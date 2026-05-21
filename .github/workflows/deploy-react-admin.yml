@@ -40,7 +40,12 @@ jobs:
           if [ -n "${{ secrets.DEPLOY_KNOWN_HOSTS }}" ]; then
             echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           else
-            ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "DEPLOY_KNOWN_HOSTS secret not set; scanning $REMOTE_HOST with ssh-keyscan"
+            ssh-keyscan -t rsa,ecdsa,ed25519 "$REMOTE_HOST" >> ~/.ssh/known_hosts
+          fi
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::~/.ssh/known_hosts is empty — set the DEPLOY_KNOWN_HOSTS secret or check that the runner can reach $REMOTE_HOST:22"
+            exit 1
           fi
           chmod 644 ~/.ssh/known_hosts
           cat >> ~/.ssh/config <<EOF
