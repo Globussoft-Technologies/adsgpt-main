@@ -1,0 +1,518 @@
+/* Reset default styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Global styles */
+body {
+  font-family: 'Roboto', sans-serif; /* Clean and modern font */
+  background-color: #f4f6f9; /* Light grayish-blue background */
+  color: #444; /* Darker text for better contrast */
+  line-height: 1.6;
+  padding: 20px;
+}
+
+/* Container */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px;
+  background-color: #ffffff; /* Clean white background for content */
+  border-radius: 10px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1); /* Soft shadow for better depth */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  width: 80%;
+  margin-top: 30px;
+}
+
+/* Heading styles */
+h2 {
+  color: #333; /* Dark text for headings */
+  font-size: 30px; /* Slightly larger heading */
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 25px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase; /* For a more polished look */
+}
+
+.user-info {
+  background-color: #fff;
+  height: 134px;
+  max-width: 1000px; /* Limits width but keeps it responsive */
+  width: 90%; /* Makes it fluid for smaller screens */
+  padding: 32px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  margin-bottom: 32px;
+  margin-left: auto;
+  margin-right: auto; /* Centers the section */
+}
+
+/* Medium screens (tablets, small laptops) */
+@media screen and (max-width: 1024px) {
+  .user-info {
+    width: 95%; /* Slightly more flexible */
+    padding: 24px;
+  }
+}
+
+/* Small screens (mobile devices) */
+@media screen and (max-width: 768px) {
+  .user-info {
+    width: 100%; /* Takes full width */
+    padding: 20px;
+    height: auto; /* Adjusts height dynamically */
+  }
+}
+
+/* Extra small screens (very small phones) */
+@media screen and (max-width: 480px) {
+  .user-info {
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+}
+
+/* User info text */
+.user-info p {
+  font-size: 16px;
+  color: #555; /* Slightly lighter text for less contrast */
+  margin-bottom: 15px;
+}
+
+/* Label styling */
+.user-info .label {
+  font-weight: 600;
+  color: #007bff; /* Blue color for labels */
+  display: inline-block;
+  width: 140px;
+}
+
+/* User Name and Email Styling */
+.user-info .user-detail {
+  font-size: 16px;
+  color: #333; /* Darker text for user details */
+}
+
+/* Search Section */
+.search-section {
+  margin-bottom: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Session date input */
+#session-date {
+  padding: 12px 18px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  width: 250px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  outline: none;
+}
+
+/* Focus effect for session date input */
+#session-date:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+/* Search button */
+#search-btn {
+  padding: 12px 30px;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0, 123, 255, 0.1); /* Subtle shadow effect */
+}
+
+/* Button hover effect */
+#search-btn:hover {
+  background-color: #0056b3;
+  transform: translateY(-3px); /* Slight hover lift */
+  box-shadow: 0 6px 15px rgba(0, 123, 255, 0.2); /* Intensified shadow on hover */
+}
+
+/* Button active effect */
+#search-btn:active {
+  transform: translateY(1px); /* Button "pressed" effect */
+}
+
+/* Error message styling */
+.err {
+  color: #ff4d4d;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 15px;
+  text-align: center;
+}
+
+/* Sessions Layout */
+/* .sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  justify-content: space-between;
+  margin-top: 40px; 
+} */
+
+/* Session Card Styling */
+/* .session-card {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1); 
+  flex: 1 1 300px;
+  min-width: 300px;
+  margin-bottom: 30px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+} */
+
+
+/* Session card title */
+/* .session-card h3 {
+  color: #333;
+  font-size: 20px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  text-transform: capitalize; 
+} */
+
+/* Session card text */
+/* .session-card p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+} */
+
+/* Section Header for Sessions */
+/* .session-header {
+  margin-bottom: 20px;
+  font-size: 20px;
+  color: #444;
+  font-weight: 500;
+  border-bottom: 2px solid #eee; 
+  padding-bottom: 10px;
+} */
+
+/* Card Types (Click, Copy, Scroll) */
+.card-header {
+  font-weight: 600;
+  color: #333;
+  font-size: 16px;
+  margin-bottom: 12px;
+  text-transform: capitalize;
+}
+
+/* Card Info Text */
+.card-info {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.7;
+  margin-bottom: 15px;
+}
+
+/* Timestamp Styling */
+.timestamp {
+  font-style: italic;
+  color: #888;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+/* Styling for Different Data Cards */
+.click-card {
+  border-left: 5px solid #007bff; /* Blue border */
+  padding-left: 20px;
+  background-color: #f8f9fa;
+  margin-bottom: 25px;
+  transition: background-color 0.3s ease;
+  border-radius: 10px; /* Rounded edges for visual harmony */
+}
+
+.copy-card {
+  border-left: 5px solid #28a745; /* Green border */
+  padding-left: 20px;
+  background-color: #f8f9fa;
+  margin-bottom: 25px;
+  transition: background-color 0.3s ease;
+  border-radius: 10px; /* Rounded edges */
+}
+
+.scroll-card {
+  border-left: 5px solid #ffc107; /* Yellow border */
+  padding-left: 20px;
+  background-color: #f8f9fa;
+  margin-bottom: 25px;
+  transition: background-color 0.3s ease;
+  border-radius: 10px; /* Rounded edges */
+}
+
+.creative-card {
+  border-left: 5px solid #cd07ff; /* Yellow border */
+  padding-left: 20px;
+  background-color: #f8f9fa;
+  margin-bottom: 25px;
+  transition: background-color 0.3s ease;
+  border-radius: 10px; /* Rounded edges */
+}
+
+.adCopy-card {
+  border-left: 5px solid #cd07ff; /* Yellow border */
+  padding-left: 20px;
+  background-color: #f8f9fa;
+  margin-bottom: 25px;
+  transition: background-color 0.3s ease;
+  border-radius: 10px; /* Rounded edges */
+}
+
+
+label, .session-header, .card-header {
+  color: #333;
+  font-weight: 600;
+}
+
+/* Input Fields Styling */
+input[type="text"], input[type="date"], select {
+  padding: 12px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  width: 100%;
+  margin-bottom: 15px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Input Focus Effect */
+input[type="text"]:focus, input[type="date"]:focus, select:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+/* Responsive Design Adjustments */
+@media (max-width: 768px) {
+  .sessions {
+      flex-direction: column;
+      gap: 20px;
+  }
+
+  .session-card {
+      min-width: auto; /* Make session cards flexible */
+  }
+}
+
+@media (max-width: 480px) {
+  #session-date {
+      width: 180px; /* Adjust session date input size */
+  }
+
+  #search-btn {
+      width: 100%; /* Full-width button on small screens */
+  }
+
+  .session-card {
+      min-width: auto; /* Make session cards flexible on very small screens */
+  }
+}
+
+/* Login Form Styles */
+.login-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  width: 100%;
+  padding: 30px;
+  margin: 50px auto; /* Center the login form */
+}
+
+/* Centering Login Form Content */
+.login-form {
+  text-align: center;
+}
+
+/* Login Form Title */
+.login-form h2 {
+  margin-bottom: 20px;
+  color: #333;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+/* Input Container for Login Form */
+.input-container {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+/* Label for Login Form */
+.input-container label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+  font-weight: 600;
+}
+
+/* Input Styling for Login Form */
+.input-container input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  font-size: 16px;
+  color: #333;
+  outline: none;
+}
+
+/* Input Focus Effect in Login Form */
+.input-container input:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+/* Login Button Styles */
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* Login Button Hover Effect */
+.login-btn:hover {
+  background-color: #0056b3;
+}
+
+/* Footer Links Styles */
+.footer-links {
+  margin-top: 15px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.footer-links a {
+  color: #007bff;
+  text-decoration: none;
+  margin: 0 10px;
+}
+
+/* Footer Links Hover Effect */
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/************************************/
+.card {
+  width: 190px;
+  height: 254px;
+  background: #ffffff;
+  border-radius: 15px;
+  box-shadow: 1px 5px 60px 0px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd;
+}
+
+.card .card-border-top {
+  width: 60%;
+  height: 3%;
+  background: #b0b0b0;
+  margin: auto;
+  border-radius: 0px 0px 15px 15px;
+}
+
+.card span {
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+  display: block;
+  padding-top: 10px;
+  font-size: 16px;
+}
+
+.card .job {
+  font-weight: 400;
+  color: #666;
+  display: block;
+  text-align: center;
+  padding-top: 3px;
+  font-size: 12px;
+}
+
+.card .img {
+  width: 70px;
+  height: 80px;
+  background: #d0d0d0; /* Gradient for avatar */
+  border-radius: 15px;
+  margin: auto;
+  margin-top: 25px;
+  position: relative; /* For adding a human-like shape */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Creating a simple human-like head */
+.card .img::before {
+  content: "";
+  width: 25px;
+  height: 25px;
+  background: white; /* Head color */
+  border-radius: 50%;
+  position: absolute;
+  top: 10px;
+}
+
+/* Creating a simple human-like body */
+.card .img::after {
+  content: "";
+  width: 40px;
+  height: 35px;
+  background: white; /* Body color */
+  border-radius: 10px;
+  position: absolute;
+  bottom: 8px;
+}
+
+.card button {
+  padding: 8px 25px;
+  display: block;
+  margin: auto;
+  border-radius: 8px;
+  border: none;
+  margin-top: 30px;
+  background: #d0d0d0;
+  color: #333;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card button:hover {
+  background: #b0b0b0;
+}
+

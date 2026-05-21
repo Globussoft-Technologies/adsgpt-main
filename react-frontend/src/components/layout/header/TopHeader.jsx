@@ -1,0 +1,575 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BarChart3,
+  FileText,
+  Image,
+  Images,
+  ListFilter,
+  MessageCirclePlus,
+  MessageSquarePlus,
+  Plus,
+  RefreshCcw,
+  Search,
+  Users,
+  Video,
+  Zap,
+  Globe,
+  Facebook,
+  Instagram,
+  Linkedin,
+  Twitter,
+  Music,
+  Camera,
+  Pin,
+  NotebookPen,
+  List,
+  PanelLeft,
+  MenuIcon,
+  Save,
+} from 'lucide-react';
+import { LuLayoutTemplate } from 'react-icons/lu';
+import { useDispatch, useSelector } from 'react-redux';
+import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
+import { useLocation } from 'react-router-dom';
+import { getHeaderName } from '@/utils/getHeaderName';
+import HeaderTabs from './HeaderTabs';
+import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+import { Button } from '@/components/ui/button';
+import { resetAdCopySlice } from '@/store/reducers/adStudio/adCopySlice';
+import { resetPromptSlice, setField } from '@/store/reducers/adStudio/promptSlice';
+import { fetchSuggestions } from '@/store/actions/adStudio/adCopyActions';
+import { createNewSession } from '@/store/reducers/adStudio/adHistorySlice';
+import { Input } from '@/components/ui/input';
+import AddNewBrandDialog from '@/components/BrandIQ/Actions/AddNewBrandDialog';
+import BrandsDropdown from './BrandIQ/Competitors/BrandsDropdown';
+import AllPlateformDropdown from './BrandIQ/Competitors/AllPlateformDropdown';
+import {
+  resetAdCreativeSlice,
+  setExploreCompetitor,
+  setExplorePlatform,
+  setExploreSearchTerm,
+  setSkip,
+} from '@/store/reducers/adStudio/adCreativeSlice';
+import { fetchExploreAds } from '@/store/actions/adStudio/adCreativeActions';
+import CreativeFilterDropdown from './AdStudio/AdCreative/CreativeFilterDropdown';
+import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
+import { FaMeta } from 'react-icons/fa6';
+import { FaGoogle, FaPinterest, FaReddit, FaYoutube } from 'react-icons/fa';
+import { SiGoogleads } from 'react-icons/si';
+import { AiFillLinkedin } from 'react-icons/ai';
+import { RiTwitterXLine } from 'react-icons/ri';
+import AdCreativeAction from '@/components/AdStudio/AdCreatives/Actions/AdCreativeAction';
+import { resetAdVideoSlice } from '@/store/reducers/adStudio/adVideoSlice';
+import { debounce } from 'lodash';
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { createNewSessionAddie } from '@/store/reducers/adInsights/Addie/addieHistorySlice';
+import {
+  resetAddieStates,
+  setAddieConversation,
+  setIsFreshUser,
+  setShowWelcomePage,
+  setScrollSkip,
+} from '@/store/reducers/adInsights/Addie/AddieChatBotSlice';
+import { getFaqData } from '@/store/actions/adInsights/addieActions';
+import { resetAddiePromptSlice } from '@/store/reducers/adInsights/Addie/addiePromptSlice';
+const ENABLE_NEW_LAYOUT = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
+const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
+
+import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+const adStudioTabs = [
+  { id: 'adCopy', label: 'Ad Copy', icon: NotebookPen },
+  { id: 'adCreative', label: 'Ad Creative', icon: Image },
+];
+const adVideoTab = { id: 'adVideo', label: 'Ad Video', icon: Video };
+const adVideoNewTab = {
+  id: 'adVideoNew',
+  label: 'Ad Video',
+  icon: Video,
+};
+const adCreativeNewTab = {
+  id: 'adCreativeNew',
+  label: 'Ad Creative New',
+  icon: Images,
+};
+const brandIQTabs = [
+  { id: 'myBrands', label: 'My Brands', icon: Zap },
+  { id: 'Gallery', label: 'Gallery', icon: Images },
+  // { id: 'competitors', label: 'Competitors', icon: Users },
+  // { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+];
+
+const brandOptions = [
+  { value: 'all-brands', label: 'All Brands' },
+  { value: 'zomato', label: 'Zomato' },
+  { value: 'swiggy', label: 'Swiggy' },
+  { value: 'ubereats', label: 'Uber Eats' },
+  { value: 'dominos', label: 'Domino’s' },
+  { value: 'pizza-hut', label: 'Pizza Hut' },
+  { value: 'kfc', label: 'KFC' },
+  { value: 'mcdonalds', label: 'McDonald’s' },
+  { value: 'starbucks', label: 'Starbucks' },
+];
+
+const adPlatformOptions = [
+  { value: 'all-platforms', label: 'All Platforms', icon: Globe },
+  { value: 'google-ads', label: 'Google Ads', icon: Search },
+  { value: 'facebook-ads', label: 'Facebook Ads', icon: Facebook },
+  { value: 'instagram-ads', label: 'Instagram Ads', icon: Instagram },
+  { value: 'linkedin-ads', label: 'LinkedIn Ads', icon: Linkedin },
+  // { value: 'twitter-ads', label: 'Twitter Ads', icon: Twitter },
+  { value: 'tiktok-ads', label: 'TikTok Ads', icon: Music },
+  { value: 'snapchat-ads', label: 'Snapchat Ads', icon: Camera },
+  { value: 'pinterest-ads', label: 'Pinterest Ads', icon: Pin },
+];
+
+const selectPlateformsOptions = [
+  {
+    value: 'meta',
+    Icon: <FaMeta className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'Meta Ads',
+  },
+  {
+    value: 'youtube',
+    Icon: <FaYoutube className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'Youtube Ads',
+  },
+  // {
+  //   value: 'google',
+  //   Icon: <Search className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   label: 'Google Search Ads',
+  // },
+  // {
+  //   value: 'google_performance_max_ads',
+  //   Icon: <FaGoogle className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   label: 'Google Performance Max Ads',
+  // },
+  {
+    value: 'google_display_ads',
+    Icon: <SiGoogleads className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'Google Display Ads',
+  },
+
+  {
+    value: 'linkedin',
+    Icon: <AiFillLinkedin className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'LinkedIn Ads',
+  },
+  // {
+  //   value: 'twitter',
+  //   Icon: <RiTwitterXLine className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   label: 'Twitter Ads',
+  // },
+  {
+    value: 'pinterest',
+    Icon: <FaPinterest className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'Pinterest Ads',
+  },
+  {
+    value: 'reddit',
+    Icon: <FaReddit className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    label: 'Reddit Ads',
+  },
+  // {
+  //   value: 'google_video_ads',
+  //   Icon: <Video className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   label: 'Google Video Ads',
+  // },
+];
+
+export default function TopHeader() {
+  const location = useLocation();
+  const currentRoute = location.pathname;
+
+  const [selectedBrand, setSelectedBrand] = useState(brandOptions[0]);
+  const [selectedPlateform, setSelectedPlateform] = useState(adPlatformOptions[0]);
+
+  const { isMobile } = useSidebar();
+
+  const headerName = useMemo(
+    () => getHeaderName(location.pathname),
+    [location.pathname] // re-runs every time pathname changes
+  );
+  const { userData } = useSelector((state) => state.socket);
+  // if (
+  //   userData?.featureObject?.['Ad Creative Video'] > 0 ||
+  //   Object.keys(userData?.userSubscriptionType || {})[0] === AUTO_GENERATED_PLAN_ID
+  // ) {
+  // adStudioTabs[2] = adVideoTab;
+  adStudioTabs[2] = adVideoNewTab;
+  adStudioTabs[3] = adCreativeNewTab;
+  // }
+  const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
+  const { myBrands, activeBrandIQTabId } = useSelector((state) => state.brandIQTabs);
+  const dispatch = useDispatch();
+  const {
+    conversations: creativeConversations,
+    exploreCompetitor,
+    explorePlatform,
+    exploreSearchTerm,
+  } = useSelector((state) => state.adCreative);
+
+  const { activePage } = useSelector((state) => state.adVideoNew);
+  const adCreativeNewActivePage = useSelector(
+    (state) => state.adStudioTabs.adCreativeNewActivePage
+  );
+
+  const hideHeader =
+    currentRoute === '/meta-ads' ||
+    (currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideoNew' && activePage !== 'home') ||
+    (currentRoute === '/adstudio' &&
+      activeAdStudioTabId === 'adCreativeNew' &&
+      adCreativeNewActivePage !== 'home');
+
+  const resetMap = {
+    adCopy: resetAdCopySlice,
+    adCreative: resetAdCreativeSlice,
+    adVideo: resetAdVideoSlice,
+  };
+
+  const handleNewChatClick = () => {
+    dispatch(createNewSession({ tab: activeAdStudioTabId }));
+    dispatch(resetMap[activeAdStudioTabId]());
+    dispatch(resetPromptSlice());
+    dispatch(fetchSuggestions());
+    dispatch(fetchExploreAds());
+  };
+
+  // Store the full selected option object for platform
+  const handlePlatformChange = (selectedValue) => {
+    dispatch(setExplorePlatform(selectedValue));
+  };
+
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    const esNetworks = {
+      google: ['google'],
+      google_performance_max_ads: ['google'],
+      google_display_ads: ['google_display_ads'],
+      google_video_ads: ['google'],
+      meta: ['facebook', 'instagram'],
+      youtube: ['youtube'],
+      pinterest: ['pinterest'],
+      linkedin: ['linkedin'],
+      reddit: ['reddit'],
+    };
+
+    const fetchAds = () => {
+      dispatch(setSkip(0));
+      dispatch(fetchExploreAds());
+    };
+
+    const debouncedFetch = debounce(fetchAds, 1000);
+
+    // Case 1: platform change → immediate fetch
+    if (explorePlatform && esNetworks[explorePlatform]) {
+      // fetchAds();
+      debouncedFetch();
+    }
+    // Case 2: competitor length ≥ 3 → debounce 500ms
+    else if (exploreCompetitor && exploreCompetitor.length >= 3) {
+      debouncedFetch();
+    }
+    // Case 3: competitor empty → debounce 1000ms
+    else if (exploreCompetitor.length === 0) {
+      if (!isFirstRender.current) {
+        debouncedFetch();
+      }
+    }
+
+    isFirstRender.current = false;
+
+    return () => {
+      debouncedFetch.cancel();
+    };
+  }, [explorePlatform, exploreCompetitor, dispatch]);
+
+  const [isShowHeadersTabs, setIsShowHeadersTabs] = useState(true);
+  const mobileTabsOpenRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setIsShowHeadersTabs(true);
+      } else {
+        setIsShowHeadersTabs(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [mobileTabsOpenRef]);
+
+  return (
+    <>
+      {currentRoute !== '/adfactory-demo' && !hideHeader && (
+        <div
+          className={`sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 bg-[#0D0D0D]/50 px-2 py-3 backdrop-blur-xl md:px-5 lg:bg-transparent lg:backdrop-blur-none 2xl:h-24 2xl:px-8 2xl:py-6 ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
+        >
+          <div className="left_header_container flex items-center">
+            <SidebarTrigger>
+              <button className="close_open_ mr-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-slate-800/70 sm:mr-1.5 lg:hidden">
+                <PanelLeft className="h-5" />
+              </button>
+            </SidebarTrigger>
+            {/* Left Title */}
+            {currentRoute !== '/adfactory-demo' && (
+              <h1
+                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-white md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px]`}
+              >
+                {headerName}
+              </h1>
+            )}
+            {currentRoute === '/adstudio' && (
+              <HeaderTabs
+                isShowHeadersTabs={isShowHeadersTabs}
+                setIsShowHeadersTabs={setIsShowHeadersTabs}
+                tabs={adStudioTabs}
+                mobileTabsOpenRef={mobileTabsOpenRef}
+                activeTabId={activeAdStudioTabId}
+                onTabChange={(id) => dispatch(setActiveAdStudioTab(id))}
+              />
+            )}
+            {currentRoute === '/brandiq' && (
+              <HeaderTabs
+                isShowHeadersTabs={isShowHeadersTabs}
+                setIsShowHeadersTabs={setIsShowHeadersTabs}
+                tabs={brandIQTabs}
+                mobileTabsOpenRef={mobileTabsOpenRef}
+                activeTabId={activeBrandIQTabId}
+                onTabChange={(id) => dispatch(setActiveBrandIQTab(id))}
+              />
+            )}
+          </div>
+
+          <div
+            id="tour_filter_adcreatives_prompt"
+            className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
+          >
+            {/* for AdStudio */}
+            {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
+              <Button
+                variant="ghost"
+                onClick={handleNewChatClick}
+                className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm"
+              >
+                <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                <span>New Chat</span>
+              </Button>
+            )}
+            {currentRoute === '/adstudio' &&
+              activeAdStudioTabId === 'adCreative' &&
+              Array.isArray(creativeConversations) &&
+              creativeConversations.length > 0 && (
+                <Button
+                  variant="ghost"
+                  onClick={handleNewChatClick}
+                  className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm"
+                >
+                  <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                  <span>New Chat</span>
+                </Button>
+              )}
+            {((currentRoute === '/adstudio' &&
+              activeAdStudioTabId === 'adCreative' &&
+              Array.isArray(creativeConversations) &&
+              creativeConversations.length === 0) ||
+              currentRoute === '/ad-library') && (
+                <>
+                  {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
+              <Input
+                type="text"
+                placeholder={'Search your competitors'}
+                className="h-full w-14 flex-1 border-none !bg-transparent px-0 py-[2px] !text-[9px] text-[#969696] placeholder:!text-[9px] placeholder:text-[#969696] focus-visible:ring-0 focus-visible:ring-offset-0 lg:w-auto 2xl:!text-sm 2xl:placeholder:!text-sm"
+                onChange={(e) => {
+                  dispatch(setExploreCompetitor(e.target.value));
+                }}
+                value={exploreCompetitor}
+                // onKeyDown={(event) => {
+                //   if (event.key === 'Enter' && !event.shiftKey && exploreCompetitor) {
+                //     event.preventDefault();
+                //     dispatch(setSkip(0));
+                //     dispatch(fetchExploreAds());
+                //   }
+                // }}
+              />
+              <Search
+                className="h-3 w-3 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
+                onClick={() => {
+                  dispatch(setSkip(0));
+                  dispatch(fetchExploreAds());
+                }}
+              />
+            </div> */}
+
+                  {/* ! search field */}
+                  <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-1.5 text-[#AFAFAF] transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm">
+                    <div className="flex flex-shrink-0 items-center">
+                      <Search
+                        className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
+                        onClick={() => {
+                          dispatch(setSkip(0));
+                          dispatch(fetchExploreAds());
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search.."
+                      className="w-full border-none bg-transparent text-sm text-[#D1D1D1] placeholder:text-[#777777] focus:outline-none"
+                      value={exploreCompetitor}
+                      onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
+                    />
+                    <div className="ml-2 flex space-x-1">
+                      {!isMobile ? (
+                        <>
+                          {['competitor', 'keyword'].map((type) => (
+                            <button
+                              key={type}
+                              className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
+                                exploreSearchTerm === type
+                                  ? 'bg-[#2A2A2A] text-white'
+                                  : 'text-[#777777]'
+                              }`}
+                              onClick={() => {
+                                dispatch(setExploreSearchTerm(type));
+                                dispatch(setSkip(0));
+                                dispatch(fetchExploreAds());
+                              }}
+                            >
+                              {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                          </PopoverTrigger>
+                          <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                            {['competitor', 'keyword'].map((type) => (
+                              <button
+                                key={type}
+                                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
+                                  exploreSearchTerm === type
+                                    ? 'bg-[#2A2A2A] text-white'
+                                    : 'text-[#777777]'
+                                }`}
+                                onClick={() => {
+                                  dispatch(setExploreSearchTerm(type));
+                                  dispatch(setSkip(0));
+                                  dispatch(fetchExploreAds());
+                                }}
+                              >
+                                {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                              </button>
+                            ))}
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Platform select */}
+                  <CreativeFilterDropdown
+                    options={selectPlateformsOptions}
+                    label="Platform"
+                    value={selectPlateformsOptions.find((p) => p.value === explorePlatform)}
+                    onChange={handlePlatformChange}
+                  />
+                </>
+              )}
+
+            {currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideo' && (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={handleNewChatClick}
+                  className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm"
+                >
+                  <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                  <span>New Chat </span>
+                </Button>
+                {false && (
+                  <Button
+                    variant="ghost"
+                    onClick={handleNewChatClick}
+                    className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm"
+                  >
+                    <LuLayoutTemplate className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                    <span>Templates </span>
+                  </Button>
+                )}
+              </>
+            )}
+
+            {/* for BrandIQ */}
+            {currentRoute === '/brandiq' && activeBrandIQTabId === 'myBrands' && (
+              <>
+                {Array.isArray(myBrands) && myBrands?.length > 0 && (
+                  <AddNewBrand fromComponent="topheader" />
+                )}
+                {false && (
+                  <button
+                    variant="ghost"
+                    className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-4 py-1.5 text-[#AFAFAF] hover:text-white sm:flex 2xl:py-2 2xl:text-sm"
+                  >
+                    <span className="flex items-center gap-2 rounded-full">
+                      Refresh
+                      <RefreshCcw className="!h-3.5 !w-3.5 2xl:h-5 2xl:w-5" />
+                    </span>
+                  </button>
+                )}
+              </>
+            )}
+            {currentRoute === '/brandiq' && activeBrandIQTabId === 'competitors' && (
+              <>
+                <BrandsDropdown
+                  options={brandOptions}
+                  value={selectedBrand}
+                  onChange={(val) => {
+                    const brand = brandOptions.find((opt) => opt.value === val);
+                    setSelectedBrand(brand);
+                  }}
+                />
+                <AllPlateformDropdown
+                  options={adPlatformOptions}
+                  value={selectedPlateform}
+                  onChange={(val) => {
+                    const plateform = adPlatformOptions.find((opt) => opt.value === val);
+                    setSelectedPlateform(plateform);
+                  }}
+                />
+                <button
+                  variant="ghost"
+                  className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-4 py-1.5 text-[#AFAFAF] hover:text-white sm:flex 2xl:py-2 2xl:text-sm"
+                >
+                  <span className="flex items-center gap-2 rounded-full">
+                    Refresh
+                    <RefreshCcw className="!h-3.5 !w-3.5 2xl:h-5 2xl:w-5" />
+                  </span>
+                </button>
+              </>
+            )}
+
+            {(currentRoute === '/brandiq' || currentRoute === '/adstudio') && (
+              <div className="responsive_options flex lg:hidden">
+                <button
+                  id="tour_mobile_tabs_open"
+                  ref={mobileTabsOpenRef}
+                  onClick={() => setIsShowHeadersTabs(!isShowHeadersTabs)}
+                  className={`show_top_header cursor-pointer rounded-full border border-white/20 ${isShowHeadersTabs ? 'border-white/60 text-white' : ''} bg-[#0D0D0D]/50 p-2 text-xs text-[#AFAFAF] transition-all duration-200 ease-out hover:scale-105 hover:border-white/40 hover:text-white`}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

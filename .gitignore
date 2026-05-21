@@ -1,0 +1,56 @@
+.env
+node_modules
+
+
+# Python cache and test artifacts
+__pycache__/
+.pytest_cache/
+
+# Environment files
+.env*
+local.env
+
+# SSH keys / credentials — never commit
+*.pem
+*.key
+*.ppk
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# OAuth / API credentials — defensive root-level entries in case someone
+# drops a credentials.json or token.json at the repo root by mistake.
+# tools/gdocs-uploader/.gitignore also covers these in the canonical location.
+credentials.json
+token.json
+
+# Logs
+logs/
+*.log
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Docker
+*.pid
+*.sock
+
+# Deployment
+deployment/*.yaml
+
+# Local scratch dirs used by the Autopilot tooling session (GitHub API
+# payloads, headless-browser smoke tests). Harmless either way, but no
+# reason to track them.
+.pr-tmp/
+.browser-test/
+.yamlcheck/
+.secret-setup/
+.fathom-cache/

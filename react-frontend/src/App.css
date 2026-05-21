@@ -1,0 +1,572 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&family=Quicksand:wght@300..700&display=swap');
+
+html,
+body {
+  font-family: 'Public Sans';
+}
+
+.Toastify__toast,
+.Toastify__toast-body,
+.Toastify__toast-container {
+  font-family: 'Public Sans', sans-serif !important;
+}
+
+/* *{
+    outline: 1px solid white;
+} */
+
+body {
+  overflow-x: hidden;
+}
+
+/* ✅ Prompt Component Styles */
+.dark .prompt_selection_button {
+  position: relative;
+  z-index: 0;
+  background: #20202050;
+  color: white;
+  align-items: center;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.dark .prompt_selection_button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.4) 100%);
+
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+
+  display: block;
+  z-index: -1;
+  pointer-events: none;
+}
+@media (max-width: 1280px) {
+  .dark .prompt_selection_button::before {
+    padding: 0.5px;
+  }
+}
+
+.dark .prompt_selection_button_no_gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  /* background: linear-gradient(to top, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.4) 100%); */
+
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+
+  display: block;
+  z-index: -1;
+  pointer-events: none;
+}
+@media (max-width: 1280px) {
+  .dark .prompt_selection_button_no_gradient::before {
+    padding: 0.5px;
+  }
+}
+
+/* Gradietn border for dark */
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px; /* border thickness */
+  border-radius: inherit;
+  background: linear-gradient(180deg, #ffffff 100%, rgba(255, 255, 255, 0.5) 50%);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Scrollbar CSS ( Must be in Bottom ) */
+.dark {
+  /* For Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #555 #00000010; /* thumb color | track color */
+}
+
+/* For Chrome, Edge, Safari */
+.dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #444, #666); /* Professional dark gradient */
+  border-radius: 6px;
+}
+
+.dark::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #555, #777); /* Hover effect */
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background-color: grey;
+  animation: typing 1s infinite;
+}
+
+.dot-indicator {
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background-color: grey;
+  animation: typing 1s infinite;
+}
+.dot-indicator:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dot-indicator:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.2;
+  }
+}
+
+ul {
+  list-style-type: disc;
+  margin-left: 34px;
+}
+
+/* Mic loader */
+.mic-loader {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  animation: 1s micPulse infinite ease-in-out;
+}
+
+@keyframes micPulse {
+  0% {
+    box-shadow: 0 0 0 0 #7e90ff;
+  }
+
+  100% {
+    box-shadow: 0 0 0 14px #69ffa800;
+  }
+}
+
+/* Ad Creatives Maonsry extra css */
+.my-masonry-grid {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  margin-left: -0px;
+  width: auto;
+}
+.my-masonry-grid_column {
+  padding-left: 20px;
+  background-clip: padding-box;
+}
+@media (max-width: 635px) {
+  .my-masonry-grid_column {
+    padding-left: 0px;
+  }
+}
+.my-masonry-grid_column > div {
+  margin-bottom: 20px;
+}
+
+/* Hide scrollbar of AdIinsights left masonry */
+/* .scroller-hide,
+.adinsight_adcard_left_container,
+.adinsight_graphs_right_container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.adinsight_adcard_left_container::-webkit-scrollbar,
+.adinsight_graphs_right_container::-webkit-scrollbar {
+  display: none;
+} */
+/* focus on rechart graph none outline */
+.recharts-surface:focus {
+  outline: none;
+}
+
+/* FOR GENERATING LOADER */
+@keyframes loader-rotate {
+  0% {
+    transform: rotate(90deg);
+    box-shadow:
+      0 10px 20px 0 #fff inset,
+      0 20px 30px 0 #ad5fff inset,
+      0 60px 60px 0 #471eec inset;
+  }
+  50% {
+    transform: rotate(270deg);
+    box-shadow:
+      0 10px 20px 0 #fff inset,
+      0 20px 10px 0 #d60a47 inset,
+      0 40px 60px 0 #311e80 inset;
+  }
+  100% {
+    transform: rotate(450deg);
+    box-shadow:
+      0 10px 20px 0 #fff inset,
+      0 20px 30px 0 #ad5fff inset,
+      0 60px 60px 0 #471eec inset;
+  }
+}
+
+@keyframes loader-letter-anim {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  40% {
+    opacity: 0.7;
+    transform: translateY(0);
+  }
+}
+
+.animate-loader-rotate {
+  animation: loader-rotate 2s linear infinite;
+}
+
+.animate-loader-letter {
+  animation: loader-letter-anim 2s infinite;
+}
+
+.border_white_gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px; /* thickness of border */
+  background: linear-gradient(to bottom right, white, rgba(255, 255, 255, 0.5));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  opacity: 0.2;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.border_white_gradient_2px::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px; /* thickness of border */
+  background: linear-gradient(to bottom right, white, rgba(255, 255, 255, 0.5));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  opacity: 0.2;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.word_break {
+  word-break: break-word;
+}
+
+.darker_gradient_border {
+  position: relative;
+  padding: 2px;
+}
+
+.darker_gradient_border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(to top right, #333333, #767676);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.input-gradient-border {
+  position: relative;
+  border-radius: 30px;
+  padding: 1px;
+}
+
+.input-gradient-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #ffffff33, #ffffff10);
+  pointer-events: none;
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.input-gradient-border-2 {
+  position: relative;
+  border-radius: 10px;
+  padding: 1px;
+}
+
+.input-gradient-border-2::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #ffffff33, #ffffff10);
+  pointer-events: none;
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* React Flow Chart Override */
+.react-flow__panel.react-flow__attribution.bottom.right {
+  display: none;
+}
+.react-flow__controls-button {
+  background: #30303050 !important;
+  backdrop-filter: blur(100px) !important;
+  border: 1px solid #cccccc40 !important;
+  border-radius: 2px;
+}
+
+.brand_select_from_adfactory div[data-slot='command-input-wrapper'] {
+  border: none !important;
+}
+.brand_select_from_adfactory div[data-slot='command'] {
+  border: none !important;
+}
+
+.ad_factory_card {
+  position: relative;
+  border-radius: 12px;
+  padding: 2px;
+}
+
+.ad_factory_card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #ffffff40, #ffffff20);
+  pointer-events: none;
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1px;
+}
+
+/* Main wrapper */
+.rdrCalendarWrapper {
+  background: #30303080 !important;
+  color: #b5bec6 !important;
+  border-radius: 16px;
+  font-family: inherit;
+}
+
+/* Top selected date inputs */
+.rdrDateDisplayWrapper {
+  background: #30303080 !important;
+  border-bottom: 1px solid #ffffff20 !important;
+  padding-bottom: 4px;
+}
+
+.rdrDateDisplayItem {
+  background: #464951 !important;
+  border-radius: 8px;
+  border: 1px solid #3a3c44;
+}
+
+.rdrDateDisplayItem input::placeholder,
+.rdrDateDisplayItem input {
+  color: #ffffffb2 !important;
+  font-weight: 500 !important;
+}
+
+/* Month header */
+.rdrMonthAndYearWrapper {
+  background: transparent !important;
+  color: #b5bec6 !important;
+  text-transform: uppercase !important;
+}
+
+/* Weekday labels */
+.rdrWeekDays {
+  background: transparent !important;
+  color: #b5bec6 !important;
+  /* text-transform: uppercase !important; */
+}
+
+/* Individual day */
+.rdrDays {
+  background: transparent !important;
+}
+.rdrDay {
+  background: transparent !important;
+}
+
+.rdrDayNumber span {
+  color: white !important;
+}
+
+/* Hover */
+.rdrDay:hover {
+  background: #2a2c33;
+  border-radius: 8px;
+}
+
+/* Disabled day text */
+.rdrDayDisabled .rdrDayNumber span {
+  color: #989c9f !important;
+  background: transparent !important;
+  opacity: 0.7;
+}
+
+.rdrDayPassive {
+  background: transparent !important;
+}
+.rdrDayPassive .rdrDayNumber span {
+  color: #6b7280 !important;
+  opacity: 0.7;
+}
+
+/* Selected range */
+.rdrInRange {
+  background: #434343 !important;
+}
+
+.rdrDayToday .rdrDayNumber span:after {
+  background: #fff !important;
+}
+
+.rdrNextPrevButton,
+.rdrPprevButton {
+  background: #464951 !important;
+  color: white !important;
+  border-color: white !important;
+}
+
+.rdrPprevButton i {
+  border-color: transparent #fff9f9c7 transparent transparent !important;
+}
+.rdrNextButton i {
+  border-color: transparent transparent transparent #fff9f9c7 !important;
+}
+
+.rdrPprevButton:hover i {
+  border-color: transparent #fff transparent transparent !important;
+}
+
+.rdrNextButton:hover i {
+  border-color: transparent transparent transparent #fff !important;
+}
+
+/* Month + Year text */
+.rdrMonthAndYearWrapper select {
+  color: #ffffffd6 !important;
+  background: transparent !important;
+  font-weight: 500 !important;
+  max-height: 150px !important;
+}
+
+.rdrMonthAndYearWrapper select:hover {
+  color: #fff !important;
+  background: #464951 !important;
+  font-weight: 500 !important;
+}
+
+/* Dropdown arrow */
+.rdrMonthAndYearWrapper select option {
+  background: #303030 !important;
+  color: white !important;
+}
+
+.rdrDateDisplayItemActive {
+  border-color: #3a91b7d6 !important;
+}
+
+.rdrDayDisabled .rdrInRange {
+  background: transparent !important;
+}
+
+.rdrMonthPicker,
+.rdrYearPicker {
+  position: relative;
+}
+
+.rdrMonthPicker::after,
+.rdrYearPicker::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #ffffffa1;
+  border-bottom: 2px solid #ffffffa1;
+  transform: rotate(45deg);
+  right: 9px;
+  top: 50%;
+  margin-top: -6px;
+  pointer-events: none;
+}

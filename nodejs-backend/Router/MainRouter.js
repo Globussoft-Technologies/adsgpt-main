@@ -1,0 +1,97 @@
+const express = require("express");
+const draftRouter = require("./darftRoute");
+const adCopyRouter = require("./adsCopyChat");
+const adCretiveRouter = require("./adCreative");
+const adVideoRouter = require("./adVideo");
+const adCopyDraftRouter = require("./adCopyDraft");
+const adCreativeDraftRouter = require("./adCreativeDraft");
+const chatRouter = require("./chatRoute");
+const getScrollAdsRouter = require("./getScrollads");
+const faqRouter = require("./faqRoutes");
+const {
+  authenticateJWT,
+  authenticateJWTInteraction,
+} = require("../services/authService");
+const loginRoute = require("./loginRoutes");
+const profileRoutes = require("./profileRoutes");
+const trendingRoute = require("./trendingTopics");
+const ipLocationRoter = require("./ipLocationRoute");
+const tracksRoutes = require("./tracks/accesslogs");
+const checkAuth = require("./auth/userCheckRoute");
+const advertiserSearch = require("./advertiserSearch");
+const amemberRoute = require("./auth/amemberRoute");
+const userInteractionData = require("./userInteractionRoute");
+const chatPageRoutes = require("./chatPageRouter");
+const adminLogin = require("./adminLogin");
+const downloadImgUrl = require("./downloadImgUrl");
+const brandName = require("./brandName");
+const initCount = require("./chatCounterRoutes");
+const canvaRoutes = require("./canvaRoutes");
+const newHistoryRoutes = require("./newHistory");
+const videoRenderRoutes = require("./videoRenderRoutes");
+const queryRouter = require("./queryRoutes");
+const galleryRoutes = require("../Router/gallery");
+const userCreditData = require("../Router/creditRoutes");
+const campaignRoutes = require("./adFactory");
+const adPostingRoutes = require("./adPostingRoutes");
+const getCategoryRoutes = require("../Router/adFactoryCategory");
+const Usage = require("../Router/usage.route");
+const metaAdRoutes = require("./adPosting/metaAdRoutes");
+const googleAdRoutes = require("./adPosting/googleAdRoutes");
+const videoGenerationRoutes = require("./videoRoutes");
+const imageGenerationRoutes = require("./imageRoutes");
+const avatarRoutes = require("./avatarRoutes");
+const generatedMediaRoutes = require("./generatedMedia.route");
+const adStudioRoutes = require("./adStudio");
+const adminApiRoutes = require("./adminApi.route");
+const newsletterTestRoutes = require("./newsletterTestRoutes");
+
+const app = express();
+app.use("/adcopy", authenticateJWT, adCopyRouter);
+app.use("/adCreative", authenticateJWT, adCretiveRouter);
+app.use("/adVideo", authenticateJWT, adVideoRouter);
+app.use("/chat", authenticateJWT, chatRouter);
+//app.use('/adsscroll', authenticateJWT, getScrollAdsRouter );
+app.use("/draft", authenticateJWT, draftRouter);
+app.use("/AdCopydraft", authenticateJWT, adCopyDraftRouter);
+app.use("/AdCreativedraft", authenticateJWT, adCreativeDraftRouter);
+app.use("/faq", authenticateJWT, faqRouter);
+app.use("/ip-location", ipLocationRoter);
+//app.use("/login", loginRoute);
+//app.use("/profile", profileRoutes);
+app.use("/trending", authenticateJWT, trendingRoute);
+app.use("/chat-settings", authenticateJWT, chatPageRoutes);
+app.use("/track", tracksRoutes);
+app.use("/check-access", checkAuth);
+app.use("/advertiser-search", advertiserSearch);
+app.use("/amember", amemberRoute);
+app.use(
+  "/user-intreaction-data",
+  authenticateJWTInteraction,
+  userInteractionData,
+);
+app.use("/user-credit-data", userCreditData);
+app.use("/admin-panel", adminLogin);
+app.use("/img", downloadImgUrl);
+app.use("/brand", authenticateJWT, brandName);
+app.use("/prompt", initCount);
+app.use("/backup", queryRouter);
+app.use("/canva", canvaRoutes);
+app.use("/history", authenticateJWT, newHistoryRoutes);
+app.use("/video-render", videoRenderRoutes);
+app.use("/gallery", authenticateJWT, galleryRoutes);
+app.use("/campaign", campaignRoutes);
+app.use("/ad-posting", authenticateJWT, adPostingRoutes);
+app.use("/getCategory", getCategoryRoutes);
+app.use("/usage", Usage);
+app.use("/meta-ads", authenticateJWT, metaAdRoutes);
+app.use("/google-ads", authenticateJWT, googleAdRoutes);
+app.use("/video", videoGenerationRoutes);
+app.use("/image", imageGenerationRoutes);
+app.use("/avatar", authenticateJWT, avatarRoutes);
+app.use("/generated-media", generatedMediaRoutes);
+app.use("/ad-studio", adStudioRoutes);
+app.use("/admin", adminApiRoutes);
+app.use("/newsletter-test", newsletterTestRoutes);
+
+module.exports = app;

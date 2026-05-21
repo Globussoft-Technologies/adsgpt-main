@@ -1,0 +1,20 @@
+# Ignore build output
+dist
+build
+.next
+out
+
+# Ignore dependencies
+node_modules
+
+# Ignore lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Ignore env files
+.env
+.env.* 
+
+# Ignore generated files
+coverage

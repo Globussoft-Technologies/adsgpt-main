@@ -1,0 +1,186 @@
+name: Deploy nodejs-backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'nodejs-backend/**'
+      - '.github/workflows/deploy-nodejs-backend.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run: rsync --dry-run, no file writes, no pm2 restart'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never overlap two deploys to the same target — queue instead.
+  group: deploy-nodejs-backend
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test before deploy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nodejs-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.20.0'
+        # No cache — repo doesn't ship package-lock.json files; setup-node
+        # treats a missing lock file as a hard error when caching is enabled.
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Run autopilot tests
+        run: npm run test:autopilot
+
+  deploy:
+    name: Deploy to dev server
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+      REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+      REMOTE_PATH: /home/pas-adsgpt-dev-ftp/adsgpt-back-end/ads-gpt-nodejs-backend
+      SERVICE_USER: pas-adsgpt-dev-ftp
+      PM2_PROCESS: gateway
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "${{ secrets.DEPLOY_KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            # Fall back to live keyscan — less secure but unblocks bootstrap.
+            ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 644 ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host deploy
+            HostName $REMOTE_HOST
+            User $REMOTE_USER
+            IdentityFile ~/.ssh/deploy_key
+            UserKnownHostsFile ~/.ssh/known_hosts
+            StrictHostKeyChecking yes
+            ConnectTimeout 30
+            ServerAliveInterval 30
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Sanity-check SSH + server state
+        run: |
+          ssh deploy "hostname; id; test -d $REMOTE_PATH && echo 'REMOTE_PATH ok' || (echo 'REMOTE_PATH missing!'; exit 2)"
+
+      - name: Rsync source
+        # --rsync-path='sudo -u <service-user> rsync' so files land owned by
+        # the service user, not the login user and not root.
+        #
+        # We intentionally do NOT pass --delete: the server holds files the
+        # repo doesn't (node_modules, uploads, logs, renders, temp, .env,
+        # local archive). Repo additions and modifications overwrite; repo
+        # deletions are NOT propagated. If a file needs to be removed from
+        # server, do it manually and follow up with the repo deletion.
+        run: |
+          RSYNC_FLAGS="-avz --human-readable"
+          if [ "$DRY_RUN" = "true" ]; then
+            RSYNC_FLAGS="$RSYNC_FLAGS --dry-run"
+            echo "### DRY RUN — no files will be written ###"
+          fi
+          rsync $RSYNC_FLAGS \
+            --exclude='node_modules/' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='logs/' \
+            --exclude='uploads/' \
+            --exclude='temp/' \
+            --exclude='renders/' \
+            --exclude='public/' \
+            --exclude='archive.tgz' \
+            --exclude='*.log' \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --rsync-path="sudo -u $SERVICE_USER rsync" \
+            nodejs-backend/ \
+            deploy:"$REMOTE_PATH/"
+
+      - name: Install dependencies if package.json changed
+        # Compare the freshly-deployed package.json on the server to the
+        # node_modules lock file to decide if an install is needed. A crude
+        # but effective heuristic: just install if package-lock.json changed
+        # on disk in this push.
+        if: env.DRY_RUN != 'true'
+        run: |
+          # Did this push touch package.json or package-lock.json?
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null \
+               | grep -qE '^nodejs-backend/(package|package-lock)\.json$'; then
+            echo "package(-lock).json changed — running npm install on server"
+            ssh deploy "sudo -u $SERVICE_USER -H bash -lc '\
+              source ~/.nvm/nvm.sh && \
+              cd $REMOTE_PATH && \
+              npm install --production --no-audit --no-fund'"
+          else
+            echo "package(-lock).json unchanged — skipping npm install"
+          fi
+
+      - name: Restart pm2 process
+        if: env.DRY_RUN != 'true'
+        run: |
+          ssh deploy "sudo -u $SERVICE_USER -H bash -lc '\
+            source ~/.nvm/nvm.sh && \
+            pm2 restart $PM2_PROCESS --update-env && \
+            pm2 save'"
+
+      - name: Health check (port + read-only endpoint)
+        if: env.DRY_RUN != 'true'
+        # Give the process 10s to come up, then verify:
+        #   1. tcp port 7000 is listening
+        #   2. hitting the root returns something HTTP-ish (not expecting
+        #      200 — routes require JWT — but a connection refusal is fatal)
+        run: |
+          sleep 10
+          ssh deploy "sudo ss -tlnp | grep ':7000 ' || (echo 'port 7000 not listening'; exit 3)"
+          ssh deploy "curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 http://127.0.0.1:7000/ || (echo 'gateway not reachable'; exit 4)"
+
+      - name: Autopilot smoke test (live /run-cycle dry-run)
+        if: env.DRY_RUN != 'true'
+        # Server-side execution so the smoke script can mint a short-lived
+        # JWT from the deployed .env (--jwt-from-mint) without us needing
+        # to plumb a token through GitHub secrets. Validates orchestrator +
+        # audit + system-token + Mongo writes end-to-end against real Meta
+        # data. Failure here fires the "Rollback on failure" step below.
+        #
+        # AUTOPILOT_BASE_URL defaults to the public domain so the test also
+        # exercises nginx + cert. Switch to http://127.0.0.1:7000 only if
+        # the public URL is unavailable from the server itself.
+        run: |
+          ssh deploy "sudo -u $SERVICE_USER -H bash -lc '\
+            source ~/.nvm/nvm.sh && \
+            cd $REMOTE_PATH && \
+            AUTOPILOT_BASE_URL=https://adsgpt-dev-api.poweradspy.com \
+            node scripts/smoke-autopilot.js --jwt-from-mint'"
+
+      - name: Tail logs (30s, for visibility)
+        if: env.DRY_RUN != 'true' && always()
+        continue-on-error: true
+        run: |
+          ssh deploy "sudo -u $SERVICE_USER -H bash -lc '\
+            source ~/.nvm/nvm.sh && \
+            timeout 30 pm2 logs $PM2_PROCESS --lines 40 --nostream || true; \
+            pm2 describe $PM2_PROCESS | grep -E \"restart|status|uptime\" || true'"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

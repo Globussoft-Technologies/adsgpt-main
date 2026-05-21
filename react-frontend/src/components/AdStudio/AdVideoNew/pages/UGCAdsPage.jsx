@@ -1,0 +1,909 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { estimateAdVideoCredits } from '@/utils/creditEstimator';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  CloudUpload,
+  LinkIcon,
+  RectangleHorizontal,
+  RectangleVertical,
+  Square,
+  X,
+  Clapperboard,
+  ChevronLeft,
+  Check,
+  Loader2,
+} from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { SiOpenai, SiBytedance } from 'react-icons/si';
+import KlingIcon from '@/components/icons/KlingIcon';
+import { RiGeminiFill as GeminiIcon } from 'react-icons/ri';
+import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
+import UpgradeModal from '../UpgradeModal';
+import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
+import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
+import {
+  generateVideoAction,
+  generateVideoUGCAction,
+} from '@/store/actions/adVideoNew/Advideoactions';
+import { analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
+import { toast } from 'react-toastify';
+import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { RiGeminiFill } from 'react-icons/ri';
+import emitter from '@/utils/eventEmitter';
+import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
+import { setActivePage, setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
+import { uploadToS3 } from '@/utils/imageUpload';
+import { globalToast } from '@/utils/globalToast';
+import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
+const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+const availableRatios = [
+  { value: '9:16', label: '9:16', icon: RectangleVertical },
+  { value: '1:1', label: '1:1', icon: Square, onlyModels: ['kling_3.0'] },
+  { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+];
+
+const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
+  const dispatch = useDispatch();
+  const { isLoading, recreateInputs } = useSelector((state) => state.adVideoNew);
+  const [localRecreateData, setLocalRecreateData] = useState(recreateInputs);
+  const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
+  const { modelCredits } = useSelector((state) => state.prompt);
+  const { userData, credits } = useSelector((state) => state.socket);
+  const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
+
+  // Form State
+  const [website, setWebsite] = useState('');
+  const [productName, setProductName] = useState('');
+  const [description, setDescription] = useState('');
+  const [productUrl, setProductUrl] = useState('');
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [videoModel, setVideoModel] = useState('');
+  const [videoDuration, setVideoDuration] = useState('');
+  const [aspectRatio, setAspectRatio] = useState('');
+  const [promotion, setPromotion] = useState('');
+  const [notes, setNotes] = useState('');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [imageOrientation, setImageOrientation] = useState(null); // 'portrait', 'landscape', 'square'
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxImages, setLightboxImages] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (productName && errors.productName) setErrors((prev) => ({ ...prev, productName: null }));
+    if (description && errors.description) setErrors((prev) => ({ ...prev, description: null }));
+    if (videoModel && errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: null }));
+    if (videoDuration && errors.videoDuration)
+      setErrors((prev) => ({ ...prev, videoDuration: null }));
+    if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
+    if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
+      setErrors((prev) => ({ ...prev, productUrl: null }));
+  }, [
+    productName,
+    description,
+    videoModel,
+    videoDuration,
+    aspectRatio,
+    productUrl,
+    uploadedImages,
+    errors,
+  ]);
+
+  const videoChatModels = useMemo(
+    () => [
+      {
+        value: 'veo-3.1-fast',
+        label: 'Veo 3.1 Fast (Fast & Social-Ready)',
+        tier: 'lower',
+        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) =>
+          m.label.toLowerCase().includes('veo 3.1 fast')
+        )?.value,
+      },
+      // {
+      //   value: 'sora',
+      //   label: 'Sora 2 (Creative & Stylised)',
+      //   tier: 'lower',
+      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
+      // },
+      {
+        value: 'veo',
+        label: 'Veo 3 (Cinematic Quality)',
+        tier: 'premium',
+        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
+      },
+      // {
+      //   value: 'soraPro',
+      //   label: 'Sora 2 Pro (Cinematic Storytelling)',
+      //   tier: 'premium',
+      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
+      //     ?.value,
+      // },
+      // {
+      //   value: 'soraPro_4k',
+      //   label: 'Sora Pro 4K (Premium 4K Film Quality)',
+      //   tier: 'premium',
+      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      //   credit: modelCredits?.videoModels?.find(
+      //     (m) =>
+      //       m.label.toLowerCase().includes('sora 2 pro 4k') ||
+      //       m.label.toLowerCase().includes('sora pro 4k')
+      //   )?.value,
+      // },
+      {
+        value: 'veo_4k',
+        label: 'Veo 4K (Cinematic 4K Quality)',
+        tier: 'premium',
+        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
+      },
+      // {
+      //   value: 'seedance_v1',
+      //   label: 'Seedance 1.5 Pro',
+      //   tier: 'premium',
+      //   Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance v1')
+      //     ?.value,
+      // },
+      {
+        value: 'seedance_v2',
+        label: 'Seedance 2.0 (Smooth Motion & Transitions)',
+        tier: 'premium',
+        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance 2.0')
+          ?.value,
+      },
+      {
+        value: 'seedance_fast',
+        label: 'Seedance 2.0 Fast (Quick Turnaround)',
+        tier: 'premium',
+        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find(
+          (m) => m.label.toLowerCase() === 'seedance 2.0 fast'
+        )?.value,
+      },
+      {
+        value: 'kling_3.0',
+        label: 'Kling 3.0',
+        tier: 'premium',
+        Icon: <KlingIcon className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
+          ?.value,
+      },
+    ],
+    [modelCredits]
+  );
+
+  useEffect(() => {
+    if (videoChatModels.length && !videoModel) {
+      setVideoModel(videoChatModels[0].value);
+    }
+  }, [videoChatModels, videoModel]);
+
+  useEffect(() => {
+    dispatch(fetchModelCreditsAction());
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (videoModel !== 'kling_3.0' && aspectRatio === '1:1') {
+      setAspectRatio('16:9');
+    }
+
+    // Kling specific ratio enforcement based on image orientation
+    if (videoModel === 'kling_3.0' && imageOrientation) {
+      if (imageOrientation === 'portrait' && aspectRatio !== '9:16') {
+        setAspectRatio('9:16');
+      } else if (imageOrientation === 'landscape' && aspectRatio !== '16:9') {
+        setAspectRatio('16:9');
+      } else if (imageOrientation === 'square' && aspectRatio !== '1:1') {
+        setAspectRatio('1:1');
+      }
+    }
+  }, [videoModel, aspectRatio, imageOrientation]);
+
+  useEffect(() => {
+    const selectedImg = uploadedImages[selectedImageIndex];
+    if (selectedImg?.preview) {
+      const img = new Image();
+      img.src = selectedImg.preview;
+      img.onload = () => {
+        if (img.height > img.width) {
+          setImageOrientation('portrait');
+        } else if (img.width > img.height) {
+          setImageOrientation('landscape');
+        } else {
+          setImageOrientation('square');
+        }
+      };
+    } else {
+      setImageOrientation(null);
+    }
+  }, [uploadedImages, selectedImageIndex]);
+
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const previews = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setUploadedImages((prev) => [...prev, ...previews]);
+  };
+
+  const removeImage = (index) => {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGenerate = async () => {
+    if (isLoading) return;
+    const newErrors = {};
+    if (!productName.trim()) newErrors.productName = 'Product name is required';
+    if (!description.trim()) newErrors.description = 'Description is required';
+    if (!videoModel) newErrors.videoModel = 'Model is required';
+    if (!videoDuration) newErrors.videoDuration = 'Duration is required';
+    if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
+    if (!productUrl.trim() && uploadedImages.length === 0) {
+      newErrors.productUrl = 'Product image is required';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    const payload = {
+      // sessionId,
+      inputs: {
+        type: 'ugc',
+        productUrl,
+        productName,
+        duration: videoDuration,
+        aspectRatio,
+        promotion,
+        notes,
+        model: videoModel,
+        numberOfVideos: 1,
+        productDescription: description,
+      },
+    };
+
+    try {
+      const selectedImage = uploadedImages[selectedImageIndex]
+        ? [uploadedImages[selectedImageIndex]]
+        : [];
+      await dispatch(generateVideoUGCAction(payload, selectedImage));
+      if (onGenerate) onGenerate();
+    } catch (error) {
+      console.log('Error in generating video:', error);
+    }
+  };
+
+  const isStep2Valid =
+    productName &&
+    description &&
+    videoModel &&
+    videoDuration &&
+    aspectRatio &&
+    (productUrl || uploadedImages.length > 0);
+
+  const handleNext = async () => {
+    if (!website || isAnalyzing) return;
+
+    setIsAnalyzing(true);
+    try {
+      const response = await analazeDomain(website).catch((error) => {
+        if (error?.response?.status === 409) return null; // ✅ silently ignore, proceed to step 2
+        throw error;
+      });
+
+      if (response) {
+        if (response.meta?.title) setProductName(response.meta.title);
+        if (response.meta?.description) setDescription(response.meta.description);
+        if (response.images && response.images.length > 0) {
+          const apiImages = response.images.map((url) => ({
+            file: null,
+            preview: url,
+            isApiImage: true,
+          }));
+          setUploadedImages(apiImages);
+          setSelectedImageIndex(0);
+        }
+      }
+      setStep(2);
+    } catch (error) {
+      console.error('Error in handleNext:', error);
+      setStep(2); // still proceed on any other error
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData.items;
+
+    // Case 1: Image pasted directly — store file, upload happens on Generate
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          setUploadedImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
+          return;
+        }
+      }
+    }
+
+    // Case 2: Image URL pasted — store as-is, upload happens on Generate
+    const pastedText = e.clipboardData.getData('text');
+
+    if (pastedText && pastedText.startsWith('http')) {
+      const isDuplicate = uploadedImages.some((img) => img.preview === pastedText);
+      if (isDuplicate) {
+        toast.error('This image is already added');
+        return;
+      }
+      setProductUrl(pastedText);
+      setUploadedImages((prev) => [...prev, { file: null, preview: pastedText, isUrl: true }]);
+    }
+  };
+
+  const videoTimer = useMemo(() => {
+    const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
+
+    if (videoModel === 'veo_4k') {
+      return [{ value: '8s', label: '8s' }];
+    }
+
+    if (videoModel === 'veo' || videoModel === 'veo-3.1-fast') {
+      let options = [
+        // { value: '4s', label: '4s' },
+        // { value: '6s', label: '6s' },
+        { value: '8s', label: '8s' },
+      ];
+
+      if (hasPlan8) {
+        if (videoModel === 'veo-3.1-fast') {
+          // limit to 8s
+          options = options.filter((opt) => parseInt(opt.value) <= 8);
+        }
+
+        // if (videoModel === 'veo') {
+        //   // limit to 6s
+        //   options = options.filter((opt) => parseInt(opt.value) <= 6);
+        // }
+      }
+
+      return options;
+    }
+
+    if (videoModel === 'soraPro_4k') {
+      return [
+        // { value: '4s', label: '4s' },
+        { value: '8s', label: '8s' },
+        { value: '12s', label: '12s' },
+        { value: '16s', label: '16s' },
+        { value: '21s', label: '21s' },
+      ];
+    }
+    if (videoModel === 'seedance_v2' || videoModel === 'seedance_fast' || videoModel === 'kling_3.0') {
+      return [
+        // { value: '4s', label: '4s' },
+        // {value: '6s', label: '6s' },  
+        { value: '8s', label: '8s' },
+        { value: '12s', label: '12s' },
+      
+      ]
+    };
+
+    // sora / soraPro
+    return [
+      // { value: '4s', label: '4s' },
+      { value: '8s', label: '8s' },
+      { value: '12s', label: '12s' },
+      { value: '16s', label: '16s' },
+      { value: '20s', label: '20s' },
+    ];
+  }, [videoModel]);
+
+  useEffect(() => {
+    if (videoTimer.length > 0) {
+      setVideoDuration(videoTimer[0].value);
+    }
+  }, [videoModel]);
+
+  useEffect(() => {
+    const handleRecreate = (inputs) => {
+      console.log('Recreating UGC video with inputs:', inputs);
+      if (!inputs || inputs.type !== 'ugc') return;
+
+      setStep(2); // Jump to form step
+
+      if (inputs.productName) setProductName(inputs.productName);
+      if (inputs.productDescription) setDescription(inputs.productDescription);
+      if (inputs.model && videoChatModels.some((m) => m.value === inputs.model)) {
+        setVideoModel(inputs.model);
+      }
+      if (inputs.duration) setVideoDuration(inputs.duration);
+      if (inputs.aspectRatio) setAspectRatio(inputs.aspectRatio);
+      if (inputs.promotion) setPromotion(inputs.promotion);
+      if (inputs.notes) setNotes(inputs.notes);
+
+      const s3Base = import.meta.env.VITE_S3_BASE_URL || '';
+      const rawImageUrl = inputs.image || inputs.imageUrl || inputs.productUrl || '';
+
+      if (rawImageUrl) {
+        const isFullUrl = rawImageUrl.startsWith('http');
+        const previewUrl = isFullUrl ? rawImageUrl : s3Base + rawImageUrl;
+
+        setProductUrl('');
+        setUploadedImages([
+          {
+            file: null,
+            preview: previewUrl,
+            isUrl: true,
+          },
+        ]);
+        setSelectedImageIndex(0);
+      }
+      // Clear recreateInputs from Redux after handled
+      setLocalRecreateData(inputs);
+      dispatch(setFields({ brand_name: inputs.productName || '' }));
+      dispatch(setRecreateInputs(null));
+    };
+
+    emitter.on('recreate-video', handleRecreate);
+    return () => {
+      emitter.off('recreate-video', handleRecreate);
+    };
+  }, [dispatch, videoChatModels]);
+
+  if (step === 1) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <div className="w-full max-w-[520px] rounded-[32px] border border-white/5 bg-[#18181B]/60 p-10 shadow-2xl backdrop-blur-xl">
+          {/* Header */}
+          <div className="relative mb-10 flex items-center justify-center gap-3 text-white">
+            <Clapperboard className="h-6 w-6 text-white" />
+            <h2 className="text-xl font-semibold tracking-tight">Create your UGC ad</h2>
+            <button
+              onClick={() => dispatch(setActivePage('home'))}
+              className="absolute -top-2 -right-4 rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Input */}
+          <div className="flex flex-col gap-4">
+            <label className="text-sm font-medium text-white/90">Brand Website</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Enter your website..."
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNext();
+                }}
+                className="w-full rounded-full border border-white/10 bg-white/[0.03] px-6 py-4 text-sm text-white shadow-inner transition-all placeholder:text-white/20 focus:ring-1 focus:ring-white/20 focus:outline-none"
+              />
+              <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-white/20" />
+            </div>
+          </div>
+
+          {/* Footer Buttons */}
+          <div className="mt-10 flex justify-end gap-3">
+            <button
+              onClick={() => setStep(2)}
+              disabled={isAnalyzing}
+              className={`rounded-full bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-white/60 transition hover:bg-white/10 hover:text-white ${
+                isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
+              }`}
+            >
+              Skip
+            </button>
+            <button
+              onClick={handleNext}
+              disabled={!website || isAnalyzing}
+              className={`rounded-full bg-white px-8 py-2.5 text-sm font-bold text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
+                !website || isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
+              }`}
+            >
+              {isAnalyzing ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Analyzing...</span>
+                </div>
+              ) : (
+                'Next'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden">
+      <div className="relative h-full w-full max-w-[1100px] rounded-[32px] border border-white/5 bg-[#18181B]/60 pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8">
+        {/* Back Button */}
+        {!localRecreateData && (
+          <button
+            onClick={() => setStep(1)}
+            className="absolute top-5.5 left-1 rounded-full p-2 text-white transition hover:bg-white/10 sm:left-6"
+          >
+            <ChevronLeft className="h-5 w-5 2xl:h-7 2xl:w-7" />
+          </button>
+        )}
+
+        {/* Header */}
+        <div className="mt-1 mb-6 ml-2 flex items-center justify-center gap-1 text-white sm:mt-0 sm:gap-3">
+          <Clapperboard className="h-5 w-5 text-white" />
+          <h2 className="font-semibold tracking-tight uppercase sm:text-lg 2xl:text-xl">
+            Create Your UGC Ad
+          </h2>
+        </div>
+
+        <div className="mt-10 flex h-full flex-col gap-6 pb-10">
+          <div className="h-full max-h-[500px] overflow-y-auto px-6">
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+              {/* Left Column - Scrollable if content overflows */}
+              <div className="flex flex-col gap-6 pr-4 sm:gap-[29px] 2xl:gap-6">
+                {/* Language support chip */}
+                <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-white px-2.5 py-0.5 text-10 font-medium text-black 2xl:text-xs">
+                  🌐 All regional languages supported
+                </span>
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    Brand/product Name*
+                  </label>
+                  <input
+                    placeholder="Enter your Brand/product name"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    className={`w-full rounded-xl border bg-white/5 px-4 py-2 text-[11px] text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:py-3 2xl:text-sm ${
+                      errors.productName ? 'border-red-500/50' : 'border-white/10'
+                    }`}
+                  />
+                  {errors.productName && (
+                    <span className="mt-1 text-[12px] text-red-400">{errors.productName}</span>
+                  )}
+                </div>
+
+                {/* URL / Upload */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-white/80">
+                    Brand/product URL or upload image*
+                  </label>
+
+                  <div
+                    className={`flex items-center gap-2 rounded-full border bg-white/5 px-1 py-0.5 ${
+                      errors.productUrl ? 'border-red-500/50' : 'border-white/10'
+                    }`}
+                  >
+                    <div className="flex flex-1 items-center justify-between">
+                      <input
+                        placeholder="Paste your product Image"
+                        value={productUrl}
+                        onChange={(e) => setProductUrl(e.target.value)}
+                        onPaste={handlePaste}
+                        className="w-full bg-transparent px-2 py-1 text-[11px] text-white focus:outline-none 2xl:text-xs"
+                      />
+
+                      <LinkIcon className="h-3 w-3 text-white/40" />
+                    </div>
+
+                    <label
+                      htmlFor="ugc-image-upload"
+                      className="flex cursor-pointer items-center gap-1 rounded-full bg-white/20 px-3 py-1 transition hover:bg-white/30"
+                    >
+                      <CloudUpload className="h-3 w-3 text-white 2xl:h-3.5 2xl:w-3.5" />
+                      <span className="!text-[8px] font-bold tracking-wider text-white uppercase 2xl:text-[11px]">
+                        Upload
+                      </span>
+                    </label>
+
+                    <input
+                      id="ugc-image-upload"
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                  </div>
+                  {errors.productUrl && (
+                    <span className="mt-1 text-[12px] text-red-400">{errors.productUrl}</span>
+                  )}
+                </div>
+
+                {/* Model & Duration */}
+                <div className="flex gap-4">
+                  <div className="flex flex-1 flex-col gap-2">
+                    <label className="text-xs font-medium text-white/80 2xl:text-sm">Model *</label>
+                    <CommonDropdown
+                      options={videoChatModels}
+                      label="Model"
+                      icon={SparkleDark}
+                      value={videoChatModels.find((o) => o.value === videoModel)}
+                      onChange={(val) => {
+                        const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes(
+                          '8'
+                        );
+                        if (hasPlan8) {
+                          if (val !== 'sora' && val !== 'veo-3.1-fast') {
+                            // window.location.href =
+                            //   'https://adsgpt-dev.poweradspy.com/amember/signup';
+                            setIsUpgradeModalOpen(true);
+                            return;
+                          }
+                        }
+                        setVideoModel(val);
+                      }}
+                      type="ugc"
+                    />
+                    {errors.videoModel && (
+                      <span className="mt-1 text-[12px] text-red-400">{errors.videoModel}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2">
+                    <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                      Duration *
+                    </label>
+                    <CommonDropdown
+                      options={videoTimer}
+                      label="Duration"
+                      icon={TimerDarkLogo}
+                      value={videoTimer.find((o) => o.value === videoDuration)}
+                      onChange={(value) => setVideoDuration(value)}
+                      type="ugc"
+                    />
+                    {errors.videoDuration && (
+                      <span className="mt-1 text-[12px] text-red-400">{errors.videoDuration}</span>
+                    )}
+                  </div>
+                </div>
+                {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+                  <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+                    <span>⚠</span>
+                    <span>Lower quality model selected. Video output quality may be reduced.</span>
+                  </div>
+                )}
+
+                {/* Aspect Ratio */}
+                <div className="flex flex-col gap-3">
+                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    Aspect Ratio *
+                  </label>
+                  <div className="flex gap-4">
+                    {availableRatios
+                      .filter((r) => !r.onlyModels || r.onlyModels.includes(videoModel))
+                      .map((ratio) => {
+                        const Icon = ratio.icon;
+                        const isSelected = aspectRatio === ratio.value;
+                        const isKling = videoModel === 'kling_3.0';
+                        let isDisabled = false;
+
+                        if (isKling && imageOrientation) {
+                          if (imageOrientation === 'portrait' && ratio.value !== '9:16')
+                            isDisabled = true;
+                          if (imageOrientation === 'landscape' && ratio.value !== '16:9')
+                            isDisabled = true;
+                          if (imageOrientation === 'square' && ratio.value !== '1:1')
+                            isDisabled = true;
+                        }
+
+                        return (
+                          <button
+                            key={ratio.value}
+                            disabled={isDisabled}
+                            onClick={() => {
+                              if (isDisabled) return;
+                              setAspectRatio(ratio.value);
+                            }}
+                            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
+                              isSelected
+                                ? 'border-white/30 bg-white/10 text-white shadow-inner'
+                                : isDisabled
+                                  ? 'border-white/5 bg-transparent text-white/20 cursor-not-allowed opacity-40 grayscale'
+                                  : errors.aspectRatio
+                                    ? 'border-red-500/50 bg-transparent text-white/40 hover:bg-white/5'
+                                    : 'border-white/5 bg-transparent text-white/40 hover:bg-white/5 hover:text-white/60'
+                            }`}
+                          >
+                            <Icon
+                              className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-white/40'}`}
+                            />
+                            {ratio.label}
+                          </button>
+                        );
+                      })}
+                  </div>
+                  {errors.aspectRatio && (
+                    <span className="mt-1 text-[12px] text-red-400">{errors.aspectRatio}</span>
+                  )}
+                  {/* {videoModel === 'kling_3.0' && aspectRatio === '9:16' && (
+                    <div className="mt-1 flex w-fit items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400 2xl:text-xs">
+                      <span>ℹ</span>
+                      <span>Product image also should be in 9:16 ratio</span>
+                    </div>
+                  )} */}
+                </div>
+
+                {/* Promotional Info */}
+                {videoModel !== 'seedance_v1' && (
+                  <div className="mt-0.5 flex flex-col gap-2 2xl:mt-0">
+                    <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                      Promotional Info
+                    </label>
+                    <input
+                      placeholder="Enter any promotional info/offers"
+                      value={promotion}
+                      onChange={(e) => setPromotion(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column */}
+              <div className="flex flex-col gap-6 overflow-hidden">
+                {/* Description */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    Brand description*
+                  </label>
+                  <textarea
+                    placeholder="Enter your Brand Description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                    className={`w-full resize-none rounded-xl border bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
+                      errors.description ? 'border-red-500/50' : 'border-white/10'
+                    }`}
+                  />
+                  {errors.description && (
+                    <span className="mt-1 text-[12px] text-red-400">{errors.description}</span>
+                  )}
+                </div>
+
+                {/* Thumbnails */}
+                {uploadedImages.length > 0 && (
+                  <div className="flex min-h-0 flex-1 flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                        Product Images *
+                      </label>
+                      <span className="text-[10px] font-medium text-white/30">
+                        {uploadedImages.length} Images
+                      </span>
+                    </div>
+
+                    <div
+                      className="scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-[#4F46E5]/40 grid grid-cols-3 gap-4 overflow-y-auto rounded-3xl border border-white/5 bg-[#1C1C1F] p-4"
+                      style={{ height: '180px', alignContent: 'start' }}
+                    >
+                      {uploadedImages.map((img, idx) => {
+                        const isSelected = selectedImageIndex === idx;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setSelectedImageIndex(idx)}
+                            onDoubleClick={() => {
+                              const allImages = uploadedImages.map((img) => img.preview);
+                              setLightboxImages(allImages);
+                              setLightboxImage(img.preview);
+                              setLightboxOpen(true);
+                            }}
+                            className={`group relative flex h-[70px] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border shadow-xl transition-all duration-300 ${
+                              isSelected
+                                ? 'border-[#4F46E5] bg-[#4F46E5]/10 ring-1 ring-[#4F46E5]'
+                                : 'border-white/5 bg-white/[0.03] hover:border-white/20'
+                            }`}
+                          >
+                            <div className="relative flex h-full w-full items-center justify-center p-2">
+                              <img
+                                src={img.preview}
+                                alt={`Product ${idx}`}
+                                className={`max-h-full max-w-full object-contain transition-transform duration-500 ${
+                                  isSelected ? 'scale-110' : 'group-hover:scale-105'
+                                }`}
+                              />
+                            </div>
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#4F46E5] text-white shadow-lg">
+                                <Check className="h-3 w-3" />
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              className="absolute -top-2 -right-2 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeImage(idx);
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4.5 flex flex-col gap-2">
+                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    Additional Notes
+                  </label>
+                  <input
+                    placeholder="e.g., white background, aerial drone shot, etc"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mr-4 flex items-center justify-end gap-2 2xl:gap-3">
+            {(() => {
+              const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
+              const enough = availableCredits >= est;
+              return (
+                <>
+                  <ShadcnTooltip label={enough ? `Will use : ${est} credits, ${availableCredits - est} left after` : `Not enough credits — need ${est}, you have ${availableCredits}`}>
+                    <span className={`rounded-full px-6 py-2 text-xs 2xl:text-sm font-medium ${enough ? 'bg-white/20 text-white/90' : 'bg-red-500 text-white'}`}>
+                      ~{est} credits
+                    </span>
+                  </ShadcnTooltip>
+                  <button
+                    disabled={isLoading || !enough}
+                    onClick={handleGenerate}
+                    className={`rounded-full px-10 py-2 text-xs font-bold text-black shadow-2xl transition 2xl:text-sm ${
+                      isLoading || !enough
+                        ? 'cursor-not-allowed bg-white/30'
+                        : 'bg-white hover:scale-[1.02] hover:opacity-90 active:scale-[0.98]'
+                    }`}
+                  >
+                    {isLoading ? 'Generating...' : 'Generate'}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {lightboxOpen && (
+          <ShowLightBox
+            images={lightboxImages}
+            lightboxImage={lightboxImage}
+            closeLightbox={() => setLightboxOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        onUpgrade={() => {
+          setIsUpgradeModalOpen(false);
+          window.open(SIGNUP_URL, '_blank');
+        }}
+      />
+    </div>
+  );
+};
+
+export default UGCAdsPage;

@@ -1,0 +1,655 @@
+import axios from 'axios';
+import getCookies from '@/utils/getCookies';
+import {
+  setLoading,
+  setError,
+  setImageAndScript,
+  setAllVideos,
+  setAvatars,
+  setAvatarsLoading,
+  setAiAdsAnalysisData,
+  setAiAdsAnalysisLoading,
+  setAiAdsAnalysisError,
+  setAiAdsSceneData,
+  setAiAdsSceneLoading,
+} from '@/store/reducers/adStudio/adVideoNewSlice';
+import { uploadToS3 } from '@/utils/imageUpload';
+import { globalToast } from '@/utils/globalToast';
+import { setSavedCount } from '@/store/reducers/adStudio/adVideoNewSlice';
+const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
+const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+
+const VIDEO_GENERATE_API = `${BACKEND_HOST}/adsgpt/video/generate`;
+
+export const generateVideoAction =
+  (payload, files = []) =>
+  async (dispatch, getState) => {
+    try {
+      dispatch(setLoading(true));
+      dispatch(setError(null));
+
+      const { socket } = getState();
+      const userId = socket?.userData?.user_id;
+
+      let imageUrl = '';
+
+      if (files.length > 0) {
+        const imgObj = files[0];
+        const file = imgObj.file;
+
+        if (file) {
+          globalToast.loading('Uploading image...');
+          const uploadedUrl = await uploadToS3(file, userId, true);
+          globalToast.dismiss();
+          if (uploadedUrl) {
+            imageUrl = `${S3_BASE_URL}${uploadedUrl}`;
+          } else {
+            throw new Error('Image upload failed');
+          }
+        } else if (imgObj.url) {
+          imageUrl = imgObj.url;
+        } else if (imgObj.preview && !imgObj.preview.startsWith('blob:')) {
+          // External URL — fetch, upload to S3, use S3 URL
+          globalToast.loading('Uploading image...');
+          const res = await fetch(imgObj.preview);
+          const blob = await res.blob();
+          const urlFile = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+          const uploadedUrl = await uploadToS3(urlFile, userId, true);
+          globalToast.dismiss();
+          if (uploadedUrl) {
+            imageUrl = `${S3_BASE_URL}${uploadedUrl}`;
+          } else {
+            throw new Error('Image upload failed');
+          }
+        }
+      }
+
+      const finalPayload = {
+        ...payload,
+        inputs: {
+          ...payload.inputs,
+          image: imageUrl || (payload.inputs.image ? `${S3_BASE_URL}${payload.inputs.image}` : ''),
+        },
+      };
+
+      const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getCookies()}`,
+        },
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        dispatch(setImageAndScript(response.data));
+        globalToast.success('Video generation started successfully!');
+        return response.data;
+      } else {
+        throw new Error('Video generation failed');
+      }
+    } catch (error) {
+      console.error('Error generating video:', error);
+      const errorMsg =
+        error.response?.data?.error || error.message || 'An error occurred during video generation';
+      dispatch(setError(errorMsg));
+      globalToast.error(errorMsg);
+      throw error;
+    } finally {
+      dispatch(setLoading(false));
+    }
+  };
+
+export const fetchProcessingCount = () => async (dispatch) => {
+  try {
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/video/processing-count`, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    // console.log("count",response)
+    const count = response?.data?.count || 0;
+
+    dispatch(setSavedCount(count));
+  } catch (error) {
+    console.error('Error fetching processing count:', error);
+  }
+};
+
+export const fetchAllVideos =
+  ({ skip = 0, limit = 10, append = false, type = '', startDate = '', endDate = '' } = {}) =>
+  async (dispatch, getState) => {
+    try {
+      dispatch(setLoading(true));
+      const response = await axios.get(`${BACKEND_HOST}/adsgpt/video/all`, {
+        params: { skip, limit, type, startDate, endDate },
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      // console.log('all videos', response);
+      const videos = response?.data?.data || [];
+      if (append) {
+        const { allVideos } = getState().adVideoNew;
+        dispatch(setAllVideos([...allVideos, ...videos]));
+      } else {
+        dispatch(setAllVideos(videos));
+      }
+      return videos;
+    } catch (error) {
+      console.error('Error fetching all videos:', error);
+      return [];
+    } finally {
+      dispatch(setLoading(false));
+    }
+  };
+
+export const generateVideoUGCAction =
+  (payload, files = []) =>
+  async (dispatch, getState) => {
+    try {
+      dispatch(setLoading(true));
+      dispatch(setError(null));
+
+      const { socket } = getState();
+      const userId = socket?.userData?.user_id;
+
+      let imageUrl = '';
+
+      if (files.length > 0) {
+        const selectedImage = files[0];
+
+        // CASE 1: Image from analyze-url API — fetch and upload to S3
+        if (selectedImage.isApiImage) {
+          globalToast.loading('Uploading image...');
+          const res = await fetch(selectedImage.preview);
+          const blob = await res.blob();
+          const urlFile = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+          const uploadedUrl = await uploadToS3(urlFile, userId, true);
+          globalToast.dismiss();
+          if (!uploadedUrl) throw new Error('Image upload failed');
+          imageUrl = `${S3_BASE_URL}${uploadedUrl}`;
+        }
+
+        // CASE 2: Image pasted URL — fetch and upload to S3
+        else if (selectedImage.isUrl) {
+          globalToast.loading('Uploading image...');
+          const res = await fetch(selectedImage.preview);
+          const blob = await res.blob();
+          const urlFile = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+          const uploadedUrl = await uploadToS3(urlFile, userId, true);
+          globalToast.dismiss();
+          if (!uploadedUrl) throw new Error('Image upload failed');
+          imageUrl = `${S3_BASE_URL}${uploadedUrl}`;
+        }
+
+        // CASE 3: Manually uploaded image
+        else if (selectedImage.file) {
+          globalToast.loading('Uploading image...');
+
+          const uploadedUrl = await uploadToS3(selectedImage.file, userId, true);
+
+          globalToast.dismiss();
+
+          if (!uploadedUrl) {
+            throw new Error('Image upload failed');
+          }
+
+          imageUrl = `${S3_BASE_URL}${uploadedUrl}`;
+        }
+      }
+
+      const finalPayload = {
+        ...payload,
+        inputs: {
+          ...payload.inputs,
+          image: imageUrl,
+        },
+      };
+
+      const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        dispatch(setImageAndScript(response.data));
+        globalToast.success('Video generation started successfully!');
+        return response.data;
+      } else {
+        throw new Error('Video generation failed');
+      }
+    } catch (error) {
+      console.error('Error generating video:', error);
+
+      const errorMsg =
+        error.response?.data?.error || error.message || 'An error occurred during video generation';
+
+      dispatch(setError(errorMsg));
+      globalToast.error(errorMsg);
+
+      throw error;
+    } finally {
+      dispatch(setLoading(false));
+    }
+  };
+
+export const downloadMediaFromUrl = (mediaUrl, kind = 'video') => async () => {
+  try {
+    if (!mediaUrl) throw new Error('URL is required');
+
+    // Image records arrive pre-normalised with absolute URLs; video records
+    // still hand us relative paths. Only prefix S3 if the URL isn't already
+    // absolute, otherwise we end up double-prefixing.
+    const fullUrl = /^https?:\/\//i.test(mediaUrl) ? mediaUrl : `${S3_BASE_URL}${mediaUrl}`;
+    const filename =
+      mediaUrl.split('/').pop() || (kind === 'image' ? 'image.png' : 'video.mp4');
+
+    const toastId = globalToast.loading(
+      kind === 'image' ? 'Downloading image...' : 'Downloading video...',
+    );
+
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/video/download-media`, {
+      params: { url: fullUrl },
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+      },
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response.data]);
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(blobUrl);
+    globalToast.success('Download completed', { id: toastId });
+  } catch (error) {
+    console.error('Download API error:', error);
+    globalToast.error('Failed to download');
+    throw error;
+  }
+};
+
+export const downloadMediaZipAction = (urls, kind = 'video') => async () => {
+  try {
+    if (!urls || urls.length === 0) throw new Error('URLs are required');
+
+    const toastId = globalToast.loading(
+      kind === 'image'
+        ? 'Preparing image zip download...'
+        : 'Preparing video zip download...',
+    );
+
+    const fullUrls = urls.map((url) =>
+      /^https?:\/\//i.test(url) ? url : `${S3_BASE_URL}${url}`,
+    );
+
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/download-media-zip`,
+      { urls: fullUrls },
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob',
+      }
+    );
+
+    const blob = new Blob([response.data], { type: 'application/zip' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `${kind === 'image' ? 'images' : 'videos'}-${Date.now()}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(blobUrl);
+    globalToast.success('Zip download completed', { id: toastId });
+  } catch (error) {
+    console.error('Zip download error:', error);
+    globalToast.error('Failed to download zip');
+    throw error;
+  }
+};
+
+export const getAllAvatars = () => async (dispatch) => {
+  try {
+    dispatch(setAvatarsLoading(true));
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/avatar`, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    dispatch(setAvatars(response.data.data || []));
+    return response.data.data || [];
+  } catch (error) {
+    console.error('Error fetching avatars:', error);
+    return [];
+  } finally {
+    dispatch(setAvatarsLoading(false));
+  }
+};
+
+export const getVideoById = (id) => async () => {
+  try {
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/video/${id}`, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log('getvideobyid: ', response);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching video:', error);
+    throw error;
+  }
+};
+
+export const generateImageAndScript = (payload) => async (dispatch) => {
+  try {
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/generate-image-and-script`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    console.log('generateImageAndScript: ', response);
+    dispatch(setImageAndScript(response.data));
+    // globalToast.success('Image and script generation started successfully!');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching image and script:', error);
+    globalToast.error(error.response?.data?.error || 'Failed to generate image and script');
+    dispatch(setError(error.response?.data?.error || 'Error fetching image and script'));
+    throw error;
+  } finally {
+    dispatch(setLoading(false));
+  }
+};
+
+export const regenerateScript = (payload) => async (dispatch) => {
+  try {
+    const response = await axios.post(`${BACKEND_HOST}/adsgpt/video/regenerate-script`, payload, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log('regenerate Script: ', response);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching regenerated script:', error);
+    const apiError = error.response?.data?.error || error.message;
+    const fullErrorMsg = apiError
+      ? `Failed to generate script: ${apiError}`
+      : 'Failed to generate script';
+    globalToast.error(fullErrorMsg);
+    dispatch(setError(fullErrorMsg));
+    throw error;
+  }
+};
+
+export const generateAvatarVideo =
+  (id, payload = {}) =>
+  async (dispatch) => {
+    try {
+      dispatch(setLoading(true));
+      dispatch(setError(null));
+      const response = await axios.post(
+        `${BACKEND_HOST}/adsgpt/video/generate-avatar-video/${id}`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${getCookies()}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      console.log(' Video generated successfully: ', response);
+      globalToast.success('Video generation started successfully!');
+      return response.data;
+    } catch (error) {
+      console.error('Error in generating video', error);
+      const errorMsg = 'Error in generating video';
+      globalToast.error(error.response?.data?.error || errorMsg);
+      dispatch(setError(errorMsg));
+      throw error;
+    } finally {
+      dispatch(setLoading(false));
+    }
+  };
+
+
+export const analyzeAiAdsAction = (aiAdsType, { script = '', name = '' }) => async (dispatch) => {
+  try {
+    dispatch(setAiAdsAnalysisLoading(true));
+    dispatch(setAiAdsAnalysisError(null));
+    const endpoint = `${BACKEND_HOST}/adsgpt/video/ai-ads/${aiAdsType}`;
+    const response = await axios.post(
+      endpoint,
+      { script, name },
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    const result = response.data?.data || response.data;
+    dispatch(setAiAdsAnalysisData(result));
+    return result;
+  } catch (error) {
+    // console.log(error)F
+    const errorMsg = error.response?.data?.error || 'Failed to analyze';
+    dispatch(setAiAdsAnalysisError(errorMsg));
+    throw error;
+  } finally {
+    dispatch(setAiAdsAnalysisLoading(false));
+  }
+};
+
+
+
+
+export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch, getState) => {
+  try {
+    dispatch(setAiAdsSceneLoading(true));
+    dispatch(setError(null));
+
+    const { socket } = getState();
+    const userId = socket?.userData?.user_id;
+
+    // Upload all images (url-based then file-based) to S3
+    const imageUrls = [];
+
+    for (const img of details.urlImages || []) {
+      try {
+        const res = await fetch(img.url);
+        const blob = await res.blob();
+        const file = new File([blob], img.name || 'image.jpg', { type: blob.type || 'image/jpeg' });
+        const uploaded = await uploadToS3(file, userId, true);
+        if (uploaded) imageUrls.push(`${S3_BASE_URL}${uploaded}`);
+      } catch (e) {
+        console.error('Image upload failed:', e);
+      }
+    }
+
+    for (const img of details.uploadedImages || []) {
+      if (!img.file) continue;
+      const uploaded = await uploadToS3(img.file, userId, true);
+      if (uploaded) imageUrls.push(`${S3_BASE_URL}${uploaded}`);
+    }
+
+    // Upload logo
+    let logoUrl = '';
+    const logoSource = details.uploadedLogo || details.urlLogo;
+    if (logoSource) {
+      try {
+        if (logoSource.file) {
+          const uploaded = await uploadToS3(logoSource.file, userId, true);
+          if (uploaded) logoUrl = `${S3_BASE_URL}${uploaded}`;
+        } else if (logoSource.url) {
+          const res = await fetch(logoSource.url);
+          const blob = await res.blob();
+          const file = new File([blob], 'logo.jpg', { type: blob.type || 'image/jpeg' });
+          const uploaded = await uploadToS3(file, userId, true);
+          if (uploaded) logoUrl = `${S3_BASE_URL}${uploaded}`;
+        }
+      } catch (e) {
+        console.error('Logo upload failed:', e);
+      }
+    }
+
+    const { formData } = details;
+    const isBrand = aiAdsType === 'brand';
+
+    const inputs = isBrand
+      ? {
+          type: 'ai_ads',
+          aiAdsType: 'brand',
+          brandName: formData.name,
+          productDescription: formData.description,
+          category: formData.category,
+          images: imageUrls,
+          logoUrl,
+          adStyle: formData.adStyle,
+          tone: formData.tone,
+          ctaType: formData.cta,
+          tagline: formData.tagline,
+          model: formData.model,
+          duration: formData.duration,
+          aspectRatio: formData.aspectRatio,
+          numberOfVideos: 1,
+          userPrompt: formData.optimizedPrompt || '',
+        }
+      : {
+          type: 'ai_ads',
+          aiAdsType: 'product',
+          productName: formData.name,
+          productDescription: formData.description,
+          category: formData.category,
+          images: imageUrls,
+          logoUrl,
+          adStyle: formData.adStyle,
+          tone: formData.tone,
+          ctaType: formData.cta,
+          productType: formData.productType,
+          price: formData.price || '',
+          model: formData.model,
+          duration: formData.duration,
+          aspectRatio: formData.aspectRatio,
+          numberOfVideos: 1,
+          userPrompt: formData.optimizedPrompt || '',
+        };
+
+    const response = await axios.post(
+     `${BACKEND_HOST}/adsgpt/video/ai-ads/generate-scene`,
+      { inputs },
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data?.valid === false) {
+      dispatch(setAiAdsSceneLoading(false));
+      return { __validationError: true, fields: response.data.fields || [], message: response.data.message };
+    }
+
+    const sessionId = response.data?.data?._id || response.data?._id || null;
+    dispatch(setAiAdsSceneData(response.data));
+    return { ...response.data, sessionId };
+    // setAiAdsSceneLoading(false) is called by the aiAdsScenesReady socket event
+  } catch (error) {
+    const responseData = error.response?.data;
+    if (responseData?.fields?.length > 0) {
+      dispatch(setAiAdsSceneLoading(false));
+      return { __validationError: true, fields: responseData.fields, message: responseData.message };
+    }
+    const errorMsg = responseData?.error || 'Failed to generate scenes';
+    dispatch(setError(errorMsg));
+    globalToast.error(errorMsg);
+    dispatch(setAiAdsSceneLoading(false));
+    throw error;
+  }
+};
+
+export const getAiAdsSceneAction = (_id) => async (dispatch) => {
+  try {
+    dispatch(setAiAdsSceneLoading(true));
+    const response = await axios.get(
+      `${BACKEND_HOST}/adsgpt/video/${_id}`,
+      { headers: { Authorization: `Bearer ${getCookies()}` } }
+    );
+    const data = response.data?.data || response.data;
+    dispatch(setAiAdsSceneData(data));
+    // This is a fetch, not a generation — turn off loading immediately
+    dispatch(setAiAdsSceneLoading(false));
+  } catch (error) {
+    globalToast.error(error.response?.data?.error || 'Failed to fetch scenes');
+    dispatch(setAiAdsSceneLoading(false));
+  }
+};
+
+// segments: [{ segmentNumber: 0, regenerate: 'text'|'image'|'both' }]
+export const regenerateAiAdsSceneAction = (_id, segments) => async (dispatch) => {
+  try {
+    dispatch(setAiAdsSceneLoading(true));
+    await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/regenerate-scene`,
+      { sessionId: _id, segments },
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || 'Failed to regenerate scenes';
+    dispatch(setError(errorMsg));
+    globalToast.error(errorMsg);
+    dispatch(setAiAdsSceneLoading(false));
+    throw error;
+  }
+  // setAiAdsSceneLoading(false) is called by the aiAdsScenesReady socket event
+};
+
+export const generateAiAdsVideoAction = (sessionId) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/generate-video/${sessionId}`,
+      {},
+      { headers: { Authorization: `Bearer ${getCookies()}` } }
+    );
+    if (response.status === 200 || response.status === 201) {
+      return true;
+    }
+    throw new Error('Video generation failed');
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || 'Failed to generate video';
+    globalToast.error(errorMsg);
+    throw error;
+  }
+};

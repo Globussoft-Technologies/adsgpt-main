@@ -1,0 +1,100 @@
+/* react-date-range tweaks to match the panel's indigo/slate look */
+.rdrCalendarWrapper,
+.rdrDateDisplayWrapper,
+.rdrMonthAndYearWrapper {
+  background: #ffffff;
+  font-family: inherit;
+  color: #0f172a;
+}
+
+.rdrMonthAndYearPickers select {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.rdrDayNumber span {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.rdrDayPassive .rdrDayNumber span {
+  color: #cbd5e1;
+}
+
+.rdrDayDisabled {
+  background: transparent;
+}
+
+.rdrDayToday .rdrDayNumber span:after {
+  background: #6366f1;
+}
+
+.rdrDayHovered .rdrDayNumber span,
+.rdrDayInPreview .rdrDayNumber span,
+.rdrDayStartPreview .rdrDayNumber span,
+.rdrDayEndPreview .rdrDayNumber span {
+  color: #0f172a;
+}
+
+/* Selection pill — round the start/end edges */
+.rdrStartEdge,
+.rdrEndEdge {
+  border-radius: 999px;
+}
+.rdrStartEdge {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.rdrEndEdge {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.rdrStartEdge.rdrEndEdge {
+  border-radius: 999px;
+}
+.rdrInRange {
+  border-radius: 0;
+}
+
+/* When the selected day is also start AND end (single day), keep it pill */
+.rdrDayStartOfMonth .rdrInRange,
+.rdrDayEndOfMonth .rdrInRange,
+.rdrDayStartOfWeek .rdrInRange,
+.rdrDayEndOfWeek .rdrInRange {
+  border-radius: 0;
+}
+
+.rdrSelected,
+.rdrInRange,
+.rdrStartEdge,
+.rdrEndEdge {
+  color: #6366f1 !important;
+}
+
+.rdrDayStartPreview,
+.rdrDayInPreview,
+.rdrDayEndPreview {
+  border-color: #6366f1;
+}
+
+/* Make the selected day text white to read on the indigo pill */
+.rdrDay.rdrDayStartOfWeek .rdrInRange,
+.rdrDay.rdrDayEndOfWeek .rdrInRange {
+  border-radius: 0;
+}
+.rdrDay .rdrStartEdge ~ .rdrDayNumber span,
+.rdrDay .rdrEndEdge ~ .rdrDayNumber span,
+.rdrDay .rdrInRange ~ .rdrDayNumber span {
+  color: #ffffff;
+}
+
+.rdrNextPrevButton {
+  background: #f1f5f9;
+}
+.rdrNextPrevButton:hover {
+  background: #e2e8f0;
+}
+
+.rdrMonthAndYearWrapper {
+  padding-top: 4px;
+}

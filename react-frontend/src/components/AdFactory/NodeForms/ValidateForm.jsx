@@ -1,0 +1,485 @@
+import React from 'react';
+import { Formik, Form, ErrorMessage } from 'formik';
+import * as Yup from 'yup';
+import { motion } from 'framer-motion';
+import { useDispatch, useSelector } from 'react-redux';
+import { toast } from 'react-toastify';
+import { PiFacebookLogoBold, PiSnapchatLogo } from 'react-icons/pi';
+import { FaGoogle, FaMeta, FaPinterest, FaReddit, FaSnapchat, FaWhatsapp } from 'react-icons/fa6';
+import { AiFillTikTok } from 'react-icons/ai';
+import { RiTwitterXFill } from 'react-icons/ri';
+import { AiOutlineYoutube } from 'react-icons/ai';
+import { FaInstagram, FaLinkedin } from 'react-icons/fa';
+import { RectangleVertical, Square, RectangleHorizontal, Trash2 } from 'lucide-react';
+
+import { setActiveForm } from '@/store/reducers/AdFactory/AdFactorySlice';
+import { fetchCampaignById, updateCampaign } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { updateDistribution } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
+import {
+  setCompletedNodes,
+  setFormProgress,
+  updateNodeEnabledStatus,
+} from '@/store/reducers/AdFactory/AdFactorySlice';
+import { useSearchParams } from 'react-router-dom';
+import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+
+const schema = Yup.object().shape({
+  platforms: Yup.array()
+    .of(
+      Yup.object().shape({
+        platformName: Yup.string().required('Platform is required'),
+        creativeRatios: Yup.array()
+          .of(Yup.string().required('Ratio is required'))
+          .min(1, 'Select at least one ratio')
+          .max(5, 'Maximum 5 ratios allowed')
+          .required('Ratios are required'),
+      })
+    )
+    .min(1, 'Select at least one platform')
+    .max(10, 'Maximum 10 platforms allowed'),
+});
+
+const availablePlatforms = [
+  {
+    id: 'meta',
+    name: 'meta',
+    icon: FaMeta,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: true,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '4:5', label: '4:5', icon: RectangleVertical },
+      { value: '9:16', label: '9:16', icon: RectangleVertical },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+    ],
+  },
+  {
+    id: 'google',
+    name: 'google',
+    icon: FaGoogle,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+    ],
+  },
+  {
+    id: 'tiktok',
+    name: 'tiktok',
+    icon: AiFillTikTok,
+    iconSize: 'size-7',
+    isLaunchable: false,
+    availableRatios: [{ value: '9:16', label: '9:16', icon: RectangleVertical }],
+  },
+  {
+    id: 'snapchat',
+    name: 'snapchat',
+    icon: FaSnapchat,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '9:16', label: '9:16', icon: RectangleVertical },
+      { value: '1:1', label: '1:1', icon: Square },
+    ],
+  },
+  {
+    id: 'linkedin',
+    name: 'linkedin',
+    icon: FaLinkedin,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+    ],
+  },
+  {
+    id: 'twitter',
+    name: 'twitter',
+    icon: RiTwitterXFill,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+    ],
+  },
+  {
+    id: 'pinterest',
+    name: 'pinterest',
+    icon: FaPinterest,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '2:3', label: '2:3', icon: RectangleVertical },
+      { value: '9:16', label: '9:16', icon: RectangleVertical },
+    ],
+  },
+  {
+    id: 'reddit',
+    name: 'reddit',
+    icon: FaReddit,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+      { value: '4:5', label: '4:5', icon: RectangleVertical },
+    ],
+  },
+  {
+    id: 'whatsapp',
+    name: 'whatsapp',
+    icon: FaWhatsapp,
+    iconSize: 'size-5.5 2xl:size-6',
+    isLaunchable: false,
+    availableRatios: [
+      { value: '1:1', label: '1:1', icon: Square },
+      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+    ],
+  },
+  // {
+  //   id: 'youtube',
+  //   name: 'youtube',
+  //   icon: AiOutlineYoutube,
+  //   iconSize: 'size-7',
+  //   availableRatios: [
+  //     { value: '1:1', label: '1:1', icon: Square },
+  //     { value: '16:9', label: '16:9', icon: RectangleHorizontal },
+  //     { value: '4:5', label: '4:5', icon: RectangleVertical },
+  //   ],
+  // },
+];
+
+export default function ValidateForm({ onComplete }) {
+  const [searchParams] = useSearchParams();
+  const campaignId = searchParams.get('campaignId');
+  const dispatch = useDispatch();
+  const { loading, distribution, productionAndServices, results } = useSelector(
+    (state) => state.adFactoryNew
+  );
+  const { userData } = useSelector((state) => state.socket);
+  const isSubmitting = loading;
+
+  const initialValues = React.useMemo(() => {
+    if (
+      distribution?.platforms &&
+      Array.isArray(distribution.platforms) &&
+      distribution.platforms.length > 0
+    ) {
+      return {
+        platforms: distribution.platforms?.map((p) => ({
+          platformName: p.platformName || '',
+          creativeRatios: Array.isArray(p.creativeRatios) ? p.creativeRatios : [],
+        })),
+      };
+    }
+    // Default: Meta pre-selected with '' ratio
+    return { platforms: [{ platformName: 'meta', creativeRatios: [] }] };
+  }, [distribution]);
+
+  const handleSubmit = async (values, { setSubmitting }) => {
+    try {
+      // Validate that each platform has at least one ratio
+      const hasInvalidPlatform = values.platforms.some(
+        (platform) => !platform.creativeRatios || platform.creativeRatios.length === 0
+      );
+
+      if (hasInvalidPlatform) {
+        // toast.error('Please select at least one aspect ratio for each platform');
+        return;
+      }
+
+      const payload = {
+        campaignId: campaignId,
+        nodeType: 'distribution',
+        data: { platforms: values.platforms },
+      };
+
+      dispatch(updateDistribution(payload?.data));
+      const result = await dispatch(updateCampaign(payload));
+      const campaignPayload = {
+        campaignId: campaignId,
+        userId: userData?.user_id,
+      };
+      // dispatch(fetchCampaignById(campaignPayload));
+      if (updateCampaign.fulfilled.match(result)) {
+        // Update node completion status
+        dispatch(setCompletedNodes('validate'));
+        dispatch(setFormProgress({ nodeId: 'validate', progress: 100 }));
+
+        // Update node enabled status to enable next nodes
+        dispatch(updateNodeEnabledStatus());
+
+        // Call onComplete if provided
+        if (onComplete) {
+          onComplete();
+        }
+      }
+    } catch (error) {
+      console.error('Form submission error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 25, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.25 }}
+      className="text-white"
+    >
+      <h2 className="mb-6 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+        Platforms & Ratios
+      </h2>
+
+      <Formik
+        initialValues={initialValues}
+        validationSchema={schema}
+        validateOnChange={true}
+        validateOnBlur={true}
+        onSubmit={handleSubmit}
+        enableReinitialize
+      >
+        {({
+          values,
+          setFieldValue,
+          errors,
+          touched,
+          isValid,
+          dirty,
+          isSubmitting: formikSubmitting,
+          validateForm,
+        }) => {
+          const submitting = formikSubmitting;
+
+          const handlePlatformToggle = async (name) => {
+            const currentPlatforms = [...values.platforms];
+            const isSelected = currentPlatforms?.some((p) => p.platformName === name);
+
+            if (isSelected) {
+              const updatedPlatforms = currentPlatforms?.filter((p) => p.platformName !== name);
+              await setFieldValue('platforms', updatedPlatforms);
+            } else {
+              if (currentPlatforms?.length < 10) {
+                currentPlatforms.push({
+                  platformName: name,
+                  creativeRatios: [],
+                });
+                await setFieldValue('platforms', currentPlatforms, false);
+              }
+            }
+          };
+
+          const handleRatioToggle = async (pIdx, value) => {
+            const currentRatios = [...values.platforms[pIdx].creativeRatios];
+            const isSelected = currentRatios?.includes(value);
+
+            if (isSelected) {
+              const updatedRatios = currentRatios?.filter((r) => r !== value);
+              await setFieldValue(`platforms.${pIdx}.creativeRatios`, updatedRatios);
+            } else {
+              if (currentRatios?.length < 5) {
+                currentRatios.push(value);
+                await setFieldValue(`platforms.${pIdx}.creativeRatios`, currentRatios);
+              }
+            }
+          };
+
+          return (
+            <Form className="">
+              <div className="max-h-[calc(100svh-250px)] space-y-6 overflow-y-auto p-2 pr-5">
+                {/* Platform Selection */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="mb-1 text-sm text-[#AFAFAF] 2xl:mb-1.5 2xl:text-[18px]">
+                      Platform
+                    </label>
+                    <div className="flex flex-wrap gap-2 2xl:gap-3">
+                      {availablePlatforms.map(({ id, name, icon: Icon, iconSize }) => {
+                        const isSelected = values.platforms.some((p) => p.platformName === name);
+
+                        return (
+                          <div
+                            key={id}
+                            className={`group rounded-lg bg-gradient-to-r ${
+                              isSelected
+                                ? 'from-[#02C8C4] to-[#5867EB]'
+                                : 'from-white/30 to-gray-100/10'
+                            } w-fit p-[1px]`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handlePlatformToggle(name)}
+                              className={`backdrop-blur-100 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-[#2d2d2d] transition-all 2xl:h-[52px] 2xl:w-[52px] ${
+                                isSelected ? '' : ''
+                              }`}
+                              disabled={submitting}
+                            >
+                              <Icon className={iconSize} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {errors.platforms && typeof errors.platforms === 'string' && (
+                      <div className="mt-1 text-xs text-red-400 2xl:text-sm">
+                        {errors.platforms}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Selected Platforms Configuration */}
+                {values.platforms.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-base text-white 2xl:text-[21px]">
+                      Configure Aspect Ratios
+                    </h3>
+                    <div className="space-y-6">
+                      {values.platforms.map((platform, pIdx) => {
+                        const platformConfig = availablePlatforms.find(
+                          (p) => p.name === platform.platformName
+                        );
+                        const platformError = errors.platforms?.[pIdx];
+                        const ratiosError = platformError?.creativeRatios;
+
+                        return (
+                          <div
+                            key={pIdx}
+                            className="rounded-lg border border-zinc-600 bg-zinc-800/30 p-4"
+                          >
+                            {/* Platform Header */}
+                            <div className="mb-4 flex items-center justify-between">
+                              <div className="flex items-center gap-2 2xl:gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-zinc-700/50 2xl:h-11 2xl:w-11">
+                                  {platformConfig &&
+                                    React.createElement(platformConfig.icon, {
+                                      className: platformConfig.iconSize,
+                                    })}
+                                </div>
+                                <div className="flex flex-col">
+                                  <h4 className="text-base font-medium text-[#AFAFAF] capitalize 2xl:text-lg">
+                                    {platform.platformName}
+                                  </h4>
+
+                                  <span
+                                    className={`mt-1 w-fit rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                      platformConfig?.isLaunchable
+                                        ? 'bg-emerald-500/20 text-emerald-400'
+                                        : 'bg-yellow-500/20 text-yellow-400'
+                                    }`}
+                                  >
+                                    {platformConfig?.isLaunchable
+                                      ? 'Ad launching is supported on this platform.'
+                                      : 'Ad launching is currently unavailable for this platform.'}
+                                  </span>
+                                </div>
+                              </div>
+                              <ShadcnTooltip label="Remove Platform">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updatedPlatforms = values.platforms.filter(
+                                      (_, index) => index !== pIdx
+                                    );
+                                    setFieldValue('platforms', updatedPlatforms);
+                                  }}
+                                  className="h-10 w-10 rounded-full bg-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/30"
+                                  disabled={submitting}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </ShadcnTooltip>
+                            </div>
+
+                            {/* Aspect Ratio Selection */}
+                            <div className="flex flex-col gap-3">
+                              <label className="text-xs text-[#AFAFAF] 2xl:text-sm">
+                                Select Aspect Ratios *
+                              </label>
+                              <div className="flex flex-wrap gap-2.5">
+                                {platformConfig?.availableRatios.map(
+                                  ({ value, label, icon: Icon }) => {
+                                    const isSelected = platform.creativeRatios.includes(value);
+
+                                    return (
+                                      <div
+                                        key={value}
+                                        className={`group rounded-full bg-gradient-to-r ${
+                                          isSelected
+                                            ? 'from-[#02C8C4] to-[#5867EB]'
+                                            : 'from-[#2d2d2d] to-[#2d2d2d]'
+                                        } w-fit p-[1px] hover:bg-gradient-to-tr`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRatioToggle(pIdx, value)}
+                                          className={`backdrop-blur-100 flex items-center justify-center gap-1.5 rounded-full border bg-[#2d2d2d] px-5 py-1.5 text-xs transition-all ${
+                                            isSelected
+                                              ? ''
+                                              : 'border-white/10 bg-[#383838]/50 text-[#AFAFAF] hover:border-white/10 hover:text-white'
+                                          }`}
+                                          disabled={submitting}
+                                        >
+                                          <Icon className="h-4 w-4" />
+                                          <span className="text-xs 2xl:text-sm">{label}</span>
+                                        </button>
+                                      </div>
+                                    );
+                                  }
+                                )}
+                              </div>
+
+                              {/* Simple error display for ratios */}
+                              {ratiosError && typeof ratiosError === 'string' && (
+                                <div className="mt-1 text-sm text-red-400">{ratiosError}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="mt-8 flex flex-wrap justify-end gap-3 md:mt-12">
+                <button
+                  type="button"
+                  onClick={() => dispatch(setActiveForm(null))}
+                  className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-1.5 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    submitting ||
+                    (productionAndServices?.status == 'success' && results?.status != 'success')
+                  }
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+                >
+                  {submitting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      Saving...
+                    </div>
+                  ) : (
+                    'Save & Continue'
+                  )}
+                </button>
+              </div>
+            </Form>
+          );
+        }}
+      </Formik>
+    </motion.div>
+  );
+}
