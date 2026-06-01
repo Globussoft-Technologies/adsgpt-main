@@ -253,6 +253,19 @@ export default function ProfileHome() {
                     </span>
                   </div>
                 </div>
+
+                {/* Frozen (in-progress) Credits */}
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-13 text-white font-bold">Frozen</p>
+                  <div className="flex w-[180px] items-center space-x-2 rounded-lg border border-white/5 bg-[#333333]/50 p-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/5">
+                      <img src={adCreativeLogo} className="h-7 w-7" />
+                    </div>
+                    <span className="text-sm font-medium text-white">
+                      {credits?.frozenCredits || 0}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 

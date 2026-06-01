@@ -70,11 +70,31 @@ class UnifiedCreditController {
         total_credits: 0,
         used_credits: 0,
         remaining_credits: 0,
-        subscription: { total: 0, used: 0, remaining: 0 },
-        rollover: { total: 0, used: 0, remaining: 0 },
-        topup: { total: 0, used: 0, remaining: 0 },
+        frozen_credits: 0,
+        settled_credits: 0,
+        subscription: { total: 0, used: 0, frozen: 0, settled: 0, remaining: 0 },
+        rollover: { total: 0, used: 0, frozen: 0, settled: 0, remaining: 0 },
+        topup: { total: 0, used: 0, frozen: 0, settled: 0, remaining: 0 },
       };
     }
+
+    // Sum every active reservation's split for this user so we can report
+    // how much of `used_*` is currently FROZEN (in-flight generation) vs.
+    // SETTLED (truly spent). `used_*` itself already includes the freeze.
+    const reservations = await CreditReservation.find(
+      { user_id: userId },
+      { split: 1, amount: 1 },
+    ).lean();
+
+    let frozenRollover = 0;
+    let frozenSub = 0;
+    let frozenTopup = 0;
+    for (const r of reservations) {
+      frozenRollover += r.split?.fromRollover || 0;
+      frozenSub += r.split?.fromSub || 0;
+      frozenTopup += r.split?.fromTopup || 0;
+    }
+    const frozenTotal = frozenRollover + frozenSub + frozenTopup;
 
     const remainingSub = Math.max(
       0,
@@ -99,23 +119,41 @@ class UnifiedCreditController {
       user.topup_credits_used;
     const totalRemaining = remainingSub + remainingRollover + remainingTopup;
 
+    // settled = used - frozen. That's what's irrecoverably spent right now;
+    // the frozen part can still be refunded if generation fails.
+    const settledSub = Math.max(0, user.used_subscription_credits - frozenSub);
+    const settledRollover = Math.max(
+      0,
+      user.used_rolledover_credits - frozenRollover,
+    );
+    const settledTopup = Math.max(0, user.topup_credits_used - frozenTopup);
+    const settledTotal = settledSub + settledRollover + settledTopup;
+
     return {
       total_credits: totalAllowed,
       used_credits: totalUsed,
       remaining_credits: totalRemaining,
+      frozen_credits: frozenTotal,
+      settled_credits: settledTotal,
       subscription: {
         total: user.base_subscription_credits,
         used: user.used_subscription_credits,
+        frozen: frozenSub,
+        settled: settledSub,
         remaining: remainingSub,
       },
       rollover: {
         total: user.rolledover_credits,
         used: user.used_rolledover_credits,
+        frozen: frozenRollover,
+        settled: settledRollover,
         remaining: remainingRollover,
       },
       topup: {
         total: user.topup_credits_purchased,
         used: user.topup_credits_used,
+        frozen: frozenTopup,
+        settled: settledTopup,
         remaining: remainingTopup,
       },
     };

@@ -92,6 +92,8 @@ const emitCreditStatus = async (userId) => {
             creditsUsed: creditStatus.used_credits,
             totalCredits: creditStatus.total_credits,
             remainingCredits: creditStatus.remaining_credits,
+            frozenCredits: creditStatus.frozen_credits,
+            settledCredits: creditStatus.settled_credits,
             subscription: creditStatus.subscription,
             rollover: creditStatus.rollover,
             topup: creditStatus.topup,
