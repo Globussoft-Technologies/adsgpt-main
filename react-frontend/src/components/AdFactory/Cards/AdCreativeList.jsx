@@ -30,13 +30,27 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
   const [searchParams] = useSearchParams();
   const [loadedImages, setLoadedImages] = useState({});
   const { userData } = useSelector((state) => state?.socket);
-  const { results, history } = useSelector((state) => state?.adFactoryNew);
+  const { results, history, productionAndServices } = useSelector((state) => state?.adFactoryNew);
+
+  const imageModelLabel = useMemo(() => {
+    const imageService = productionAndServices?.servicesSelected?.find(
+      (s) => s.serviceName === 'image'
+    );
+    const model = imageService?.serviceParams?.model;
+    const labelMap = {
+      google: 'Nano Banana Pro',
+      openai: 'OpenAI 1.5',
+      openai2: 'OpenAI 2.0',
+      auto: 'Auto',
+    };
+    return model ? (labelMap[model] || model) : null;
+  }, [productionAndServices]);
   const queryCampaignId = searchParams.get('campaignId');
   const { handleDownloadWithFormat } = useDownloadWithFormat();
   const [isDownloadingViaAPI, setIsDownloadingViaAPI] = useState(false);
 
   // Extract history data
-  const historyData = Array.isArray(history) ? history : [];
+  const historyData = useMemo(() => (Array.isArray(history) ? history : []), [history]);
 
   // Extract current images
   const currentImages = useMemo(() => results?.image || [], [results?.image]);
@@ -50,6 +64,9 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
       ?.sort((a, b) => b?.version - a?.version) // Sort by version descending (newest first)
       ?.forEach((historyItem) => {
         const historyImages = historyItem?.previousData?.results?.image || [];
+        const historyImageModel = historyItem?.previousData?.services?.servicesSelected?.find(
+          (s) => s.serviceName === 'image'
+        )?.serviceParams?.model;
         historyImages?.forEach((img, index) => {
           images.push({
             ...img,
@@ -62,6 +79,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
             version: historyItem?.version, // Add version for display
             editImage: img?.data,
             imagePath: img?.data, // Store the path for download
+            imageModel: historyImageModel || null,
           });
         });
       });
@@ -375,7 +393,16 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
           {(isHistory || item?.timestamp || item?.createdAt) && item?.status === 200 && (
             <div className="flex items-center justify-between bg-[#1a1a1a] px-4 py-2">
               <span className="text-xs font-medium text-[#02C8C4]">
-                {item?.prompt === 'Edited image' ? 'Edited Image' : ''}
+                {item?.prompt === 'Edited image' ? 'Edited Image' : (() => {
+                  const model = isHistory ? item?.imageModel : imageModelLabel;
+                  if (!model) return '';
+                  const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
+                  return (
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-10 font-medium text-white/70">
+                      {labelMap[model] || model}
+                    </span>
+                  );
+                })()}
               </span>
               <span className="text-xs text-[#888]">
                 {new Date(item?.timestamp || item?.createdAt).toLocaleDateString()}
@@ -386,9 +413,21 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
           <div className="flex h-full items-center justify-center">
             {item?.status === 400 ? (
               <div className="relative flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
-                <span className="absolute top-2 right-3 text-xs text-[#888]">
-                  {new Date(item?.timestamp || item?.createdAt).toLocaleDateString()}
-                </span>
+                <div className="absolute top-2 right-3 left-3 flex items-center justify-between">
+                  {(() => {
+                    const model = isHistory ? item?.imageModel : imageModelLabel;
+                    if (!model) return <span />;
+                    const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
+                    return (
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-10 font-medium text-white/70">
+                        {labelMap[model] || model}
+                      </span>
+                    );
+                  })()}
+                  <span className="text-xs text-[#888]">
+                    {new Date(item?.timestamp || item?.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
                 <p className="text-sm font-semibold text-red-400">Content moderation blocked</p>
                 <p className="text-xs text-red-300 opacity-70">
                   Your credits were not deducted. Please revise your inputs and try again.
