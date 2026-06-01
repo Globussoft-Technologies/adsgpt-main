@@ -55,38 +55,31 @@ const adFactoryV2Schema = Joi.object({
   adSetDetails: Joi.object({
     adSetId: Joi.string().required(),
   }).required(),
-  // Optional batch-level Lead Form id. Required (and surfaced as a 400)
-  // when the inferred cell needs one — Leads/InstantForm + the Multiple
-  // cells. Applied to every ad in the batch (they share the ad set).
   leadFormId: Joi.string().optional().allow("", null),
   ads: Joi.array()
     .items(
       Joi.object({
-        // `.trim()` before `.uri()` so a stray space from a paste / CSV
-        // import doesn't fail launch with "must be a valid uri" — matches
-        // the V2 wizard's meta.v2.validator.js parity rule.
-        imageUrl: Joi.string().trim().uri().required(),
+        // Exactly one of imageUrl or videoUrl must be provided per ad.
+        imageUrl: Joi.string().trim().uri().optional(),
+        videoUrl: Joi.string().trim().uri().optional(),
+        videoThumbnailUrl: Joi.string().trim().uri().optional(),
         headline: Joi.string().allow("").optional(),
-        message: Joi.string().allow("").optional(), // primary text
+        message: Joi.string().allow("").optional(),
         description: Joi.string().allow("").optional(),
-        // linkUrl is the creative's destination — also trimmed + URI-
-        // validated when present, so the same paste-with-space issue
-        // can't sneak through here either.
         linkUrl: Joi.string().trim().uri().allow("").optional(),
         callToAction: Joi.string().optional(),
         adFactoryCreativeId: Joi.string().allow(null, "").optional(),
-      }),
+      }).xor("imageUrl", "videoUrl"), // exactly one required
     )
     .min(1)
     .required(),
-}).unknown(true); // legacy callers may pass extra fields (campaignDetails.campaignName, etc.) — ignore them.
+}).unknown(true);
 
 // Cell inference (objective × destination → wizard cell) lives in the
 // shared ./cellInference module — reused by campaign management's
 // resolve-cell endpoint so both stay in lockstep.
 
-// Upload an image to the ad account from a URL. Mirrors the V1 helper
-// but kept local so V2 stays self-contained.
+// Upload an image to the ad account from a URL.
 async function uploadImageFromUrl(account, imageUrl) {
   const res = await axios.get(imageUrl, {
     responseType: "arraybuffer",
@@ -100,6 +93,45 @@ async function uploadImageFromUrl(account, imageUrl) {
     if (k && out.images[k]?.hash) return out.images[k].hash;
   }
   throw new Error("Image upload succeeded but no hash was returned by Meta");
+}
+
+// Upload a video from a URL and poll until Meta finishes encoding it.
+// Returns { videoId, videoThumbnailUrl }.
+async function uploadVideoFromUrl(account, videoUrl) {
+  const res = await axios.get(videoUrl, {
+    responseType: "arraybuffer",
+    timeout: 60000,
+  });
+  const videoBytes = Buffer.from(res.data).toString("base64");
+
+  const uploaded = await account.createAdVideo([], {
+    name: `ad-video-${Date.now()}.mp4`,
+    file_bytes: videoBytes,
+  });
+  const videoId = uploaded?.id || uploaded?._data?.id;
+  if (!videoId) throw new Error("Video upload succeeded but no id was returned by Meta");
+
+  // Poll until Meta finishes encoding (status: ready).
+  const MAX_POLLS = 20;
+  const POLL_INTERVAL_MS = 3000;
+  let thumbnailUrl = null;
+  for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const info = await new bizSdk.AdVideo(videoId).get(["status", "thumbnails"]);
+    const data = info?._data || info || {};
+    const status = data?.status?.video_status || data?.status;
+    if (status === "ready") {
+      // Grab the first auto-generated thumbnail Meta produced.
+      const thumbs = data?.thumbnails?.data || [];
+      if (thumbs.length > 0) thumbnailUrl = thumbs[0].uri || thumbs[0].url || null;
+      break;
+    }
+    if (status === "error") {
+      throw new Error(`Meta video encoding failed for video id ${videoId}`);
+    }
+  }
+
+  return { videoId, videoThumbnailUrl: thumbnailUrl };
 }
 
 async function createAdV2(req, res) {
@@ -267,13 +299,26 @@ async function createAdV2(req, res) {
       try {
         logger.info(`createAdV2: processing ad ${i + 1}/${ads.length}`);
 
-        const imageHash = await uploadImageFromUrl(account, adData.imageUrl);
+        let mediaParams;
+        if (adData.videoUrl) {
+          logger.info(`createAdV2: ad ${i + 1} — uploading video...`);
+          const { videoId, videoThumbnailUrl } = await uploadVideoFromUrl(account, adData.videoUrl);
+          logger.info(`createAdV2: ad ${i + 1} — video ready, id: ${videoId}`);
+          mediaParams = {
+            videoId,
+            videoThumbnailUrl: adData.videoThumbnailUrl || videoThumbnailUrl || undefined,
+          };
+        } else {
+          const imageHash = await uploadImageFromUrl(account, adData.imageUrl);
+          logger.info(`createAdV2: ad ${i + 1} — image hash: ${imageHash}`);
+          mediaParams = { imageHash };
+        }
 
         const objectStorySpec = buildObjectStorySpec(
           cell.ad.objectStorySpecShape,
           {
             pageId,
-            imageHash,
+            ...mediaParams,
             headline: adData.headline || "",
             primaryText: adData.message || "",
             description: adData.description || "",
@@ -316,7 +361,8 @@ async function createAdV2(req, res) {
             message: adData.message,
             linkUrl: adData.linkUrl,
             callToAction: adData.callToAction,
-            imageUrl: adData.imageUrl,
+            imageUrl: adData.imageUrl || null,
+            videoUrl: adData.videoUrl || null,
           },
           metaData: {
             objective,
@@ -333,7 +379,8 @@ async function createAdV2(req, res) {
           index: i,
           adId: ad.id,
           creativeId: creative.id,
-          imageHash,
+          imageHash: mediaParams.imageHash || null,
+          videoId: mediaParams.videoId || null,
           headline: adData.headline,
         });
       } catch (err) {
