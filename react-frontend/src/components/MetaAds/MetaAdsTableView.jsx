@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,12 +14,18 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import {
   getAdSets,
   getAdSetAds,
   updateAdStatus,
   deleteMetaCampaign,
+  resolveCellForAdSet,
+  resolveCampaignForAdd,
+  resolveAdSetForEdit,
+  resolveAdForEdit,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { StatusBadge, Spinner, EmptyState } from './MetaAdsAtoms';
@@ -32,6 +38,32 @@ import {
 } from './metaAdsUtils';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+// Objectives migrated to the V2 cell engine. Add Ad Set / Add Ad are only
+// offered for these — legacy-objective campaigns (Awareness / Engagement /
+// Sales) stay read-only + status-toggle until they migrate. Mirrors
+// SUPPORTED_OBJECTIVES in nodejs-backend/controllers/adPosting/cellInference.js.
+const V2_SUPPORTED_OBJECTIVES = new Set([
+  'OUTCOME_TRAFFIC',
+  'OUTCOME_LEADS',
+  'OUTCOME_APP_PROMOTION',
+]);
+
+// Small toolbar button used above the Ad Set / Ads tables to launch the
+// add-to-existing wizard flows.
+function AddButton({ label, onClick, busy = false, disabled = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy || disabled}
+      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs"
+    >
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+      {label}
+    </button>
+  );
+}
 
 function parseBudget(v) {
   const n = parseFloat(v);
@@ -219,12 +251,42 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh }) {
+function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onLaunchWizard }) {
   const [statuses, setStatuses]   = useState({});
   const [toggling, setToggling]   = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(campaigns, 'name');
+
+  // Edit — read FRESH campaign settings (the list is cached + budgets are
+  // formatted strings, useless for editing) then open the wizard prefilled.
+  const handleEdit = async (e, c) => {
+    e.stopPropagation();
+    setEditingId(c.id);
+    try {
+      const r = await resolveCampaignForAdd({ campaignId: c.id });
+      const cbo = !!r.cbo;
+      const minor = r.campaignBudgetType === 'lifetime' ? r.lifetimeBudget : r.dailyBudget;
+      onLaunchWizard?.('edit-campaign', {
+        campaignId: c.id,
+        objective: r.objective || c.objective,
+        cbo,
+        campaignBudgetType: r.campaignBudgetType || 'daily',
+        campaignName: r.name || c.name,
+        // minor → major for the inputs.
+        campaignBudget: cbo && minor ? String(minor / 100) : '',
+        spendCap: r.spendCap ? String(r.spendCap / 100) : '',
+        parentLabel: r.name || c.name,
+      });
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || "Couldn't open the campaign editor.",
+      );
+    } finally {
+      setEditingId(null);
+    }
+  };
 
   const getStatus = (c) => statuses[c.id] ?? c.status;
 
@@ -345,7 +407,21 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   </td>
                   {/* actions */}
                   <td className="pr-5 pl-2 py-4">
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {V2_SUPPORTED_OBJECTIVES.has(c.objective) && onLaunchWizard && (
+                        <button
+                          onClick={(e) => handleEdit(e, c)}
+                          disabled={editingId === c.id}
+                          title="Edit campaign"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                        >
+                          {editingId === c.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Pencil className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -419,25 +495,119 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, onDrillDown }) {
+function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce }) {
   const [adSets,  setAdSets]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [statuses, setStatuses] = useState({});
   const [toggling, setToggling] = useState({});
-  const fetched = useRef(false);
+  const [resolvingAdd, setResolvingAdd] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(adSets, 'name');
   // CBO campaigns own the budget — adsets show 0/empty daily_budget. We
   // surface this explicitly instead of rendering a confusing "₹0.00".
   const cboParent = hasBudget(campaign?.daily_budget) || hasBudget(campaign?.lifetime_budget);
+  // Add Ad Set / Edit are only offered for V2-migrated objectives AND when
+  // the V2 wizard is enabled (the buttons open it with mode/context — the
+  // V1 wizard doesn't understand those, so showing the buttons without the
+  // V2 wizard mounted would be a broken click).
+  const canAdd = V2_SUPPORTED_OBJECTIVES.has(campaign?.objective) && !!onLaunchWizard;
 
+  // Refetch on mount + whenever the parent signals an add (manageNonce).
   useEffect(() => {
-    if (fetched.current) return;
-    fetched.current = true;
+    let cancelled = false;
+    setLoading(true);
     getAdSets(campaign.id, adAccountId)
-      .then((r) => setAdSets(r.adSets || []))
+      .then((r) => { if (!cancelled) setAdSets(r.adSets || []); })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [campaign.id, adAccountId]);
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [campaign.id, adAccountId, manageNonce]);
+
+  // Read FRESH campaign settings before opening the wizard — the campaign
+  // list is cached, so its bid_strategy can be stale/missing. The wizard
+  // needs the live bid strategy to render a bid-cap field for capped CBO
+  // campaigns (and inherit special categories). Falls back to the cached
+  // row if the read fails.
+  const handleAddAdSet = async () => {
+    setResolvingAdd(true);
+    let ctx = {
+      campaignId: campaign.id,
+      objective: campaign.objective,
+      cbo: cboParent,
+      campaignBudgetType: hasBudget(campaign?.daily_budget) ? 'daily' : 'lifetime',
+      bidStrategy: campaign.bid_strategy || undefined,
+      specialAdCategories: campaign.special_ad_categories || [],
+      parentLabel: campaign.name,
+    };
+    try {
+      const r = await resolveCampaignForAdd({ campaignId: campaign.id });
+      ctx = {
+        campaignId: campaign.id,
+        objective: r.objective || campaign.objective,
+        cbo: !!r.cbo,
+        campaignBudgetType: r.campaignBudgetType || ctx.campaignBudgetType,
+        bidStrategy: r.bidStrategy || undefined,
+        specialAdCategories: r.specialAdCategories || [],
+        parentLabel: campaign.name,
+      };
+    } catch {
+      /* fall back to cached-row context */
+    } finally {
+      setResolvingAdd(false);
+    }
+    onLaunchWizard?.('create-adset', ctx);
+  };
+
+  // Edit — read the FULL ad set fresh (reverse-mapped targeting + resolved
+  // geo names), then open the wizard prefilled. Budgets/bid → major units.
+  const handleEditAdSet = async (e, s) => {
+    e.stopPropagation();
+    setEditingId(s.id);
+    try {
+      const r = await resolveAdSetForEdit({ adSetId: s.id });
+      const lifetime = Number(r.lifetimeBudget) > 0;
+      onLaunchWizard?.('edit-adset', {
+        adSetId: s.id,
+        campaignId: r.campaignId,
+        objective: r.objective,
+        conversionLocation: r.conversionLocation,
+        cbo: !!r.cbo,
+        pageId: r.pageId || '',
+        parentLabel: r.name || s.name,
+        formOverrides: {
+          adSetName: r.name || s.name,
+          optimizationGoal: r.optimizationGoal,
+          billingEvent: r.billingEvent,
+          bidStrategy: r.bidStrategy || 'LOWEST_COST_WITHOUT_CAP',
+          bidAmount: r.bidAmount ? String(r.bidAmount / 100) : '',
+          adSetBudgetType: lifetime ? 'lifetime' : 'daily',
+          adSetBudget: !r.cbo
+            ? String(((lifetime ? r.lifetimeBudget : r.dailyBudget) || 0) / 100)
+            : '',
+          startTime: r.startTime || '',
+          endTime: r.endTime || '',
+          hasEndTime: !!r.endTime,
+          worldwide: !!r.targeting?.worldwide,
+          locations: r.targeting?.locations || [],
+          ageMin: r.targeting?.ageMin ?? 18,
+          ageMax: r.targeting?.ageMax ?? 65,
+          genders: r.targeting?.genders || [],
+          locales: r.targeting?.locales || [],
+          advantageAudience: !!r.targeting?.advantageAudience,
+          placementMode: r.targeting?.placementMode || 'advantage_plus',
+          publisherPlatforms: r.targeting?.publisherPlatforms || [],
+          devicePlatforms: r.targeting?.devicePlatforms || [],
+          useSavedAudience: false,
+        },
+      });
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || "Couldn't open the ad set editor.",
+      );
+    } finally {
+      setEditingId(null);
+    }
+  };
 
   const getStatus = (s) => statuses[s.id] ?? s.status;
 
@@ -455,6 +625,12 @@ function AdSetTable({ campaign, adAccountId, onDrillDown }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-2.5">
+        <p className="truncate text-xs font-semibold text-white/70">
+          Ad sets in <span className="text-white">{campaign.name}</span>
+        </p>
+        {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
+      </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-[680px] border-collapse">
           <thead>
@@ -464,15 +640,16 @@ function AdSetTable({ campaign, adAccountId, onDrillDown }) {
               <SortTh label="Daily Budget"      colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Optimization Goal" colKey="optimization_goal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="pr-5" />
+              <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white/70">Edit</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={6} className="py-14"><EmptyState message="No ad sets in this campaign" /></td></tr>
+              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message="No ad sets in this campaign" /></td></tr>
             )}
             {sorted.map((s, idx) => {
               const status = getStatus(s);
@@ -516,12 +693,30 @@ function AdSetTable({ campaign, adAccountId, onDrillDown }) {
                   <td className="px-4 py-4 text-sm text-white/80">
                     {labelOptimizationGoal(s.optimization_goal) ?? '—'}
                   </td>
-                  <td className="pr-5 pl-4 py-4 text-sm text-white/80">
+                  <td className="px-4 py-4 text-sm text-white/80">
                     <span className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 shrink-0 text-white/30" />
                       {s.start_time ? new Date(s.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
+                  {canAdd && (
+                    <td className="pr-5 pl-2 py-4">
+                      <div className="flex items-center justify-end">
+                        <button
+                          onClick={(e) => handleEditAdSet(e, s)}
+                          disabled={editingId === s.id}
+                          title="Edit ad set"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                        >
+                          {editingId === s.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Pencil className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </motion.tr>
               );
             })}
@@ -739,23 +934,96 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet }) {
+function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
   const [ads,       setAds]       = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [selectedAd, setSelectedAd] = useState(null);
   const [statuses,  setStatuses]  = useState({});
   const [toggling,  setToggling]  = useState({});
-  const fetched = useRef(false);
+  const [resolving, setResolving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(ads, 'name');
+  // Add Ad / Edit only when V2 wizard is on AND the campaign objective is
+  // V2-supported (see AdSetTable's canAdd for the rationale).
+  const canAdd = V2_SUPPORTED_OBJECTIVES.has(campaign?.objective) && !!onLaunchWizard;
 
+  // Refetch on mount + whenever the parent signals an add (manageNonce).
   useEffect(() => {
-    if (fetched.current) return;
-    fetched.current = true;
+    let cancelled = false;
+    setLoading(true);
     getAdSetAds(adSet.id)
-      .then((r) => setAds(r.ads || []))
+      .then((r) => { if (!cancelled) setAds(r.ads || []); })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [adSet.id]);
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [adSet.id, manageNonce]);
+
+  // "Add Ad": the wizard's Ad step is cell-driven, so first resolve the
+  // cell (objective × conversionLocation + the ad set's page) from Meta,
+  // then open the wizard in create-ad mode prefilled with that context.
+  const handleAddAd = async () => {
+    setResolving(true);
+    try {
+      const r = await resolveCellForAdSet({ adSetId: adSet.id });
+      onLaunchWizard?.('create-ad', {
+        campaignId: r.campaignId || campaign?.id,
+        adSetId: adSet.id,
+        objective: r.objective,
+        conversionLocation: r.conversionLocation,
+        pageId: r.pageId || '',
+        parentLabel: adSet.name,
+      });
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error ||
+          "Couldn't open the ad builder for this ad set.",
+      );
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  // Edit — read the ad's creative fresh, then open the wizard prefilled.
+  // Media is reused as-is (v1); only name + copy/CTA/link are editable.
+  const handleEditAd = async (e, a) => {
+    e.stopPropagation();
+    setEditingId(a.id);
+    try {
+      const r = await resolveAdForEdit({ adId: a.id });
+      onLaunchWizard?.('edit-ad', {
+        adId: a.id,
+        adSetId: r.adSetId,
+        campaignId: r.campaignId,
+        objective: r.objective,
+        conversionLocation: r.conversionLocation,
+        pageId: r.pageId || '',
+        parentLabel: r.name || a.name,
+        formOverrides: {
+          adName: r.name || a.name,
+          headline: r.headline || '',
+          primaryText: r.primaryText || '',
+          description: r.description || '',
+          linkUrl: r.linkUrl || '',
+          callToAction: r.callToAction || '',
+          urlTags: r.urlTags || '',
+          leadFormId: r.leadFormId || '',
+          objectStoreUrl: r.objectStoreUrl || '',
+          applicationId: r.applicationId || '',
+          mediaType: r.mediaType || 'image',
+          imageHash: r.imageHash || null,
+          videoId: r.videoId || null,
+          videoThumbnailUrl: r.videoThumbnailUrl || null,
+          previewUrl: r.previewUrl || null,
+        },
+      });
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || "Couldn't open the ad editor.",
+      );
+    } finally {
+      setEditingId(null);
+    }
+  };
 
   const getStatus = (a) => statuses[a.id] ?? a.status;
 
@@ -775,6 +1043,12 @@ function AdsTable({ adSet }) {
     <div className="flex min-h-0 flex-1 gap-4">
       {/* main table */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-2.5">
+          <p className="truncate text-xs font-semibold text-white/70">
+            Ads in <span className="text-white">{adSet.name}</span>
+          </p>
+          {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
+        </div>
         <div className="scrollbar-thin flex-1 overflow-auto">
           <table className="w-full min-w-140 border-collapse">
             <thead>
@@ -784,15 +1058,16 @@ function AdsTable({ adSet }) {
                 <SortTh label="Status"   colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Bid Type" colKey="bid_type"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="CTA"      colKey="creative.call_to_action_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="pr-5" />
+                <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white/70">Edit</th>}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="py-14"><Spinner /></td></tr>
+                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
               )}
               {!loading && sorted.length === 0 && (
-                <tr><td colSpan={6} className="py-14"><EmptyState message="No ads in this ad set" /></td></tr>
+                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message="No ads in this ad set" /></td></tr>
               )}
               {sorted.map((a, idx) => {
                 const status     = getStatus(a);
@@ -842,7 +1117,25 @@ function AdsTable({ adSet }) {
                     </td>
                     <td className="px-4 py-3 text-sm text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-white/80">{labelCTA(a.creative?.call_to_action_type) ?? '—'}</td>
-                    <td className="pr-5 pl-4 py-3 text-sm text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
+                    {canAdd && (
+                      <td className="pr-5 pl-2 py-3">
+                        <div className="flex items-center justify-end">
+                          <button
+                            onClick={(e) => handleEditAd(e, a)}
+                            disabled={editingId === a.id}
+                            title="Edit ad"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                          >
+                            {editingId === a.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Pencil className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </motion.tr>
                 );
               })}
@@ -863,7 +1156,7 @@ function AdsTable({ adSet }) {
 
 // ─── root export ──────────────────────────────────────────────────────────────
 
-export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh }) {
+export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh, onLaunchWizard, manageNonce }) {
   const [level,            setLevel]            = useState('campaigns');
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [selectedAdSet,    setSelectedAdSet]    = useState(null);
@@ -891,17 +1184,17 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onLaunchWizard={onLaunchWizard} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (
             <motion.div key="adsets" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <AdSetTable campaign={selectedCampaign} adAccountId={adAccountId} onDrillDown={drillToAdSet} />
+              <AdSetTable campaign={selectedCampaign} adAccountId={adAccountId} onDrillDown={drillToAdSet} onLaunchWizard={onLaunchWizard} manageNonce={manageNonce} />
             </motion.div>
           )}
           {level === 'ads' && selectedAdSet && (
             <motion.div key="ads" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <AdsTable adSet={selectedAdSet} />
+              <AdsTable adSet={selectedAdSet} campaign={selectedCampaign} onLaunchWizard={onLaunchWizard} manageNonce={manageNonce} />
             </motion.div>
           )}
         </AnimatePresence>

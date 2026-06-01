@@ -103,7 +103,9 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
       ) : !loading && items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-10 text-center text-sm text-white/60">
           <ImageIcon className="mx-auto mb-2 h-6 w-6 text-white/40" />
-          {`No generated ${type}s yet. Create some from Ad Studio first.`}
+          {type === 'all'
+            ? 'No generated media yet. Create some from Ad Studio first.'
+            : `No generated ${type}s yet. Create some from Ad Studio first.`}
         </div>
       ) : (
         <div
@@ -113,6 +115,9 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
             const url = absolutize(doc?.url || null);
             if (!url) return null;
             const isSelected = url === selectedUrl;
+            // In "all" mode each row carries its own type; otherwise the
+            // whole grid is the single requested kind.
+            const itemType = doc?.type || type;
             return (
               <button
                 key={doc._id}
@@ -125,7 +130,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
                     : 'border-white/10 hover:border-white/30'
                 }`}
               >
-                {type === 'video' ? (
+                {itemType === 'video' ? (
                   <video
                     src={url}
                     className="h-full w-full object-cover"

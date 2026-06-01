@@ -73,7 +73,10 @@ const DateRangeFilter = ({ onDateChange, onClear }) => {
           </button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-auto overflow-hidden rounded-2xl border-white/10 bg-[#1a1a1a] p-0 shadow-2xl backdrop-blur-xl"
+          // z-[1002] lifts the popover above any modal backdrop. The default
+          // popover z-55 sits below z-1001 modals (e.g. PublishedAdsModal),
+          // which would otherwise eat the click and hide the calendar.
+          className="z-1002 w-auto overflow-hidden rounded-2xl border-white/10 bg-[#1a1a1a] p-0 shadow-2xl backdrop-blur-xl"
           align="end"
         >
           <div className="date-range-picker-dark p-1">

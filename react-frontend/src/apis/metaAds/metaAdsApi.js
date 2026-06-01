@@ -122,6 +122,21 @@ export const searchGeoLocations = async ({ q, types, limit } = {}) => {
   return data;
 };
 
+// Geocode a place name → { latitude, longitude, displayName } via the
+// backend's OpenStreetMap Nominatim proxy. Meta's search typeahead has no
+// coordinates, so the wizard calls this to auto-pin a selected city/region
+// on the map. `countryCode` (2-letter) narrows the match when known.
+export const geocodeLocation = async ({ q, countryCode } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/geocode`,
+    {
+      params: { q, countryCode },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
 // Apps promotable from THIS ad account — backend queries
 // `act_<adAccountId>/applications` only (matches Meta Ads Manager's own
 // scoping). Apps without a store URL (Instant Games / fb_canvas / web)
@@ -384,9 +399,44 @@ export const createMetaCampaignV2 = async (payload) => {
   return data;
 };
 
+// Edit an existing campaign (name / budget / spend cap). Only the provided
+// fields are changed; objective + special categories are immutable.
+export const updateMetaCampaignV2 = async (payload) => {
+  const { data } = await axios.patch(
+    `${BASE_URL}/adsgpt/meta-ads/v2/update-campaign`,
+    payload,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 export const createMetaAdSetV2 = async (payload) => {
   const { data } = await axios.post(
     `${BASE_URL}/adsgpt/meta-ads/v2/create-adset`,
+    payload,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Full editable shape for an existing ad set (reverse-mapped targeting +
+// resolved geo names). Powers the "Edit ad set" flow.
+export const resolveAdSetForEdit = async ({ adSetId } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/resolve-adset`,
+    {
+      params: { adSetId },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
+// Edit an existing ad set (name / budget / bid cap / targeting / schedule).
+// Delivery + identity fields are immutable and rejected server-side.
+export const updateMetaAdSetV2 = async (payload) => {
+  const { data } = await axios.patch(
+    `${BASE_URL}/adsgpt/meta-ads/v2/update-adset`,
     payload,
     { headers: getAuthHeaders() },
   );
@@ -398,6 +448,61 @@ export const createMetaAdV2 = async (payload) => {
     `${BASE_URL}/adsgpt/meta-ads/v2/create-ad`,
     payload,
     { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Editable shape for an existing ad (creative copy/CTA/link + existing media
+// tokens). Powers the "Edit ad" flow.
+export const resolveAdForEdit = async ({ adId } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/resolve-ad`,
+    {
+      params: { adId },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
+// Edit an ad (name + creative copy/CTA/link). Rebuilds the creative
+// server-side (Meta won't edit one in place) and re-points the ad.
+export const updateMetaAdV2 = async (payload) => {
+  const { data } = await axios.patch(
+    `${BASE_URL}/adsgpt/meta-ads/v2/update-ad`,
+    payload,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Resolve the wizard cell (objective × conversionLocation) for an existing
+// ad set — powers the management "Add Ad" flow so the wizard knows which
+// cell schema to render. Returns { objective, conversionLocation,
+// campaignId, adSetId, pageId }. 422 = campaign objective not V2-supported.
+export const resolveCellForAdSet = async ({ adSetId, campaignId } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/resolve-cell`,
+    {
+      params: { adSetId, campaignId },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
+// Fresh campaign settings for the "Add Ad Set" flow. The campaign list is
+// cached, so this live read ensures the wizard knows the campaign's bid
+// strategy (a capped CBO campaign needs a per-ad-set bid cap), CBO state,
+// and special ad categories. Returns { objective, cbo, campaignBudgetType,
+// bidStrategy, specialAdCategories }.
+export const resolveCampaignForAdd = async ({ campaignId } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/resolve-campaign`,
+    {
+      params: { campaignId },
+      headers: getAuthHeaders(),
+    },
   );
   return data;
 };

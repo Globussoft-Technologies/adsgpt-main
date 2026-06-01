@@ -327,7 +327,7 @@ async function scrapePage2(pageUrl) {
 
     return result;
   } catch (error) {
-    return {};
+    throw error;
   }
 }
 

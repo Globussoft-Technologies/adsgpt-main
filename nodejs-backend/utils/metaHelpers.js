@@ -53,6 +53,12 @@ function getCampaignFields() {
     Campaign.Fields.budget_remaining,
     Campaign.Fields.start_time,
     Campaign.Fields.stop_time,
+    // Needed by the management "Add Ad Set" flow so the new ad set inherits
+    // the campaign's bid strategy (a CBO campaign with a capped strategy
+    // requires a bid_amount on its ad sets) and special ad categories
+    // (which constrain ad-set targeting).
+    Campaign.Fields.bid_strategy,
+    Campaign.Fields.special_ad_categories,
   ];
 }
 

@@ -9,6 +9,7 @@ const CommonDropdown = ({
   type = '',
   onChange,
   className = '',
+  side,
 }) => {
   const Icon = value?.Icon;
   const dropdownLabel = label;
@@ -29,7 +30,7 @@ const CommonDropdown = ({
         </div>
       </SelectTrigger>
 
-      <SelectContent className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent side={side} className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
         {label && (
           <div className="text-10 px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">
             {label}

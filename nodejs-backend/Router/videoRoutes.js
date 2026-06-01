@@ -103,6 +103,15 @@ router.post(
   videoController.generateAiAdsVideo
 );
 
+// Recreate — clone an existing AI Ads session into a new doc with status="copy".
+// Lets the frontend "Recreate" flow get a fresh _id even when the form is unchanged.
+// The copy is hidden from /video/all until /ai-ads/generate-video flips status to "processing".
+router.post(
+  "/ai-ads/copy/:sessionId",
+  authenticateJWT,
+  videoController.copyAiAdsVideo
+);
+
 // Python callbacks (secret-key protected, NOT JWT)
 router.patch(
   "/ai-ads/callback/scene-result/:sessionId",

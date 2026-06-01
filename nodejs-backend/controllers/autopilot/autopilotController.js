@@ -172,14 +172,28 @@ class AutopilotController {
         90,
         Math.max(1, parseInt(req.query.windowDays || "7", 10) || 7),
       );
-      const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+      // Two date modes, in order of precedence:
+      //   1. Explicit `from` / `to` ISO range — Overview + Action log date
+      //      pickers send these. `to` is optional (defaults to "now").
+      //   2. Fallback rolling `now − windowDays` window for any caller that
+      //      hasn't migrated to from/to yet (preserves back-compat).
+      const fromRaw = req.query.from ? new Date(req.query.from) : null;
+      const toRaw = req.query.to ? new Date(req.query.to) : null;
+      const hasFrom = fromRaw && !Number.isNaN(fromRaw.getTime());
+      const hasTo = toRaw && !Number.isNaN(toRaw.getTime());
+      const since = hasFrom
+        ? fromRaw
+        : new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+      const runAtQuery = { $gte: since };
+      if (hasTo) runAtQuery.$lte = toRaw;
 
       // Pull rows the user can see: their own + the scheduler's SYSTEM rows.
       // Lean for speed; no projection limit so summary has full row context.
       const rows = await AutopilotActionLog.find(
         {
           userId: { $in: [userId, "SYSTEM"] },
-          runAt: { $gte: since },
+          runAt: runAtQuery,
         },
         {
           // Modest projection — we don't need the full metricsSnapshot for
@@ -201,6 +215,7 @@ class AutopilotController {
         status: true,
         windowDays,
         windowStart: since.toISOString(),
+        windowEnd: hasTo ? toRaw.toISOString() : null,
         ...summary,
       });
     } catch (err) {
@@ -915,8 +930,14 @@ class AutopilotController {
       } = req.query;
 
       const page = Math.max(1, parseInt(req.query.page || "1", 10) || 1);
+      // Cap raised from 100 → 1000 so a date-scoped action-log view (the UI
+      // now requires a from/to range, defaulting to the current month) can
+      // actually return every action in that range instead of silently
+      // truncating after 100 rows. 1000 is well below any memory concern for
+      // a single account+month and matches the FE's KPI-cards-over-full-range
+      // model.
       const limit = Math.min(
-        100,
+        1000,
         Math.max(1, parseInt(req.query.limit || "20", 10) || 20),
       );
 

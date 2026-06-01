@@ -18,7 +18,16 @@ import {
   getActionLog,
   listUserRules,
 } from '@/apis/autopilot/autopilotApi';
-import { Section, Banner, SecondaryButton } from './_atoms';
+import {
+  Section,
+  Banner,
+  SecondaryButton,
+  DateRangeFilter,
+  todayDateInput,
+  firstOfMonthDateInput,
+  dateInputToIsoStart,
+  dateInputToIsoEnd,
+} from './_atoms';
 
 /**
  * Overview tab — windowed activity dashboard.
@@ -54,7 +63,12 @@ const AutopilotOverview = ({
   const accountList = adAccounts || [];
 
   // ─── window + summary ───────────────────────────────────────────────────
-  const [windowDays, setWindowDays] = useState(7);
+  // Date range — replaces the previous Last-7/14/30 buttons. Default =
+  // current calendar month → today (matches the Action log default and
+  // what the operator is usually triaging). Future dates blocked by the
+  // shared DateRangeFilter component.
+  const [from, setFrom] = useState(firstOfMonthDateInput);
+  const [to, setTo] = useState(todayDateInput);
   const [summary, setSummary] = useState(null);
   const [priorTotal, setPriorTotal] = useState(null);
   const [logRows, setLogRows] = useState([]);
@@ -62,27 +76,38 @@ const AutopilotOverview = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async (days) => {
+  const load = useCallback(async (fromStr, toStr) => {
     setLoading(true);
     setError(null);
     try {
-      const fromIso = new Date(Date.now() - days * 86_400_000).toISOString();
-      const [sum, sumDouble, log, rules] = await Promise.all([
-        getAutopilotSummary({ windowDays: days }),
-        getAutopilotSummary({ windowDays: days * 2 }).catch(() => null),
-        getActionLog({ from: fromIso, page: 1, limit: 500 }).catch(() => ({
-          rows: [],
-        })),
+      const fromIso = dateInputToIsoStart(fromStr);
+      const toIso = dateInputToIsoEnd(toStr);
+
+      // Prior-period delta: a same-length window ending the day BEFORE
+      // `from`. e.g. May 1–26 (26 days) → prior is Apr 5–30. This lets the
+      // KPI card render an honest "vs prior period" comparison even when
+      // the user picks an arbitrary calendar range, not just rolling 7/30.
+      const oneDayMs = 86_400_000;
+      const fromMs = new Date(fromIso).getTime();
+      const toMs = new Date(toIso).getTime();
+      const rangeMs = Math.max(oneDayMs, toMs - fromMs);
+      const priorToIso = new Date(fromMs - 1).toISOString();
+      const priorFromIso = new Date(fromMs - 1 - rangeMs).toISOString();
+
+      const [sum, sumPrior, log, rules] = await Promise.all([
+        getAutopilotSummary({ from: fromIso, to: toIso }),
+        getAutopilotSummary({ from: priorFromIso, to: priorToIso }).catch(
+          () => null,
+        ),
+        getActionLog({ from: fromIso, to: toIso, page: 1, limit: 1000 }).catch(
+          () => ({ rows: [] }),
+        ),
         listUserRules().catch(() => null),
       ]);
       setSummary(sum);
-      // Prior-period total = (doubled-window total) - (current-window total).
-      // Falls back to null if the second call failed.
-      if (sumDouble && typeof sumDouble.total === 'number') {
-        setPriorTotal(Math.max(0, (sumDouble.total || 0) - (sum?.total || 0)));
-      } else {
-        setPriorTotal(null);
-      }
+      setPriorTotal(
+        sumPrior && typeof sumPrior.total === 'number' ? sumPrior.total : null,
+      );
       setLogRows(Array.isArray(log?.rows) ? log.rows : []);
       const rs = Array.isArray(rules?.rules) ? rules.rules : [];
       setActiveRulesCount(rs.filter((r) => r.enabled).length);
@@ -94,8 +119,8 @@ const AutopilotOverview = ({
   }, []);
 
   useEffect(() => {
-    load(windowDays);
-  }, [load, windowDays]);
+    load(from, to);
+  }, [load, from, to]);
 
   // ─── derived stats ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -175,7 +200,7 @@ const AutopilotOverview = ({
     try {
       const res = await runAutopilotCycle({ dryRun: runMode === 'dry' });
       setCycleResult(res);
-      load(windowDays);
+      load(from, to);
     } catch (e) {
       setRunError(e?.response?.data?.error || e.message);
     } finally {
@@ -188,8 +213,12 @@ const AutopilotOverview = ({
       {/* Activity summary header */}
       <SummaryHeader
         accountCount={stats.accountCount}
-        windowDays={windowDays}
-        onWindowChange={setWindowDays}
+        from={from}
+        to={to}
+        onDateChange={(key, value) => {
+          if (key === 'from') setFrom(value);
+          else if (key === 'to') setTo(value);
+        }}
         loading={loading}
       />
 
@@ -313,7 +342,8 @@ const AutopilotOverview = ({
             />
             <ActivityChart
               byDay={summary?.by_day}
-              windowDays={windowDays}
+              from={from}
+              to={to}
             />
           </Section>
         </div>
@@ -413,45 +443,25 @@ const AutopilotOverview = ({
 };
 
 // ─── header ─────────────────────────────────────────────────────────────────
-const SummaryHeader = ({ accountCount, windowDays, onWindowChange, loading }) => {
-  const options = [
-    { value: 7, label: 'Last 7 days' },
-    { value: 14, label: 'Last 14 days' },
-    { value: 30, label: 'Last 30 days' },
-  ];
-  return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-bold text-white 2xl:text-lg">Activity summary</h2>
-          {loading && (
-            <Loader2 className="h-3 w-3 animate-spin text-white/40" />
-          )}
-        </div>
-        <p className="mt-1 text-xs text-white/70 2xl:text-13">
-          Across {accountCount} account{accountCount === 1 ? '' : 's'} in the
-          selected window
-        </p>
+const SummaryHeader = ({ accountCount, from, to, onDateChange, loading }) => (
+  <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="min-w-0">
+      <div className="flex items-center gap-2">
+        <h2 className="text-base font-bold text-white 2xl:text-lg">
+          Activity summary
+        </h2>
+        {loading && (
+          <Loader2 className="h-3 w-3 animate-spin text-white/40" />
+        )}
       </div>
-      <div className="inline-flex rounded-xl border border-white/10 bg-[#1A2027] p-1">
-        {options.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onWindowChange(o.value)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all 2xl:px-3.5 2xl:py-2 2xl:text-13 ${
-              windowDays === o.value
-                ? 'bg-white/10 text-white'
-                : 'text-white/70 hover:text-white'
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
+      <p className="mt-1 text-xs text-white/70 2xl:text-13">
+        Across {accountCount} account{accountCount === 1 ? '' : 's'} in the
+        selected range
+      </p>
     </div>
-  );
-};
+    <DateRangeFilter from={from} to={to} onChange={onDateChange} />
+  </div>
+);
 
 // ─── KPI card ──────────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, tone = 'cyan', label, value, sub }) => {
@@ -602,21 +612,37 @@ const ChartHeader = ({ title, subtitle, legend }) => (
 
 // ─── activity chart (stacked daily bars) ──────────────────────────────────
 // Fed by `/summary`'s `by_day` rollup — a per-UTC-day breakdown computed
-// server-side over the entire window. Previously this bucketed the `/log`
-// rows client-side, but `/log` is paginated + limit-capped at 100, so on
-// busy accounts the chart only ever saw the most-recent few days. `by_day`
-// covers every day in the window regardless of action volume.
-const ActivityChart = ({ byDay, windowDays }) => {
+// server-side over the entire range. Previously this bucketed the `/log`
+// rows client-side, but `/log` is paginated + limit-capped, so on busy
+// accounts the chart only ever saw the most-recent few days. `by_day`
+// covers every day in the range regardless of action volume.
+//
+// `from` / `to` are local 'YYYY-MM-DD' strings from the date-range picker.
+// We pre-seed a UTC bucket for every calendar day in [from, to] so empty
+// days still render as zero-height bars.
+const ActivityChart = ({ byDay, from, to }) => {
   const buckets = useMemo(() => {
     const map = new Map();
-    // Pre-seed the full window with UTC calendar days so zero-action days
-    // still render as empty bars. Keys are 'YYYY-MM-DD' to match the
-    // backend's UTC `by_day` keys exactly.
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    for (let i = windowDays - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setUTCDate(today.getUTCDate() - i);
+    if (!from || !to) return [];
+    // Convert local 'YYYY-MM-DD' → UTC-midnight date for the day. The
+    // backend keys by_day with `toISOString().slice(0,10)` on the row's
+    // runAt (UTC), so we key the same way to match.
+    const parse = (s) => {
+      const [y, m, d] = s.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    };
+    const start = parse(from);
+    const end = parse(to);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+    const ONE_DAY = 86_400_000;
+    // Cap the number of buckets defensively (a malformed range could
+    // otherwise render thousands of bars).
+    const days = Math.min(
+      400,
+      Math.max(1, Math.floor((end.getTime() - start.getTime()) / ONE_DAY) + 1),
+    );
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start.getTime() + i * ONE_DAY);
       const key = d.toISOString().slice(0, 10);
       map.set(key, { date: d, pause: 0, alert: 0, budget: 0 });
     }
@@ -629,7 +655,7 @@ const ActivityChart = ({ byDay, windowDays }) => {
       b.budget = ba.scale_budget || 0;
     }
     return Array.from(map.values());
-  }, [byDay, windowDays]);
+  }, [byDay, from, to]);
 
   const max = Math.max(
     1,

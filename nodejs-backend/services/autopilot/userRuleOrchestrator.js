@@ -143,6 +143,25 @@ function collectTargetsForRule(rule, entities, campaignId) {
   return [];
 }
 
+// Pull the human-readable cause out of a facebook-nodejs-business-sdk error.
+// The SDK flattens Meta's response body straight onto `err.response` (NOT
+// `err.response.error`), so the useful strings live at
+// `err.response.error_user_title` / `error_user_msg`. `err.message` alone is
+// the generic top-level text ("Invalid parameter") that tells us nothing
+// about WHICH parameter or why — surfacing the user-facing pair is how we
+// learn that, say, an ad is still in review or its parent is archived.
+function formatMetaError(err) {
+  const r = err && err.response;
+  const title = r && r.error_user_title;
+  const msg = r && r.error_user_msg;
+  const code = r && (r.code || (r.error && r.error.code));
+  const sub = r && (r.error_subcode || (r.error && r.error.error_subcode));
+  const human = [title, msg].filter(Boolean).join(" — ");
+  const base = human || (err && err.message) || String(err);
+  const codeTag = [code, sub].filter((x) => x != null).join("/");
+  return codeTag ? `${base} (code ${codeTag})` : base;
+}
+
 // ─── Meta write — pause an entity ──────────────────────────────────────────
 async function pauseEntity({ level, entityId }) {
   const sdk = bizSdk();
@@ -364,7 +383,7 @@ async function evaluateRuleAtAccount({
           });
         } catch (err) {
           outcome = "failed";
-          error = err && err.message ? err.message : String(err);
+          error = formatMetaError(err);
           getLogger().error(
             `[autopilot v4] pause failed rule=${rule._id} entity=${target[`${rule.evaluateOn}_id`]}: ${error}`,
           );
@@ -585,6 +604,24 @@ async function runUserRuleCycle({
           const finalDryRun = gated.dryRun;
 
           for (const [lookbackDays, rulesAtLookback] of byLookback.entries()) {
+            // Scope the Meta fetch to ONLY the campaigns these rules are
+            // attached to (for this account). Without this, runAuditForAccount
+            // pulls the whole account's insights — which trips Meta's
+            // "Please reduce the amount of data" ceiling on large accounts,
+            // even though we only ever evaluate the attached campaigns.
+            const campaignIds = Array.from(
+              new Set(
+                rulesAtLookback.flatMap((r) =>
+                  (r.attachments || [])
+                    .filter(
+                      (a) => normalizeAdAccountId(a.adAccountId) === acctKey,
+                    )
+                    .map((a) => String(a.campaignId))
+                    .filter(Boolean),
+                ),
+              ),
+            );
+
             // Re-use the existing fetch+normalize pipeline per lookback
             // window. Guards off so user rules see ALL ads (v4 lets users
             // encode their own spend floors via conditions, no service-
@@ -599,6 +636,7 @@ async function runUserRuleCycle({
                 enforceSpendFloor: false,
                 lookbackDays,
                 prevLookbackDays: lookbackDays,
+                campaignIds,
               },
             });
             // Account name is a constant for the (user, account) — first

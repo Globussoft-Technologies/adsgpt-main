@@ -269,9 +269,9 @@ exports.generateImage = async (req, res) => {
 
         console.log("[generateImage]  Request received:", JSON.stringify({ type: req.body?.type, brandName: req.body?.brandInfo?.brandName, aspectRatios: req.body?.userInputs?.aspectRatioPerImage }, null, 2));
 
-        // Pre-validation: Check for empty brandName (except for recreate_ads, ai_ads, and lifestyle types)
+        // Pre-validation: Check for empty brandName (except for recreate_ads and ai_ads types)
         const requestType = req.body?.type;
-        if (requestType !== "recreate_ads" && requestType !== "ai_ads" && requestType !== "lifestyle" && (!req.body?.brandInfo?.brandName || req.body.brandInfo.brandName.trim() === "")) {
+        if (requestType !== "recreate_ads" && requestType !== "ai_ads" && (!req.body?.brandInfo?.brandName || req.body.brandInfo.brandName.trim() === "")) {
             console.error("[generateImage] brandName is empty");
             return res.status(400).json({
                 success: false,
@@ -337,90 +337,109 @@ exports.generateImage = async (req, res) => {
         );
         const totalRequiredCredits = totalImages * imageCreditCost;
 
-        const unifiedCheck = await UnifiedCreditController.checkCredits(
+        const imageData = {
             userId,
-            totalRequiredCredits
-        );
-        const userRemainingCredits = unifiedCheck.remainingCredits || 0;
+            inputs: buildDbInputs(value),
+            status: "pending",
+        };
 
-        if (unifiedCheck.isAllowed) {
-            const imageData = {
-                userId,
-                inputs: buildDbInputs(value),
-                status: "pending",
-            };
+        const image = await ImageGeneration.create(imageData);
+        const imageId = image._id.toString();
 
-            const image = await ImageGeneration.create(imageData);
-            const imageId = image._id.toString();
+        // Atomic freeze — receipt key is imageId; the result handler settles/releases.
+        const freeze = await UnifiedCreditController.freezeCredits({
+            userId,
+            reservationKey: imageId,
+            amount: totalRequiredCredits,
+            meta: {
+                service_type: "image_gen",
+                model: selectedModel,
+                imageType: value.type,
+                totalImages,
+            },
+        });
 
-            const pythonPayload = {
-                brandInfo: value.brandInfo,
-                userInputs: value.userInputs,
-                sessionId: imageId,
-                userId,
-            };
-
-            const typeToApiUrl = {
-                lifestyle: process.env.LIFESTYLE_IMAGE_PYTHON_API,
-                product_shot: process.env.PRODUCT_SHOT_IMAGE_PYTHON_API,
-                apps_saas: process.env.APPS_SAAS_IMAGE_PYTHON_API,
-                brand_awareness: process.env.BRAND_AWARENESS_IMAGE_PYTHON_API,
-                ai_ads: process.env.AI_ADS_IMAGE_PYTHON_API,
-                recreate_ads: process.env.RECREATE_ADS_IMAGE_PYTHON_API,
-            };
-
-            const targetApi = typeToApiUrl[value.type];
-
-            if (targetApi) {
-                try {
-                    console.log(`[generateImage]  Sending to Python API: ${targetApi}`);
-                    console.log(`[generateImage]  Payload:`, JSON.stringify({ type: value.type, brandName: value.brandInfo.brandName, sessionId: imageId }, null, 2));
-
-                    const pythonResponse = await axios.post(targetApi, pythonPayload);
-
-                    if (pythonResponse.status === 200) {
-                        console.log(`[generateImage]  Python API responded with 200`);
-
-                        await ImageGeneration.updateOne(
-                            { _id: imageId },
-                            { $set: { status: "processing" } }
-                        );
-                    }
-                } catch (err) {
-                    console.error(`[Python API] Failed - ${value.type} - sessionId: ${imageId} - Status: ${err.response?.status}`);
-                    console.error(`[Python API] Error:`, err.response?.data?.error || err.message);
-
-                    await ImageGeneration.deleteOne({ _id: imageId });
-
-                    // Extract error from Python API response
-                    const pythonApiError = err.response?.data?.error || err.message;
-                    const httpStatus = err.response?.status || 500;
-
-                    return res.status(httpStatus).json({
-                        success: false,
-                        error: pythonApiError,
-                    });
-                }
-            } else {
-                console.error(`[Python API] No API configured for type: ${value.type}`);
+        if (!freeze.ok) {
+            await ImageGeneration.deleteOne({ _id: imageId });
+            if (freeze.reason === "NO_BASE_PLAN") {
+                return res.status(403).json({
+                    success: false,
+                    error: "An active subscription plan is required.",
+                });
             }
-
-            return res.status(201).json({
-                success: true,
-                message: "Image generation request submitted successfully",
-                data: image,
-            });
-        } else if (userRemainingCredits >= imageCreditCost) {
-            return res.status(402).json({
+            if (freeze.reason === "INSUFFICIENT") {
+                return res.status(402).json({
+                    success: false,
+                    error: `Insufficient credits. You need ${totalRequiredCredits} credits for ${totalImages} image(s) but only have ${freeze.remaining}.`,
+                });
+            }
+            return res.status(503).json({
                 success: false,
-                error: `Insufficient credits. You have ${userRemainingCredits} credits but need ${totalRequiredCredits} credits for ${totalImages} image(s).`,
-            });
-        } else {
-            return res.status(402).json({
-                success: false,
-                error: "Insufficient credits. Please upgrade your plan.",
+                error: "Could not reserve credits. Please try again.",
             });
         }
+
+        const pythonPayload = {
+            brandInfo: value.brandInfo,
+            userInputs: value.userInputs,
+            sessionId: imageId,
+            userId,
+        };
+
+        const typeToApiUrl = {
+            lifestyle: process.env.LIFESTYLE_IMAGE_PYTHON_API,
+            product_shot: process.env.PRODUCT_SHOT_IMAGE_PYTHON_API,
+            apps_saas: process.env.APPS_SAAS_IMAGE_PYTHON_API,
+            brand_awareness: process.env.BRAND_AWARENESS_IMAGE_PYTHON_API,
+            ai_ads: process.env.AI_ADS_IMAGE_PYTHON_API,
+            recreate_ads: process.env.RECREATE_ADS_IMAGE_PYTHON_API,
+        };
+
+        const targetApi = typeToApiUrl[value.type];
+
+        if (targetApi) {
+            try {
+                console.log(`[generateImage]  Sending to Python API: ${targetApi}`);
+                console.log(`[generateImage]  Payload:`, JSON.stringify({ type: value.type, brandName: value.brandInfo.brandName, sessionId: imageId }, null, 2));
+
+                const pythonResponse = await axios.post(targetApi, pythonPayload);
+
+                if (pythonResponse.status === 200) {
+                    console.log(`[generateImage]  Python API responded with 200`);
+
+                    await ImageGeneration.updateOne(
+                        { _id: imageId },
+                        { $set: { status: "processing" } }
+                    );
+                }
+            } catch (err) {
+                console.error(`[Python API] Failed - ${value.type} - sessionId: ${imageId} - Status: ${err.response?.status}`);
+                console.error(`[Python API] Error:`, err.response?.data?.error || err.message);
+
+                // Python rejected → refund freeze + clean up.
+                await UnifiedCreditController.releaseCredits(imageId);
+                await ImageGeneration.deleteOne({ _id: imageId });
+
+                // Extract error from Python API response
+                const pythonApiError = err.response?.data?.error || err.message;
+                const httpStatus = err.response?.status || 500;
+
+                return res.status(httpStatus).json({
+                    success: false,
+                    error: pythonApiError,
+                });
+            }
+        } else {
+            console.error(`[Python API] No API configured for type: ${value.type}`);
+            // No Python API configured → release the freeze rather than leak it.
+            await UnifiedCreditController.releaseCredits(imageId);
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Image generation request submitted successfully",
+            data: image,
+        });
     } catch (err) {
         console.error("[generateImage] Error:", err.message);
         console.error("[generateImage] Stack:", err.stack);
@@ -561,38 +580,94 @@ exports.updateImageResult = async (req, res) => {
             },
         };
 
-        const image = await ImageGeneration.findOneAndUpdate(
-            { _id: sessionId },
-            updateQuery,
-            { new: true, lean: true }
+        console.log(
+            `[credits] updateImageResult ENTER session=${sessionId} status=${status} model=${model} imagesCount=${images?.length || 0}`,
         );
 
-        if (!image) {
+        // Capture PRE-update doc so we can detect duplicate callbacks: if the
+        // record was already terminal, a prior callback already settled or
+        // released the freeze. Running again would NO_RECEIPT-fallthrough into
+        // deductCredits and double-charge.
+        const priorDoc = await ImageGeneration.findOneAndUpdate(
+            { _id: sessionId },
+            updateQuery,
+            { new: false, lean: true }
+        );
+
+        if (!priorDoc) {
+            console.warn(
+                `[credits] updateImageResult 404 session=${sessionId} — no image record`,
+            );
             return res.status(404).json({
                 success: false,
                 error: "Image record not found",
             });
         }
 
-        // Deduct credits on successful completion
+        // Duplicate-callback guard. If the record was already terminal, a
+        // prior callback already settled or released the freeze. Running
+        // again would NO_RECEIPT-fallthrough into deductCredits → double-charge.
+        const priorTerminal =
+            priorDoc.status === "completed" || priorDoc.status === "failed";
+
+        // Reconstruct the post-update view for the downstream emit/log code.
+        const image = {
+            ...priorDoc,
+            status: dbStatus,
+            results: [...(priorDoc.results || []), ...imagesWithStatus],
+        };
+
+        if (priorTerminal) {
+            console.warn(
+                `[credits] updateImageResult DUPLICATE session=${sessionId} ` +
+                    `prior_status=${priorDoc.status} new_status=${status} ` +
+                    `— skipping credit work`,
+            );
+            if (global.io) {
+                try {
+                    global.io.to(image?.userId).emit("imageCreated", {
+                        _id: image._id,
+                        image: {
+                            ...image,
+                            url: images?.[0]?.generatedImageUrl || "",
+                        },
+                        userId: image?.userId,
+                    });
+                } catch (e) {
+                    console.error(`[Socket] duplicate emit failed: ${e.message}`);
+                }
+            }
+            return res.status(200).json({ success: true, duplicate: true });
+        }
+
+        // Settle the freeze on success, release on failure.
         if (status === "completed" && images && images.length > 0) {
-            const totalCreditsToDeduct = UnifiedCreditController.getModelDeduction(model);
+            // NOTE: preserving legacy deduction shape — total cost is
+            // `getModelDeduction(model)` (per image) × image count.
+            const totalCreditsToDeduct =
+                UnifiedCreditController.getModelDeduction(model) * images.length;
             const totalPromptTokens = images.reduce((sum, img) => sum + (img.promptTokens || 0), 0);
             const totalCompletionTokens = images.reduce((sum, img) => sum + (img.completionTokens || 0), 0);
 
-            await UnifiedCreditController.deductCredits(
-                userId,
+            const settleResult = await UnifiedCreditController.releasePartial(
+                sessionId,
                 totalCreditsToDeduct,
-                {
-                    model,
-                    service_type: "ad_image",
-                    item_count: images.length,
-                    duration: timing?.totalMs || 0,
-                    resolution: "standard",
-                    session_id: sessionId,
-                    chat_id: image._id.toString(),
-                }
             );
+            if (!settleResult.ok && settleResult.reason === "NO_RECEIPT") {
+                await UnifiedCreditController.deductCredits(
+                    userId,
+                    totalCreditsToDeduct,
+                    {
+                        model,
+                        service_type: "ad_image",
+                        item_count: images.length,
+                        duration: timing?.totalMs || 0,
+                        resolution: "standard",
+                        session_id: sessionId,
+                        chat_id: image._id.toString(),
+                    }
+                );
+            }
 
             const actualImageCost = modelPricingConfig.getImageCost(
                 model,
@@ -610,6 +685,13 @@ exports.updateImageResult = async (req, res) => {
                 cost: actualImageCost,
                 duration: timing?.totalMs || 0,
             });
+        } else if (status === "completed" || status === "failed" || status === "error") {
+            // Terminal status that didn't settle above (e.g. "completed" with
+            // 0 images, or any failure) → refund the freeze in full. Leaving
+            // the receipt dangling would let the sweep cron refund a settled
+            // generation 60 minutes later. Intermediate statuses like "pending"
+            // intentionally fall through — they're partial updates, freeze stays.
+            await UnifiedCreditController.releaseCredits(sessionId);
         }
 
         if (global.io) {

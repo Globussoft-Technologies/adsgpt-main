@@ -57,6 +57,7 @@ const ResultEntrySchema = new mongoose.Schema(
     error: { type: String, default: null },
     timestamp: { type: Date, default: Date.now },
     prompt: { type: String, default: "" },
+    jobId: { type: String, default: null },
   },
   { _id: false }
 );
@@ -66,6 +67,7 @@ const textResultEntrySchema = new mongoose.Schema(
     data: { type: mongoose.Schema.Types.Mixed, default:""},
     error: { type: String, default: null },
     timestamp: { type: Date, default: Date.now },
+    jobId: { type: String, default: null },
   },
   { _id: false }
 );
@@ -231,6 +233,7 @@ const CampaignSchema = new mongoose.Schema(
       campaignId: { type: String, unique: true },
       campaignName: { type: String, required: true },
       type: { type: String, default: "metadata" },
+      jobId: { type: String, default: null },
     },
     brandInfo: { type: BrandInfoSchema, default: {} },
 

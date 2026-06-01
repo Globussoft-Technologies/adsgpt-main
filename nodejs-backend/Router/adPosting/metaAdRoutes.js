@@ -32,6 +32,10 @@ router.get("/get-saved-audiences", metaAdController.getSavedAudiences);
 // Geo-location typeahead — drives the V2 wizard's Location Targeting
 // picker (countries / cities with radius / regions / free-trade groups).
 router.get("/search-geo", metaAdController.searchGeoLocations);
+// Geocode a selected place → coordinates (OpenStreetMap Nominatim) so the
+// wizard can auto-pin a chosen city/region on the map. Meta's search API
+// doesn't return coordinates; radius still goes to Meta via cities[].radius.
+router.get("/geocode", metaAdController.geocodeLocation);
 // Feeds the App Promotion app picker in the V2 wizard. Returns the
 // user's promotable apps with iOS / Play store URLs normalised so the
 // frontend can filter by store and pre-fill objectStoreUrl.
@@ -74,6 +78,22 @@ router.delete("/delete-campaign", metaAdController.deleteCampaign);
 router.post("/v2/create-campaign", metaAdControllerV2.createCampaignV2);
 router.post("/v2/create-adset", metaAdControllerV2.createAdSetV2);
 router.post("/v2/create-ad", metaAdControllerV2.createAdV2);
+// Edit an existing campaign (name / budget / spend cap) — management flow.
+router.patch("/v2/update-campaign", metaAdControllerV2.updateCampaignV2);
+// Edit an existing ad set (name / budget / bid cap / targeting / schedule).
+router.patch("/v2/update-adset", metaAdControllerV2.updateAdSetV2);
+// Full editable shape (reverse-mapped targeting) for the Edit ad set flow.
+router.get("/v2/resolve-adset", metaAdControllerV2.resolveAdSetForEdit);
+// Edit an existing ad (name + creative copy/CTA/link — rebuilds the creative).
+router.patch("/v2/update-ad", metaAdControllerV2.updateAdV2);
+// Editable shape (creative copy + media tokens) for the Edit ad flow.
+router.get("/v2/resolve-ad", metaAdControllerV2.resolveAdForEdit);
+// Resolve the wizard cell for an existing ad set — powers the "Add Ad"
+// flow + gating Add/Edit for legacy-objective campaigns.
+router.get("/v2/resolve-cell", metaAdControllerV2.resolveCellForAdSet);
+// Fresh campaign settings for the "Add Ad Set" flow (bid strategy / CBO /
+// special categories) — the campaign list is cached, this isn't.
+router.get("/v2/resolve-campaign", metaAdControllerV2.resolveCampaignForAdd);
 
 // Autopilot — owns ALL audit + fix flows (continuous rule cron + on-demand
 // LLM audit). Mounted at /meta-ads/autopilot/* and inherits authenticateJWT

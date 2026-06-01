@@ -26,7 +26,13 @@ import {
 } from '@/store/reducers/image/imageSlice';
 import { buildImageInputs } from '@/store/actions/image/buildImageInputs';
 import { uploadToS3 } from '@/utils/imageUpload';
+import {
+  ALLOWED_IMAGE_ACCEPT,
+  IMAGE_TYPE_ERROR,
+  isAllowedImageFile,
+} from '@/utils/imageValidation';
 import { useGenieToMySpace } from '@/utils/ui/useGenieToMySpace';
+import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -76,7 +82,11 @@ const allowedAspectLabels = (modelName) =>
     : ASPECT_LABELS;
 
 const DEFAULT_COUNTS = { '1:1': 1, '2:3': 0, '3:2': 0, '9:16': 0, '16:9': 0 };
-const CREDITS_PER_IMAGE = 7;
+
+// Combined 5-image cap across uploads + chip picks. Matches AiCreativesCustom.
+// The source ad on the left is the implicit competitor reference and lives
+// outside this count — only user-added images contribute.
+const MAX_REFS_TOTAL = 5;
 
 const totalImages = (counts) => Object.values(counts).reduce((a, b) => a + b, 0);
 const primaryRatio = (counts) => {
@@ -100,6 +110,9 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('Nano Banana 2');
   const [aspectCounts, setAspectCounts] = useState(DEFAULT_COUNTS);
+  // Live per-model credit cost from /adsgpt/usage/model-credit-value
+  // (shared cache). Falls back to 7 while loading or on API error.
+  const creditsPerImage = useImageCreditsForModel(model);
 
   const [brandSource, setBrandSource] = useState({ kind: 'none' });
   const [websiteUrl, setWebsiteUrl] = useState('');
@@ -126,6 +139,18 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   //   - referenceImagesPicked : array (multi-select)
   const [brandLogoPicked, setBrandLogoPicked] = useState('');
   const [referenceImagesPicked, setReferenceImagesPicked] = useState([]);
+  // Inline cap / type warning for the references area. Set when the user
+  // tries to overshoot the 5-image cap OR pastes/drops a non-allowed file
+  // type; cleared whenever any contributing slot is freed.
+  const [imagesError, setImagesError] = useState('');
+  // Inline type warning for the brand-logo upload — surfaces under the logo
+  // row when a non-allowed file type is dropped / pasted / picked.
+  const [logoError, setLogoError] = useState('');
+  const remainingRefSlots = () =>
+    Math.max(
+      0,
+      MAX_REFS_TOTAL - referenceImages.length - referenceImagesPicked.length,
+    );
   // Lightbox URL for double-click preview of a chip.
   const [lightboxUrl, setLightboxUrl] = useState('');
   // Portal target for the lightbox. Resolved after first mount so we
@@ -340,12 +365,14 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       setAutofillState('ok');
       // Mirror AiCreativesCustom: show scraped logos + brand images as
       // clickable chips. Empty arrays cleanly hide the chip rows below.
+      // Autofill can return very large pools — cap at 10 so the chip row
+      // stays manageable.
       const bi = data?.brandInfo || {};
       setBrandLogoOptions(
-        Array.isArray(bi.brandLogo) ? bi.brandLogo.filter(Boolean) : [],
+        Array.isArray(bi.brandLogo) ? bi.brandLogo.filter(Boolean).slice(0, 10) : [],
       );
       setReferenceImageOptions(
-        Array.isArray(bi.brandImages) ? bi.brandImages.filter(Boolean) : [],
+        Array.isArray(bi.brandImages) ? bi.brandImages.filter(Boolean).slice(0, 10) : [],
       );
       // Drop prior chip picks so they don't carry over from a previous brand.
       setBrandLogoPicked('');
@@ -676,18 +703,29 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 onUrlCommit={(u) => {
                   const trimmed = u.trim();
                   if (!trimmed) return;
+                  if (remainingRefSlots() <= 0) {
+                    setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+                    return;
+                  }
                   setReferenceImages((prev) => [
                     ...prev,
                     { file: null, preview: trimmed },
                   ]);
                   setReferenceImageUrl('');
+                  setImagesError('');
                 }}
                 onFile={(f) => {
+                  if (remainingRefSlots() <= 0) {
+                    setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+                    return;
+                  }
                   setReferenceImages((prev) => [
                     ...prev,
                     { file: f, preview: URL.createObjectURL(f) },
                   ]);
+                  setImagesError('');
                 }}
+                onInvalidType={() => setImagesError(IMAGE_TYPE_ERROR)}
                 inputRef={referenceInputRef}
                 multipleFiles
               />
@@ -696,9 +734,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
               {referenceImages.length > 0 && (
                 <UploadedChipList
                   items={referenceImages}
-                  onRemove={(idx) =>
-                    setReferenceImages((prev) => prev.filter((_, i) => i !== idx))
-                  }
+                  onRemove={(idx) => {
+                    setReferenceImages((prev) => prev.filter((_, i) => i !== idx));
+                    setImagesError('');
+                  }}
                   onPreview={(src) => setLightboxUrl(src)}
                 />
               )}
@@ -711,12 +750,26 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   options={referenceImageOptions}
                   isSelected={(u) => referenceImagesPicked.includes(u)}
                   onPick={(u) => {
-                    setReferenceImagesPicked((prev) =>
-                      prev.includes(u) ? prev.filter((x) => x !== u) : [...prev, u],
-                    );
+                    setReferenceImagesPicked((prev) => {
+                      // Deselecting always succeeds and frees a slot.
+                      if (prev.includes(u)) {
+                        setImagesError('');
+                        return prev.filter((x) => x !== u);
+                      }
+                      // Selecting: respect the combined 5-image cap.
+                      if (remainingRefSlots() <= 0) {
+                        setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+                        return prev;
+                      }
+                      setImagesError('');
+                      return [...prev, u];
+                    });
                   }}
                   onDoubleClick={(u) => setLightboxUrl(u)}
                 />
+              )}
+              {imagesError && (
+                <p className="mt-2 text-[11px] text-red-300">{imagesError}</p>
               )}
             </Section>
 
@@ -724,8 +777,15 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
               <UploadRow
                 placeholder="Paste your image URL or upload"
                 url={brandLogoUrl}
-                onUrlChange={setBrandLogoUrl}
-                onFile={setBrandLogoFile}
+                onUrlChange={(v) => {
+                  setBrandLogoUrl(v);
+                  if (logoError) setLogoError('');
+                }}
+                onFile={(f) => {
+                  setBrandLogoFile(f);
+                  setLogoError('');
+                }}
+                onInvalidType={() => setLogoError(IMAGE_TYPE_ERROR)}
                 inputRef={logoInputRef}
               />
               {(brandLogoFile || brandLogoUrl.trim()) && (
@@ -759,6 +819,9 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   onPick={(u) => setBrandLogoPicked((cur) => (cur === u ? '' : u))}
                   onDoubleClick={(u) => setLightboxUrl(u)}
                 />
+              )}
+              {logoError && (
+                <p className="mt-2 text-[11px] text-red-300">{logoError}</p>
               )}
             </Section>
 
@@ -867,7 +930,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                           <span className="font-medium text-white">{total}</span>
                         </div>
                         <p className="mt-1 mb-6 text-center text-[11px] text-white/50">
-                          {CREDITS_PER_IMAGE} credits per image
+                          {creditsPerImage} credits per image
                         </p>
                         <div className="space-y-1">
                           {allowedAspectLabels(model).map(({ key, label }) => (
@@ -1050,6 +1113,7 @@ const UploadRow = ({
   onUrlChange,
   onUrlCommit,
   onFile,
+  onInvalidType,
   inputRef,
   multipleFiles = false,
 }) => {
@@ -1059,22 +1123,27 @@ const UploadRow = ({
     if (onUrlCommit) onUrlCommit(trimmed);
     else onUrlChange(trimmed);
   };
+  // Strict-type forwarder: passes through allowed files to onFile and tracks
+  // whether anything was rejected so the caller can surface a type warning.
+  const forwardFiles = (fileList) => {
+    const arr = Array.from(fileList || []);
+    let rejected = 0;
+    for (const f of arr) {
+      if (isAllowedImageFile(f)) onFile?.(f);
+      else rejected += 1;
+    }
+    if (rejected > 0) onInvalidType?.();
+  };
   return (
     <div
       onPaste={(e) => {
-        // Clipboard image(s) → push as upload(s). Clipboard text URL →
+        // Clipboard file(s) → strict-type forward. Clipboard text URL →
         // commit as a new chip when onUrlCommit is wired, otherwise drop
         // into the URL input.
         const files = e.clipboardData?.files;
-        if (
-          files &&
-          files.length > 0 &&
-          Array.from(files).some((f) => f.type?.startsWith('image/'))
-        ) {
+        if (files && files.length > 0) {
           e.preventDefault();
-          for (const f of Array.from(files)) {
-            if (f.type?.startsWith('image/')) onFile?.(f);
-          }
+          forwardFiles(files);
           onUrlChange('');
           return;
         }
@@ -1083,6 +1152,31 @@ const UploadRow = ({
           e.preventDefault();
           if (onUrlCommit) onUrlCommit(text.trim());
           else onUrlChange(text.trim());
+        }
+      }}
+      // preventDefault on dragover is required to allow drop. Without
+      // both handlers the browser falls back to its default and drops
+      // the URL into the focused input.
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const dt = e.dataTransfer;
+        const files = dt?.files;
+        if (files && files.length > 0) {
+          forwardFiles(files);
+          onUrlChange('');
+          return;
+        }
+        const url =
+          dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+        const trimmed = url.trim();
+        if (trimmed && /^https?:\/\//i.test(trimmed)) {
+          if (onUrlCommit) onUrlCommit(trimmed);
+          else onUrlChange(trimmed);
         }
       }}
       className="flex items-center gap-2"
@@ -1098,6 +1192,32 @@ const UploadRow = ({
               commitUrl(url);
             }
           }}
+          // The input itself must cancel the drop default — without these
+          // the browser drops the URL straight into the field even when
+          // the wrapper above has handlers, because the input is the
+          // direct drop target.
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dt = e.dataTransfer;
+            const files = dt?.files;
+            if (files && files.length > 0) {
+              forwardFiles(files);
+              onUrlChange('');
+              return;
+            }
+            const dragged =
+              dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+            const trimmed = dragged.trim();
+            if (trimmed && /^https?:\/\//i.test(trimmed)) {
+              if (onUrlCommit) onUrlCommit(trimmed);
+              else onUrlChange(trimmed);
+            }
+          }}
           placeholder={placeholder}
           className="w-full bg-transparent text-[13px] font-light text-white placeholder:text-[#afafaf] focus:outline-none"
         />
@@ -1106,12 +1226,11 @@ const UploadRow = ({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={ALLOWED_IMAGE_ACCEPT}
         multiple={multipleFiles}
         className="hidden"
         onChange={(e) => {
-          const list = e.target.files ? Array.from(e.target.files) : [];
-          for (const f of list) onFile?.(f);
+          forwardFiles(e.target.files);
           // Reset so the same file can be picked again.
           e.target.value = '';
         }}

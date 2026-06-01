@@ -29,7 +29,7 @@
  * un-migrated objectives.
  */
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 // eslint-disable-next-line no-unused-vars -- motion is used as <motion.div> below; the project's lint rule doesn't track JSX dotted access.
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -67,6 +67,9 @@ import {
   createMetaCampaignV2,
   createMetaAdSetV2,
   createMetaAdV2,
+  updateMetaCampaignV2,
+  updateMetaAdSetV2,
+  updateMetaAdV2,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import LibraryPicker from './LibraryPicker';
@@ -196,28 +199,73 @@ function pickCell(schema, objective, conversionLocation) {
   return schema.objectives?.[objective]?.conversionLocations?.[conversionLocation] || null;
 }
 
-// Build the dynamic list of steps for the current cell. A cell's
-// `additionalSteps` array (e.g. ["leadForm"]) inserts extra steps
-// between AdSet and Ad.
-function buildSteps(cell) {
-  if (!cell) return BASE_STEPS;
-  const extra = (cell.additionalSteps || []).map((id) => {
-    if (id === 'leadForm') return { id: 'leadForm', label: 'Lead Form', icon: UserPlus };
-    return { id, label: id, icon: Layers };
-  });
-  // Insert extras between adSet (index 3) and ad (index 4).
-  return [
-    ...BASE_STEPS.slice(0, 4),
-    ...extra,
-    ...BASE_STEPS.slice(4),
-  ];
+// Build the dynamic list of steps for the current cell + wizard mode. A
+// cell's `additionalSteps` array (e.g. ["leadForm"]) inserts extra steps
+// between AdSet and Ad. The `mode` then trims the list for the "add to
+// existing" flows:
+//   create-full   — everything (default; new campaign + ad set + ad)
+//   create-adset  — campaign exists: drop Objective + Campaign steps
+//   create-ad     — campaign + ad set exist: keep Lead Form + Ad + Review
+function buildSteps(cell, mode = 'create-full') {
+  const all = (() => {
+    if (!cell) return BASE_STEPS;
+    const extra = (cell.additionalSteps || []).map((id) => {
+      if (id === 'leadForm') return { id: 'leadForm', label: 'Lead Form', icon: UserPlus };
+      return { id, label: id, icon: Layers };
+    });
+    // Insert extras between adSet (index 3) and ad (index 4).
+    return [...BASE_STEPS.slice(0, 4), ...extra, ...BASE_STEPS.slice(4)];
+  })();
+  if (mode === 'create-adset') {
+    return all.filter((s) => s.id !== 'objective' && s.id !== 'campaign');
+  }
+  if (mode === 'create-ad') {
+    return all.filter((s) => s.id === 'leadForm' || s.id === 'ad' || s.id === 'review');
+  }
+  // Edit modes: a single entity step (no objective/location/review).
+  if (mode === 'edit-campaign') return all.filter((s) => s.id === 'campaign');
+  if (mode === 'edit-adset') return all.filter((s) => s.id === 'adSet');
+  if (mode === 'edit-ad') return all.filter((s) => s.id === 'ad');
+  return all;
+}
+
+// True for any edit-* mode (single-step Save flow, not the create sequence).
+function isEditMode(mode) {
+  return typeof mode === 'string' && mode.startsWith('edit-');
+}
+
+// Header title + launch/save copy per mode.
+const WIZARD_MODE_META = {
+  'create-full': { title: 'New Campaign', toast: 'Campaign launched (PAUSED). Activate it from the Campaigns tab.' },
+  'create-adset': { title: 'New Ad Set', toast: 'Ad set created (PAUSED). Activate it from the Ad Sets view.' },
+  'create-ad': { title: 'New Ad', toast: 'Ad created (PAUSED). Activate it from the Ads view.' },
+  'edit-campaign': { title: 'Edit Campaign', toast: 'Campaign updated.' },
+  'edit-adset': { title: 'Edit Ad Set', toast: 'Ad set updated.' },
+  'edit-ad': { title: 'Edit Ad', toast: 'Ad updated.' },
+};
+
+// Seed the idempotent `created` cache with the ids the "add to existing"
+// flows already have, so handleLaunch naturally skips creating the parent
+// campaign / ad set and only creates what's new.
+function seedCreated(mode, context) {
+  if (!context) return {};
+  if (mode === 'create-adset') {
+    return context.campaignId ? { campaignId: context.campaignId } : {};
+  }
+  if (mode === 'create-ad') {
+    const s = {};
+    if (context.campaignId) s.campaignId = context.campaignId;
+    if (context.adSetId) s.adSetId = context.adSetId;
+    return s;
+  }
+  return {};
 }
 
 // Initial form state. Default values match the schema's defaults where
 // derivable; cell-specific defaults (optimisationGoal, CTA) get filled
 // in the effect that runs when conversionLocation changes.
-function buildInitialForm() {
-  return {
+function buildInitialForm(context = null) {
+  const base = {
     // Step 0
     objective: '',
     // Step 1
@@ -308,6 +356,33 @@ function buildInitialForm() {
     customProductPage: '',
     autoTranslate: false, // auto-translate ad copy into viewer language
   };
+  // "Add to existing" flows prefill the inherited context: the campaign's
+  // objective + budget mode (so the ad-set budget field shows correctly),
+  // the resolved conversion location, and the page the ad set promotes.
+  if (context) {
+    if (context.objective) base.objective = context.objective;
+    if (context.conversionLocation) base.conversionLocation = context.conversionLocation;
+    if (typeof context.cbo === 'boolean') base.cbo = context.cbo;
+    if (context.campaignBudgetType) base.campaignBudgetType = context.campaignBudgetType;
+    if (context.pageId) base.pageId = context.pageId;
+    // Inherited from the parent campaign (add-ad-set flow): the bid
+    // strategy decides whether the Ad Set step requires a bid cap, and
+    // special categories drive the targeting restrictions. A capped
+    // strategy here makes CAPPED_BID_STRATEGIES require bidAmount inline.
+    if (context.bidStrategy) base.bidStrategy = context.bidStrategy;
+    if (Array.isArray(context.specialAdCategories)) {
+      base.specialAdCategories = context.specialAdCategories;
+    }
+    // Edit-campaign prefill (major-unit values prepared by the caller).
+    if (context.campaignName != null) base.campaignName = context.campaignName;
+    if (context.campaignBudget != null) base.campaignBudget = context.campaignBudget;
+    if (context.spendCap != null) base.spendCap = context.spendCap;
+    // Generic prefill for richer edit flows (edit-adset): a form-shaped
+    // partial built by the caller from the fresh read, spread last so it
+    // wins over the individual seeds above.
+    if (context.formOverrides) Object.assign(base, context.formOverrides);
+  }
+  return base;
 }
 
 // ─── Step rail ───────────────────────────────────────────────────────────────
@@ -353,7 +428,18 @@ function StepRail({ steps, currentIndex }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function CreateCampaignWizardV2({ open, onClose, adAccountId, account, onCreated }) {
+export default function CreateCampaignWizardV2({
+  open,
+  onClose,
+  adAccountId,
+  account,
+  onCreated,
+  // Management flows: 'create-full' (default), 'create-adset', 'create-ad'.
+  mode = 'create-full',
+  // For add-to-existing modes: { campaignId, adSetId, objective,
+  // conversionLocation, cbo, campaignBudgetType, pageId, parentLabel }.
+  context = null,
+}) {
   const [schema, setSchema] = useState(null);
   const [schemaDefaults, setSchemaDefaults] = useState({});
   const [schemaLoading, setSchemaLoading] = useState(true);
@@ -380,15 +466,27 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
   const [pages, setPages] = useState([]);
   const [savedAudiences, setSavedAudiences] = useState([]);
 
-  // Reset everything when the modal opens (matches V1 behaviour).
+  // The seed (parent ids already known in add-to-existing modes) — kept in
+  // a ref so the dirty-close check can tell newly-created entities apart
+  // from the pre-seeded parents.
+  const seededRef = useRef({});
+
+  // Reset everything when the modal opens (matches V1 behaviour). In add
+  // modes, prefill the form + seed `created` with the inherited context so
+  // handleLaunch skips creating the parent campaign / ad set.
   useEffect(() => {
     if (!open) return;
-    setForm(buildInitialForm());
+    const seeded = seedCreated(mode, context);
+    seededRef.current = seeded;
+    setForm(buildInitialForm(context));
     setStepIndex(0);
     setTouched({});
-    setCreated({});
+    setCreated(seeded);
     setLaunchError(null);
     setShowDiscardConfirm(false);
+    // context/mode are read fresh each time the modal opens; intentionally
+    // excluded from deps to avoid re-resetting a live wizard on re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Fetch schema once on mount.
@@ -429,6 +527,9 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
 
   useEffect(() => {
     if (!cell) return;
+    // Edit modes prefill these from the existing entity — don't clobber them
+    // with cell defaults (would reset e.g. an ad's CTA on open).
+    if (isEditMode(mode)) return;
     setForm((prev) => {
       const next = {
         ...prev,
@@ -444,9 +545,9 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
       }
       return next;
     });
-  }, [cell, schemaDefaults]);
+  }, [cell, schemaDefaults, mode]);
 
-  const steps = useMemo(() => buildSteps(cell), [cell]);
+  const steps = useMemo(() => buildSteps(cell, mode), [cell, mode]);
   const currentStep = steps[stepIndex];
 
   // Account-derived validation limits — Meta's per-currency floors. Meta
@@ -465,12 +566,12 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
   // pre-Review step ({ stepId: { field: message } }). The first gates
   // "Continue" + drives inline + summary errors; the second gates Launch.
   const stepErrors = useMemo(
-    () => validateStep(currentStep?.id, form, cell, valCtx),
-    [currentStep, form, cell, valCtx],
+    () => validateStep(currentStep?.id, form, cell, valCtx, mode),
+    [currentStep, form, cell, valCtx, mode],
   );
   const allStepErrors = useMemo(
-    () => validateAllSteps(steps, form, cell, valCtx),
-    [steps, form, cell, valCtx],
+    () => validateAllSteps(steps, form, cell, valCtx, mode),
+    [steps, form, cell, valCtx, mode],
   );
   const hasBlockingErrors = Object.keys(allStepErrors).length > 0;
 
@@ -758,7 +859,9 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
 
       await createMetaAdV2(adPayload);
 
-      globalToast.success('Campaign launched (PAUSED). Activate it from the Campaigns tab.');
+      globalToast.success(
+        WIZARD_MODE_META[mode]?.toast || WIZARD_MODE_META['create-full'].toast,
+      );
       onCreated?.();
       onClose?.();
     } catch (e) {
@@ -786,24 +889,151 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
     }
   };
 
+  // Edit-mode submit — a single PATCH (no create sequence). Sends only the
+  // editable fields for the entity being edited.
+  const handleSave = async () => {
+    setLaunching(true);
+    setLaunchError(null);
+    try {
+      if (mode === 'edit-campaign') {
+        const payload = {
+          adAccountId,
+          campaignId: context?.campaignId,
+          name: form.campaignName,
+        };
+        // Budget lives on the campaign only when it's CBO; same level as
+        // created (the type toggle is locked in edit).
+        if (form.cbo) {
+          const budget = majorToMinor(form.campaignBudget);
+          if (form.campaignBudgetType === 'daily') payload.dailyBudget = budget;
+          else payload.lifetimeBudget = budget;
+        }
+        if (form.spendCap) payload.spendCap = majorToMinor(form.spendCap);
+        await updateMetaCampaignV2(payload);
+      } else if (mode === 'edit-adset') {
+        const payload = {
+          adAccountId,
+          adSetId: context?.adSetId,
+          name: form.adSetName,
+          targeting: {
+            locations: form.worldwide ? [] : form.locations,
+            worldwide: form.worldwide,
+            ageMin: form.ageMin,
+            ageMax: form.ageMax,
+            genders: form.genders,
+            locales: form.locales,
+            advantageAudience: form.advantageAudience,
+            placementMode: form.placementMode,
+            publisherPlatforms:
+              form.placementMode === 'manual' ? form.publisherPlatforms : [],
+            devicePlatforms: form.devicePlatforms,
+          },
+        };
+        // Budget lives on the ad set only for ABO campaigns.
+        if (!form.cbo) {
+          const budget = majorToMinor(form.adSetBudget);
+          if (form.adSetBudgetType === 'daily') payload.dailyBudget = budget;
+          else payload.lifetimeBudget = budget;
+        }
+        // Bid cap — only for capped strategies (the strategy itself is locked).
+        if (CAPPED_BID_STRATEGIES.has(form.bidStrategy) && form.bidAmount) {
+          payload.bidAmount = majorToMinor(form.bidAmount);
+        }
+        if (form.startTime) {
+          payload.startTime = new Date(form.startTime).toISOString();
+        }
+        if (form.hasEndTime && form.endTime) {
+          payload.endTime = new Date(form.endTime).toISOString();
+        }
+        await updateMetaAdSetV2(payload);
+      } else if (mode === 'edit-ad') {
+        // Rebuild the creative with the EXISTING media (v1 reuses it) +
+        // edited copy/CTA/link; the backend swaps the ad's creative_id.
+        const adPayload = {
+          adAccountId,
+          adSetId: context?.adSetId,
+          adId: context?.adId,
+          objective: form.objective,
+          conversionLocation: form.conversionLocation,
+          pageId: form.pageId,
+          name: form.adName,
+          headline: form.headline,
+          primaryText: form.primaryText,
+          description: form.description,
+          callToAction: form.callToAction,
+          status: 'PAUSED',
+        };
+        if (form.mediaType === 'video') {
+          adPayload.videoId = form.videoId;
+          adPayload.videoThumbnailUrl = form.videoThumbnailUrl;
+        } else {
+          adPayload.imageHash = form.imageHash;
+        }
+        if (form.instagramUserId) adPayload.instagramUserId = form.instagramUserId;
+        if (
+          cell.ad.requiredFields?.includes('linkUrl') ||
+          cell.ad.optionalFields?.includes('linkUrl')
+        ) {
+          const trimmed = String(form.linkUrl || '').trim();
+          if (trimmed) adPayload.linkUrl = trimmed;
+        }
+        if (form.urlTags) adPayload.urlTags = form.urlTags;
+        if (form.autoTranslate) adPayload.autoTranslate = true;
+        if (cell.ad.requiredFields?.includes('leadFormId')) {
+          adPayload.leadFormId = form.leadFormId;
+        }
+        if (cell.ad.objectStorySpecShape === 'app_link') {
+          adPayload.objectStoreUrl = form.objectStoreUrl;
+          adPayload.applicationId = form.applicationId;
+          if (form.deferredDeepLink) adPayload.deferredDeepLink = form.deferredDeepLink;
+          if (form.customProductPage) adPayload.customProductPage = form.customProductPage;
+        }
+        await updateMetaAdV2(adPayload);
+      }
+      globalToast.success(WIZARD_MODE_META[mode]?.toast || 'Saved.');
+      onCreated?.();
+      onClose?.();
+    } catch (e) {
+      const data = e?.response?.data;
+      if (data && typeof data === 'object') {
+        setLaunchError({
+          title: data.error || 'Save failed',
+          details: data.details || data.error || '',
+          code: data.meta?.code,
+          subcode: data.meta?.subcode,
+          fbtraceId: data.meta?.fbtraceId,
+        });
+      } else {
+        setLaunchError({
+          title: 'Save failed',
+          details: e?.message || 'Something went wrong',
+        });
+      }
+    } finally {
+      setLaunching(false);
+    }
+  };
+
   if (!open) return null;
 
-  // Dirty check — used to decide whether closing the modal needs a confirm.
-  // Anything the user might have typed counts; the objective/conversion-
-  // location picks alone don't (one click to redo).
-  const isDirty =
-    form.campaignName?.trim() ||
-    form.adSetName?.trim() ||
-    form.adName?.trim() ||
-    form.headline?.trim() ||
-    form.primaryText?.trim() ||
-    form.linkUrl?.trim() ||
-    form.imageFile ||
-    form.imageUrl ||
-    form.pageId;
+  const editing = isEditMode(mode);
+
+  // Dirty check — every user edit flows through `update()`, which marks the
+  // field touched (prefill + cell-default effects use setForm directly, so
+  // they don't). So "touched anything real" is the reliable signal across
+  // all flows (create, add, edit). Objective / conversion-location picks
+  // alone don't count — they're a one-click redo, not lost work.
+  const isDirty = Object.keys(touched).some(
+    (k) => k !== 'objective' && k !== 'conversionLocation',
+  );
+  // Did we create anything NEW (beyond the pre-seeded parent ids)? If so,
+  // closing just leaves it — the work is already on Meta, nothing to discard.
+  const newlyCreated = Object.keys(created).some(
+    (k) => created[k] && !seededRef.current[k],
+  );
   const requestClose = () => {
     if (launching) return;
-    if (isDirty && !Object.keys(created).length) {
+    if (isDirty && !newlyCreated) {
       setShowDiscardConfirm(true);
     } else {
       onClose?.();
@@ -852,13 +1082,17 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
               </div>
               <div>
                 <p className="text-sm font-bold text-white 2xl:text-lg">
-                  New Campaign
+                  {WIZARD_MODE_META[mode]?.title || 'New Campaign'}
                   <span className="ml-2 inline-flex items-center rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#15DCFF] 2xl:text-[10px]">
                     V2
                   </span>
                 </p>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className="text-[11px] text-white/60 2xl:text-xs">Posting to</span>
+                  <span className="text-[11px] text-white/60 2xl:text-xs">
+                    {context?.parentLabel
+                      ? `${editing ? 'Editing' : 'Adding to'} ${context.parentLabel} ·`
+                      : 'Posting to'}
+                  </span>
                   <span className="inline-flex rounded-[6px] bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-px transition-all">
                     <span className="rounded-[5px] bg-[#141414] px-2 py-1 text-[11px] font-bold leading-tight text-white 2xl:text-xs">
                       {account?.name || `act_${adAccountId || '—'}`}
@@ -889,6 +1123,26 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
                   error={{ title: 'Could not load wizard schema', details: schemaError }}
                 />
               )}
+              {/* Edit modes have no Review step to host the error banner —
+                  surface save errors at the top of the body instead. */}
+              {editing && launchError && (
+                <div className="mb-4">
+                  <LaunchErrorBanner
+                    error={
+                      typeof launchError === 'string'
+                        ? { title: 'Save failed', details: launchError }
+                        : {
+                            title: launchError.title || 'Save failed',
+                            details: launchError.subcode
+                              ? `${launchError.details} (Meta subcode ${launchError.subcode})`
+                              : launchError.details,
+                            fbtraceId: launchError.fbtraceId,
+                          }
+                    }
+                    onDismiss={() => setLaunchError(null)}
+                  />
+                </div>
+              )}
               {!schemaLoading && !schemaError && schema && (
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -900,6 +1154,9 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
                   >
                     <StepBody
                       step={currentStep}
+                      mode={mode}
+                      context={context}
+                      seeded={seededRef.current}
                       form={form}
                       update={update}
                       cell={cell}
@@ -950,7 +1207,27 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
             >
               <ChevronLeft className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" /> Back
             </button>
-            {currentStep?.id !== 'review' ? (
+            {editing ? (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={launching || hasBlockingErrors}
+                title={hasBlockingErrors ? 'Fix the highlighted errors before saving' : undefined}
+                className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-6 py-2 text-xs font-bold text-white shadow-md transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 2xl:px-7 2xl:py-2.5 2xl:text-sm"
+              >
+                {launching ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin 2xl:h-4 2xl:w-4" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
+                    Save changes
+                  </>
+                )}
+              </button>
+            ) : currentStep?.id !== 'review' ? (
               <button
                 type="button"
                 onClick={goNext}
@@ -1008,11 +1285,12 @@ export default function CreateCampaignWizardV2({ open, onClose, adAccountId, acc
                     <AlertCircle className="h-5 w-5 text-red-300 2xl:h-6 2xl:w-6" />
                   </div>
                   <h3 className="text-sm font-bold text-white 2xl:text-base">
-                    Discard this campaign?
+                    {editing ? 'Discard changes?' : 'Discard this campaign?'}
                   </h3>
                   <p className="mt-1.5 text-xs leading-relaxed text-white/55 2xl:text-sm">
-                    Everything you&apos;ve entered in the wizard will be cleared. Your existing
-                    campaigns in Meta aren&apos;t affected.
+                    {editing
+                      ? "Your unsaved changes will be lost. The existing campaign in Meta isn't affected."
+                      : "Everything you've entered in the wizard will be cleared. Your existing campaigns in Meta aren't affected."}
                   </p>
                   <div className="mt-5 flex items-center justify-end gap-2">
                     <button
@@ -1152,6 +1430,9 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
 
 function StepBody({
   step,
+  mode,
+  context,
+  seeded,
   form,
   update,
   cell,
@@ -1182,6 +1463,7 @@ function StepBody({
             update={update}
             adAccountId={adAccountId}
             errors={errors}
+            mode={mode}
           />
         );
       case 'adSet':
@@ -1195,10 +1477,11 @@ function StepBody({
             savedAudiences={savedAudiences}
             adAccountId={adAccountId}
             errors={errors}
+            mode={mode}
           />
         );
       case 'leadForm':
-        return <LeadFormStep form={form} update={update} />;
+        return <LeadFormStep form={form} update={update} mode={mode} pages={pages} />;
       case 'ad':
         return (
           <AdStep
@@ -1207,6 +1490,8 @@ function StepBody({
             cell={cell}
             schema={schema}
             errors={errors}
+            mode={mode}
+            pages={pages}
           />
         );
       case 'review':
@@ -1217,6 +1502,9 @@ function StepBody({
             account={account}
             adAccountId={adAccountId}
             created={created}
+            seeded={seeded}
+            mode={mode}
+            context={context}
             launching={launching}
             launchError={launchError}
             onDismissError={onDismissError}
@@ -1341,8 +1629,12 @@ function ConversionLocationStep({ form, update, schema }) {
 
 // ─── Step: Campaign ─────────────────────────────────────────────────────────
 
-function CampaignStep({ form, update, adAccountId, errors = {} }) {
+function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-full' }) {
   const isAppPromo = form.objective === 'OUTCOME_APP_PROMOTION';
+  // Edit mode: only name / budget amount / spend cap are editable. CBO,
+  // budget type, special categories, iOS are immutable post-creation, so
+  // they're hidden (the budget type shows as a read-only label).
+  const isEdit = mode === 'edit-campaign';
   return (
     <div className="flex flex-col gap-5">
       <TextField
@@ -1354,24 +1646,35 @@ function CampaignStep({ form, update, adAccountId, errors = {} }) {
         maxLength={120}
         error={errors.campaignName}
       />
-      <ToggleField
-        label="Campaign Budget Optimisation (CBO)"
-        description="Set the budget on the campaign and let Meta distribute across ad sets. Otherwise each ad set has its own budget."
-        value={form.cbo}
-        onChange={(v) => update({ cbo: v })}
-      />
+      {!isEdit && (
+        <ToggleField
+          label="Campaign Budget Optimisation (CBO)"
+          description="Set the budget on the campaign and let Meta distribute across ad sets. Otherwise each ad set has its own budget."
+          value={form.cbo}
+          onChange={(v) => update({ cbo: v })}
+        />
+      )}
       {form.cbo && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <FieldShell label="Budget type" required>
-            <SegGroup
-              value={form.campaignBudgetType}
-              onChange={(v) => update({ campaignBudgetType: v })}
-              options={[
-                { value: 'daily', label: 'Daily budget' },
-                { value: 'lifetime', label: 'Lifetime budget' },
-              ]}
-            />
-          </FieldShell>
+          {isEdit ? (
+            <FieldShell label="Budget type">
+              <div className="rounded-full border border-white/10 bg-white/3 px-4 py-2.5 text-13 text-white/70">
+                {form.campaignBudgetType === 'daily' ? 'Daily budget' : 'Lifetime budget'}
+                <span className="ml-2 text-white/35">· can’t be changed</span>
+              </div>
+            </FieldShell>
+          ) : (
+            <FieldShell label="Budget type" required>
+              <SegGroup
+                value={form.campaignBudgetType}
+                onChange={(v) => update({ campaignBudgetType: v })}
+                options={[
+                  { value: 'daily', label: 'Daily budget' },
+                  { value: 'lifetime', label: 'Lifetime budget' },
+                ]}
+              />
+            </FieldShell>
+          )}
           <CurrencyField
             label={form.campaignBudgetType === 'daily' ? 'Daily budget' : 'Lifetime budget'}
             required
@@ -1398,7 +1701,7 @@ function CampaignStep({ form, update, adAccountId, errors = {} }) {
           is_skadnetwork_attribution + promoted_object on the campaign
           payload. When OFF (default), app picker stays on the Ad Set
           step and both stores are available. */}
-      {isAppPromo && (
+      {!isEdit && isAppPromo && (
         <>
           <ToggleField
             label="iOS 14+ campaign"
@@ -1431,20 +1734,30 @@ function CampaignStep({ form, update, adAccountId, errors = {} }) {
         </>
       )}
 
-      <MultiSelectField
-        label="Special ad categories"
-        hint="Required for ads about employment, housing, credit, politics or gambling."
-        values={form.specialAdCategories}
-        onChange={(v) => update({ specialAdCategories: v })}
-        options={SPECIAL_AD_CATEGORIES}
-      />
+      {!isEdit && (
+        <MultiSelectField
+          label="Special ad categories"
+          hint="Required for ads about employment, housing, credit, politics or gambling."
+          values={form.specialAdCategories}
+          onChange={(v) => update({ specialAdCategories: v })}
+          options={SPECIAL_AD_CATEGORIES}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Step: Ad Set ───────────────────────────────────────────────────────────
 
-function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, schema, errors = {} }) {
+function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, schema, errors = {}, mode = 'create-full' }) {
+  // Editing an existing ad set: delivery + identity (page, performance goal,
+  // billing event, bid strategy, app/pixel) are immutable post-creation, so
+  // they're shown read-only / hidden. Name, bid cap, budget, targeting and
+  // schedule stay editable.
+  const editing = mode === 'edit-adset';
+  // CBO campaigns own the bid strategy at the campaign level — when adding
+  // an ad set to one (or editing one under CBO), the strategy is inherited.
+  const lockBidStrategy = (mode === 'create-adset' && form.cbo) || editing;
   // Performance-goal labels — match Meta Ads Manager wording. Per-cell
   // overrides (e.g. Leads/App relabels OFFSITE_CONVERSIONS to "app events")
   // take precedence over the global `schema.labels.optimizationGoal` map.
@@ -1511,6 +1824,8 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         required
         value={form.pageId}
         onChange={onPickPage}
+        disabled={editing}
+        hint={editing ? "Can't be changed after creation" : undefined}
         placeholder={pages.length ? 'Pick a page' : 'No pages found'}
         options={pages.map((p) => ({ value: p.id, label: p.name }))}
         error={errors.pageId}
@@ -1523,7 +1838,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           step), the picker is at the Campaign level and this surface
           shows the picked app as read-only with a note pointing back —
           again mirroring Meta's Ads Manager. */}
-      {additional.includes('applicationId') && (
+      {!editing && additional.includes('applicationId') && (
         form.iosOptimised ? (
           <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-3 2xl:p-5">
             <div className="text-13 font-semibold text-white">App promotion</div>
@@ -1560,7 +1875,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
       {/* Pixel + Event pickers — Leads/Website + Multiple cells use
           OFFSITE_CONVERSIONS optimisation, which needs a Pixel and a
           conversion event. */}
-      {additional.includes('pixelId') && (
+      {!editing && additional.includes('pixelId') && (
         <PixelEventPicker
           form={form}
           update={update}
@@ -1576,6 +1891,8 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           value={form.optimizationGoal}
           onChange={(v) => update({ optimizationGoal: v })}
           options={optimisationOptions}
+          disabled={editing}
+          hint={editing ? "Can't be changed after creation" : undefined}
           error={errors.optimizationGoal}
         />
         <SelectField
@@ -1584,6 +1901,8 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           value={form.billingEvent}
           onChange={(v) => update({ billingEvent: v })}
           options={billingOptions}
+          disabled={editing}
+          hint={editing ? "Can't be changed after creation" : undefined}
           error={errors.billingEvent}
         />
       </div>
@@ -1592,6 +1911,14 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         <SelectField
           label="Bid strategy"
           value={form.bidStrategy}
+          disabled={lockBidStrategy}
+          hint={
+            editing
+              ? "Can't be changed after creation"
+              : lockBidStrategy
+              ? 'Inherited from the campaign (CBO)'
+              : undefined
+          }
           onChange={(v) =>
             update({
               bidStrategy: v,
@@ -1673,20 +2000,24 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
       <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-13 font-semibold text-white">Audience</div>
-          <div className="flex items-stretch gap-2 min-w-[320px]">
-            <SegButton
-              active={!form.useSavedAudience}
-              onClick={() => update({ useSavedAudience: false })}
-            >
-              Build new
-            </SegButton>
-            <SegButton
-              active={form.useSavedAudience}
-              onClick={() => update({ useSavedAudience: true })}
-            >
-              Saved audience
-            </SegButton>
-          </div>
+          {/* Saved-audience swap isn't offered in edit — the existing
+              targeting is edited in place as an explicit audience. */}
+          {!editing && (
+            <div className="flex items-stretch gap-2 min-w-[320px]">
+              <SegButton
+                active={!form.useSavedAudience}
+                onClick={() => update({ useSavedAudience: false })}
+              >
+                Build new
+              </SegButton>
+              <SegButton
+                active={form.useSavedAudience}
+                onClick={() => update({ useSavedAudience: true })}
+              >
+                Saved audience
+              </SegButton>
+            </div>
+          )}
         </div>
 
         {form.useSavedAudience ? (
@@ -1757,23 +2088,26 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           single variant of each, so a dynamic-creative ad here would have
           nothing to mix — and creating a normal ad in a dynamic-creative
           ad set is rejected (subcode 1885702). Re-surface this toggle
-          only once the Ad step collects multiple creative variations. */}
-      <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
-        <div className="text-13 font-semibold text-white">Optimisation</div>
-        <SelectField
-          label="Attribution window"
-          hint="How long a click or view counts. Each (objective, optimisation goal) accepts a different subset — leave on Meta default unless you know what you need."
-          value={form.attributionWindow}
-          onChange={(v) => update({ attributionWindow: v })}
-          options={[
-            { value: '', label: 'Meta default (recommended)' },
-            { value: '1d_click', label: '1-day click only' },
-            { value: '1d_click_1d_view', label: '1-day click + 1-day view' },
-            { value: '7d_click', label: '7-day click' },
-            { value: '7d_click_1d_view', label: '7-day click + 1-day view' },
-          ]}
-        />
-      </div>
+          only once the Ad step collects multiple creative variations.
+          Hidden in edit — attribution_spec locks after delivery starts. */}
+      {!editing && (
+        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
+          <div className="text-13 font-semibold text-white">Optimisation</div>
+          <SelectField
+            label="Attribution window"
+            hint="How long a click or view counts. Each (objective, optimisation goal) accepts a different subset — leave on Meta default unless you know what you need."
+            value={form.attributionWindow}
+            onChange={(v) => update({ attributionWindow: v })}
+            options={[
+              { value: '', label: 'Meta default (recommended)' },
+              { value: '1d_click', label: '1-day click only' },
+              { value: '1d_click_1d_view', label: '1-day click + 1-day view' },
+              { value: '7d_click', label: '7-day click' },
+              { value: '7d_click_1d_view', label: '7-day click + 1-day view' },
+            ]}
+          />
+        </div>
+      )}
 
       {/* Placements — Advantage+ default, manual reveals checkboxes */}
       <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
@@ -2160,8 +2494,20 @@ function PixelEventPicker({ form, update, adAccountId, errors = {} }) {
   );
 }
 
-function LeadFormStep({ form, update }) {
+function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
   const [existingForms, setExistingForms] = useState([]);
+  // Add-Ad inherits the ad set's Page silently — the user shouldn't pick it
+  // again. The picker only surfaces as a fallback if we couldn't resolve
+  // the page (rare: an ad set with no page + no existing ad to read it from).
+  const showPagePicker = mode === 'create-ad' && !form.pageId;
+  const onPickPage = (pageId) => {
+    const picked = pages.find((p) => p.id === pageId);
+    update({
+      pageId,
+      instagramUserId: picked?.instagramAccount?.id || '',
+      leadFormId: '',
+    });
+  };
   const [formsLoading, setFormsLoading] = useState(false);
   const [formsError, setFormsError] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -2232,7 +2578,26 @@ function LeadFormStep({ form, update }) {
         </p>
       </div>
 
-      {!form.pageId && (
+      {/* Fallback only — normally the ad set's Page is inherited silently.
+          Shown if we couldn't resolve it, so the step never dead-ends. */}
+      {showPagePicker && (
+        <>
+          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-13 text-yellow-100">
+            We couldn’t detect this ad set’s Facebook Page — pick it to load its Lead Forms.
+          </div>
+          <SelectField
+            label="Facebook Page"
+            required
+            hint="Lead Forms are scoped to this Page"
+            value={form.pageId}
+            onChange={onPickPage}
+            placeholder={pages.length ? 'Pick a page' : 'No pages found'}
+            options={pages.map((p) => ({ value: p.id, label: p.name }))}
+          />
+        </>
+      )}
+
+      {!form.pageId && mode !== 'create-ad' && (
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-13 text-yellow-100">
           Pick a Facebook Page on the previous step first — Lead Forms are scoped per Page.
         </div>
@@ -2413,7 +2778,7 @@ function LeadFormStep({ form, update }) {
 
 // ─── Step: Ad ───────────────────────────────────────────────────────────────
 
-function AdStep({ form, update, cell, schema, errors = {} }) {
+function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full', pages = [] }) {
   const requiredFields = new Set(cell?.ad?.requiredFields || []);
   const optionalFields = new Set(cell?.ad?.optionalFields || []);
   // CTA options — show Meta's friendly label ("Learn more") in the
@@ -2427,14 +2792,45 @@ function AdStep({ form, update, cell, schema, errors = {} }) {
   }));
   const showLinkUrl = requiredFields.has('linkUrl') || optionalFields.has('linkUrl');
   const isAppLink = cell?.ad?.objectStorySpecShape === 'app_link';
+  // Lead-gen cells require an external URL on the creative, but the ad still
+  // opens the FORM — the link is only a Meta-required fallback, NOT the
+  // click destination. Label it so users aren't misled (the "FORM" preview
+  // surprised people who set it expecting the ad to go to that URL).
+  const isLeadGen =
+    cell?.ad?.objectStorySpecShape === 'lead_gen_form' ||
+    cell?.ad?.objectStorySpecShape === 'lead_gen_form_with_pixel';
 
-  // Library picker — inline tab inside the Ad step (V1 uses the same
-  // pattern). When ON, hides Upload/URL and shows the picker; selecting
-  // an item flips back to OFF and stores the URL on the form.
-  const [libraryMode, setLibraryMode] = useState(false);
+  // Media source — default to the generated-media library (the primary
+  // AdsGPT path). ON shows the combined image+video picker; OFF shows the
+  // manual Upload / URL fields.
+  const [libraryMode, setLibraryMode] = useState(true);
+
+  // Add-Ad inherits the ad set's Page silently. The picker only appears as
+  // a fallback if the page couldn't be resolved (and only on cells without
+  // a Lead Form step, which owns the fallback picker otherwise).
+  const hasLeadFormStep = cell?.additionalSteps?.includes('leadForm');
+  const showPagePicker = mode === 'create-ad' && !hasLeadFormStep && !form.pageId;
+  // Edit-ad reuses the existing media (v1 doesn't swap it) — show a
+  // read-only preview instead of the upload picker.
+  const editingAd = mode === 'edit-ad';
+  const onPickAdPage = (pageId) => {
+    const picked = pages.find((p) => p.id === pageId);
+    update({ pageId, instagramUserId: picked?.instagramAccount?.id || '' });
+  };
 
   return (
     <div className="flex flex-col gap-5">
+      {showPagePicker && (
+        <SelectField
+          label="Facebook Page"
+          required
+          value={form.pageId}
+          onChange={onPickAdPage}
+          placeholder={pages.length ? 'Pick a page' : 'No pages found'}
+          options={pages.map((p) => ({ value: p.id, label: p.name }))}
+          error={errors.pageId}
+        />
+      )}
       <TextField
         label="Ad name"
         required
@@ -2445,75 +2841,121 @@ function AdStep({ form, update, cell, schema, errors = {} }) {
         error={errors.adName}
       />
 
-      {/* Media — top-level Image / Video toggle. For each branch, an
-          inner Upload-URL / From-library toggle gives access to the
-          generated-media library. Switching media types resets all
-          media state so the backend's xor (imageHash xor videoId) can
-          never fire on a stale value. */}
+      {/* Edit-ad: media is reused as-is (v1 doesn't swap it) — read-only
+          preview instead of the upload picker. */}
+      {editingAd ? (
+        <FieldShell
+          label="Media"
+          hint="Media can't be changed here — create a new ad to use different media."
+        >
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/3 p-3">
+            {form.previewUrl ? (
+              <img
+                src={form.previewUrl}
+                alt="Current media"
+                className="h-16 w-24 shrink-0 rounded-lg border border-white/10 object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1e1e1e]">
+                <ImageIcon className="h-5 w-5 text-white/25" />
+              </div>
+            )}
+            <div className="text-12 text-white/55">
+              {form.mediaType === 'video' ? 'Current video' : 'Current image'} · reused as-is
+            </div>
+          </div>
+        </FieldShell>
+      ) : (
+      /* Media — source toggle (From library / Upload). The media KIND
+          (image vs video) is no longer asked up-front: picking from the
+          library derives it from the item's own type, and the manual
+          uploader exposes a small Image/Video switch only where it's
+          genuinely needed. Switching kind resets the other set so the
+          backend's xor (imageHash xor videoId) never fires on stale state. */
       <FieldShell
         label="Media"
         required
         error={errors.media}
         hint={
-          form.mediaType === 'video'
+          libraryMode
+            ? 'Pick any image or video from your generated-media library'
+            : form.mediaType === 'video'
             ? 'MP4 / MOV / WEBM up to 100 MB · poster URL required'
-            : libraryMode
-            ? 'Pick from your generated-media library'
             : 'JPG or PNG, ≤10MB'
         }
       >
         <div className="flex flex-col gap-3">
-          {/* Image / Video type selector */}
+          {/* Source: From library ⇄ Upload / URL */}
           <div className="flex items-stretch gap-2 max-w-xs">
-            <SegButton
-              active={form.mediaType === 'image'}
-              onClick={() =>
-                update({
-                  mediaType: 'image',
-                  videoFile: null,
-                  videoUrl: null,
-                  videoThumbnailUrl: null,
-                })
-              }
-            >
-              Image
+            <SegButton active={libraryMode} onClick={() => setLibraryMode(true)}>
+              From library
             </SegButton>
-            <SegButton
-              active={form.mediaType === 'video'}
-              onClick={() =>
-                update({
-                  mediaType: 'video',
-                  imageFile: null,
-                  imageUrl: null,
-                })
-              }
-            >
-              Video
+            <SegButton active={!libraryMode} onClick={() => setLibraryMode(false)}>
+              Upload / URL
             </SegButton>
           </div>
 
-          {form.mediaType === 'image' ? (
+          {libraryMode ? (
+            <div className="rounded-2xl border border-white/12 bg-white/4 p-3 2xl:p-4">
+              <LibraryPicker
+                type="all"
+                selectedUrl={form.mediaType === 'video' ? form.videoUrl : form.imageUrl}
+                onPick={(absoluteUrl, doc) => {
+                  // Derive image-vs-video from the picked item's own type —
+                  // no manual selection needed.
+                  if (doc?.type === 'video') {
+                    update({
+                      mediaType: 'video',
+                      videoUrl: absoluteUrl,
+                      videoFile: null,
+                      videoThumbnailUrl: null,
+                      imageFile: null,
+                      imageUrl: null,
+                    });
+                  } else {
+                    update({
+                      mediaType: 'image',
+                      imageUrl: absoluteUrl,
+                      imageFile: null,
+                      videoFile: null,
+                      videoUrl: null,
+                      videoThumbnailUrl: null,
+                    });
+                  }
+                }}
+              />
+            </div>
+          ) : (
             <>
-              {/* Image: Upload / URL ⇄ From library inner toggle */}
+              {/* Manual upload genuinely differs by kind (video needs a
+                  poster), so the Image/Video switch lives here only. */}
               <div className="flex items-stretch gap-2 max-w-xs">
-                <SegButton active={!libraryMode} onClick={() => setLibraryMode(false)}>
-                  Upload / URL
+                <SegButton
+                  active={form.mediaType === 'image'}
+                  onClick={() =>
+                    update({ mediaType: 'image', videoFile: null, videoUrl: null, videoThumbnailUrl: null })
+                  }
+                >
+                  Image
                 </SegButton>
-                <SegButton active={libraryMode} onClick={() => setLibraryMode(true)}>
-                  From library
+                <SegButton
+                  active={form.mediaType === 'video'}
+                  onClick={() =>
+                    update({ mediaType: 'video', imageFile: null, imageUrl: null })
+                  }
+                >
+                  Video
                 </SegButton>
               </div>
-              {libraryMode ? (
-                <div className="rounded-2xl border border-white/12 bg-white/4 p-3 2xl:p-4">
-                  <LibraryPicker
-                    type="image"
-                    selectedUrl={form.imageUrl}
-                    onPick={(absoluteUrl) => {
-                      update({ imageFile: null, imageUrl: absoluteUrl });
-                      setLibraryMode(false);
-                    }}
-                  />
-                </div>
+              {form.mediaType === 'video' ? (
+                <VideoField
+                  videoFile={form.videoFile}
+                  videoUrl={form.videoUrl}
+                  videoThumbnailUrl={form.videoThumbnailUrl}
+                  onChangeFile={(f) => update({ videoFile: f })}
+                  onChangeUrl={(u) => update({ videoUrl: u })}
+                  onChangeThumbnailUrl={(u) => update({ videoThumbnailUrl: u })}
+                />
               ) : (
                 <ImageField
                   imageFile={form.imageFile}
@@ -2523,42 +2965,10 @@ function AdStep({ form, update, cell, schema, errors = {} }) {
                 />
               )}
             </>
-          ) : (
-            <>
-              {/* Video: Upload / URL ⇄ From library inner toggle */}
-              <div className="flex items-stretch gap-2 max-w-xs">
-                <SegButton active={!libraryMode} onClick={() => setLibraryMode(false)}>
-                  Upload / URL
-                </SegButton>
-                <SegButton active={libraryMode} onClick={() => setLibraryMode(true)}>
-                  From library
-                </SegButton>
-              </div>
-              {libraryMode ? (
-                <div className="rounded-2xl border border-white/12 bg-white/4 p-3 2xl:p-4">
-                  <LibraryPicker
-                    type="video"
-                    selectedUrl={form.videoUrl}
-                    onPick={(absoluteUrl) => {
-                      update({ videoFile: null, videoUrl: absoluteUrl });
-                      setLibraryMode(false);
-                    }}
-                  />
-                </div>
-              ) : (
-                <VideoField
-                  videoFile={form.videoFile}
-                  videoUrl={form.videoUrl}
-                  videoThumbnailUrl={form.videoThumbnailUrl}
-                  onChangeFile={(f) => update({ videoFile: f })}
-                  onChangeUrl={(u) => update({ videoUrl: u })}
-                  onChangeThumbnailUrl={(u) => update({ videoThumbnailUrl: u })}
-                />
-              )}
-            </>
           )}
         </div>
       </FieldShell>
+      )}
       {requiredFields.has('headline') && (
         <TextField
           label="Headline"
@@ -2591,7 +3001,12 @@ function AdStep({ form, update, cell, schema, errors = {} }) {
       />
       {showLinkUrl && (
         <TextField
-          label="Destination URL"
+          label={isLeadGen ? 'Website URL (fallback)' : 'Destination URL'}
+          hint={
+            isLeadGen
+              ? 'Meta requires a real website URL on lead ads, but the ad opens your form — this link is only a fallback, not where the button goes.'
+              : undefined
+          }
           required={requiredFields.has('linkUrl')}
           type="url"
           value={form.linkUrl}
@@ -2649,6 +3064,9 @@ function ReviewStep({
   account,
   adAccountId,
   created,
+  seeded = {},
+  mode = 'create-full',
+  context = null,
   launching,
   launchError,
   onDismissError,
@@ -2657,6 +3075,8 @@ function ReviewStep({
   onJumpToStep,
 }) {
   const labels = schema?.labels || {};
+  const showCampaign = mode === 'create-full';
+  const showAdSet = mode === 'create-full' || mode === 'create-adset';
   // launchError can be a plain string (legacy) OR a structured object
   // {title, details, code, subcode, fbtraceId}. Normalise for the banner.
   // Subcode-aware hints: Meta sometimes wraps a real cause in a generic
@@ -2763,11 +3183,13 @@ function ReviewStep({
         </p>
       </div>
 
-      {Object.keys(created).length > 0 && (
+      {/* Only count entities created on THIS run as "progress" — the
+          pre-seeded parent ids in add modes aren't progress. */}
+      {Object.keys(created).some((k) => created[k] && !seeded[k]) && (
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-[12px] text-emerald-200">
           Partial progress saved — retry only re-runs the failing step:
-          {created.campaignId && <div>· Campaign {created.campaignId}</div>}
-          {created.adSetId && <div>· Ad Set {created.adSetId}</div>}
+          {created.campaignId && !seeded.campaignId && <div>· Campaign {created.campaignId}</div>}
+          {created.adSetId && !seeded.adSetId && <div>· Ad Set {created.adSetId}</div>}
           {created.imageHash && <div>· Image uploaded</div>}
         </div>
       )}
@@ -2775,15 +3197,25 @@ function ReviewStep({
       {/* 2-up grid on wider screens prevents the value column from stretching
           across the modal. Stacks on mobile. */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:gap-5">
-        <Section title="Objective">
-          <Field k="Objective" v={labels.objective?.[form.objective] || form.objective} />
-          <Field k="Destination" v={labels.conversionLocation?.[form.conversionLocation] || form.conversionLocation} />
-        </Section>
-        <Section title="Campaign">
-          <Field k="Name" v={form.campaignName} />
-          <Field k="Budget" v={form.cbo ? `${form.campaignBudgetType} ₹${form.campaignBudget}` : 'Per ad set'} />
-          <Field k="Categories" v={form.specialAdCategories.length ? form.specialAdCategories.join(', ') : 'None'} />
-        </Section>
+        {mode === 'create-ad' && context?.parentLabel ? (
+          <Section title="Adding to">
+            <Field k="Ad set" v={context.parentLabel} />
+            <Field k="Destination" v={labels.conversionLocation?.[form.conversionLocation] || form.conversionLocation} />
+          </Section>
+        ) : (
+          <Section title="Objective">
+            <Field k="Objective" v={labels.objective?.[form.objective] || form.objective} />
+            <Field k="Destination" v={labels.conversionLocation?.[form.conversionLocation] || form.conversionLocation} />
+          </Section>
+        )}
+        {showCampaign && (
+          <Section title="Campaign">
+            <Field k="Name" v={form.campaignName} />
+            <Field k="Budget" v={form.cbo ? `${form.campaignBudgetType} ₹${form.campaignBudget}` : 'Per ad set'} />
+            <Field k="Categories" v={form.specialAdCategories.length ? form.specialAdCategories.join(', ') : 'None'} />
+          </Section>
+        )}
+        {showAdSet && (
         <Section title="Ad Set">
           <Field k="Name" v={form.adSetName} />
           <Field k="Page" v={form.pageId} />
@@ -2814,6 +3246,7 @@ function ReviewStep({
           {form.mobileAppStore && <Field k="App store" v={form.mobileAppStore} />}
           {form.applicationId && <Field k="App ID" v={form.applicationId} />}
         </Section>
+        )}
         <Section title="Ad" wide>
           <Field k="Name" v={form.adName} />
           <Field k="Headline" v={form.headline} />
@@ -2826,7 +3259,11 @@ function ReviewStep({
       {launching && (
         <div className="flex items-center gap-2 text-13 text-white/70">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Launching campaign…
+          {mode === 'create-ad'
+            ? 'Creating ad…'
+            : mode === 'create-adset'
+            ? 'Creating ad set…'
+            : 'Launching campaign…'}
         </div>
       )}
     </div>

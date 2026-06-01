@@ -379,7 +379,9 @@ class GoogleAdController {
   // * 1. GET all Google Ads accounts
   async getAdAccountsList(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get ad accounts'
        #swagger.description = 'Get all accessible Google Ads customer accounts for the authenticated user'
+       #swagger.security = [{ "BearerAuth": [] }]
     */
     try {
       const userId = req.user.user_id;
@@ -596,8 +598,10 @@ class GoogleAdController {
 // * 5. GET campaigns by customer
   async getCampaignsByCustomer(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get campaigns'
        #swagger.description = 'Get all campaigns and ad groups for a Google Ads customer account'
-       #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID (required)', type: 'string' }
     */
     try {
       const userId = req.user.user_id;
@@ -898,7 +902,9 @@ class GoogleAdController {
   // * 6. GET ad groups by campaign
   async getAdGroupsByCampaignId(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get ad groups by campaign'
        #swagger.description = 'Get all ad groups for a specific campaign'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['campaignId'] = { description: 'Campaign ID to filter ad groups', type: 'string', required: true }
     */
@@ -992,7 +998,9 @@ class GoogleAdController {
   // * 7. GET ads by campaign
   async getAdsByCampaignId(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get ads by campaign'
        #swagger.description = 'Get all ads for a specific campaign'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['campaignId'] = { description: 'Campaign ID to filter ads', type: 'string', required: true }
     */
@@ -1111,7 +1119,9 @@ class GoogleAdController {
   // * 8. GET ads by ad group
   async getAdsByAdGroupId(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get ads by ad group'
        #swagger.description = 'Get all ads for a specific ad group'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['adGroupId'] = { description: 'Ad Group ID to filter ads', type: 'string', required: true }
     */
@@ -1226,7 +1236,9 @@ class GoogleAdController {
   // * 2. Lightweight account check
   async checkGoogleAdsAccount(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Check Google Ads account'
        #swagger.description = 'Lightweight check — is a Google account connected and does it have any Ads accounts'
+       #swagger.security = [{ "BearerAuth": [] }]
     */
     try {
       const userId = req.user.user_id;
@@ -1311,7 +1323,9 @@ class GoogleAdController {
   // * 3. GET dashboard data
   async getDashboardData(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get dashboard data'
        #swagger.description = 'Get dashboard overview statistics and performance chart data'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['datePreset'] = { description: 'Date preset for data range', type: 'string', default: 'last_7d' }
     */
@@ -1414,7 +1428,9 @@ class GoogleAdController {
   // * 4. GET analytics data with period comparison
   async getAnalyticsData(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get analytics data'
        #swagger.description = 'Get detailed analytics statistics with period comparison (spend, impressions, clicks, CTR, CPC, CPM)'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['datePreset'] = { description: 'Date preset for data range', type: 'string', default: 'last_30d' }
     */
@@ -1555,7 +1571,9 @@ class GoogleAdController {
   // * 9. GET insights
   async getInsights(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get performance insights'
        #swagger.description = 'Get performance insights by account, campaign, adgroup or ad level'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
        #swagger.parameters['level'] = { description: 'Aggregation level', type: 'string', enum: ['account', 'campaign', 'adgroup', 'ad'], default: 'account' }
        #swagger.parameters['datePreset'] = { description: 'Date preset', type: 'string', enum: ['today','yesterday','last_7d','last_14d','last_30d','last_90d','this_month','last_month'], default: 'last_30d' }
@@ -1658,7 +1676,9 @@ class GoogleAdController {
   // * 10. Run rule-based audit
   async runAudit(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Run account audit'
        #swagger.description = 'Run 24-rule automated audit engine across campaigns, ad groups and ads (last 14 days)'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
     */
     try {
@@ -1908,7 +1928,9 @@ class GoogleAdController {
   // * 11. PATCH update status
   async updateStatus(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Update entity status'
        #swagger.description = 'Enable or pause a campaign, ad group or ad'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -1987,7 +2009,9 @@ class GoogleAdController {
   // * Delete campaign (sets status to REMOVED)
   async deleteCampaignAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Delete campaign'
        #swagger.description = 'Delete a Google Ads campaign (marks as REMOVED)'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -2047,7 +2071,9 @@ class GoogleAdController {
   // * 13. POST create campaign
   async createCampaignAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Create campaign'
        #swagger.description = 'Create a Google Ads campaign. MCC resolved automatically.'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -2229,7 +2255,9 @@ class GoogleAdController {
   // * 15. POST create ad group
   async createAdGroupAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Create ad group'
        #swagger.description = 'Create an ad group under a campaign. Ad group type auto-detected from campaign channel type. MCC resolved automatically.'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -2463,7 +2491,9 @@ class GoogleAdController {
   // * 21. POST create ad — one-shot: campaign + adgroup + ads
   async createAd(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Create ad (one-shot)'
        #swagger.description = 'One-shot AdFactory launch: creates campaign + ad group + ads. MCC resolved automatically.'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -2634,7 +2664,9 @@ class GoogleAdController {
   // * 22. POST create ad
   async createAdAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Create ads'
        #swagger.description = 'Create one or more responsive search ads under an ad group in a single request. Pass an "ads" array — one item for a single ad, multiple for bulk.'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {
@@ -2839,7 +2871,10 @@ class GoogleAdController {
   // * 23. GET single ad
   async getAd(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get ad by ID'
        #swagger.description = 'Get a single ad by ID including headlines, descriptions and final URLs'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['id'] = { in: 'path', description: 'Google Ad ID', type: 'string', required: true }
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID', type: 'string', required: true }
     */
     try {
@@ -2919,7 +2954,9 @@ class GoogleAdController {
   // * 24. POST upload media asset to Google Ads
   async uploadMediaAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Upload media asset'
        #swagger.description = 'Upload an image asset to Google Ads; returns assetResourceName. Accepts multipart file or imageUrl.'
+       #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
          content: {

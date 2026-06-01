@@ -1,0 +1,76 @@
+const Joi = require("joi");
+
+// ─── scheduleSchema ───────────────────────────────────────────────────────────
+
+const customFrequencySchema = Joi.object({
+  repeatEvery:  Joi.number().integer().min(1).default(1),
+  repeatUnit:   Joi.string().valid("day", "week").default("week"),
+  repeatOnDays: Joi.array().items(Joi.string()).default([]),
+});
+
+const scheduleSchema = Joi.object({
+  frequency:       Joi.string().required(),
+  startDate:       Joi.date().iso().optional().allow(null),
+  endDate:         Joi.date().iso().optional().allow(null),
+  timezone:        Joi.string().valid(...Intl.supportedValuesOf("timeZone")).default("UTC"),
+  customFrequency: Joi.when("frequency", {
+    is:        "custom",
+    then:      customFrequencySchema.required(),
+    otherwise: Joi.forbidden(),
+  }),
+});
+
+// ─── Platform target schemas ──────────────────────────────────────────────────
+
+const metaTargetSchema = Joi.object({
+  adAccountId: Joi.string().allow("", null).optional(),
+  pageId:      Joi.string().allow("", null).optional(),
+  campaignId:  Joi.string().allow("", null).optional(),
+  adSetId:     Joi.string().allow("", null).optional(),
+  leadFormId:  Joi.string().allow("", null).optional(),
+});
+
+const targetsSchema = Joi.object({
+  meta: metaTargetSchema.optional(),
+});
+
+// ─── createJobSchema ──────────────────────────────────────────────────────────
+
+const createJobSchema = Joi.object({
+  campaignId: Joi.string()
+    .pattern(/^[a-f\d]{24}$/i)
+    .required()
+    .messages({ "string.pattern.base": "campaignId must be a valid MongoDB ObjectId" }),
+
+  schedule: scheduleSchema.required(),
+
+  pairsPerCycle: Joi.number().integer().min(1).max(200).default(1),
+
+  model: Joi.string().allow("", null).optional(),
+
+  // Dynamic per-campaign — array of CTA strings copied from campaign.objectives.callToAction
+  callToAction: Joi.array().items(Joi.string().trim()).default([]),
+
+  destinationUrl: Joi.string().uri({ allowRelative: false }).allow("", null).optional(),
+
+  targets: targetsSchema.optional(),
+});
+
+// ─── updateJobSchema ──────────────────────────────────────────────────────────
+
+const updateJobSchema = Joi.object({
+  campaignId:     Joi.string().pattern(/^[a-f\d]{24}$/i).messages({ "string.pattern.base": "campaignId must be a valid MongoDB ObjectId" }),
+  schedule:       scheduleSchema,
+  pairsPerCycle:  Joi.number().integer().min(1).max(200),
+  model:          Joi.string().allow("", null),
+  callToAction:   Joi.array().items(Joi.string().trim()),
+  destinationUrl: Joi.string().uri({ allowRelative: false }).allow("", null),
+  targets:        targetsSchema,
+}).min(1);
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
+
+module.exports = {
+  createJobSchema,
+  updateJobSchema,
+};

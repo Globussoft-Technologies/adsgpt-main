@@ -16,19 +16,6 @@ const schema = Yup.object({
     .required('Campaign Name is required')
     .min(3, 'Campaign Name must be at least 3 characters')
     .max(50, 'Campaign Name must be less than 50 characters'),
-  // website_url: Yup.string()
-  //   .nullable()
-  //   .optional()
-  //   .test('is-valid-url', 'Please enter a valid URL (e.g., https://example.com)', (value) => {
-  //     // If no value is provided, it's valid (optional field)
-  //     if (!value || value.trim() === '') {
-  //       return true;
-  //     }
-
-  //     // Validate URL format if provided
-  //     const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
-  //     return urlPattern.test(value);
-  //   }),
 });
 
 export default function StartFormDialog({ open, onOpenChange }) {
@@ -67,30 +54,36 @@ export default function StartFormDialog({ open, onOpenChange }) {
                 website_url: metadata?.website_url || '',
               }}
               validationSchema={schema}
-              onSubmit={async (values, { setSubmitting }) => {
+              onSubmit={async (values, { setSubmitting, setFieldError }) => {
                 try {
                   const payload = {
                     campaignName: values.campaignName,
                     userId: userData?.user_id,
                   };
-                  const payloadUrl = {
-                    website_url: values.website_url && values.website_url,
-                  };
 
                   dispatch(updateMetaData(values));
                   const result = await dispatch(createCampaign(payload));
-                  if (createCampaign.fulfilled.match(result) && values.website_url !== '') {
-                    const urlresult = await dispatch(Analyzingsweburl(payloadUrl));
+
+                  if (!createCampaign.fulfilled.match(result)) {
+                    console.error(result.payload);
+                    return;
                   }
 
-                  if (
-                    createCampaign.fulfilled.match(result) ||
-                    Analyzingsweburl?.fulfilled.match(urlresult)
-                  ) {
-                    navigate(`/adfactory?campaignId=${result.payload}`);
-                  } else {
-                    console.error(result.payload);
+                  if (values.website_url) {
+                    const urlresult = await dispatch(
+                      Analyzingsweburl({ website_url: values.website_url })
+                    );
+                    if (Analyzingsweburl.rejected.match(urlresult)) {
+                      setFieldError(
+                        'website_url',
+                        urlresult.payload ||
+                          "We couldn't reach this URL right now. Try again or set up manually."
+                      );
+                      return;
+                    }
                   }
+
+                  navigate(`/adfactory?campaignId=${result.payload}`);
                 } finally {
                   setSubmitting(false);
                 }
@@ -122,29 +115,22 @@ export default function StartFormDialog({ open, onOpenChange }) {
                   <div>
                     <label className="text-[18px] font-medium text-white">Website URL</label>
                     <div className="mt-2">
-                      {/* <Field
+                      <Field
                         name="website_url"
                         className={`rounded-10 h-[52px] w-full bg-[#909294]/20 px-5 py-2.5 text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#AFAFAF] ${
-                          errors.website_url && touched.website_url
+                          errors.website_url
                             ? 'border border-red-500'
                             : 'border border-transparent'
                         }`}
                         placeholder="https://example.com (optional)"
                         disabled={isSubmitting || loading}
-                      /> */}
-
-                      <Field
-                        name="website_url"
-                        className="rounded-10 h-[52px] w-full border border-transparent bg-[#909294]/20 px-5 py-2.5 text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#AFAFAF]"
-                        placeholder="https://example.com (optional)"
-                        disabled={isSubmitting || loading}
                       />
                     </div>
-                    {/* <ErrorMessage
+                    <ErrorMessage
                       name="website_url"
                       component="div"
                       className="mt-1 text-xs text-red-400"
-                    /> */}
+                    />
                   </div>
                   {/* Action Buttons */}
                   <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-end">

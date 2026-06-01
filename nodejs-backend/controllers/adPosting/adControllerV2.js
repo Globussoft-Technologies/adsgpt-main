@@ -35,9 +35,9 @@ const { decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
 const {
-  getCell,
-  isCellImplemented,
-} = require("../../config/wizardSchema");
+  inferCellForMetaCampaign,
+  destinationToConversionLocation,
+} = require("./cellInference");
 const {
   invalidateAfterCreate,
   formatMetaError,
@@ -81,70 +81,9 @@ const adFactoryV2Schema = Joi.object({
     .required(),
 }).unknown(true); // legacy callers may pass extra fields (campaignDetails.campaignName, etc.) — ignore them.
 
-// V2 supports these three. Other objectives flow through the V1 endpoint.
-const SUPPORTED_OBJECTIVES = new Set([
-  "OUTCOME_TRAFFIC",
-  "OUTCOME_LEADS",
-  "OUTCOME_APP_PROMOTION",
-]);
-
-// destination_type → conversionLocation. Some destinations need to be
-// resolved per-objective (PHONE_CALL means CALLS on Leads, PHONE_CALL on
-// Traffic — different cells), which is why this is a function not a map.
-function destinationToConversionLocation(objective, destinationType) {
-  switch (destinationType) {
-    case "WEBSITE":
-      return "WEBSITE";
-    case "APP":
-      return "APP";
-    case "MESSENGER":
-      return "MESSENGER";
-    case "WHATSAPP":
-      return "WHATSAPP";
-    case "INSTAGRAM_DIRECT":
-      return "INSTAGRAM";
-    case "ON_AD":
-      return "INSTANT_FORM";
-    case "PHONE_CALL":
-      return objective === "OUTCOME_LEADS" ? "CALLS" : "PHONE_CALL";
-    default:
-      return null;
-  }
-}
-
-// Given the Meta campaign + ad set we're posting under, return the
-// wizard cell to use for building creatives. Returns { error } when the
-// campaign uses an objective V2 doesn't yet support.
-function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
-  const objective = String(metaCampaign?.objective || "").toUpperCase();
-  if (!SUPPORTED_OBJECTIVES.has(objective)) {
-    return {
-      error: `Unsupported campaign objective "${objective || "(none)"}". V2 currently supports Traffic, Leads, and App Promotion campaigns.`,
-    };
-  }
-  const destinationType = metaAdSet?.destination_type || null;
-  let conversionLocation = destinationToConversionLocation(
-    objective,
-    destinationType,
-  );
-  // Fall back to the most common cell per objective when destination_type
-  // is missing — covers ad sets created without an explicit destination.
-  if (!conversionLocation) {
-    if (objective === "OUTCOME_TRAFFIC") conversionLocation = "WEBSITE";
-    else if (objective === "OUTCOME_APP_PROMOTION") conversionLocation = "APP";
-    else if (objective === "OUTCOME_LEADS") conversionLocation = "INSTANT_FORM";
-  }
-  if (!isCellImplemented(objective, conversionLocation)) {
-    return {
-      error: `No V2 cell implementation for (${objective}, ${conversionLocation}). Try a campaign with a supported destination.`,
-    };
-  }
-  return {
-    objective,
-    conversionLocation,
-    cell: getCell(objective, conversionLocation),
-  };
-}
+// Cell inference (objective × destination → wizard cell) lives in the
+// shared ./cellInference module — reused by campaign management's
+// resolve-cell endpoint so both stay in lockstep.
 
 // Upload an image to the ad account from a URL. Mirrors the V1 helper
 // but kept local so V2 stays self-contained.

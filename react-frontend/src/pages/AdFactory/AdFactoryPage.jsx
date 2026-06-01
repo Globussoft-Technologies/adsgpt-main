@@ -9,10 +9,13 @@ import {
   fetchCampaignById,
   fetchCampaigns,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { fetchAutomation } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
+import { isAutomationVisibleStatus } from '@/store/reducers/adFactoryAutomation/constants';
 import { setAdsDialogOpen, setAdsDialogType } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { emitWhenConnected } from '@/utils/socketEmitter';
 import { useSearchParams } from 'react-router-dom';
 import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
+import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 export default function AdFactoryPage() {
   const dispatch = useDispatch();
@@ -48,19 +51,45 @@ export default function AdFactoryPage() {
     dispatch(checkGoogleUser(userData?.user_id));
   }, [dispatch, userData?.user_id]);
 
+  // Bootstrap a campaign on mount: load its data, and trigger the MANUAL
+  // pipeline only if it isn't currently running under automation.
+  //
+  // History: this used to fire `adFactoryRequest` after a hardcoded 900ms
+  // `setTimeout` — which was both pointless (`emitWhenConnected` already
+  // queues until the socket is up) AND wrong, because it kicked off the
+  // manual image/text/post pipeline even on campaigns whose automation
+  // was actively running its own cycles. The result was duplicate work:
+  // the cron worker generated ads on schedule AND the manual pipeline
+  // generated a fresh set on every page navigation.
+  //
+  // Fix: await fetchAutomation, then skip the emit if the entry's status
+  // is in the "automation visible" set (active/paused/completed/failed).
+  // `cancelled` flag prevents the emit from firing after unmount.
   useEffect(() => {
-    if (queryCampaignId) {
-      const payload = {
-        campaignId: queryCampaignId,
-        userId: userData?.user_id,
-      };
-      const timer = setTimeout(() => {
-        emitWhenConnected('adFactoryRequest', queryCampaignId);
-      }, 900);
-      dispatch(fetchCampaignById(payload));
-      return () => clearTimeout(timer);
+    if (!queryCampaignId) return undefined;
+    dispatch(
+      fetchCampaignById({ campaignId: queryCampaignId, userId: userData?.user_id }),
+    );
+
+    // Pre-automation behavior: kick the manual pipeline unconditionally. The
+    // fetchAutomation-gated branch below only matters when automation is
+    // enabled; with the flag off, no cron worker can be running so there's
+    // no risk of duplicate work and we can take the simpler path.
+    if (!IS_AUTOMATION_ENABLED) {
+      emitWhenConnected('adFactoryRequest', queryCampaignId);
+      return undefined;
     }
-    // dispatch(fetchCampaigns(userData?.user_id));
+
+    let cancelled = false;
+    dispatch(fetchAutomation(queryCampaignId)).then((action) => {
+      if (cancelled) return;
+      const status = action?.payload?.entry?.status;
+      if (status && isAutomationVisibleStatus(status)) return;
+      emitWhenConnected('adFactoryRequest', queryCampaignId);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [queryCampaignId, userData?.user_id, dispatch]);
 
   return (

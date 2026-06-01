@@ -331,8 +331,8 @@ function googleMockMiddleware(req, res, next) {
   const isGetAccounts = req.path === "/get-ad-accounts";
 
   const requestedAccountId =
-    req.query.adAccountId ||
-    req.query.customerId ||
+    req.query['adAccountId'] ||
+    req.query['customerId'] ||
     req.body?.adAccountId ||
     req.body?.customerId;
 
@@ -394,7 +394,7 @@ function googleMockMiddleware(req, res, next) {
 
   // ── Ad Groups ──────────────────────────────────────────────────────────────
   if (path === "/get-ad-groups") {
-    const cmpId = req.query.campaignId;
+    const cmpId = req.query['campaignId'];
     const groups = cmpId
       ? mockAdGroups.filter((g) => g.campaignId === cmpId)
       : mockAdGroups;
@@ -410,7 +410,7 @@ function googleMockMiddleware(req, res, next) {
 
   // ── Ads ────────────────────────────────────────────────────────────────────
   if (path === "/get-campaign-ads") {
-    const cmpId = req.query.campaignId;
+    const cmpId = req.query['campaignId'];
     const ads = cmpId
       ? mockAds.filter((a) => a.campaignId === cmpId)
       : mockAds;
@@ -425,7 +425,7 @@ function googleMockMiddleware(req, res, next) {
   }
 
   if (path === "/get-ad-group-ads") {
-    const agId = req.query.adGroupId;
+    const agId = req.query['adGroupId'];
     const ads = agId ? mockAds.filter((a) => a.adGroupId === agId) : mockAds;
     return res.status(200).json({
       status: true,
@@ -439,7 +439,7 @@ function googleMockMiddleware(req, res, next) {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
   if (path === "/get-dashboard-data") {
-    const chartData = buildDailyRows(resolveDays(req.query.datePreset));
+    const chartData = buildDailyRows(resolveDays(req.query['datePreset']));
     const totalSpend = parseFloat(
       chartData.reduce((s, r) => s + r.spend, 0).toFixed(2)
     );
@@ -461,7 +461,7 @@ function googleMockMiddleware(req, res, next) {
 
   // ── Analytics ──────────────────────────────────────────────────────────────
   if (path === "/get-analytics-data") {
-    const allRows = buildDailyRows(resolveDays(req.query.datePreset));
+    const allRows = buildDailyRows(resolveDays(req.query['datePreset']));
     const chartData = allRows.map((r) => ({ name: r.name, spend: r.spend, clicks: r.clicks }));
     const totSpend = parseFloat(allRows.reduce((s, r) => s + r.spend, 0).toFixed(2));
     const totImpressions = allRows.reduce((s, r) => s + r.impressions, 0);
@@ -500,10 +500,10 @@ function googleMockMiddleware(req, res, next) {
 
   // ── Insights ───────────────────────────────────────────────────────────────
   if (path === "/get-insights") {
-    const level = req.query.level || "account";
-    const cmpId = req.query.campaignId;
-    const agId = req.query.adGroupId;
-    const rows = buildDailyRows(resolveDays(req.query.datePreset)).map((r) => {
+    const level = req.query['level'] || "account";
+    const cmpId = req.query['campaignId'];
+    const agId = req.query['adGroupId'];
+    const rows = buildDailyRows(resolveDays(req.query['datePreset'])).map((r) => {
       const row = {
         date: r.date,
         spend: r.spend,

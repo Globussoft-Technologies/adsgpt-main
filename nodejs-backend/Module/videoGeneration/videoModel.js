@@ -83,7 +83,7 @@ const videoSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "processing", "completed", "failed"],
+      enum: ["pending", "processing", "completed", "failed", "copy"],
       default: "pending",
     },
 
@@ -136,6 +136,20 @@ const videoSchema = new mongoose.Schema(
       userPrompt: { type: String},
       // confirmed scenes sent to generate-video step
       scenes: { type: mongoose.Schema.Types.Mixed },
+
+      // ── ElevenLabs voice picker (AI Ads) ───────────────────────────────────
+      // voiceId is the deliverable forwarded to Python for TTS. voiceFilters
+      // is metadata used to repopulate the picker on resume/recreate; Python
+      // does not consume it.
+      voiceId: String,
+      voiceName: String,
+      voiceFilters: {
+        language:      String,
+        languageLabel: String,
+        gender:        String,
+        accent:        String,
+        age:           String,
+      },
     },
 
     // ── Regular video outputs ─────────────────────────────────────────────────

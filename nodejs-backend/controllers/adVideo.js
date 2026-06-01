@@ -379,6 +379,9 @@ exports.analyzeUrl = async (req, res) => {
 
     return res.json(data);
   } catch (err) {
+    if (err?.response) {
+      return res.status(err.response.status).json(err.response.data);
+    }
     return res.status(500).json({
       message: "Scraping failed",
       details: err.message,

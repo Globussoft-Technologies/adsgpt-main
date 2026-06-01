@@ -17,6 +17,8 @@ import addieHistoryreducer from '@/store/reducers/adInsights/Addie/addieHistoryS
 import userInteractionSlice from '@/store/reducers/userInteraction/userInteraction.jsx';
 import adFactorySlice from '@/store/reducers/AdFactory/AdFactorySlice';
 import adFactoryNewSlice from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
+import adFactoryAutomationSlice from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import modelCreditsSlice from '@/store/reducers/modelCredits/modelCreditsSlice';
 import usageSlice from '@/store/reducers/profile/usageSlice';
 import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSlice';
 import imageReducer from '@/store/reducers/image/imageSlice';
@@ -65,6 +67,8 @@ const store = configureStore({
     userInteractions: userInteractionSlice,
     adFactory: adFactorySlice,
     adFactoryNew: adFactoryNewSlice,
+    adFactoryAutomation: adFactoryAutomationSlice,
+    modelCredits: modelCreditsSlice,
     usage: usageSlice,
     competitorSearch: competitorSearchReducer,
     image: imageReducer,

@@ -146,7 +146,10 @@ export const Analyzingsweburl = createAsyncThunk(
         window.location.href = REDIRECT_LOGIN;
       }
       return rejectWithValue(
-        err?.response?.data?.error || err?.message || 'Failed to analyze website URL'
+        err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.message ||
+          'Failed to analyze website URL'
       );
     }
   }
@@ -175,7 +178,7 @@ export const updateCampaign = createAsyncThunk(
   'adFactory/updateCampaign',
   async (payload, { rejectWithValue, dispatch, getState }) => {
     try {
-      const res = await axios.put(`${BACKEND_HOST}/adsgpt/campaign/update`, payload, {
+      const res = await axios.put(`${import.meta.env.VITE_SOCKET_URL}/adsgpt/campaign/update`, payload, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${getCookies()}`,
@@ -245,7 +248,7 @@ export const fetchCampaigns = createAsyncThunk(
   async (userId, { rejectWithValue }) => {
     try {
       const token = getCookies();
-      const res = await axios.get(`${BACKEND_HOST}/adsgpt/campaign/get/${userId}`, {
+      const res = await axios.get(`${import.meta.env.VITE_SOCKET_URL}/adsgpt/campaign/get/${userId}`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       return res?.data || [];
@@ -465,12 +468,12 @@ export const fetchCampaignById = createAsyncThunk(
 
       // Fetch both campaign data and history in parallel
       const [res, historyRes] = await Promise.all([
-        axios.get(`${BACKEND_HOST}/adsgpt/campaign/get/${payload?.userId}/${payload?.campaignId}`, {
+        axios.get(`${import.meta.env.VITE_SOCKET_URL}/adsgpt/campaign/get/${payload?.userId}/${payload?.campaignId}`, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         }),
         axios
           .get(
-            `${BACKEND_HOST}/adsgpt/campaign/get-history/${payload?.userId}/${payload?.campaignId}`,
+            `${import.meta.env.VITE_SOCKET_URL}/adsgpt/campaign/get-history/${payload?.userId}/${payload?.campaignId}`,
             {
               headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             }
@@ -707,6 +710,29 @@ export const fetchFacebookPages = createAsyncThunk(
         },
       });
       return res?.data?.pages;
+    } catch (err) {
+      return rejectWithValue('failed');
+    }
+  }
+);
+
+// Instant Forms (lead forms) attached to a Facebook Page. Only consumed by
+// the AdFactory Automation form when the picked campaign's objective is
+// OUTCOME_LEADS — Meta requires a leadgen_form_id on lead ads, so this
+// dropdown surfaces the existing forms on the selected Page.
+export const fetchLeadForms = createAsyncThunk(
+  'adFactory/fetchLeadForms',
+  async (pageId, { rejectWithValue }) => {
+    try {
+      const token = getCookies();
+      const res = await axios.get(`${BACKEND_HOST}/adsgpt/meta-ads/get-lead-forms`, {
+        params: { pageId },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return res?.data?.forms || [];
     } catch (err) {
       return rejectWithValue('failed');
     }

@@ -75,6 +75,15 @@ async function createServer() {
   await connectMongoDB();
   runCronJobs();
 
+  // * Ads Factory Auto-Pilot — start BullMQ worker + reload active jobs
+  try {
+    const { startWorker, reloadActiveJobs } = require("./services/adsFactoryAuto/adsFactoryAutoQueue");
+    startWorker();
+    await reloadActiveJobs();
+  } catch (err) {
+    console.error("[adsFactory] failed to start autopilot queue:", err.message);
+  }
+
   // ! To be reworked properly
   sub.subscribe("analyticsChartTop");
   sub.subscribe("analyticsChartMid");

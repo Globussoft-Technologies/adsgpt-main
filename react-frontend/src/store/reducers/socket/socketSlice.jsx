@@ -55,6 +55,12 @@ import {
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+import {
+  mergeActivityFromSocket,
+  applyAutomationStatsPatch,
+} from '../adFactoryAutomation/adFactoryAutomationSlice';
+import { fetchAutomationStats } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
+import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 let socket = null;
 const notifiedVideoIds = new Set();
@@ -117,6 +123,7 @@ export default socketSlice.reducer;
 // ---- socket init (side effect in slice) ----
 export const initSocket = (url) => (dispatch, getState) => {
   if (!socket) {
+    // socket = io("https://h9pxq91j-7000.inc1.devtunnels.ms", {
     socket = io(url, {
       auth: {
         token: getCookies(),
@@ -399,7 +406,12 @@ export const initSocket = (url) => (dispatch, getState) => {
           imageFailed: false,
           imageError: null,
         }));
+        // Preserve existing top-level fields (_id, status, inputs, etc.) — the
+        // socket payload only carries sessionId/event/scenes, so spreading it
+        // alone would wipe _id and break URL/Generate after Back→Next cycles.
+        const existing = getState()?.adVideoNew?.aiAdsSceneData || {};
         dispatch(setAiAdsSceneData({
+          ...existing,
           ...(data?.data || data),
           scenes,
           status: 'processing',
@@ -426,7 +438,8 @@ export const initSocket = (url) => (dispatch, getState) => {
 
       // Regen callback (or legacy full-payload) — merge by segmentNumber
       const { adVideoNew } = getState();
-      const existingScenes = adVideoNew?.aiAdsSceneData?.scenes || adVideoNew?.aiAdsSceneData?.data?.scenes || [];
+      const existingAiAdsData = adVideoNew?.aiAdsSceneData || {};
+      const existingScenes = existingAiAdsData?.scenes || existingAiAdsData?.data?.scenes || [];
       const incomingScenes = data?.scenes || data?.data?.scenes || [];
 
       const mergedScenes = existingScenes.length > 0
@@ -446,7 +459,11 @@ export const initSocket = (url) => (dispatch, getState) => {
             frameImageUrl: newScene.frameImageUrl || '',
           }));
 
+      // Preserve existing _id, status, inputs, etc. — regen socket payload
+      // only carries sessionId/event/scenes, so spreading it alone would wipe
+      // _id and break URL/Generate flow after Back→Next.
       dispatch(setAiAdsSceneData({
+        ...existingAiAdsData,
         ...(data?.data || data),
         scenes: mergedScenes,
       }));
@@ -475,6 +492,19 @@ export const initSocket = (url) => (dispatch, getState) => {
       dispatch(setAiAdsSceneError(data?.error || 'Generation failed'));
     });
 
+    // Regen failure on a scene that already had a working image. Backend
+    // preserves the old image in DB (does NOT set imageFailed); we just
+    // toast the error and clear the loading state so the user keeps seeing
+    // the previous image and can try again.
+    socket.on('aiAdsSceneRegenFailed', (data) => {
+      console.error('AI Ads scene regen failed (preserving old image):', data);
+      showFailureNotification(
+        'image',
+        data?.error || 'Failed to regenerate this scene. Previous image kept.'
+      );
+      dispatch(setAiAdsSceneLoading(false));
+    });
+
     socket.on('aiAdsVideoFailed', (data) => {
       console.error('AI Ads video failed:', data);
       const isVoiceFailure = data?.event === 'voiceFailed';
@@ -482,6 +512,103 @@ export const initSocket = (url) => (dispatch, getState) => {
         ? (data?.error || 'Voice generation failed')
         : (data?.error || 'Video generation failed');
       showFailureNotification('video', message);
+    });
+
+    // AdFactory Autopilot — one terminal event per cycle, fired after the
+    // generated ad has been posted to Meta and persisted to history.
+    //
+    // Payload shape observed in the wild (matches AUTOPILOT_SOCKET_EVENTS.md):
+    //   { success: true,
+    //     campaign: { _id, campaignId, campaignName, status },
+    //     generationHealth: {...},
+    //     platforms: { meta: { config: {...} } },
+    //     data: [ { runId, status, ...generationSummary, creatives[] } ] }
+    //
+    // jobId (the autopilot job's Mongo _id, used as the activityByJob key)
+    // lives at `campaign._id` — same value the actions layer captures as
+    // `jobId: job._id` when saving a config. We fall back to a couple of
+    // legacy field names so a server shape drift doesn't silently drop the
+    // event. campaignId (the AdFactory campaign reference, used to refresh
+    // the countdown) is a separate field on the job document — distinct
+    // from jobId in general — and is reverse-resolved from configsByCampaign
+    // when not explicitly present on the payload.
+    if (IS_AUTOMATION_ENABLED) socket.on('adsFactory:runComplete', (data) => {
+      // jobId now ships at the top level of the payload (the cleanest
+      // source). Older shapes nested it under `campaign._id`; we keep that
+      // as a fallback so a partial server rollback doesn't drop events.
+      const jobId =
+        data?.jobId ||
+        data?.campaign?._id ||
+        data?.data?.[0]?.jobId;
+      if (!jobId) {
+        console.warn('adsFactory:runComplete missing jobId', data);
+        return;
+      }
+
+      // Merge first — modal may or may not be open, but the bucket stays
+      // warm so the next open is instant. Keyed by jobId only.
+      dispatch(mergeActivityFromSocket({ jobId, payload: data }));
+
+      // Resolve campaignId by reverse-lookup against configsByCampaign.
+      // `campaign.campaignId` on the payload is sometimes aliased to the
+      // jobId (same Mongo ObjectId), so we can't trust it as the AdFactory
+      // campaign reference — the reverse lookup is authoritative.
+      const configs = getState().adFactoryAutomation?.configsByCampaign || {};
+      const rawCampaignId = data?.campaign?.campaignId || null;
+      let campaignId = rawCampaignId && rawCampaignId !== jobId ? rawCampaignId : null;
+      if (!campaignId) {
+        for (const [cid, entry] of Object.entries(configs)) {
+          if (entry?.jobId === jobId) {
+            campaignId = cid;
+            break;
+          }
+        }
+      }
+
+      if (campaignId) {
+        // Eager stats patch built straight from the socket payload — the
+        // event already carries every field the AutomationActiveNode reads,
+        // so the canvas updates in the same tick as the event without
+        // waiting on the HTTP roundtrip below. Field mapping:
+        //   generated → generationHealth.totalCreativesAssembled (cumulative)
+        //   posted    → generationHealth.totalCreativesPosted    (cumulative)
+        //   lastRunAt → data[0].completedAt (the run that just finished)
+        //   nextRunAt → data[0].generationSummary.nextRunAt
+        //               (mirrored onto stats.schedule so the countdown
+        //               selector — which reads stats.schedule.nextRunAt —
+        //               picks it up; the existing schedule object is
+        //               spread in so frequency/timezone aren't clobbered
+        //               by the shallow merge inside applyAutomationStatsPatch.)
+        const gh = data?.generationHealth || {};
+        const latestRun = Array.isArray(data?.data) ? data.data[0] : null;
+        const nextRunAt = latestRun?.generationSummary?.nextRunAt || null;
+        const lastRunAt = latestRun?.completedAt || null;
+        const existingSchedule =
+          configs?.[campaignId]?.stats?.schedule || {};
+
+        dispatch(
+          applyAutomationStatsPatch({
+            campaignId,
+            stats: {
+              generated:
+                Number(gh.totalCreativesAssembled ?? gh.totalImagesGenerated) ||
+                0,
+              posted: Number(gh.totalCreativesPosted) || 0,
+              lastRunAt,
+              nextRunAt,
+              schedule: { ...existingSchedule, nextRunAt, lastRunAt },
+            },
+          }),
+        );
+
+        // HTTP backstop — reconciles any field the socket payload doesn't
+        // carry (or a server shape drift). UI is already up-to-date from
+        // the patch above; this just keeps Redux honest.
+        dispatch(fetchAutomationStats(campaignId));
+      }
+      // If no campaignId could be resolved (cold tab, entry never
+      // hydrated), we still merged the activity — countdown will catch
+      // up on the next AdFactoryWorkflow mount via fetchAutomation.
     });
   }
 };

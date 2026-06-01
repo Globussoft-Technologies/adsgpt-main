@@ -664,6 +664,22 @@ exports.deleteCampaign = async (req, res) => {
       }
     }
 
+    // If the campaign was deleted mid-generation, release any frozen credits.
+    // The freeze key uses metadata.campaignId (user-facing id), matching the
+    // value frozen in updateCampaign(services).
+    const metadataCampaignId = campaign?.metadata?.campaignId;
+    if (metadataCampaignId) {
+      try {
+        await UnifiedCreditController.releaseCredits(
+          `campaign:${metadataCampaignId}`,
+        );
+      } catch (err) {
+        logger.error(
+          `Failed to release freeze on deleted campaign ${metadataCampaignId}: ${err.message}`,
+        );
+      }
+    }
+
     // Delete all related history documents
     await CampaignHistory.deleteMany({ campaignId });
     await Campaign.deleteOne({ _id: campaignId });
@@ -685,6 +701,7 @@ exports.sendAdFactoryRequest = async (
   campaignId,
   subscriptionTypeKey,
   subscriptionTypeValue,
+  jobId = null,
 ) => {
   try {
     const campaign = await Campaign.findOne({
@@ -718,6 +735,7 @@ exports.sendAdFactoryRequest = async (
       metadata: {
         ...campaignWithoutResults.metadata,
         userId: campaign.userId,
+        jobId: jobId,
         userData: {
           userId: campaign.userId,
           subscriptionTypeKey,
@@ -895,7 +913,7 @@ exports.validateCredits = async (user, subscriptionTypeKey, data) => {
 
     const totalRequired = requiredText + requiredImage + requiredVideo;
 
-    if (totalRequired <= 0) return { code: 200, success: true };
+    if (totalRequired <= 0) return { code: 200, success: true, totalRequired: 0 };
 
     // Step 3: Check credits using UnifiedCreditController
     const userId = `${user?.created_from}-${user?.user_id || user?.userId}`;
@@ -917,7 +935,8 @@ exports.validateCredits = async (user, subscriptionTypeKey, data) => {
       };
     }
 
-    return { code: 200, success: true };
+    // Surface the required total so the caller can freeze it atomically.
+    return { code: 200, success: true, totalRequired, userId };
   } catch (error) {
     logger.error("Error in credit checking:", error);
     console.error("Error in credit checking:", error);
@@ -1006,6 +1025,44 @@ exports.updateCampaign = async (req, res) => {
           available: verifyUserCredits?.available,
         });
       }
+
+      // Freeze the full expected campaign cost atomically. Receipt key is the
+      // campaignId; the existing per-batch `handleCreditDeduction` continues
+      // to deduct as Python returns results. When the campaign completes (or
+      // fails / is deleted), updateGenerationResult / deleteCampaign release
+      // this hold so the only net charge is the per-batch deducts.
+      if (verifyUserCredits?.totalRequired > 0) {
+        const freeze = await UnifiedCreditController.freezeCredits({
+          userId: verifyUserCredits.userId,
+          reservationKey: `campaign:${campaignId}`,
+          amount: verifyUserCredits.totalRequired,
+          meta: { service_type: "adfactory_campaign", campaignId },
+        });
+        if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
+          return res.status(400).json({
+            success: false,
+            message: "Insufficient credits",
+            required: verifyUserCredits.totalRequired,
+            available: freeze.remaining,
+          });
+        }
+        if (!freeze.ok && freeze.reason === "NO_BASE_PLAN") {
+          return res.status(403).json({
+            success: false,
+            message: "An active subscription plan is required.",
+          });
+        }
+        if (!freeze.ok) {
+          logger.error(
+            `AdFactory freeze failed (${freeze.reason}) for campaign ${campaignId}`,
+          );
+          return res.status(503).json({
+            success: false,
+            message: "Could not reserve credits for this campaign. Please try again.",
+          });
+        }
+      }
+
       const existingCampaign = await Campaign.findOne({
         "metadata.campaignId": campaignId,
       }).lean();
@@ -1364,7 +1421,7 @@ exports.updateGenerationResult = async (req, res) => {
   */
 
   try {
-    const { campaignId, type, result, userData } = req.body;
+    const { campaignId, type, result, userData, jobId = null } = req.body;
     logger.info(`Ad Factory Result: ${JSON.stringify(req.body)}`);
     if (!campaignId || !type || !result) {
       return res.status(400).json({
@@ -1389,6 +1446,7 @@ exports.updateGenerationResult = async (req, res) => {
         error: resItem.error ?? null,
         timestamp: new Date(),
         prompt: resItem?.prompt || "",
+        jobId: jobId || null,
       };
 
       updatedCampaign = await Campaign.findOneAndUpdate(
@@ -1420,6 +1478,7 @@ exports.updateGenerationResult = async (req, res) => {
       });
     }
 
+    
     const allCompleted = updatedCampaign?.services?.servicesSelected?.every(
       (srv) => srv.generated >= srv.serviceParams?.quantity,
     );
@@ -1428,8 +1487,18 @@ exports.updateGenerationResult = async (req, res) => {
       updatedCampaign.status = "success";
       await updatedCampaign.save();
       console.log(`Campaign ${campaignId} generation completed`);
+
+      // Release the upfront campaign freeze. handleCreditDeduction has
+      // already debited per-batch actuals, so this only unwinds the hold.
+      try {
+        await UnifiedCreditController.releaseCredits(`campaign:${campaignId}`);
+      } catch (err) {
+        logger.error(
+          `Failed to release campaign freeze ${campaignId}: ${err.message}`,
+        );
+      }
     }
-    
+
     handleCreditDeduction(resultArray, type, userData, campaignId)
     this.emitCampaignResult(campaignId, type, resultArray)
 

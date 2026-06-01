@@ -169,6 +169,10 @@ const regenerateSceneSchema = Joi.object({
         regenerate: Joi.string().valid("text", "image", "both").required(),
         // Frontend sends '' for text, actual prompt for image/both
         regeneratePrompt: Joi.string().optional().allow(""),
+        // Whether the scene already had a successful image. true → billable
+        // image regen; false → free retry of a never-succeeded scene. Backend
+        // validates against DB before honoring (see regenerateScene).
+        deduct: Joi.boolean().optional(),
       })
     )
     .min(1)

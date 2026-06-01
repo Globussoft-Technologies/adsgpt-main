@@ -14,7 +14,9 @@ const { buildPromotedObject } = require("../../utils/promotedObject");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
 const {
   createCampaignSchemaV2,
+  updateCampaignSchemaV2,
   buildAdSetSchemaV2,
+  updateAdSetSchemaV2,
   buildAdSchemaV2,
 } = require("../../Validations/meta.v2.validator");
 const {
@@ -800,6 +802,75 @@ group("buildAdSetSchemaV2 — Traffic / Website", () => {
     });
     assert.ok(error);
   });
+
+  test("accepts a custom map-pin with lat/lng/radius", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [
+          {
+            type: "custom",
+            key: "custom:19.07,72.87",
+            name: "Pin @ 19.07, 72.87",
+            mode: "include",
+            latitude: 19.07,
+            longitude: 72.87,
+            radius: 25,
+          },
+        ],
+      },
+    });
+    assert.equal(error, undefined);
+  });
+
+  test("rejects a custom pin missing latitude", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [
+          { type: "custom", key: "p", mode: "include", longitude: 72.87, radius: 25 },
+        ],
+      },
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a custom pin missing radius", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [
+          {
+            type: "custom",
+            key: "p",
+            mode: "include",
+            latitude: 19.07,
+            longitude: 72.87,
+          },
+        ],
+      },
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a custom pin with out-of-range latitude", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [
+          {
+            type: "custom",
+            key: "p",
+            mode: "include",
+            latitude: 120,
+            longitude: 72.87,
+            radius: 25,
+          },
+        ],
+      },
+    });
+    assert.ok(error);
+  });
 });
 
 group("buildAdSetSchemaV2 — bid strategy ↔ bid amount (both directions)", () => {
@@ -1340,6 +1411,254 @@ group("every cell — Joi factories accept a valid body", () => {
       });
     }
   }
+});
+
+// ─── cellInference (resolve-cell) ───────────────────────────────────────────
+
+const {
+  destinationToConversionLocation,
+  inferCellForMetaCampaign,
+} = require("../../controllers/adPosting/cellInference");
+
+group("destinationToConversionLocation", () => {
+  test("WEBSITE → WEBSITE", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_TRAFFIC", "WEBSITE"), "WEBSITE");
+  });
+  test("APP → APP", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_APP_PROMOTION", "APP"), "APP");
+  });
+  test("ON_AD → INSTANT_FORM", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_LEADS", "ON_AD"), "INSTANT_FORM");
+  });
+  test("INSTAGRAM_DIRECT → INSTAGRAM", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_LEADS", "INSTAGRAM_DIRECT"), "INSTAGRAM");
+  });
+  test("PHONE_CALL on Leads → CALLS", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_LEADS", "PHONE_CALL"), "CALLS");
+  });
+  test("PHONE_CALL on Traffic → PHONE_CALL", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_TRAFFIC", "PHONE_CALL"), "PHONE_CALL");
+  });
+  test("unknown destination → null", () => {
+    assert.equal(destinationToConversionLocation("OUTCOME_TRAFFIC", "ZZZ"), null);
+  });
+});
+
+group("inferCellForMetaCampaign", () => {
+  test("Traffic + WEBSITE destination resolves the WEBSITE cell", () => {
+    const r = inferCellForMetaCampaign(
+      { objective: "OUTCOME_TRAFFIC" },
+      { destination_type: "WEBSITE" },
+    );
+    assert.equal(r.error, undefined);
+    assert.equal(r.objective, "OUTCOME_TRAFFIC");
+    assert.equal(r.conversionLocation, "WEBSITE");
+    assert.ok(r.cell);
+  });
+
+  test("missing destination_type falls back per objective (Traffic → WEBSITE)", () => {
+    const r = inferCellForMetaCampaign({ objective: "OUTCOME_TRAFFIC" }, {});
+    assert.equal(r.conversionLocation, "WEBSITE");
+    assert.ok(r.cell);
+  });
+
+  test("App Promotion fallback → APP", () => {
+    const r = inferCellForMetaCampaign({ objective: "OUTCOME_APP_PROMOTION" }, {});
+    assert.equal(r.conversionLocation, "APP");
+  });
+
+  test("Leads fallback → INSTANT_FORM", () => {
+    const r = inferCellForMetaCampaign({ objective: "OUTCOME_LEADS" }, {});
+    assert.equal(r.conversionLocation, "INSTANT_FORM");
+  });
+
+  test("lowercase objective is normalised", () => {
+    const r = inferCellForMetaCampaign(
+      { objective: "outcome_traffic" },
+      { destination_type: "WEBSITE" },
+    );
+    assert.equal(r.objective, "OUTCOME_TRAFFIC");
+  });
+
+  test("unsupported objective returns an error", () => {
+    const r = inferCellForMetaCampaign({ objective: "OUTCOME_AWARENESS" }, {});
+    assert.ok(r.error);
+    assert.equal(r.cell, undefined);
+  });
+
+  test("missing objective returns an error", () => {
+    const r = inferCellForMetaCampaign({}, {});
+    assert.ok(r.error);
+  });
+});
+
+// ─── updateCampaignSchemaV2 (edit campaign) ─────────────────────────────────
+
+group("updateCampaignSchemaV2", () => {
+  test("accepts a partial update (name only)", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      name: "Renamed campaign",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("accepts a budget + spend cap update", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 50000,
+      spendCap: 200000,
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("requires adAccountId + campaignId", () => {
+    const { error } = updateCampaignSchemaV2.validate({ name: "x" });
+    assert.ok(error);
+  });
+
+  test("rejects changing objective (immutable)", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      objective: "OUTCOME_LEADS",
+    });
+    assert.ok(error);
+  });
+
+  test("rejects changing special ad categories (immutable)", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      specialAdCategories: ["HOUSING"],
+    });
+    assert.ok(error);
+  });
+
+  test("rejects daily + lifetime budget together", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 10000,
+      lifetimeBudget: 50000,
+    });
+    assert.ok(error);
+  });
+
+  test("rejects spend cap at or below the daily budget", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 50000,
+      spendCap: 50000,
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a sub-minimum budget", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 50,
+    });
+    assert.ok(error);
+  });
+});
+
+// ─── updateAdSetSchemaV2 (edit ad set) ──────────────────────────────────────
+
+group("updateAdSetSchemaV2", () => {
+  test("accepts a name-only update", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      name: "Renamed ad set",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("accepts a budget + bid cap update", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      dailyBudget: 30000,
+      bidAmount: 5000,
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("accepts a targeting update (country + city radius)", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      targeting: {
+        locations: [
+          { type: "country", key: "IN", mode: "include" },
+          { type: "city", key: "2295414", radius: 40, mode: "include" },
+        ],
+        ageMin: 25,
+        ageMax: 45,
+      },
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("requires adAccountId + adSetId", () => {
+    const { error } = updateAdSetSchemaV2.validate({ name: "x" });
+    assert.ok(error);
+  });
+
+  test("rejects changing optimization goal (locked)", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      optimizationGoal: "LINK_CLICKS",
+    });
+    assert.ok(error);
+  });
+
+  test("rejects changing billing event (locked)", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      billingEvent: "IMPRESSIONS",
+    });
+    assert.ok(error);
+  });
+
+  test("rejects changing bid strategy (locked)", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      bidStrategy: "LOWEST_COST_WITH_BID_CAP",
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a custom pin without a radius", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      targeting: {
+        locations: [
+          { type: "custom", key: "custom:1,2", latitude: 1, longitude: 2, mode: "include" },
+        ],
+      },
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a schedule shorter than 24h", () => {
+    const { error } = updateAdSetSchemaV2.validate({
+      adAccountId: "act_1",
+      adSetId: "s1",
+      startTime: "2026-06-01T00:00:00Z",
+      endTime: "2026-06-01T06:00:00Z",
+    });
+    assert.ok(error);
+  });
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────────

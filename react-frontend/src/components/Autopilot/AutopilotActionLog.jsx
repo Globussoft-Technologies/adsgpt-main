@@ -27,6 +27,11 @@ import {
   SecondaryButton,
   Banner,
   SeverityBadge,
+  DateRangeFilter,
+  todayDateInput,
+  firstOfMonthDateInput,
+  dateInputToIsoStart,
+  dateInputToIsoEnd,
 } from './_atoms';
 
 // The page-level picker emits bare ad-account IDs but every row in
@@ -47,14 +52,19 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
   const [error, setError] = useState(null);
   const [userAccounts, setUserAccounts] = useState([]);
 
-  const [filters, setFilters] = useState({
+  // Date filters use 'YYYY-MM-DD' (local) so the values plug straight into
+  // <input type="date">. Default range = current calendar month → today,
+  // matching the new UI requirement (no future dates, scoped to the month
+  // the operator is actually triaging).
+  const [filters, setFilters] = useState(() => ({
     adAccountId: normalizeAccountId(selectedAdAccountId),
     action: '',
     outcome: '',
     severity: '',
-    timeRange: 'all',
+    from: firstOfMonthDateInput(),
+    to: todayDateInput(),
     search: '',
-  });
+  }));
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
@@ -95,22 +105,19 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
         action: filters.action || undefined,
         outcome: filters.outcome || undefined,
         page: 1,
-        // Pull a large window so KPI cards reflect the full filter scope,
-        // not just the visible page. Per-user volume stays bounded by the
-        // server-side filters above.
-        limit: 500,
+        // Pull the entire date range so KPI cards reflect the full filter
+        // scope, not just the visible page. The backend caps at 1000 — a
+        // one-month date scope is well under that for any realistic account.
+        limit: 1000,
       };
-      if (filters.timeRange === 'today') {
-        // "Today" = since local midnight, NOT a rolling 24h window. A
-        // rolling window (now − 24h) bleeds yesterday's afternoon/evening
-        // rows into a filter the user expects to mean "the calendar day".
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        params.from = start.toISOString();
-      } else if (filters.timeRange !== 'all') {
-        // "Last 7/30 days" — a rolling window is the expected reading.
-        const days = filters.timeRange === '7' ? 7 : 30;
-        params.from = new Date(Date.now() - days * 86_400_000).toISOString();
+      // Map 'YYYY-MM-DD' to a local-day boundary ISO instant. The backend
+      // filters `runAt: { $gte: from, $lte: to }`, so passing 00:00:00 local
+      // and 23:59:59.999 local makes the calendar-day intent exact.
+      if (filters.from) {
+        params.from = dateInputToIsoStart(filters.from);
+      }
+      if (filters.to) {
+        params.to = dateInputToIsoEnd(filters.to);
       }
       const res = await getActionLog(params);
       setAllRows(res?.rows || []);
@@ -119,7 +126,13 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [filters.adAccountId, filters.action, filters.outcome, filters.timeRange]);
+  }, [
+    filters.adAccountId,
+    filters.action,
+    filters.outcome,
+    filters.from,
+    filters.to,
+  ]);
 
   useEffect(() => {
     load();
@@ -137,7 +150,8 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
       action: '',
       outcome: '',
       severity: '',
-      timeRange: 'all',
+      from: firstOfMonthDateInput(),
+      to: todayDateInput(),
       search: '',
     });
     setPage(1);
@@ -337,16 +351,13 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
 
           {/* Filter dropdowns */}
           <div className="flex flex-wrap items-center gap-2">
-            <FilterDropdown
-              value={filters.timeRange}
-              options={[
-                { value: 'all', label: 'All time' },
-                { value: 'today', label: 'Today' },
-                { value: '7', label: 'Last 7 days' },
-                { value: '30', label: 'Last 30 days' },
-              ]}
-              onChange={(v) => setFilter('timeRange', v)}
-              widthClass="w-32"
+            {/* Date range — defaults to current month, today blocks future
+                picks via `max={todayDateInput()}`. The end input also clamps
+                its min to the start date so the range can't invert. */}
+            <DateRangeFilter
+              from={filters.from}
+              to={filters.to}
+              onChange={(key, value) => setFilter(key, value)}
             />
             <FilterDropdown
               value={filters.adAccountId}

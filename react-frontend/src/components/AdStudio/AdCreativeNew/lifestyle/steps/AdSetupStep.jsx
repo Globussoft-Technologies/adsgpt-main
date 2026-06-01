@@ -23,6 +23,12 @@ import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png
 import chatResponseDark from '@/assets/layouts/adstudio/chat-response-dark.svg';
 import brandIqIcon from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
 import getCookies from '@/utils/getCookies';
+import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
+import {
+  ALLOWED_IMAGE_ACCEPT,
+  IMAGE_TYPE_ERROR,
+  isAllowedImageFile,
+} from '@/utils/imageValidation';
 import {
   AUTOFILL_FAILURE_MESSAGE,
   fetchAutofill,
@@ -100,9 +106,6 @@ const unquote = (v) => {
     return v;
   }
 };
-
-// Credit cost per generated image. Total deducted = total × this.
-const CREDITS_PER_IMAGE = 7;
 
 const totalImages = (counts) => Object.values(counts).reduce((a, b) => a + b, 0);
 const primaryRatio = (counts) => ASPECT_LABELS.find(({ key }) => counts[key] > 0)?.key ?? '1:1';
@@ -305,11 +308,21 @@ export function AdSetupStep({
         autofillData: data,
       });
       const bi = data.brandInfo || {};
+      // Autofill can return very large pools — cap both logos and images
+      // at 10 so the chip rows stay manageable.
+      const scrapedImages = Array.isArray(bi.brandImages)
+        ? bi.brandImages.slice(0, 10)
+        : [];
+      const scrapedLogos = Array.isArray(bi.brandLogo)
+        ? bi.brandLogo.slice(0, 10)
+        : bi.brandLogo
+          ? [bi.brandLogo]
+          : [];
       fillFromBrand({
         name: bi.brandName,
         description: bi.brandDescription,
-        logoUrls: Array.isArray(bi.brandLogo) ? bi.brandLogo : bi.brandLogo ? [bi.brandLogo] : [],
-        imageUrls: bi.brandImages,
+        logoUrls: scrapedLogos,
+        imageUrls: scrapedImages,
       });
       setAutofillState('ok');
     } catch (err) {
@@ -382,9 +395,15 @@ export function AdSetupStep({
     }
 
     const toItem = (u) => ({ file: null, preview: u });
+    // Items that came from the scraped brand pool are rendered as
+    // selected chips below the field — exclude them from the upload
+    // thumbnail row so the same image isn't shown twice.
+    const brandSet = new Set(
+      (Array.isArray(inp.brandImages) ? inp.brandImages : []).filter(Boolean),
+    );
     if (variant === 'lifestyle') {
       const visuals = Array.isArray(inp.keyVisualImages) ? inp.keyVisualImages : [];
-      setImages(visuals.filter(Boolean).map(toItem));
+      setImages(visuals.filter((u) => u && !brandSet.has(u)).map(toItem));
       const refs = Array.isArray(inp.modelReferenceImages) ? inp.modelReferenceImages : [];
       setModelRefImages(refs.filter(Boolean).map(toItem));
     } else if (variant === 'apps-saas') {
@@ -392,10 +411,10 @@ export function AdSetupStep({
       const screenshots = Array.isArray(inp.productScreenshots) ? inp.productScreenshots : [];
       const productImgs = Array.isArray(inp.productImages) ? inp.productImages : [];
       const pool = screenshots.length > 0 ? screenshots : productImgs;
-      setImages(pool.filter(Boolean).map(toItem));
+      setImages(pool.filter((u) => u && !brandSet.has(u)).map(toItem));
     } else {
       const productImgs = Array.isArray(inp.productImages) ? inp.productImages : [];
-      setImages(productImgs.filter(Boolean).map(toItem));
+      setImages(productImgs.filter((u) => u && !brandSet.has(u)).map(toItem));
     }
 
     // Surface the previous run's logo as a single-option chip and mark it
@@ -501,6 +520,9 @@ export function AdSetupStep({
 
   const [model, setModel] = useState('Nano Banana 2');
   const [ratioCounts, setRatioCounts] = useState(DEFAULT_RATIO_COUNTS);
+  // Live per-model credit cost from /adsgpt/usage/model-credit-value
+  // (shared cache). Falls back to 7 while loading or on API error.
+  const creditsPerImage = useImageCreditsForModel(model);
 
   // Switching to an OpenAI model removes 9:16 / 16:9 from the picker; zero
   // out any counts the user may have already set so totals + payload match
@@ -729,7 +751,8 @@ export function AdSetupStep({
           {/* Left — Instructions textarea + model + ratio pills */}
           <div className={`flex min-h-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
             <p className="mb-3 text-[16px] text-white">
-              Instructions<span>*</span>
+              {/* Instructions<span>*</span> */}
+              Prompt<span>*</span>
             </p>
             <div
               className={`relative flex min-h-[380px] flex-1 flex-col rounded-[24px] bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-white/20 ${
@@ -1048,6 +1071,9 @@ export function AdSetupStep({
                           setModelRefImages((p) => p.filter((_, idx) => idx !== i))
                         }
                         onPreview={(i) => openPreview(modelRefImages, i)}
+                        onInvalidType={() =>
+                          setErrors((p) => ({ ...p, images: IMAGE_TYPE_ERROR }))
+                        }
                       />
                     </div>
                   </div>
@@ -1067,6 +1093,9 @@ export function AdSetupStep({
                   onAddFiles={(items) => addImages(items)}
                   onRemoveFile={(i) => setImages((p) => p.filter((_, idx) => idx !== i))}
                   onPreview={(i) => openPreview(images, i)}
+                  onInvalidType={() =>
+                    setErrors((p) => ({ ...p, images: IMAGE_TYPE_ERROR }))
+                  }
                 />
                 <FieldError message={errors.images} />
                 {/* Brand-image chips. Surface scraped/BrandIQ images
@@ -1108,13 +1137,23 @@ export function AdSetupStep({
                     label={cfg.logo.label}
                     placeholder={cfg.logo.placeholder}
                     url={logoUrl}
-                    onUrlChange={setLogoUrl}
+                    onUrlChange={(v) => {
+                      setLogoUrl(v);
+                      if (v.trim()) clearError('logo');
+                    }}
                     files={logoFiles}
-                    onAddFiles={(items) => setLogoFiles((p) => [...p, ...items])}
+                    onAddFiles={(items) => {
+                      setLogoFiles((p) => [...p, ...items]);
+                      clearError('logo');
+                    }}
                     onRemoveFile={(i) => setLogoFiles((p) => p.filter((_, idx) => idx !== i))}
                     onPreview={(i) => openPreview(logoFiles, i)}
+                    onInvalidType={() =>
+                      setErrors((p) => ({ ...p, logo: IMAGE_TYPE_ERROR }))
+                    }
                     multiple={false}
                   />
+                  <FieldError message={errors.logo} />
                   {/* Scraped/BrandIQ logos as picker chips — none auto-
                       selected. Single click picks (single-select); double
                       click previews. Selection lives in brandLogoPicked
@@ -1146,7 +1185,7 @@ export function AdSetupStep({
         <div className="mt-2 flex items-center justify-end gap-3">
           {total > 0 && (
             <span className="rounded-full bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-white/70 ring-1 ring-white/5">
-              –{total * CREDITS_PER_IMAGE} credits
+              –{total * creditsPerImage} credits
             </span>
           )}
           <button
@@ -1236,54 +1275,79 @@ function FileUploadField({
   onAddFiles,
   onRemoveFile,
   onPreview,
+  onInvalidType,
   multiple = true,
   hidePreview = false,
   className,
 }) {
   const inputRef = useRef(null);
+  // Strict-type forwarder for file entry points. Splits a FileList into the
+  // accepted subset (JPG/JPEG/PNG/WebP) and reports rejections so the caller
+  // can surface a type-error message.
+  const acceptFiles = (fileList) => {
+    const arr = Array.from(fileList || []);
+    const valid = arr.filter(isAllowedImageFile);
+    const rejected = arr.length - valid.length;
+    if (valid.length > 0) {
+      onAddFiles(
+        valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) })),
+      );
+    }
+    if (rejected > 0) onInvalidType?.();
+  };
   return (
     <div className={className}>
       <FieldLabel>{label}</FieldLabel>
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={ALLOWED_IMAGE_ACCEPT}
         multiple={multiple}
         aria-label={label}
         className="hidden"
         onChange={(e) => {
-          if (!e.target.files) return;
-          onAddFiles(
-            Array.from(e.target.files).map((f) => ({
-              file: f,
-              preview: URL.createObjectURL(f),
-            }))
-          );
+          acceptFiles(e.target.files);
           e.target.value = '';
         }}
       />
       <div
         onPaste={(e) => {
-          // Clipboard image → push as upload (file + blob preview).
+          // Clipboard file(s) → strict-type forward. Pasted URL → file=null
+          // entry directly (no extension check).
           const files = e.clipboardData?.files;
-          if (
-            files &&
-            files.length > 0 &&
-            Array.from(files).some((f) => f.type?.startsWith('image/'))
-          ) {
+          if (files && files.length > 0) {
             e.preventDefault();
-            onAddFiles(
-              Array.from(files)
-                .filter((f) => f.type?.startsWith('image/'))
-                .map((f) => ({ file: f, preview: URL.createObjectURL(f) })),
-            );
+            acceptFiles(files);
             return;
           }
-          // Pasted URL → add as a file=null entry directly.
           const text = e.clipboardData?.getData('text');
           if (text && /^https?:\/\//i.test(text.trim())) {
             e.preventDefault();
             onAddFiles([{ file: null, preview: text.trim() }]);
+            onUrlChange('');
+          }
+        }}
+        // Drag and drop: file(s) go through the strict filter; dragged URLs
+        // become file=null entries. preventDefault on both dragover AND
+        // drop is required — without it the browser drops the URL into the
+        // focused input field.
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dt = e.dataTransfer;
+          const files = dt?.files;
+          if (files && files.length > 0) {
+            acceptFiles(files);
+            return;
+          }
+          const dragged = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+          const trimmed = dragged.trim();
+          if (trimmed && /^https?:\/\//i.test(trimmed)) {
+            onAddFiles([{ file: null, preview: trimmed }]);
             onUrlChange('');
           }
         }}
@@ -1293,6 +1357,28 @@ function FileUploadField({
           type="url"
           value={url}
           onChange={(e) => onUrlChange(e.target.value)}
+          // The inner input also needs handlers because dropping directly
+          // on it bypasses the parent unless we cancel the default here.
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dt = e.dataTransfer;
+            const files = dt?.files;
+            if (files && files.length > 0) {
+              acceptFiles(files);
+              return;
+            }
+            const dragged = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+            const trimmed = dragged.trim();
+            if (trimmed && /^https?:\/\//i.test(trimmed)) {
+              onAddFiles([{ file: null, preview: trimmed }]);
+              onUrlChange('');
+            }
+          }}
           placeholder={placeholder}
           className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-white outline-none placeholder:text-[#afafaf]/80"
         />
@@ -1311,7 +1397,7 @@ function FileUploadField({
           {files.map((it, i) => (
             <div
               key={`${it.preview}-${i}`}
-              className="group relative h-[40px] w-[40px] cursor-pointer  shrink-0 rounded-md ring-1 ring-white/10"
+              className="group relative h-[40px] w-[40px] cursor-pointer shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40"
             >
               <img
                 src={it.preview}
@@ -1335,7 +1421,7 @@ function FileUploadField({
             // a separate concern.
             <div
               key="url-preview"
-              className="group relative h-[40px] w-[40px] shrink-0 rounded-md ring-1 ring-white/10"
+              className="group relative h-[40px] w-[40px] shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40"
             >
               <img
                 src={url.trim()}
@@ -1586,6 +1672,9 @@ function ModelPickerPill({ value, onChange }) {
 }
 
 function RatioPickerPill({ counts, onChange, model }) {
+  // Reuses the shared modelCredits cache — multiple components calling the
+  // hook with the same model still cost one network request per session.
+  const creditsPerImage = useImageCreditsForModel(model);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const total = totalImages(counts);
@@ -1630,7 +1719,7 @@ function RatioPickerPill({ counts, onChange, model }) {
             <span className="font-medium text-white">{total}</span>
           </div>
           <p className="mb-6 mt-1 text-center text-[11px] text-white/50">
-            {CREDITS_PER_IMAGE} credits per image
+            {creditsPerImage} credits per image
           </p>
           <div className="space-y-1">
             {allowedAspectLabels(model).map(({ key, label }) => (

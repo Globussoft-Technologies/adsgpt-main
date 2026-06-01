@@ -447,6 +447,7 @@ class MetaAdLauncher {
     this.getPages = this.getPages.bind(this);
     this.getSavedAudiences = this.getSavedAudiences.bind(this);
     this.searchGeoLocations = this.searchGeoLocations.bind(this);
+    this.geocodeLocation = this.geocodeLocation.bind(this);
     this.createCampaign = this.createCampaign.bind(this);
     this.createAdSet = this.createAdSet.bind(this);
     this.uploadAdImage = this.uploadAdImage.bind(this);
@@ -830,7 +831,7 @@ class MetaAdLauncher {
 
       const user = new bizSdk.User("me");
 
-      const adAccounts = await user.getAdAccounts([
+      const FIELDS = [
         "id",
         "name",
         "account_status",
@@ -843,7 +844,27 @@ class MetaAdLauncher {
         // minimum is ₹5,000 (= 500000 paise).
         "min_campaign_group_spend_cap",
         "min_daily_budget",
-      ]);
+      ];
+      // Page size 100 (Meta's max for /me/adaccounts) so the typical agency
+      // portfolio fits in one call. Then walk pagination via the SDK cursor
+      // so an agency with >100 accounts still gets every account back.
+      // Safety cap of 50 pages (= 5000 accounts) so a malformed cursor
+      // can't loop forever.
+      let cursor = await user.getAdAccounts(FIELDS, { limit: 100 });
+      const adAccounts = [...cursor];
+      let pages = 1;
+      while (
+        typeof cursor?.hasNext === "function" &&
+        cursor.hasNext() &&
+        pages < 50
+      ) {
+        cursor = await cursor.next();
+        adAccounts.push(...cursor);
+        pages += 1;
+      }
+      logger.info(
+        `getAdAccountsList: fetched ${adAccounts.length} ad accounts across ${pages} page(s)`,
+      );
 
       const formattedAccounts = adAccounts.map((account) => ({
         id: account.id.replace("act_", ""),
@@ -942,6 +963,9 @@ class MetaAdLauncher {
         budget_remaining: formatBudget(campaign.budget_remaining, currency),
         start_time: campaign.start_time,
         stop_time: campaign.stop_time,
+        // For the management "Add Ad Set" flow (see getCampaignFields).
+        bid_strategy: campaign.bid_strategy || null,
+        special_ad_categories: campaign.special_ad_categories || [],
       }));
 
       const response = {
@@ -2146,6 +2170,11 @@ class MetaAdLauncher {
         "category",
         "fan_count",
         "picture",
+        // The current user's permission tasks on this page. Creating an ad
+        // needs ADVERTISE (or MANAGE) — without it Meta rejects at launch
+        // even though the page is visible. We filter on this below so the
+        // picker only offers pages the user can actually advertise with.
+        "tasks",
         "instagram_business_account{id,username,name,profile_picture_url}",
         "connected_instagram_account{id,username}",
       ];
@@ -2155,6 +2184,7 @@ class MetaAdLauncher {
         category: p.category,
         fanCount: p.fan_count,
         picture: p.picture?.data?.url,
+        tasks: Array.isArray(p.tasks) ? p.tasks : [],
         instagramAccount: p.instagram_business_account
           ? {
               id: p.instagram_business_account.id,
@@ -2234,14 +2264,41 @@ class MetaAdLauncher {
       }
 
       // Dedupe by page id — owned_pages and client_pages can overlap if a
-      // page was assigned through both routes.
+      // page was assigned through both routes. Keep the entry that carries
+      // the richer task list (a page can come back with tasks on one edge
+      // and without on another).
       const byId = new Map();
-      for (const p of all) if (!byId.has(p.id)) byId.set(p.id, p);
+      for (const p of all) {
+        const existing = byId.get(p.id);
+        if (!existing || (p.tasks?.length || 0) > (existing.tasks?.length || 0)) {
+          byId.set(p.id, p);
+        }
+      }
+      let pagesOut = Array.from(byId.values());
+
+      // Only offer pages the user can actually advertise with. Meta returns
+      // each page's `tasks` (the user's permissions); creating an ad needs
+      // ADVERTISE or MANAGE. Pages the business owns but the user isn't
+      // assigned to advertise with come back WITHOUT those tasks — picking
+      // one fails at launch with a page-permission error. We filter only
+      // when Meta actually returned task data for at least one page (so an
+      // API that omits `tasks` can never hide every page).
+      const AD_TASKS = new Set(["ADVERTISE", "MANAGE"]);
+      const canAdvertise = (p) =>
+        Array.isArray(p.tasks) && p.tasks.some((t) => AD_TASKS.has(t));
+      const anyHasTasks = pagesOut.some((p) => p.tasks?.length);
+      if (anyHasTasks) {
+        const before = pagesOut.length;
+        pagesOut = pagesOut.filter(canAdvertise);
+        logger.info(
+          `getPages: filtered ${before} → ${pagesOut.length} pages with ADVERTISE/MANAGE`,
+        );
+      }
 
       return res.status(200).json({
         status: true,
-        pages: Array.from(byId.values()),
-        count: byId.size,
+        pages: pagesOut,
+        count: pagesOut.length,
       });
     } catch (error) {
       const m = logMetaError("Get pages error", error);
@@ -2406,6 +2463,69 @@ class MetaAdLauncher {
         error: m.title || "Failed to search locations",
         details: m.message,
         meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // Geocode a place name → { latitude, longitude } via OpenStreetMap
+  // Nominatim. Meta's `adgeolocation` search does NOT return coordinates,
+  // so the wizard calls this to drop a selected city/region as a pin on
+  // the map (display only). Radius still travels to Meta the normal way
+  // (`cities[].radius`); the lat/lng are not sent for non-custom types.
+  async geocodeLocation(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Geocode a place name to coordinates (OpenStreetMap Nominatim)'
+    */
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q) {
+        return res
+          .status(400)
+          .json({ status: false, error: "q (place name) is required" });
+      }
+      // Nominatim usage policy requires an identifying User-Agent and a
+      // single result is enough for a centroid. countrycodes narrows the
+      // match when the caller knows the country (cities/regions do).
+      const params = {
+        q,
+        format: "jsonv2",
+        limit: 1,
+        addressdetails: 0,
+      };
+      const cc = String(req.query.countryCode || "").trim().toLowerCase();
+      if (cc) params.countrycodes = cc;
+
+      const { data } = await axios.get(
+        "https://nominatim.openstreetmap.org/search",
+        {
+          params,
+          headers: {
+            "User-Agent": "AdsGPT/1.0 (Meta Ads location targeting)",
+            "Accept-Language": "en",
+          },
+          timeout: 8000,
+        },
+      );
+
+      const hit = Array.isArray(data) && data.length ? data[0] : null;
+      if (!hit) {
+        return res
+          .status(200)
+          .json({ status: true, result: null });
+      }
+      return res.status(200).json({
+        status: true,
+        result: {
+          latitude: Number(hit.lat),
+          longitude: Number(hit.lon),
+          displayName: hit.display_name || q,
+        },
+      });
+    } catch (error) {
+      console.error("geocodeLocation error:", error?.message || error);
+      return res.status(500).json({
+        status: false,
+        error: "Failed to geocode location",
       });
     }
   }

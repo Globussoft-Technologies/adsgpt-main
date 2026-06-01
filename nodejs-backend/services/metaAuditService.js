@@ -38,6 +38,56 @@ const { evaluateRules } = require("./autopilot/ruleEvaluator");
 // Helpers (pure)
 // ---------------------------------------------------------------------------
 
+/**
+ * Page through a facebook-nodejs-business-sdk Cursor and return one flat
+ * array of every record across every page.
+ *
+ * Why this exists: `account.getAds(fields)` (and siblings) return a Cursor
+ * that, by itself, only carries Meta's FIRST PAGE — default ~25 entities.
+ * Awaiting the cursor does NOT auto-paginate. On any ad account with more
+ * than 25 active ads, the audit silently never saw ads 26+ — they got
+ * never-flagged regardless of how badly they breached threshold. Same
+ * trap with `getInsights` (one row per entity per time bucket; >25 active
+ * entities → page-2 rows invisible).
+ *
+ * We page with `cursor.hasNext()` / `cursor.next()` until the cursor is
+ * drained. A safety `maxPages` cap prevents a runaway against a pathological
+ * account (or an SDK bug that never sets hasNext=false); 200 pages × 500
+ * entities = 100k, well above any realistic active-entity count.
+ *
+ * @param {Promise<Cursor>} cursorPromise  e.g. account.getAds(fields, params)
+ * @param {Object} [opts]
+ * @param {string} [opts.label]   short tag for the maxPages warning log
+ * @param {number} [opts.maxPages=200]
+ * @returns {Promise<Array>}
+ */
+async function fetchAllPages(
+  cursorPromise,
+  { label = "page", maxPages = 200 } = {},
+) {
+  const cursor = await cursorPromise;
+  if (!cursor) return [];
+  // Cursor extends Array — spread to snapshot the first page.
+  const all = [...cursor];
+  let pages = 1;
+  while (typeof cursor.hasNext === "function" && cursor.hasNext()) {
+    if (pages >= maxPages) {
+      try {
+        require("../utils/logger").warn(
+          `[autopilot audit] ${label} pagination hit maxPages=${maxPages} — truncating (account is very large; consider raising the cap)`,
+        );
+      } catch {
+        /* logger optional in test envs */
+      }
+      break;
+    }
+    await cursor.next();
+    all.push(...cursor);
+    pages += 1;
+  }
+  return all;
+}
+
 const getActionValue = (actions, type) => {
   if (!actions) return 0;
   const a = actions.find((x) => x.action_type === type);
@@ -373,6 +423,8 @@ function buildNormalisers({
  * @param {Object} [args.options.thresholdOverrides]  per-rule map
  * @param {boolean} [args.options.enforceAgeGuard=false]  filter out young ads
  * @param {boolean} [args.options.enforceSpendFloor=false]  filter low-spend
+ * @param {string[]} [args.options.campaignIds]  scope the fetch to these
+ *    campaign ids only (Autopilot v4). Omit for a whole-account audit.
  *
  * @returns {Promise<{status, account_name, summary, findings}>}
  *    Same shape the controller used to produce inline.
@@ -392,7 +444,18 @@ async function runAuditForAccount({
     thresholdOverrides,
     enforceAgeGuard = false,
     enforceSpendFloor = false,
+    // Autopilot v4 passes the set of campaign ids its rules are attached to,
+    // so we fetch ONLY those campaigns' entities + insights instead of the
+    // whole account. This is what keeps a large account from tripping Meta's
+    // "Please reduce the amount of data you're asking for" error — the
+    // unscoped HTTP audit path leaves this undefined and still pulls the
+    // full account (unchanged behavior).
+    campaignIds,
   } = options;
+  const scopeIds =
+    Array.isArray(campaignIds) && campaignIds.length > 0
+      ? campaignIds.map(String)
+      : null;
 
   // Resolve per-account settings (age/spend guards only consulted if the
   // caller opts in — HTTP endpoint does not)
@@ -433,28 +496,54 @@ async function runAuditForAccount({
     until: dayjs().subtract(lookbackDays, "day").format("YYYY-MM-DD"),
   };
 
-  // Filter insights to ACTIVE entities only — paused / archived /
-  // deleted entities don't deliver new data within the lookback, and a
-  // pause-action rule against a PAUSED entity is a no-op anyway. Cuts
-  // both the API payload size AND the work done in the per-target loop
-  // downstream.
-  //
-  // Important: the entity reads (`getCampaigns`, `getAdSets`, `getAds`)
-  // are intentionally LEFT UNFILTERED. Two reasons:
-  //   1. The campaign roster powers orphan-attachment detection — we
-  //      need to know "does this campaign exist on Meta at all?",
-  //      including paused ones, so a paused-then-resumed campaign isn't
-  //      false-flagged as orphan.
-  //   2. The status / learning_status / budget metadata read off the
-  //      entity is used inside the normalizer (e.g. `budget_pacing`
-  //      consults `daily_budget` on the campaign object).
-  const activeOnlyFiltering = (entityPrefix) => [
-    {
-      field: `${entityPrefix}.effective_status`,
-      operator: "IN",
-      value: ["ACTIVE"],
-    },
-  ];
+  // Page size for the entity + insights reads. Meta's response size is
+  // bounded — larger `limit` values combined with the heavy insights field
+  // set (action arrays, cost_per_action_type, purchase_roas, …) trip the
+  // "Please reduce the amount of data you're asking for" error (code 100)
+  // on large accounts. 20 is a conservative page size that Meta accepts
+  // even on the heaviest accounts; the cost is more round-trips per
+  // account (handled transparently by `fetchAllPages`), which is fine
+  // since we now ACTUALLY see every active entity (vs. the silent
+  // first-25-only behavior before pagination was added).
+  const PAGE_LIMIT = 20;
+
+  // Insights are filtered to ACTIVE entities (paused/archived ones deliver
+  // no new data in the lookback, and a pause against an already-paused
+  // entity is a no-op). When the caller scopes to specific campaigns
+  // (Autopilot v4), we ALSO constrain to those campaign ids — that scope
+  // is the heavy lever: it turns a whole-account insights pull into "just
+  // the attached campaigns", which is what stops large accounts tripping
+  // Meta's data-volume ceiling.
+  const insightsFiltering = (entityPrefix) => {
+    const f = [
+      {
+        field: `${entityPrefix}.effective_status`,
+        operator: "IN",
+        value: ["ACTIVE"],
+      },
+    ];
+    if (scopeIds) {
+      f.push({ field: "campaign.id", operator: "IN", value: scopeIds });
+    }
+    return f;
+  };
+
+  // The CAMPAIGN entity read stays UNFILTERED-by-status (light payload, and
+  // the full roster powers orphan-attachment detection — we must know
+  // whether an attached campaign still exists on Meta at all, including
+  // paused ones). The ADSET and AD entity reads are the heavy ones; when
+  // scoping is in effect we constrain them to the attached campaigns so we
+  // don't pull the whole account's ad metadata. All stay unscoped (full
+  // account) on the HTTP audit path where `scopeIds` is null.
+  const adsetReadParams = { limit: PAGE_LIMIT };
+  const adReadParams = { limit: PAGE_LIMIT };
+  if (scopeIds) {
+    const scopeFilter = [
+      { field: "campaign.id", operator: "IN", value: scopeIds },
+    ];
+    adsetReadParams.filtering = scopeFilter;
+    adReadParams.filtering = scopeFilter;
+  }
 
   const [
     campaigns,
@@ -467,41 +556,74 @@ async function runAuditForAccount({
     adsetInsightsPrev,
     adInsightsPrev,
   ] = await Promise.all([
-    account.getCampaigns(getCampaignFields()),
-    account.getAdSets(getAdSetFields()),
-    account.getAds(getAdFields()),
+    fetchAllPages(
+      account.getCampaigns(getCampaignFields(), { limit: PAGE_LIMIT }),
+      { label: "campaigns" },
+    ),
+    fetchAllPages(
+      account.getAdSets(getAdSetFields(), adsetReadParams),
+      { label: "adsets" },
+    ),
+    fetchAllPages(
+      account.getAds(getAdFields(), adReadParams),
+      { label: "ads" },
+    ),
 
-    account.getInsights(getInsightsFields(), {
-      level: "campaign",
-      time_range: currentRange,
-      filtering: activeOnlyFiltering("campaign"),
-    }),
-    account.getInsights(getInsightsFields(), {
-      level: "adset",
-      time_range: currentRange,
-      filtering: activeOnlyFiltering("adset"),
-    }),
-    account.getInsights(getInsightsFields(), {
-      level: "ad",
-      time_range: currentRange,
-      filtering: activeOnlyFiltering("ad"),
-    }),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "campaign",
+        time_range: currentRange,
+        filtering: insightsFiltering("campaign"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "campaign-insights" },
+    ),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "adset",
+        time_range: currentRange,
+        filtering: insightsFiltering("adset"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "adset-insights" },
+    ),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "ad",
+        time_range: currentRange,
+        filtering: insightsFiltering("ad"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "ad-insights" },
+    ),
 
-    account.getInsights(getInsightsFields(), {
-      level: "campaign",
-      time_range: prevRange,
-      filtering: activeOnlyFiltering("campaign"),
-    }),
-    account.getInsights(getInsightsFields(), {
-      level: "adset",
-      time_range: prevRange,
-      filtering: activeOnlyFiltering("adset"),
-    }),
-    account.getInsights(getInsightsFields(), {
-      level: "ad",
-      time_range: prevRange,
-      filtering: activeOnlyFiltering("ad"),
-    }),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "campaign",
+        time_range: prevRange,
+        filtering: insightsFiltering("campaign"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "campaign-insights-prev" },
+    ),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "adset",
+        time_range: prevRange,
+        filtering: insightsFiltering("adset"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "adset-insights-prev" },
+    ),
+    fetchAllPages(
+      account.getInsights(getInsightsFields(), {
+        level: "ad",
+        time_range: prevRange,
+        filtering: insightsFiltering("ad"),
+        limit: PAGE_LIMIT,
+      }),
+      { label: "ad-insights-prev" },
+    ),
   ]);
 
   const prevCampaignMap = new Map(

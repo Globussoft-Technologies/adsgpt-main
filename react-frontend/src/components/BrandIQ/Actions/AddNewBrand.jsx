@@ -272,7 +272,10 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         // setAnalysisError('This website is already added for this user');
         return;
       }
-      setAnalysisError('Failed to analyze website. Please try again or enter details manually.');
+      setAnalysisError(
+        error?.response?.data?.detail ||
+          'Failed to analyze website. Please try again or enter details manually.'
+      );
       console.error('Website analysis error:', error);
     } finally {
       setIsAnalyzing(false);

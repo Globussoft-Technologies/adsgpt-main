@@ -3,7 +3,7 @@ import { X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, Send } from 'lu
 import { AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { regenerateAiAdsSceneAction, generateAiAdsVideoAction } from '@/store/actions/adVideoNew/Advideoactions';
-import { setAiAdsSceneError, setAiAdsPrefillInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setAiAdsSceneError } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 
 const CustomLoader = ({ label }) => (
@@ -41,6 +41,9 @@ const SceneImageFailed = ({ onRetry, disabled, message }) => (
     <span className="text-[11px] font-medium text-white/70 2xl:text-xs">
       {message || 'Image generation failed'}
     </span>
+    <span className="text-[12px] font-medium text-white/70">
+      However your credits are not deducted
+    </span>
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); if (!disabled) onRetry(); }}
@@ -53,23 +56,11 @@ const SceneImageFailed = ({ onRetry, disabled, message }) => (
   </div>
 );
 
-// grid cols + max card width based on scene count
-const getGridClass = (count) => {
-  if (count === 1) return 'grid-cols-1';
-  if (count === 2) return 'grid-cols-2';
-  if (count === 3) return 'grid-cols-3';
-  return 'grid-cols-4';
-};
 
-const getCardMaxWidth = (count) => {
-  if (count === 1) return 'max-w-[280px] mx-auto';
-  if (count === 2) return '';
-  return '';
-};
 
 const SCENES_PER_PAGE = 1;
 
-const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onClose, handleGenerate }) => {
+const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGenerate }) => {
   const dispatch = useDispatch();
   const sceneData = useSelector((state) => state.adVideoNew.aiAdsSceneData);
   const isLoading = useSelector((state) => state.adVideoNew.aiAdsSceneLoading);
@@ -82,7 +73,6 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
     null;
 
   const scenes = sceneData?.data?.scenes || sceneData?.scenes || [];
-  const totalSegments = sceneData?.data?.totalSegments || sceneData?.totalSegments || 4;
   const sessionStatus = sceneData?.data?.status || sceneData?.status;
   const isPending = sessionStatus === 'pending';
   const isEffectivelyLoading = isLoading || (isPending && scenes.length === 0);
@@ -93,6 +83,10 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
   const allImagesReady =
     scenes.length > 0 &&
     scenes.every((s) => s.frameImageUrl && !s.imageFailed);
+  // True while at least one scene is still pending (no result, not failed)
+  const isStillGenerating =
+    scenes.length > 0 &&
+    scenes.some((s) => !s.frameImageUrl && !s.imageFailed);
 
   const totalPages = Math.ceil(scenes.length / SCENES_PER_PAGE);
   const [page, setPage] = useState(0);
@@ -134,9 +128,17 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
 
   const handleRegenerateOne = async (globalIdx, type, prompt) => {
     if (!sessionId) return;
+    const scene = scenes[globalIdx];
+    // `deduct` tells the backend whether this scene already had a working
+    // image. true → user is replacing a working image (paid 2 credits on
+    // success). false → user is recovering from a failure that never produced
+    // an image (free retry until first success). Backend validates this flag
+    // against DB to prevent the frontend from underpaying.
+    const deduct = !!(scene?.frameImageUrl || scene?.imageUrl || scene?.image);
     const segment = {
-      segmentNumber: scenes[globalIdx]?.segmentNumber ?? globalIdx + 1,
+      segmentNumber: scene?.segmentNumber ?? globalIdx + 1,
       regenerate: type,
+      deduct,
       ...(type === 'text'
         ? { regeneratePrompt: '' }
         : prompt && prompt.trim()
@@ -165,7 +167,38 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
     if (!sessionId) return;
     setGenerating(true);
     try {
-      await dispatch(generateAiAdsVideoAction(sessionId));
+      // Build the current script for every scene (with any user edits applied
+      // via editedLines). Node persists this to DB and forwards to Python in
+      // place of the originals.
+      //
+      // Important: Python reads `voice` (format: "[tone] <text>"), NOT `text`,
+      // when synthesizing audio. When the user edits text, we must rebuild
+      // voice as "[tone] <new text>" — preserve the bracketed tone marker,
+      // replace the text portion. Otherwise Python speaks the old text even
+      // though the UI shows the edited one.
+      const sceneScripts = scenes
+        .filter((scene) => Array.isArray(scene.script))
+        .map((scene, idx) => ({
+          segmentNumber: scene.segmentNumber,
+          script: scene.script.map((line) => {
+            const newText = editedLines[idx]?.[line.id] ?? line.text;
+            let newVoice = line.voice;
+            if (newText !== line.text && typeof line.voice === 'string') {
+              const toneMatch = line.voice.match(/^(\[[^\]]+\]\s*)/);
+              const tonePrefix = toneMatch ? toneMatch[1] : '';
+              newVoice = `${tonePrefix}${newText}`;
+            }
+            return {
+              ...line,
+              text: newText,
+              voice: newVoice,
+            };
+          }),
+        }));
+
+      await dispatch(
+        generateAiAdsVideoAction(sessionId, { scenes: sceneScripts })
+      );
       // Trigger genie animation + navigate to MySpace via layout
       if (handleGenerate) {
         handleGenerate();
@@ -212,11 +245,6 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
     Object.values(sceneErrs).some((e) => e !== null)
   );
 
-  const gridClass = getGridClass(
-    visibleScenes.length > 0
-      ? Math.min(visibleScenes.length, 4)
-      : Math.min(totalSegments, 4)
-  );
 
   return (
     <div className="relative flex h-full max-h-[100vh] min-h-[500px] rounded-3xl w-screen max-w-[450px] min-w-[450px] flex-col bg-[#303030]/30 px-1 pt-6 pb-3 md:max-w-[750px] 2xl:max-h-[80vh] 2xl:min-h-[600px] 2xl:max-w-[850px]">
@@ -225,14 +253,14 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
           is complete, or in error state (so user can dismiss the error). */}
       <button
         onClick={onClose}
-        disabled={(!allImagesReady || isRegenerating) && !sceneError}
+        disabled={(isInitialLoading || isStillGenerating || isRegenerating) && !sceneError}
         className={`pointer-events-auto absolute top-6 right-6 z-50 transition ${
-          (!allImagesReady || isRegenerating) && !sceneError
+          (isInitialLoading || isStillGenerating || isRegenerating) && !sceneError
             ? 'cursor-not-allowed text-white/20'
             : 'cursor-pointer text-white/50 hover:text-white'
         }`}
         title={
-          !allImagesReady && !sceneError
+          (isInitialLoading || isStillGenerating) && !sceneError
             ? 'Wait until scene generation finishes'
             : isRegenerating && !sceneError
               ? 'Wait until regeneration finishes'
@@ -328,6 +356,7 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
       const regenImage = regenType === 'image' || regenType === 'both';
       const regenText = regenType === 'text' || regenType === 'both';
 
+
       return (
         <div
           key={globalIdx}
@@ -339,12 +368,7 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
               <CustomLoader label="Generating Image" />
             ) : scene.imageFailed ? (
               <SceneImageFailed
-                onRetry={() => {
-                  // Re-generate on a failed scene opens the same prompt overlay
-                  // as the regular Re-generate flow so the user can guide the retry.
-                  setImagePromptIdx(globalIdx);
-                  setImagePromptText('');
-                }}
+                onRetry={() => handleRegenerateOne(globalIdx, 'image')}
                 disabled={isRegenerating}
                 message={scene.imageError}
               />
@@ -371,7 +395,7 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
                       setImagePromptIdx(globalIdx);
                       setImagePromptText('');
                     }}
-                    disabled={isRegenerating || !allImagesReady}
+                    disabled={isRegenerating}
                   />
                 </div>
               </>
@@ -409,8 +433,7 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
                           const promptToSend = imagePromptText;
                           askConfirm({
                             title: 'Regenerate Image',
-                            message:
-                              'Are you sure you want to regenerate this scene\u2019s image with the given prompt? The current image will be replaced.',
+                            message: <>We will use the AdsGPT Video Model to Re-generate this image, and <strong className="text-white">2 credits</strong> will be deducted for the process do you want to continue?</>,
                             confirmLabel: 'Regenerate',
                             onConfirm: () => {
                               closeConfirm();
@@ -451,7 +474,7 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
                         },
                       })
                     }
-                    disabled={isRegenerating || !allImagesReady}
+                    disabled={isRegenerating}
                   />
                 </div>
 
@@ -583,13 +606,10 @@ const ImplementationPlanStep = ({ detailsInputs, canGoBack, onBack, onNext, onCl
 
             {/* Footer Actions — Back only when reached from details form, Generate on last scene page */}
             <div className="mt-8 flex items-center justify-between gap-3 2xl:mt-10">
-                {canGoBack && (
+                {canGoBack && !isInitialLoading && (
                   <button
                     disabled={isEffectivelyLoading}
-                    onClick={() => {
-                      if (detailsInputs) dispatch(setAiAdsPrefillInputs(detailsInputs));
-                      onBack();
-                    }}
+                    onClick={onBack}
                     className="rounded-sm border border-[#efefef]/70 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Back

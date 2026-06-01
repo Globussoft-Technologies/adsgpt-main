@@ -5,6 +5,8 @@ import {
   setActivePage,
   setAIAdsStep,
   setAiAdsSceneData,
+  setAiAdsPrefillInputs,
+  setAiAdsSceneLoading,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { getAiAdsSceneAction } from '@/store/actions/adVideoNew/Advideoactions';
 
@@ -27,8 +29,13 @@ const AIAdsPage = ({ handleGenerate }) => {
     details: {},
   });
 
-  // true only when generation step is reached via the details form (not resume/direct URL)
-  const [canGoBack, setCanGoBack] = useState(false);
+  // true only when generation step was reached via the details form.
+  // Persisted in sessionStorage so a page refresh doesn't lose the Back button
+  // for recreate/form flows, while plain URL resumes (never written) stay false.
+  const [canGoBack, setCanGoBack] = useState(() => {
+    const sessionId = new URLSearchParams(window.location.search).get('id');
+    return sessionId ? sessionStorage.getItem(`aiads_canGoBack_${sessionId}`) === '1' : false;
+  });
 
   // Snapshot of original inputs used by DetailsFormStep for hasFormChanged()
   const [originalInputs, setOriginalInputs] = useState(null);
@@ -46,10 +53,24 @@ const AIAdsPage = ({ handleGenerate }) => {
     const sessionId = searchParams.get('id');
     if (sessionId) {
       dispatch(setAIAdsStep('generation'));
+      dispatch(setAiAdsSceneLoading(true)); // prevent blank panel before thunk sets loading
       dispatch(getAiAdsSceneAction(sessionId));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist canGoBack in sessionStorage so refresh preserves the Back button
+  // for form/recreate flows. Also keep prefillInputs in sync for the resume case.
+  useEffect(() => {
+    const sessionId = aiAdsSceneData?._id || aiAdsSceneData?.data?._id;
+    if (step !== 'generation') return;
+    if (canGoBack) {
+      if (sessionId) sessionStorage.setItem(`aiads_canGoBack_${sessionId}`, '1');
+      return;
+    }
+    const inputs = aiAdsSceneData?.inputs || aiAdsSceneData?.data?.inputs;
+    if (inputs) dispatch(setAiAdsPrefillInputs(inputs));
+  }, [aiAdsSceneData, step, canGoBack, dispatch]);
 
   // Keep ?id= in URL in sync with the generation step + scene data
   useEffect(() => {
@@ -71,6 +92,8 @@ const AIAdsPage = ({ handleGenerate }) => {
   };
 
   const handleClose = () => {
+    const sessionId = aiAdsSceneData?._id || aiAdsSceneData?.data?._id;
+    if (sessionId) sessionStorage.removeItem(`aiads_canGoBack_${sessionId}`);
     setSearchParams({}, { replace: true });
     dispatch(setAiAdsSceneData(null));
     dispatch(setAIAdsStep('selection'));
@@ -129,6 +152,7 @@ const AIAdsPage = ({ handleGenerate }) => {
         );
       case 'generation': {
         const detailsInputs = {
+          ...( aiAdsSceneData?.inputs || aiAdsSceneData?.data?.inputs || {}),
           ...formData.analysisData,
           ...formData.details,
           _savedImages: formData.savedImages,
@@ -138,9 +162,11 @@ const AIAdsPage = ({ handleGenerate }) => {
         };
         return (
           <ImplementationPlanStep
-            detailsInputs={detailsInputs}
             canGoBack={canGoBack}
-            onBack={() => handleBack('details')}
+            onBack={() => {
+              dispatch(setAiAdsPrefillInputs(detailsInputs));
+              handleBack('details');
+            }}
             onNext={handleClose}
             onClose={handleClose}
             handleGenerate={handleGenerate}

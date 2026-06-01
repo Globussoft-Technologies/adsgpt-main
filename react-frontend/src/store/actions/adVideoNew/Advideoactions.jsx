@@ -458,8 +458,8 @@ export const analyzeAiAdsAction = (aiAdsType, { script = '', name = '' }) => asy
     dispatch(setAiAdsAnalysisData(result));
     return result;
   } catch (error) {
-    // console.log(error)F
-    const errorMsg = error.response?.data?.error || 'Failed to analyze';
+    const data = error.response?.data;
+    const errorMsg = data?.error || data?.detail || 'Failed to analyze';
     dispatch(setAiAdsAnalysisError(errorMsg));
     throw error;
   } finally {
@@ -483,6 +483,11 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
 
     for (const img of details.urlImages || []) {
       try {
+        // Already on S3 — use as-is, no re-upload needed
+        if (img.isS3 && img.url) {
+          imageUrls.push(img.url);
+          continue;
+        }
         const res = await fetch(img.url);
         const blob = await res.blob();
         const file = new File([blob], img.name || 'image.jpg', { type: blob.type || 'image/jpeg' });
@@ -507,6 +512,9 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
         if (logoSource.file) {
           const uploaded = await uploadToS3(logoSource.file, userId, true);
           if (uploaded) logoUrl = `${S3_BASE_URL}${uploaded}`;
+        } else if (logoSource.isS3 && logoSource.url) {
+          // Already on S3 — use as-is
+          logoUrl = logoSource.url;
         } else if (logoSource.url) {
           const res = await fetch(logoSource.url);
           const blob = await res.blob();
@@ -521,6 +529,23 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
 
     const { formData } = details;
     const isBrand = aiAdsType === 'brand';
+
+    // Voice cascade — voice_id is the deliverable, the rest is metadata
+    // useful for analytics / recreating the picker selection on resume.
+    // NOTE: key is `voiceFilters` (not `voice`) — the inputs schema already
+    // reserves `voice: String` for the older video types.
+    const voice = formData.voice || {};
+    const voicePayload = {
+      voiceId: voice.voiceId || '',
+      voiceName: voice.voiceName || '',
+      voiceFilters: {
+        language: voice.language || '',
+        languageLabel: voice.languageLabel || '',
+        gender: voice.gender || '',
+        accent: voice.accent || '',
+        age: voice.age || '',
+      },
+    };
 
     const inputs = isBrand
       ? {
@@ -540,6 +565,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
+          ...voicePayload,
         }
       : {
           type: 'ai_ads',
@@ -559,6 +585,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
+          ...voicePayload,
         };
 
     const response = await axios.post(
@@ -577,8 +604,17 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
       return { __validationError: true, fields: response.data.fields || [], message: response.data.message };
     }
 
-    const sessionId = response.data?.data?._id || response.data?._id || null;
-    dispatch(setAiAdsSceneData(response.data));
+    // Unwrap to keep the Redux shape consistent with getAiAdsSceneAction.
+    // Storing the wrapped {data: {...}} envelope leaves a stale empty
+    // data.scenes:[] in state — and because [] is truthy, the
+    // `sceneData?.data?.scenes || sceneData?.scenes` read in
+    // ImplementationPlanStep keeps returning [] even after the socket text
+    // event populates the top-level scenes, producing a blank panel until
+    // the user refreshes (which goes through the GET action that already
+    // unwraps).
+    const sceneData = response.data?.data || response.data;
+    const sessionId = sceneData?._id || null;
+    dispatch(setAiAdsSceneData(sceneData));
     return { ...response.data, sessionId };
     // setAiAdsSceneLoading(false) is called by the aiAdsScenesReady socket event
   } catch (error) {
@@ -627,7 +663,8 @@ export const regenerateAiAdsSceneAction = (_id, segments) => async (dispatch) =>
       }
     );
   } catch (error) {
-    const errorMsg = error.response?.data?.error || 'Failed to regenerate scenes';
+    // console.log(error)
+    const errorMsg = error.response?.data?.error || 'Insufficient credits to regenerate this image.';
     dispatch(setError(errorMsg));
     globalToast.error(errorMsg);
     dispatch(setAiAdsSceneLoading(false));
@@ -636,11 +673,36 @@ export const regenerateAiAdsSceneAction = (_id, segments) => async (dispatch) =>
   // setAiAdsSceneLoading(false) is called by the aiAdsScenesReady socket event
 };
 
-export const generateAiAdsVideoAction = (sessionId) => async () => {
+// Clones an existing AI Ads session into a new doc (status="copy") so the
+// Recreate flow always lands on a fresh _id, even when the user doesn't edit
+// the form. The new doc carries over inputs + scenes + scripts; results[] is
+// empty until the user triggers generate-video. Returns { sessionId: newId }.
+export const copyAiAdsSessionAction = (sessionId) => async (dispatch) => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/copy/${sessionId}`,
+      {},
+      { headers: { Authorization: `Bearer ${getCookies()}` } }
+    );
+    const newDoc = response.data?.data || response.data;
+    const newId = newDoc?._id || response.data?.sessionId;
+    if (newDoc) dispatch(setAiAdsSceneData(newDoc));
+    return { sessionId: newId, data: newDoc };
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || 'Failed to copy AI Ads session';
+    globalToast.error(errorMsg);
+    throw error;
+  }
+};
+
+// `overrides` is optional — pass { scenes: [{ segmentNumber, script: [...] }] }
+// when the user edited scripts in the Implementation Plan step. Node persists
+// these to DB and forwards them to Python in place of the originals.
+export const generateAiAdsVideoAction = (sessionId, overrides) => async () => {
   try {
     const response = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/ai-ads/generate-video/${sessionId}`,
-      {},
+      overrides || {},
       { headers: { Authorization: `Bearer ${getCookies()}` } }
     );
     if (response.status === 200 || response.status === 201) {

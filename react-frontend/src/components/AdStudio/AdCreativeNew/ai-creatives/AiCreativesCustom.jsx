@@ -38,6 +38,13 @@ import { generateImageAction } from '@/store/actions/image/imageActions';
 import { resetCurrent, clearImageRecreateInputs } from '@/store/reducers/image/imageSlice';
 import { buildImageInputs } from '@/store/actions/image/buildImageInputs';
 import { uploadToS3 } from '@/utils/imageUpload';
+import {
+  ALLOWED_IMAGE_ACCEPT,
+  IMAGE_TYPE_ERROR,
+  filterAllowedImageFiles,
+  isAllowedImageFile,
+} from '@/utils/imageValidation';
+import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
 import getCookies from '@/utils/getCookies';
 import axios from 'axios';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
@@ -78,9 +85,6 @@ function ModelIcon({ option }) {
   }
   return option?.icon ?? null;
 }
-
-// Credit cost charged per generated image. Total deducted = total × this.
-const CREDITS_PER_IMAGE = 7;
 
 const ASPECT_LABELS = [
   { key: '1:1', label: '1:1 (square)' },
@@ -134,6 +138,13 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // the payload) when the user double-clicks them to opt-in.
   const [referenceImages, setReferenceImages] = useState([]);
   const [referenceImageUrl, setReferenceImageUrl] = useState('');
+  // Inline cap warning for the references area. Set when the user tries to
+  // overshoot the 5-image cap; cleared whenever any contributing slot is
+  // freed (remove ref / unpick brand chip / clear competitor).
+  const [imagesError, setImagesError] = useState('');
+  // Inline type warning for the brand logo upload — surfaces under the logo
+  // row when the user tries to drop / paste / pick a non-allowed file.
+  const [logoError, setLogoError] = useState('');
   // Pool of brand-scraped images (display-only by default). Single-click a
   // chip to toggle inclusion in the payload (`brandImagesPicked`). Picks
   // do NOT flow into `referenceImages` so the prompt-thumb row only
@@ -155,6 +166,9 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const [competitorAdRef, setCompetitorAdRef] = useState('');
   const [model, setModel] = useState('Nano Banana 2');
   const [aspectCounts, setAspectCounts] = useState(DEFAULT_COUNTS);
+  // Live per-model credit cost from /adsgpt/usage/model-credit-value
+  // (shared cache). Falls back to 7 while loading or on API error.
+  const creditsPerImage = useImageCreditsForModel(model);
 
   // Lightbox preview state for thumbnail clicks.
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -365,28 +379,49 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const adjustCount = (key, delta) =>
     setAspectCounts((prev) => ({ ...prev, [key]: Math.max(0, prev[key] + delta) }));
 
-  // Total references shown in the prompt box are capped at 5. The competitor
-  // visual counts as one of those five (4 refs + 1 competitor or 5 refs).
+  // Total images shown in the prompt box are capped at 5. The competitor
+  // visual + every picked brand-pool chip count toward the same five slots.
   const MAX_REFS_TOTAL = 5;
   const competitorSelected =
     Boolean(competitorAdRef) && !competitorAdRef.startsWith('competitor-ref-');
   const remainingRefSlots = () =>
-    Math.max(0, MAX_REFS_TOTAL - referenceImages.length - (competitorSelected ? 1 : 0));
+    Math.max(
+      0,
+      MAX_REFS_TOTAL
+        - referenceImages.length
+        - brandImagesPicked.length
+        - (competitorSelected ? 1 : 0),
+    );
 
   const handleRefImageFiles = (files) => {
     if (!files) return;
-    const slots = remainingRefSlots();
-    if (slots <= 0) {
-      toast.error(`You can attach up to ${MAX_REFS_TOTAL} reference images.`);
+    // Strict type filter first — JPG/JPEG/PNG/WebP only. Anything else gets
+    // dropped here and surfaces a type error, even if the cap had room.
+    const { valid, rejectedCount } = filterAllowedImageFiles(files);
+    if (valid.length === 0) {
+      if (rejectedCount > 0) setImagesError(IMAGE_TYPE_ERROR);
       return;
     }
-    const incoming = Array.from(files).slice(0, slots);
+    const slots = remainingRefSlots();
+    if (slots <= 0) {
+      setImagesError(
+        rejectedCount > 0 ? IMAGE_TYPE_ERROR : `You can attach up to ${MAX_REFS_TOTAL} images.`,
+      );
+      return;
+    }
+    const incoming = valid.slice(0, slots);
     setReferenceImages((prev) => [
       ...prev,
       ...incoming.map((f) => ({ file: f, preview: URL.createObjectURL(f) })),
     ]);
-    if (files.length > slots) {
-      toast.error(`Only ${slots} more image${slots === 1 ? '' : 's'} could be added.`);
+    // Priority: surface type error if anything was rejected for type; else
+    // cap error if more were dropped than slots had; else clear.
+    if (rejectedCount > 0) {
+      setImagesError(IMAGE_TYPE_ERROR);
+    } else if (valid.length > slots) {
+      setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+    } else {
+      setImagesError('');
     }
   };
 
@@ -394,17 +429,19 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     const trimmed = referenceImageUrl.trim();
     if (!trimmed) return;
     if (remainingRefSlots() <= 0) {
-      toast.error(`You can attach up to ${MAX_REFS_TOTAL} reference images.`);
+      setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
       return;
     }
     setReferenceImages((prev) => [...prev, { file: null, preview: trimmed }]);
     setReferenceImageUrl('');
+    setImagesError('');
   };
 
-  // Clipboard paste: image files become uploads, URL text gets added as-is.
+  // Clipboard paste: any file goes through the strict-type filter, URL text
+  // gets added as-is (no type check — URLs may not carry an extension).
   const handleRefPaste = (e) => {
     const files = e.clipboardData?.files;
-    if (files && files.length > 0 && Array.from(files).some((f) => f.type?.startsWith('image/'))) {
+    if (files && files.length > 0) {
       e.preventDefault();
       handleRefImageFiles(files);
       return;
@@ -415,6 +452,67 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       setReferenceImages((prev) => [...prev, { file: null, preview: text.trim() }]);
       setReferenceImageUrl('');
     }
+  };
+
+  // Drag and drop: image files become uploads, dragged image URLs (from
+  // another browser tab, the brand-pool chip row, etc.) become file=null
+  // entries. preventDefault on both dragover AND drop is required —
+  // without it the browser falls back to its default and drops the URL
+  // text into the focused input.
+  const handleRefDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    const files = dt?.files;
+    if (files && files.length > 0) {
+      // Always route dropped files through the strict filter — a dropped
+      // PDF / SVG / GIF should surface the type error instead of silently
+      // falling through to the URL-drop branch below.
+      handleRefImageFiles(files);
+      return;
+    }
+    const url = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+    const trimmed = url.trim();
+    if (trimmed && /^https?:\/\//i.test(trimmed)) {
+      if (remainingRefSlots() <= 0) {
+        setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+        return;
+      }
+      setReferenceImages((prev) => [...prev, { file: null, preview: trimmed }]);
+      setReferenceImageUrl('');
+      setImagesError('');
+    }
+  };
+
+  const handleLogoDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    const files = dt?.files;
+    if (files && files.length > 0) {
+      const f = Array.from(files).find(isAllowedImageFile);
+      if (f) {
+        setBrandLogoFile(f);
+        setBrandLogoUrl(URL.createObjectURL(f));
+        setLogoError('');
+        return;
+      }
+      // A file was dropped but none matched the allow-list.
+      setLogoError(IMAGE_TYPE_ERROR);
+      return;
+    }
+    const url = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+    const trimmed = url.trim();
+    if (trimmed && /^https?:\/\//i.test(trimmed)) {
+      setBrandLogoFile(null);
+      setBrandLogoUrl(trimmed);
+      setLogoError('');
+    }
+  };
+
+  const preventDefaultDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const openBrandIqPicker = async () => {
@@ -525,7 +623,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       // explicitly. The autofilled logo still ends up in the request body
       // via brand.brandLogo coming from resolveBrandInfo.
       const logoUrls = Array.isArray(data.brandInfo.brandLogo)
-        ? data.brandInfo.brandLogo.filter(Boolean)
+        ? data.brandInfo.brandLogo.filter(Boolean).slice(0, 10)
         : [];
       brandSourceLogoRef.current = logoUrls[0] || '';
       // Surface every scraped logo as a picker option below the field. The
@@ -533,9 +631,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       setBrandLogoOptions(logoUrls);
 
       // Replace the pool with this brand's scraped images and drop any
-      // previously-selected pool items from referenceImages.
+      // previously-selected pool items from referenceImages. Cap at 10 so
+      // the chip row stays manageable on image-heavy sites.
       const newBrandImages = Array.isArray(data.brandInfo.brandImages)
-        ? data.brandInfo.brandImages.filter(Boolean)
+        ? data.brandInfo.brandImages.filter(Boolean).slice(0, 10)
         : [];
       setReferenceImages((prev) =>
         prev.filter((it) => !brandSourceImagesRef.current.includes(it.preview)),
@@ -732,15 +831,18 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           onTabChange={setCompetitorTab}
           initialSelectedUrl={competitorAdRef}
           onSelect={(ref) => {
-            // 5-cap: competitor counts as one slot. If refs already fill all
-            // five, ask the user to drop one before adding a competitor.
-            if (ref && referenceImages.length >= MAX_REFS_TOTAL) {
-              toast.error(
-                `Remove a reference to add a competitor (max ${MAX_REFS_TOTAL}).`,
-              );
+            // 5-cap: competitor counts as one slot alongside refs + brand
+            // picks. If the other slots are already full, surface the
+            // inline warning instead of letting the user overshoot.
+            if (
+              ref
+              && referenceImages.length + brandImagesPicked.length >= MAX_REFS_TOTAL
+            ) {
+              setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
               return;
             }
             setCompetitorAdRef(ref);
+            setImagesError('');
             setShowCompetitorModal(false);
           }}
           onClose={() => setShowCompetitorModal(false)}
@@ -847,6 +949,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                   prev.filter((r) => r.preview !== t.preview),
                                 );
                               }
+                              // Removing any contributor frees a slot — clear
+                              // the cap warning so the user sees they can add
+                              // again.
+                              setImagesError('');
                             }}
                             className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-105"
                           >
@@ -957,7 +1063,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                           <span className="font-medium text-white">{total}</span>
                         </div>
                         <p className="mb-6 mt-1 text-center text-[11px] text-white/50">
-                          {CREDITS_PER_IMAGE} credits per image
+                          {creditsPerImage} credits per image
                         </p>
                         <div className="space-y-1">
                           {allowedAspectLabels(model).map(({ key, label }) => (
@@ -1133,6 +1239,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   </p>
                   <div
                     onPaste={handleRefPaste}
+                    onDragOver={preventDefaultDragOver}
+                    onDrop={handleRefDrop}
                     className="flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[10px] text-[#afafaf] 2xl:py-2"
                   >
                     <div className="flex flex-1 items-center justify-between">
@@ -1146,6 +1254,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onKeyDown={(e) =>
                           e.key === 'Enter' && (e.preventDefault(), handleRefImageUrlAdd())
                         }
+                        onDragOver={preventDefaultDragOver}
+                        onDrop={handleRefDrop}
                         placeholder="Paste your image URL or upload"
                         className="w-full rounded-lg px-3 text-xs text-white placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
                       />
@@ -1172,11 +1282,15 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       id="ref-image-upload"
                       ref={refImgInputRef}
                       type="file"
-                      accept="image/*"
+                      accept={ALLOWED_IMAGE_ACCEPT}
                       multiple
                       aria-label="Upload reference images"
                       className="hidden"
-                      onChange={(e) => handleRefImageFiles(e.target.files)}
+                      onChange={(e) => {
+                        handleRefImageFiles(e.target.files);
+                        // Reset so the same file can be picked again.
+                        e.target.value = '';
+                      }}
                     />
                   </div>
                   {/* User-added refs (uploads + URL pastes + double-clicked
@@ -1188,7 +1302,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         {referenceImages.map((it, i) => (
                           <div
                             key={`ref-${i}-${it.preview}`}
-                            className="group relative h-12 w-12 border rounded-sm border-white/10 2xl:h-16 2xl:w-16"
+                            className="group relative h-12 w-12 shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 2xl:h-16 2xl:w-16"
                           >
                             <img
                               src={it.preview}
@@ -1200,9 +1314,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                             <button
                               type="button"
                               aria-label={`Remove reference image ${i + 1}`}
-                              onClick={() =>
-                                setReferenceImages((p) => p.filter((_, idx) => idx !== i))
-                              }
+                              onClick={() => {
+                                setReferenceImages((p) => p.filter((_, idx) => idx !== i));
+                                setImagesError('');
+                              }}
                               className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md group-hover:opacity-100"
                             >
                               <X className="h-3 w-3" />
@@ -1224,9 +1339,21 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       options={brandImagePool.map((it) => it.preview)}
                       isSelected={(u) => brandImagesPicked.includes(u)}
                       onPick={(u) => {
-                        setBrandImagesPicked((prev) =>
-                          prev.includes(u) ? prev.filter((x) => x !== u) : [...prev, u],
-                        );
+                        setBrandImagesPicked((prev) => {
+                          // Deselecting always succeeds and frees a slot.
+                          if (prev.includes(u)) {
+                            setImagesError('');
+                            return prev.filter((x) => x !== u);
+                          }
+                          // Selecting: respect the combined 5-cap (refs +
+                          // brand picks + competitor).
+                          if (remainingRefSlots() <= 0) {
+                            setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
+                            return prev;
+                          }
+                          setImagesError('');
+                          return [...prev, u];
+                        });
                       }}
                       onDoubleClick={(u) => {
                         const urls = brandImagePool.map((it) => it.preview);
@@ -1236,27 +1363,27 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                     />
                   )}
+                  {imagesError && (
+                    <p className="mt-2 text-[11px] text-red-300">{imagesError}</p>
+                  )}
                 </div>
 
                 <div className="mb-5">
                   <p className="mb-2 text-[14px] font-medium text-white">Brand logo</p>
                   <div
                     onPaste={(e) => {
-                      // Clipboard image → push as upload. Clipboard text URL →
-                      // treat as a typed URL.
+                      // Clipboard image → push as upload (strict type check).
+                      // Clipboard text URL → treat as a typed URL.
                       const files = e.clipboardData?.files;
-                      if (
-                        files &&
-                        files.length > 0 &&
-                        Array.from(files).some((f) => f.type?.startsWith('image/'))
-                      ) {
-                        const f = Array.from(files).find((x) =>
-                          x.type?.startsWith('image/'),
-                        );
+                      if (files && files.length > 0) {
+                        e.preventDefault();
+                        const f = Array.from(files).find(isAllowedImageFile);
                         if (f) {
-                          e.preventDefault();
                           setBrandLogoFile(f);
                           setBrandLogoUrl(URL.createObjectURL(f));
+                          setLogoError('');
+                        } else {
+                          setLogoError(IMAGE_TYPE_ERROR);
                         }
                         return;
                       }
@@ -1265,8 +1392,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         e.preventDefault();
                         setBrandLogoFile(null);
                         setBrandLogoUrl(text.trim());
+                        setLogoError('');
                       }
                     }}
+                    onDragOver={preventDefaultDragOver}
+                    onDrop={handleLogoDrop}
                     className="flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[10px] text-[#afafaf] 2xl:py-2"
                   >
                     <div className="flex flex-1 items-center justify-between">
@@ -1283,6 +1413,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                           setBrandLogoUrl(e.target.value);
                           if (brandLogoFile) setBrandLogoFile(null);
                         }}
+                        onDragOver={preventDefaultDragOver}
+                        onDrop={handleLogoDrop}
                         placeholder="Paste your image URL or upload"
                         className="w-full rounded-lg px-3 text-xs text-white placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
                       />
@@ -1301,14 +1433,22 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       id="brand-logo-upload"
                       ref={logoImgInputRef}
                       type="file"
-                      accept="image/*"
+                      accept={ALLOWED_IMAGE_ACCEPT}
                       aria-label="Upload brand logo"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f) {
-                          setBrandLogoFile(f);
-                          setBrandLogoUrl(URL.createObjectURL(f));
+                          if (isAllowedImageFile(f)) {
+                            setBrandLogoFile(f);
+                            setBrandLogoUrl(URL.createObjectURL(f));
+                            setLogoError('');
+                          } else {
+                            // Defensive — the accept attribute should already
+                            // filter the picker, but DnD into the picker can
+                            // still leak through in some browsers.
+                            setLogoError(IMAGE_TYPE_ERROR);
+                          }
                         }
                         e.target.value = '';
                       }}
@@ -1337,6 +1477,9 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       rounded
                     />
                   )}
+                  {logoError && (
+                    <p className="mt-2 text-[11px] text-red-300">{logoError}</p>
+                  )}
                 </div>
 
                 <div className="mb-6">
@@ -1363,7 +1506,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           <div className="mt-4 flex items-center justify-end gap-3">
             {total > 0 && (
               <span className="rounded-full bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-white/70 ring-1 ring-white/5">
-                –{total * CREDITS_PER_IMAGE} credits
+                –{total * creditsPerImage} credits
               </span>
             )}
             <button

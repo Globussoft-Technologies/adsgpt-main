@@ -159,6 +159,146 @@ const createCampaignSchemaV2 = Joi.object({
   return value;
 });
 
+// ─── Campaign EDIT schema ─────────────────────────────────────────────────────
+//
+// Partial update for the management "Edit campaign" flow. All editable fields
+// are optional-when-present; immutable fields (objective, special ad
+// categories) are rejected outright. Budget values are in minor currency
+// units, same as create. bid_strategy is intentionally NOT editable in v1 —
+// changing it on a CBO campaign cascades to ad-set bid caps (deferred).
+const updateCampaignSchemaV2 = Joi.object({
+  adAccountId: Joi.string().required(),
+  campaignId: Joi.string().required(),
+  name: Joi.string().min(2).max(120).optional(),
+  dailyBudget: Joi.number().integer().min(100).optional(),
+  lifetimeBudget: Joi.number().integer().min(100).optional(),
+  spendCap: Joi.number().integer().min(100).optional(),
+  // Immutable post-creation — reject so a stale/edited client can't try.
+  objective: Joi.any().forbidden().messages({
+    "any.unknown": "A campaign's objective can't be changed after creation.",
+  }),
+  specialAdCategories: Joi.any().forbidden().messages({
+    "any.unknown": "Special ad categories can't be changed after creation.",
+  }),
+}).custom((value, helpers) => {
+  if (value.dailyBudget && value.lifetimeBudget) {
+    return helpers.error("any.invalid", {
+      message: "Provide dailyBudget OR lifetimeBudget, not both",
+    });
+  }
+  if (value.spendCap) {
+    if (value.dailyBudget && value.spendCap <= value.dailyBudget) {
+      return helpers.error("any.invalid", {
+        message:
+          "spendCap (campaign spending limit) must be greater than the daily budget",
+      });
+    }
+    if (value.lifetimeBudget && value.spendCap < value.lifetimeBudget) {
+      return helpers.error("any.invalid", {
+        message:
+          "spendCap (campaign spending limit) must be at least the lifetime budget",
+      });
+    }
+  }
+  return value;
+});
+
+// ─── Shared targeting schema ──────────────────────────────────────────────────
+//
+// The audience/targeting object — identical between create-adset and
+// edit-adset (parity rule: one source of truth). See LOCATION_TARGETING_PLAN.md
+// for the `locations[]` model. Each entry maps to one of Meta's
+// `geo_locations.{countries|cities|regions|country_groups|custom_locations}`
+// (or `excluded_geo_locations.*` when mode === 'exclude').
+const targetingSchemaV2 = Joi.object({
+  locations: Joi.array()
+    .items(
+      Joi.object({
+        type: Joi.string()
+          .valid("country", "city", "region", "country_group", "custom")
+          .required(),
+        key: Joi.string().required(),
+        name: Joi.string().allow("").optional(),
+        mode: Joi.string().valid("include", "exclude").default("include"),
+        radius: Joi.number()
+          .integer()
+          .min(1)
+          .max(80)
+          .when("type", { is: "custom", then: Joi.required() }),
+        distanceUnit: Joi.string().valid("kilometer", "mile").default("kilometer"),
+        countryCode: Joi.string().length(2).uppercase().optional(),
+        latitude: Joi.number()
+          .min(-90)
+          .max(90)
+          .when("type", { is: "custom", then: Joi.required() }),
+        longitude: Joi.number()
+          .min(-180)
+          .max(180)
+          .when("type", { is: "custom", then: Joi.required() }),
+      }),
+    )
+    .default([]),
+  worldwide: Joi.boolean().default(false),
+  ageMin: Joi.number().integer().min(13).max(65).default(18),
+  ageMax: Joi.number().integer().min(13).max(65).default(65),
+  genders: Joi.array().items(Joi.number().valid(1, 2)).default([]),
+  locales: Joi.array().items(Joi.number().integer()).default([]),
+  advantageAudience: Joi.boolean().default(true),
+  placementMode: Joi.string().valid("advantage_plus", "manual").default("advantage_plus"),
+  publisherPlatforms: Joi.array()
+    .items(Joi.string().valid("facebook", "instagram", "audience_network", "messenger"))
+    .default([]),
+  devicePlatforms: Joi.array()
+    .items(Joi.string().valid("mobile", "desktop"))
+    .default([]),
+});
+
+// ─── AdSet EDIT schema ────────────────────────────────────────────────────────
+//
+// Partial update for "Edit ad set". Editable: name, budget amount, bid cap,
+// targeting/audience, schedule. NOT accepted (immutable / locked in v1):
+// optimization_goal, billing_event, bid_strategy, page, app/pixel identity,
+// destination, attribution. The controller has the campaign context to know
+// whether budget belongs here (ABO) — Joi only enforces field shapes.
+const updateAdSetSchemaV2 = Joi.object({
+  adAccountId: Joi.string().required(),
+  adSetId: Joi.string().required(),
+  name: Joi.string().min(2).max(120).optional(),
+  dailyBudget: Joi.number().integer().min(100).optional(),
+  lifetimeBudget: Joi.number().integer().min(100).optional(),
+  bidAmount: Joi.number().integer().min(1).optional(),
+  targeting: targetingSchemaV2.optional(),
+  startTime: Joi.date().iso().optional(),
+  endTime: Joi.date().iso().optional(),
+  // Locked post-creation — reject so a stale/edited client can't try.
+  optimizationGoal: Joi.any().forbidden().messages({
+    "any.unknown": "The performance goal can't be changed after creation.",
+  }),
+  billingEvent: Joi.any().forbidden().messages({
+    "any.unknown": "The billing event can't be changed after creation.",
+  }),
+  bidStrategy: Joi.any().forbidden().messages({
+    "any.unknown": "The bid strategy can't be changed here.",
+  }),
+}).custom((value, helpers) => {
+  if (value.dailyBudget && value.lifetimeBudget) {
+    return helpers.error("any.invalid", {
+      message: "Provide dailyBudget OR lifetimeBudget, not both",
+    });
+  }
+  if (
+    value.startTime &&
+    value.endTime &&
+    new Date(value.endTime).getTime() - new Date(value.startTime).getTime() <
+      24 * 60 * 60 * 1000
+  ) {
+    return helpers.error("any.invalid", {
+      message: "The schedule must run for at least 24 hours.",
+    });
+  }
+  return value;
+});
+
 // ─── AdSet schema factory ────────────────────────────────────────────────────
 
 /**
@@ -246,55 +386,9 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
     dsaPayor: Joi.string().min(1).max(200).optional().allow(""),
 
     savedAudienceId: Joi.string().optional().allow(""),
-    targeting: Joi.object({
-      // Phase 1 of Meta-parity Location Targeting (see
-      // docs/LOCATION_TARGETING_PLAN.md). Each entry maps to one of
-      // Meta's `geo_locations.{countries|cities|regions|country_groups}`
-      // sub-lists (or `excluded_geo_locations.*` when mode === 'exclude').
-      // `radius` (km) is only meaningful on cities; Phase 3 will add the
-      // `custom` type for map-drop pins.
-      locations: Joi.array()
-        .items(
-          Joi.object({
-            type: Joi.string()
-              .valid("country", "city", "region", "country_group")
-              .required(),
-            key: Joi.string().required(),
-            name: Joi.string().allow("").optional(),
-            mode: Joi.string().valid("include", "exclude").default("include"),
-            radius: Joi.number().integer().min(1).max(80).optional(),
-            distanceUnit: Joi.string()
-              .valid("kilometer", "mile")
-              .default("kilometer"),
-            // Two-letter country code — country entries carry it in `key`,
-            // city/region/area entries carry it on this field. Used by
-            // the campaign payload to derive `special_ad_category_country`
-            // when a Special Ad Category is in play.
-            countryCode: Joi.string().length(2).uppercase().optional(),
-          }),
-        )
-        .default([]),
-      worldwide: Joi.boolean().default(false),
-      ageMin: Joi.number().integer().min(13).max(65).default(18),
-      ageMax: Joi.number().integer().min(13).max(65).default(65),
-      genders: Joi.array().items(Joi.number().valid(1, 2)).default([]),
-      locales: Joi.array().items(Joi.number().integer()).default([]),
-      advantageAudience: Joi.boolean().default(true),
-      // Placements — Advantage+ (Meta picks placements automatically) is
-      // the default. When `placementMode === 'manual'`, `publisherPlatforms`
-      // takes effect; we map it to Meta's `publisher_platforms`. The other
-      // per-position fields (facebook_positions, instagram_positions, etc.)
-      // are auto-included so Meta serves every position on each platform.
-      placementMode: Joi.string().valid("advantage_plus", "manual").default("advantage_plus"),
-      publisherPlatforms: Joi.array()
-        .items(Joi.string().valid("facebook", "instagram", "audience_network", "messenger"))
-        .default([]),
-      // Device targeting — defaults to all. App Promotion typically only
-      // delivers to mobile anyway, but the option exists for completeness.
-      devicePlatforms: Joi.array()
-        .items(Joi.string().valid("mobile", "desktop"))
-        .default([]),
-    }).required(),
+    // Shared targeting schema (see targetingSchemaV2 above) — identical to
+    // the edit-adset flow so the two never drift.
+    targeting: targetingSchemaV2.required(),
 
     status: Joi.string().valid("ACTIVE", "PAUSED").default("PAUSED"),
   };
@@ -511,7 +605,9 @@ function buildAdSchemaV2(objective, conversionLocation) {
 
 module.exports = {
   createCampaignSchemaV2,
+  updateCampaignSchemaV2,
   buildAdSetSchemaV2,
+  updateAdSetSchemaV2,
   buildAdSchemaV2,
   // Re-exported for the controller's use in error messages + UI hints.
   V2_BID_STRATEGIES,

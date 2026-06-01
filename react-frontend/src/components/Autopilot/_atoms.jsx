@@ -1,6 +1,16 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Info } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, ChevronDown, Info } from 'lucide-react';
+import { DateRange } from 'react-date-range';
+import { format } from 'date-fns';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
 
 /**
  * Autopilot-local dark atoms. Lifted from the original `#0D0D0D/60` shell
@@ -332,5 +342,142 @@ export const InfoTip = ({ text, className = '' }) => {
           )
         : null}
     </span>
+  );
+};
+
+// ─── date range filter ─────────────────────────────────────────────────────
+// Shared from/to picker used by the Overview chart window and the Action
+// log filter bar. Values are 'YYYY-MM-DD' (local) so they plug straight
+// into <input type="date">. Future dates are blocked via `max={today}`
+// and the two inputs cross-clamp so the range can't invert.
+const pad2 = (n) => String(n).padStart(2, '0');
+export const dateToInput = (d) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+export const todayDateInput = () => dateToInput(new Date());
+export const firstOfMonthDateInput = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+};
+// 'YYYY-MM-DD' → ISO instant anchored to LOCAL midnight (start) or
+// 23:59:59.999 local (end). Anchoring locally is what makes a calendar-day
+// pick exact for an IST viewer (the backend then matches `runAt` against
+// these instants, and the by_day rollup uses the matching tz offset).
+export const dateInputToIsoStart = (s) => {
+  const [y, m, day] = s.split('-').map(Number);
+  return new Date(y, m - 1, day, 0, 0, 0, 0).toISOString();
+};
+export const dateInputToIsoEnd = (s) => {
+  const [y, m, day] = s.split('-').map(Number);
+  return new Date(y, m - 1, day, 23, 59, 59, 999).toISOString();
+};
+
+// Parse 'YYYY-MM-DD' → local-midnight Date. Inverse of `dateToInput`.
+const parseLocalDate = (s) => {
+  if (!s) return new Date();
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
+// Popover + react-date-range picker — matches the My Space gallery picker
+// (rounded pill trigger, calendar popover with month/year nav, in-range
+// highlight, future dates blocked). Same `{from, to, onChange(key, value)}`
+// API as the previous native-input version so callers don't change.
+// `clear` resets to the current-month default rather than emptying — the
+// autopilot views require a range, and we don't want to crash the chart
+// pre-seed by handing it empty values.
+export const DateRangeFilter = ({ from, to, onChange }) => {
+  const [open, setOpen] = useState(false);
+
+  const fromDate = parseLocalDate(from);
+  const toDate = parseLocalDate(to);
+
+  const handleSelect = (item) => {
+    const { startDate, endDate } = item.selection;
+    if (!startDate || !endDate) return;
+    onChange('from', dateToInput(startDate));
+    onChange('to', dateToInput(endDate));
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onChange('from', firstOfMonthDateInput());
+    onChange('to', todayDateInput());
+  };
+
+  const defaultFrom = firstOfMonthDateInput();
+  const defaultTo = todayDateInput();
+  const isDefault = from === defaultFrom && to === defaultTo;
+  const hasRange = !!(from && to);
+  const displayText = hasRange
+    ? `${format(fromDate, 'MMM d')} - ${format(toDate, 'MMM d')}`
+    : 'Select Date Range';
+
+  // Trigger styling mirrors the autopilot filter chips (`FilterDropdown`,
+  // `DarkInput`): `rounded-xl border-white/10 bg-white/[0.06] px-3 py-2
+  // text-xs text-white`, so the picker reads as just another filter in the
+  // toolbar — not a foreign My-Space-style pill. When a non-default range
+  // is selected, we tint with the autopilot cyan to signal "active filter."
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/6 px-3 text-xs text-white transition-all hover:border-white/20 hover:bg-white/9 2xl:h-10 2xl:text-13',
+            hasRange &&
+              !isDefault &&
+              'border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]',
+          )}
+        >
+          <CalendarIcon
+            className={cn(
+              'h-3.5 w-3.5 text-white/70 2xl:h-4 2xl:w-4',
+              hasRange && !isDefault && 'text-[#15DCFF]',
+            )}
+          />
+          <span className="font-medium">{displayText}</span>
+          {!isDefault && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={handleClear}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') handleClear(e);
+              }}
+              className="ml-1 text-10 font-medium text-[#15DCFF]/80 uppercase tracking-wider hover:text-[#15DCFF] hover:underline 2xl:text-[11px]"
+            >
+              clear
+            </span>
+          )}
+          <ChevronDown className="h-3 w-3 shrink-0 text-white/50 2xl:h-3.5 2xl:w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-auto overflow-hidden rounded-2xl border border-white/10 bg-[#14181D] p-0 shadow-2xl backdrop-blur-xl"
+        align="end"
+      >
+        <div className="date-range-picker-dark p-1">
+          <DateRange
+            editableDateInputs={true}
+            onChange={handleSelect}
+            moveRangeOnFirstSelection={false}
+            ranges={[
+              {
+                startDate: fromDate,
+                endDate: toDate,
+                key: 'selection',
+              },
+            ]}
+            months={1}
+            direction="horizontal"
+            rangeColors={['#15DCFF']}
+            color="#15DCFF"
+            className="bg-transparent text-white"
+            maxDate={new Date()}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };

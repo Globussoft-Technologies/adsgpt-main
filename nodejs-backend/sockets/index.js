@@ -70,49 +70,57 @@ const initializeSockets = (Socket, pub, sub) => {
         data.featureObject = featureObject;
         data.socket_id = socket?.id;
 
-        // STEP 2: Unified credit check (MongoDB)
+        // STEP 2: Freeze the expected chat cost. ChatResponse handler
+        // (setupSockets.js) settles via legacy deductCredits today — when
+        // ADSGPT-TEXT is set to 0 (default), this is a free no-op freeze.
         const modelDeduction =
           UnifiedCreditController.getModelDeduction("ADSGPT-TEXT");
-        const unifiedCheck = await UnifiedCreditController.checkCredits(
-          data.uid,
-          modelDeduction,
-        );
 
-        // Condition 1: User has enough credits - allow the request
-        if (unifiedCheck.isAllowed) {
+        const freeze = await UnifiedCreditController.freezeCredits({
+          userId: data.uid,
+          reservationKey: data?.chatId,
+          amount: modelDeduction,
+          meta: { service_type: "chat", chatId: data?.chatId },
+        });
+
+        if (freeze.ok) {
           pub.publish("chatRequest", JSON.stringify(data));
-        } else {
-          // Condition 2: User has no credits - block the request and send limit message
-          const limitMessage = `You have exceeded your unified credit limit. You have used ${unifiedCheck.currentUsage} out of ${unifiedCheck.totalAllowed} allowed credits. Please check your subscription plan for more details.`;
-
-          const response = {
-            uid: data?.uid,
-            chatId: data.chatId || "unknown",
-            sessionId: data.sessionId || "unknown",
-            message: limitMessage,
-            chatAdsData: [],
-            advertiser: [],
-            token: data.token,
-            timestamp: new Date().toISOString(),
-            responseBy: "adsgpt",
-            isFinalResponse: false,
-            limit: true,
-            socket_id: socket?.id,
-          };
-
-          pub.publish("chatResponse", JSON.stringify(response));
-          pub.publish(
-            "resolve",
-            JSON.stringify({
-              uid: data?.uid,
-              token: socket?.user?.token || "",
-              chatId: "",
-              sessionId: "",
-              allowChat: true,
-              socket_id: socket?.id,
-            }),
-          );
+          return;
         }
+
+        // Freeze failed → send the existing limit response.
+        const limitMessage =
+          freeze.reason === "INSUFFICIENT"
+            ? `You have exceeded your unified credit limit. Required: ${freeze.required}, remaining: ${freeze.remaining}. Please check your subscription plan.`
+            : "We couldn't reserve credits for this request. Please try again.";
+
+        const response = {
+          uid: data?.uid,
+          chatId: data.chatId || "unknown",
+          sessionId: data.sessionId || "unknown",
+          message: limitMessage,
+          chatAdsData: [],
+          advertiser: [],
+          token: data.token,
+          timestamp: new Date().toISOString(),
+          responseBy: "adsgpt",
+          isFinalResponse: false,
+          limit: true,
+          socket_id: socket?.id,
+        };
+
+        pub.publish("chatResponse", JSON.stringify(response));
+        pub.publish(
+          "resolve",
+          JSON.stringify({
+            uid: data?.uid,
+            token: socket?.user?.token || "",
+            chatId: "",
+            sessionId: "",
+            allowChat: true,
+            socket_id: socket?.id,
+          }),
+        );
       } catch (error) {
         console.error("Error handling chat event:", error);
       }
@@ -152,29 +160,35 @@ const initializeSockets = (Socket, pub, sub) => {
           return;
         }
 
-        // STEP 4: Unified credit check (MongoDB)
-        const modelDeduction =
+        // STEP 4: Freeze the expected credit cost atomically. The response
+        // handler (handleAdCopyFullResponse) will settle on success or
+        // release on failure, keyed by chatId.
+        const perCopy =
           UnifiedCreditController.getModelDeduction("ADSGPT-TEXT");
+        const numCopies = Number(message?.no_of_ad_copies) || 1;
+        const totalRequired = perCopy * numCopies;
 
-        const unifiedCheck = await UnifiedCreditController.checkCredits(
-          message.user_id,
-          modelDeduction,
-        );
+        const freeze = await UnifiedCreditController.freezeCredits({
+          userId: message.user_id,
+          reservationKey: message?.chatId,
+          amount: totalRequired,
+          meta: { service_type: "ad_copy", chatId: message?.chatId },
+        });
 
-        // ! STEP 4: Permission logic
-        // Condition 1: User has enough credits
-        if (unifiedCheck.isAllowed) {
+        if (freeze.ok) {
           await sendAdCopyRequest(message);
+          return;
         }
-        // Condition 2: User has no credits
-        else {
+
+        // Freeze failed — surface the right UX.
+        if (freeze.reason === "INSUFFICIENT") {
           const adCopyMessage = `🚫 **Credit Limit Exceeded!** 🚫
-            
-            You have used ${unifiedCheck.currentUsage} out of ${unifiedCheck.totalAllowed} allowed unified credits.
-            
+
+            You need ${freeze.required} credits but only ${freeze.remaining} remain.
+
             🔔 Next Steps:
             Please review your subscription plan for more details on your available limits and how to upgrade if needed.
-            
+
             Thank you for using our service! 😊`;
 
           const expireCopyResponse = {
@@ -187,9 +201,25 @@ const initializeSockets = (Socket, pub, sub) => {
             chatId: message?.chatId,
             sessionId: message?.sessionId,
           };
-
           handleAdCopyResponse(expireCopyResponse, Socket);
           updateAdCopyConversation(expireCopyResponse);
+        } else {
+          // CONTENDED / RECEIPT_WRITE_FAILED / MISSING_KEY / NO_USER
+          logger.error(
+            `Ad Copy freeze failed (${freeze.reason}) for user ${message?.user_id}`,
+          );
+          const errResponse = {
+            adCopyText:
+              "We couldn't reserve credits for this request. Please try again.",
+            user_id: message?.user_id,
+            session_id: message?.sessionId,
+            isLastChunk: true,
+            socket_id: socket?.id,
+            limit: true,
+            chatId: message?.chatId,
+            sessionId: message?.sessionId,
+          };
+          handleAdCopyResponse(errResponse, Socket);
         }
       } catch (error) {
         console.error("Error in adCopyRequest handler:", error);
@@ -254,24 +284,45 @@ const initializeSockets = (Socket, pub, sub) => {
         const numberOfAdsCreative = message.num_images;
         const totalRequiredCredits = numberOfAdsCreative * modelMinCount;
 
-        const unifiedCheck = await UnifiedCreditController.checkCredits(
-          message.user_id,
-          totalRequiredCredits,
-        );
+        // STEP 4: Freeze the full requested cost atomically. Response handler
+        // (adStudio.handleAdCreativeResponse) settles on success and may also
+        // release for any items that failed. Regenerate requests are free
+        // re-rolls — they skip the freeze entirely (mirrors the legacy
+        // `if (!data.isRegenerate)` guard on the deduct path).
+        // if (message?.isRegenerate) {
+        //   await sendCreativeRequest(message);
+        //   return;
+        // }
 
-        const userCreativeCountUnified = unifiedCheck.remainingCredits || 0;
-        const maxCreativesAllowedUnified = Math.floor(
-          userCreativeCountUnified / modelMinCount,
-        );
+        const freeze = await UnifiedCreditController.freezeCredits({
+          userId: message?.user_id,
+          reservationKey: message?.chatId,
+          amount: totalRequiredCredits,
+          meta: {
+            service_type: "ad_creative",
+            model: selectedModel,
+            num_images: numberOfAdsCreative,
+          },
+        });
 
-        // ! STEP 4: Permission logic
-        // Condition 1: User has enough credits
-        if (unifiedCheck.isAllowed) {
-          // pub.publish("adCreativeRequest", JSON.stringify(message));
-          await sendCreativeRequest(message);
+        if (freeze.ok) {
+          // If Python rejects the request synchronously (network error, down),
+          // release the freeze immediately — the async response handler that
+          // would normally settle/release will never fire.
+          const sent = await sendCreativeRequest(message);
+          if (!sent?.ok && message?.chatId) {
+            await UnifiedCreditController.releaseCredits(message?.chatId);
+          }
+          return;
         }
-        // Condition 2: User has some credits but not enough for the selected model
-        else if (userCreativeCountUnified >= modelMinCount) {
+
+        // Freeze failed → mirror the existing partial / no-credits UX.
+        const userCreativeCountUnified = freeze.remaining || 0;
+        const maxCreativesAllowedUnified = modelMinCount
+          ? Math.floor(userCreativeCountUnified / modelMinCount)
+          : 0;
+
+        if (freeze.reason === "INSUFFICIENT" && userCreativeCountUnified >= modelMinCount) {
           const textResponse = {
             starting_acknowledgement: `You have only ${userCreativeCountUnified} credit${userCreativeCountUnified > 1 ? "s" : ""} left. For the selected model each creative costs ${modelMinCount} credit${modelMinCount > 1 ? "s" : ""}. Based on this, you can generate up to ${maxCreativesAllowedUnified} creative${maxCreativesAllowedUnified > 1 ? "s" : ""} at a time. Please reduce the number of creatives to ${maxCreativesAllowedUnified}`,
             ad_copies: {},
@@ -362,20 +413,29 @@ const initializeSockets = (Socket, pub, sub) => {
         const numberOfAdsVideo = message?.query?.numberOfVideos;
         const totalRequiredCredits = numberOfAdsVideo * videoMinCount;
 
-        const unifiedCheck = await UnifiedCreditController.checkCredits(
-          message.session?.userId,
-          totalRequiredCredits,
-        );
+        // STEP 3: Freeze the full requested cost. Response handler
+        // (handleAdCreativeVideoResponse) settles on success / releases on
+        // failure, keyed by the session's chatId.
+        const freeze = await UnifiedCreditController.freezeCredits({
+          userId: message.session?.userId,
+          reservationKey: message?.session?.chatId,
+          amount: totalRequiredCredits,
+          meta: {
+            service_type: "ad_video",
+            model: selectedModel,
+            duration: message?.query?.duration,
+            num_videos: numberOfAdsVideo,
+          },
+        });
 
-        const userCreativeCountUnified = unifiedCheck.remainingCredits || 0;
-
-        // ! STEP 3: Permission logic
-        // Condition 1: User has enough credits
-        if (unifiedCheck.isAllowed) {
+        if (freeze.ok) {
           pub.publish("adCreativeVideoRequest", JSON.stringify(message));
+          return;
         }
-        // Condition 2: User has some credits but not enough for the selected model
-        else if (userCreativeCountUnified >= videoMinCount) {
+
+        const userCreativeCountUnified = freeze.remaining || 0;
+
+        if (freeze.reason === "INSUFFICIENT" && userCreativeCountUnified >= videoMinCount) {
           const videoResponse = {
             session: {
               userId: message?.session?.userId,

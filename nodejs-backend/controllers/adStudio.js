@@ -11,9 +11,10 @@ exports.sendCreativeRequest = async (payload) => {
   try {
     const apiUrl = process.env.CREATIVE_REQUEST_API;
     const response = await axios.post(apiUrl, payload);
-    return response.data;
+    return { ok: true, data: response.data };
   } catch (error) {
     logger.error("Error in sendCreativeRequest:", error);
+    return { ok: false, error: error.message };
   }
 };
 
@@ -45,10 +46,16 @@ const handleAdCreativeResponse = async (data) => {
     const images = data?.images;
     const model = data?.model;
     const user_id = data?.user_id;
+    // chatId is the freeze receipt key set by sockets/index.js adCreativeRequest.
+    // Python echoes it back on `chatId` or inside `request_payload.chatId`.
+    const reservationKey = data?.chatId || data?.request_payload?.chatId;
 
     // Validate images safely
     if (!Array.isArray(images) || images.length === 0) {
-      // Still emit response even if no images
+      // Full failure — release the entire freeze.
+      if (reservationKey && !data?.isRegenerate) {
+        await UnifiedCreditController.releaseCredits(reservationKey);
+      }
       if (data?.socket_id) {
         emitResult(user_id, "adCreativeResponse", data);
       }
@@ -59,20 +66,23 @@ const handleAdCreativeResponse = async (data) => {
     // Count only successful images
     const successfulImages = images.filter((img) => {
       if (!img) return false;
-    
+
       let url = "";
-    
+
       if (typeof img === "string") {
         url = img;
       } else if (typeof img === "object") {
         url = img.base_image || img.data || "";
       }
-    
+
       return url && url !== "failed" && url !== "400";
     });
 
-    // If no successful images → no deduction
+    // If no successful images → release entire freeze, no charge.
     if (successfulImages.length === 0) {
+      if (reservationKey && !data?.isRegenerate) {
+        await UnifiedCreditController.releaseCredits(reservationKey);
+      }
       if (data?.socket_id) {
         emitResult(user_id, "adCreativeResponse", data);
       }
@@ -87,10 +97,26 @@ const handleAdCreativeResponse = async (data) => {
     const totalCreditsToDeduct = creditPerImage * successfulImages.length;
 
     if (user_id && !data?.isRegenerate) {
-      await UnifiedCreditController.deductCredits(
-        user_id,
-        totalCreditsToDeduct
-      );
+      // Settle the freeze: keep the cost of successful images, refund the rest.
+      // Falls back to legacy deductCredits if no reservation receipt exists
+      // (e.g. a request that bypassed the sockets/index.js freeze path).
+      if (reservationKey) {
+        const result = await UnifiedCreditController.releasePartial(
+          reservationKey,
+          totalCreditsToDeduct,
+        );
+        if (!result.ok && result.reason === "NO_RECEIPT") {
+          await UnifiedCreditController.deductCredits(
+            user_id,
+            totalCreditsToDeduct,
+          );
+        }
+      } else {
+        await UnifiedCreditController.deductCredits(
+          user_id,
+          totalCreditsToDeduct,
+        );
+      }
 
       // Save each successful adCreative image to GeneratedMedia
       // Python does NOT call /createUsage for adCreativeImage, so count is saved here.

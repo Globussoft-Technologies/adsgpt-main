@@ -4,6 +4,7 @@ import {
   BookOpen,
   Loader2,
   Pencil,
+  Copy,
   Trash2,
   AlertCircle,
   Shield,
@@ -106,6 +107,30 @@ const UserRulesSection = () => {
   const onTemplatePicked = (templateBody) => {
     setEditing(null);
     setPrefill(templateBody);
+    setFormOpen(true);
+  };
+  // Clone — open the form in CREATE mode (editing=null) pre-filled from an
+  // existing rule, so Save calls createUserRule and produces a brand-new
+  // rule. We reuse the template `prefill` path the form already supports.
+  // Attachments are sanitized down to the fields the create validator
+  // accepts: a stale `orphan`/`orphanedAt`/`_id` copied from the source
+  // rule shouldn't ride along into a fresh rule.
+  const openClone = (rule) => {
+    setEditing(null);
+    setPrefill({
+      name: `${rule.name || 'Rule'} (copy)`,
+      description: rule.description || '',
+      severity: rule.severity || 'medium',
+      evaluateOn: rule.evaluateOn || 'campaign',
+      lookbackDays: rule.lookbackDays || 14,
+      conditions: rule.conditions,
+      action: rule.action,
+      attachments: (rule.attachments || []).map((a) => ({
+        adAccountId: a.adAccountId,
+        campaignId: a.campaignId,
+        ...(a.campaignName ? { campaignName: a.campaignName } : {}),
+      })),
+    });
     setFormOpen(true);
   };
 
@@ -342,6 +367,7 @@ const UserRulesSection = () => {
                 busy={busyId === rule._id}
                 onToggle={() => onToggle(rule)}
                 onEdit={() => openEdit(rule)}
+                onClone={() => openClone(rule)}
                 onDelete={() => onDelete(rule)}
               />
             ))}
@@ -387,7 +413,7 @@ const UserRulesSection = () => {
 // toggle); disabled rules dim down so the eye can scan the list for
 // what's actually live without parsing per-row chrome. Hover lifts the
 // row a touch so the drag handle + actions read as interactive.
-const RuleRow = ({ rule, busy, onToggle, onEdit, onDelete }) => {
+const RuleRow = ({ rule, busy, onToggle, onEdit, onClone, onDelete }) => {
   const sev =
     SEVERITIES.find((s) => s.value === rule.severity) || SEVERITIES[1];
   const level = EVALUATE_ON.find((e) => e.value === rule.evaluateOn);
@@ -470,6 +496,9 @@ const RuleRow = ({ rule, busy, onToggle, onEdit, onDelete }) => {
         </IconButton>
         <IconButton onClick={onEdit} title="Edit" disabled={busy}>
           <Pencil className="h-3.5 w-3.5" />
+        </IconButton>
+        <IconButton onClick={onClone} title="Clone" disabled={busy}>
+          <Copy className="h-3.5 w-3.5" />
         </IconButton>
         <IconButton
           onClick={onDelete}

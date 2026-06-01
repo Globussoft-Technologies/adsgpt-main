@@ -43,7 +43,7 @@ import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { useSidebar } from '@/components/ui/sidebar';
 
 const AdCreativeChat = () => {
-  const [copiedId, setCopiedId] = useState(null);
+  // const [copiedId, setCopiedId] = useState(null);
 
   const dispatch = useDispatch();
   const { conversations, timers } = useSelector((state) => state.adCreative);
@@ -56,12 +56,12 @@ const AdCreativeChat = () => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations]);
 
-  const copyText = (text, id) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 1500);
-    });
-  };
+  // const copyText = (text, id) => {
+  //   navigator.clipboard.writeText(text).then(() => {
+  //     setCopiedId(id);
+  //     setTimeout(() => setCopiedId(null), 1500);
+  //   });
+  // };
 
   const openLightbox = (baseImage, logoImage, baseWithLogoImage, botId, adIndex, editorType) => {
     if (baseWithLogoImage == EXPIRED_URL) {
@@ -174,17 +174,8 @@ const AdCreativeChat = () => {
                       className="h-6 w-6 2xl:h-8 2xl:w-8"
                     />
                   </div>
-                  <div className="reply_bot_container flex w-full max-w-2xl flex-col gap-4">
-                    <motion.p
-                      variants={FADE_UP_ANIMATION_VARIANT}
-                      initial="initial"
-                      whileInView="whileInView"
-                      viewport={{ once: false }}
-                      className="text-sm max-sm:text-sm"
-                    >
-                      <ReactMarkdown>{c?.start_message}</ReactMarkdown>
-                    </motion.p>
-                    <div className="flex max-w-2xl flex-col gap-4">
+                  <div className="reply_bot_container flex w-full max-w-[500px] flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {c?.ads?.map((cr, index) => (
                         <motion.div
                           key={cr.id}
@@ -192,25 +183,24 @@ const AdCreativeChat = () => {
                           initial="initial"
                           whileInView="whileInView"
                           viewport={{ once: false }}
-                          className="overflow-hidden rounded-2xl border border-[#2A2A2A] bg-[#111111] shadow-md"
+                          className="rounded-2xl border border-[#2A2A2A] bg-[#111111] shadow-md w-full"
                         >
-                          {/* EXACT LAYOUT: image left, content right */}
-                          <div className="flex h-full flex-col sm:flex-row">
-                            {/* Left image with rounded-left corners */}
+                          <div className="h-full w-full">
+                            {/* Image */}
                             {cr?.image_complete ? (
-                              <div className="gen-image group-relative h-full sm:min-w-[220px]">
+                              <div className="gen-image relative h-[240px] w-full rounded-2xl">
                                 {cr?.image_ad && cr?.image_ad?.includes('failed') ? (
-                                  <p className="adcreative_generated_image flex h-60 w-60 items-center bg-slate-600/20 p-4 text-center leading-7 sm:p-2">
+                                  <p className="flex h-full w-full items-center justify-center bg-slate-600/20 p-4 text-center text-sm leading-7">
                                     Couldn't generate Ad Creative. However, your credit is not
                                     deducted. Please try again!
                                   </p>
                                 ) : cr?.image_ad && cr?.image_ad == '400' ? (
-                                  <p className="adcreative_generated_image flex h-60 w-60 items-center bg-slate-600/20 p-4 text-center leading-7 sm:p-2">
+                                  <p className="flex h-full w-full items-center justify-center bg-slate-600/20 p-4 text-center text-sm leading-7">
                                     Image request restricted for safety compliance. However, your
                                     credit is not deducted. Please revise your prompt and retry.
                                   </p>
                                 ) : cr?.image_ad && cr?.image_ad?.includes('planExpired') ? (
-                                  <div className={`group relative h-60 w-60`}>
+                                  <div className="group relative h-full w-full">
                                     <a
                                       href={import.meta.env.VITE_SIGNUP_URL}
                                       target="_blank"
@@ -225,81 +215,102 @@ const AdCreativeChat = () => {
                                     </a>
                                   </div>
                                 ) : (
-                                  <div className={`group relative h-60 w-60`}>
-                                    <img
-                                      src={`${S3_BASE_URL}${cr?.image_ad}`}
-                                      alt={cr?.title}
-                                      className="adcreative_generated_image h-full w-full cursor-pointer object-cover transition-transform group-hover:scale-105"
-                                      onClick={() =>
-                                        openLightbox(
-                                          cr?.base_image,
-                                          cr?.logo,
-                                          cr?.image_ad,
-                                          c?.id,
-                                          index,
-                                          'old'
-                                        )
-                                      }
-                                    />
+                                  <div className="group relative h-full w-full">
+                                    <div className="overflow-hidden rounded-2xl h-full w-full">
+                                      <img
+                                        src={`${S3_BASE_URL}${cr?.image_ad}`}
+                                        alt={cr?.title}
+                                        className="adcreative_generated_image h-full w-full cursor-pointer object-cover transition-transform group-hover:scale-105"
+                                        onClick={() =>
+                                          openLightbox(
+                                            cr?.base_image,
+                                            cr?.logo,
+                                            cr?.image_ad,
+                                            c?.id,
+                                            index,
+                                            'old'
+                                          )
+                                        }
+                                      />
+                                    </div>
                                     <div className="absolute bottom-2 left-2 rounded-full bg-white px-2 py-0.5 text-10 text-black font-bold  backdrop-blur-sm">
                                       Brand-aware applied
                                     </div>
                                     {EXPIRED_URL != cr?.image_ad && (
-                                      <div className="absolute top-2 right-2 hidden opacity-0 transition-all duration-200 group-hover:flex group-hover:opacity-100">
-                                        <div className="flex items-center gap-1">
-                                          <div
-                                            className="animated-border"
-                                            style={{
-                                              '--ab-width': 'fit-content',
-                                              '--ab-height': 'fit-content',
-                                              '--ab-radius': '9999px',
-                                              '--ab-border-size': '2px',
-                                              '--color-1': '#3c3c3c',
-                                              '--color-3': '#FFFFFF',
-                                              '--color-2': 'transparent',
-                                              '--color-4': 'transparent',
-                                            }}
-                                          >
+                                      <>
+                                        {/* Top-right: Edit + three-dots */}
+                                        <div className="absolute top-2 right-2 hidden opacity-0 transition-all duration-200 group-hover:flex group-hover:opacity-100">
+                                          <div className="flex items-center gap-1">
+                                            <div
+                                              className="animated-border"
+                                              style={{
+                                                '--ab-width': 'fit-content',
+                                                '--ab-height': 'fit-content',
+                                                '--ab-radius': '9999px',
+                                                '--ab-border-size': '2px',
+                                                '--color-1': '#3c3c3c',
+                                                '--color-3': '#FFFFFF',
+                                                '--color-2': 'transparent',
+                                                '--color-4': 'transparent',
+                                              }}
+                                            >
+                                              <button
+                                                onClick={() =>
+                                                  openLightbox(
+                                                    cr?.base_image,
+                                                    cr?.logo,
+                                                    cr?.image_ad,
+                                                    c?.id,
+                                                    index,
+                                                    'new'
+                                                  )
+                                                }
+                                                title="Edit"
+                                                className="flex items-center justify-center rounded-full bg-[#3c3c3c] p-1.5 text-white hover:bg-black/80"
+                                              >
+                                                <Pencil size={15} />
+                                              </button>
+                                            </div>
+                                            {cr?.image_ad &&
+                                              cr?.image_ad != '400' &&
+                                              !cr?.image_ad?.includes('failed') && (
+                                                <AdCreativeAction
+                                                  key={index}
+                                                  imageUrl={`${S3_BASE_URL}${cr?.image_ad}`}
+                                                  baseUrl={
+                                                    cr?.base_image
+                                                      ? `${S3_BASE_URL}${cr?.base_image}`
+                                                      : ''
+                                                  }
+                                                  adText={cr?.text_ad}
+                                                  userInput={c?.inputs}
+                                                />
+                                              )}
+                                          </div>
+                                        </div>
+                                        {/* Bottom-right: Regenerate */}
+                                        <div className="absolute bottom-2 right-2 hidden opacity-0 transition-all duration-200 group-hover:flex group-hover:opacity-100">
+                                          <ShadcnTooltip label="Regenerate Creative">
                                             <button
+                                              className="flex items-center justify-center rounded-full bg-[#3c3c3c] p-1.5 text-white hover:bg-black/80"
                                               onClick={() =>
-                                                openLightbox(
-                                                  cr?.base_image,
-                                                  cr?.logo,
-                                                  cr?.image_ad,
-                                                  c?.id,
-                                                  index,
-                                                  'new'
+                                                dispatch(
+                                                  handleCreativeRegenerateClick(c?.inputs, isSidebarOpen)
                                                 )
                                               }
-                                              title="Edit"
-                                              className="flex items-center justify-center rounded-full bg-[#3c3c3c] p-1.5 text-white hover:bg-black/80"
                                             >
-                                              <Pencil size={15} />
+                                              <RefreshCw size={15} />
                                             </button>
-                                          </div>
-
-                                          {/* <button
-                                            title="Copy"
-                                            className="flex items-center justify-center rounded-full bg-[#3c3c3c] p-1.5 text-white transition-all hover:scale-105 hover:bg-black/80"
-                                          >
-                                            <Copy size={15} />
-                                          </button>
-
-                                          <button
-                                            className="flex items-center justify-center rounded-full bg-[#3c3c3c] p-1.5 text-white transition-all hover:scale-105 hover:bg-black/80"
-                                            title="Share"
-                                          >
-                                            <Share2 size={15} />
-                                          </button> */}
+                                          </ShadcnTooltip>
                                         </div>
-                                      </div>
+                                      </>
                                     )}
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <div className="relative aspect-square h-full w-[200px]">
-                                <div className="relative h-full w-full animate-pulse rounded-l-2xl bg-[#212121]">
+                              <div className="h-60 w-full">
+                                <div className="relative h-full w-full animate-pulse rounded-2xl bg-[#212121]">
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     {/* {timers[`${c?.id}-${index}`] ? (
                                     <div className="h-9 w-9 text-white">
@@ -336,104 +347,24 @@ const AdCreativeChat = () => {
                               </div>
                             )}
 
-                            {/* Right content */}
-                            <div className="flex w-full flex-1 flex-col justify-between p-4">
+                            {/* Right content — commented out */}
+                            {/* <div className="flex w-full flex-1 flex-col justify-between p-4">
                               {cr?.text_complete ? (
                                 <>
                                   <div className="contents_chat flex w-full flex-1 flex-col">
-                                    {/* Title + kebab */}
                                     <div className="relative mb-2 flex items-start justify-between">
                                       <h3 className="mb-2 text-sm font-semibold text-white 2xl:text-base">
                                         Ad Creative {index + 1}
                                       </h3>
-                                      <div className="absolute -top-1 -right-1">
-                                        {cr?.image_ad &&
-                                          cr?.image_ad != '400' &&
-                                          !cr?.image_ad?.includes('failed') && (
-                                            <AdCreativeAction
-                                              key={index}
-                                              imageUrl={
-                                                cr?.image_ad &&
-                                                !cr?.image_ad?.includes('failed') &&
-                                                cr?.image_ad != '400'
-                                                  ? `${S3_BASE_URL}${cr?.image_ad}`
-                                                  : ''
-                                              }
-                                              baseUrl={
-                                                cr?.base_image
-                                                  ? `${S3_BASE_URL}${cr?.base_image}`
-                                                  : ''
-                                              }
-                                              adText={cr?.text_ad}
-                                              userInput={c?.inputs}
-                                            />
-                                          )}
-                                      </div>
                                     </div>
-
-                                    {/* Primary Text */}
-                                    {/* <p className="text-xs text-neutral-200 2xl:text-sm">
-                                    <span className="font-semibold">Primary Text: </span>
-                                    {cr.primaryText}
-                                  </p> */}
-
-                                    {/* Headline */}
-                                    {/* <p className="mt-3 text-xs text-neutral-300 2xl:text-sm">
-                                    <span className="font-semibold">Headline: </span>
-                                    {cr.headline}
-                                  </p> */}
                                     <p className="flex-1 basis-0 overflow-y-auto text-sm max-sm:text-sm">
                                       <ReactMarkdown>{cr?.text_ad || ''}</ReactMarkdown>
                                     </p>
                                   </div>
-
-                                  {/* Actions bottom-right */}
                                   <div className="mt-3 flex items-center justify-end gap-0">
-                                    {/* <ShadcnTooltip label="Like">
-                                      <button
-                                        className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#2A2A2A]"
-                                        onClick={() => {
-                                          handleLikeDislike(c?.id, cr?.feedback, index, 'like');
-                                        }}
-                                      >
-                                        {cr?.feedback === 'like' ? (
-                                          <RiThumbUpFill className="h-4 w-4" />
-                                        ) : (
-                                          <ThumbsUp className="h-4 w-4" />
-                                        )}
-                                      </button>
-                                    </ShadcnTooltip>
-
-                                    <ShadcnTooltip label="Dislike">
-                                      <button
-                                        className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#2A2A2A]"
-                                        onClick={() => {
-                                          handleLikeDislike(c?.id, cr?.feedback, index, 'dislike');
-                                        }}
-                                      >
-                                        {cr?.feedback === 'dislike' ? (
-                                          <RiThumbDownFill className="h-4 w-4" />
-                                        ) : (
-                                          <ThumbsDown className="h-4 w-4" />
-                                        )}
-                                      </button>
-                                    </ShadcnTooltip> */}
                                     <ShadcnTooltip label="Read Aloud">
                                       <button className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#2A2A2A]">
                                         <ReadAloud text={cr?.text_ad} />
-                                        {/* <Volume2 className="h-4 w-4" /> */}
-                                      </button>
-                                    </ShadcnTooltip>
-                                    <ShadcnTooltip label="Regenerate Creative">
-                                      <button
-                                        className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#2A2A2A]"
-                                        onClick={() =>
-                                          dispatch(
-                                            handleCreativeRegenerateClick(c?.inputs, isSidebarOpen)
-                                          )
-                                        }
-                                      >
-                                        <RefreshCw className="h-4 w-4" />
                                       </button>
                                     </ShadcnTooltip>
                                     <ShadcnTooltip label="Copy">
@@ -451,12 +382,8 @@ const AdCreativeChat = () => {
                                   </div>
                                 </>
                               ) : (
-                                /* Loader for right content */
                                 <div className="w-full animate-pulse space-y-4">
-                                  {/* Title line */}
                                   <div className="h-4 w-1/3 rounded bg-slate-700"></div>
-
-                                  {/* Paragraph lines */}
                                   <div className="w-full space-y-2">
                                     <div className="h-3 w-full rounded bg-slate-700"></div>
                                     <div className="h-3 w-11/12 rounded bg-slate-700"></div>
@@ -465,7 +392,9 @@ const AdCreativeChat = () => {
                                   </div>
                                 </div>
                               )}
-                            </div>
+                            </div> */}
+
+
                           </div>
                         </motion.div>
                       ))}

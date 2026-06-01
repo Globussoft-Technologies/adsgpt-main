@@ -5,6 +5,7 @@ const brandInfoSchema = Joi.object({
   brandName: Joi.string().required(),
   brandDescription: Joi.string().required(),
   brandLogo: Joi.array().items(Joi.string()),
+  brandImages: Joi.array().items(Joi.string()),
   brandVoice: Joi.array().items(Joi.string().required()).min(1).required(),
   category: Joi.string().allow('').optional(),
   brandGuidelines: Joi.object({

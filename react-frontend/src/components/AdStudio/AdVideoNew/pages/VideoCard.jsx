@@ -755,7 +755,7 @@ export default function VideoCard({
                 }
                 dispatch(setAIAdsStep('details'));
                 dispatch(setActivePage(targetPage));
-                setTimeout(() => emitter.emit('ai-ads:prefill', item.inputs), 100);
+                dispatch(setAiAdsPrefillInputs(item.inputs));
                 return;
               }
 

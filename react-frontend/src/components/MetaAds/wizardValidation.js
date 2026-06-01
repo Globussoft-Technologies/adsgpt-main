@@ -145,8 +145,11 @@ function validateCampaign(form, ctx) {
 }
 
 // ── Step: Ad Set ────────────────────────────────────────────────────────
-function validateAdSet(form, cell, ctx) {
+function validateAdSet(form, cell, ctx, mode) {
   const e = {};
+  // In edit-adset the identity/delivery fields (page, app, pixel) are locked
+  // and not collected, so don't require them — they're already valid on Meta.
+  const editing = mode === 'edit-adset';
   const minDaily = ctx.minDailyBudget || MIN_BUDGET_MAJOR;
   if (isBlank(form.adSetName)) {
     e.adSetName = 'Ad set name is required.';
@@ -197,14 +200,13 @@ function validateAdSet(form, cell, ctx) {
       e.locations =
         'Add at least one location (country, city, region, or area), or enable Worldwide.';
     } else {
-      // City radius must stay inside Meta's accepted band — the
-      // LocationTargeting input clamps it on edit, but a paste / preset
-      // can land outside the bounds.
+      // Radius must stay inside Meta's accepted band (cities + map pins).
+      // The LocationTargeting input clamps it on edit, but guard anyway.
       for (const l of locations) {
-        if (l && l.type === 'city' && l.radius != null) {
+        if (l && (l.type === 'city' || l.type === 'custom') && l.radius != null) {
           const r = toNumber(l.radius);
           if (!Number.isFinite(r) || r < 1 || r > 80) {
-            e.locations = 'City radius must be between 1 km and 80 km.';
+            e.locations = 'Location radius must be between 1 km and 80 km.';
             break;
           }
         }
@@ -275,7 +277,8 @@ function validateAdSet(form, cell, ctx) {
   }
 
   // Cell-specific required fields (App Promotion + Pixel-using cells).
-  const extra = cell?.adSet?.additionalFields || [];
+  // Skipped in edit — the app/pixel identity is locked and not re-collected.
+  const extra = editing ? [] : (cell?.adSet?.additionalFields || []);
   if (extra.includes('mobileAppStore') && isBlank(form.mobileAppStore)) {
     e.mobileAppStore = 'Choose a mobile app store.';
   }
@@ -299,17 +302,28 @@ function validateAdSet(form, cell, ctx) {
 }
 
 // ── Step: Ad ────────────────────────────────────────────────────────────
-function validateAd(form, cell) {
+function validateAd(form, cell, mode) {
   const e = {};
   if (isBlank(form.adName)) e.adName = 'Ad name is required.';
 
-  // Media — exactly one of image / video must be provided.
-  if (form.mediaType === 'video') {
-    if (!form.videoFile && isBlank(form.videoUrl)) {
-      e.media = 'Upload a video or pick one from the library.';
+  // In the standalone "Add Ad" flow (create-ad mode) there's no Ad Set
+  // step, so the Page is chosen on the Ad step instead — require it here.
+  // In the full / add-ad-set flows the Page is validated on the Ad Set step.
+  if (mode === 'create-ad' && isBlank(form.pageId)) {
+    e.pageId = 'Select a Facebook Page.';
+  }
+
+  // Media — exactly one of image / video must be provided. Skipped in
+  // edit-ad: the existing media is reused (v1 doesn't re-upload), so there's
+  // no upload field to satisfy.
+  if (mode !== 'edit-ad') {
+    if (form.mediaType === 'video') {
+      if (!form.videoFile && isBlank(form.videoUrl)) {
+        e.media = 'Upload a video or pick one from the library.';
+      }
+    } else if (!form.imageFile && !form.imageUrl) {
+      e.media = 'Upload an image or pick one from the library.';
     }
-  } else if (!form.imageFile && !form.imageUrl) {
-    e.media = 'Upload an image or pick one from the library.';
   }
 
   // Every field the cell's schema marks required. Iterating the schema
@@ -348,7 +362,7 @@ function validateAd(form, cell) {
  * units): { minSpendCap, minDailyBudget, currency }. Optional — when
  * absent the engine falls back to conservative generic minimums.
  */
-export function validateStep(stepId, form, cell, ctx = {}) {
+export function validateStep(stepId, form, cell, ctx = {}, mode = 'create-full') {
   switch (stepId) {
     case 'objective':
       return form.objective ? {} : { objective: 'Choose an objective.' };
@@ -359,13 +373,13 @@ export function validateStep(stepId, form, cell, ctx = {}) {
     case 'campaign':
       return validateCampaign(form, ctx);
     case 'adSet':
-      return validateAdSet(form, cell, ctx);
+      return validateAdSet(form, cell, ctx, mode);
     case 'leadForm':
       return form.leadFormId
         ? {}
         : { leadFormId: 'Select an existing lead form or create a new one.' };
     case 'ad':
-      return validateAd(form, cell);
+      return validateAd(form, cell, mode);
     case 'review':
       return {};
     default:
@@ -378,11 +392,11 @@ export function validateStep(stepId, form, cell, ctx = {}) {
  * for steps that have errors — used to gate Launch and show a per-step
  * summary on the Review screen.
  */
-export function validateAllSteps(steps, form, cell, ctx = {}) {
+export function validateAllSteps(steps, form, cell, ctx = {}, mode = 'create-full') {
   const byStep = {};
   for (const s of steps || []) {
     if (!s || s.id === 'review') continue;
-    const errs = validateStep(s.id, form, cell, ctx);
+    const errs = validateStep(s.id, form, cell, ctx, mode);
     if (Object.keys(errs).length) byStep[s.id] = errs;
   }
   return byStep;

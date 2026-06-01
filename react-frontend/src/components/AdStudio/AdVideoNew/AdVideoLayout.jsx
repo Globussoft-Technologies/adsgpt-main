@@ -64,6 +64,10 @@ const pageConfig = {
 
 const selectVideoType = [
   {
+    value: 'ai_ads',
+    label: 'AI Ads',
+  },
+  {
     value: 'ugc',
     label: 'UGC Ads',
   },
@@ -185,7 +189,7 @@ const AdVideoLayout = () => {
       const hasIncompleteImages =
         currentAIAdsStep === 'generation' &&
         aiAdsScenes.length > 0 &&
-        !aiAdsScenes.every((s) => s.frameImageUrl && !s.imageFailed);
+        aiAdsScenes.some((s) => !s.frameImageUrl && !s.imageFailed);
       if (isInitiallyLoading || hasIncompleteImages) {
         toast.dismiss();
         toast.error('Scenes are generating, please wait');

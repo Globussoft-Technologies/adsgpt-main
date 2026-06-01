@@ -77,19 +77,53 @@ const handleAdCopyFullResponse = async (data, socket) => {
       socket.to(data?.socket_id).emit("finalAdCopyResponse", payload);
       logger.info(`Ad Copy Response: ${JSON.stringify(payload)}`);
 
-      const incCount = data?.error
-        ? 0
-        : (data?.sentPayload?.no_of_ad_copies || 0) *
+      // Freeze was keyed by chatId in sockets/index.js adCopyRequest.
+      const reservationKey =
+        data?.sentPayload?.chatId || data?.chatId || null;
+
+      if (data?.error) {
+        // Generation failed → release the entire freeze.
+        if (reservationKey) {
+          await UnifiedCreditController.releaseCredits(reservationKey);
+        }
+      } else {
+        const actualCharged =
+          (data?.sentPayload?.no_of_ad_copies || 0) *
           UnifiedCreditController.getModelDeduction("ADSGPT-TEXT");
 
-      if (incCount > 0 && !data?.error) {
-        await UnifiedCreditController.deductCredits(data.user_id, incCount, {
-          service_type: "ad_copy",
-          item_count: incCount,
-          platform: data?.sentPayload?.platform,
-          session_id: data.sessionId,
-          chat_id: data?.sentPayload?.chatId,
-        });
+        if (reservationKey) {
+          // releasePartial keeps `actualCharged` debited and refunds the rest;
+          // falls through to deductCredits if no receipt was created (legacy path).
+          const result = await UnifiedCreditController.releasePartial(
+            reservationKey,
+            actualCharged,
+          );
+          if (!result.ok && result.reason === "NO_RECEIPT" && actualCharged > 0) {
+            await UnifiedCreditController.deductCredits(
+              data.user_id,
+              actualCharged,
+              {
+                service_type: "ad_copy",
+                item_count: actualCharged,
+                platform: data?.sentPayload?.platform,
+                session_id: data.sessionId,
+                chat_id: data?.sentPayload?.chatId,
+              },
+            );
+          }
+        } else if (actualCharged > 0) {
+          await UnifiedCreditController.deductCredits(
+            data.user_id,
+            actualCharged,
+            {
+              service_type: "ad_copy",
+              item_count: actualCharged,
+              platform: data?.sentPayload?.platform,
+              session_id: data.sessionId,
+              chat_id: data?.sentPayload?.chatId,
+            },
+          );
+        }
       }
 
       // STEP 2: Send the credits to the client
@@ -201,9 +235,14 @@ const handleAdCreativeVideoResponse = async (data, socket) => {
     const user_id = data?.session?.userId;
     const socketId = data?.session?.socketId;
     const selectedModel = data?.queryResult?.model;
+    // Freeze key used in sockets/index.js adCreativeVideoRequest:
+    const reservationKey = data?.session?.chatId;
 
     // Validate videos safely
     if (!Array.isArray(videos) || videos.length === 0) {
+      if (reservationKey) {
+        await UnifiedCreditController.releaseCredits(reservationKey);
+      }
       if (socketId) {
         socket.to(socketId).emit("adCreativeVideoResponse", data);
       }
@@ -219,6 +258,9 @@ const handleAdCreativeVideoResponse = async (data, socket) => {
     );
 
     if (successfulVideos.length === 0) {
+      if (reservationKey) {
+        await UnifiedCreditController.releaseCredits(reservationKey);
+      }
       if (socketId) {
         socket.to(socketId).emit("adCreativeVideoResponse", data);
       }
@@ -261,19 +303,43 @@ const handleAdCreativeVideoResponse = async (data, socket) => {
     }
 
     if (user_id) {
-      await UnifiedCreditController.deductCredits(
-        user_id,
-        totalCreditsToDeduct,
-        {
-          model: selectedModel,
-          service_type: "ad_video",
-          item_count: successfulVideos.length,
-          duration: durationInSeconds,
-          resolution: "standard",
-          session_id: data?.session?.sessionId,
-          chat_id: data?.session?.chatId,
-        },
-      );
+      // Settle the freeze: keep cost of successful videos, refund the rest.
+      // Falls back to legacy deductCredits if no receipt (e.g. pre-freeze request).
+      if (reservationKey) {
+        const result = await UnifiedCreditController.releasePartial(
+          reservationKey,
+          totalCreditsToDeduct,
+        );
+        if (!result.ok && result.reason === "NO_RECEIPT") {
+          await UnifiedCreditController.deductCredits(
+            user_id,
+            totalCreditsToDeduct,
+            {
+              model: selectedModel,
+              service_type: "ad_video",
+              item_count: successfulVideos.length,
+              duration: durationInSeconds,
+              resolution: "standard",
+              session_id: data?.session?.sessionId,
+              chat_id: data?.session?.chatId,
+            },
+          );
+        }
+      } else {
+        await UnifiedCreditController.deductCredits(
+          user_id,
+          totalCreditsToDeduct,
+          {
+            model: selectedModel,
+            service_type: "ad_video",
+            item_count: successfulVideos.length,
+            duration: durationInSeconds,
+            resolution: "standard",
+            session_id: data?.session?.sessionId,
+            chat_id: data?.session?.chatId,
+          },
+        );
+      }
 
       await emitCreditStatus(user_id, socketId, socket);
     }
@@ -385,18 +451,43 @@ const ChatResponse = async (parsedMessage, uidChannel, Socket) => {
     handleResponse(parsedMessage, Socket, uidChannel);
 
     if (parsedMessage?.isFinalResponse) {
-      // Record chat credit deduction
-      await UnifiedCreditController.deductCredits(
-        parsedMessage?.uid,
-        UnifiedCreditController.getModelDeduction("ADSGPT-CHAT"),
-        {
-          model: "ADSGPT-CHAT",
-          service_type: "chat",
-          message_length: parsedMessage?.message?.length || 0,
-          session_id: parsedMessage?.sessionId,
-          chat_id: parsedMessage?.chatId,
-        },
-      );
+      // Settle the chat freeze. Receipt key is the chatId set in
+      // sockets/index.js chat handler. If no receipt (legacy chat), fall
+      // back to legacy deductCredits.
+      const reservationKey = parsedMessage?.chatId;
+      const chatCost = UnifiedCreditController.getModelDeduction("ADSGPT-TEXT");
+
+      if (reservationKey) {
+        const settleResult = await UnifiedCreditController.releasePartial(
+          reservationKey,
+          chatCost,
+        );
+        if (!settleResult.ok && settleResult.reason === "NO_RECEIPT" && chatCost > 0) {
+          await UnifiedCreditController.deductCredits(
+            parsedMessage?.uid,
+            chatCost,
+            {
+              model: "ADSGPT-CHAT",
+              service_type: "chat",
+              message_length: parsedMessage?.message?.length || 0,
+              session_id: parsedMessage?.sessionId,
+              chat_id: parsedMessage?.chatId,
+            },
+          );
+        }
+      } else if (chatCost > 0) {
+        await UnifiedCreditController.deductCredits(
+          parsedMessage?.uid,
+          chatCost,
+          {
+            model: "ADSGPT-CHAT",
+            service_type: "chat",
+            message_length: parsedMessage?.message?.length || 0,
+            session_id: parsedMessage?.sessionId,
+            chat_id: parsedMessage?.chatId,
+          },
+        );
+      }
 
       await emitCreditStatus(
         parsedMessage?.uid,

@@ -22,6 +22,9 @@ const GeneratedMediaController = require("./generatedMedia.controller");
 
 const getFileName = (extension) => `${Date.now()}${extension}`;
 
+const AI_ADS_REGEN_IMAGE_CREDIT =
+  parseFloat(process.env.AI_ADS_REGEN_IMAGE_CREDIT_DEDUCTION) || 2;
+
 const emitCreditStatus = async (userId) => {
   try {
     const creditStatus = await UnifiedCreditController.getCreditStatus(userId);
@@ -112,30 +115,68 @@ exports.generateVideo = async (req, res) => {
     // Calculate total required credits for the entire batch
     const totalRequiredCredits = numberOfVideos * videoMinCount;
 
-    // Check MongoDB if user has enough credits
-    const unifiedCheck = await UnifiedCreditController.checkCredits(
-      userId,
-      totalRequiredCredits,
-    );
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
-    // Total credits user has left
-    const userRemainingCredits = unifiedCheck.remainingCredits || 0;
 
     // * STEP 3: Permission logic based on remaining credits
-    if (unifiedCheck.isAllowed) {
-      // Create the record in MongoDB with 'pending' status first
-      // This is better because it allows us to:
-      // 1. Enforce sessionId uniqueness early
-      // 2. Track the request even if the Python API call fails
-      const videoData = {
-        userId: userId,
-        inputs: { ...inputs, watermark: plan == "8" ? true : false },
-        status: "pending",
-      };
+    // Create the record in MongoDB with 'pending' status first
+    // This is better because it allows us to:
+    // 1. Enforce sessionId uniqueness early
+    // 2. Track the request even if the Python API call fails
+    const videoData = {
+      userId: userId,
+      inputs: { ...inputs, watermark: plan == "8" ? true : false },
+      status: "pending",
+    };
 
-      const video = await VideoGeneration.create(videoData);
-      const videoId = video._id.toString();
+    const video = await VideoGeneration.create(videoData);
+    const videoId = video._id.toString();
 
+    console.log(
+      `[credits] generateVideo ENTER user=${userId} videoId=${videoId} ` +
+        `model=${selectedModel} duration=${inputs.duration} numVideos=${numberOfVideos} ` +
+        `totalRequired=${totalRequiredCredits}`,
+    );
+
+    // Freeze the full requested cost atomically (race-safe). Keyed by videoId
+    // so updateVideoResult can settle/release using the same key.
+    const freeze = await UnifiedCreditController.freezeCredits({
+      userId,
+      reservationKey: videoId,
+      amount: totalRequiredCredits,
+      meta: {
+        service_type: "ad_video",
+        model: selectedModel,
+        duration: inputs.duration,
+        numberOfVideos,
+      },
+    });
+
+    if (!freeze.ok) {
+      // Couldn't freeze — clean up the placeholder record and bail.
+      await VideoGeneration.deleteOne({ _id: videoId });
+
+      if (freeze.reason === "NO_BASE_PLAN") {
+        return res.status(403).json({
+          success: false,
+          error: "An active subscription plan is required to generate video.",
+        });
+      }
+      if (freeze.reason === "INSUFFICIENT") {
+        return res.status(402).json({
+          success: false,
+          error: "Insufficient credits",
+          required: totalRequiredCredits,
+          remaining: freeze.remaining,
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: "Could not reserve credits for this request. Please try again.",
+      });
+    }
+
+    {
+      // Freeze succeeded — proceed to Python.
       // * Send to python based on type
       const pythonPayload = {
         sessionId: videoId,
@@ -171,7 +212,8 @@ exports.generateVideo = async (req, res) => {
             err.message,
           );
 
-          // Delete the record since the job never reached python
+          // Python never accepted the job — refund the freeze and clean up.
+          await UnifiedCreditController.releaseCredits(videoId);
           await VideoGeneration.deleteOne({ _id: videoId });
 
           return res.status(500).json({
@@ -188,18 +230,6 @@ exports.generateVideo = async (req, res) => {
         success: true,
         message: "Video generation request submitted successfully",
         data: video,
-      });
-    } else if (userRemainingCredits >= videoMinCount) {
-      // Condition 2: User doesn't have enough for ALL videos, but could have made at least ONE video
-      return res.status(400).json({
-        success: false,
-        error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
-      });
-    } else {
-      // Condition 3: User doesn't even have enough for a single video
-      return res.status(403).json({
-        success: false,
-        error: "Not enough credits",
       });
     }
   } catch (err) {
@@ -253,7 +283,12 @@ exports.updateVideoResult = async (req, res) => {
     let finalStatus;
 
     if (videoStatus === 200) finalStatus = "completed";
-    if (videoStatus === 400 || videoStatus === 500 || videoStatus === 529)
+    if (
+      videoStatus === 400 ||
+      videoStatus === 429 ||
+      videoStatus === 500 ||
+      videoStatus === 529
+    )
       finalStatus = "failed";
 
     const updateQuery = {
@@ -271,20 +306,71 @@ exports.updateVideoResult = async (req, res) => {
       updateQuery.$set = { status: finalStatus };
     }
 
-    const video = await VideoGeneration.findOneAndUpdate(
-      { _id: sessionId },
-      updateQuery,
-      { new: true, lean: true },
+    console.log(
+      `[credits] updateVideoResult ENTER session=${sessionId} videoStatus=${videoStatus} model=${resultData?.model} duration=${resultData?.duration}`,
     );
 
-    if (!video) {
+    // Capture PRE-update status so we can detect duplicate callbacks from
+    // Python. If we used { new: true }, we couldn't tell whether THIS call
+    // flipped the record to terminal — and a second callback would silently
+    // double-charge via the NO_RECEIPT fallback to deductCredits.
+    const priorDoc = await VideoGeneration.findOneAndUpdate(
+      { _id: sessionId },
+      updateQuery,
+      { new: false, lean: true },
+    );
+
+    if (!priorDoc) {
+      console.warn(
+        `[credits] updateVideoResult 404 session=${sessionId} — no video record`,
+      );
       return res.status(404).json({
         success: false,
         error: "Video record not found",
       });
     }
 
-    // Deduct credits if video is completed
+    const alreadyTerminal =
+      priorDoc.status === "completed" || priorDoc.status === "failed";
+
+    // Reconstruct the post-update view for downstream code that emits to the
+    // socket. We don't re-query — the update has already happened, and the
+    // emit only needs the surface fields.
+    const video = {
+      ...priorDoc,
+      status: finalStatus || priorDoc.status,
+      results: [
+        ...(priorDoc.results || []),
+        {
+          ...resultData,
+          waterMarkUrl: watermark ? resultData?.watermarkUrl : "",
+          videoStatus,
+          error: resultData?.error || "",
+        },
+      ],
+    };
+
+    if (alreadyTerminal) {
+      console.warn(
+        `[credits] updateVideoResult DUPLICATE session=${sessionId} ` +
+          `prior_status=${priorDoc.status} new_videoStatus=${videoStatus} ` +
+          `— skipping credit work to avoid double-charge`,
+      );
+      if (global.io && videoStatus === 200) {
+        global.io.to(video?.userId).emit("videoCreated", {
+          _id: video._id,
+          video: {
+            ...video,
+            url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
+          },
+          userId: video?.userId,
+        });
+      }
+      return res.json({ success: true, data: video, duplicate: true });
+    }
+
+    // Settle the freeze on success; release it on failure.
+    // The reservation_key is the videoId (sessionId), set by generateVideo.
     if (videoStatus === 200) {
       const rawDuration = resultData?.duration || "0s";
       const durationInSeconds = parseInt(rawDuration.replace("s", ""), 10) || 0;
@@ -296,19 +382,27 @@ exports.updateVideoResult = async (req, res) => {
 
       const totalCreditsToDeduct = durationInSeconds * creditPerSecond;
 
-      await UnifiedCreditController.deductCredits(
-        userId,
+      // Keep `totalCreditsToDeduct` debited; refund anything the freeze held
+      // beyond that (e.g. user requested 30s, Python returned 20s).
+      const settleResult = await UnifiedCreditController.releasePartial(
+        sessionId,
         totalCreditsToDeduct,
-        {
-          model: resultData?.model,
-          service_type: "ad_video",
-          item_count: 1,
-          duration: durationInSeconds,
-          resolution: "standard",
-          session_id: sessionId,
-          chat_id: video._id.toString(),
-        },
       );
+      if (!settleResult.ok && settleResult.reason === "NO_RECEIPT") {
+        await UnifiedCreditController.deductCredits(
+          userId,
+          totalCreditsToDeduct,
+          {
+            model: resultData?.model,
+            service_type: "ad_video",
+            item_count: 1,
+            duration: durationInSeconds,
+            resolution: "standard",
+            session_id: sessionId,
+            chat_id: video._id.toString(),
+          },
+        );
+      }
 
       // Store in mongo for admin analytics and user history
       const actualVideoCost = modelPricingConfig.getVideoCost(
@@ -326,6 +420,12 @@ exports.updateVideoResult = async (req, res) => {
         cost: actualVideoCost,
         duration: durationInSeconds,
       });
+    } else {
+      // Any non-success videoStatus is terminal — the Joi schema only allows
+      // {200, 400, 429, 500, 529}, all of which are final outcomes. Refund
+      // the freeze in full. Leaving the receipt dangling would cause the
+      // sweep cron to refund a successful generation 60 minutes later.
+      await UnifiedCreditController.releaseCredits(sessionId);
     }
 
     // emit to frontend (using userId room so it works across all tabs/reconnections)
@@ -444,7 +544,7 @@ exports.getAllVideos = async (req, res) => {
 
     const filter = {
       userId: req.user.user_id,
-      // status: { $ne: "failed" },
+      status: { $ne: "copy" },
     };
 
     if (type) filter["inputs.type"] = type;
@@ -667,65 +767,63 @@ exports.generateImageAndScript = async (req, res) => {
     // Calculate total required credits for the entire batch
     const totalRequiredCredits = numberOfVideos * videoMinCount;
 
-    // Check MongoDB if user has enough credits
+    // NOTE: no freeze here. generateImageAndScript is only the preview step
+    // (generates image + script for user review) — the user hasn't committed
+    // to spending video credits yet. The freeze happens at generateAvatarVideo,
+    // which is the actual commit. This avoids leaked holds when users preview
+    // a script and walk away.
     const unifiedCheck = await UnifiedCreditController.checkCredits(
       userId,
       totalRequiredCredits,
     );
 
-    // Total credits user has left
     const userRemainingCredits = unifiedCheck.remainingCredits || 0;
 
-    // * STEP 3: Permission logic based on remaining credits
-    if (unifiedCheck.isAllowed) {
-      const video = await VideoGeneration.create({
-        userId,
-        inputs: value,
-        status: "pending",
-      });
-
-      const videoId = video._id.toString();
-
-      let avatarJson = null;
-      if (inputs.avatarId && inputs.avatarType === "ai_library") {
-        avatarJson = await Avatar.findById(inputs.avatarId).lean();
+    if (!unifiedCheck.isAllowed) {
+      if (userRemainingCredits >= videoMinCount) {
+        return res.status(400).json({
+          success: false,
+          error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
+        });
       }
-
-      const pythonPayload = {
-        sessionId: videoId,
-        inputs: {
-          ...inputs,
-          avatarJson,
-          images: inputs?.uploadedAvatars || [],
-        },
-        userId,
-        subscription: req.user?.userSubscriptionType,
-      };
-
-      // * Call Python API to generate image and script
-      await axios.post(
-        process.env.AVATAR_IMAGE_SCRIPT_PYTHON_API,
-        pythonPayload,
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "Script generation in progress",
-        data: video,
-      });
-    } else if (userRemainingCredits >= videoMinCount) {
-      // Condition 2: User doesn't have enough for ALL videos, but could have made at least ONE video
-      return res.status(400).json({
-        success: false,
-        error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
-      });
-    } else {
-      // Condition 3: User doesn't even have enough for a single video
-      return res.status(400).json({
-        success: false,
-        error: "Not enough credits",
-      });
+      return res.status(400).json({ success: false, error: "Not enough credits" });
     }
+
+    const video = await VideoGeneration.create({
+      userId,
+      inputs: value,
+      status: "pending",
+    });
+
+    const videoId = video._id.toString();
+
+    let avatarJson = null;
+    if (inputs.avatarId && inputs.avatarType === "ai_library") {
+      avatarJson = await Avatar.findById(inputs.avatarId).lean();
+    }
+
+    const pythonPayload = {
+      sessionId: videoId,
+      inputs: {
+        ...inputs,
+        avatarJson,
+        images: inputs?.uploadedAvatars || [],
+      },
+      userId,
+      subscription: req.user?.userSubscriptionType,
+    };
+
+    // * Call Python API to generate image and script
+    await axios.post(
+      process.env.AVATAR_IMAGE_SCRIPT_PYTHON_API,
+      pythonPayload,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Script generation in progress",
+      data: video,
+    });
   } catch (err) {
     console.error("Error in generateImageAndScript:", err);
 
@@ -1017,15 +1115,49 @@ exports.generateAvatarVideo = async (req, res) => {
     // Calculate total required credits for the entire batch
     const totalRequiredCredits = numberOfVideos * videoMinCount;
 
-    // Check MongoDB if user has enough credits
-    const unifiedCheck = await UnifiedCreditController.checkCredits(
-      userId,
-      totalRequiredCredits,
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+
+    console.log(
+      `[credits] generateAvatarVideo ENTER user=${userId} videoId=${id} ` +
+        `model=${selectedModel} duration=${inputs.duration} numVideos=${numberOfVideos} ` +
+        `totalRequired=${totalRequiredCredits}`,
     );
 
-    // Total credits user has left
-    const userRemainingCredits = unifiedCheck.remainingCredits || 0;
-    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+    // Atomic freeze — this is the commit step (generateImageAndScript was
+    // just preview). Keyed by the videoId so updateVideoResult settles/releases.
+    const freeze = await UnifiedCreditController.freezeCredits({
+      userId,
+      reservationKey: id,
+      amount: totalRequiredCredits,
+      meta: {
+        service_type: "ad_video",
+        model: selectedModel,
+        duration: inputs.duration,
+        numberOfVideos,
+        phase: "avatarVideo",
+      },
+    });
+
+    if (!freeze.ok) {
+      if (freeze.reason === "NO_BASE_PLAN") {
+        return res.status(403).json({
+          success: false,
+          error: "An active subscription plan is required.",
+        });
+      }
+      if (freeze.reason === "INSUFFICIENT") {
+        return res.status(402).json({
+          success: false,
+          error: "Insufficient credits",
+          required: totalRequiredCredits,
+          remaining: freeze.remaining,
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: "Could not reserve credits. Please try again.",
+      });
+    }
 
     // * STEP 2: Send to Python for video generation
     const pythonPayload = {
@@ -1040,7 +1172,7 @@ exports.generateAvatarVideo = async (req, res) => {
       watermark: plan == "8" ? true : false,
     };
 
-    if (unifiedCheck.isAllowed) {
+    try {
       const pythonResponse = await axios.post(
         process.env.AVATAR_PYTHON_API,
         pythonPayload,
@@ -1058,16 +1190,10 @@ exports.generateAvatarVideo = async (req, res) => {
           data: video,
         });
       }
-    } else if (userRemainingCredits >= videoMinCount) {
-      return res.status(400).json({
-        success: false,
-        error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
-      });
-    } else {
-      return res.status(403).json({
-        success: false,
-        error: "Not enough credits",
-      });
+    } catch (pythonErr) {
+      // Python never accepted the job → refund the freeze.
+      await UnifiedCreditController.releaseCredits(id);
+      throw pythonErr;
     }
   } catch (err) {
     console.error("Error in generateAvatarVideo:", err);
@@ -1334,24 +1460,78 @@ exports.regenerateScene = async (req, res) => {
       record.scenes?.length
         ? record.scenes
         : record.inputs?.scenes || [];
-    // Credit check (same formula as regular video types)
-    const durationSec = Number(String(inputs.duration).replace("s", "")) || 0;
-    const totalRequired =
-      durationSec * UnifiedCreditController.getModelDeduction(inputs.model) * (inputs.numberOfVideos || 1);
-    const unifiedCheck = await UnifiedCreditController.checkCredits(userId, totalRequired);
 
-    if (!unifiedCheck.isAllowed) {
-      const remaining = unifiedCheck.remainingCredits || 0;
-      if (remaining > 0) {
-        return res.status(400).json({
+    // ── Derive authoritative `deduct` flag per segment from the DB ─────────
+    // The frontend sends a `deduct` hint based on what it renders, but the DB
+    // is the source of truth. We OVERRIDE the frontend's claim with the DB
+    // state to prevent cheating in both directions:
+    //   - Frontend claims deduct:false on a scene that DOES have a
+    //     frameImageUrl → backend forces deduct:true (would-be cheat blocked).
+    //   - Frontend claims deduct:true on a scene that has NO frameImageUrl →
+    //     backend forces deduct:false (refunds an honest mistake; frontend
+    //     and backend should agree, this just makes the backend defensive).
+    const sceneBySegment = new Map(
+      (scenes || []).map((s) => {
+        const sceneObj = typeof s.toObject === "function" ? s.toObject() : s;
+        return [sceneObj.segmentNumber, sceneObj];
+      })
+    );
+    const validatedSegments = segments.map((seg) => {
+      const prior = sceneBySegment.get(seg.segmentNumber);
+      const hasPriorImage = !!prior?.frameImageUrl;
+      // Authoritative: deduct iff the DB shows a prior successful image.
+      return { ...seg, deduct: hasPriorImage };
+    });
+
+    // Upfront credit check — only segments that are (a) image-related and
+    // (b) validated-billable count toward credits required.
+    const billableSegments = validatedSegments.filter(
+      (seg) =>
+        (seg.regenerate === "image" || seg.regenerate === "both") &&
+        seg.deduct === true
+    );
+    const creditsNeeded = billableSegments.length * AI_ADS_REGEN_IMAGE_CREDIT;
+
+    // Atomic freeze for this regen request. updateSceneResult finds the
+    // receipt via meta.regenSessionId and settles with the actual successful
+    // billable count. The key embeds a timestamp+nonce so concurrent regens
+    // on the same session each get their own reservation (FIFO settle).
+    let regenReservationKey = null;
+    if (creditsNeeded > 0) {
+      regenReservationKey = `regen:${sessionId}:${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const freeze = await UnifiedCreditController.freezeCredits({
+        userId,
+        reservationKey: regenReservationKey,
+        amount: creditsNeeded,
+        meta: {
+          service_type: "ai_ads_scene_regen",
+          regenSessionId: sessionId,
+          perScene: AI_ADS_REGEN_IMAGE_CREDIT,
+          expectedBillable: billableSegments.length,
+        },
+      });
+      if (!freeze.ok) {
+        if (freeze.reason === "NO_BASE_PLAN") {
+          return res.status(403).json({
+            success: false,
+            error: "An active subscription plan is required.",
+          });
+        }
+        if (freeze.reason === "INSUFFICIENT") {
+          return res.status(400).json({
+            success: false,
+            error: `Not enough credits. You need ${creditsNeeded} but only have ${freeze.remaining}.`,
+          });
+        }
+        return res.status(503).json({
           success: false,
-          error: `Not enough credits. You need ${totalRequired} but only have ${remaining}.`,
+          error: "Could not reserve credits. Please try again.",
         });
       }
-      return res.status(403).json({ success: false, error: "Not enough credits" });
     }
 
-    await VideoGeneration.findByIdAndUpdate(sessionId, { status: "processing" });
 
     // Match generateScene python payload formatting
     const {
@@ -1386,7 +1566,11 @@ exports.regenerateScene = async (req, res) => {
     const pythonPayload = {
       sessionId,
       userId,
-      segments,
+      // Use validatedSegments so Python receives the corrected deduct flag.
+      // Python must echo each segment's `deduct` back in the callback per
+      // segment (under image[*].deduct on success, image[*].deduct on
+      // partial_error). See updateSceneResult for how it's consumed.
+      segments: validatedSegments,
       inputs: pythonInputs,
       scenes: scenesPayload,
     };
@@ -1402,18 +1586,45 @@ exports.regenerateScene = async (req, res) => {
           status: "pending",
         }).catch(() => { });
 
+        // Python rejected the job → refund the freeze immediately.
+        if (regenReservationKey) {
+          await UnifiedCreditController.releaseCredits(regenReservationKey).catch(
+            (e) =>
+              logger.error(
+                `[AI Ads] regen freeze release failed for ${regenReservationKey}: ${e.message}`,
+              ),
+          );
+        }
+
         // Mark only the segments that were being regenerated as failed.
         // The rest of the session is untouched — frontend keeps showing all
         // other scenes intact, and only the failed segments show Retry.
-        if (Array.isArray(segments)) {
-          for (const seg of segments) {
+        // Two outcomes per failed segment:
+        //   (a) Scene HAD a prior image (validatedSegments[*].deduct === true)
+        //       → preserve old image; emit aiAdsSceneRegenFailed for toast.
+        //   (b) Scene had NO prior image → mark imageFailed; emit
+        //       aiAdsScenesFailed/sceneImageFailed so failure card renders.
+        if (Array.isArray(validatedSegments)) {
+          for (const seg of validatedSegments) {
             const segNum = seg?.segmentNumber;
             if (segNum == null) continue;
-            // Only mark imageFailed if the regenerate type was image-related.
-            // Text-only regen failures don't currently have a scene-level flag,
-            // so they fall back to the toast via the action's catch.
             const regenType = seg?.regenerate;
-            if (regenType === "image" || regenType === "both") {
+            const isImageRelated = regenType === "image" || regenType === "both";
+
+            if (isImageRelated && seg.deduct === true) {
+              // (a) Preserve old image. No DB write to imageFailed.
+              if (global.io) {
+                global.io.to(userId).emit("aiAdsSceneRegenFailed", {
+                  sessionId,
+                  segmentNumber: segNum,
+                  error: pythonError,
+                });
+              }
+              continue;
+            }
+
+            if (isImageRelated) {
+              // (b) Scene never had a successful image — mark imageFailed.
               await VideoGeneration.updateOne(
                 { _id: sessionId, "scenes.segmentNumber": segNum },
                 {
@@ -1506,6 +1717,81 @@ exports.updateSceneResult = async (req, res) => {
 
     // ───── Regenerate path (smart merge per-scene, per-type) ────────────────
     if (isRegenerate === true) {
+      // Build prior-state lookup BEFORE any merge so we can decide:
+      //   - per-segment credit deduction (echoed `deduct` from Python)
+      //   - regen-failure UX: preserve old image vs mark as failed
+      const existingScenes = record.scenes || [];
+      const priorSceneByNum = new Map();
+      existingScenes.forEach((s) => {
+        const sceneObj = typeof s.toObject === "function" ? s.toObject() : s;
+        priorSceneByNum.set(sceneObj.segmentNumber, sceneObj);
+      });
+
+      // ── Regen failure guard ──────────────────────────────────────────────
+      // Python reports the regen failed for one or more segments. Two
+      // outcomes per segment:
+      //   (a) Scene HAD a prior frameImageUrl → preserve the old image in
+      //       DB, do NOT set imageFailed; emit aiAdsSceneRegenFailed so the
+      //       frontend can show a toast without flipping the card to the
+      //       error view.
+      //   (b) Scene had NO prior image (initial-failure recovery) → mark
+      //       imageFailed and emit aiAdsScenesFailed/sceneImageFailed so the
+      //       frontend keeps the failure card visible with a Retry button.
+      const regenFailed =
+        type === "error" || success === false || status === 400;
+      if (regenFailed) {
+        const failedSegNums = Array.isArray(image)
+          ? image.map((img) => img?.segmentNumber).filter((n) => n != null)
+          : [];
+
+        if (failedSegNums.length === 0) {
+          // No per-segment info — treat as session-level regen failure.
+          if (global.io) {
+            global.io.to(record.userId).emit("aiAdsSceneRegenFailed", {
+              sessionId,
+              error: error || "Regeneration failed",
+            });
+          }
+          return res.json({ success: true, message: "Regen failure recorded" });
+        }
+
+        for (const segNum of failedSegNums) {
+          const prior = priorSceneByNum.get(segNum);
+          const hadPriorImage = !!prior?.frameImageUrl;
+
+          if (hadPriorImage) {
+            // (a) Preserve old image; no DB write to imageFailed.
+            if (global.io) {
+              global.io.to(record.userId).emit("aiAdsSceneRegenFailed", {
+                sessionId,
+                segmentNumber: segNum,
+                error: error || "Failed to regenerate this scene",
+              });
+            }
+          } else {
+            // (b) Scene never had a working image — mark imageFailed.
+            await VideoGeneration.updateOne(
+              { _id: sessionId, "scenes.segmentNumber": segNum },
+              {
+                $set: {
+                  "scenes.$.imageFailed": true,
+                  "scenes.$.imageError": error || "Image generation failed",
+                },
+              }
+            );
+            if (global.io) {
+              global.io.to(record.userId).emit("aiAdsScenesFailed", {
+                sessionId,
+                event: "sceneImageFailed",
+                segmentNumber: segNum,
+                error: error || "Image generation failed for this scene",
+              });
+            }
+          }
+        }
+        return res.json({ success: true, message: "Regen failure recorded" });
+      }
+
       const segmentMap = new Map();
 
       if (Array.isArray(text)) {
@@ -1528,7 +1814,6 @@ exports.updateSceneResult = async (req, res) => {
         (a, b) => a.segmentNumber - b.segmentNumber
       );
 
-      const existingScenes = record.scenes || [];
       const updatedScenes = existingScenes.map((existingScene) => {
         const existing = typeof existingScene.toObject === "function"
           ? existingScene.toObject()
@@ -1565,9 +1850,68 @@ exports.updateSceneResult = async (req, res) => {
 
       const updatedRecord = await VideoGeneration.findByIdAndUpdate(
         sessionId,
-        { $set: { scenes: updatedScenes, status: "processing" } },
+        { $set: { scenes: updatedScenes, status: "pending" } },
         { new: true }
       );
+
+      // Per-segment credit deduction.
+      //   - Skip if Python returned no new frameImageUrl for the segment.
+      //   - Trust `deduct` echoed by Python (validated at regenerateScene
+      //     against DB). Fallback: if `deduct` is missing from the echo,
+      //     derive from the prior DB state (hadPriorImage → deductible).
+      let billableCount = 0;
+      const billingTrace = [];
+      if (Array.isArray(image)) {
+        for (const img of image) {
+          if (!img || !img.frameImageUrl) {
+            billingTrace.push({ seg: img?.segmentNumber, decision: "skip:no-new-url" });
+            continue;
+          }
+          const hadPriorImage = !!priorSceneByNum.get(img.segmentNumber)?.frameImageUrl;
+          const shouldDeduct =
+            img.deduct === true ||
+            (img.deduct === undefined && hadPriorImage);
+          if (!shouldDeduct) {
+            billingTrace.push({ seg: img.segmentNumber, decision: "skip:free-retry" });
+            continue;
+          }
+          billingTrace.push({ seg: img.segmentNumber, decision: "billable" });
+          billableCount += 1;
+        }
+      }
+      logger.info(
+        `[AI Ads] Regen ${sessionId} billing: ${JSON.stringify(billingTrace)}, total=${billableCount}`
+      );
+
+      // Settle the regen freeze: the oldest reservation for this session
+      // gets `billableCount × AI_ADS_REGEN_IMAGE_CREDIT` debited; the rest of
+      // its hold is refunded (covers partial-failure refunds for free).
+      // If no receipt exists (legacy in-flight regen), fall back to deduct.
+      try {
+        const actualCharge = billableCount * AI_ADS_REGEN_IMAGE_CREDIT;
+        const settleResult = await UnifiedCreditController.settleByMeta(
+          { "meta.regenSessionId": sessionId },
+          actualCharge,
+        );
+        if (!settleResult.ok && settleResult.reason === "NO_RECEIPT") {
+          if (billableCount > 0) {
+            await UnifiedCreditController.deductCredits(
+              record.userId,
+              actualCharge,
+              {
+                model: record.inputs?.model,
+                service_type: "ai_ads_scene_regen_image",
+                session_id: sessionId,
+              },
+            );
+          }
+        }
+        emitCreditStatus(record.userId).catch(() => {});
+      } catch (deductErr) {
+        logger.error(
+          `[AI Ads] regenerate credit settle failed for ${sessionId}: ${deductErr.message}`
+        );
+      }
 
       if (global.io) {
         global.io.to(record.userId).emit("aiAdsScenesReady", {
@@ -1588,6 +1932,11 @@ exports.updateSceneResult = async (req, res) => {
       (success === false || status === 400);
     if (isFullCrash) {
       await VideoGeneration.findByIdAndUpdate(sessionId, { status: "failed" });
+      // Refund every active regen freeze for this session — no scenes
+      // succeeded so all reserved credits are returned in full.
+      await UnifiedCreditController.releaseByMeta({
+        "meta.regenSessionId": sessionId,
+      });
       if (global.io) {
         global.io.to(record.userId).emit("aiAdsScenesFailed", {
           ...req.body,
@@ -1640,7 +1989,7 @@ exports.updateSceneResult = async (req, res) => {
         scenes,
         totalSegments: totalSegments || scenes.length,
         totalDuration: totalDuration || record.totalDuration,
-        status: "processing",
+        status: "pending",
       };
       if (characterGender) {
         textUpdate["inputs.characterGender"] = characterGender;
@@ -1689,9 +2038,6 @@ exports.updateSceneResult = async (req, res) => {
         }
       }
 
-      if (isComplete) {
-        await VideoGeneration.findByIdAndUpdate(sessionId, { status: "completed" });
-      }
       return res.json({ success: true, message: `Image ${imageStatus || "patch"} saved` });
     }
 
@@ -1737,12 +2083,31 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       `[AI Ads] Received video callback for sessionId ${sessionId}: videoStatus=${videoStatus}`
     );
 
+    console.log(
+      `[credits] updateAiAdsVideoResult ENTER session=${sessionId} videoStatus=${videoStatus}`,
+    );
+
     const record = await VideoGeneration.findOne({
       _id: sessionId,
       "inputs.type": "ai_ads",
     });
     if (!record) {
+      console.warn(
+        `[credits] updateAiAdsVideoResult 404 session=${sessionId} — no AI Ads record`,
+      );
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    }
+
+    // Duplicate-callback guard. If the record is already in a terminal state,
+    // a prior callback already settled or released the freeze. Running again
+    // would NO_RECEIPT-fallthrough into deductCredits and double-charge.
+    if (record.status === "completed" || record.status === "failed") {
+      console.warn(
+        `[credits] updateAiAdsVideoResult DUPLICATE session=${sessionId} ` +
+          `prior_status=${record.status} new_videoStatus=${videoStatus} ` +
+          `— skipping credit work`,
+      );
+      return res.json({ success: true, duplicate: true });
     }
 
     // Resolve fields — use Python body first, fall back to DB record
@@ -1778,18 +2143,25 @@ exports.updateAiAdsVideoResult = async (req, res) => {
         { new: true }
       );
 
-      // Deduct credits
+      // Settle the freeze: keep the cost of the actual delivered duration,
+      // refund the rest (e.g. Python returned a shorter clip than reserved).
       const creditPerSecond = UnifiedCreditController.getModelDeduction(model);
       const totalCreditsToDeduct = durationInSeconds * creditPerSecond;
 
-      await UnifiedCreditController.deductCredits(userId, totalCreditsToDeduct, {
-        model,
-        service_type: "ai_ads",
-        duration: durationInSeconds,
-        resolution: "standard",
-        session_id: sessionId,
-        chat_id: record._id.toString(),
-      });
+      const settleResult = await UnifiedCreditController.releasePartial(
+        sessionId,
+        totalCreditsToDeduct,
+      );
+      if (!settleResult.ok && settleResult.reason === "NO_RECEIPT") {
+        await UnifiedCreditController.deductCredits(userId, totalCreditsToDeduct, {
+          model,
+          service_type: "ai_ads",
+          duration: durationInSeconds,
+          resolution: "standard",
+          session_id: sessionId,
+          chat_id: record._id.toString(),
+        });
+      }
 
       // Save to generated media history
       const actualCost = modelPricingConfig.getVideoCost(model, durationInSeconds);
@@ -1813,6 +2185,8 @@ exports.updateAiAdsVideoResult = async (req, res) => {
 
       emitCreditStatus(userId);
     } else {
+      // Failure path → refund the freeze fully. Safe no-op if already released.
+      await UnifiedCreditController.releaseCredits(sessionId);
       // Error cases: 400 (safety), 429 (voice gen failed), 500 (general), 529 (overload)
       const isVoiceFailure = videoStatus === 429;
       const failureMessage = isVoiceFailure
@@ -1866,23 +2240,38 @@ exports.generateAiAdsVideo = async (req, res) => {
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
     }
 
-    // Credit check (same formula as all other video types)
+    // Atomic freeze — this is the commit (generateScene was just preview).
+    // Keyed by sessionId; updateAiAdsVideoResult settles/releases.
     const durationSec = Number(String(record.inputs.duration).replace("s", "")) || 0;
     const totalRequired =
       durationSec *
       UnifiedCreditController.getModelDeduction(record.inputs.model) *
       (record.inputs.numberOfVideos || 1);
-    const creditCheck = await UnifiedCreditController.checkCredits(userId, totalRequired);
 
-    if (!creditCheck.isAllowed) {
-      const remaining = creditCheck.remainingCredits || 0;
-      if (remaining > 0) {
-        return res.status(400).json({
+    const freeze = await UnifiedCreditController.freezeCredits({
+      userId,
+      reservationKey: sessionId,
+      amount: totalRequired,
+      meta: { service_type: "ai_ads", model: record.inputs.model },
+    });
+
+    if (!freeze.ok) {
+      if (freeze.reason === "NO_BASE_PLAN") {
+        return res.status(403).json({
           success: false,
-          error: `Not enough credits. You need ${totalRequired} but only have ${remaining}.`,
+          error: "An active subscription plan is required.",
         });
       }
-      return res.status(403).json({ success: false, error: "Not enough credits" });
+      if (freeze.reason === "INSUFFICIENT") {
+        return res.status(400).json({
+          success: false,
+          error: `Not enough credits. You need ${totalRequired} but only have ${freeze.remaining}.`,
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: "Could not reserve credits. Please try again.",
+      });
     }
 
     await VideoGeneration.findByIdAndUpdate(sessionId, { status: "processing" });
@@ -1905,9 +2294,39 @@ exports.generateAiAdsVideo = async (req, res) => {
       ...(productDescription ? { description: productDescription } : {}),
     };
 
-    // Build flat scenes array from DB record
+    // Script-override map from the request body. Frontend sends the user's
+    // edited scripts (per scene) here. Keyed by segmentNumber.
+    const scriptOverrideBySegment = new Map();
+    if (Array.isArray(req.body?.scenes)) {
+      for (const s of req.body.scenes) {
+        if (s?.segmentNumber != null && Array.isArray(s.script)) {
+          scriptOverrideBySegment.set(s.segmentNumber, s.script);
+        }
+      }
+    }
+
+    // Persist the edited scripts to DB FIRST so the record matches what gets
+    // sent to Python. await so any read after this point sees fresh data.
+    if (scriptOverrideBySegment.size > 0) {
+      await Promise.all(
+        Array.from(scriptOverrideBySegment.entries()).map(([segNum, script]) =>
+          VideoGeneration.updateOne(
+            { _id: sessionId, "scenes.segmentNumber": segNum },
+            { $set: { "scenes.$.script": script } }
+          ).catch((err) => {
+            logger.error(
+              `[AI Ads] failed to persist script override for ${sessionId} seg ${segNum}: ${err.message}`
+            );
+          })
+        )
+      );
+    }
+
+    // Build flat scenes array — use override script if present, else the
+    // (now-already-saved) DB script.
     const scenesForPython = (record.scenes || dbScenes || []).map(s => {
       const scene = typeof s.toObject === "function" ? s.toObject() : { ...s };
+      const overrideScript = scriptOverrideBySegment.get(scene.segmentNumber);
       return {
         segmentNumber: scene.segmentNumber,
         goal: scene.goal,
@@ -1917,7 +2336,7 @@ exports.generateAiAdsVideo = async (req, res) => {
         audioDirection: scene.audioDirection,
         tone: scene.tone,
         indianAccent: scene.indianAccent,
-        script: scene.script,
+        script: overrideScript || scene.script,
       };
     });
 
@@ -1941,6 +2360,10 @@ exports.generateAiAdsVideo = async (req, res) => {
         VideoGeneration.findByIdAndUpdate(sessionId, {
           status: "failed",
         }).catch(() => { });
+        // Python rejected — refund the freeze so credits aren't stuck.
+        UnifiedCreditController.releaseCredits(sessionId).catch((e) =>
+          logger.error(`[AI Ads] freeze release failed for ${sessionId}: ${e.message}`),
+        );
         if (global.io) {
           global.io.to(userId).emit("aiAdsVideoFailed", { sessionId, error: err.message });
         }
@@ -1954,6 +2377,79 @@ exports.generateAiAdsVideo = async (req, res) => {
   } catch (err) {
     console.error("Error in generateAiAdsVideo:", err);
     logger.error(`[AI Ads] generateAiAdsVideo error: ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- 3b. copyAiAdsVideo (Recreate — clone an existing AI Ads session) -------------
+// Clones an existing AI Ads VideoGeneration record into a brand-new document so
+// "Recreate" produces a different _id even when the user does not edit the form.
+// The clone carries over `inputs`, `scenes`, `totalSegments`, `totalDuration`,
+// and `watermark`, but `results` and `videoSegments` start empty. Status is
+// set to "copy" so the clone is hidden from getAllVideos (My Space) until the
+// user actually triggers generation via /ai-ads/generate-video/:sessionId,
+// which flips the status to "processing".
+exports.copyAiAdsVideo = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Step 1c — Copy an existing AI Ads session for Recreate'
+       #swagger.description = 'Creates a new VideoGeneration record by cloning an existing AI Ads session (inputs + scenes + scripts). The new record has status="copy" and is hidden from My Space until the user calls /ai-ads/generate-video/:sessionId on it. Use this so the Recreate flow always produces a new _id even when the form is unchanged.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['sessionId'] = { in: 'path', required: true, schema: { type: 'string' }, description: 'Session ID of the AI Ads record to copy' }
+    */
+    const { sessionId } = req.params;
+    const userId = req.user.user_id;
+
+    const original = await VideoGeneration.findOne({
+      _id: sessionId,
+      userId,
+      "inputs.type": "ai_ads",
+    }).lean();
+
+    if (!original) {
+      return res.status(404).json({
+        success: false,
+        error: "AI Ads session not found",
+      });
+    }
+
+    // Strip Mongo internals so we can re-create cleanly.
+    const {
+      _id,
+      createdAt,
+      updatedAt,
+      __v,
+      results,
+      videoSegments,
+      generatedImage,
+      generatedScript,
+      promptPercentage,
+      status,
+      ...rest
+    } = original;
+
+    const copyData = {
+      ...rest,
+      userId,
+      status: "copy",
+      results: [],
+      videoSegments: [],
+      generatedImage: null,
+      generatedScript: null,
+      promptPercentage: 0,
+    };
+
+    const copy = await VideoGeneration.create(copyData);
+
+    return res.status(200).json({
+      success: true,
+      message: "AI Ads session copied. Use the new sessionId for /ai-ads/generate-video.",
+      sessionId: copy._id.toString(),
+      data: copy,
+    });
+  } catch (err) {
+    console.error("Error in copyAiAdsVideo:", err);
+    logger.error(`[AI Ads] copyAiAdsVideo error: ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

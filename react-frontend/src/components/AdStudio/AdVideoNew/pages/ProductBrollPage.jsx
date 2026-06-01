@@ -676,11 +676,17 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
             const enough = availableCredits >= est;
             return (
               <div className="flex items-center gap-2">
-                <ShadcnTooltip label={enough ? `Will use : ${est} credits, ${availableCredits - est} left after` : `Not enough credits — need ${est}, you have ${availableCredits}`}>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${enough ? 'bg-white/20 text-white/90' : 'bg-red-500 text-white'}`}>
-                    ~{est} credits
+                {enough ? (
+                  <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
+                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white/90">
+                      ~{est} credits
+                    </span>
+                  </ShadcnTooltip>
+                ) : (
+                  <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                    Not enough credits — need {est}, you have {availableCredits}
                   </span>
-                </ShadcnTooltip>
+                )}
                 <button
                   disabled={isLoading || !enough}
                   onClick={handleGenerate}

@@ -67,6 +67,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [imageOrientation, setImageOrientation] = useState(null); // 'portrait', 'landscape', 'square'
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [urlError, setUrlError] = useState('');
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -297,6 +298,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
   const handleNext = async () => {
     if (!website || isAnalyzing) return;
 
+    setUrlError('');
     setIsAnalyzing(true);
     try {
       const response = await analazeDomain(website).catch((error) => {
@@ -319,8 +321,13 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
       }
       setStep(2);
     } catch (error) {
-      console.error('Error in handleNext:', error);
-      setStep(2); // still proceed on any other error
+      const detail = error?.response?.data?.detail;
+      if (detail) {
+        setUrlError(detail);
+      } else {
+        console.error('Error in handleNext:', error);
+        setStep(2); // still proceed on any other error
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -488,14 +495,19 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 type="text"
                 placeholder="Enter your website..."
                 value={website}
-                onChange={(e) => setWebsite(e.target.value)}
+                onChange={(e) => { setWebsite(e.target.value); setUrlError(''); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleNext();
                 }}
-                className="w-full rounded-full border border-white/10 bg-white/[0.03] px-6 py-4 text-sm text-white shadow-inner transition-all placeholder:text-white/20 focus:ring-1 focus:ring-white/20 focus:outline-none"
+                className={`w-full rounded-full border bg-white/[0.03] px-6 py-4 text-sm text-white shadow-inner transition-all placeholder:text-white/20 focus:ring-1 focus:outline-none ${
+                  urlError
+                    ? 'border-red-500 focus:ring-red-500/30'
+                    : 'border-white/10 focus:ring-white/20'
+                }`}
               />
               <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-white/20" />
             </div>
+            {urlError && <p className="mt-1 text-xs text-red-400">{urlError}</p>}
           </div>
 
           {/* Footer Buttons */}
@@ -862,11 +874,17 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
               const enough = availableCredits >= est;
               return (
                 <>
-                  <ShadcnTooltip label={enough ? `Will use : ${est} credits, ${availableCredits - est} left after` : `Not enough credits — need ${est}, you have ${availableCredits}`}>
-                    <span className={`rounded-full px-6 py-2 text-xs 2xl:text-sm font-medium ${enough ? 'bg-white/20 text-white/90' : 'bg-red-500 text-white'}`}>
-                      ~{est} credits
+                  {enough ? (
+                    <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
+                      <span className="rounded-full bg-white/20 px-6 py-2 text-xs font-medium text-white/90 2xl:text-sm">
+                        ~{est} credits
+                      </span>
+                    </ShadcnTooltip>
+                  ) : (
+                    <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                      Not enough credits — need {est}, you have {availableCredits}
                     </span>
-                  </ShadcnTooltip>
+                  )}
                   <button
                     disabled={isLoading || !enough}
                     onClick={handleGenerate}

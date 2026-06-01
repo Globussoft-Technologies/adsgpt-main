@@ -216,7 +216,7 @@ const MODEL_REGISTRY = [
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
-    enabled: true,
+    enabled: false,
   },
   {
     canonicalKey: "gemini-3-pro-image-preview",
@@ -228,7 +228,7 @@ const MODEL_REGISTRY = [
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
-    enabled: true,
+    enabled: false,
   },
   {
     canonicalKey: "gpt-image-1.5",
@@ -240,7 +240,7 @@ const MODEL_REGISTRY = [
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
-    enabled: true,
+    enabled: false,
   },
   {
     canonicalKey: "gpt-image-2",
@@ -264,7 +264,7 @@ const MODEL_REGISTRY = [
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
-    enabled: true,
+    enabled: false,
   },
 ];
 

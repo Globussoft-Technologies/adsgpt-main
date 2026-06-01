@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -11,6 +11,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useDispatch, useSelector } from 'react-redux';
+import { toast } from 'react-toastify';
 import {
   resetAdFactory,
   resetNodeStatuses,
@@ -23,6 +24,29 @@ import {
 import { getSocket } from '@/store/reducers/socket/socketSlice';
 import NodeModal from './NodeModal';
 import AdFactoryStepCard from './Cards/AdFactoryStepCard';
+import { ManualGroupNode, AutoGroupNode } from './Cards/PipelineGroupNode';
+import AutomationActiveNode from './Automation/AutomationActiveNode';
+import AutomationHistoryPanel from './Automation/AutomationHistoryPanel';
+import AutomationStopConfirm from './Automation/AutomationStopConfirm';
+import PublishedAdsModal from './Automation/PublishedAdsModal';
+import {
+  selectIsAutomationActive,
+  selectAutomationEntry,
+  selectHistoryOpenFor,
+  selectStopConfirmFor,
+  selectPublishedAdsOpenFor,
+  openAutomationHistory,
+  openAutomationStopConfirm,
+  openPublishedAds,
+} from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import { AUTOMATION_STATUS } from '@/store/reducers/adFactoryAutomation/constants';
+import {
+  fetchAutomation,
+  fetchAutomationStats,
+  pauseAutomation,
+  resumeAutomation,
+} from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
+import { AnimatePresence } from 'framer-motion';
 import AdsDialogLayout from './NodeForms/AdsDialogLayout';
 import FlowChartEffectBg from '@/assets/layouts/ad-factory/flow-chart-bg-layer.svg';
 import BrandInfoIcon from '@/assets/layouts/ad-factory/flow-chart/brand-info.svg';
@@ -47,9 +71,63 @@ import {
   checkFbUser,
   checkGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 const nodeTypes = {
   customNode: AdFactoryStepCard,
+  automationActiveNode: AutomationActiveNode,
+  manualGroupNode: ManualGroupNode,
+  autoGroupNode: AutoGroupNode,
+};
+
+// After Services the canvas branches into two collapsible containers. The
+// manual sub-pipeline (image gen / text gen / prepare / post ad) and the
+// automation sub-pipeline (active stat card + result) render *inside* their
+// respective group container when expanded, via ReactFlow's parentId.
+const MANUAL_GROUP_ID = 'manual-group';
+const AUTO_GROUP_ID = 'auto-group';
+// Manual sits upper-right, auto lower-right of the trunk. Y positions leave
+// enough room for the manual container to expand downwards (height 500)
+// without colliding with the collapsed auto card below.
+const MANUAL_GROUP_POSITION = { x: 700, y: 60 };
+const AUTO_GROUP_POSITION = { x: 700, y: 600 };
+
+// FlowCardArray ids that belong inside the manual group container. When the
+// manual group is expanded they are re-emitted as ReactFlow nodes with
+// `parentId: MANUAL_GROUP_ID`, positioned in a fan-in layout (image + text
+// on the left merging into preview in the middle, then post-ad on the
+// right) that mirrors the original pre-container canvas arrangement.
+const INNER_MANUAL_NODE_IDS = ['image-generation', 'text-generation', 'preview', 'post-ad'];
+
+// Container dimensions when expanded — wide enough to host three w-80
+// columns (image / preview / post-ad) and tall enough for image + text to
+// stack vertically on the left side.
+const MANUAL_GROUP_EXPANDED_SIZE = { width: 1080, height: 500 };
+
+// Positions of each child relative to the manual group's top-left corner.
+// Fan-in: image (top-left) + text (bottom-left) → preview (middle, vertically
+// centred between them) → post-ad (right of preview).
+const INNER_MANUAL_POSITIONS = {
+  'image-generation': { x: 20, y: 70 },
+  'text-generation': { x: 20, y: 280 },
+  preview: { x: 380, y: 170 },
+  'post-ad': { x: 740, y: 170 },
+};
+
+// Synthetic node ids for the auto sub-pipeline. These don't live in
+// FlowCardArray — they are constructed inline in generateNodes when the
+// auto group is expanded.
+const AUTOMATION_ACTIVE_NODE_ID = 'automation-active';
+const AUTOMATION_RESULT_NODE_ID = 'automation-result';
+
+// Auto container — narrower than manual since it only hosts two w-80 cards
+// laid out horizontally (active stat card → result preview). Sized with a
+// bit of breathing room around the cards rather than tightly hugging them.
+const AUTO_GROUP_EXPANDED_SIZE = { width: 900, height: 320 };
+
+const INNER_AUTO_POSITIONS = {
+  [AUTOMATION_ACTIVE_NODE_ID]: { x: 30, y: 80 },
+  [AUTOMATION_RESULT_NODE_ID]: { x: 510, y: 80 },
 };
 
 const FlowCardArray = [
@@ -183,6 +261,13 @@ const FlowCardArray = [
 export default function AdFactoryWorkflowDarkReal() {
   const [rfInstance, setRfInstance] = useState(null);
   const [showGeneratingLoader, setShowGeneratingLoader] = useState(false);
+  // Expand/collapse state for the two pipeline group containers. Both can be
+  // open simultaneously (decided in the design forks). Chunk 4 wires
+  // autoExpanded the same way.
+  const [manualExpanded, setManualExpanded] = useState(false);
+  const [autoExpanded, setAutoExpanded] = useState(false);
+  const toggleManualExpanded = useCallback(() => setManualExpanded((v) => !v), []);
+  const toggleAutoExpanded = useCallback(() => setAutoExpanded((v) => !v), []);
   const [searchParams] = useSearchParams();
   const queryCampaignId = searchParams?.get?.('campaignId');
   const { userData } = useSelector((state) => state?.socket) || {};
@@ -210,6 +295,18 @@ export default function AdFactoryWorkflowDarkReal() {
     loading,
     results,
   } = useSelector((state) => state.adFactoryNew);
+
+  // Automation lifecycle — drives the auto group's active state + the live
+  // AutomationActiveNode shown inside the expanded auto container.
+  const isAutomationActive = useSelector((state) =>
+    selectIsAutomationActive(state, queryCampaignId)
+  );
+  const automationEntry = useSelector((state) =>
+    selectAutomationEntry(state, queryCampaignId)
+  );
+  const automationHistoryOpen = useSelector(selectHistoryOpenFor) === queryCampaignId;
+  const automationStopConfirmOpen = useSelector(selectStopConfirmFor) === queryCampaignId;
+  const publishedAdsOpen = useSelector(selectPublishedAdsOpenFor) === queryCampaignId;
   // console.log("results",results)
 
   const hasImageVersions = results?.image?.some((img) => img?.status === 200);
@@ -228,6 +325,72 @@ export default function AdFactoryWorkflowDarkReal() {
   );
   // console.log("distribution",distribution)
 
+  // ---------------------------------------------------------------------------
+  // Auto-pause when Meta is removed from the Platforms node.
+  //
+  // The automation requires Meta in distribution.platforms to fire — the same
+  // precondition that gates the Schedule mode in ServicesForm. When the user
+  // genuinely removes Meta while an automation is ACTIVE, we silently pause
+  // it on the backend (POST /jobs/:id/pause). The entry is preserved with
+  // status=paused so re-adding Meta later surfaces it with the original
+  // config intact.
+  //
+  // Important: this must only fire on a transition (hasMeta was true, now
+  // false) — NOT on initial mount when distribution hasn't loaded yet.
+  // fetchAutomation can resolve before fetchCampaignById, so on a refresh
+  // the slice briefly looks like "active automation + no Meta in platforms"
+  // even though the campaign genuinely has Meta. previousHasMetaRef tracks
+  // the last value we saw so we can distinguish "Meta was removed" from
+  // "distribution hasn't been hydrated yet".
+  //
+  // null = never seen distribution.platforms in a loaded state.
+  // ---------------------------------------------------------------------------
+  const previousHasMetaRef = React.useRef(null);
+  React.useEffect(() => {
+    // Don't make a decision until distribution.platforms is actually defined.
+    // (undefined → still hydrating; [] → user explicitly cleared platforms.)
+    if (!Array.isArray(distribution?.platforms)) return;
+
+    const hasMeta = selectedPlatforms.includes('meta');
+    const previousHasMeta = previousHasMetaRef.current;
+    previousHasMetaRef.current = hasMeta;
+
+    // First time we've seen distribution loaded — just record state.
+    if (previousHasMeta === null) return;
+
+    // Only react to a true → false transition (genuine user removal).
+    if (!previousHasMeta || hasMeta) return;
+
+    // Only pause if the automation is currently ACTIVE — paused / completed
+    // / failed entries are left alone (the dormant card handles paused).
+    if (automationEntry?.status !== AUTOMATION_STATUS.ACTIVE) return;
+
+    dispatch(pauseAutomation(queryCampaignId)).then((res) => {
+      if (pauseAutomation.fulfilled.match(res)) {
+        toast.info('Automation paused — Meta was removed from platforms');
+      }
+    });
+  }, [
+    distribution?.platforms,
+    selectedPlatforms,
+    automationEntry?.status,
+    queryCampaignId,
+    dispatch,
+  ]);
+
+  // Dormant = the automation precondition (Meta in platforms) is broken but
+  // the backend entry is still there. Only applies to active/paused — the
+  // terminal statuses (completed/failed) keep their normal visuals per the
+  // locked decision. Drives the lock-card swap on AutomationActiveNode.
+  const automationDormant = React.useMemo(() => {
+    if (!automationEntry?.jobId) return false;
+    if (selectedPlatforms.includes('meta')) return false;
+    const status = automationEntry?.status;
+    return (
+      status === AUTOMATION_STATUS.ACTIVE || status === AUTOMATION_STATUS.PAUSED
+    );
+  }, [automationEntry?.jobId, automationEntry?.status, selectedPlatforms]);
+
   const isGenerating = loading;
 
   const canEnablePreview = React.useMemo(
@@ -240,7 +403,87 @@ export default function AdFactoryWorkflowDarkReal() {
     [isImageNodeEnabled, isTextNodeEnabled, hasImageVersions, hasTextVersions, isGenerating]
   );
 
-  const initialEdges = [
+  // Pipeline active flags — drive the active visual treatment on each group
+  // container AND the services→branch wrapper edge styling. Manual is
+  // "active" the moment the user opts into the manual flow (Services form
+  // submitted with text or image > 0) OR once real results exist; auto is
+  // "active" while an automation entry is visible. Both can be true
+  // simultaneously when the user runs both paths.
+  //
+  // The selectedServices signal is what flips on submit of the manual
+  // ('once' mode) Services form — without it the manual group would stay
+  // locked from click → first result, which feels broken to the user.
+  const isManualActive =
+    (results?.image?.length || 0) > 0 ||
+    (results?.text?.length || 0) > 0 ||
+    !!selectedServices?.image ||
+    !!selectedServices?.text;
+  // Force-collapse the entire auto pipeline when the feature flag is off,
+  // OR when the automation is dormant (Meta no longer in platforms). Every
+  // downstream check (auto-group expansion, AutomationActiveNode isActive,
+  // fetchAutomationStats poll) keys off this one boolean, so a single gate
+  // here is enough to revert the canvas to its pre-automation shape without
+  // touching the node graph itself.
+  const isAutoActive = !!isAutomationActive && !automationDormant && IS_AUTOMATION_ENABLED;
+
+  // If the user deletes / stops their automation while the auto container
+  // is expanded, collapse it — the inactive card is non-clickable, so
+  // leaving it open would strand the user inside an empty container.
+  useEffect(() => {
+    if (!isAutoActive && autoExpanded) {
+      setAutoExpanded(false);
+    }
+  }, [isAutoActive, autoExpanded]);
+
+  // Whenever a group container toggles expand state, pan + zoom the canvas
+  // so the new bounds stay in view. ReactFlow's built-in fitView prop
+  // handles the initial render — we only animate for subsequent toggles, so
+  // the user isn't yanked around on mount.
+  const skipFitOnNextRender = useRef(true);
+  useEffect(() => {
+    if (!rfInstance) return undefined;
+    if (skipFitOnNextRender.current) {
+      skipFitOnNextRender.current = false;
+      return undefined;
+    }
+    // Defer one tick so the node's new width/height has actually applied
+    // before fitView reads its dimensions.
+    const id = setTimeout(() => {
+      rfInstance.fitView({ duration: 600, padding: 0.15 });
+    }, 60);
+    return () => clearTimeout(id);
+  }, [manualExpanded, autoExpanded, rfInstance]);
+
+  // Pull authoritative stats from /jobs/:id/stats. Fires once when auto goes
+  // active (so the collapsed card reflects real counts the moment the user
+  // expands).
+  //
+  // This is the FALLBACK refresh in the hybrid model — the primary trigger
+  // is the `adsFactory:runComplete` socket event (see socketSlice), which
+  // dispatches the same thunk the instant a cycle finishes. The 5-min
+  // interval below only covers socket disconnects, missed events on
+  // reconnect, and post-deploy gaps. Don't tighten it back to 30s without
+  // also removing the socket listener — you'd just be double-dispatching.
+  useEffect(() => {
+    if (!queryCampaignId || !isAutoActive) return undefined;
+    dispatch(fetchAutomationStats(queryCampaignId));
+    if (!autoExpanded) return undefined;
+    const id = setInterval(() => {
+      dispatch(fetchAutomationStats(queryCampaignId));
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [queryCampaignId, isAutoActive, autoExpanded, dispatch]);
+
+  // Trunk + (in automation mode) the two services → group edges. Inner edges
+  // (image-gen → preview, text-gen → preview, preview → post-ad,
+  // automation-active → automation-result) live inside their respective group
+  // container and are appended dynamically in the edges effect when that
+  // container is expanded.
+  //
+  // When the automation feature flag is off, the group containers don't
+  // render — services connects straight to the flat image-gen / text-gen
+  // nodes (the pre-automation layout).
+  const trunkEdges = [
     {
       id: 'e1',
       source: 'brand-info',
@@ -273,58 +516,46 @@ export default function AdFactoryWorkflowDarkReal() {
       type: 'smoothstep',
       style: { stroke: '#737373', strokeWidth: 3 },
     },
-    {
-      id: 'e5',
-      source: 'services',
-      target: 'text-generation',
-      // animated: true,
-      type: 'smoothstep',
-      style: { stroke: '#3e3b3bff', strokeWidth: 3 },
-      animated: selectedServices.text, // Only animate if text service is selected
-    },
-    // {
-    //   id: 'e6',
-    //   source: 'services',
-    //   target: 'video-generation',
-    //   animated: true,
-    //   type: 'smoothstep',
-    //   style: { stroke: '#737373', strokeWidth: 3 },
-    //   animated: selectedServices.video, // Only animate if video service is selected
-    // },
-    {
-      id: 'e7',
-      source: 'services',
-      target: 'image-generation',
-      // animated: true,
-      type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
-      animated: selectedServices.image, // Only animate if image service is selected
-    },
-    {
-      id: 'e8',
-      source: 'image-generation',
-      target: 'preview',
-      animated: true,
-      type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
-    },
-    {
-      id: 'e9',
-      source: 'text-generation',
-      target: 'preview',
-      animated: true,
-      type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
-    },
-    {
-      id: 'e10',
-      source: 'preview',
-      target: 'post-ad',
-      animated: true,
-      type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
-    },
   ];
+  const initialEdges = IS_AUTOMATION_ENABLED
+    ? [
+        ...trunkEdges,
+        {
+          id: 'e-services-to-manual',
+          source: 'services',
+          target: MANUAL_GROUP_ID,
+          animated: true,
+          type: 'smoothstep',
+          style: { stroke: '#737373', strokeWidth: 3 },
+        },
+        {
+          id: 'e-services-to-auto',
+          source: 'services',
+          target: AUTO_GROUP_ID,
+          animated: true,
+          type: 'smoothstep',
+          style: { stroke: '#737373', strokeWidth: 3 },
+        },
+      ]
+    : [
+        ...trunkEdges,
+        {
+          id: 'e-services-to-image',
+          source: 'services',
+          target: 'image-generation',
+          animated: true,
+          type: 'smoothstep',
+          style: { stroke: '#737373', strokeWidth: 3 },
+        },
+        {
+          id: 'e-services-to-text',
+          source: 'services',
+          target: 'text-generation',
+          animated: true,
+          type: 'smoothstep',
+          style: { stroke: '#737373', strokeWidth: 3 },
+        },
+      ];
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -343,16 +574,14 @@ export default function AdFactoryWorkflowDarkReal() {
 
   // Helper function to generate nodes based on current state
   const generateNodes = useCallback(() => {
-    const isValidateCompleted = completedNodes.includes('validate');
-    const isMetaSelected = distribution?.platforms?.some((p) => p.platformName === 'meta');
-
-    // Only hide nodes if validation is completed and meta is NOT selected
-    const isGoogleSelected = distribution?.platforms?.some((p) => p.platformName === 'google');
-    const hideMetaNodes = isValidateCompleted && !isMetaSelected && !isGoogleSelected;
-
-    return FlowCardArray.filter((card) => {
-      if (hideMetaNodes && (card.id === 'preview' || card.id === 'post-ad')) {
-        return false;
+    const stepNodes = FlowCardArray.filter((card) => {
+      // Manual sub-pipeline nodes live inside the manual group container.
+      // They only render while the manual group is expanded; collapsed =
+      // hidden. With the automation flag off, the group container doesn't
+      // exist at all — the inner nodes become flat top-level nodes that
+      // always render (pre-automation layout).
+      if (INNER_MANUAL_NODE_IDS.includes(card.id)) {
+        return IS_AUTOMATION_ENABLED ? manualExpanded : true;
       }
       return true;
     }).map((card) => {
@@ -381,10 +610,20 @@ export default function AdFactoryWorkflowDarkReal() {
       if (isCompleted) status = 'success';
       else if (isActive || (progress > 0 && progress < 100)) status = 'running';
 
+      // With the automation flag off the manual group container doesn't
+      // render, so the inner-manual treatment (parented children inside the
+      // group, sub-positions relative to it) doesn't apply — the nodes use
+      // their original FlowCardArray positions and sit at the top level.
+      const isInnerManual =
+        IS_AUTOMATION_ENABLED && INNER_MANUAL_NODE_IDS.includes(card.id);
+
       return {
         id: card.id,
         type: 'customNode',
-        position: card.position,
+        position: isInnerManual ? INNER_MANUAL_POSITIONS[card.id] : card.position,
+        ...(isInnerManual
+          ? { parentId: MANUAL_GROUP_ID, extent: 'parent', draggable: false }
+          : {}),
         data: {
           ...card,
           status,
@@ -438,6 +677,154 @@ export default function AdFactoryWorkflowDarkReal() {
         },
       };
     });
+
+    // Feature flag off → render the original flat layout (no group
+    // containers, no automation nodes). Every node already has its
+    // FlowCardArray position because the isInnerManual check above is gated
+    // on the flag, so we can return them all as a single flat list.
+    if (!IS_AUTOMATION_ENABLED) {
+      return stepNodes;
+    }
+
+    // ReactFlow v12 requires that a parent node appears in the nodes array
+    // BEFORE any of its children (via parentId), otherwise the children's
+    // positions are interpreted as absolute canvas coordinates instead of
+    // relative-to-parent. Split the step nodes into the manual children
+    // bucket and everything else so we can interleave the manual group
+    // container between them.
+    const trunkAndLeafNodes = stepNodes.filter(
+      (n) => !INNER_MANUAL_NODE_IDS.includes(n.id)
+    );
+    const innerManualNodes = stepNodes.filter((n) =>
+      INNER_MANUAL_NODE_IDS.includes(n.id)
+    );
+
+    const baseNodes = [...trunkAndLeafNodes];
+
+    // The two collapsible group containers always render — both branches are
+    // always visible. Manual group is pushed before its inner children so
+    // ReactFlow correctly parents them.
+    baseNodes.push({
+      id: MANUAL_GROUP_ID,
+      type: 'manualGroupNode',
+      position: MANUAL_GROUP_POSITION,
+      // Explicit dimensions on expand let ReactFlow size the wrapper so the
+      // parented children sit cleanly inside, and so the CSS transition has
+      // concrete from/to width + height values to animate.
+      style: manualExpanded
+        ? {
+            width: MANUAL_GROUP_EXPANDED_SIZE.width,
+            height: MANUAL_GROUP_EXPANDED_SIZE.height,
+            transition:
+              'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
+          }
+        : { transition: 'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)' },
+      data: {
+        id: MANUAL_GROUP_ID,
+        title: 'Manual Fabrication',
+        subtitle: 'Generate ads on demand · ship when ready',
+        infoMessage: 'Generate, prepare, and post creatives one at a time.',
+        inactiveText: 'Generate ads to activate',
+        isActive: isManualActive,
+        expanded: manualExpanded,
+        onToggleExpand: toggleManualExpanded,
+      },
+    });
+
+    // Inner manual children must appear AFTER their parent in the array.
+    innerManualNodes.forEach((node) => baseNodes.push(node));
+
+    baseNodes.push({
+      id: AUTO_GROUP_ID,
+      type: 'autoGroupNode',
+      position: AUTO_GROUP_POSITION,
+      style: autoExpanded
+        ? {
+            width: AUTO_GROUP_EXPANDED_SIZE.width,
+            height: AUTO_GROUP_EXPANDED_SIZE.height,
+            transition:
+              'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
+          }
+        : { transition: 'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)' },
+      data: {
+        id: AUTO_GROUP_ID,
+        title: 'Auto-Forge',
+        subtitle: 'Generate & post on a schedule, hands-free',
+        infoMessage: 'Runs the manual pipeline on a recurring schedule.',
+        inactiveText: 'Set up automation to activate',
+        isActive: isAutoActive,
+        expanded: autoExpanded,
+        onToggleExpand: toggleAutoExpanded,
+      },
+    });
+
+    // Inner auto children — automation stat card + result preview. Pushed
+    // after the auto-group so ReactFlow parents them correctly. Lifecycle
+    // handlers wire back through the existing automation slice thunks.
+    if (autoExpanded) {
+      baseNodes.push({
+        id: AUTOMATION_ACTIVE_NODE_ID,
+        type: 'automationActiveNode',
+        parentId: AUTO_GROUP_ID,
+        extent: 'parent',
+        draggable: false,
+        position: INNER_AUTO_POSITIONS[AUTOMATION_ACTIVE_NODE_ID],
+        data: {
+          status: automationEntry?.status || 'active',
+          frequency: automationEntry?.config?.frequency,
+          stats: automationEntry?.stats || {},
+          onPause: async () => {
+            const res = await dispatch(pauseAutomation(queryCampaignId));
+            if (pauseAutomation.fulfilled.match(res)) {
+              toast.success('Automation paused');
+            } else {
+              toast.error(
+                res?.payload?.message || res?.error?.message || 'Failed to pause automation'
+              );
+            }
+          },
+          onResume: async () => {
+            const res = await dispatch(resumeAutomation(queryCampaignId));
+            if (resumeAutomation.fulfilled.match(res)) {
+              toast.success('Automation resumed');
+            } else {
+              toast.error(
+                res?.payload?.message || res?.error?.message || 'Failed to resume automation'
+              );
+            }
+          },
+          // Edit opens the Services modal — ServicesForm auto-defaults to
+          // Schedule mode when an automation entry exists, so the inline
+          // AutomationForm appears pre-filled.
+          onEdit: () => dispatch(setActiveForm('services')),
+          onStop: () => dispatch(openAutomationStopConfirm(queryCampaignId)),
+          onViewHistory: () => dispatch(openAutomationHistory(queryCampaignId)),
+        },
+      });
+
+      baseNodes.push({
+        id: AUTOMATION_RESULT_NODE_ID,
+        type: 'customNode',
+        parentId: AUTO_GROUP_ID,
+        extent: 'parent',
+        draggable: false,
+        position: INNER_AUTO_POSITIONS[AUTOMATION_RESULT_NODE_ID],
+        data: {
+          id: AUTOMATION_RESULT_NODE_ID,
+          title: 'Automation Result',
+          subtitle: 'Preview your published Ads',
+          type: 'action',
+          icon: ServicesIcon,
+          status: 'idle',
+          progress: 0,
+          isEnabled: true,
+          handle: { target: 'left', source: '' },
+          onNodeClick: () => dispatch(openPublishedAds(queryCampaignId)),
+        },
+      });
+    }
+
+    return baseNodes;
   }, [
     reduxNodes,
     completedNodes,
@@ -447,6 +834,14 @@ export default function AdFactoryWorkflowDarkReal() {
     dispatch,
     distribution?.platforms,
     userData?.user_id,
+    isManualActive,
+    isAutoActive,
+    manualExpanded,
+    toggleManualExpanded,
+    autoExpanded,
+    toggleAutoExpanded,
+    automationEntry,
+    queryCampaignId,
   ]);
 
   const handleReset = useCallback(() => {
@@ -465,39 +860,140 @@ export default function AdFactoryWorkflowDarkReal() {
     setNodes(generateNodes());
   }, [generateNodes, setNodes]);
 
-  // Consolidatied effect to update edges based on services and completion status
+  // Hydrate automation state on mount so an active automation shows up on the
+  // canvas without the user having to open the form first. Skipped entirely
+  // when the feature flag is off — slice stays at initialState.
   useEffect(() => {
-    setEdges((prevEdges) =>
-      initialEdges
-        .filter(() => true)
-        .map((edge) => {
-          const isSourceCompleted = completedNodes.includes(edge.source);
-          const isTargetCompleted = completedNodes.includes(edge.target);
-          const isCompleted = isSourceCompleted && isTargetCompleted;
+    if (!IS_AUTOMATION_ENABLED) return;
+    if (queryCampaignId) {
+      dispatch(fetchAutomation(queryCampaignId));
+    }
+  }, [queryCampaignId, dispatch]);
 
-          // Determine animation
-          let animated = true;
-          if (isCompleted) {
-            animated = false;
-          } else {
-            if (edge.target === 'text-generation') {
-              animated = !!selectedServices.text;
-            } else if (edge.target === 'video-generation') {
-              animated = !!selectedServices.video;
-            } else if (edge.target === 'image-generation') {
-              animated = !!selectedServices.image;
-            }
-          }
+  // After the Facebook OAuth round-trip, AutomationForm left a breadcrumb
+  // in sessionStorage. If it matches the current campaign, auto-open the
+  // Services modal — ServicesForm then flips itself into Schedule mode and
+  // the inline form appears with the now-connected Meta state. Skipped
+  // entirely when the feature flag is off (the breadcrumb can't be set in
+  // that case anyway because AutomationForm never renders).
+  useEffect(() => {
+    if (!IS_AUTOMATION_ENABLED) return;
+    if (!queryCampaignId) return;
+    if (sessionStorage.getItem('adsgpt:reopen-automation-for') === queryCampaignId) {
+      dispatch(setActiveForm('services'));
+    }
+  }, [queryCampaignId, dispatch]);
 
-          // Determine style
-          const style = isCompleted
+  // Recompute edge style based on which trunk nodes have been completed.
+  // Inner edges only render alongside their group container's expanded state
+  // — they would otherwise dangle on nodes that aren't present.
+  useEffect(() => {
+    // Manual sub-pipeline edges. With automation enabled these only render
+    // when the manual group is expanded (children are hidden otherwise so
+    // the edges would dangle). With the flag off the inner nodes are flat
+    // and always present, so the edges should always render too.
+    const showInnerManual = IS_AUTOMATION_ENABLED ? manualExpanded : true;
+    const innerManualEdges = showInnerManual
+      ? [
+          {
+            id: 'e-img-prep',
+            source: 'image-generation',
+            target: 'preview',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#737373', strokeWidth: 3 },
+          },
+          {
+            id: 'e-text-prep',
+            source: 'text-generation',
+            target: 'preview',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#737373', strokeWidth: 3 },
+          },
+          {
+            id: 'e-prep-post',
+            source: 'preview',
+            target: 'post-ad',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#737373', strokeWidth: 3 },
+          },
+        ]
+      : [];
+
+    const innerAutoEdges = IS_AUTOMATION_ENABLED && autoExpanded
+      ? [
+          {
+            id: 'e-active-result',
+            source: AUTOMATION_ACTIVE_NODE_ID,
+            target: AUTOMATION_RESULT_NODE_ID,
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#15DCFF', strokeWidth: 3, opacity: 0.9 },
+          },
+        ]
+      : [];
+
+    // Wrapper-edge active styling — bright cyan + animated, used when a
+    // branch is the chosen path. Inactive wrapper edges go dim + static so
+    // the unused branch fades into the background.
+    const branchActiveStyle = { stroke: '#15DCFF', strokeWidth: 3, opacity: 0.9 };
+    const branchInactiveStyle = { stroke: '#6B7280', strokeWidth: 3, opacity: 0.35 };
+
+    // The services step is the gate before either branch can be "the
+    // active path". Until it's done, both wrapper edges stay dim.
+    const servicesDone = completedNodes.includes('services');
+
+    setEdges(
+      [...initialEdges, ...innerManualEdges, ...innerAutoEdges].map((edge) => {
+        const isSourceCompleted = completedNodes.includes(edge.source);
+        const isTargetCompleted = completedNodes.includes(edge.target);
+        const isCompleted = isSourceCompleted && isTargetCompleted;
+
+        // Inner auto edge already carries its own cyan style — leave it
+        // alone so the active automation visually stands out from the
+        // greyscale trunk edges.
+        if (edge.id === 'e-active-result') {
+          return { ...edge, animated: true };
+        }
+
+        // Wrapper edge → auto group. Lights up the moment the campaign
+        // has a visible automation entry (active/paused/completed/failed),
+        // independent of completedNodes — the group container itself never
+        // makes it into that array.
+        if (edge.id === 'e-services-to-auto') {
+          const active = servicesDone && isAutoActive;
+          return {
+            ...edge,
+            animated: active,
+            style: active ? branchActiveStyle : branchInactiveStyle,
+          };
+        }
+
+        // Wrapper edge → manual group. Lights up the moment the user
+        // commits to the manual flow (Services submitted with quantities
+        // > 0 OR any real results already exist). Independent of the auto
+        // branch — a campaign can run both paths and both edges light.
+        if (edge.id === 'e-services-to-manual') {
+          const active = servicesDone && isManualActive;
+          return {
+            ...edge,
+            animated: active,
+            style: active ? branchActiveStyle : branchInactiveStyle,
+          };
+        }
+
+        return {
+          ...edge,
+          animated: !isCompleted,
+          style: isCompleted
             ? { stroke: '#3CE0A8', strokeWidth: 3, opacity: 0.9 }
-            : { stroke: '#6B7280', strokeWidth: 3, opacity: 0.5 };
-
-          return { ...edge, animated, style };
-        })
+            : { stroke: '#6B7280', strokeWidth: 3, opacity: 0.5 },
+        };
+      })
     );
-  }, [selectedServices, completedNodes, setEdges]);
+  }, [completedNodes, manualExpanded, autoExpanded, isAutoActive, isManualActive, setEdges]);
 
   const onConnect = useCallback(
     (params) =>
@@ -652,6 +1148,22 @@ export default function AdFactoryWorkflowDarkReal() {
         imageUrl={formatDialog.imageUrl}
       />
       {/* {showGeneratingLoader && <GeneratingLoader />} */}
+
+      {/* Automation history + stop-confirm overlays. The setup form itself
+          lives inline inside the Services modal (see ServicesForm). */}
+      {IS_AUTOMATION_ENABLED && (
+        <>
+          <AnimatePresence>
+            {automationHistoryOpen && <AutomationHistoryPanel />}
+          </AnimatePresence>
+          <AnimatePresence>
+            {automationStopConfirmOpen && <AutomationStopConfirm />}
+          </AnimatePresence>
+          <AnimatePresence>
+            {publishedAdsOpen && <PublishedAdsModal />}
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

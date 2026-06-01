@@ -124,13 +124,21 @@ export const getActionLog = async ({
 // -----------------------------------------------------------------------------
 // Per-user windowed summary (Overview tab cards).
 // -----------------------------------------------------------------------------
-export const getAutopilotSummary = async ({ windowDays = 7 } = {}) => {
+// Accepts either `{ from, to }` (preferred — explicit calendar range from
+// the Overview date picker) OR `{ windowDays }` (legacy rolling window).
+// The backend honors `from`/`to` first and falls back to `windowDays`.
+export const getAutopilotSummary = async ({
+  windowDays,
+  from,
+  to,
+} = {}) => {
+  const params = {};
+  if (from) params.from = from;
+  if (to) params.to = to;
+  if (!from && !to) params.windowDays = windowDays ?? 7;
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/autopilot/summary`,
-    {
-      params: { windowDays },
-      headers: headers(),
-    },
+    { params, headers: headers() },
   );
   return data;
 };

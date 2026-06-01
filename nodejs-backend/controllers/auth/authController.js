@@ -288,6 +288,8 @@ async function getTopUpPlanDetails(userId) {
     invoiceData = invoiceData.reverse();
   }
   const allCustomOptions = [];
+  const wantId = String(topUpPlanID);
+  const seenIds = []; // diagnostic: every (item_id / billing_plan_id) we saw
 
   for (const value of invoiceData) {
     const invoiceId = value.invoice_id;
@@ -299,9 +301,20 @@ async function getTopUpPlanDetails(userId) {
 
       const invoiceItems =
         resultDataInvoice[0]?.nested?.["invoice-items"] || [];
-      // Only process invoice items that explicitly match the Top-Up plan ID
+
+      // Match the Top-Up product on EITHER identifier aMember may carry it on:
+      // `item_id` (product id) or `billing_plan_id` (the trial flow in this
+      // file matches on billing_plan_id, so top-up products may too). Without
+      // this, a product whose id only appears in billing_plan_id is missed and
+      // top-up credits silently resolve to 0.
       for (const item of invoiceItems) {
-        if (String(item.item_id) === String(topUpPlanID)) {
+        seenIds.push(
+          `item_id=${item.item_id}/billing_plan_id=${item.billing_plan_id}/type=${item.item_type}`,
+        );
+        const matches =
+          String(item.item_id) === wantId ||
+          String(item.billing_plan_id) === wantId;
+        if (matches) {
           const dollarAmountPaid = parseFloat(item.first_total) || 0;
           allCustomOptions.push(dollarAmountPaid);
         }
@@ -312,6 +325,17 @@ async function getTopUpPlanDetails(userId) {
   }
 
   // allCustomOptions now contains an array of precise dollar amounts paid exclusively for Top-Ups
+  if (allCustomOptions.length === 0) {
+    console.warn(
+      `[topup] user ${userId}: NO invoice items matched plan ${wantId}. ` +
+        `Seen items: ${seenIds.join(" | ") || "(none)"}`,
+    );
+  } else {
+    console.log(
+      `[topup] user ${userId}: matched ${allCustomOptions.length} item(s) for plan ${wantId}, dollars=[${allCustomOptions.join(", ")}]`,
+    );
+  }
+
   const topUpResponse = transformTopUpData(allCustomOptions);
   return topUpResponse;
 }

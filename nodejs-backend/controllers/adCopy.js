@@ -5,6 +5,7 @@ const checkUserExist = require("../Module/adCopy/CheckUserExist");
 const { default: mongoose } = require("mongoose");
 const logger = require("../utils/logger");
 const { updateAdCopyConversation } = require("./newHistory");
+const UnifiedCreditController = require("./UnifiedCreditController");
 
 exports.redisGetSet = new Redis({
   host: process.env.HOST,
@@ -132,6 +133,15 @@ exports.sendAdCopyRequest = async (payload) => {
     });
     consumeAdCopyStream(response.data, payload);
   } catch (error) {
+    // Python rejected the request — handleAdCopyFullResponse will never
+    // fire, so release the freeze held in sockets/index.js adCopyRequest.
+    if (payload?.chatId) {
+      try {
+        await UnifiedCreditController.releaseCredits(payload.chatId);
+      } catch (e) {
+        logger.error("Failed to release ad copy freeze:", e);
+      }
+    }
     const status = error?.response?.status;
     logger.error(
       `Error in sendAdCopyRequest [status=${status}] ${error?.message}`

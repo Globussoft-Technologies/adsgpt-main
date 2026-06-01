@@ -268,3 +268,7 @@ input[type='range']::-webkit-slider-thumb {
 .error {
   @apply mt-1 text-xs text-red-400;
 }
+
+.leaflet-control-attribution.leaflet-control {
+  display: none !important;
+}

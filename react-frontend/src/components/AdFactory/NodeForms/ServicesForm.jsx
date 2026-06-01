@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Formik, Form } from 'formik';
 import * as Yup from 'yup';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
@@ -11,6 +11,9 @@ import {
   Video as VideoIcon,
   RectangleHorizontal,
   RectangleVertical,
+  Sparkles,
+  CalendarClock,
+  Zap,
 } from 'lucide-react';
 import InputCommonDropdown from './InputCommonDropdown';
 import { PiFacebookLogoBold, PiSnapchatLogo } from 'react-icons/pi';
@@ -18,6 +21,11 @@ import { RiTwitterXFill } from 'react-icons/ri';
 import { AiOutlineYoutube } from 'react-icons/ai';
 import { FaInstagram, FaLinkedin, FaPlay } from 'react-icons/fa';
 import { fetchCampaignById, updateCampaign } from '@/store/actions/adFactoryNew/adFactoryActions';
+import {
+  selectIsAutomationActive,
+} from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import AutomationForm from '@/components/AdFactory/Automation/AutomationForm';
+import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import {
   initializeResults,
   updateProductionAndServices,
@@ -76,6 +84,57 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
   );
   const { credits, userData } = useSelector((state) => state.socket);
   const isSubmitting = loading;
+
+  // --- Automation mode gating ----------------------------------------------
+  // Show the "Run on Schedule" option only when Meta is one of the selected
+  // platforms. Other providers (Google, etc.) are not yet supported by the
+  // automation cycle backend.
+  const hasMeta = Array.isArray(distribution?.platforms)
+    ? distribution.platforms.some(
+        (p) => String(p?.platformName || '').toLowerCase() === 'meta'
+      )
+    : false;
+
+  // Single gate for every automation-related UI branch in this form. When the
+  // VITE_FEATURE_AUTOMATION flag is off the whole feature is invisible — no
+  // toggle, no pill, no schedule-mode form — and the component behaves like
+  // it did before the automation work landed.
+  const automationAvailable = IS_AUTOMATION_ENABLED && hasMeta;
+
+  // 'once' = existing manual generation flow.
+  // 'schedule' = inline AutomationForm rendered in the body.
+  const [mode, setMode] = useState('once');
+
+  // Auto-default to Schedule mode when this campaign already has an active
+  // automation entry — covers the Edit-from-canvas path. The OAuth
+  // round-trip return is handled separately by the sessionStorage
+  // breadcrumb effect below.
+  const isAutomationActive = useSelector((state) =>
+    selectIsAutomationActive(state, campaignId)
+  );
+  const initialModeApplied = useRef(false);
+
+  // Actions exposed by the inline AutomationForm so we can render its
+  // Activate button alongside Cancel in the footer.
+  const [automationActions, setAutomationActions] = useState(null);
+
+  useEffect(() => {
+    if (initialModeApplied.current) return;
+    if (!automationAvailable) return;
+    if (isAutomationActive) {
+      setMode('schedule');
+      initialModeApplied.current = true;
+    }
+  }, [automationAvailable, isAutomationActive]);
+
+  // If the user just returned from the Facebook OAuth redirect, flip into
+  // Schedule mode so the form is the first thing they see.
+  useEffect(() => {
+    if (!campaignId || !automationAvailable) return;
+    if (sessionStorage.getItem('adsgpt:reopen-automation-for') === campaignId) {
+      setMode('schedule');
+    }
+  }, [campaignId, automationAvailable]);
 
   // Credit calculations
   const creativeCreditsLeft =
@@ -210,10 +269,10 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
         return;
       }
 
-      // Dispatch initializeResults
-      dispatch(initializeResults({ type: 'text', quantity: text }));
-      dispatch(initializeResults({ type: 'image', quantity: image }));
-      // dispatch(initializeResults({ type: 'video', quantity: video }));
+      // Placeholders are seeded AFTER updateCampaign's auto-refetch settles
+      // (see the fulfilled block below) — seeding here would get wiped because
+      // updateCampaign fires fetchCampaignById internally and filterManualResults
+      // strips status:null items on the way in.
 
       // Convert to backend-required structure
       const servicesArrayPayload = [
@@ -266,6 +325,14 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
       };
       // dispatch(fetchCampaignById(campaignPayload));
       if (updateCampaign.fulfilled.match(result)) {
+        // updateCampaign internally dispatches fetchCampaignById without
+        // awaiting it. Await an explicit refetch so the racey one is settled,
+        // then seed manual placeholders — otherwise filterManualResults wipes
+        // the status:null items and the "Generating" sphere never appears.
+        await dispatch(fetchCampaignById(campaignPayload));
+        if (text > 0) dispatch(initializeResults({ type: 'text', quantity: text }));
+        if (image > 0) dispatch(initializeResults({ type: 'image', quantity: image }));
+
         // Update node status and enable generation nodes
         dispatch(setCompletedNodes('services'));
         dispatch(setFormProgress({ nodeId: 'services', progress: 100 }));
@@ -325,13 +392,14 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
   };
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 25, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25 }}
-      className="text-white"
+      className="flex max-h-[calc(95vh-56px)] flex-col text-white 2xl:max-h-[calc(92vh-72px)]"
     >
-      <h2 className="mb-5 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+      <h2 className="mb-5 shrink-0 text-center text-xl font-semibold text-white 2xl:text-[23px]">
         Services Selection
       </h2>
 
@@ -348,8 +416,39 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
           const costs = calculateCreditCost(values);
 
           return (
-            <Form className="">
-              <div className="max-h-[calc(100svh-290px)] space-y-6 overflow-y-auto sm:pr-5">
+            <Form className="flex min-h-0 flex-1 flex-col">
+              {/* FIXED TOP — only the Generation Mode toggle stays pinned;
+                  everything else (including the Meta pill) scrolls. */}
+              {automationAvailable && (
+                <div className="mb-4 shrink-0">
+                  <ModeToggle mode={mode} onChange={setMode} disabled={isSubmitting} />
+                </div>
+              )}
+
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto sm:pr-5">
+                <AnimatePresence mode="wait">
+                  {mode === 'schedule' && automationAvailable ? (
+                    <motion.div
+                      key="schedule-form"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <AutomationForm
+                        onActivated={() => dispatch(setActiveForm(null))}
+                        onActionsChange={setAutomationActions}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="once-fields"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-5"
+                    >
                 {/* SERVICE QUANTITY INPUTS */}
                 <div className="space-y-5">
                   <h3 className="relative top-1.5 flex items-center gap-2 text-base text-white 2xl:text-lg">
@@ -377,15 +476,21 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                           min="0"
                           max="50"
                           value={Number(values.servicesSelected.text) || ''}
-                          onChange={(e) =>
-                            setFieldValue('servicesSelected.text', parseInt(e.target.value) || 0)
-                          }
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            if (val > 50) {
+                              toast.error('Text Ads quantity cannot exceed 50.');
+                              setFieldValue('servicesSelected.text', 50);
+                            } else {
+                              setFieldValue('servicesSelected.text', val);
+                            }
+                          }}
                           className="h-10.5 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base"
                           placeholder="Enter quantity"
                           disabled={isSubmitting}
                         />
                       </div>
-                      {errors.servicesSelected?.text && touched.servicesSelected?.text && (
+                      {errors.servicesSelected?.text && (touched.servicesSelected?.text || values.servicesSelected.text > 50) && (
                         <div className="text-xs text-red-400">{errors.servicesSelected.text}</div>
                       )}
                       <div className="flex items-center justify-between pr-3">
@@ -419,15 +524,21 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                             min="0"
                             max="50"
                             value={Number(values.servicesSelected.image) || ''}
-                            onChange={(e) =>
-                              setFieldValue('servicesSelected.image', parseInt(e.target.value) || 0)
-                            }
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              if (val > 50) {
+                                toast.error('Image Ads quantity cannot exceed 50.');
+                                setFieldValue('servicesSelected.image', 50);
+                              } else {
+                                setFieldValue('servicesSelected.image', val);
+                              }
+                            }}
                             className="h-10.5 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base"
                             placeholder="Enter quantity"
                             disabled={isSubmitting}
                           />
                         </div>
-                        {errors.servicesSelected?.image && touched.servicesSelected?.image && (
+                        {errors.servicesSelected?.image && (touched.servicesSelected?.image || values.servicesSelected.image > 50) && (
                           <div className="text-xs text-red-400">
                             {errors.servicesSelected.image}
                           </div>
@@ -628,45 +739,143 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                     </div>
                   </div>
                 )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
-              {/* ACTION BUTTONS */}
-              <div className="mt-8 flex flex-wrap justify-end gap-3 md:mt-10">
+              {/* ACTION BUTTONS — Cancel always; Activate in Schedule mode,
+                  Generate Ads in Once mode. Buttons share py-2 so they end
+                  up the same height regardless of label length. Draft is
+                  auto-saved on close so a separate Save draft isn't needed. */}
+              <div className="mt-8 flex shrink-0 flex-wrap items-center justify-end gap-3 md:mt-10">
                 <button
                   type="button"
                   onClick={() => dispatch(setActiveForm(null))}
-                  className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-1.5 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
+                  className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-2 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
                   disabled={isSubmitting}
                 >
                   Cancel
                 </button>
 
-                <button
-                  type="submit"
-                  disabled={
-                    isSubmitting ||
-                    (productionAndServices?.status == 'success' && results?.status != 'success') ||
-                    (values.servicesSelected.text === 0 &&
-                      values.servicesSelected.image === 0 &&
-                      values.servicesSelected.video === 0)
-                  }
-                  className="min-w-32 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Generating...
-                    </div>
-                  ) : (
-                    `Generate Ads (${costs.total} credits)`
-                  )}
-                </button>
+                {mode === 'schedule' && automationAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => automationActions?.activate?.()}
+                    disabled={
+                      !automationActions ||
+                      !automationActions.canActivate ||
+                      automationActions.saving
+                    }
+                    title={automationActions?.validationError || ''}
+                    className="min-w-32 rounded-lg bg-linear-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40 2xl:text-base"
+                  >
+                    {automationActions?.saving
+                      ? automationActions?.isEditMode
+                        ? 'Updating…'
+                        : 'Activating…'
+                      : automationActions?.isEditMode
+                        ? 'Update automation'
+                        : 'Activate automation'}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      (productionAndServices?.status == 'success' && results?.status != 'success') ||
+                      (values.servicesSelected.text === 0 &&
+                        values.servicesSelected.image === 0 &&
+                        values.servicesSelected.video === 0)
+                    }
+                    className="min-w-32 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+                  >
+                    {isSubmitting ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        Generating...
+                      </div>
+                    ) : (
+                      `Generate Ads (${costs.total} credits)`
+                    )}
+                  </button>
+                )}
               </div>
             </Form>
           );
         }}
       </Formik>
     </motion.div>
+    </>
+  );
+}
+
+// ============================================================================
+// ModeToggle — segmented control: [Generate Once] / [Run on Schedule]
+// Only rendered when Meta is one of the selected platforms.
+// ============================================================================
+function ModeToggle({ mode, onChange, disabled }) {
+  const options = [
+    { key: 'once', label: 'Generate Once', icon: Zap },
+    { key: 'schedule', label: 'Run on Schedule', icon: CalendarClock },
+  ];
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium tracking-wide text-[#AFAFAF] uppercase">
+          Generation mode
+        </span>
+        {mode === 'schedule' && (
+          <motion.span
+            initial={{ opacity: 0, x: 4 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="inline-flex items-center gap-1 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-2.5 py-0.5 text-10 font-medium text-[#15DCFF]"
+          >
+            <Sparkles className="size-3" /> Meta automation
+          </motion.span>
+        )}
+      </div>
+
+      <div
+        role="tablist"
+        className="relative grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-[#0D0D0D]/40 p-1 backdrop-blur-md"
+      >
+        {options.map((opt) => {
+          const isActive = mode === opt.key;
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              disabled={disabled}
+              onClick={() => onChange(opt.key)}
+              className="relative z-10 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="services-mode-pill"
+                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  className="absolute inset-0 -z-10 rounded-lg bg-linear-to-r from-[#15DCFF]/15 to-[#6b72f8]/15 ring-1 ring-white/10"
+                />
+              )}
+              <Icon
+                className={`size-4 transition-colors ${
+                  isActive ? 'text-white' : 'text-[#AFAFAF]'
+                }`}
+              />
+              <span
+                className={`transition-colors ${isActive ? 'text-white' : 'text-[#AFAFAF]'}`}
+              >
+                {opt.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

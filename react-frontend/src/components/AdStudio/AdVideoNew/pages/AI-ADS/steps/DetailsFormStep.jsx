@@ -15,12 +15,25 @@ import { AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import { RiGeminiFill } from 'react-icons/ri';
-import { generateAiAdsSceneAction } from '@/store/actions/adVideoNew/Advideoactions';
+import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneLoading, setAiAdsPrefillInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
+import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
+import { estimateAdVideoCredits } from '@/utils/creditEstimator';
+import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+const IMAGE_TYPE_ERROR = 'Only .jpg, .jpeg, .png, and .webp image are allowed.';
+const LOGO_TYPE_ERROR = 'Only .jpg, .jpeg, .png, and .webp logo are allowed.';
+
+const isImageFile = (file) =>
+  ALLOWED_IMAGE_TYPES.includes(file.type) ||
+  ALLOWED_IMAGE_EXTENSIONS.test(file.name || '');
 
 // Reusable Input Component
-const CustomInput = ({ label, value, onChange, placeholder, required = false, error }) => (
+const CustomInput = ({ label, value, onChange, placeholder, required = false, error, disabled }) => (
   <div className="flex w-full min-w-0 flex-col">
     {label && (
       <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">
@@ -33,14 +46,15 @@ const CustomInput = ({ label, value, onChange, placeholder, required = false, er
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className={`w-full min-w-0 rounded-full border bg-[#909294]/15 px-3 py-2.5 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm ${error ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
+      disabled={disabled}
+      className={`w-full min-w-0 rounded-full border bg-[#909294]/15 px-3 py-2.5 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50 ${error ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
     />
     {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
   </div>
 );
 
 // File Upload
-const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, error }) => (
+const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, error, disabled }) => (
   <div className="flex w-full min-w-0 flex-col">
     {label && (
       <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:text-sm">
@@ -48,10 +62,10 @@ const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, 
         {required && '*'}
       </label>
     )}
-    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''}`}>
+    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''} ${disabled ? 'opacity-50' : ''}`}>
       <label
-        htmlFor={id}
-        className="flex shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[#606060] px-3 py-1.5 text-[10px] font-normal text-white transition hover:opacity-80 sm:px-4 sm:py-2 sm:text-[11px]"
+        htmlFor={disabled ? undefined : id}
+        className={`flex shrink-0 items-center gap-1 rounded-full bg-[#606060] px-3 py-1.5 text-[10px] font-normal text-white transition sm:px-4 sm:py-2 sm:text-[11px] ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:opacity-80'}`}
       >
         <CloudUpload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         Choose File
@@ -59,15 +73,16 @@ const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, 
           id={id}
           type="file"
           className="hidden"
-          accept="image/*"
+          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
           onChange={onChange}
           multiple={label === 'Images'}
+          disabled={disabled}
         />
       </label>
       <div className="flex min-w-0 flex-1 items-center justify-between gap-1 px-1 text-[11px] text-[#AFAFAF] sm:px-2 sm:text-xs">
         <span className="min-w-0 flex-1 truncate">{fileName || 'No file chosen'}</span>
         {fileName && (
-          <button onClick={onClear} className="shrink-0 text-white/40 hover:text-white">
+          <button onClick={onClear} disabled={disabled} className="shrink-0 text-white/40 hover:text-white disabled:cursor-not-allowed">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -109,6 +124,11 @@ const durationOptions = [
   { value: '40', label: '40s' },
 ];
 
+const aspectRatioOptions = [
+  { value: '9:16', label: '9:16' },
+  { value: '16:9', label: '16:9' },
+];
+
 // If the saved duration isn't in the active list (e.g. '4'/'6' were removed),
 // pick the closest available value so the field is never blank on recreate.
 const normalizeDuration = (value, options) => {
@@ -143,8 +163,14 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   const title = isBrand ? 'Brand Details' : 'Product Details';
   const dispatch = useDispatch();
   const { modelCredits } = useSelector((state) => state.prompt);
+  const { credits } = useSelector((state) => state.socket);
+  const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    dispatch(fetchModelCreditsAction());
+  }, [dispatch]);
 
   const validate = () => {
     const e = {};
@@ -154,6 +180,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     if (urlImages.length + uploadedImages.length === 0) e.images = 'At least one image is required';
     if (!formData.model) e.model = 'Model is required';
     if (!formData.duration) e.duration = 'Duration is required';
+    if (!formData.voice?.voiceId) e.voice = 'Voice is required';
     return e;
   };
 
@@ -170,13 +197,33 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     model: data?.model || '',
     duration: data?.duration || '',
     aspectRatio: data?.aspectRatio || '9:16',
+    voice: {
+      // Voice data may arrive in two shapes:
+      //   (a) Runtime/formData shape (on Back navigation): data.voice.{...}
+      //   (b) Saved/DB shape (on first entry or recreate): data.voiceFilters,
+      //       data.voiceId, data.voiceName (flat)
+      // Check (a) first so a user's selection survives Back→forward.
+      // Language defaults to English — currently the only supported locale
+      // (see VoiceSelector.jsx where non-'en' codes are filtered out).
+      language: data?.voice?.language || data?.voiceFilters?.language || 'en',
+      languageLabel: data?.voice?.languageLabel || data?.voiceFilters?.languageLabel || 'English',
+      gender: data?.voice?.gender || data?.voiceFilters?.gender || '',
+      accent: data?.voice?.accent || data?.voiceFilters?.accent || '',
+      age: data?.voice?.age || data?.voiceFilters?.age || '',
+      voiceId: data?.voice?.voiceId || data?.voiceId || '',
+      voiceName: data?.voice?.voiceName || data?.voiceName || '',
+    },
   }));
 
   // URL-based images from analysis (not File objects)
-  const [urlImages, setUrlImages] = useState(
-    () => data?.images?.slice(0, 5).map((src) => ({ url: src, preview: src, name: src.split('/').pop() })) || []
-  );
+  // brandImages takes priority — these are already on S3 from BrandIQ, no re-upload needed
+  const [urlImages, setUrlImages] = useState(() => {
+    if (Array.isArray(data?.brandImages) && data.brandImages.length > 0)
+      return data.brandImages.slice(0, 5);
+    return data?.images?.slice(0, 5).map((src) => ({ url: src, preview: src, name: src.split('/').pop() })) || [];
+  });
   const [urlLogo, setUrlLogo] = useState(() => {
+    if (data?.brandLogoUrl) return data.brandLogoUrl;
     const src = data?.logoUrl || data?.brandLogo || '';
     return src ? { url: src, preview: src, name: 'brand-logo' } : null;
   });
@@ -212,6 +259,17 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       model: inputs.model || '',
       duration: normalizeDuration(inputs.duration, durationOptions),
       aspectRatio: inputs.aspectRatio || '9:16',
+      voice: {
+        // Same dual-shape handling as the useState initializer above.
+        // Runtime shape (inputs.voice) wins over saved shape (inputs.voiceFilters).
+        language: inputs.voice?.language || inputs.voiceFilters?.language || 'en',
+        languageLabel: inputs.voice?.languageLabel || inputs.voiceFilters?.languageLabel || 'English',
+        gender: inputs.voice?.gender || inputs.voiceFilters?.gender || '',
+        accent: inputs.voice?.accent || inputs.voiceFilters?.accent || '',
+        age: inputs.voice?.age || inputs.voiceFilters?.age || '',
+        voiceId: inputs.voice?.voiceId || inputs.voiceId || '',
+        voiceName: inputs.voice?.voiceName || inputs.voiceName || '',
+      },
     });
     if (inputs._savedImages?.length) {
       setUrlImages(inputs._savedImages);
@@ -289,6 +347,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       formData.model !== (orig.model || '') ||
       formData.duration !== normalizeDuration(orig.duration, durationOptions) ||
       formData.aspectRatio !== (orig.aspectRatio || '') ||
+      formData.voice?.voiceId !== (orig.voice?.voiceId || orig.voiceId || '') ||
       imagesChanged ||
       logoChanged
     );
@@ -299,6 +358,13 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     e.target.value = '';
     if (!files.length) return;
 
+    const imageFiles = files.filter(isImageFile);
+    const hadInvalid = imageFiles.length < files.length;
+    if (!imageFiles.length) {
+      setErrors((prev) => ({ ...prev, images: IMAGE_TYPE_ERROR }));
+      return;
+    }
+
     const totalCount = uploadedImages.length + urlImages.length;
     const remainingSlots = 5 - totalCount;
 
@@ -307,13 +373,15 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       return;
     }
 
-    if (files.length > remainingSlots) {
+    if (imageFiles.length > remainingSlots) {
       setErrors((prev) => ({ ...prev, images: 'Max 5 images allowed' }));
+    } else if (hadInvalid) {
+      setErrors((prev) => ({ ...prev, images: IMAGE_TYPE_ERROR }));
     } else {
       setErrors((prev) => ({ ...prev, images: '' }));
     }
 
-    const filesToUpload = files.slice(0, remainingSlots);
+    const filesToUpload = imageFiles.slice(0, remainingSlots);
     const newPreviews = filesToUpload.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
@@ -326,6 +394,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
+    if (!isImageFile(file)) {
+      setErrors((prev) => ({ ...prev, logo: LOGO_TYPE_ERROR }));
+      return;
+    }
+    setErrors((prev) => ({ ...prev, logo: '' }));
     setUrlLogo(null);
     setUploadedLogo({
       file,
@@ -346,9 +419,9 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     const items = clipboardData?.items || [];
     const files = [];
     for (const item of items) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
+      if (item.kind === 'file') {
         const file = item.getAsFile();
-        if (file) files.push(file);
+        if (file && isImageFile(file)) files.push(file);
       }
     }
     return files;
@@ -412,7 +485,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
 
   return (
-    <div className="relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-[#303030]/30 pt-3 pb-6 sm:pt-4 sm:pb-8 2xl:max-h-[90vh]">
+    <div className="relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
       {/* Close button */}
       <button
         onClick={onClose}
@@ -421,21 +494,73 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
         <X className="h-5 w-5" />
       </button>
 
-      <div className="relative mb-2 w-full min-w-0 rounded-2xl px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 xl:px-8 xl:pt-4 xl:pb-4">
+      <div className="relative mb-2 w-full min-w-0 rounded-2xl px-4 pt-1 pb-4 sm:px-6 sm:pt-2 sm:pb-6 xl:px-8 xl:pt-2 xl:pb-4">
         {/* Title */}
-        <h2 className="mb-4 text-center text-lg font-bold text-white sm:mb-5 sm:text-xl xl:mb-4 xl:text-2xl">{title}</h2>
+        <h2 className="mb-2 text-center text-lg font-bold text-white sm:mb-3 sm:text-xl xl:mb-2 xl:text-2xl">{title}</h2>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-stretch xl:gap-6">
-          {/* LEFT: Optimized Prompt (full height) */}
+          {/* LEFT: Prompt textarea with Model/Duration pills INSIDE at the bottom */}
           <div className="flex w-full min-w-0 flex-col">
             <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Prompt*</label>
-            <textarea
-              value={formData.optimizedPrompt}
-              onChange={(e) => { updateField('optimizedPrompt', e.target.value); setErrors((prev) => ({ ...prev, optimizedPrompt: '' })); }}
-              placeholder="Write your prompt here..."
-              className={`min-h-[120px] w-full flex-1 resize-none rounded-2xl border bg-[#909294]/15! px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none sm:min-h-[180px] sm:px-5 sm:py-3.5 sm:text-sm xl:min-h-0 ${errors.optimizedPrompt ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
-            />
-            {errors.optimizedPrompt && <p className="mt-1 text-xs text-red-400">{errors.optimizedPrompt}</p>}
+            <div
+              className={`relative flex h-full flex-1 flex-col rounded-2xl border bg-[#909294]/15 focus-within:border-white/20 ${errors.optimizedPrompt ? 'border-red-500' : 'border-white/5'}`}
+            >
+              <textarea
+                value={formData.optimizedPrompt}
+                onChange={(e) => { updateField('optimizedPrompt', e.target.value); setErrors((prev) => ({ ...prev, optimizedPrompt: '' })); }}
+                placeholder="Write your prompt here..."
+                disabled={submitting}
+                className="min-h-[120px] w-full flex-1 resize-none rounded-2xl bg-transparent px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[180px] sm:px-5 sm:py-3.5 sm:text-sm xl:min-h-0"
+              />
+              {/* Inline Model + Duration + Aspect ratio pills at the bottom-right of the prompt box */}
+              <div className={`flex flex-wrap items-center justify-end gap-2 px-3 pb-3 sm:px-4 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+                <div className="flex flex-col items-end">
+                  <div className={errors.model ? 'rounded-full ring-1 ring-red-500' : ''}>
+                    <CommonDropdown
+                      label="Model"
+                      type="b-roll"
+                      side="top"
+                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      options={modelOptions}
+                      value={modelOptions.find((opt) => opt.value === formData.model)}
+                      onChange={(val) => { updateField('model', val); setErrors((prev) => ({ ...prev, model: '' })); }}
+                    />
+                  </div>
+                  {errors.model && <p className="mt-1 text-[10px] text-red-400">{errors.model}</p>}
+                </div>
+                <div className="flex flex-col items-end">
+                  <div className={errors.duration ? 'rounded-full ring-1 ring-red-500' : ''}>
+                    <CommonDropdown
+                      label="Duration"
+                      type="b-roll"
+                      side="top"
+                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      options={durationOptions}
+                      value={durationOptions.find((opt) => opt.value === formData.duration)}
+                      onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
+                    />
+                  </div>
+                  {errors.duration && <p className="mt-1 text-[10px] text-red-400">{errors.duration}</p>}
+                </div>
+                <div className="flex flex-col items-end">
+                  <div className={errors.aspectRatio ? 'rounded-full ring-1 ring-red-500' : ''}>
+                    <CommonDropdown
+                      label="Aspect Ratio"
+                      type="b-roll"
+                      side="top"
+                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      options={aspectRatioOptions}
+                      value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio)}
+                      onChange={(val) => { updateField('aspectRatio', val); setErrors((prev) => ({ ...prev, aspectRatio: '' })); }}
+                    />
+                  </div>
+                  {errors.aspectRatio && <p className="mt-1 text-[10px] text-red-400">{errors.aspectRatio}</p>}
+                </div>
+              </div>
+            </div>
+            {errors.optimizedPrompt && (
+              <p className="mt-1 text-xs text-red-400">{errors.optimizedPrompt}</p>
+            )}
           </div>
 
           {/* RIGHT: All other fields */}
@@ -448,17 +573,21 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               value={formData.name}
               onChange={(e) => { updateField('name', e.target.value); setErrors((prev) => ({ ...prev, name: '' })); }}
               error={errors.name}
+              disabled={submitting}
             />
             <div className="flex w-full flex-col">
               <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Category</label>
-              <CommonDropdown
-                label="Choose category"
-                className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
-                type="b-roll"
-                options={categoryOptions}
-                value={categoryOptions.find((opt) => opt.value === formData.category)}
-                onChange={(val) => updateField('category', val)}
-              />
+              <div className={`${errors.category ? 'rounded-full ring-1 ring-red-500' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+                <CommonDropdown
+                  label="Choose category"
+                  className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                  type="b-roll"
+                  options={categoryOptions}
+                  value={categoryOptions.find((opt) => opt.value === formData.category)}
+                  onChange={(val) => { updateField('category', val); setErrors((prev) => ({ ...prev, category: '' })); }}
+                />
+              </div>
+              {errors.category && <p className="mt-1 text-xs text-red-400">{errors.category}</p>}
             </div>
           </div>
 
@@ -471,15 +600,16 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               onChange={(e) => { updateField('description', e.target.value); setErrors((prev) => ({ ...prev, description: '' })); }}
               placeholder={`Briefly describe your ${type} including key features.`}
               rows={3}
-              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-[#909294]/15! px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
+              disabled={submitting}
+              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-[#909294]/15! px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
             />
             {errors.description && <p className="mt-1 text-xs text-red-400">{errors.description}</p>}
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div
-              tabIndex={0}
-              onPaste={handleImagesPaste}
+              tabIndex={submitting ? -1 : 0}
+              onPaste={submitting ? undefined : handleImagesPaste}
               className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               title="Click here and press Ctrl+V to paste an image"
             >
@@ -491,6 +621,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 onChange={handleImageUpload}
                 onClear={() => { setUploadedImages([]); setUrlImages([]); }}
                 error={errors.images}
+                disabled={submitting}
               />
 
               {(urlImages.length > 0 || uploadedImages.length > 0) && (
@@ -509,7 +640,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       />
                       <button
                         onClick={() => setUrlImages((prev) => prev.filter((_, i) => i !== index))}
-                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                        disabled={submitting}
+                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -528,7 +660,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       />
                       <button
                         onClick={() => removeImage(index)}
-                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                        disabled={submitting}
+                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -538,8 +671,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               )}
             </div>
             <div
-              tabIndex={0}
-              onPaste={handleLogoPaste}
+              tabIndex={submitting ? -1 : 0}
+              onPaste={submitting ? undefined : handleLogoPaste}
               className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               title="Click here and press Ctrl+V to paste an image"
             >
@@ -549,6 +682,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 fileName={uploadedLogo?.name || urlLogo?.name || ''}
                 onChange={handleLogoUpload}
                 onClear={() => { removeLogo(); setUrlLogo(null); }}
+                error={errors.logo}
+                disabled={submitting}
               />
               {(uploadedLogo || urlLogo) && (
                 <div className="mt-3">
@@ -562,7 +697,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                     />
                     <button
                       onClick={() => { removeLogo(); setUrlLogo(null); }}
-                      className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                      disabled={submitting}
+                      className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -579,6 +715,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               value={formData.cta}
               onChange={(e) => { updateField('cta', e.target.value); setErrors((prev) => ({ ...prev, cta: '' })); }}
               error={errors.cta}
+              disabled={submitting}
             />
             {isBrand ? (
               <CustomInput
@@ -587,84 +724,64 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 value={formData.tagline}
                 onChange={(e) => { updateField('tagline', e.target.value); setErrors((prev) => ({ ...prev, tagline: '' })); }}
                 error={errors.tagline}
+                disabled={submitting}
               />
             ) : (
               <div className="flex w-full min-w-0 flex-col">
                 <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Product Type</label>
-                <CommonDropdown
-                  label="Choose Product Type"
-                  type="b-roll"
-                  className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
-                  options={productTypeOptions}
-                  value={productTypeOptions.find((opt) => opt.value === formData.productType)}
-                  onChange={(val) => updateField('productType', val)}
-                />
+                <div className={`${errors.productType ? 'rounded-full ring-1 ring-red-500' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+                  <CommonDropdown
+                    label="Choose Product Type"
+                    type="b-roll"
+                    className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                    options={productTypeOptions}
+                    value={productTypeOptions.find((opt) => opt.value === formData.productType)}
+                    onChange={(val) => { updateField('productType', val); setErrors((prev) => ({ ...prev, productType: '' })); }}
+                  />
+                </div>
+                {errors.productType && <p className="mt-1 text-xs text-red-400">{errors.productType}</p>}
               </div>
             )}
           </div>
 
           {/* Settings Divider */}
           <div>
-            <div className="mb-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:mb-3">
-              <div className="flex w-full min-w-0 flex-col">
-                <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Model*</label>
-                <div className={errors.model ? 'rounded-full ring-1 ring-red-500' : ''}>
-                  <CommonDropdown
-                    label="Choose Model"
-                    type="b-roll"
-                    className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
-                    options={modelOptions}
-                    value={modelOptions.find((opt) => opt.value === formData.model)}
-                    onChange={(val) => { updateField('model', val); setErrors((prev) => ({ ...prev, model: '' })); }}
-                  />
-                </div>
-                {errors.model && <p className="mt-1 text-xs text-red-400">{errors.model}</p>}
-              </div>
-
-              <div className="flex w-full min-w-0 flex-col">
-                <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Duration*</label>
-                <div className={errors.duration ? 'rounded-full ring-1 ring-red-500' : ''}>
-                  <CommonDropdown
-                    label="Choose Duration"
-                    type="b-roll"
-                    className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
-                    options={durationOptions}
-                    value={durationOptions.find((opt) => opt.value === formData.duration)}
-                    onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
-                  />
-                </div>
-                {errors.duration && <p className="mt-1 text-xs text-red-400">{errors.duration}</p>}
-              </div>
+            <div className={`mb-4 rounded-2xl border border-white/5 bg-[#909294]/10 p-3 sm:p-4 xl:mb-3 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+              <VoiceSelector
+                value={formData.voice}
+                onChange={(next) => { updateField('voice', next); setErrors((prev) => ({ ...prev, voice: '' })); }}
+                error={errors.voice}
+              />
             </div>
 
-            <div className="flex w-full min-w-0 flex-col">
-              <label className="mb-2 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Aspect ratio</label>
-              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  <button
-                    onClick={() => updateField('aspectRatio', '9:16')}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 transition-all sm:gap-2 sm:px-5 sm:py-1.5 ${formData.aspectRatio === '9:16' ? 'border-transparent bg-[#3A3A3A] text-white' : 'border-white/10 bg-[#909294]/15 text-white/60 hover:text-white'}`}
-                  >
-                    <div className="h-3.5 w-2 rounded-[2px] border-2 border-current sm:h-4 sm:w-2.5"></div>
-                    <span className="text-xs font-medium sm:text-sm">9:16</span>
-                  </button>
-                  <button
-                    onClick={() => updateField('aspectRatio', '16:9')}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 transition-all sm:gap-2 sm:px-4 sm:py-1.5 ${formData.aspectRatio === '16:9' ? 'border-transparent bg-[#3A3A3A] text-white' : 'border-white/10 bg-[#909294]/15 text-white/60 hover:text-white'}`}
-                  >
-                    <div className="h-2 w-3.5 rounded-[2px] border-2 border-current sm:h-2.5 sm:w-4"></div>
-                    <span className="text-xs font-medium sm:text-sm">16:9</span>
-                  </button>
-                </div>
+            <div className="mt-4 flex w-full min-w-0 flex-col sm:mt-6">
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
+                  {(() => {
+                    const est = estimateAdVideoCredits({ video_model: formData.model, video_duration: formData.duration, no_of_ads: 1, modelCredits });
+                    const enough = availableCredits >= est;
+                    if (!formData.model || !formData.duration) return null;
+                    return enough ? (
+                      <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
+                        <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white/90">
+                          ~{est} credits
+                        </span>
+                      </ShadcnTooltip>
+                    ) : (
+                      <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                        Not enough credits — need {est}, you have {availableCredits}
+                      </span>
+                    );
+                  })()}
                   <button
                     onClick={onBack}
-                    className="rounded-sm border border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-white transition hover:bg-white/5 sm:px-6 sm:text-sm"
+                    disabled={submitting}
+                    className="rounded-sm border border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
                   >
                     Back
                   </button>
                   <button
-                    disabled={submitting}
+                    disabled={submitting || availableCredits < estimateAdVideoCredits({ video_model: formData.model, video_duration: formData.duration, no_of_ads: 1, modelCredits })}
                     onClick={async () => {
                       const validationErrors = validate();
                       if (Object.keys(validationErrors).length > 0) {
@@ -672,10 +789,33 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         return;
                       }
 
-                      // If recreating and nothing changed, reuse existing scenes directly
+                      // Recreate with no edits: clone the original session into a new
+                      // doc (status="copy") so generate-video runs on a fresh _id and
+                      // doesn't mutate the original. Backend's /ai-ads/copy/:sessionId
+                      // carries over inputs + scenes + scripts; results[] stays empty
+                      // until the user triggers generate-video on the new id.
                       if (!hasFormChanged()) {
-                        dispatch(setAiAdsSceneLoading(false));
-                        onNext({ formData, uploadedImages, uploadedLogo, urlImages, urlLogo });
+                        const originalSessionId = existingSceneData?._id || existingSceneData?.data?._id;
+                        if (!originalSessionId) {
+                          dispatch(setAiAdsSceneLoading(false));
+                          onNext({ formData, uploadedImages, uploadedLogo, urlImages, urlLogo });
+                          return;
+                        }
+                        setSubmitting(true);
+                        try {
+                          const result = await dispatch(copyAiAdsSessionAction(originalSessionId));
+                          if (result?.sessionId) {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('id', result.sessionId);
+                            window.history.replaceState(null, '', url.toString());
+                          }
+                          dispatch(setAiAdsSceneLoading(false));
+                          onNext({ formData, uploadedImages, uploadedLogo, urlImages, urlLogo });
+                        } catch {
+                          // error already toasted in action
+                        } finally {
+                          setSubmitting(false);
+                        }
                         return;
                       }
 
@@ -689,11 +829,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                           urlLogo,
                         }));
                         if (result?.__validationError) {
-                          const fieldMap = { ctaType: 'cta' };
+                          const fieldMap = { ctaType: 'cta', userPrompt: 'optimizedPrompt' };
                           const apiErrors = {};
                           result.fields.forEach(({ field, reason }) => {
-                            // Strip array index suffix: "images[0]" → "images"
-                            const baseField = field.replace(/\[\d+\]/g, '');
+                            // Strip array index suffix: "images[0]" → "images", trim whitespace
+                            const baseField = field.trim().replace(/\[\d+\]/g, '');
                             const key = fieldMap[baseField] || baseField;
                             apiErrors[key] = reason;
                           });
@@ -712,7 +852,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         setSubmitting(false);
                       }
                     }}
-                    className="rounded-sm bg-white px-4 py-1.5 text-13 font-medium text-black transition hover:opacity-90 disabled:opacity-50 sm:px-6 sm:text-sm"
+                    className="rounded-sm bg-white px-4 py-1.5 text-13 font-medium text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
                   >
                     {submitting ? 'Generating...' : 'Next'}
                   </button>

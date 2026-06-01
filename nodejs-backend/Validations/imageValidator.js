@@ -31,6 +31,14 @@ const baseUserInputs = {
 // =========================
 // LIFESTYLE
 // =========================
+const lifestyleBrandInfoSchema = Joi.object({
+    brandName: Joi.string().allow("", null), // Optional for lifestyle
+    brandDescription: Joi.string().allow("", null),
+    brandLogo: Joi.string().allow("", null),
+    brandImages: Joi.array().items(Joi.string()).allow(null),
+    brandColors: Joi.array().items(Joi.string()),
+});
+
 const lifestyleUserInputsSchema = Joi.object({
     ...baseUserInputs,
     productDescription: Joi.string().required(),
@@ -48,13 +56,21 @@ const lifestyleUserInputsSchema = Joi.object({
 
 const lifestyleSchema = Joi.object({
     type: Joi.valid("lifestyle").required(),
-    brandInfo: brandInfoSchema.required(),
+    brandInfo: lifestyleBrandInfoSchema.required(),
     userInputs: lifestyleUserInputsSchema.required(),
 });
 
 // =========================
 // PRODUCT SHOT
 // =========================
+const productShotBrandInfoSchema = Joi.object({
+    brandName: Joi.string().allow("", null), // Optional for product_shot
+    brandDescription: Joi.string().allow("", null),
+    brandLogo: Joi.string().allow("", null),
+    brandImages: Joi.array().items(Joi.string()).allow(null),
+    brandColors: Joi.array().items(Joi.string()),
+});
+
 const productShotUserInputsSchema = Joi.object({
     ...baseUserInputs,
     productName: Joi.string().required(),
@@ -64,13 +80,21 @@ const productShotUserInputsSchema = Joi.object({
 
 const productShotSchema = Joi.object({
     type: Joi.valid("product_shot").required(),
-    brandInfo: brandInfoSchema.required(),
+    brandInfo: productShotBrandInfoSchema.required(),
     userInputs: productShotUserInputsSchema.required(),
 });
 
 // =========================
 // APPS / SAAS
 // =========================
+const appsSaasBrandInfoSchema = Joi.object({
+    brandName: Joi.string().allow("", null), // Optional for apps_saas
+    brandDescription: Joi.string().allow("", null),
+    brandLogo: Joi.string().allow("", null),
+    brandImages: Joi.array().items(Joi.string()).allow(null),
+    brandColors: Joi.array().items(Joi.string()),
+});
+
 const appsSaasUserInputsSchema = Joi.object({
     ...baseUserInputs,
     productName: Joi.string().required(),
@@ -80,7 +104,7 @@ const appsSaasUserInputsSchema = Joi.object({
 
 const appsSaasSchema = Joi.object({
     type: Joi.valid("apps_saas").required(),
-    brandInfo: brandInfoSchema.required(),
+    brandInfo: appsSaasBrandInfoSchema.required(),
     userInputs: appsSaasUserInputsSchema.required(),
 });
 

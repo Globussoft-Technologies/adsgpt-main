@@ -233,7 +233,8 @@ export default function ImageCard({
                 <span className="text-gray-400">Type:</span> {item?.inputs?.type || '-'}
               </p>
               <p>
-                <span className="text-gray-400">Model:</span> {item?.inputs?.model || '-'}
+                <span className="text-gray-400">Model:</span>{' '}
+                {item?.inputs?.modelLabel || item?.inputs?.model || '-'}
               </p>
               {item?.inputs?.brandName && (
                 <p>

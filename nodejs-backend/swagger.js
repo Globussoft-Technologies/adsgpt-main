@@ -33,6 +33,14 @@ const {
   updateImageResultPayload,
 } = require("./resources/payloadBody/imageGenerationPayload");
 
+const {
+  createAutopilotJobPayload,
+  updateAutopilotJobPayload,
+  autopilotJobResponse,
+  autopilotJobListResponse,
+  autopilotRunHistoryResponse,
+} = require("./resources/payloadBody/adsFactoryAutoPilotPayload");
+
 // For local development on port 7000, detect if MODE=DEV
 const isLocalDev = process.env.MODE === "local" || !process.env.SWAGGER_HOST;
 const SwaggerHost = isLocalDev ? "http://localhost:7000" : process.env.SWAGGER_HOST;
@@ -77,6 +85,10 @@ const doc = {
     {
       name: "Google Ads",
       description: "Google Ads account, campaign, ad group and ad management",
+    },
+    {
+      name: "Ads Factory Autopilot",
+      description: "Autopilot job management — schedule, pause, resume, and monitor automated ad generation jobs",
     },
     {
       name: "default",
@@ -124,6 +136,13 @@ const doc = {
       brandAwarenessImagePayload,
       aiAdsImagePayload,
       updateImageResultPayload,
+
+      // Ads Factory Autopilot
+      createAutopilotJobPayload,
+      updateAutopilotJobPayload,
+      autopilotJobResponse,
+      autopilotJobListResponse,
+      autopilotRunHistoryResponse,
     },
   },
 

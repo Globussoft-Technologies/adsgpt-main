@@ -58,7 +58,20 @@ export default function MetaAdsDashboard() {
   const [dateOpen, setDateOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
-  const [showCreateWizard, setShowCreateWizard] = useState(false);
+  // Wizard launcher — one modal serves create (full), add-ad-set, and
+  // add-ad flows. `mode` + `context` drive which steps render.
+  const [wizard, setWizard] = useState({ open: false, mode: 'create-full', context: null });
+  // Bumped after an add succeeds so the drilled-down Ad Set / Ads tables
+  // refetch and show the new row.
+  const [manageNonce, setManageNonce] = useState(0);
+  const openWizard = useCallback(
+    (mode, context = null) => setWizard({ open: true, mode, context }),
+    [],
+  );
+  const closeWizard = useCallback(
+    () => setWizard((w) => ({ ...w, open: false })),
+    [],
+  );
 
   const reloadCampaigns = useCallback(async () => {
     if (!selectedAccount) return;
@@ -393,7 +406,7 @@ export default function MetaAdsDashboard() {
                     Refresh
                   </button>
                   <button
-                    onClick={() => setShowCreateWizard(true)}
+                    onClick={() => openWizard('create-full')}
                     disabled={!selectedAccount}
                     className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-10 2xl:text-xs font-semibold text-black transition-all hover:opacity-90 disabled:opacity-50"
                   >
@@ -407,6 +420,11 @@ export default function MetaAdsDashboard() {
                 loadingCampaigns={loadingCampaigns}
                 adAccountId={selectedAccount?.id}
                 onRefresh={reloadCampaigns}
+                // Add-Ad-Set / Add-Ad / Edit buttons all open the V2 wizard
+                // with mode/context — only expose them when V2 is enabled.
+                // (V1 wizard doesn't understand these modes.)
+                onLaunchWizard={FEATURE_WIZARD_V2 ? openWizard : null}
+                manageNonce={manageNonce}
               />
             </motion.div>
           )}
@@ -470,22 +488,31 @@ export default function MetaAdsDashboard() {
         </AnimatePresence>
       </div>
 
-      {/* ── create campaign wizard ─────────────────────────────────────────── */}
+      {/* ── create / add-to-existing wizard ────────────────────────────────── */}
       {FEATURE_WIZARD_V2 ? (
         <CreateCampaignWizardV2
-          open={showCreateWizard}
-          onClose={() => setShowCreateWizard(false)}
+          open={wizard.open}
+          mode={wizard.mode}
+          context={wizard.context}
+          onClose={closeWizard}
           adAccountId={selectedAccount?.id}
           account={selectedAccount}
           onCreated={() => {
-            setActiveTab('campaigns');
-            reloadCampaigns();
+            // Campaign-level changes (new campaign or edited campaign) reload
+            // the Campaigns list; an added ad set / ad refreshes the
+            // drilled-down table in place.
+            if (wizard.mode === 'create-full' || wizard.mode === 'edit-campaign') {
+              if (wizard.mode === 'create-full') setActiveTab('campaigns');
+              reloadCampaigns();
+            } else {
+              setManageNonce((n) => n + 1);
+            }
           }}
         />
       ) : (
         <CreateCampaignWizard
-          open={showCreateWizard}
-          onClose={() => setShowCreateWizard(false)}
+          open={wizard.open}
+          onClose={closeWizard}
           account={selectedAccount}
           onCreated={() => {
             setActiveTab('campaigns');

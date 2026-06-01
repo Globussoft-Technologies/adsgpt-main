@@ -183,54 +183,72 @@ class GeneratedMediaController {
       const limitNumber = Math.max(1, Math.min(100, parseInt(limit, 10) || 24));
       const skip = (pageNumber - 1) * limitNumber;
 
-      const targetType = type === "video" ? "video" : "image";
+      // 'all' returns images AND videos in one feed (the wizard's media
+      // picker auto-derives image-vs-video from each row's `type`, so it
+      // no longer asks the user to pick a media kind up-front).
+      const targetType =
+        type === "video" ? "video" : type === "all" ? "all" : "image";
 
-      // Asset-URL match — at least one of the known shapes must hold a
-      // non-empty string. `$type: 'string', $ne: ''` rejects nulls,
-      // missing fields, empty strings, and objects in one go.
+      // Per-kind asset-URL matchers — at least one known shape must hold a
+      // non-empty string. `$type: 'string', $ne: ''` rejects nulls, missing
+      // fields, empty strings, and objects in one go.
+      const videoUrlOr = [
+        { video: { $type: "string", $ne: "" } },
+        { "video.url": { $type: "string", $ne: "" } },
+      ];
+      const imageUrlOr = [
+        { image: { $type: "string", $ne: "" } },
+        { "image.base_image_with_logo": { $type: "string", $ne: "" } },
+        { "image.base_image": { $type: "string", $ne: "" } },
+      ];
       const urlMatch =
         targetType === "video"
-          ? {
+          ? { $or: videoUrlOr }
+          : targetType === "image"
+          ? { $or: imageUrlOr }
+          : // all — match a video row with a video URL OR an image row with
+            // an image URL.
+            {
               $or: [
-                { video: { $type: "string", $ne: "" } },
-                { "video.url": { $type: "string", $ne: "" } },
-              ],
-            }
-          : {
-              $or: [
-                { image: { $type: "string", $ne: "" } },
-                { "image.base_image_with_logo": { $type: "string", $ne: "" } },
-                { "image.base_image": { $type: "string", $ne: "" } },
+                { $and: [{ type: "video" }, { $or: videoUrlOr }] },
+                { $and: [{ type: "image" }, { $or: imageUrlOr }] },
               ],
             };
 
-      // URL projection expression — chooses the right field per row.
-      // Mirrors the match above so anything that passed the filter
-      // resolves to a non-empty string here.
+      // Per-kind URL projection expressions — chooses the right field.
+      const videoUrlExpr = {
+        $cond: [
+          { $eq: [{ $type: "$video" }, "string"] },
+          "$video",
+          { $ifNull: ["$video.url", null] },
+        ],
+      };
+      const imageUrlExpr = {
+        $cond: [
+          { $eq: [{ $type: "$image" }, "string"] },
+          "$image",
+          {
+            $ifNull: [
+              "$image.base_image_with_logo",
+              { $ifNull: ["$image.base_image", null] },
+            ],
+          },
+        ],
+      };
       const urlProject =
         targetType === "video"
-          ? {
-              $cond: [
-                { $eq: [{ $type: "$video" }, "string"] },
-                "$video",
-                { $ifNull: ["$video.url", null] },
-              ],
-            }
-          : {
-              $cond: [
-                { $eq: [{ $type: "$image" }, "string"] },
-                "$image",
-                {
-                  $ifNull: [
-                    "$image.base_image_with_logo",
-                    { $ifNull: ["$image.base_image", null] },
-                  ],
-                },
-              ],
-            };
+          ? videoUrlExpr
+          : targetType === "image"
+          ? imageUrlExpr
+          : // all — pick per row's own type.
+            { $cond: [{ $eq: ["$type", "video"] }, videoUrlExpr, imageUrlExpr] };
+
+      // 'all' has no fixed `type` in the match — the urlMatch already scopes
+      // to image/video rows; otherwise pin the type.
+      const typeMatch = targetType === "all" ? {} : { type: targetType };
 
       const pipeline = [
-        { $match: { userId, type: targetType, ...urlMatch } },
+        { $match: { userId, ...typeMatch, ...urlMatch } },
         { $sort: { createdAt: -1 } },
         {
           $facet: {

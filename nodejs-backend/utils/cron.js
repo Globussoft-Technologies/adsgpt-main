@@ -7,6 +7,7 @@ const IMAGE = require("../Module/adCreative/adCreativeImages");
 const { s3Client } = require('../storage/s3');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { runUserRuleCycle } = require('../services/autopilot/userRuleOrchestrator');
+const UnifiedCreditController = require('../controllers/UnifiedCreditController');
 require('dotenv').config();
 
 // -----------------------------------------------------------------------------
@@ -42,9 +43,56 @@ const registerAutopilotCron = () => {
   console.log(`[autopilot] scheduler registered: cron="${schedule}" dryRun=${dryRun}`);
 };
 
+// -----------------------------------------------------------------------------
+// Credit reservation sweeper
+// Refunds CreditReservation receipts older than CREDIT_RESERVATION_MAX_AGE_MIN
+// (default 60 min). Closes the orphan-hold gap when Python silently drops a
+// generation — without this, those credits stay locked in `used_*` forever
+// because the 24h TTL only deletes the receipt, it does not refund.
+// -----------------------------------------------------------------------------
+const registerCreditReservationSweepCron = () => {
+    const enabled =
+        String(process.env.CREDIT_RESERVATION_SWEEP_ENABLED || 'true').toLowerCase() === 'true';
+    if (!enabled) {
+        console.log('[credit-sweep] disabled (CREDIT_RESERVATION_SWEEP_ENABLED=false)');
+        return;
+    }
+    const schedule = process.env.CREDIT_RESERVATION_SWEEP_CRON || '*/10 * * * *';
+    const maxAgeMin = Math.max(
+        5,
+        parseInt(process.env.CREDIT_RESERVATION_MAX_AGE_MIN || '60', 10),
+    );
+    if (!cron.validate(schedule)) {
+        console.error(
+            `[credit-sweep] invalid CREDIT_RESERVATION_SWEEP_CRON: ${schedule}. Cron not registered.`,
+        );
+        return;
+    }
+    cron.schedule(schedule, async () => {
+        try {
+            const { swept, refunded } = await UnifiedCreditController.sweepStaleReservations({
+                maxAgeMs: maxAgeMin * 60 * 1000,
+            });
+            if (swept > 0) {
+                console.log(
+                    `[credit-sweep] swept=${swept} refunded=${refunded} (age>${maxAgeMin}min)`,
+                );
+            }
+        } catch (err) {
+            console.error('[credit-sweep] cron tick failed:', err.message);
+        }
+    });
+    console.log(
+        `[credit-sweep] scheduler registered: cron="${schedule}" maxAge=${maxAgeMin}min`,
+    );
+};
+
 const runCronJobs = () => {
     // Phase 3 — hourly Autopilot orchestrator
     registerAutopilotCron();
+
+    // Orphan-reservation sweeper (every 10 min by default)
+    registerCreditReservationSweepCron();
 
     // Daily newsletter drip — runs at 09:00 UTC every day
     cron.schedule('0 9 * * *', async () => {
