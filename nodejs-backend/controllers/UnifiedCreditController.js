@@ -713,13 +713,18 @@ class UnifiedCreditController {
       // Only the current cycle's leftover BASE carries forward. Any unused
       // rollover from the prior cycle is forfeited so credits can't compound
       // across multiple cycles of light usage.
+      // No rollover for yearly plans (paid up-front, no churn-protection
+      // value) OR for the 7-day trial (free trials shouldn't accumulate
+      // leftover credits across cycles, defeats the trial limit).
       const isYearlyPlan = durationDays >= 365;
-      const totalCarryForward = isYearlyPlan
-        ? 0
-        : Math.max(
-            0,
-            user.base_subscription_credits - user.used_subscription_credits
-          );
+      const isShortTrial = durationDays === 7;
+      const totalCarryForward =
+        isYearlyPlan || isShortTrial
+          ? 0
+          : Math.max(
+              0,
+              user.base_subscription_credits - user.used_subscription_credits,
+            );
 
       const newBaseCredits = Number.isFinite(snapshot.credits)
         ? snapshot.credits
@@ -744,7 +749,9 @@ class UnifiedCreditController {
         `Billing cycle refreshed for user ${userId} (plan ${planId}, ${durationDays}d): ` +
           (isYearlyPlan
             ? `yearly plan — no rollover, new allocation: ${newBaseCredits}`
-            : `carried forward ${totalCarryForward} credits, new allocation: ${newBaseCredits}`)
+            : isShortTrial
+              ? `short-trial plan — no rollover, new allocation: ${newBaseCredits}`
+              : `carried forward ${totalCarryForward} credits, new allocation: ${newBaseCredits}`),
       );
 
       return updatedUser;

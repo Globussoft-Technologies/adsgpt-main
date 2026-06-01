@@ -943,7 +943,11 @@ async function syncUserProfile(userData) {
       // const carryForward = leftoverBase + leftoverRollover;
 
       // New logic: only carry forward leftover base credits on resubscribe. Leftover rollover credits will be forfeited if the user pauses and resubscribes, but this prevents potential credit accumulation abuse while still allowing users to benefit from unused base credits when they return.
-      const carryForward = leftoverBase;
+      // The 7-day trial gets NO rollover on resubscribe either — otherwise
+      // a user could exit-then-resubscribe to chain unlimited free trials.
+      const planDurationDays = planSnapshot?.durationDays || 30;
+      const isShortTrial = planDurationDays === 7;
+      const carryForward = isShortTrial ? 0 : leftoverBase;
 
 
       updateFields.base_subscription_credits = newBaseCredits;
