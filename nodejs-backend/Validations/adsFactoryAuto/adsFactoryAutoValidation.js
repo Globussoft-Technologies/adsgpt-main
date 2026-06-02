@@ -18,7 +18,12 @@ const scheduleSchema = Joi.object({
     then:      customFrequencySchema.required(),
     otherwise: Joi.forbidden(),
   }),
-});
+}).custom((value, helpers) => {
+  if (value.startDate && value.endDate && new Date(value.endDate) <= new Date(value.startDate)) {
+    return helpers.error("any.invalid", { message: "endDate must be greater than startDate" });
+  }
+  return value;
+}).messages({ "any.invalid": "{{#message}}" });
 
 // ─── Platform target schemas ──────────────────────────────────────────────────
 
@@ -26,7 +31,7 @@ const metaTargetSchema = Joi.object({
   adAccountId: Joi.string().allow("", null).optional(),
   pageId:      Joi.string().allow("", null).optional(),
   campaignId:  Joi.string().allow("", null).optional(),
-  adSetId:     Joi.string().allow("", null).optional(),
+  adSetId:     Joi.array().items(Joi.string()).min(1).optional(),
   leadFormId:  Joi.string().allow("", null).optional(),
 });
 

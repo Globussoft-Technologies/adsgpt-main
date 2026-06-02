@@ -5,6 +5,7 @@ const { authenticateJWT } = require("../../services/authService");
 
 router.get("/cta-options",        authenticateJWT, ctrl.getCtaOptions);
 router.get("/jobs/stats",         authenticateJWT, ctrl.getStats);        // overall stats — must be before /:id
+router.post("/jobs/summary",      authenticateJWT, ctrl.getJobSummary);   // pre-creation summary card — must be before /:id
 router.post("/jobs",              authenticateJWT, ctrl.createJob);
 router.get("/jobs",               authenticateJWT, ctrl.getJobs);
 router.get("/jobs/:id",           authenticateJWT, ctrl.getJob);

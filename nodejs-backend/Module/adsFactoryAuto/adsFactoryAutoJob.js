@@ -85,11 +85,12 @@ const ScheduleSchema = new mongoose.Schema(
 // Facebook / Instagram placement IDs — must exist in the user's Meta Business Manager
 const MetaTargetSchema = new mongoose.Schema(
   {
-    adAccountId: { type: String, default: "" }, // e.g. "act_123456789"
-    pageId:      { type: String, default: "" }, // Facebook Page the ad runs under
-    campaignId:  { type: String, default: "" }, // existing Meta campaign to attach to
-    adSetId:     { type: String, default: "" }, // existing ad set inside that campaign
-    leadFormId:  { type: String, default: "" }, // required for LEADS campaigns
+    adAccountId:      { type: String,   default: "" },  // bare digits e.g. "123456789" — act_ is added at runtime
+    pageId:           { type: String,   default: "" },  // Facebook Page the ad runs under
+    campaignId:       { type: String,   default: "" },  // existing Meta campaign to attach to
+    adSetId:          { type: [String], default: [] },  // ordered list of ad sets — rotated when one hits 50-ad limit
+    activeAdSetIndex: { type: Number,   default: 0 },   // index into adSetIds currently being used
+    leadFormId:       { type: String,   default: "" },  // required for LEADS campaigns
   },
   { _id: false }
 );

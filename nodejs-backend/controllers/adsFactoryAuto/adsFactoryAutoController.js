@@ -7,6 +7,7 @@ const {
   updateJobSchema,
 } = require("../../Validations/adsFactoryAuto/adsFactoryAutoValidation");
 const logger = require("../../utils/logger");
+const UnifiedCreditController = require("../UnifiedCreditController");
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ class AdsFactoryAutoController {
         model:         value.model         ?? null,
         callToAction:  value.callToAction  ?? [],
         destinationUrl: value.destinationUrl ?? "",
-        targets:        value.targets        ?? {},
+        targets:        value.targets ?? {},
         status:         "active",
       });
 
@@ -869,6 +870,139 @@ class AdsFactoryAutoController {
       });
     } catch (err) {
       logger.error(`[adsFactoryAuto:getJobActivity] ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  // ─── Summary preview card (shown BEFORE job is created) ───────────────────────
+  //
+  // POST /jobs/summary
+  // Body: { campaignId, pairsPerCycle, model, schedule: { frequency, startDate, endDate, timezone, cronExpression } }
+  //
+  // All numbers are computed from the user's current form inputs so they can
+  // see projected cost/coverage before committing to creating the job.
+
+  async getJobSummary(req, res) {
+    /*
+      #swagger.tags = ['Ads Factory Autopilot']
+      #swagger.summary = 'Job summary preview'
+      #swagger.description = 'Calculates the summary card shown before creating an autopilot job: next run time based on schedule, cycles scheduled until endDate, credits per cycle derived from campaignId services × pairsPerCycle, how many future cycles remaining credits cover, and total credits that will be consumed across all runnable cycles.'
+      #swagger.security = [{ "BearerAuth": [] }]
+    */
+    try {
+      const userId = req.user.user_id;
+      const { campaignId, pairsPerCycle = 1, model = null, schedule = {} } = req.body;
+
+      if (!campaignId) {
+        return res.status(400).json({ success: false, error: "campaignId is required" });
+      }
+      if (!schedule.frequency) {
+        return res.status(400).json({ success: false, error: "schedule.frequency is required" });
+      }
+
+      // ── Load campaign to get its services ────────────────────────────────────
+      const campaign = await Campaign.findOne({ _id: campaignId, userId })
+        .select("services")
+        .lean();
+      if (!campaign) {
+        return res.status(404).json({ success: false, error: "Campaign not found" });
+      }
+
+      const cronExpr = schedule.cronExpression || FREQUENCY_CRON_MAP[schedule.frequency] || null;
+      const tz       = schedule.timezone || "UTC";
+      const fromDate = schedule.startDate ? new Date(schedule.startDate) : new Date();
+
+      // ── 1. Next run time ────────────────────────────────────────────────────
+      let nextRunAt = null;
+      if (cronExpr) {
+        try {
+          const cronParser = require("cron-parser");
+          nextRunAt = cronParser.parseExpression(cronExpr, { currentDate: fromDate, tz })
+            .next()
+            .toDate();
+        } catch (_) {}
+      }
+
+      // ── 2. Cycles scheduled — cron fires from now until endDate ────────────
+      // null = no endDate → job runs indefinitely
+      let cyclesScheduled = null;
+      if (cronExpr && schedule.endDate) {
+        try {
+          const cronParser = require("cron-parser");
+          const iter = cronParser.parseExpression(cronExpr, {
+            currentDate: fromDate,
+            endDate:     new Date(schedule.endDate),
+            tz,
+          });
+          let count = 0;
+          while (count <= 10000) {
+            try { iter.next(); count++; } catch (_) { break; }
+          }
+          cyclesScheduled = count;
+        } catch (_) {}
+      }
+
+      // ── 3. Credits per cycle ────────────────────────────────────────────────
+      // text + image scale with pairsPerCycle; video uses its stored quantity.
+      const ppc      = Number(pairsPerCycle) || 1;
+      const services = campaign.services?.servicesSelected || [];
+      let creditsPerCycle = 0;
+      for (const srv of services) {
+        let qty, key;
+        if (srv.serviceName === "text") {
+          qty = ppc;
+          key = "ADSGPT-TEXT";
+        } else if (srv.serviceName === "image") {
+          qty = ppc;
+          key = model || srv.serviceParams?.model || null;
+        } else if (srv.serviceName === "video") {
+          qty = srv.serviceParams?.quantity || 0;
+          key = model || srv.serviceParams?.model || null;
+        } else {
+          continue;
+        }
+        creditsPerCycle += qty * (UnifiedCreditController.getModelDeduction(key) || 0);
+      }
+
+      // ── 4. User's credit balance ────────────────────────────────────────────
+      let totalCredits = 0, remainingCredits = 0;
+      try {
+        const cs     = await UnifiedCreditController.getCreditStatus(userId);
+        totalCredits     = cs?.total_credits     || 0;
+        remainingCredits = cs?.remaining_credits || 0;
+      } catch (_) {}
+
+      // ── 5. Cycles your credits cover ────────────────────────────────────────
+      const cyclesCredsCover = creditsPerCycle > 0
+        ? Math.floor(remainingCredits / creditsPerCycle)
+        : null;
+
+      // ── 6. Credits used across runnable cycles ──────────────────────────────
+      // Runnable = min(cyclesScheduled, cyclesCredsCover).
+      // If no endDate (indefinite), runnable = cyclesCredsCover.
+      const runnableCycles = (cyclesScheduled !== null && cyclesCredsCover !== null)
+        ? Math.min(cyclesScheduled, cyclesCredsCover)
+        : (cyclesCredsCover ?? 0);
+      const creditsUsedAcrossRunnable = Math.round(runnableCycles * creditsPerCycle);
+
+      return res.json({
+        success: true,
+        data: {
+          frequency:  schedule.frequency,
+          timezone:   tz,
+
+          nextRunAt,                      // "Next Run"
+          cyclesScheduled,                // "Cycles Scheduled" — null if indefinite
+          creditsPerCycle,                // "Credits / Cycle"
+          cyclesCredsCover,               // "Cycles Your Credits Cover"
+
+          creditsUsedAcrossRunnable,      // left of "21 / 900"
+          totalCredits,                   // right of "21 / 900"
+          remainingCredits,
+        },
+      });
+    } catch (err) {
+      logger.error(`[adsFactoryAuto:getJobSummary] ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });
     }
   }

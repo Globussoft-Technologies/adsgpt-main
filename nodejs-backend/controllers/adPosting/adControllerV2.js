@@ -48,7 +48,7 @@ const adFactoryV2Schema = Joi.object({
   accountId: Joi.string().required(), // FBUsers _id (NOT the AdsGPT user id)
   adAccountId: Joi.string().required(),
   pageId: Joi.string().required(),
-  adFactoryCampaignId: Joi.string().required(),
+  adFactoryCampaignId: Joi.string().optional().allow("", null),
   campaignDetails: Joi.object({
     campaignId: Joi.string().required(),
   }).required(),
@@ -170,12 +170,15 @@ async function createAdV2(req, res) {
       ads,
     } = value;
 
-    // ── AdFactory campaign doc (the orchestration record we update at the end) ──
-    const campaignDoc = await CampaignModel.findById(adFactoryCampaignId);
-    if (!campaignDoc) {
-      return res
-        .status(404)
-        .json({ success: false, error: "AdFactory Campaign not found" });
+    // ── AdFactory campaign doc (optional — only needed when adFactoryCampaignId is provided) ──
+    let campaignDoc = null;
+    if (adFactoryCampaignId) {
+      campaignDoc = await CampaignModel.findById(adFactoryCampaignId);
+      if (!campaignDoc) {
+        return res
+          .status(404)
+          .json({ success: false, error: "AdFactory Campaign not found" });
+      }
     }
 
     // ── Facebook user + access token ──────────────────────────────────────
@@ -404,7 +407,7 @@ async function createAdV2(req, res) {
     }
 
     // ── Update the AdFactory campaign doc (single write at the end) ──
-    await CampaignModel.findByIdAndUpdate(adFactoryCampaignId, {
+    if (adFactoryCampaignId) await CampaignModel.findByIdAndUpdate(adFactoryCampaignId, {
       $set: {
         "fbMetaData.adAccountId": adAccountId,
         "fbMetaData.pageId": pageId,
@@ -486,7 +489,7 @@ async function createAdV2(req, res) {
 
 module.exports = {
   createAdV2,
-  // Exported for tests.
+  uploadImageFromUrl,
   inferCellForMetaCampaign,
   destinationToConversionLocation,
 };

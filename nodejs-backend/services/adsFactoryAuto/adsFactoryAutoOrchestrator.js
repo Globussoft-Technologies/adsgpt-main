@@ -5,22 +5,29 @@
  * matching poster in PLATFORM_POSTERS. Adding a new platform = add one
  * entry to PLATFORM_POSTERS. Nothing else changes.
  *
- * External calls — zero logic duplicated:
- *  validateCredits()      → controllers/adFactory.js
- *  sendAdFactoryRequest() → controllers/adFactory.js
- *  uploadAdImage()        → controllers/adPosting/metaAdLauncher.js
- *  createAd()             → controllers/adPosting/metaAdLauncher.js
- *  logMetaError()         → controllers/adPosting/metaAdLauncher.js
+ * Meta posting uses the same shared functions as adControllerV2.createAdV2:
+ *  uploadImageFromUrl()      → controllers/adPosting/adControllerV2.js
+ *  inferCellForMetaCampaign() → controllers/adPosting/cellInference.js
+ *  buildObjectStorySpec()    → utils/objectStorySpec.js
+ *  invalidateAfterCreate()   → controllers/adPosting/metaAdLauncher.js
  */
 
 const { v4: uuidv4 } = require("uuid");
+const bizSdk         = require("facebook-nodejs-business-sdk");
+const AdAccount      = bizSdk.AdAccount;
 const Campaign       = require("../../Module/adFactory/adFactory");
 const AdsFactoryJob  = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
+const FBUsers        = require("../../Module/adPosting/facebookUsers");
+const PostedAd       = require("../../Module/adPosting/postedAds");
 const logger         = require("../../utils/logger");
 const UnifiedCreditController = require("../../controllers/UnifiedCreditController");
+const { buildObjectStorySpec }                   = require("../../utils/objectStorySpec");
+const { inferCellForMetaCampaign }               = require("../../controllers/adPosting/cellInference");
+const { invalidateAfterCreate }                  = require("../../controllers/adPosting/metaAdLauncher");
+const { decrypt }                                = require("../../utils/crypto");
+const { uploadImageFromUrl }                     = require("../../controllers/adPosting/adControllerV2");
 
 function adFactoryCtrl() { return require("../../controllers/adFactory"); }
-function metaLauncher()  { return require("../../controllers/adPosting/metaAdLauncher"); }
 
 const _runningJobs = new Set();
 
@@ -36,75 +43,143 @@ const _runningJobs = new Set();
 const PLATFORM_POSTERS = {
 
   meta: {
-    isConfigured: (target) => !!(target?.adAccountId && target?.adSetId && target?.pageId),
+    isConfigured: (target) => !!(target?.adAccountId && target?.pageId && target?.adSetId?.length > 0),
 
-    post: async (target, job, creatives) => {
-      const { adAccountId, adSetId, pageId, leadFormId } = target;
-      const controller = metaLauncher();
+    post: async (target, job, creatives, campaign) => {
+      const { adAccountId, pageId, leadFormId, campaignId: metaCampaignId } = target;
 
-      // Pick the creative that has an image; if none have one, fail early
+      const adSetIds = target.adSetId && target.adSetId.length > 0 ? target.adSetId : [];
+      if (adSetIds.length === 0) throw new Error("No ad set configured on this job — set targets.meta.adSetId");
+
       const creative = creatives.find((c) => c.imageUrl) || creatives[0];
       if (!creative) throw new Error("No creative available");
-      if (!creative.imageUrl) {
-        throw new Error("No image was generated for this cycle — ad cannot be posted without an image");
-      }
+      if (!creative.imageUrl) throw new Error("No image was generated for this cycle — ad cannot be posted without an image");
 
-      // Step 1 — upload image using existing uploadAdImage handler
-      const imageHash = await new Promise((resolve, reject) => {
-        const req = {
-          user: { user_id: job.userId },
-          body: { adAccountId, imageUrl: creative.imageUrl },
-          file: null,
-        };
-        const res = {
-          status: (code) => ({
-            json: (body) => code >= 400
-              ? reject(new Error(body.error || "uploadAdImage failed"))
-              : resolve(body.imageHash || null),
-          }),
-        };
-        controller.uploadAdImage(req, res).catch(reject);
-      }).catch((err) => {
-        logger.warn(`[adsFactoryAuto:meta] image upload failed: ${err.message}`);
-        return null;
-      });
+      // ── FB user + access token ────────────────────────────────────────────
+      const fbUser = await FBUsers.findOne({ userId: job.userId });
+      if (!fbUser) throw new Error(`No Facebook account linked for user ${job.userId}`);
+      const accessToken = decrypt(fbUser.accessToken);
+      if (!accessToken) throw new Error("Facebook access token is missing");
 
-      // If image upload failed, skip createAd — posting requires a valid image
-      if (!imageHash) {
-        throw new Error("Image upload failed — ad cannot be posted without an image");
-      }
+      const api = bizSdk.FacebookAdsApi.init(accessToken);
+      bizSdk.FacebookAdsApi.setDefaultApi(api);
+      const account = new AdAccount(`act_${adAccountId}`);
 
-      // Step 2 — create ad using existing createAd handler
+      // ── Fetch Meta campaign + first ad set → infer cell ──────────────────
+      const metaCampaign = await new bizSdk.Campaign(metaCampaignId).get(["id", "objective", "name", "status"]);
+      const firstAdSet   = await new bizSdk.AdSet(adSetIds[0]).get(["id", "destination_type", "promoted_object", "optimization_goal", "name"]);
+      const campaignData = metaCampaign?._data || metaCampaign || {};
+      const firstAdSetData = firstAdSet?._data || firstAdSet || {};
+
+      const cellInfo = inferCellForMetaCampaign(campaignData, firstAdSetData);
+      if (cellInfo.error) throw new Error(cellInfo.error);
+      const { objective, conversionLocation, cell } = cellInfo;
+
+      const promotedObject = firstAdSetData.promoted_object || {};
+      const applicationId  = promotedObject.application_id  || null;
+      const objectStoreUrl = promotedObject.object_store_url || null;
+
+      // ── Upload image ──────────────────────────────────────────────────────
+      logger.info(`[adsFactoryAuto:meta] uploading image — ${(creative.imageUrl || "").slice(0, 120)}`);
+      const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
+      logger.info(`[adsFactoryAuto:meta] image hash: ${imageHash}`);
+
       const ctaType = (creative.callToAction || "LEARN_MORE").toUpperCase().replace(/\s+/g, "_");
+      const adName  = `Automation Ads — ${new Date().toISOString().slice(0, 10)}`;
 
-      return new Promise((resolve, reject) => {
-        const req = {
-          user: { user_id: job.userId },
-          body: {
-            adAccountId,
-            adSetId,
-            pageId,
-            imageHash,
-            headline:    creative.headline    || "",
-            primaryText: creative.message     || "",
-            description: creative.description || "",
-            linkUrl:     creative.linkUrl     || "https://example.com",
-            callToAction: ctaType,
-            ...(leadFormId && { leadFormId }),
-            name:        `Automation Ads Posting — ${new Date().toISOString().slice(0, 10)}`,
-            status:      "PAUSED",
-          },
-        };
-        const res = {
-          status: (code) => ({
-            json: (body) => code >= 400
-              ? reject(new Error(body.error || "createAd failed"))
-              : resolve({ adId: body.ad?.id }),
-          }),
-          json: (body) => resolve({ adId: body.ad?.id }),
-        };
-        controller.createAd(req, res).catch(reject);
+      const objectStorySpec = buildObjectStorySpec(cell.ad.objectStorySpecShape, {
+        pageId,
+        imageHash,
+        headline:       creative.headline    || "",
+        primaryText:    creative.message     || "",
+        description:    creative.description || "",
+        callToAction:   ctaType,
+        linkUrl:        creative.linkUrl     || undefined,
+        leadFormId:     leadFormId           || undefined,
+        objectStoreUrl: objectStoreUrl       || undefined,
+        applicationId:  applicationId       || undefined,
       });
+
+      const adCreative = await account.createAdCreative([], {
+        name: `${adName} — creative`,
+        object_story_spec: objectStorySpec,
+      });
+
+      // ── Try each ad set in order, rotate on 50-ad limit ──────────────────
+      let startIndex = target.activeAdSetIndex || 0;
+      if (startIndex >= adSetIds.length) startIndex = 0;
+
+      let ad = null;
+      let usedAdSetId = null;
+
+      for (let i = startIndex; i < adSetIds.length; i++) {
+        const candidateAdSetId = adSetIds[i];
+        try {
+          ad = await account.createAd([], {
+            name:     adName,
+            adset_id: candidateAdSetId,
+            creative: { creative_id: adCreative.id },
+            status:   "ACTIVE",
+          });
+          usedAdSetId = candidateAdSetId;
+
+          // If we advanced the index, persist it so next run starts here
+          if (i !== startIndex) {
+            await AdsFactoryJob.updateOne(
+              { _id: job._id },
+              { $set: { "targets.meta.activeAdSetIndex": i } }
+            );
+            logger.info(`[adsFactoryAuto:meta] rotated to ad set index ${i} (${candidateAdSetId})`);
+          }
+          break;
+        } catch (err) {
+          const isLimitError = err?.message?.includes("Too many ads") ||
+                               JSON.stringify(err).includes("1487809");
+          if (isLimitError) {
+            logger.warn(`[adsFactoryAuto:meta] ad set ${candidateAdSetId} is full (50 ads limit), trying next`);
+            continue;
+          }
+          throw err; // any other error — surface it
+        }
+      }
+
+      // All ad sets full — pause the job
+      if (!ad) {
+        await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "paused" } });
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(job._id.toString());
+        throw new Error("All ad sets are full (50 ads limit reached on every ad set) — job paused");
+      }
+
+      // ── Persist PostedAd + invalidate cache ──────────────────────────────
+      await PostedAd.create({
+        userId:       fbUser._id.toString(),
+        facebookAdId: ad.id,
+        adAccountId,
+        campaignId:   metaCampaignId,
+        adSetId:      usedAdSetId,
+        creativeId:   adCreative.id,
+        pageId,
+        status:       "ACTIVE",
+        content: {
+          headline:     creative.headline,
+          message:      creative.message,
+          linkUrl:      creative.linkUrl,
+          callToAction: ctaType,
+          imageUrl:     creative.imageUrl || null,
+        },
+        metaData: { objective, conversionLocation, campaignId: metaCampaignId, adSetId: usedAdSetId, leadFormId: leadFormId || undefined },
+        adFactoryCampaignId: campaign._id.toString(),
+      });
+
+      try {
+        await invalidateAfterCreate(fbUser.userId, { adAccountId, campaignId: metaCampaignId, adSetId: usedAdSetId });
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto:meta] cache invalidation failed (non-fatal): ${e.message}`);
+      }
+
+      logger.info(`[adsFactoryAuto:meta] ad created: ${ad.id} in ad set ${usedAdSetId}`);
+      return { adId: ad.id };
     },
   },
 
@@ -415,7 +490,7 @@ async function run(jobId) {
       if (!poster.isConfigured(target)) continue; // not configured — skip silently
 
       try {
-        const result = await poster.post(target, job, newCreatives);
+        const result = await poster.post(target, job, newCreatives, completedCampaign);
         postedAdIds[platformName] = result.adId;
         logger.info(`[adsFactoryAuto] ${platformName} ad posted: ${result.adId}`);
       } catch (platformErr) {
@@ -447,26 +522,6 @@ async function run(jobId) {
   // 9. Save run history
   if (job) {
     try {
-      // ── Auto-Pause if we hit Facebook's hard limit of 50 ads per ad set ──
-      if (runError && (runError.includes("Too many ads") || runError.includes("1487809"))) {
-        logger.warn(`[adsFactoryAuto] job ${jobId} hit Meta's 50 ads limit. Auto-pausing.`);
-        job.status = "paused";
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(job._id.toString());
-
-        // Update fbMetaData.status to "error" so the campaign details reflect the posting failure
-        if (campaign) {
-          try {
-            await Campaign.updateOne(
-              { "metadata.campaignId": campaign.metadata?.campaignId },
-              { $set: { "fbMetaData.status": "error" } }
-            );
-          } catch (campaignErr) {
-            logger.warn(`[adsFactoryAuto] could not update campaign fbMetaData status to error: ${campaignErr.message}`);
-          }
-        }
-      }
-
       job.runHistory.push({
         runId,
         startedAt,

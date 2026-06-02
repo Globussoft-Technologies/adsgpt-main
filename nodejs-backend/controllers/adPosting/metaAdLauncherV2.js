@@ -1387,4 +1387,5 @@ module.exports = {
   resolveCampaignForAdd,
   resolveAdSetForEdit,
   resolveAdForEdit,
+  buildAdCreativeOr400,
 };
