@@ -497,6 +497,12 @@ export default function MetaAdsDashboard() {
           onClose={closeWizard}
           adAccountId={selectedAccount?.id}
           account={selectedAccount}
+          // Lets "Start from template" swap the active ad account on the
+          // dashboard when the template was saved against a different one.
+          onChangeAccount={(nextId) => {
+            const next = adAccounts.find((a) => a.id === nextId);
+            if (next) setSelectedAccount(next);
+          }}
           onCreated={() => {
             // Campaign-level changes (new campaign or edited campaign) reload
             // the Campaigns list; an added ad set / ad refreshes the

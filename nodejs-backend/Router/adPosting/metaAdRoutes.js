@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const metaAdController = require("../../controllers/adPosting/metaAdLauncher");
 const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
+const campaignTemplateController = require("../../controllers/campaignTemplate.controller");
 const autopilotRoutes = require("../autopilot/autopilotRoutes");
 
 // 10MB cap, in-memory only — we forward bytes straight to Meta.
@@ -88,6 +89,14 @@ router.get("/v2/resolve-adset", metaAdControllerV2.resolveAdSetForEdit);
 router.patch("/v2/update-ad", metaAdControllerV2.updateAdV2);
 // Editable shape (creative copy + media tokens) for the Edit ad flow.
 router.get("/v2/resolve-ad", metaAdControllerV2.resolveAdForEdit);
+
+// Campaign Templates — user-saved snapshots of the wizard `form` state, so an
+// agency can stamp out new campaigns from a known-good setup (budget / account
+// / name editable on apply). See campaignTemplate.controller.js.
+router.get("/v2/templates", campaignTemplateController.listTemplates);
+router.get("/v2/templates/:id", campaignTemplateController.getTemplate);
+router.post("/v2/templates", campaignTemplateController.createTemplate);
+router.delete("/v2/templates/:id", campaignTemplateController.deleteTemplate);
 // Resolve the wizard cell for an existing ad set — powers the "Add Ad"
 // flow + gating Add/Edit for legacy-objective campaigns.
 router.get("/v2/resolve-cell", metaAdControllerV2.resolveCellForAdSet);

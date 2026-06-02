@@ -476,6 +476,48 @@ export const updateMetaAdV2 = async (payload) => {
   return data;
 };
 
+// ─── Campaign Templates ──────────────────────────────────────────────────────
+// Saved snapshots of the V2 wizard `form` state. Per-user. Used to stamp out
+// new campaigns from a known-good setup (budget / account / name editable on
+// apply). See campaignTemplate.controller.js on the backend.
+
+// Slim list for the picker (id, name, objective, conversionLocation, dates).
+export const listCampaignTemplates = async () => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/templates`,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Full payload for applying a template.
+export const getCampaignTemplate = async (id) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/v2/templates/${id}`,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Save the current wizard form as a named template. `payload` is the wizard
+// `form` object (transient File handles stripped beforehand).
+export const saveCampaignTemplate = async ({ name, payload, objective, conversionLocation } = {}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/v2/templates`,
+    { name, payload, objective, conversionLocation },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+export const deleteCampaignTemplate = async (id) => {
+  const { data } = await axios.delete(
+    `${BASE_URL}/adsgpt/meta-ads/v2/templates/${id}`,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 // Resolve the wizard cell (objective × conversionLocation) for an existing
 // ad set — powers the management "Add Ad" flow so the wizard knows which
 // cell schema to render. Returns { objective, conversionLocation,

@@ -35,6 +35,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
 import {
   AlertCircle,
+  Bookmark,
+  BookmarkPlus,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -49,6 +51,7 @@ import {
   Rocket,
   Smartphone,
   Target,
+  Trash2,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -70,6 +73,10 @@ import {
   updateMetaCampaignV2,
   updateMetaAdSetV2,
   updateMetaAdV2,
+  saveCampaignTemplate,
+  listCampaignTemplates,
+  getCampaignTemplate,
+  deleteCampaignTemplate,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import LibraryPicker from './LibraryPicker';
@@ -236,9 +243,9 @@ function isEditMode(mode) {
 
 // Header title + launch/save copy per mode.
 const WIZARD_MODE_META = {
-  'create-full': { title: 'New Campaign', toast: 'Campaign launched (PAUSED). Activate it from the Campaigns tab.' },
-  'create-adset': { title: 'New Ad Set', toast: 'Ad set created (PAUSED). Activate it from the Ad Sets view.' },
-  'create-ad': { title: 'New Ad', toast: 'Ad created (PAUSED). Activate it from the Ads view.' },
+  'create-full': { title: 'New Campaign', toast: 'Campaign launched. Meta starts delivering after review.' },
+  'create-adset': { title: 'New Ad Set', toast: 'Ad set created. Meta starts delivering after review.' },
+  'create-ad': { title: 'New Ad', toast: 'Ad created. Meta starts delivering after review.' },
   'edit-campaign': { title: 'Edit Campaign', toast: 'Campaign updated.' },
   'edit-adset': { title: 'Edit Ad Set', toast: 'Ad set updated.' },
   'edit-ad': { title: 'Edit Ad', toast: 'Ad updated.' },
@@ -439,6 +446,11 @@ export default function CreateCampaignWizardV2({
   // For add-to-existing modes: { campaignId, adSetId, objective,
   // conversionLocation, cbo, campaignBudgetType, pageId, parentLabel }.
   context = null,
+  // Optional callback for the "Start from template" picker to switch the
+  // dashboard's active ad account to the template's. Dashboard wires it to
+  // its own setSelectedAccount; if omitted, account-switch is silently
+  // skipped (template still applies, but stays on the current account).
+  onChangeAccount,
 }) {
   const [schema, setSchema] = useState(null);
   const [schemaDefaults, setSchemaDefaults] = useState({});
@@ -606,6 +618,45 @@ export default function CreateCampaignWizardV2({
     });
   }, []);
 
+  // Apply a saved Campaign Template — merge its payload over the current
+  // form, mark every patched field touched so validation surfaces, and ask
+  // the dashboard to switch ad accounts if the template was saved against a
+  // different one. Account-scoped IDs (page / IG / lead form / pixel) are
+  // cleared on an account switch so the user re-picks valid values for the
+  // new account; otherwise they're kept.
+  const applyTemplate = useCallback(
+    (template) => {
+      const payload = template?.payload || {};
+      const templateAccount = payload.adAccountId || null;
+      const accountChanged =
+        templateAccount && templateAccount !== adAccountId;
+      const patch = { ...payload };
+      // adAccountId is dashboard-managed, not part of the form.
+      delete patch.adAccountId;
+      // Strip File handles that might have leaked from older saves — they're
+      // not useful and can't be reconstructed from a JSON snapshot.
+      delete patch.imageFile;
+      delete patch.videoFile;
+      if (accountChanged) {
+        patch.pageId = '';
+        patch.instagramUserId = '';
+        patch.leadFormId = '';
+        patch.pixelId = '';
+        patch.pixelEventType = '';
+      }
+      setForm((prev) => ({ ...prev, ...patch }));
+      setTouched((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(patch)) next[k] = true;
+        return next;
+      });
+      if (accountChanged) {
+        onChangeAccount?.(templateAccount);
+      }
+    },
+    [adAccountId, onChangeAccount],
+  );
+
   const goNext = () => {
     // Block advancing on an invalid step — reveal every error first.
     if (Object.keys(stepErrors).length > 0) {
@@ -632,7 +683,7 @@ export default function CreateCampaignWizardV2({
           name: form.campaignName,
           objective: form.objective,
           specialAdCategories: form.specialAdCategories,
-          status: 'PAUSED',
+          status: 'ACTIVE',
         };
         if (form.cbo) {
           const budget = majorToMinor(form.campaignBudget);
@@ -702,7 +753,7 @@ export default function CreateCampaignWizardV2({
             publisherPlatforms: form.placementMode === 'manual' ? form.publisherPlatforms : [],
             devicePlatforms: form.devicePlatforms,
           },
-          status: 'PAUSED',
+          status: 'ACTIVE',
         };
         if (form.instagramUserId) adSetPayload.instagramUserId = form.instagramUserId;
         // DSA — Meta requires `dsa_beneficiary` on every ad set globally
@@ -821,7 +872,7 @@ export default function CreateCampaignWizardV2({
         primaryText: form.primaryText,
         description: form.description,
         callToAction: form.callToAction,
-        status: 'PAUSED',
+        status: 'ACTIVE',
       };
       if (form.mediaType === 'video') {
         adPayload.videoId = videoId;
@@ -961,7 +1012,7 @@ export default function CreateCampaignWizardV2({
           primaryText: form.primaryText,
           description: form.description,
           callToAction: form.callToAction,
-          status: 'PAUSED',
+          status: 'ACTIVE',
         };
         if (form.mediaType === 'video') {
           adPayload.videoId = form.videoId;
@@ -1159,6 +1210,7 @@ export default function CreateCampaignWizardV2({
                       seeded={seededRef.current}
                       form={form}
                       update={update}
+                      applyTemplate={applyTemplate}
                       cell={cell}
                       schema={schema}
                       pages={pages}
@@ -1256,7 +1308,7 @@ export default function CreateCampaignWizardV2({
                 ) : (
                   <>
                     <Rocket className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
-                    Launch (PAUSED)
+                    Launch
                   </>
                 )}
               </button>
@@ -1435,6 +1487,7 @@ function StepBody({
   seeded,
   form,
   update,
+  applyTemplate,
   cell,
   schema,
   pages,
@@ -1453,7 +1506,14 @@ function StepBody({
   const body = (() => {
     switch (step?.id) {
       case 'objective':
-        return <ObjectiveStep form={form} update={update} schema={schema} />;
+        return (
+          <ObjectiveStep
+            form={form}
+            update={update}
+            schema={schema}
+            applyTemplate={applyTemplate}
+          />
+        );
       case 'conversionLocation':
         return <ConversionLocationStep form={form} update={update} schema={schema} />;
       case 'campaign':
@@ -1525,15 +1585,20 @@ function StepBody({
 
 // ─── Step: Objective ────────────────────────────────────────────────────────
 
-function ObjectiveStep({ form, update, schema }) {
+function ObjectiveStep({ form, update, schema, applyTemplate }) {
   const objectives = Object.entries(schema.objectives || {});
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h3 className="text-15 font-semibold text-white">Choose an objective</h3>
-        <p className="text-[12px] text-white/50 mt-1">
-          Each objective has its own form. Pick what you want users to do.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-15 font-semibold text-white">Choose an objective</h3>
+          <p className="text-[12px] text-white/50 mt-1">
+            Each objective has its own form. Pick what you want users to do.
+          </p>
+        </div>
+        {/* Stamp out from a saved template — applies the whole form snapshot
+            and switches ad accounts on the dashboard if needed. */}
+        {applyTemplate && <TemplatePicker onApply={applyTemplate} />}
       </div>
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 2xl:gap-3">
         {objectives.map(([key, obj]) => (
@@ -3056,6 +3121,232 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
   );
 }
 
+// ─── Campaign Templates — Save + Pick helpers ───────────────────────────────
+
+// Strip transient File handles before POST — they're not JSON-serialisable
+// and not useful in a template (the user picks media at use time anyway,
+// and the resulting imageUrl / videoUrl carry the reusable token).
+function stripUnsavable(form) {
+  const { imageFile: _i, videoFile: _v, ...rest } = form;
+  return rest;
+}
+
+// "Save as template" — inline chip → name input → POST. Lives on the Review
+// step. Only meaningful in create-full (the wizard has the whole form);
+// hidden in add / edit modes.
+function SaveAsTemplateChip({ form, adAccountId }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      await saveCampaignTemplate({
+        name: trimmed,
+        payload: { ...stripUnsavable(form), adAccountId },
+        objective: form.objective,
+        conversionLocation: form.conversionLocation,
+      });
+      globalToast.success(`Template "${trimmed}" saved.`);
+      setOpen(false);
+      setName('');
+    } catch (e) {
+      globalToast.error(
+        e?.response?.data?.error || 'Failed to save template.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/4 px-3 py-1.5 text-11 font-semibold text-white/75 transition-colors hover:border-white/25 hover:text-white"
+      >
+        <BookmarkPlus className="h-3.5 w-3.5" /> Save as template
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/4 px-1 py-1">
+      <input
+        type="text"
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave();
+          if (e.key === 'Escape') {
+            setOpen(false);
+            setName('');
+          }
+        }}
+        placeholder="Template name…"
+        maxLength={120}
+        className="w-56 rounded-full bg-transparent px-3 py-1 text-12 text-white placeholder:text-white/40 focus:outline-none"
+      />
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={!name.trim() || saving}
+        className="flex items-center gap-1 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-3 py-1 text-11 font-bold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={() => { setOpen(false); setName(''); }}
+        disabled={saving}
+        className="flex h-6 w-6 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/8 hover:text-white"
+        aria-label="Cancel"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// "Start from template" — Objective-step dropdown. Lists the user's saved
+// templates, applies the selected one's payload to the form (via update +
+// a parent callback that can switch the active ad account on the dashboard).
+function TemplatePicker({ onApply }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [applyingId, setApplyingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Lazy-load list when the dropdown opens, so an empty wizard doesn't
+  // fire a GET on every mount.
+  useEffect(() => {
+    if (!open || items.length || loading) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    listCampaignTemplates()
+      .then((r) => { if (!cancelled) setItems(r?.templates || []); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, items.length, loading]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  const handlePick = async (t) => {
+    setApplyingId(t.id);
+    try {
+      const r = await getCampaignTemplate(t.id);
+      if (r?.template?.payload) {
+        await onApply?.(r.template);
+        globalToast.success(`Applied template "${t.name}".`);
+        setOpen(false);
+      }
+    } catch (e) {
+      globalToast.error(
+        e?.response?.data?.error || 'Failed to load template.',
+      );
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const handleDelete = async (e, t) => {
+    e.stopPropagation();
+    setDeletingId(t.id);
+    try {
+      await deleteCampaignTemplate(t.id);
+      setItems((prev) => prev.filter((x) => x.id !== t.id));
+      globalToast.success(`Deleted "${t.name}".`);
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || 'Failed to delete template.',
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/4 px-3 py-1.5 text-12 font-semibold text-white/80 transition-colors hover:border-white/25 hover:text-white"
+      >
+        <Bookmark className="h-3.5 w-3.5" />
+        Start from template
+        <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-80 w-80 overflow-y-auto rounded-xl border border-white/12 bg-[#1A1A1A] shadow-xl">
+          {loading && (
+            <div className="flex items-center justify-center gap-2 px-3 py-4 text-12 text-white/55">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+            </div>
+          )}
+          {!loading && items.length === 0 && (
+            <div className="px-3 py-4 text-12 text-white/50">
+              No saved templates yet. Save the campaign you’re building on the Review step to reuse it later.
+            </div>
+          )}
+          {!loading && items.map((t) => (
+            <button
+              type="button"
+              key={t.id}
+              disabled={!!applyingId}
+              onClick={() => handlePick(t)}
+              className="flex w-full items-center gap-2 border-b border-white/5 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-white/5 disabled:opacity-50"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-13 font-medium text-white">{t.name}</p>
+                {(t.objective || t.conversionLocation) && (
+                  <p className="truncate text-11 text-white/45">
+                    {[t.objective, t.conversionLocation].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+              {applyingId === t.id ? (
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-white/55" />
+              ) : (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => handleDelete(e, t)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') handleDelete(e, t);
+                  }}
+                  title="Delete template"
+                  className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/8 hover:text-red-300"
+                >
+                  {deletingId === t.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Step: Review ───────────────────────────────────────────────────────────
 
 function ReviewStep({
@@ -3178,10 +3469,23 @@ function ReviewStep({
 
       <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/8 px-4 py-3 2xl:px-5 2xl:py-3.5">
         <p className="text-xs leading-relaxed text-emerald-100 2xl:text-sm">
-          Will be launched <b>PAUSED</b>. Activate from the Campaigns tab when you&apos;re ready;
-          Meta starts delivering after the ad set passes review.
+          Will be launched <b>ACTIVE</b>. Meta starts delivering after the ad set passes review —
+          you can pause anytime from the Campaigns tab.
         </p>
       </div>
+
+      {/* Save the current setup so the agency can stamp out similar
+          campaigns later (budget / account / name editable on apply).
+          Only on full create — partial saves from add-ad-set / add-ad
+          wouldn't have enough to be useful. */}
+      {mode === 'create-full' && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-11 text-white/55">
+            Reuse this setup for future campaigns — budget, account and name stay editable.
+          </p>
+          <SaveAsTemplateChip form={form} adAccountId={adAccountId} />
+        </div>
+      )}
 
       {/* Only count entities created on THIS run as "progress" — the
           pre-seeded parent ids in add modes aren't progress. */}
