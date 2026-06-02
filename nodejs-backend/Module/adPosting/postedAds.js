@@ -52,11 +52,11 @@ const postedAdSchema = new mongoose.Schema(
     },
     adFactoryCampaignId: {
       type: String,
-      required: true
+      default: null
     },
     adFactoryCreativeId: {
       type: String,
-      required: true
+      default: null
     }
   },
   {
