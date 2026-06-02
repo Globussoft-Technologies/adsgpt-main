@@ -271,9 +271,9 @@ exports.generateImage = async (req, res) => {
 
         console.log("[generateImage]  Request received:", JSON.stringify({ type: req.body?.type, brandName: req.body?.brandInfo?.brandName, aspectRatios: req.body?.userInputs?.aspectRatioPerImage }, null, 2));
 
-        // Pre-validation: Check for empty brandName (except for recreate_ads and ai_ads types)
         const requestType = req.body?.type;
-        if (requestType !== "recreate_ads" && requestType !== "ai_ads" && (!req.body?.brandInfo?.brandName || req.body.brandInfo.brandName.trim() === "")) {
+        const optionalBrandNameTypes = ["recreate_ads", "ai_ads", "lifestyle", "product_shot", "apps_saas"];
+        if (!optionalBrandNameTypes.includes(requestType) && (!req.body?.brandInfo?.brandName || req.body.brandInfo.brandName.trim() === "")) {
             console.error("[generateImage] brandName is empty");
             return res.status(400).json({
                 success: false,
