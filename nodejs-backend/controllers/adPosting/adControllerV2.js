@@ -102,14 +102,76 @@ async function uploadVideoFromUrl(account, videoUrl) {
     responseType: "arraybuffer",
     timeout: 60000,
   });
-  const videoBytes = Buffer.from(res.data).toString("base64");
+  const fileBytes = Buffer.from(res.data);
 
-  const uploaded = await account.createAdVideo([], {
-    name: `ad-video-${Date.now()}.mp4`,
-    file_bytes: videoBytes,
+  const accessToken = bizSdk.FacebookAdsApi.getDefaultApi().accessToken;
+  const advideosUrl = `https://graph.facebook.com/v24.0/${account.id}/advideos`;
+
+  // 1. Start Phase
+  const startBody = new URLSearchParams({
+    upload_phase: "start",
+    file_size: String(fileBytes.length),
+    access_token: accessToken,
   });
-  const videoId = uploaded?.id || uploaded?._data?.id;
-  if (!videoId) throw new Error("Video upload succeeded but no id was returned by Meta");
+  const startResp = await axios.post(advideosUrl, startBody.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    timeout: 30000,
+  });
+  const {
+    upload_session_id: sessionId,
+    video_id: videoId,
+    start_offset: startOffsetRaw,
+    end_offset: endOffsetRaw,
+  } = startResp.data || {};
+  if (!sessionId || !videoId) {
+    throw new Error("Meta resumable upload: start phase returned no session");
+  }
+
+  const NodeFormData = require("form-data");
+
+  // 2. Transfer Phase
+  let start = Number(startOffsetRaw);
+  let end = Number(endOffsetRaw);
+  while (start < end) {
+    const chunk = fileBytes.subarray(start, end);
+    const form = new NodeFormData();
+    form.append("upload_phase", "transfer");
+    form.append("upload_session_id", sessionId);
+    form.append("start_offset", String(start));
+    form.append("access_token", accessToken);
+    form.append("video_file_chunk", chunk, { filename: `chunk-${start}.mp4`, contentType: "video/mp4" });
+
+    const r = await axios.post(advideosUrl, form, {
+      headers: form.getHeaders(),
+      timeout: 60000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+    const nextStart = Number(r.data?.start_offset);
+    const nextEnd = Number(r.data?.end_offset);
+    if (Number.isNaN(nextStart) || Number.isNaN(nextEnd)) {
+      throw new Error("Meta resumable upload: transfer phase returned no offsets");
+    }
+    if (nextStart === start && nextEnd === end) {
+      throw new Error("Meta resumable upload: offsets not advancing");
+    }
+    start = nextStart;
+    end = nextEnd;
+  }
+
+  // 3. Finish Phase
+  const finishBody = new URLSearchParams({
+    upload_phase: "finish",
+    upload_session_id: sessionId,
+    access_token: accessToken,
+  });
+  const finishResp = await axios.post(advideosUrl, finishBody.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    timeout: 30000,
+  });
+  if (finishResp.data?.success !== true) {
+    throw new Error("Meta resumable upload: finish phase did not return success");
+  }
 
   // Poll until Meta finishes encoding (status: ready).
   const MAX_POLLS = 20;
