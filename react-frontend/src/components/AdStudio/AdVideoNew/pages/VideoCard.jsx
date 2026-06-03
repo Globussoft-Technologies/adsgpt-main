@@ -13,6 +13,7 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  Megaphone,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
@@ -43,6 +44,7 @@ export default function VideoCard({
   getVideoAt,
   hasMore,
   onFetchMore,
+  onOpenPostAdModal,
 }) {
   const videoRef = useRef();
   const pendingPlayRef = useRef(false);
@@ -652,6 +654,27 @@ export default function VideoCard({
               </div>
 
               <div className="flex items-center gap-1">
+                {item?.status === 'completed' && onOpenPostAdModal && (
+                  <button
+                    title="Post as ad"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenPostAdModal({
+                        url: item?.results?.[0]?.url,
+                        isVideo: true,
+                        prompt:
+                          item?.inputs?.userPrompt ||
+                          item?.inputs?.prompt ||
+                          item?.inputs?.productDescription ||
+                          '',
+                        item,
+                      });
+                    }}
+                    className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                  >
+                    <Megaphone size={18} />
+                  </button>
+                )}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}

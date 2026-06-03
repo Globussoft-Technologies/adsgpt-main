@@ -199,6 +199,17 @@ const createAdSchema = Joi.object({
   status: Joi.string().valid("ACTIVE", "PAUSED").default("PAUSED"),
 });
 
+
+const generateAdCopySchema = Joi.object({
+  prompt: Joi.string().trim().min(3).max(2000).required().messages({
+    "string.empty": "prompt is required",
+    "string.min": "prompt must be at least 3 characters",
+    "string.max": "prompt must be 2000 characters or fewer",
+    "any.required": "prompt is required",
+  }),
+});
+
+
 module.exports = {
   updateAdStatusSchema,
   applyFixSchema,
@@ -206,6 +217,7 @@ module.exports = {
   createAdSetSchema,
   createAdSchema,
   deleteCampaignSchema,
+  generateAdCopySchema,
   META_OBJECTIVES,
   SPECIAL_AD_CATEGORIES,
 };

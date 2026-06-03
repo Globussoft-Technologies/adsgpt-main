@@ -5,6 +5,7 @@ const metaAdController = require("../../controllers/adPosting/metaAdLauncher");
 const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
 const campaignTemplateController = require("../../controllers/campaignTemplate.controller");
 const autopilotRoutes = require("../autopilot/autopilotRoutes");
+const adCopyGenerator = require("../../controllers/adPosting/adCopyGeneratorController")
 
 // 10MB cap, in-memory only — we forward bytes straight to Meta.
 const upload = multer({
@@ -103,6 +104,11 @@ router.get("/v2/resolve-cell", metaAdControllerV2.resolveCellForAdSet);
 // Fresh campaign settings for the "Add Ad Set" flow (bid strategy / CBO /
 // special categories) — the campaign list is cached, this isn't.
 router.get("/v2/resolve-campaign", metaAdControllerV2.resolveCampaignForAdd);
+// AI ad-copy helper for the wizard's Ad step. Takes a free-text brief,
+// returns { primary_text, headline, description, call_to_action } generated
+// by Gemini. Synchronous (no socket/stream). Credits charged on success via
+// the freeze→settle path. Inherits authenticateJWT from the /meta-ads mount.
+router.post("/generate-ad-copy", adCopyGenerator.generateAdCopy);
 
 // Autopilot — owns ALL audit + fix flows (continuous rule cron + on-demand
 // LLM audit). Mounted at /meta-ads/autopilot/* and inherits authenticateJWT

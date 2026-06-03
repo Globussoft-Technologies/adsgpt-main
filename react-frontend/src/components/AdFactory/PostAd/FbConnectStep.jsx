@@ -79,7 +79,7 @@ const DisconnectModal = ({ platformLabel, onConfirm, onCancel, isLoading }) => (
   </div>
 );
 
-const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelectPlatform, onDisconnect }) => {
+const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelectPlatform, onDisconnect, connectedActionLabel }) => {
   const Icon = platform.icon;
   const renderIcon = (sizeClass) =>
     platform.iconImg ? (
@@ -159,7 +159,11 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
                 : 'text-gray-600'
             }
           >
-            {!platform.available ? 'Unavailable' : isConnected ? 'Connected' : `Connect ${platform.label}`}
+            {!platform.available
+              ? 'Unavailable'
+              : isConnected
+                ? connectedActionLabel || 'Connected'
+                : `Connect ${platform.label}`}
           </span>
         </Button>
       </div>
@@ -167,7 +171,12 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
   );
 };
 
-const FbConnectStep = ({ onSelectPlatform }) => {
+// `connectedActionLabel` (optional) overrides the "Connected" pill text
+// on platforms where the user is already connected. AdFactory passes
+// nothing — keeps the default "Connected". MySpace's Post Ad modal
+// passes something action-oriented like "Click to Post Ad" so the
+// button itself nudges the user to proceed.
+const FbConnectStep = ({ onSelectPlatform, connectedActionLabel }) => {
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
   const { fbUser, googleUser } = useSelector((state) => state.adFactoryNew);
@@ -250,6 +259,7 @@ const FbConnectStep = ({ onSelectPlatform }) => {
               isDisconnecting={isDisconnecting && confirmPlatform === platform.key}
               onSelectPlatform={onSelectPlatform}
               onDisconnect={handleDisconnect}
+              connectedActionLabel={connectedActionLabel}
             />
           ))}
         </div>

@@ -5,6 +5,7 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
+  Megaphone,
 } from 'lucide-react';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
@@ -73,6 +74,7 @@ export default function ImageCard({
   hasMore,
   onFetchMore,
   onOpenRecreateAdsModal,
+  onOpenPostAdModal,
 }) {
   const dispatch = useDispatch();
   const containerRef = useRef(null);
@@ -230,7 +232,8 @@ export default function ImageCard({
             <div className="absolute top-full right-0 h-2 w-full" />
             <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg bg-black/90 p-3 text-xs text-white shadow-xl">
               <p>
-                <span className="text-gray-400">Type:</span> {item?.inputs?.type || '-'}
+                <span className="text-gray-400">Type:</span>{' '}
+                {item?.creativeType || item?.inputs?.type || '-'}
               </p>
               <p>
                 <span className="text-gray-400">Model:</span>{' '}
@@ -376,6 +379,23 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            {onOpenPostAdModal && (
+              <button
+                title="Post as ad"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenPostAdModal({
+                    url: item?.results?.[0]?.url,
+                    isVideo: false,
+                    prompt: item?.inputs?.userPrompt || item?.inputs?.prompt || '',
+                    item,
+                  });
+                }}
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+              >
+                <Megaphone size={18} />
+              </button>
+            )}
             <button
               className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
               onClick={(e) => {

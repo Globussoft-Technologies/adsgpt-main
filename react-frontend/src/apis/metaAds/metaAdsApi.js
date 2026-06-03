@@ -47,6 +47,18 @@ export const getAdSetAds = async (adSetId) => {
   return data;
 };
 
+// Powers the AdCopy "Generate" button in the MySpace → Post Ad flow.
+// Backend charges 1 credit per call and returns
+// `{ adCopy: { primary_text, headline, description, call_to_action } }`.
+export const generateAdCopy = async ({ prompt }) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/generate-ad-copy`,
+    { prompt },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 export const getAuditData = async (adAccountId) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/audit`, {
     params: { adAccountId },
@@ -67,6 +79,21 @@ export const getUserAdPostingInfo = async (userId) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/ad-posting/users/${userId}`, {
     headers: getAuthHeaders(),
   });
+  return data;
+};
+
+// Cell-aware ad creation. Campaign + Ad Set must already exist; the
+// backend reads the campaign objective and ad-set conversion location
+// to build the right creative shape (image/video, link_data/video_data,
+// app promotion, etc.). Powers the MySpace → Post Ad flow.
+// Note: distinct from `createMetaAdV2` further down, which hits the
+// wizard's `/meta-ads/v2/create-ad` endpoint.
+export const postAdV2 = async (payload) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/ad-posting/ads/v2/create`,
+    payload,
+    { headers: getAuthHeaders() },
+  );
   return data;
 };
 

@@ -6,6 +6,8 @@ import { fetchImageHistoryAction } from '@/store/actions/image/imageActions';
 import { downloadMediaZipAction } from '@/store/actions/adVideoNew/Advideoactions';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 import ImageCard from './ImageCard';
+import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
+import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -110,6 +112,26 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
     open: false,
     sourceImage: '',
   });
+
+  // MySpace → Meta Post Ad modal. Opened from each ImageCard's Megaphone
+  // button; the payload carries the chosen image URL + the prompt that
+  // produced it. `autoAdvance` is set only when restoring after the
+  // Facebook OAuth round-trip — it tells the modal to skip the connect
+  // step the moment fbUser populates.
+  const [postAdState, setPostAdState] = useState({
+    open: false,
+    payload: null,
+    autoAdvance: false,
+  });
+
+  // Re-open the modal after the FB OAuth redirect. The payload was
+  // stashed to sessionStorage by the modal itself before redirect.
+  useEffect(() => {
+    const pending = readPendingPostAd();
+    if (pending) {
+      setPostAdState({ open: true, payload: pending, autoAdvance: true });
+    }
+  }, []);
 
   const toggleSelection = (url) => {
     if (!url) return;
@@ -281,6 +303,9 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
                   tailored?.competitorAd || tailored?.competitorReferenceImage || '',
               });
             }}
+            onOpenPostAdModal={(payload) =>
+              setPostAdState({ open: true, payload, autoAdvance: false })
+            }
           />
         ))}
       </Masonry>
@@ -303,6 +328,13 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
         onOpenChange={(open) => setRecreateAdsState((s) => ({ ...s, open }))}
         image={recreateAdsState.sourceImage}
         ad={null}
+      />
+
+      <PostAdMySpaceModal
+        open={postAdState.open}
+        onOpenChange={(open) => setPostAdState((s) => ({ ...s, open }))}
+        payload={postAdState.payload}
+        autoAdvance={postAdState.autoAdvance}
       />
     </div>
   );

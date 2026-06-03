@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAllVideos, downloadMediaZipAction } from '@/store/actions/adVideoNew/Advideoactions';
 import VideoCard from './VideoCard';
+import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
+import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -38,6 +40,25 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
   const limit = 10;
   const containerRef = useRef(null);
   const [selectedVideos, setSelectedVideos] = useState([]);
+
+  // MySpace → Meta Post Ad modal. Opened from each VideoCard's Megaphone
+  // button; payload carries the video URL and the prompt that produced
+  // it. `autoAdvance` is set only when restoring after the Facebook
+  // OAuth round-trip.
+  const [postAdState, setPostAdState] = useState({
+    open: false,
+    payload: null,
+    autoAdvance: false,
+  });
+
+  // Re-open the modal after the FB OAuth redirect. Payload was stashed
+  // to sessionStorage by the modal before the redirect fired.
+  useEffect(() => {
+    const pending = readPendingPostAd();
+    if (pending) {
+      setPostAdState({ open: true, payload: pending, autoAdvance: true });
+    }
+  }, []);
 
   const toggleSelection = (url) => {
     if (!url) return;
@@ -212,6 +233,9 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
             getVideoAt={(i) => displayedVideos[i]}
             hasMore={hasMore}
             onFetchMore={fetchMoreForNav}
+            onOpenPostAdModal={(payload) =>
+              setPostAdState({ open: true, payload, autoAdvance: false })
+            }
           />
         ))}
       </Masonry>
@@ -225,6 +249,13 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
         </div>
       )}
+
+      <PostAdMySpaceModal
+        open={postAdState.open}
+        onOpenChange={(open) => setPostAdState((s) => ({ ...s, open }))}
+        payload={postAdState.payload}
+        autoAdvance={postAdState.autoAdvance}
+      />
     </div>
   );
 }
