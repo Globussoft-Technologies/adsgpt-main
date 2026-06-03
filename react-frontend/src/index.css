@@ -1,6 +1,21 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* AI Assistant — drop the .woff2 file at react-frontend/public/fonts/UniversalSans_Text_400.woff2.
+   Until the file is present, font-display: swap falls back to system fonts gracefully. */
+@font-face {
+  font-family: 'UniversalSans';
+  src: url('/fonts/UniversalSans_Text_400.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.font-universal,
+.font-universal * {
+  font-family: 'UniversalSans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

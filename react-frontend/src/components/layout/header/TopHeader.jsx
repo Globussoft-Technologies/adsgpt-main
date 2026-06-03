@@ -77,6 +77,7 @@ const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
 import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import AIAssistantHeaderActions from '@/components/AIAssistant/AIAssistantHeaderActions';
 const adStudioTabs = [
   { id: 'adCopy', label: 'Ad Copy', icon: NotebookPen },
   { id: 'adCreative', label: 'Ad Creative', icon: Image },
@@ -349,6 +350,9 @@ export default function TopHeader() {
             id="tour_filter_adcreatives_prompt"
             className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
           >
+            {/* AI Assistant — History + New Chat */}
+            {currentRoute === '/assistant' && <AIAssistantHeaderActions />}
+
             {/* for AdStudio */}
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
               <Button

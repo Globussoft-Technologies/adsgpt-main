@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Bot,
   ChartNoAxesColumn,
   ChevronsLeft,
+  Gauge,
   HelpCircle,
   History,
-  Library,
-  Gauge,
   Image,
+  Library,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import brandIQDarkLogo from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
@@ -48,6 +49,12 @@ const navigationItems = [
     activeIcon: adFactoryDarkLogoActive,
     label: 'Ad Factory',
     link: '/adfactory',
+  },
+  {
+    id: 'ai',
+    label: 'AI',
+    link: '/assistant',
+    lucideIcon: Bot,
   },
   {
     id: 'adstudio',
@@ -175,7 +182,7 @@ const AppSidebar = () => {
         // > */}
         layout
         transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className={`flex h-full w-full flex-col justify-between border-none bg-[#0F0F0F]`}
+        className={`flex h-full w-full flex-col justify-between border-none ${currentRoute === '/assistant' ? 'bg-black' : 'bg-[#0F0F0F]'}`}
       >
         {/* Logo */}
         <div className="logo_and_history flex w-full flex-col gap-0">

@@ -14,5 +14,9 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, './src'),
     },
-  },
+  }
+  // server: {
+  //   // Temporary — ngrok tunnel for dev demos. Remove when no longer needed.
+  //   allowedHosts: ['rvb23mw0-5173.inc1.devtunnels.ms'],
+  // },
 });

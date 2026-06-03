@@ -82,8 +82,11 @@ const Layout = () => {
 
   return (
     <div className="layout_container relative flex">
-      {location.pathname !== '/adfactory' && (
+      {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
         <div className="fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-100 blur-[100px] 2xl:blur-[160px]"></div>
+      )}
+      {location.pathname === '/assistant' && (
+        <div className="fixed inset-0 z-[-1] bg-black"></div>
       )}
 
       <Toaster position="top-center" reverseOrder={false} />
@@ -118,7 +121,7 @@ const Layout = () => {
           </>
         )}
       </SidebarProvider>
-      {location.pathname !== '/adfactory' && (
+      {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
         <div className="fixed top-[85%] left-1/2 z-[-1] h-[100vw] w-[100vw] -translate-x-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-100 blur-[100px] 2xl:top-[90%] 2xl:h-[130vw] 2xl:w-[130vw] 2xl:blur-[150px]"></div>
       )}
     </div>

@@ -58,8 +58,8 @@ function RunBackLog({ children }) {
   // --- EXISTING amember login/token logic ---
   useEffect(() => {
     
-    const userName = Cookies.get('amember_login') || '';
-    const password = Cookies.get('amember_pass') || '';
+    const userName = Cookies.get('amember_login') || 'Gajendratest';
+    const password = Cookies.get('amember_pass') || 'gajendratest';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
 

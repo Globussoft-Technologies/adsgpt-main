@@ -22,6 +22,7 @@ import modelCreditsSlice from '@/store/reducers/modelCredits/modelCreditsSlice';
 import usageSlice from '@/store/reducers/profile/usageSlice';
 import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSlice';
 import imageReducer from '@/store/reducers/image/imageSlice';
+import aiAssistantReducer from '@/store/reducers/aiAssistant/aiAssistantSlice';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
@@ -72,6 +73,7 @@ const store = configureStore({
     usage: usageSlice,
     competitorSearch: competitorSearchReducer,
     image: imageReducer,
+    aiAssistant: aiAssistantReducer,
   },
   preloadedState: {
     prompt: loadState() || undefined,
