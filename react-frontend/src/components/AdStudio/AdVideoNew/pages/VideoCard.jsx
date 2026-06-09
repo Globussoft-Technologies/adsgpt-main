@@ -25,6 +25,7 @@ import {
   setActivePage,
   setRecreateInputs,
   setAvatarStep,
+  setCloneStep,
   setAIAdsStep,
   setAiAdsSceneData,
   setAiAdsSceneLoading,
@@ -62,16 +63,19 @@ export default function VideoCard({
   // console.log("model",model)
   const isSeedanceModel = ['seedance_v1', 'seedance_v2', 'seedance_fast'].includes(model);
 
+  const isCloneModel = item?.inputs?.type === 'clone';
+  const rawError = item?.results?.[0]?.error;
+
   const errorMessage =
-    videoStatus === 529
-      ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
-      : videoStatus === 500
-        ? 'The model was unable to generate the video. Please try again. Note: Your credits were not deducted.'
-        : videoStatus === 400
-          ? isSeedanceModel && item?.results?.[0]?.error
-            ? item.results[0].error
-            : 'This video request was restricted for safety compliance. Please revise your input and try again. Note: Your credits were not deducted.'
-          : 'An error occurred during video generation.';
+    (isCloneModel || isSeedanceModel) && rawError
+      ? rawError
+      : videoStatus === 529
+        ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
+        : videoStatus === 500
+          ? 'The model was unable to generate the video. Please try again. Note: Your credits were not deducted.'
+          : videoStatus === 400
+            ? 'This video request was restricted for safety compliance. Please revise your input and try again. Note: Your credits were not deducted.'
+            : 'An error occurred during video generation.';
   // const errorMessage = 'Model was unable to generate video.';
   const overlayTimeout = useRef(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -487,6 +491,46 @@ export default function VideoCard({
                 setSearchParams({ id: item._id }, { replace: true });
                 dispatch(setActivePage('avatar'));
                 dispatch(setAvatarStep('script'));
+              }}
+              className="group/resume flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-xs font-bold text-black transition-all hover:bg-blue-600 hover:text-white"
+            >
+              <RefreshCw
+                size={14}
+                className="transition-transform duration-500 group-hover/resume:rotate-180"
+              />
+              RESUME
+            </button>
+          </div>
+        </div>
+      ) : item?.inputs?.type === 'clone' &&
+        item?.status === 'pending' &&
+        item?.generatedImage &&
+        item?.generatedImage !== 'failed' &&
+        item?.generatedScript &&
+        item?.generatedScript !== 'failed' ? (
+        <div className="relative h-full w-full bg-black">
+          <img
+            src={
+              item.generatedImage.startsWith('http')
+                ? item.generatedImage
+                : `${S3_BASE_URL}${item.generatedImage}`
+            }
+            alt="Generated Clone"
+            className="h-full w-full object-cover opacity-60"
+          />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/20 backdrop-blur-[2px]">
+            <div className="flex flex-col items-center gap-2">
+              <span className="rounded-full border border-yellow-500/30 bg-yellow-500/20 px-3 py-1 text-10 font-semibold tracking-wide text-yellow-500 uppercase backdrop-blur-md">
+                Pending
+              </span>
+              <p className="text-[11px] font-medium text-white/80">Generation Incomplete</p>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchParams({ id: item._id }, { replace: true });
+                dispatch(setActivePage('clone'));
+                dispatch(setCloneStep('script'));
               }}
               className="group/resume flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-xs font-bold text-black transition-all hover:bg-blue-600 hover:text-white"
             >

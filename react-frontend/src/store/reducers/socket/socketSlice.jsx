@@ -373,6 +373,11 @@ export const initSocket = (url) => (dispatch, getState) => {
       dispatch(updateGeneratedVideo(data));
     });
 
+    socket.on('CloneImageScriptUpdate', (data) => {
+      console.log('Clone image/script update:', data);
+      dispatch(updateGeneratedVideo(data));
+    });
+
     // AdCreative image generation completion. Mirrors the videoCreated
     // shape — the slice's updateImage reducer normalises the URL and
     // upserts into history + reflects into `current` if it matches.

@@ -582,10 +582,16 @@ export default function AdFactoryWorkflowDarkReal() {
   // Helper function to generate nodes based on current state
   const generateNodes = useCallback(() => {
     const hasMeta = selectedPlatforms?.includes('meta');
+    const hasGoogle = selectedPlatforms?.includes('google');
+    const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
 
     const stepNodes = FlowCardArray.filter((card) => {
-      // Hide Prepare Creatives and Post Ad entirely when meta is not selected.
-      if ((card.id === 'preview' || card.id === 'post-ad') && !hasMeta) return false;
+      // Hide Prepare Creatives and Post Ad when neither Meta nor (Google with posting enabled) is selected.
+      if (card.id === 'preview' || card.id === 'post-ad') {
+        if (hasMeta) return true;
+        if (enableGooglePosting && hasGoogle) return true;
+        return false;
+      }
 
       // Manual sub-pipeline nodes live inside the manual group container.
       // They only render while the manual group is expanded; collapsed =
@@ -605,13 +611,10 @@ export default function AdFactoryWorkflowDarkReal() {
       const isActive = activeForm === card.id;
       let isEnabled = reduxNode?.isEnabled || completedNodes.includes(card.id);
 
-      // "Prepare Creatives" and "Post Ad" nodes enabled only when Meta is selected.
-      if (card.id === 'preview') {
-        isEnabled = isEnabled && selectedPlatforms?.includes('meta');
-      }
-
-      if (card.id === 'post-ad') {
-        isEnabled = isEnabled && selectedPlatforms?.includes('meta');
+      // "Prepare Creatives" and "Post Ad" nodes enabled only when Meta (or Google if posting enabled) is selected.
+      if (card.id === 'preview' || card.id === 'post-ad') {
+        const allowedByPlatform = hasMeta || (enableGooglePosting && hasGoogle);
+        isEnabled = isEnabled && allowedByPlatform;
       }
 
       // Determine status

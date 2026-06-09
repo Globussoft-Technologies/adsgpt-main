@@ -128,7 +128,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const [lightboxImages, setLightboxImages] = useState([]);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
-  // const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState({});
   const [isUploading, setIsUploading] = useState(false);
 
   // Voice state
@@ -141,10 +141,16 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [uploadFileUrl, setUploadFileUrl] = useState(null); // object URL or remote URL for uploaded file playback
+  const [prefillVoiceName, setPrefillVoiceName] = useState(null); // display name when voice prefilled from recreate
+  const [uploadIsPlaying, setUploadIsPlaying] = useState(false);
+  const [uploadCurrentTime, setUploadCurrentTime] = useState(0);
+  const [uploadDuration, setUploadDuration] = useState(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const audioRef = useRef(null);
+  const uploadAudioRef = useRef(null);
 
   const videoChatModels = useMemo(
     () => [
@@ -233,14 +239,15 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     }
   }, [uploadedImages, productUrl]);
 
-  // useEffect(() => {
-  //   if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
-  //     setErrors((p) => ({ ...p, productUrl: null }));
-  //   if (videoModel && errors.videoModel) setErrors((p) => ({ ...p, videoModel: null }));
-  //   if (videoDuration && errors.videoDuration) setErrors((p) => ({ ...p, videoDuration: null }));
-  //   if (aspectRatio && errors.aspectRatio) setErrors((p) => ({ ...p, aspectRatio: null }));
-  //   if (brand_name && errors.brandName) setErrors((p) => ({ ...p, brandName: null }));
-  // }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name]);
+  useEffect(() => {
+    if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
+      setErrors((p) => ({ ...p, productUrl: null }));
+    if (videoModel && errors.videoModel) setErrors((p) => ({ ...p, videoModel: null }));
+    if (videoDuration && errors.videoDuration) setErrors((p) => ({ ...p, videoDuration: null }));
+    if (aspectRatio && errors.aspectRatio) setErrors((p) => ({ ...p, aspectRatio: null }));
+    if (brand_name && errors.brandName) setErrors((p) => ({ ...p, brandName: null }));
+    if ((voiceFile || recordedBlob || uploadFileUrl) && errors.voice) setErrors((p) => ({ ...p, voice: null }));
+  }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name, voiceFile, recordedBlob, uploadFileUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!recreateData) return;
@@ -257,6 +264,13 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if (recreateData.promotion) setPromotion(recreateData.promotion);
     if (recreateData.notes) setNotes(recreateData.notes);
     if (recreateData.productName) dispatch(setFields({ brand_name: recreateData.productName }));
+    if (recreateData.voiceSampleUrl) {
+      setUploadFileUrl(recreateData.voiceSampleUrl);
+      setPrefillVoiceName(recreateData.voiceSampleUrl.split('/').pop());
+      setUploadIsPlaying(false);
+      setUploadCurrentTime(0);
+      setUploadDuration(0);
+    }
   }, [recreateData, dispatch]);
 
   // ── Voice recorder helpers ─────────────────────────────────────────────────
@@ -350,13 +364,14 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
   const handleGenerateClick = async () => {
     if (isLoading || isUploading) return;
-    // const newErrors = {};
-    // if (!productUrl.trim() && uploadedImages.length === 0) newErrors.productUrl = 'Product Image is Required';
-    // if (!videoModel) newErrors.videoModel = 'Model is required';
-    // if (!videoDuration) newErrors.videoDuration = 'Duration is required';
-    // if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
-    // if (!brand_name) newErrors.brandName = 'Brand name is required';
-    // if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    const newErrors = {};
+    if (!productUrl.trim() && uploadedImages.length === 0) newErrors.productUrl = 'Product Image is Required';
+    if (!videoModel) newErrors.videoModel = 'Model is required';
+    if (!videoDuration) newErrors.videoDuration = 'Duration is required';
+    if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
+    if (!brand_name) newErrors.brandName = 'Brand name is required';
+    if (!voiceFile && !recordedBlob && !uploadFileUrl) newErrors.voice = 'Voice is required';
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
 
     try {
       setIsUploading(true);
@@ -468,7 +483,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       <div className="relative h-full min-h-[350px] w-full bg-gray-100 dark:bg-[#1c1c1c]">
         <button
           onClick={onBack}
-          className="absolute top-6 left-6 z-10 rounded-full bg-black/40 p-2 text-white hover:bg-black/60"
+          disabled={isUploading || isLoading}
+          className={`absolute top-6 left-6 z-10 rounded-full bg-black/40 p-2 text-white hover:bg-black/60 ${isUploading || isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -529,7 +545,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           </label>
           <div
             className={`flex items-center gap-2 rounded-full border bg-gray-100 p-1 transition-colors dark:bg-[#9092941A] ${
-              'border-transparent' // errors.productUrl ? 'border-red-500/50' : 'border-transparent'
+              errors.productUrl ? 'border-red-500/50' : 'border-transparent'
             }`}
           >
             <input
@@ -557,7 +573,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               onChange={handleImageUpload}
             />
           </div>
-          {/* {errors.productUrl && <span className="mt-1 text-[12px] text-red-400">{errors.productUrl}</span>} */}
+          {errors.productUrl && <span className="mt-1 text-[12px] text-red-400">{errors.productUrl}</span>}
           {uploadedImages.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2 2xl:gap-3">
               {uploadedImages.map((img, index) => (
@@ -574,7 +590,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                   />
                   <button
                     type="button"
-                    className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
+                    disabled={isUploading || isLoading}
+                    className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100 disabled:cursor-not-allowed"
                     onClick={() => removeImage(index)}
                   >
                     <X className="h-3 w-3" />
@@ -611,7 +628,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 setVideoModel(val);
               }}
             />
-            {/* {errors.videoModel && <span className="mt-1 text-[12px] text-red-400">{errors.videoModel}</span>} */}
+            {errors.videoModel && <span className="mt-1 text-[12px] text-red-400">{errors.videoModel}</span>}
           </div>
           <div className="flex flex-1 flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
@@ -621,7 +638,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               disabled={isUploading || isLoading}
               onChange={(val) => { if (!isUploading && !isLoading) setVideoDuration(val); }}
             />
-            {/* {errors.videoDuration && <span className="mt-1 text-[12px] text-red-400">{errors.videoDuration}</span>} */}
+            {errors.videoDuration && <span className="mt-1 text-[12px] text-red-400">{errors.videoDuration}</span>}
           </div>
         </div>
 
@@ -650,7 +667,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                         ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white'
                         : isDisabled
                           ? 'cursor-not-allowed border border-transparent bg-gray-100 text-gray-400 opacity-40 grayscale dark:bg-[#38383840] dark:text-white/20'
-                          // : errors.aspectRatio ? 'border border-red-500/50 ...' :
+                          : errors.aspectRatio ? 'border border-red-500/50 bg-gray-100 text-gray-500 dark:bg-[#38383880] dark:text-white/40'
                           : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
                     }`}
                   >
@@ -660,14 +677,14 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 );
               })}
           </div>
-          {/* {errors.aspectRatio && <span className="mt-1 text-[12px] text-red-400">{errors.aspectRatio}</span>} */}
+          {errors.aspectRatio && <span className="mt-1 text-[12px] text-red-400">{errors.aspectRatio}</span>}
         </div>
 
         {/* Brand name */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Brand/product Name*</label>
           <BrandSearch isAvatarAdsSearch={true} />
-          {/* {errors.brandName && <span className="mt-1 text-[12px] text-red-400">{errors.brandName}</span>} */}
+          {errors.brandName && <span className="mt-1 text-[12px] text-red-400">{errors.brandName}</span>}
         </div>
 
         {/* Promotional info */}
@@ -684,7 +701,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
         {/* Voice */}
         <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Voice</label>
+          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Voice*</label>
 
           {/* Toggle tabs */}
           <div className="flex w-fit rounded-full bg-gray-100 p-0.5 dark:bg-[#2B2A2A]">
@@ -706,14 +723,67 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
           {/* Upload mode */}
           {voiceMode === 'upload' && (
-            <div>
-              {voiceFile ? (
-                <div className="flex items-center gap-3 rounded-full bg-gray-100 px-4 py-2.5 dark:bg-[#2B2A2A]">
-                  <Mic className="h-4 w-4 shrink-0 text-blue-400" />
-                  <span className="flex-1 truncate text-xs text-gray-700 dark:text-white/80">{voiceFile.name}</span>
-                  <button onClick={() => setVoiceFile(null)} className="text-gray-400 hover:text-red-400">
-                    <X className="h-4 w-4" />
-                  </button>
+            <div className="flex flex-col gap-2">
+              {(voiceFile || uploadFileUrl) ? (
+                <div className="flex flex-col gap-2 rounded-2xl bg-gray-100 p-4 dark:bg-[#2B2A2A]">
+                  {/* hidden audio element */}
+                  <audio
+                    ref={uploadAudioRef}
+                    src={uploadFileUrl}
+                    className="hidden"
+                    onPlay={() => setUploadIsPlaying(true)}
+                    onPause={() => setUploadIsPlaying(false)}
+                    onEnded={() => { setUploadIsPlaying(false); setUploadCurrentTime(0); if (uploadAudioRef.current) uploadAudioRef.current.currentTime = 0; }}
+                    onLoadedMetadata={() => setUploadDuration(uploadAudioRef.current?.duration || 0)}
+                    onTimeUpdate={() => setUploadCurrentTime(uploadAudioRef.current?.currentTime || 0)}
+                  />
+                  {/* filename + remove */}
+                  <div className="flex items-center gap-2">
+                    <Mic className="h-4 w-4 shrink-0 text-blue-400" />
+                    <span className="flex-1 truncate text-xs text-gray-700 dark:text-white/80">{voiceFile?.name || prefillVoiceName}</span>
+                    <button
+                      disabled={isUploading || isLoading}
+                      onClick={() => { setVoiceFile(null); setUploadFileUrl(null); setPrefillVoiceName(null); setUploadIsPlaying(false); setUploadCurrentTime(0); setUploadDuration(0); }}
+                      className="text-gray-400 hover:text-red-400 disabled:cursor-not-allowed"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {/* controls */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={isUploading || isLoading}
+                      onClick={() => {
+                        if (!uploadAudioRef.current) return;
+                        if (uploadIsPlaying) uploadAudioRef.current.pause();
+                        else uploadAudioRef.current.play();
+                      }}
+                      className="flex items-center gap-1.5 rounded-full bg-blue-500 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {uploadIsPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      {uploadIsPlaying ? 'Pause' : 'Play'}
+                    </button>
+                  </div>
+                  {/* seek bar + time */}
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="range"
+                      min={0}
+                      max={uploadDuration || 0}
+                      step={0.1}
+                      value={uploadCurrentTime}
+                      onChange={(e) => {
+                        const t = parseFloat(e.target.value);
+                        if (uploadAudioRef.current) uploadAudioRef.current.currentTime = t;
+                        setUploadCurrentTime(t);
+                      }}
+                      className="h-1 w-full cursor-pointer accent-blue-500"
+                    />
+                    <div className="flex justify-between text-10 text-gray-400 dark:text-white/40">
+                      <span>{formatTime(Math.floor(uploadCurrentTime))}</span>
+                      <span>{uploadDuration ? formatTime(Math.floor(uploadDuration)) : '--:--'}</span>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <label
@@ -730,7 +800,17 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 className="hidden"
                 accept=".mp3,.aac,.wav,.m4a,.ogg,audio/*"
                 disabled={isUploading || isLoading}
-                onChange={(e) => { const f = e.target.files[0]; if (f) setVoiceFile(f); }}
+                onClick={(e) => { e.target.value = null; }}
+                onChange={(e) => {
+                  const f = e.target.files[0];
+                  if (!f) return;
+                  if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl);
+                  setVoiceFile(f);
+                  setUploadFileUrl(URL.createObjectURL(f));
+                  setUploadIsPlaying(false);
+                  setUploadCurrentTime(0);
+                  setUploadDuration(0);
+                }}
               />
             </div>
           )}
@@ -759,7 +839,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 {recorderState === 'idle' && (
                   <button
                     onClick={startRecording}
-                    className="flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                    disabled={isUploading || isLoading}
+                    className="flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Mic className="h-3.5 w-3.5" />
                     Start
@@ -770,7 +851,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                     {recorderState === 'recording' ? (
                       <button
                         onClick={pauseRecording}
-                        className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-3 py-2 text-xs font-semibold text-white hover:bg-yellow-600"
+                        disabled={isUploading || isLoading}
+                        className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-3 py-2 text-xs font-semibold text-white hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Pause className="h-3.5 w-3.5" />
                         Pause
@@ -778,7 +860,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                     ) : (
                       <button
                         onClick={resumeRecording}
-                        className="flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-2 text-xs font-semibold text-white hover:bg-green-600"
+                        disabled={isUploading || isLoading}
+                        className="flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-2 text-xs font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Play className="h-3.5 w-3.5" />
                         Resume
@@ -786,7 +869,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                     )}
                     <button
                       onClick={stopRecording}
-                      className="flex items-center gap-1.5 rounded-full bg-gray-700 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800 dark:bg-gray-600"
+                      disabled={isUploading || isLoading}
+                      className="flex items-center gap-1.5 rounded-full bg-gray-700 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-600"
                     >
                       <StopIcon className="h-3.5 w-3.5" />
                       Stop
@@ -802,31 +886,34 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                       className="hidden"
                       onPlay={() => setIsPlaying(true)}
                       onPause={() => setIsPlaying(false)}
-                      onEnded={() => { setIsPlaying(false); setAudioCurrentTime(0); }}
+                      onEnded={() => { setIsPlaying(false); setAudioCurrentTime(0); if (audioRef.current) audioRef.current.currentTime = 0; }}
                       onLoadedMetadata={() => setAudioDuration(audioRef.current?.duration || 0)}
                       onTimeUpdate={() => setAudioCurrentTime(audioRef.current?.currentTime || 0)}
                     />
                     <button
+                      disabled={isUploading || isLoading}
                       onClick={() => {
                         if (!audioRef.current) return;
                         if (isPlaying) audioRef.current.pause();
                         else audioRef.current.play();
                       }}
-                      className="flex items-center gap-1.5 rounded-full bg-blue-500 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600"
+                      className="flex items-center gap-1.5 rounded-full bg-blue-500 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                       {isPlaying ? 'Pause' : 'Play'}
                     </button>
                     <button
+                      disabled={isUploading || isLoading}
                       onClick={startRecording}
-                      className="flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                      className="flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Mic className="h-3.5 w-3.5" />
                       Re-record
                     </button>
                     <button
+                      disabled={isUploading || isLoading}
                       onClick={discardRecording}
-                      className="rounded-full p-2 text-gray-400 hover:text-red-400"
+                      className="rounded-full p-2 text-gray-400 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -859,6 +946,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               )}
             </div>
           )}
+          {errors.voice && <span className="mt-1 text-[12px] text-red-400">{errors.voice}</span>}
         </div>
 
         {/* Notes */}
@@ -876,16 +964,18 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
         {/* Generate */}
         <div className="mt-auto mb-3 flex items-center justify-end gap-2">
-          {enough ? (
-            <ShadcnTooltip label={`Will use: ${est} credits, ${availableCredits - est} left after`}>
-              <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
-                ~{est} credits
+          {videoModel && videoDuration && (
+            enough ? (
+              <ShadcnTooltip label={`Will use: ${est} credits, ${availableCredits - est} left after`}>
+                <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
+                  ~{est} credits
+                </span>
+              </ShadcnTooltip>
+            ) : (
+              <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                Not enough credits — need {est}, you have {availableCredits}
               </span>
-            </ShadcnTooltip>
-          ) : (
-            <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
-              Not enough credits — need {est}, you have {availableCredits}
-            </span>
+            )
           )}
           <button
             disabled={isLoading || isUploading || !enough}

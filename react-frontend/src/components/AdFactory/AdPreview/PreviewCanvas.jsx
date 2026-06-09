@@ -21,6 +21,7 @@ import {
 } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
 
 const transformCreativeToFinalFormat = (creative) => {
   console.log(creative,'creative')
@@ -419,7 +420,7 @@ const PreviewCanvas = ({
 
       {/* Mobile Preview */}
       <div className="hidden lg:flex">
-        {/* {selectedPlatformTab === 'google' ? (
+        {enableGooglePosting && selectedPlatformTab === 'google' ? (
           <GoogleMobilePreview
             key={creative?.id}
             image={creative?.image}
@@ -427,7 +428,7 @@ const PreviewCanvas = ({
             cta={creative?.cta}
             ctaLink={creative?.ctaLink}
           />
-        ) : ( */}
+        ) : (
           <MobilePreview
             key={creative?.id}
             image={creative?.image}
@@ -435,7 +436,7 @@ const PreviewCanvas = ({
             cta={creative?.cta}
             ctaLink={creative?.ctaLink}
           />
-        {/* )} */}
+        )}
       </div>
 
       {/* Creative Controls */}
@@ -460,9 +461,7 @@ const PreviewCanvas = ({
                       <span>Ad Copy</span>
                       {hasAnyCopies && (
                         <div className="flex gap-1 rounded-full bg-black/5 dark:bg-white/10 p-0.5">
-                          {['meta'
-                            // , 'google'
-                          ].map((p) => (
+                          {['meta', ...(enableGooglePosting ? ['google'] : [])].map((p) => (
                             <button
                               key={p}
                               onClick={() => setSelectedPlatformTab(p)}

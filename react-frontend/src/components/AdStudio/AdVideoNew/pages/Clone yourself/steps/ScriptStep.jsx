@@ -27,6 +27,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
   const { imageAndScript, isLoading } = useSelector((state) => state.adVideoNew);
 
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [regenerationError, setRegenerationError] = useState(null);
   const [script, setScript] = useState(null);
   const [tone, setTone] = useState('');
@@ -165,9 +166,9 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
       <div className="relative h-full min-h-[350px] w-full bg-gray-100 dark:bg-[#1c1c1c]">
         <button
           onClick={onBack}
-          disabled={isImageLoading || isScriptLoading || isLoading}
+          disabled={isImageLoading || isScriptLoading || isLoading || isGenerating}
           className={`absolute top-6 left-6 z-10 rounded-full bg-black p-2 text-white hover:bg-black/60 ${
-            isImageLoading || isScriptLoading || isLoading ? 'cursor-not-allowed opacity-50' : ''
+            isImageLoading || isScriptLoading || isLoading || isGenerating ? 'cursor-not-allowed opacity-50' : ''
           }`}
         >
           <ChevronLeft className="h-5 w-5" />
@@ -239,9 +240,10 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
                       <textarea
                         value={item.text}
                         onChange={(e) => handleSegmentChange(item.id, e.target.value)}
+                        disabled={isGenerating}
                         className={`custom-scrollbar w-full resize-none rounded-xl border border-transparent bg-white p-3 text-sm text-gray-900 transition-all focus:border-black/20 focus:outline-none dark:bg-[#1C1C1C]/40 dark:text-white/80 dark:focus:border-white/20 ${
                           isOverLimit ? 'border-red-500/50 bg-red-500/5' : 'hover:bg-black/5 dark:hover:bg-[#1C1C1C]/60'
-                        }`}
+                        } ${isGenerating ? 'cursor-not-allowed opacity-50' : ''}`}
                         rows={2}
                       />
                       {count > item.maxWords && (
@@ -264,8 +266,8 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
 
         {!(isImageLoading || isScriptLoading || isRegenerating || generationError || isImageFailed || isScriptFailed) && (
           <div className="mt-4 flex items-center justify-end gap-3 2xl:mb-6">
-            <Select value={tone} onValueChange={handleToneChange}>
-              <SelectTrigger className="backdrop-blur-100 dark:![&>svg]:text-white rounded-full border-none bg-gray-100 !px-5 py-[18px] text-sm !text-gray-900 hover:bg-black/5! dark:bg-[#9D9B9B80] dark:!text-white dark:hover:bg-[#9D9B9B70]! [&>svg]:size-5">
+            <Select value={tone} onValueChange={handleToneChange} disabled={isGenerating}>
+              <SelectTrigger className={`backdrop-blur-100 dark:![&>svg]:text-white rounded-full border-none bg-gray-100 px-5! py-4.5 text-sm text-gray-900! hover:bg-black/5! dark:bg-[#9D9B9B80] dark:text-white! dark:hover:bg-[#9D9B9B70]! [&>svg]:size-5 ${isGenerating ? 'cursor-not-allowed opacity-50' : ''}`}>
                 <SelectValue placeholder="Select Tone" />
               </SelectTrigger>
               <SelectContent className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
@@ -277,8 +279,9 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
 
             {!regenerationError && (
               <button
-                disabled={isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid}
+                disabled={isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid || isGenerating}
                 onClick={async () => {
+                  setIsGenerating(true);
                   try {
                     const res = await dispatch(generateCloneVideo(generatedId, { script: { script: scriptSegments } }));
                     if (res) {
@@ -289,15 +292,16 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
                     }
                   } catch (err) {
                     console.error('Final generation error:', err);
+                    setIsGenerating(false);
                   }
                 }}
                 className={`rounded-full bg-gray-900 px-8 py-2 text-sm font-bold text-white hover:opacity-90 dark:bg-white dark:text-black dark:hover:bg-white/90 ${
-                  isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid
+                  isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid || isGenerating
                     ? 'cursor-not-allowed opacity-50'
                     : ''
                 }`}
               >
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" /> : 'Generate'}
+                {isGenerating ? <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" /> : 'Generate'}
               </button>
             )}
           </div>

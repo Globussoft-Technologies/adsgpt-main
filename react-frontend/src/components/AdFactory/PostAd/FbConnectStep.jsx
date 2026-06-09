@@ -19,6 +19,8 @@ const getGoogleAuthUrl = (feUrl) =>
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 
+const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
+
 const PLATFORMS = [
   {
     key: 'facebook',
@@ -33,18 +35,18 @@ const PLATFORMS = [
       `${BACKEND_HOST}/api/auth/facebook?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`,
     available: true,
   },
-  // {
-  //   key: 'google',
-  //   label: 'Google',
-  //   iconImg: googleAdsIcon,
-  //   iconBg: 'bg-white',
-  //   glowColor: 'shadow-[0_0_30px_-8px_#4285F4]',
-  //   gradientFrom: 'from-[#4285F4]',
-  //   gradientVia: 'via-[#34A853]',
-  //   gradientTo: 'to-[#EA4335]',
-  //   getAuthUrl: ({ feUrl }) => getGoogleAuthUrl(feUrl),
-  //   available: true,
-  // },
+  ...(enableGooglePosting ? [{
+    key: 'google',
+    label: 'Google',
+    iconImg: googleAdsIcon,
+    iconBg: 'bg-white',
+    glowColor: 'shadow-[0_0_30px_-8px_#4285F4]',
+    gradientFrom: 'from-[#4285F4]',
+    gradientVia: 'via-[#34A853]',
+    gradientTo: 'to-[#EA4335]',
+    getAuthUrl: ({ feUrl }) => getGoogleAuthUrl(feUrl),
+    available: true,
+  }] : []),
 ];
 
 const DisconnectModal = ({ platformLabel, onConfirm, onCancel, isLoading }) => (

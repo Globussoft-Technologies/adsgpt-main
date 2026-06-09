@@ -24,6 +24,7 @@ import {
   setAIAdsStep,
   setAiAdsSceneData,
   setImageAndScript,
+  setRecreateInputs,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { useEffect, useRef, useState } from 'react';
@@ -201,6 +202,7 @@ const AdVideoLayout = () => {
       setSearchParams({}, { replace: true });
       dispatch(setImageAndScript(null));
       dispatch(setFields({ brand_name: '', brandInfo: {}, selectedBrand: {} }));
+      dispatch(setRecreateInputs(null));
     }
     if (activePage === 'ai-ads') {
       // Block back navigation while scenes are not fully ready:

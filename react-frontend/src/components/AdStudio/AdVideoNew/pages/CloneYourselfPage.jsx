@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import {
   setCloneStep,
   setImageAndScript,
+  setRecreateInputs,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { getVideoById } from '@/store/actions/adVideoNew/Advideoactions';
@@ -100,7 +101,7 @@ const CloneYourselfPage = ({ handleGenerate }) => {
 
   // ── Recreate flow ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!recreateInputs || recreateInputs.type !== 'avatar') return;
+    if (!recreateInputs || recreateInputs.type !== 'clone') return;
     const inputs = recreateInputs;
     if (inputs.uploadedAvatars?.length > 0) {
       setCloneImages(
@@ -239,9 +240,11 @@ const CloneYourselfPage = ({ handleGenerate }) => {
       {currentCloneStep === 'config' && (
         <ConfigStep
           customAvatarImages={cloneImages}
+          recreateData={recreateInputs?.type === 'clone' ? recreateInputs : null}
           onBack={() => {
             setCloneImages([]);
-            setStep('upload-images');
+            dispatch(setRecreateInputs(null));
+            setStep('upload');
           }}
           onGenerate={(id) => {
             setGeneratedId(id);
