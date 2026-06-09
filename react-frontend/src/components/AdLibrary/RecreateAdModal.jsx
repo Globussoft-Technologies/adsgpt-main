@@ -83,6 +83,14 @@ const allowedAspectLabels = (modelName) =>
 
 const DEFAULT_COUNTS = { '1:1': 1, '2:3': 0, '3:2': 0, '9:16': 0, '16:9': 0 };
 
+// Generation quality tiers. Value matches the backend contract verbatim
+// (Joi accepts 'low' | 'medium' | 'high'); label is the picker text.
+const QUALITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
 // Combined 5-image cap across uploads + chip picks. Matches AiCreativesCustom.
 // The source ad on the left is the implicit competitor reference and lives
 // outside this count — only user-added images contribute.
@@ -109,6 +117,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
 
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('Nano Banana 2');
+  const [quality, setQuality] = useState('medium');
   const [aspectCounts, setAspectCounts] = useState(DEFAULT_COUNTS);
   // Live per-model credit cost from /adsgpt/usage/model-credit-value
   // (shared cache). Falls back to 7 while loading or on API error.
@@ -168,12 +177,14 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   const [brandListError, setBrandListError] = useState('');
 
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showQualityPicker, setShowQualityPicker] = useState(false);
   const [showAspectPicker, setShowAspectPicker] = useState(false);
   const [showBrandIqPicker, setShowBrandIqPicker] = useState(false);
   const [isSuggestingPrompt, setIsSuggestingPrompt] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const modelPickerWrapperRef = useRef(null);
+  const qualityPickerWrapperRef = useRef(null);
   const aspectPickerWrapperRef = useRef(null);
   const brandIqPickerWrapperRef = useRef(null);
   const referenceInputRef = useRef(null);
@@ -199,21 +210,24 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   }, [model]);
 
   useEffect(() => {
-    if (!showModelPicker && !showAspectPicker && !showBrandIqPicker) return undefined;
+    if (!showModelPicker && !showQualityPicker && !showAspectPicker && !showBrandIqPicker)
+      return undefined;
     const onDocClick = (e) => {
       const t = e.target;
       const inModel = modelPickerWrapperRef.current?.contains(t);
+      const inQuality = qualityPickerWrapperRef.current?.contains(t);
       const inAspect = aspectPickerWrapperRef.current?.contains(t);
       const inBrandIq = brandIqPickerWrapperRef.current?.contains(t);
-      if (!inModel && !inAspect && !inBrandIq) {
+      if (!inModel && !inQuality && !inAspect && !inBrandIq) {
         setShowModelPicker(false);
+        setShowQualityPicker(false);
         setShowAspectPicker(false);
         setShowBrandIqPicker(false);
       }
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showModelPicker, showAspectPicker, showBrandIqPicker]);
+  }, [showModelPicker, showQualityPicker, showAspectPicker, showBrandIqPicker]);
 
   useEffect(() => {
     if (!open) {
@@ -239,6 +253,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
         Object.entries(MODEL_TO_API).map(([k, v]) => [v, k]),
       );
       if (reverseModel[inp.model]) setModel(reverseModel[inp.model]);
+    }
+
+    if (QUALITY_OPTIONS.some((q) => q.value === inp.quality)) {
+      setQuality(inp.quality);
     }
 
     // Aspect ratio — honour the structured array first, otherwise fall
@@ -491,6 +509,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
         competitorReferenceImage: image || '',
         aspectCounts,
         model: MODEL_TO_API[model] || model,
+        quality,
       });
 
       await dispatch(generateImageAction(body));
@@ -870,7 +889,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   className="w-full resize-none bg-transparent px-2 pt-1 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none"
                 />
 
-                <div className="flex items-center justify-end gap-2 px-1 pt-2">
+                <div className="flex items-center justify-end gap-1.5 px-1 pt-2">
                   <button
                     type="button"
                     onClick={handleImprovePrompt}
@@ -889,19 +908,61 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     )}
                   </button>
 
+                  {/* Quality picker — sits between the improve-prompt (magic)
+                      button and the model picker. Wires to userInputs.quality. */}
+                  <div ref={qualityPickerWrapperRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQualityPicker((v) => !v);
+                        setShowModelPicker(false);
+                        setShowAspectPicker(false);
+                        setShowBrandIqPicker(false);
+                      }}
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                    >
+                      {QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
+                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                    </button>
+                    {showQualityPicker && (
+                      <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[120px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        {QUALITY_OPTIONS.map((opt) => {
+                          const selected = opt.value === quality;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setQuality(opt.value);
+                                setShowQualityPicker(false);
+                              }}
+                              className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
+                                selected
+                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                  : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                              }`}
+                            >
+                              <span className="flex-1">{opt.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <div ref={modelPickerWrapperRef} className="relative">
                     <button
                       type="button"
                       onClick={() => {
                         setShowModelPicker((v) => !v);
+                        setShowQualityPicker(false);
                         setShowAspectPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-1.5 text-[12px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
                       <ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />
                       {model}
-                      <ChevronDown size={14} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
                     {showModelPicker && (
                       <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
@@ -944,15 +1005,15 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                         setShowModelPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-1.5 font-light text-gray-600 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 font-light text-gray-600 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      <span className="text-[12px] text-gray-900 dark:text-white/90">{primaryRatio(aspectCounts)}</span>
+                      <span className="text-[11px] text-gray-900 dark:text-white/90">{primaryRatio(aspectCounts)}</span>
                       <span className="h-3 w-px bg-black/15 dark:bg-white/20" />
                       <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-400 dark:text-white/50" />
-                      <span className="text-[12px]">
+                      <span className="text-[11px]">
                         {total} Image{total !== 1 ? 's' : ''}
                       </span>
-                      <ChevronDown size={14} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
 
                     {showAspectPicker && (

@@ -52,6 +52,7 @@ const imageSchema = new mongoose.Schema(
 
             model: { type: String, required: true },
             modelLabel: { type: String }, // Human-readable label (e.g., "Nano Banana Pro", "Gemini Flash")
+            quality: { type: String, enum: ["low", "medium", "high"], default: "medium" },
             numberOfImages: { type: Number, required: true },
             aspectRatio: {
                 type: String,

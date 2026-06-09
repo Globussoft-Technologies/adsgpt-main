@@ -88,6 +88,14 @@ function ModelIcon({ option }) {
   return option?.icon ?? null;
 }
 
+// Generation quality tiers. Value matches the backend contract verbatim
+// (Joi accepts 'low' | 'medium' | 'high'); label is the picker text.
+const QUALITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
 const ASPECT_LABELS = [
   { key: '1:1', label: '1:1 (square)' },
   { key: '2:3', label: '2:3 (portrait)' },
@@ -167,6 +175,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const [brandLogoOptions, setBrandLogoOptions] = useState([]);
   const [competitorAdRef, setCompetitorAdRef] = useState('');
   const [model, setModel] = useState('Nano Banana 2');
+  const [quality, setQuality] = useState('medium');
   const [aspectCounts, setAspectCounts] = useState(DEFAULT_COUNTS);
   // Live per-model credit cost from /adsgpt/usage/model-credit-value
   // (shared cache). Falls back to 7 while loading or on API error.
@@ -178,6 +187,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const [lightboxImage, setLightboxImage] = useState('');
 
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showQualityPicker, setShowQualityPicker] = useState(false);
   const [showAspectPicker, setShowAspectPicker] = useState(false);
   const [showBrandIqPicker, setShowBrandIqPicker] = useState(false);
   // Refs on each picker wrapper — used by the outside-click listener
@@ -185,6 +195,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // form's panel has `backdrop-blur-md`, which creates a CSS stacking
   // context that traps the pickers below the backdrop.
   const modelPickerWrapperRef = useRef(null);
+  const qualityPickerWrapperRef = useRef(null);
   const aspectPickerWrapperRef = useRef(null);
   const brandIqPickerWrapperRef = useRef(null);
   const [showCompetitorModal, setShowCompetitorModal] = useState(false);
@@ -263,6 +274,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
         Object.entries(MODEL_TO_API).map(([k, v]) => [v, k]),
       );
       if (reverseModel[inp.model]) setModel(reverseModel[inp.model]);
+    }
+
+    if (QUALITY_OPTIONS.some((q) => q.value === inp.quality)) {
+      setQuality(inp.quality);
     }
 
     if (Array.isArray(inp.aspectRatioPerImage) && inp.aspectRatioPerImage.length > 0) {
@@ -548,6 +563,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 
   const openBrandIqPicker = async () => {
     setShowModelPicker(false);
+    setShowQualityPicker(false);
     setShowAspectPicker(false);
     setShowBrandIqPicker((v) => !v);
     if (brandListState === 'loaded' || brandListState === 'loading') return;
@@ -687,6 +703,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 
   const closeAllPickers = () => {
     setShowModelPicker(false);
+    setShowQualityPicker(false);
     setShowAspectPicker(false);
     setShowBrandIqPicker(false);
   };
@@ -696,17 +713,19 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // `backdrop-blur-md`, which creates a stacking context that pinned the
   // backdrop above the picker dropdowns and ate every click.
   useEffect(() => {
-    if (!showModelPicker && !showAspectPicker && !showBrandIqPicker) return undefined;
+    if (!showModelPicker && !showQualityPicker && !showAspectPicker && !showBrandIqPicker)
+      return undefined;
     const onMouseDown = (e) => {
       const t = e.target;
       const inModel = modelPickerWrapperRef.current?.contains(t);
+      const inQuality = qualityPickerWrapperRef.current?.contains(t);
       const inAspect = aspectPickerWrapperRef.current?.contains(t);
       const inBrandIq = brandIqPickerWrapperRef.current?.contains(t);
-      if (!inModel && !inAspect && !inBrandIq) closeAllPickers();
+      if (!inModel && !inQuality && !inAspect && !inBrandIq) closeAllPickers();
     };
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
-  }, [showModelPicker, showAspectPicker, showBrandIqPicker]);
+  }, [showModelPicker, showQualityPicker, showAspectPicker, showBrandIqPicker]);
 
   // Pulls a brandInfo object out of whichever brand source is currently active.
   // Empty/none → empty strings/arrays (backend accepts that).
@@ -805,6 +824,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       competitorReferenceImage: realCompetitorRef,
       aspectCounts,
       model: apiModel,
+      quality,
     });
 
     try {
@@ -1032,12 +1052,52 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     )}
                   </button>
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* Quality picker — sits between the improve-prompt (magic)
+                      button and the model picker. Wires to userInputs.quality. */}
+                  <div ref={qualityPickerWrapperRef} className="relative">
+                    <PillButton
+                      label={QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
+                      onClick={() => {
+                        setShowQualityPicker((v) => !v);
+                        setShowModelPicker(false);
+                        setShowAspectPicker(false);
+                        setShowBrandIqPicker(false);
+                      }}
+                    />
+                    {showQualityPicker && (
+                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        {QUALITY_OPTIONS.map((opt, i) => {
+                          const selected = opt.value === quality;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setQuality(opt.value);
+                                setShowQualityPicker(false);
+                              }}
+                              className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
+                                i === 0 ? 'rounded-tl-[14px] rounded-tr-[14px]' : ''
+                              } ${
+                                selected
+                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                              }`}
+                            >
+                              <span className="flex-1">{opt.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
                       icon={<ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />}
                       label={model}
                       onClick={() => {
                         setShowModelPicker((v) => !v);
+                        setShowQualityPicker(false);
                         setShowAspectPicker(false);
                         setShowBrandIqPicker(false);
                       }}
@@ -1086,6 +1146,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       onClick={() => {
                         setShowAspectPicker((v) => !v);
                         setShowModelPicker(false);
+                        setShowQualityPicker(false);
                         setShowBrandIqPicker(false);
                       }}
                       className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"

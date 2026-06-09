@@ -77,6 +77,14 @@ const allowedAspectLabels = (modelName) =>
 
 const DEFAULT_RATIO_COUNTS = { '1:1': 1, '2:3': 0, '3:2': 0, '9:16': 0, '16:9': 0 };
 
+// Generation quality tiers. Value matches the backend contract verbatim
+// (Joi accepts 'low' | 'medium' | 'high'); label is the picker text.
+const QUALITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
 // Reverse of LifestyleAdsFlow.MODEL_TO_API — used to map a stored API model
 // id back to the UI label for the recreate-from-history flow.
 const API_MODEL_TO_UI = {
@@ -410,6 +418,10 @@ export function AdSetupStep({
       setModel(API_MODEL_TO_UI[inp.model]);
     }
 
+    if (QUALITY_OPTIONS.some((q) => q.value === inp.quality)) {
+      setQuality(inp.quality);
+    }
+
     // Aspect ratio. Prefer the structured aspectRatioPerImage if present;
     // otherwise fall back to the flat aspectRatio + numberOfImages pair.
     if (Array.isArray(inp.aspectRatioPerImage) && inp.aspectRatioPerImage.length > 0) {
@@ -551,6 +563,7 @@ export function AdSetupStep({
   const [logoFiles, setLogoFiles] = useState([]);
 
   const [model, setModel] = useState('Nano Banana 2');
+  const [quality, setQuality] = useState('medium');
   const [ratioCounts, setRatioCounts] = useState(DEFAULT_RATIO_COUNTS);
   // Live per-model credit cost from /adsgpt/usage/model-credit-value
   // (shared cache). Falls back to 7 while loading or on API error.
@@ -735,6 +748,7 @@ export function AdSetupStep({
             brandLogo: finalLogo,
           }),
       model,
+      quality,
       variations: total,
       aspectRatio: primaryRatio(ratioCounts),
       ratioCounts,
@@ -876,6 +890,7 @@ export function AdSetupStep({
                     />
                   )}
                 </button>
+                <QualityPickerPill value={quality} onChange={setQuality} />
                 <ModelPickerPill value={model} onChange={setModel} />
                 <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} />
               </div>
@@ -1637,6 +1652,59 @@ function PillDropdown({ label, value, onChange, options }) {
           </div>,
           document.body
         )}
+    </div>
+  );
+}
+
+function QualityPickerPill({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const activeLabel = QUALITY_OPTIONS.find((q) => q.value === value)?.label || 'Medium';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+      >
+        {activeLabel}
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+          {QUALITY_OPTIONS.map((opt) => {
+            const selected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
+                  selected
+                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <span className="flex-1">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

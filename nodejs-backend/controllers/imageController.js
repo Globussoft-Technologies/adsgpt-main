@@ -41,6 +41,7 @@ const buildDbInputs = (value) => {
         type,
         model: userInputs.Model,
         modelLabel,
+        quality: userInputs.quality || "medium",
         numberOfImages: totalImages,
         aspectRatio: userInputs.aspectRatioPerImage[0]?.aspectRatio,
         aspectRatioPerImage: userInputs.aspectRatioPerImage,
@@ -388,6 +389,9 @@ exports.generateImage = async (req, res) => {
             sessionId: imageId,
             userId,
         };
+
+        console.log("pythonPayload",pythonPayload);
+        
 
         const typeToApiUrl = {
             lifestyle: process.env.LIFESTYLE_IMAGE_PYTHON_API,

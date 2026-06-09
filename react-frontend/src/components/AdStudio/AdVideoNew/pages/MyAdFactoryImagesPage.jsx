@@ -7,8 +7,8 @@ import {
   downloadMediaZipAction,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { getAdFactoryImages } from '@/apis/adFactory/adFactoryImagesApi';
-import { getSocket } from '@/store/reducers/socket/socketSlice';
 import { emitWhenConnected } from '@/utils/socketEmitter';
+import emitter from '@/utils/eventEmitter';
 import { mergeCampaignImageResults } from './adFactoryImagesMerge';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 
@@ -58,20 +58,9 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen }) {
           <>
             <div className="absolute top-full right-0 h-2 w-full" />
             <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
-              <p>
-                <span className="text-gray-400">Model:</span> {item?.model || '-'}
-              </p>
               {item?.campaignName && (
                 <p>
                   <span className="text-gray-400">Campaign:</span> {item.campaignName}
-                </p>
-              )}
-              <p>
-                <span className="text-gray-400">Aspect:</span> {item?.aspectRatio || '-'}
-              </p>
-              {item?.prompt && (
-                <p className="mt-1">
-                  <span className="text-gray-400">Prompt:</span> {item.prompt}
                 </p>
               )}
               {item?.timestamp && (
@@ -234,37 +223,19 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
     });
   }, [items]);
 
-  // Subscribe to the result events once; merge into local state.
+  // Live placeholder filling. We listen on the app event bus rather than
+  // binding our own socket listener: the global `adFactoryResponse` handler in
+  // socketSlice is the single reliable socket binding and re-broadcasts every
+  // result as `adfactory:imageResult`. Both manual and autopilot generation
+  // flow through it (Python → /result-update → emitCampaignResult). This frees
+  // the gallery from socket-mount timing and reconnect races.
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return undefined;
-
     const onImageResult = (data) => {
       if (data?.type !== 'image' || !data?.campaignId || !Array.isArray(data?.result)) return;
       setItems((prev) => mergeCampaignImageResults(prev, data.campaignId, data.result));
     };
-
-    // Autopilot completion: data[0].generatedImages → result-entry shape.
-    const onRunComplete = (payload) => {
-      const campaignId = payload?.campaign?.campaignId;
-      const run = Array.isArray(payload?.data) ? payload.data[0] : null;
-      const generated = run?.generatedImages;
-      if (!campaignId || !Array.isArray(generated)) return;
-      const entries = generated.map((g) => ({
-        status: g?.status,
-        data: g?.url,
-        error: g?.error || null,
-        prompt: g?.prompt || null,
-      }));
-      setItems((prev) => mergeCampaignImageResults(prev, campaignId, entries));
-    };
-
-    socket.on('adFactoryResponse', onImageResult);
-    socket.on('adsFactory:runComplete', onRunComplete);
-    return () => {
-      socket.off('adFactoryResponse', onImageResult);
-      socket.off('adsFactory:runComplete', onRunComplete);
-    };
+    emitter.on('adfactory:imageResult', onImageResult);
+    return () => emitter.off('adfactory:imageResult', onImageResult);
   }, []);
 
   const toggleSelection = (url) => {

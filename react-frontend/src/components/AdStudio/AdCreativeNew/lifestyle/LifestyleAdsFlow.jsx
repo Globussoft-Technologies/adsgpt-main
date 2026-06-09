@@ -97,6 +97,7 @@ function buildFormInputs(apiType, resolved, brandInfo, apiModel) {
       keyVisuals: resolved.keyVisuals || [],
       aspectCounts: resolved.ratioCounts,
       model: apiModel,
+      quality: resolved.quality,
     };
   }
 
@@ -116,12 +117,19 @@ function buildFormInputs(apiType, resolved, brandInfo, apiModel) {
       productImages: resolved.productImages || [],
       aspectCounts: resolved.ratioCounts,
       model: apiModel,
+      quality: resolved.quality,
     };
   }
 
   // Unknown variant — pass through whatever's available so the error surfaces
   // from the builder rather than from a missing-field crash here.
-  return { ...brand, ...resolved, aspectCounts: resolved.ratioCounts, model: apiModel };
+  return {
+    ...brand,
+    ...resolved,
+    aspectCounts: resolved.ratioCounts,
+    model: apiModel,
+    quality: resolved.quality,
+  };
 }
 
 // Pull a usable URL out of a backend result record regardless of which key

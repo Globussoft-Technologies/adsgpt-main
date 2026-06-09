@@ -3,6 +3,7 @@ import { createSlice } from '@reduxjs/toolkit';
 import { io } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { triggerLogout } from '@/utils/logout';
+import emitter from '@/utils/eventEmitter';
 import {
   clearBotTimeout,
   setLoading,
@@ -215,6 +216,9 @@ export const initSocket = (url) => (dispatch, getState) => {
     });
 
     socket?.on(`adFactoryResponse`, (data) => {
+      // Relay to the app event bus so non-workflow views (e.g. the My Space →
+      // AdFactory gallery) can react without binding their own socket listener.
+      emitter.emit('adfactory:imageResult', data);
       if (data?.result && data?.result?.length > 0 && data?.type === 'image') {
         dispatch(updateResults(data));
         const { adFactoryNew } = getState();
