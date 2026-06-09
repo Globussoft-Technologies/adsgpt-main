@@ -499,7 +499,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     dispatch(setAiAdsSceneLoading(true));
     dispatch(setError(null));
     const aiAdsModel = details?.formData?.model || getState()?.adVideoNew?.aiAdsSceneData?.inputs?.model || null;
-    trackEvent({ type: 'video_generation', gen_type: 'ai_ads', model: aiAdsModel });
+    // trackEvent({ type: 'video_generation', gen_type: 'ai_ads', model: aiAdsModel });
 
     const { socket } = getState();
     const userId = socket?.userData?.user_id;

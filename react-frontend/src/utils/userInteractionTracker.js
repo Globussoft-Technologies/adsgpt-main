@@ -215,7 +215,7 @@ const handleAdCreativeCardInteraction = (event, item, component, interactionDeta
 };
 
 const handleChartInteraction = (event, item, component, interactionDetails) => {
-  // const interactionKey = `${generateUniqueId(item)}-${component}`;
+  const interactionKey = `${generateUniqueId(item)}-${component}`;
   item.timestamp = new Date().toISOString();
   if (event.type === 'click') {
     updateInteractionCount(interactions.clicks, ' interactionKey', item);

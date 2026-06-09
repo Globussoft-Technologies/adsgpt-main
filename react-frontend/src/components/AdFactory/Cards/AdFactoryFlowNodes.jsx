@@ -9,6 +9,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import AdFactoryStepCard from './Cards/AdFactoryStepCard';
+import BrandInfoIcon from '@/assets/layouts/ad-factory/flow-chart/brand-info.svg';
+import ObjectiveIcon from '@/assets/layouts/ad-factory/flow-chart/objectives.svg';
+import AssetsIcon from '@/assets/layouts/ad-factory/flow-chart/assets.svg';
+import ServicesIcon from '@/assets/layouts/ad-factory/flow-chart/services.svg';
+import imageGenerationIcon from '@/assets/layouts/ad-factory/flow-chart/image-generation.svg';
+import textGenerationIcon from '@/assets/layouts/ad-factory/flow-chart/text-generation.svg';
 
 const nodeTypes = {
   customNode: AdFactoryStepCard,

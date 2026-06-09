@@ -145,10 +145,10 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
     userData?.featureObject['Ad copy'] - credits?.chatCountAdsCopy > 0
       ? userData?.featureObject['Ad copy'] - credits?.chatCountAdsCopy
       : 0;
-  // const videoCreditsLeft =
-  //   userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo > 0
-  //     ? userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo
-  //     : 0;
+  const videoCreditsLeft =
+    userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo > 0
+      ? userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo
+      : 0;
 
   const initialValues = {
     servicesSelected: {

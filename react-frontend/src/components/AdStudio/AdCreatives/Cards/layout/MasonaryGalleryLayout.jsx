@@ -9,6 +9,7 @@ import ShowLightBox from '@/components/common/ShowLightBox';
 import { Loader } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import AdCreativeEditorLightBox from '../../CreativeChat/Lightbox/AdCreativeEditorLightBox';
+import { resetEditorSlice } from '@/store/reducers/adStudio/editorSlice';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const NAS_CREATIVE_URL = import.meta.env.VITE_NAS_CREATIVE_URL;
 

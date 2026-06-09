@@ -26,6 +26,7 @@ import { useSearchParams } from 'react-router-dom';
 import ShowLightBox from '../Cards/Lightbox';
 import CompetitorVisualsModal from '../CompetitorVisualsModal/CompetitorVisualsModal';
 import { fetchCompetitorAds } from '@/store/actions/feature/competitorSearchActions';
+import { setActiveForm } from '@/store/reducers/AdFactory/AdFactorySlice';
 const AD_FACTORY_WEB_URL = import.meta.env.VITE_AD_FACTORY_WEB_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 

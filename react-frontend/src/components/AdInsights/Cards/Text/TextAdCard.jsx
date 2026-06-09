@@ -24,6 +24,7 @@ const TextAdCard = ({
   othermedia,
   postOwnerImage,
   thumbnail_url,
+  ad,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);

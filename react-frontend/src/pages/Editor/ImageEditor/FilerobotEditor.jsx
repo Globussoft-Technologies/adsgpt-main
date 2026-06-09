@@ -13,13 +13,19 @@ import { setEditorFields } from '@/store/reducers/adStudio/editorSlice';
 import AdsgptFullLogo from '@/assets/layouts/adsgpt-logo.webp';
 import AdsgptLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
 
-export function FilerobotEditor({ source, isImgEditorShown, adIndex, toast }) {
+export function FilerobotEditor({ source, isImgEditorShown: initialShown, adIndex, toast }) {
+  const [isImgEditorShown, setIsImgEditorShown] = useState(initialShown);
+
+  useEffect(() => {
+    setIsImgEditorShown(initialShown);
+  }, [initialShown]);
   const { userData } = useSelector((state) => state.socket);
   const { campaignId, historyId, contextType, botId, baseImage } = useSelector(
     (state) => state.editor
   );
   const isDarkMode = useSelector((state) => state.theme.isDarkMode);
   const [logos, setLogos] = useState([]);
+  const selectedLogoUrl = logos[0]?.url || '';
   const dispatch = useDispatch();
 
   const { myBrands } = useSelector((state) => state.brandIQTabs);

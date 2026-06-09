@@ -24,6 +24,7 @@ const VideoAdCard = ({
   postImage,
   postOwnerImage,
   thumbnail_url,
+  ad,
 }) => {
   const [isVideoError, setIsVideoError] = useState(false);
   const [isYoutubeVideoError, setIsYoutubeVideoError] = useState(false);
