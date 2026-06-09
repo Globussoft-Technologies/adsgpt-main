@@ -168,18 +168,6 @@ const CompetitorAdCard = ({ ad, onClick }) => {
             {platformLabel}
             {dateRange && ` · ${dateRange}`}
           </p>
-          {ad.matchedKeywords && ad.matchedKeywords.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {ad.matchedKeywords.slice(0, 2).map((kw, i) => (
-                <span
-                  key={i}
-                  className="rounded-full border border-[#5867EB]/30 bg-gradient-to-r from-[#5867EB]/15 to-[#02C8C4]/10 px-2 py-0.5 text-[9px] font-medium text-[#5867EB]"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </motion.div>
