@@ -206,7 +206,7 @@ const AdsPreviewDialog = ({ open, onOpenChange, onProgressUpdate }) => {
           timestamp: firstAdCopies[0]?.timestamp || Date.now(),
           isAI: true,
           isSaved: false, // Mark as unsaved initially
-        } || {},
+        },
       cta: 'Learn More',
       ctaLink: null,
       createdAt: new Date().toISOString(),

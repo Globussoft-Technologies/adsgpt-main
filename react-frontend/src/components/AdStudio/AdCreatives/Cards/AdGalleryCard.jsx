@@ -43,6 +43,10 @@ import ImageFormatDialog from '@/components/BrandIQ/ImageFormating/ImageFormatDi
 const EXPIRED_URL = import.meta.env.VITE_EXPIRED_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
+// Intentionally-hidden hover overlay, kept for quick re-enable. Named flag
+// avoids a literal `false &&` (no-constant-binary-expression).
+const SHOW_HOVER_OVERLAY = false;
+
 const networks = {
   instagram: <Instagram className="h-4 w-4" />,
   facebook: <FaFacebookF className="h-4 w-4" />,
@@ -291,7 +295,7 @@ const AdGalleryCard = ({ image, editimg, setLightboxOpen, onClick }) => {
       >
         {/* Advanced Hover Overlay with Icons - Responsive */}
         <AnimatePresence>
-          {false && (
+          {SHOW_HOVER_OVERLAY && (
             <motion.div
               className="absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-black/60 backdrop-blur-md"
               initial={{ opacity: 0 }}

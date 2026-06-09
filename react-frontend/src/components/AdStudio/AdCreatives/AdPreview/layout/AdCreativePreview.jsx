@@ -2,6 +2,10 @@ import { Separator } from '@/components/ui/separator';
 import { MessageCircle, MoreVertical, Share2, ThumbsUp } from 'lucide-react';
 import { useState } from 'react';
 
+// Intentionally-hidden Sign Up placeholder, kept for quick re-enable. Named
+// flag avoids a literal `false &&` (no-constant-binary-expression).
+const SHOW_HIDDEN_UI = false;
+
 const AdCreativePreview = ({ adCreativesData }) => {
   const [isLeftTextExpanded, setIsLeftTextExpanded] = useState(false);
   const [isLeftTitleExpanded, setIsLeftTitleExpanded] = useState(false);
@@ -72,7 +76,7 @@ const AdCreativePreview = ({ adCreativesData }) => {
                 )}
               </p>
             </div>
-            {false && (
+            {SHOW_HIDDEN_UI && (
               <button className="text-10 rounded-md bg-gray-100 px-4 py-1 font-medium text-black hover:bg-gray-200 2xl:text-xs">
                 Sign Up
               </button>

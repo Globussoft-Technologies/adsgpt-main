@@ -16,6 +16,10 @@ import {
   setAdCreativeNewActivePage,
 } from '@/store/reducers/adStudio/adStudioTabsSlice';
 
+// HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
+// avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
+const SHOW_POST_AD_NAV = false;
+
 // Backend `inputs.type` → AdCreativeNewLayout route key. NOTE:
 // `recreate_ads` is intentionally NOT in this map — recreating one of
 // those re-opens the AdLibrary RecreateAdModal (handled separately below).
@@ -407,7 +411,7 @@ export default function ImageCard({
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
             {/* HIDE-MARK — MySpace → Post Ad nav (Megaphone) hidden. */}
-            {false && onOpenPostAdModal && (
+            {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"
                 onClick={(e) => {

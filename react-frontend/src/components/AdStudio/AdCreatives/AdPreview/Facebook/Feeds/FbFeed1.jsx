@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { MoreVertical, ThumbsUp, Share2, MessageCircle } from 'lucide-react';
 
+// Intentionally-hidden placeholder UI (loader + Sign Up button), kept for
+// quick re-enable. Flip to true to render. Using a named flag instead of a
+// literal `false &&` keeps no-constant-binary-expression happy.
+const SHOW_HIDDEN_UI = false;
+
 function FbFeed1({ adCreativesData }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const toggleText = () => setIsExpanded(!isExpanded);
@@ -55,7 +60,7 @@ function FbFeed1({ adCreativesData }) {
           <img src={adCreativesData?.image} alt="Ad creative" className="w-full" />
         </div>
 
-        {false && (
+        {SHOW_HIDDEN_UI && (
           <div className="flex items-center justify-between bg-[#F7F8FA] p-3">
             {/* Left Loader Section */}
             <div className="flex w-full max-w-xs flex-col space-y-2">
@@ -64,7 +69,7 @@ function FbFeed1({ adCreativesData }) {
             </div>
 
             {/* Right Button */}
-            {false && (
+            {SHOW_HIDDEN_UI && (
               <button className="ml-4 rounded-xl bg-[#E5E6EB] p-2 py-1 text-[10px] font-medium whitespace-nowrap text-black">
                 Sign Up
               </button>

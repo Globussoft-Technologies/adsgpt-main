@@ -1,6 +1,10 @@
 import { ChevronUp, MoreHorizontal, X } from 'lucide-react';
 import { BsPatchCheckFill } from 'react-icons/bs';
 
+// Intentionally-hidden Sign Up placeholder, kept for quick re-enable. Named
+// flag avoids a literal `false &&` (no-constant-binary-expression).
+const SHOW_HIDDEN_UI = false;
+
 const ReelStories3 = ({ adCreativesData }) => {
   return (
     <div className="w-full overflow-hidden rounded-lg bg-white shadow-sm">
@@ -55,7 +59,7 @@ const ReelStories3 = ({ adCreativesData }) => {
       </div>
 
       {/* Right Button */}
-      {false && (
+      {SHOW_HIDDEN_UI && (
         <div className="container mx-auto mb-0 flex flex-col items-center justify-center">
           <button className="mb-2 rounded-2xl bg-[#E5E6EB] p-2 py-1 text-[10px] font-medium whitespace-nowrap text-black">
             Sign Up

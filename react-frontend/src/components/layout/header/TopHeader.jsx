@@ -75,6 +75,11 @@ import { resetAddiePromptSlice } from '@/store/reducers/adInsights/Addie/addiePr
 const ENABLE_NEW_LAYOUT = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
+// HIDE-MARK — intentionally-hidden header UI (Templates / Refresh buttons and
+// the global theme toggle). Named flag avoids a literal `false &&`
+// (no-constant-binary-expression); flip to re-enable.
+const SHOW_HIDDEN_HEADER_UI = false;
+
 import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import ThemeToggle from './ThemeToggle';
@@ -511,7 +516,7 @@ export default function TopHeader() {
                   <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   <span>New Chat </span>
                 </Button>
-                {false && (
+                {SHOW_HIDDEN_HEADER_UI && (
                   <Button
                     variant="ghost"
                     onClick={handleNewChatClick}
@@ -530,7 +535,7 @@ export default function TopHeader() {
                 {Array.isArray(myBrands) && myBrands?.length > 0 && (
                   <AddNewBrand fromComponent="topheader" />
                 )}
-                {false && (
+                {SHOW_HIDDEN_HEADER_UI && (
                   <button
                     variant="ghost"
                     className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-4 py-1.5 text-[#AFAFAF] hover:text-white sm:flex 2xl:py-2 2xl:text-sm"
@@ -572,7 +577,7 @@ export default function TopHeader() {
             )}
 
             {/* HIDE-MARK — theme toggle hidden globally (inline header). */}
-            {false && <ThemeToggle />}
+            {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
           </div>
         </div>
       )}
@@ -585,7 +590,7 @@ export default function TopHeader() {
           className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
         >
           {/* HIDE-MARK — theme toggle hidden globally (floating fallback). */}
-          {false && <ThemeToggle />}
+          {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
         </div>
       )}
     </>

@@ -42,6 +42,10 @@ import { useSearchParams } from 'react-router-dom';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
+// Intentionally-hidden Video Ads section, kept for quick re-enable. Named flag
+// avoids a literal `false &&` (no-constant-binary-expression).
+const SHOW_VIDEO_ADS_SECTION = false;
+
 const schema = Yup.object({
   servicesSelected: Yup.object({
     text: Yup.number()
@@ -602,7 +606,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                         </div>
 
                         {/* Video Service */}
-                        {false && (
+                        {SHOW_VIDEO_ADS_SECTION && (
                           <div className="rounded-xl border border-black/10 bg-transparent p-5 dark:border-white/10">
                             <div className="mb-4 flex items-center gap-1 2xl:gap-2">
                               <VideoIcon className="size-4.5 text-gray-500 2xl:size-5 dark:text-[#AFAFAF]" />

@@ -382,7 +382,10 @@ const handleChatBotCardInteraction = (event, item, component, interactionDetails
     } else if (event.type === 'copy') {
       handleCopy(event, item, component);
     }
-  } catch (error) {}
+  } catch {
+    // Interaction tracking is best-effort; swallow errors so they never
+    // disrupt the user-facing flow.
+  }
 };
 
 function generateMiniUniqueID() {
@@ -487,7 +490,9 @@ const sendInteractionDataIfChanged = async (serializedData) => {
       // await updateUserInteractionData(serializedData)
       lastInteractions = JSON.parse(JSON.stringify(serializedData));
     }
-  } catch (error) {}
+  } catch {
+    // Best-effort persistence; ignore failures (e.g. storage quota / offline).
+  }
 };
 
 const resetSessionData = () => {

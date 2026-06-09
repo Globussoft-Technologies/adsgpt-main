@@ -392,6 +392,13 @@ function PublishedAdCard({ ad, brandInfo }) {
     status,
   } = ad;
   const isPending = status === 'pending';
+
+  // Local fallback when an <img> URL 404s post-render. The API status field
+  // says the asset was generated but the CDN can still drop it; this catches
+  // that case at runtime. Declared before any early return so the hook order
+  // stays stable across renders (rules-of-hooks).
+  const [imgErrored, setImgErrored] = useState(false);
+
   // Pending cards short-circuit to the skeleton variant. They share the
   // outer dimensions with real cards so the grid doesn't reflow when one
   // hydrates into a real result.
@@ -404,10 +411,6 @@ function PublishedAdCard({ ad, brandInfo }) {
   const ctaLabel = formatCta(callToAction);
   const initial = brandInfo?.brandName?.slice(0, 1)?.toUpperCase() || 'A';
 
-  // Local fallback when an <img> URL 404s post-render. The API status field
-  // says the asset was generated but the CDN can still drop it; this catches
-  // that case at runtime.
-  const [imgErrored, setImgErrored] = useState(false);
   const showImageFallback = imageBroken || imgErrored;
 
   return (

@@ -338,12 +338,7 @@ export const AdCopyList = () => {
           platformKey === 'meta' ||
           platformKey === 'google' ||
           platformKey === 'linkedin' ||
-          platformKey === 'pinterest' ||
-          platformKey === 'snapchat' ||
-          platformKey === 'whatsapp' ||
-          platformKey === 'twitter' ||
-          platformKey === 'reddit' ||
-          platformKey === 'tiktok'
+          platformKey === 'pinterest'
         ) {
           if (platformData.headline) allText += `Headline: ${platformData.headline}\n`;
           if (platformData.primary_text) allText += `Text: ${platformData.primary_text}\n`;

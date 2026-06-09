@@ -167,7 +167,7 @@ const VideoAdCard = ({
             src={postImage}
             loop
             muted
-            poster={`${MEDIA_URL}/${thumbnail_url}` || 'fallback-image.jpg'}
+            poster={thumbnail_url ? `${MEDIA_URL}/${thumbnail_url}` : 'fallback-image.jpg'}
             onError={(e) => {
               handleVideoError;
             }}
@@ -188,7 +188,7 @@ const VideoAdCard = ({
         ) : (
           <img
             className="h-full w-full object-cover"
-            src={`${MEDIA_URL}/${thumbnail_url}` || 'fallback-image.jpg'}
+            src={thumbnail_url ? `${MEDIA_URL}/${thumbnail_url}` : 'fallback-image.jpg'}
             alt="Thumbnail Fallback"
           />
         )}
