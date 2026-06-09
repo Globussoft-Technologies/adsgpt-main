@@ -1,0 +1,393 @@
+import Masonry from 'react-masonry-css';
+import { Download, Info, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  downloadMediaFromUrl,
+  downloadMediaZipAction,
+} from '@/store/actions/adVideoNew/Advideoactions';
+import { getAdFactoryImages } from '@/apis/adFactory/adFactoryImagesApi';
+import { getSocket } from '@/store/reducers/socket/socketSlice';
+import { emitWhenConnected } from '@/utils/socketEmitter';
+import { mergeCampaignImageResults } from './adFactoryImagesMerge';
+import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
+
+const breakpointColumnsObj = {
+  default: 4,
+  1280: 3,
+  1024: 3,
+  700: 2,
+  340: 1,
+};
+
+const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+
+const resolveImageUrl = (url) => {
+  if (!url) return '';
+  return url.startsWith('http') ? url : `${S3_BASE_URL}${url}`;
+};
+
+// ── Single card ─────────────────────────────────────────────────────────────
+function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen }) {
+  const dispatch = useDispatch();
+  const [showInfo, setShowInfo] = useState(false);
+  const infoTimeout = useRef(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const url = resolveImageUrl(item?.url);
+  const isGenerating = item?.status === 'generating';
+  const isError = item?.status === 'error';
+
+  const handleInfoEnter = () => {
+    clearTimeout(infoTimeout.current);
+    setShowInfo(true);
+  };
+  const handleInfoLeave = () => {
+    infoTimeout.current = setTimeout(() => setShowInfo(false), 150);
+  };
+
+  const InfoTooltip = () => (
+    <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+      <div className="relative" onMouseEnter={handleInfoEnter} onMouseLeave={handleInfoLeave}>
+        <button
+          className={`rounded-full p-2 text-gray-100 backdrop-blur hover:bg-black/60 dark:text-white ${showInfo ? 'bg-black/60' : ''}`}
+        >
+          <Info size={18} />
+        </button>
+        {showInfo && (
+          <>
+            <div className="absolute top-full right-0 h-2 w-full" />
+            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
+              <p>
+                <span className="text-gray-400">Model:</span> {item?.model || '-'}
+              </p>
+              {item?.campaignName && (
+                <p>
+                  <span className="text-gray-400">Campaign:</span> {item.campaignName}
+                </p>
+              )}
+              <p>
+                <span className="text-gray-400">Aspect:</span> {item?.aspectRatio || '-'}
+              </p>
+              {item?.prompt && (
+                <p className="mt-1">
+                  <span className="text-gray-400">Prompt:</span> {item.prompt}
+                </p>
+              )}
+              {item?.timestamp && (
+                <p className="mt-1">
+                  <span className="text-gray-400">Time:</span>{' '}
+                  {new Date(item.timestamp).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
+      <InfoTooltip />
+
+      {/* Selection checkbox — only for completed images */}
+      {!isGenerating && !isError && url && (
+        <div
+          className={`absolute top-3 left-3 z-30 transition-opacity duration-300 ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          <div
+            className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-2 transition-all ${
+              isSelected
+                ? 'border-blue-600 bg-blue-600'
+                : 'border-gray-400 bg-white hover:border-gray-600 hover:bg-black/5 dark:border-white/40 dark:bg-black/40 dark:hover:border-white dark:hover:bg-black/40'
+            }`}
+          >
+            {isSelected && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isGenerating ? (
+        <CreativeGeneratingLoader />
+      ) : isError || !url ? (
+        <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
+          <p className="mt-2 text-xs text-gray-400">
+            {item?.error || 'An error occurred during image generation.'}
+          </p>
+        </div>
+      ) : (
+        <div className="relative h-full w-full bg-black">
+          {!imageLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
+          <img
+            src={url}
+            alt="AdFactory generated"
+            onClick={() => onFullscreen(url)}
+            className={`h-full w-full max-h-[800px] cursor-pointer rounded-2xl object-cover transition-opacity duration-300 ${
+              imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            onLoad={() => setImageLoaded(true)}
+          />
+          {/* Controls bar */}
+          <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            <button
+              className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                dispatch(downloadMediaFromUrl(`${item?.url}`, 'image'));
+              }}
+              title="Download"
+            >
+              <Download size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) {
+  const dispatch = useDispatch();
+  const { userData } = useSelector((state) => state?.socket) || {};
+  const userId = userData?.user_id;
+
+  const [items, setItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [fullscreenUrl, setFullscreenUrl] = useState(null);
+  const limit = 20;
+  const containerRef = useRef(null);
+
+  const load = async (nextSkip, replace) => {
+    if (!userId) return;
+    setIsLoading(true);
+    try {
+      const res = await getAdFactoryImages({ userId, skip: nextSkip, limit, startDate, endDate });
+      const page = Array.isArray(res?.data) ? res.data : [];
+      setItems((prev) => (replace ? page : [...prev, ...page]));
+      setHasMore(page.length === limit);
+      setSkip(nextSkip + page.length);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fresh load on mount / filter change
+  useEffect(() => {
+    setItems([]);
+    setSkip(0);
+    setHasMore(true);
+    load(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, startDate, endDate]);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el || isLoading || !hasMore) return;
+    const isBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 100;
+    if (isBottom) load(skip, false);
+  };
+
+  // ── Live placeholder filling via socket ────────────────────────────────────
+  // Both manual and autopilot generation flow through Python → /result-update
+  // → emitCampaignResult → `adFactoryResponse` emitted to the per-campaign
+  // room. We join the room of every campaign that currently has a generating
+  // placeholder, then merge incoming results in place. `adsFactory:runComplete`
+  // (autopilot, user room — already joined) is handled the same way.
+  const joinedRoomsRef = useRef(new Set());
+
+  // Join campaign rooms for any on-screen generating placeholders.
+  useEffect(() => {
+    const pending = new Set(
+      items.filter((i) => i.status === 'generating' && i.campaignId).map((i) => i.campaignId)
+    );
+    pending.forEach((campaignId) => {
+      if (!joinedRoomsRef.current.has(campaignId)) {
+        joinedRoomsRef.current.add(campaignId);
+        emitWhenConnected('adFactoryRequest', campaignId).catch(() => {});
+      }
+    });
+  }, [items]);
+
+  // Subscribe to the result events once; merge into local state.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return undefined;
+
+    const onImageResult = (data) => {
+      if (data?.type !== 'image' || !data?.campaignId || !Array.isArray(data?.result)) return;
+      setItems((prev) => mergeCampaignImageResults(prev, data.campaignId, data.result));
+    };
+
+    // Autopilot completion: data[0].generatedImages → result-entry shape.
+    const onRunComplete = (payload) => {
+      const campaignId = payload?.campaign?.campaignId;
+      const run = Array.isArray(payload?.data) ? payload.data[0] : null;
+      const generated = run?.generatedImages;
+      if (!campaignId || !Array.isArray(generated)) return;
+      const entries = generated.map((g) => ({
+        status: g?.status,
+        data: g?.url,
+        error: g?.error || null,
+        prompt: g?.prompt || null,
+      }));
+      setItems((prev) => mergeCampaignImageResults(prev, campaignId, entries));
+    };
+
+    socket.on('adFactoryResponse', onImageResult);
+    socket.on('adsFactory:runComplete', onRunComplete);
+    return () => {
+      socket.off('adFactoryResponse', onImageResult);
+      socket.off('adsFactory:runComplete', onRunComplete);
+    };
+  }, []);
+
+  const toggleSelection = (url) => {
+    if (!url) return;
+    setSelectedImages((prev) =>
+      prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
+    );
+  };
+
+  const completedUrls = useMemo(
+    () => items.filter((i) => i.status === 'success' && i.url).map((i) => i.url),
+    [items]
+  );
+
+  const selectAll = () => {
+    if (selectedImages.length === completedUrls.length) setSelectedImages([]);
+    else setSelectedImages(completedUrls);
+  };
+
+  const handleDownloadSelected = () => {
+    if (selectedImages.length === 0) return;
+    dispatch(downloadMediaZipAction(selectedImages, 'image'));
+    setSelectedImages([]);
+  };
+
+  return (
+    <div
+      className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
+      {/* Floating selection bar */}
+      {selectedImages.length > 0 && (
+        <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-4 fixed bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-full border border-black/10 bg-white/90 px-2 py-2 text-gray-900 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-500 dark:border-white/5 dark:bg-[#1a1a1a]/90 dark:text-white">
+          <div className="flex items-center pr-2 pl-4">
+            <span className="text-[13px] font-semibold text-gray-900 dark:text-white/90">{selectedImages.length}</span>
+            <span className="ml-1.5 text-[11px] font-medium tracking-widest text-gray-400 uppercase">Selected</span>
+          </div>
+          <div className="h-4 w-[1px] bg-black/10 dark:bg-white/10" />
+          <div className="ml-1 flex items-center gap-2 pr-1">
+            <button
+              onClick={() => setSelectedImages([])}
+              className="rounded-full px-3 py-1.5 text-[11px] font-bold text-gray-400 transition-all hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
+            >
+              CLEAR
+            </button>
+            <button
+              onClick={handleDownloadSelected}
+              className="flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-[11px] font-bold text-white transition-all hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95"
+            >
+              <Download size={13} />
+              DOWNLOAD ZIP
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Select all */}
+      {completedUrls.length > 0 && (
+        <div className="mb-6 flex justify-end px-2">
+          <button
+            onClick={selectAll}
+            className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
+          >
+            <div
+              className={`flex h-4 w-4 items-center justify-center rounded border transition-colors ${
+                selectedImages.length > 0 && selectedImages.length === completedUrls.length
+                  ? 'border-blue-600 bg-blue-600'
+                  : 'border-gray-400 bg-white group-hover:border-gray-600 group-hover:bg-black/5 dark:border-gray-600 dark:bg-transparent'
+              }`}
+            >
+              {selectedImages.length > 0 && selectedImages.length === completedUrls.length && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            {selectedImages.length > 0 && selectedImages.length === completedUrls.length ? 'Deselect All' : 'Select All'}
+          </button>
+        </div>
+      )}
+
+      <Masonry breakpointCols={breakpointColumnsObj} className="flex w-full gap-2" columnClassName="flex flex-col gap-2">
+        {items.map((item, index) => (
+          <AdFactoryImageCard
+            key={`${item.campaignId || 'c'}-${item.url || 'noimg'}-${index}`}
+            item={item}
+            isSelected={selectedImages.includes(item.url)}
+            onSelect={() => toggleSelection(item.url)}
+            onFullscreen={setFullscreenUrl}
+          />
+        ))}
+      </Masonry>
+
+      {items.length === 0 && !isLoading && (
+        <div className="flex h-full w-full items-center justify-center text-gray-400">No images found.</div>
+      )}
+      {isLoading && (
+        <div className="mt-6 flex w-full items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+        </div>
+      )}
+
+      {/* Fullscreen overlay */}
+      {fullscreenUrl && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/95 p-6"
+          onClick={() => setFullscreenUrl(null)}
+        >
+          <button
+            className="absolute top-5 right-5 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            onClick={() => setFullscreenUrl(null)}
+          >
+            <X size={28} />
+          </button>
+          <img
+            src={resolveImageUrl(fullscreenUrl)}
+            alt="AdFactory generated"
+            className="max-h-full max-w-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

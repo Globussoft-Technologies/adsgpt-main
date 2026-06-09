@@ -11,6 +11,7 @@ const {
   deleteCreativeByCreativeId,
   updateCreativeByCreativeId,
   getAdFactoryGeneratedCountsByUserId,
+  getAdFactoryImagesByUserId,
   downLoadZipImages,
   saveEditedAdImage
 } = require("../controllers/adFactory");
@@ -32,6 +33,7 @@ router.post("/create", authenticateJWT, requireBasePlan, createCampaign);
 router.get("/get/:userId", authenticateJWT, getCampaignByUserId);
 router.get("/get/:userId/:campaignId", authenticateJWT, getCampaignByUserCampaignId);
 router.get("/generated-count/:userId", authenticateJWT, getAdFactoryGeneratedCountsByUserId);
+router.get("/images/:userId", authenticateJWT, getAdFactoryImagesByUserId);
 router.get("/get-history/:userId/:campaignId", authenticateJWT, getCampaignHistoryByUserCampaignId);
 router.put("/update", authenticateJWT, requireBasePlan, updateCampaign);
 router.put("/creatives/:campaignId/:creativeId", authenticateJWT,updateCreativeByCreativeId);

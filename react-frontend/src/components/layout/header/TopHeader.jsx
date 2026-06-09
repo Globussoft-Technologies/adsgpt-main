@@ -97,7 +97,7 @@ const adVideoNewTab = {
 const brandIQTabs = [
   { id: 'myBrands', label: 'My Brands', icon: Zap },
   { id: 'competitors', label: 'Competitors', icon: Users },
-  { id: 'Gallery', label: 'Gallery', icon: Images },
+  // { id: 'Gallery', label: 'Gallery', icon: Images },
   // { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
 

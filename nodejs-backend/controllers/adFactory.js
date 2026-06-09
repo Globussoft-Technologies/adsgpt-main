@@ -21,6 +21,7 @@ const GeneratedMediaController = require("./generatedMedia.controller");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
  const AdCreativeImages = require("../Module/adCreative/adCreativeImages");
+const { assembleAdFactoryImages } = require("../services/adFactory/adFactoryImagesService");
 
 // const getFileName = (extension) => `${Date.now()}${extension}`;
 
@@ -565,6 +566,65 @@ exports.getAdFactoryGeneratedCountsByUserId = async (req, res) => {
     });
   } catch (error) {
     console.error("Get AdFactory Counts Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.getAdFactoryImagesByUserId = async (req, res) => {
+  /*
+    #swagger.tags = ['Ad Factory']
+    #swagger.description = 'List all successfully generated AdFactory images (manual + automatic) for a user, including in-progress placeholders and failed entries. Merges live campaigns and history snapshots, dedupes by image URL, sorts newest-first, and paginates.'
+    #swagger.parameters['userId'] = { in: 'path', description: 'User ID', required: true, type: 'string' }
+    #swagger.parameters['skip']   = { in: 'query', description: 'Items to skip (default 0)', type: 'integer' }
+    #swagger.parameters['limit']  = { in: 'query', description: 'Items to return (default 20)', type: 'integer' }
+    #swagger.parameters['startDate'] = { in: 'query', description: 'Filter from this date, format dd-MM-yyyy', type: 'string' }
+    #swagger.parameters['endDate']   = { in: 'query', description: 'Filter up to this date, format dd-MM-yyyy', type: 'string' }
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "userId is required" });
+    }
+
+    const skip = Math.max(0, Number(req.query.skip) || 0);
+    const limit = Math.max(1, Number(req.query.limit) || 20);
+    // Dates arrive as "dd-MM-yyyy" (same contract as the image/all endpoint).
+    const { startDate, endDate } = req.query;
+
+    // 1. Live campaigns — success + generating + error
+    const campaigns = await Campaign.find({ userId })
+      .select("metadata.campaignId metadata.campaignName results.image services")
+      .lean();
+
+    // 2. History snapshots — success + error only (generating is stale here)
+    const histories = await CampaignHistory.find({ userId })
+      .select("campaignId previousData.metadata.campaignName previousData.results.image previousData.services")
+      .lean();
+
+    // 3. Assemble (merge → date-filter → dedupe → sort → count → paginate)
+    const result = assembleAdFactoryImages({
+      campaigns,
+      histories,
+      startDate,
+      endDate,
+      skip,
+      limit,
+      now: Date.now(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "AdFactory images fetched successfully",
+      ...result,
+    });
+  } catch (error) {
+    console.error("Get AdFactory Images Error:", error);
+    logger.error(`Get AdFactory Images Error: ${error}`);
     return res.status(500).json({
       success: false,
       message: "Server error",
