@@ -390,7 +390,6 @@ exports.generateImage = async (req, res) => {
             userId,
         };
 
-        console.log("pythonPayload",pythonPayload);
         
 
         const typeToApiUrl = {

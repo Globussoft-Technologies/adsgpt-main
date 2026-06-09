@@ -270,6 +270,15 @@ export default function ImageCard({
                 <span className="text-gray-400">Model:</span>{' '}
                 {item?.inputs?.modelLabel || item?.inputs?.model || '-'}
               </p>
+              <p>
+                <span className="text-gray-400">Quality:</span>{' '}
+                {(() => {
+                  // Records created before the quality field existed won't
+                  // carry it — fall back to the backend default of "medium".
+                  const q = item?.inputs?.quality || 'medium';
+                  return q.charAt(0).toUpperCase() + q.slice(1);
+                })()}
+              </p>
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-400">Brand:</span> {item.inputs.brandName}
