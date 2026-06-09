@@ -37,7 +37,7 @@ const DescriptionWithShowMore = ({ text }) => {
 
   return (
     <div
-      className={`text-sm leading-tight break-words text-[#BEBEBE] transition-all duration-300 ${
+      className={`text-sm leading-tight break-words text-gray-600 transition-all duration-300 dark:text-[#BEBEBE] ${
         expanded ? 'max-h-[70px] overflow-y-auto pr-1' : ''
       }`}
       style={{ wordBreak: 'break-word' }}
@@ -49,7 +49,7 @@ const DescriptionWithShowMore = ({ text }) => {
             e.stopPropagation();
             setExpanded(!expanded);
           }}
-          className="ml-1 cursor-pointer font-medium text-white hover:underline"
+          className="ml-1 cursor-pointer font-medium text-gray-900 hover:underline dark:text-white"
         >
           {expanded ? 'Show Less' : 'Show More'}
         </span>
@@ -200,15 +200,15 @@ const NoCompaignScreen = () => {
       {campaignsList?.length > 0 && (
         <div
           id="new_campaign_button"
-          className="fixed top-4 right-3 z-50 mb-8 flex justify-end md:top-8 md:right-10"
+          className="fixed top-3 right-14 z-50 mb-8 flex justify-end md:right-16 2xl:top-7 2xl:right-20"
         >
-          <div className="group w-fit rounded-full bg-gradient-to-b from-white/40 to-white/10 p-[1px]">
+          <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
             <button
               onClick={() => setOpenStartForm(true)}
-              className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#0D0D0D]/60 px-5 py-1.5 text-base text-[#AFAFAF] transition-all duration-300 hover:text-white"
+              className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
             >
-              <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-white/70 2xl:h-5 2xl:w-5" />
-              <span className="bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text font-medium text-transparent group-hover:text-white/70">
+              <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-black/70 2xl:h-5 2xl:w-5 dark:group-hover:text-white/70" />
+              <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
                 New Campaign
               </span>
             </button>
@@ -225,17 +225,17 @@ const NoCompaignScreen = () => {
           /* Empty State */
           <div className="flex min-h-[70vh] w-full items-center justify-center">
             <div className="flex flex-col items-center justify-center space-y-5 p-6 text-center">
-              <h2 className="text-xl font-medium text-[#AFAFAF]">No Ad Campaigns yet</h2>
-              <p className="max-w-sm text-base text-[#AFAFAF]">
+              <h2 className="text-xl font-medium text-gray-700 dark:text-[#AFAFAF]">No Ad Campaigns yet</h2>
+              <p className="max-w-sm text-base text-gray-500 dark:text-[#AFAFAF]">
                 You haven't launched any Ad campaigns yet. Start one to reach your audience.
               </p>
-              <div className="group mt-1 w-fit rounded-full bg-gradient-to-b from-white/40 to-white/10 p-[1px]">
+              <div className="group mt-1 w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
                 <button
                   onClick={() => setOpenStartForm(true)}
-                  className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#0D0D0D]/60 px-5 py-1.5 text-base text-[#AFAFAF] transition-all duration-300 hover:text-white"
+                  className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
                 >
-                  <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-white/70 2xl:h-5 2xl:w-5" />
-                  <span className="bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text font-medium text-transparent group-hover:text-white/70">
+                  <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-black/70 2xl:h-5 2xl:w-5 dark:group-hover:text-white/70" />
+                  <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
                     Start New Campaign
                   </span>
                 </button>
@@ -243,13 +243,13 @@ const NoCompaignScreen = () => {
             </div>
           </div>
         ) : (
-          <div className="h-full max-h-[calc(100svh-96px)] cursor-pointer overflow-y-auto sm:max-h-[calc(100svh-140px)] 2xl:max-h-[calc(100svh-160px)]">
+          <div className="h-full max-h-[calc(100svh-96px)] overflow-y-auto sm:max-h-[calc(100svh-140px)] 2xl:max-h-[calc(100svh-160px)]">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {campaignsList?.map((campaign) => (
                 <div
                   key={campaign?.id}
                   onClick={() => handleCampaignClick(campaign)}
-                  className="ad_factory_card group relative flex w-full items-center justify-center overflow-hidden rounded-2xl bg-[#0D0D0D]/50 p-[1px] backdrop-blur-[124px] transition-all duration-300"
+                  className="ad_factory_card group relative flex w-full items-center cursor-pointer justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-[1px] shadow-sm backdrop-blur-[124px] transition-all duration-300 dark:border-none dark:bg-[#0D0D0D]/50 dark:shadow-none"
                 >
                   <div className="relative flex w-full flex-col gap-4 rounded-2xl p-5 py-6">
                     <div className="mb-1 flex items-start justify-between">
@@ -261,17 +261,17 @@ const NoCompaignScreen = () => {
                               campaign?.metadata?.campaignName
                             }
                           >
-                            <h2 className="line-clamp-2 text-[18px] leading-snug font-medium break-all text-white">
+                            <h2 className="line-clamp-2 text-[18px] leading-snug font-medium break-all text-gray-900 dark:text-white">
                               {campaign?.metadata?.campaignName || 'Untitled Campaign'}
                             </h2>
                           </ShadcnTooltip>
                         )}
-                        <h2 className="line-clamp-2 text-[18px] leading-snug font-medium break-all text-white">
+                        <h2 className="line-clamp-2 text-[18px] leading-snug font-medium break-all text-gray-900 dark:text-white">
                           {campaign?.metadata?.campaignName?.length < 21 &&
                             campaign?.metadata?.campaignName}
                         </h2>
                       </div>
-                      <span className="ml-2 text-[13px] text-[#8B8B8B]">
+                      <span className="ml-2 text-[13px] text-gray-500 dark:text-[#8B8B8B]">
                         {campaign?.updatedAt &&
                           new Date(campaign?.updatedAt)?.toLocaleDateString('en-GB', {
                             day: '2-digit',
@@ -287,12 +287,12 @@ const NoCompaignScreen = () => {
                         className={`group w-fit rounded-full bg-gradient-to-b p-[1px] ${
                           // campaign?.status === 'success' || campaign?.status == 'edit-in-progress'
                           campaign?.status === 'success'
-                            ? 'from-white/40 to-white/10'
-                            : 'from-white/10 to-white/10'
+                            ? 'from-black/15 to-black/5 dark:from-white/40 dark:to-white/10'
+                            : 'from-black/5 to-black/5 dark:from-white/10 dark:to-white/10'
                         }`}
                       >
-                        <button className="backdrop-blur-100 relative flex items-center justify-center gap-1.5 rounded-full bg-[#171717] px-6 py-[3px] text-base text-[#AFAFAF] transition-all duration-300 hover:text-white">
-                          <span className="bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text font-medium text-transparent group-hover:text-white/70">
+                        <button className="backdrop-blur-100 relative flex items-center justify-center gap-1.5 rounded-full bg-gray-100 px-6 py-[3px] text-base text-gray-500 transition-all duration-300 hover:text-black dark:bg-[#171717] dark:text-[#AFAFAF] dark:hover:text-white">
+                          <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
                             {campaign?.status == 'success' || campaign?.status == 'edit-in-progress'
                               ? 'Active'
                               : 'Inactive'}
@@ -302,14 +302,14 @@ const NoCompaignScreen = () => {
                       <div className="flex items-center gap-3">
                         <button
                           onClick={(e) => handleEditClick(e, campaign)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-[#1A1A1A] text-gray-400 hover:text-[#72ff6b]"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-gray-100 text-gray-500 hover:text-[#3bb834] dark:border-white/10 dark:bg-[#1A1A1A] dark:text-gray-400 dark:hover:text-[#72ff6b]"
                           title="Edit campaign name"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
                           onClick={(e) => handleDeleteClick(e, campaign)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-[#1A1A1A] text-gray-400 hover:bg-[#2A2A2A] hover:text-[#FF6B6B] active:scale-95"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-[#FF6B6B] active:scale-95 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-gray-400 dark:hover:bg-[#2A2A2A] dark:hover:text-[#FF6B6B]"
                           title="Delete campaign"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -326,9 +326,9 @@ const NoCompaignScreen = () => {
 
       {/* Edit Campaign Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="flex w-full !max-w-[420px] flex-col overflow-x-hidden rounded-[24px] border-none !bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-6 shadow-2xl shadow-[#6b72f8]/10 !backdrop-blur-[100px] sm:p-8">
+        <DialogContent className="flex w-full !max-w-[420px] flex-col overflow-x-hidden rounded-[24px] border border-black/10 !bg-gradient-to-b from-white to-gray-50 p-6 shadow-2xl shadow-[#6b72f8]/10 !backdrop-blur-[100px] sm:p-8 dark:border-none dark:from-[#1A1A1A] dark:to-[#0D0D0D]">
           <div className="mb-4 flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold text-white">
+            <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-white">
               Edit Campaign Name
             </DialogTitle>
             {/* <button
@@ -341,7 +341,7 @@ const NoCompaignScreen = () => {
 
           <div className="space-y-6">
             <div className="space-y-3">
-              <label htmlFor="campaign-name" className="text-sm font-medium text-[#CCCCCC]">
+              <label htmlFor="campaign-name" className="text-sm font-medium text-gray-600 dark:text-[#CCCCCC]">
                 Campaign Name
               </label>
               <div className="relative">
@@ -352,7 +352,7 @@ const NoCompaignScreen = () => {
                   value={editedCampaignName}
                   onChange={(e) => setEditedCampaignName(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  className="focus:ring-1/2 w-full rounded-xl bg-[#2A2A2A] px-4 py-3.5 text-white placeholder:text-gray-500 focus:ring-[#6b72f8] focus:ring-offset-2 focus:ring-offset-[#0D0D0D] focus:outline-none"
+                  className="focus:ring-1/2 w-full rounded-xl border border-black/10 bg-gray-100 px-4 py-3.5 text-gray-900 placeholder:text-gray-500 focus:ring-[#6b72f8] focus:ring-offset-2 focus:ring-offset-white focus:outline-none dark:border-transparent dark:bg-[#2A2A2A] dark:text-white dark:focus:ring-offset-[#0D0D0D]"
                   placeholder="Enter campaign name"
                   disabled={isSubmitting}
                   maxLength={50}
@@ -368,7 +368,7 @@ const NoCompaignScreen = () => {
               <button
                 onClick={() => setEditDialogOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-xl bg-[#2A2A2A] px-6 py-2.5 text-sm font-medium text-gray-300 transition-all hover:bg-[#3A3A3A] hover:text-white disabled:opacity-50"
+                className="rounded-xl bg-gray-100 px-6 py-2.5 text-sm font-medium text-gray-600 transition-all hover:bg-gray-200 hover:text-black disabled:opacity-50 dark:bg-[#2A2A2A] dark:text-gray-300 dark:hover:bg-[#3A3A3A] dark:hover:text-white"
               >
                 Cancel
               </button>
@@ -399,22 +399,22 @@ const NoCompaignScreen = () => {
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent
-          className="flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[24px] border-none !bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-6 shadow-2xl shadow-red-500/10 !backdrop-blur-[100px] sm:p-8"
+          className="flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[24px] border border-black/10 !bg-gradient-to-b from-white to-gray-50 p-6 shadow-2xl shadow-red-500/10 !backdrop-blur-[100px] sm:p-8 dark:border-none dark:from-[#1A1A1A] dark:to-[#0D0D0D]"
           showCloseButton={false}
         >
           <div className="mb-4 flex flex-col items-center justify-center space-y-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-red-500/20 to-red-600/20">
               <Trash2 className="h-7 w-7 text-red-500" />
             </div>
-            <DialogTitle className="text-center text-xl font-semibold text-white">
+            <DialogTitle className="text-center text-xl font-semibold text-gray-900 dark:text-white">
               Delete Campaign?
             </DialogTitle>
           </div>
 
-          <DialogDescription className="text-center text-[#CCCCCC]">
+          <DialogDescription className="text-center text-gray-600 dark:text-[#CCCCCC]">
             <p>
               Are you sure you want to delete "
-              <span className="font-medium text-white">
+              <span className="font-medium text-gray-900 dark:text-white">
                 {campaignToDelete?.metadata?.campaignName || 'Untitled Campaign'}
               </span>
               "? This action cannot be undone.
@@ -428,7 +428,7 @@ const NoCompaignScreen = () => {
                   dispatch(setDeleteDialogOpen(false));
                   setCampaignToDelete(null);
                 }}
-                className="flex-1 rounded-xl bg-[#2A2A2A] px-6 py-2.5 text-sm font-medium text-gray-300 transition-all hover:bg-[#3A3A3A] hover:text-white"
+                className="flex-1 rounded-xl bg-gray-100 px-6 py-2.5 text-sm font-medium text-gray-600 transition-all hover:bg-gray-200 hover:text-black dark:bg-[#2A2A2A] dark:text-gray-300 dark:hover:bg-[#3A3A3A] dark:hover:text-white"
               >
                 Cancel
               </button>

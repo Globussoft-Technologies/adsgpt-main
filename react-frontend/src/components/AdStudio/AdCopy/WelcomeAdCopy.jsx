@@ -43,13 +43,13 @@ const WelcomeAdCopy = () => {
             {[1, 2, 3].map((i) => (
               <motion.div
                 key={i}
-                className="animate-pulse rounded-2xl bg-gradient-to-tr from-transparent via-white/20 to-transparent p-[1px]"
+                className="animate-pulse rounded-2xl bg-gradient-to-tr from-transparent via-black/10 to-transparent p-[1px] dark:via-white/20"
                 variants={fadeUpVariants}
               >
-                <div className="flex h-40 flex-col gap-3 rounded-2xl bg-[#222222]/50 p-4 sm:p-6">
-                  <div className="h-5 w-5 rounded bg-gray-600"></div>
-                  <div className="h-3 w-3/4 rounded bg-gray-600"></div>
-                  <div className="h-3 w-1/2 rounded bg-gray-600"></div>
+                <div className="flex h-40 flex-col gap-3 rounded-2xl border border-black/[0.04] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6 dark:border-transparent dark:bg-[#222222]/50 dark:shadow-none">
+                  <div className="h-5 w-5 rounded bg-zinc-200 dark:bg-gray-600"></div>
+                  <div className="h-3 w-3/4 rounded bg-zinc-200 dark:bg-gray-600"></div>
+                  <div className="h-3 w-1/2 rounded bg-zinc-200 dark:bg-gray-600"></div>
                 </div>
               </motion.div>
             ))}
@@ -58,7 +58,7 @@ const WelcomeAdCopy = () => {
 
         {/* Language support note */}
         <motion.p
-          className="mb-8 text-center 2xl:mb-11 text-xs text-[#AFAFAF] 2xl:text-sm"
+          className="mb-8 text-center 2xl:mb-11 text-xs text-zinc-500 2xl:text-sm dark:text-[#AFAFAF]"
           variants={fadeUpVariants}
           initial="hidden"
           animate="visible"
@@ -74,12 +74,12 @@ const WelcomeAdCopy = () => {
               const Icon = suggestionIcons[card.icon];
               return (
                 <div
-                  className="group rounded-2xl from-transparent via-white/30 to-transparent p-[1px] transition-all duration-500 ease-in hover:bg-gradient-to-tr"
+                  className="group rounded-2xl from-transparent via-black/20 to-transparent p-[1px] transition-all duration-500 ease-in hover:bg-gradient-to-tr dark:via-white/30"
                   onClick={() => handleSuggestionClick(card.text)}
                   key={card?.id || index}
                 >
-                  <div className="group relative flex h-full cursor-pointer flex-col gap-6 rounded-2xl from-[#222222] to-[#5771F6]/50 p-4 text-sm sm:p-6 dark:bg-[#222222]/50 dark:text-[#AFAFAF] dark:group-hover:bg-gradient-to-br">
-                    <Icon className="h-5 w-5 text-white opacity-70 dark:group-hover:text-[#5E66F5]" />
+                  <div className="group relative flex h-full cursor-pointer flex-col gap-6 rounded-2xl border border-black/[0.04] bg-white p-4 text-sm text-zinc-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] to-[#5771F6]/50 sm:p-6 group-hover:bg-zinc-50 dark:border-transparent dark:from-[#222222] dark:bg-[#222222]/50 dark:text-[#AFAFAF] dark:shadow-none dark:group-hover:bg-gradient-to-br">
+                    <Icon className="h-5 w-5 text-[#6e7782] opacity-90 dark:text-white dark:opacity-70 dark:group-hover:text-[#5E66F5]" />
                     <p className="max-w-[176px] text-xs 2xl:text-sm">{card.text}</p>
                   </div>
                 </div>

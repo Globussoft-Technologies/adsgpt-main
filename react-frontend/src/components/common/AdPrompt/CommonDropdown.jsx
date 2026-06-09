@@ -20,17 +20,20 @@ const CommonDropdown = ({
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
-        className={`prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`}
+        className={`prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none [&_img]:opacity-80 [&_img]:brightness-0 dark:[&_img]:opacity-100 dark:[&_img]:brightness-100 [&_svg]:text-current! opacity-80 hover:opacity-100 ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`}
       >
         <div className="flex items-center gap-1 pr-1 capitalize 2xl:gap-1.5">
-          {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className="h-3 w-3 2xl:h-4 2xl:w-4" /> : icon)}
-          <span className="font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+          {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className="h-3 w-3 brightness-0 opacity-50 2xl:h-4 2xl:w-4 dark:brightness-100 group-hover:opacity-100" /> : icon)}
+          <span className="font-light text-zinc-800 dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
             {triggerLabel}
           </span>
         </div>
       </SelectTrigger>
 
-      <SelectContent side={side} className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent
+        side={side}
+        className="z-[999999] min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white"
+      >
         {label && (
           <div className="text-10 px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">
             {label}
@@ -52,16 +55,18 @@ const CommonDropdown = ({
               <SelectItem
                 key={optionValue}
                 value={optionValue}
-                className={`group cursor-pointer text-[10px] hover:bg-[#DFDFDF] 2xl:text-xs dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
-                  value?.value === optionValue ? 'dark:bg-[#0D0D0D]/50' : 'bg-transparent'
-                } focus:bg-transparent focus:text-inherit`}
+                className={`group cursor-pointer text-[10px] text-zinc-800 hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 data-highlighted:bg-zinc-100 data-highlighted:text-zinc-900 2xl:text-xs dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white dark:focus:bg-[#0D0D0D]/30 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/30 dark:data-highlighted:text-white [&_svg]:text-current! ${
+                  value?.value === optionValue
+                    ? 'bg-zinc-100 dark:bg-[#0D0D0D]/50'
+                    : 'bg-transparent'
+                }`}
               >
                 {Icon}
                 <div className="flex w-full items-center justify-between">
                   {shouldShowPreview && (
                     <div className="mr-1 flex h-3.5 w-3.5 items-center justify-center">
                       <div
-                        className={`rounded-[2px] border border-[#AFAFAF] bg-transparent group-hover:border-white`}
+                        className={`rounded-[2px] border border-current bg-transparent`}
                         style={{
                           aspectRatio: `${numericW} / ${numericH}`,
                           width: isWide ? '100%' : 'auto',
@@ -73,14 +78,10 @@ const CommonDropdown = ({
 
                   {credit ? (
                     <ShadcnTooltip label={`${credit} `} side="right" className="z-[1000000]">
-                      <span className="text-[9px] group-hover:text-white 2xl:text-xs dark:text-inherit">
-                        {label}
-                      </span>
+                      <span className="text-[9px] text-inherit 2xl:text-xs">{label}</span>
                     </ShadcnTooltip>
                   ) : (
-                    <span className="text-[9px] group-hover:text-white 2xl:text-xs dark:text-inherit">
-                      {label}
-                    </span>
+                    <span className="text-[9px] text-inherit 2xl:text-xs">{label}</span>
                   )}
 
                   {tier === 'premium' && (
@@ -94,12 +95,12 @@ const CommonDropdown = ({
                   <span
                     className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full border ${
                       value?.value === optionValue
-                        ? 'border-[#575757] dark:bg-[#575757]'
-                        : 'border-[#AFAFAF]'
+                        ? 'border-zinc-700 bg-zinc-700 dark:border-[#575757] dark:bg-[#575757]'
+                        : 'border-zinc-400 dark:border-[#AFAFAF]'
                     }`}
                   >
                     {value?.value === optionValue && (
-                      <div className="h-[6px] w-[6px] rounded-full dark:bg-white" />
+                      <div className="h-[6px] w-[6px] rounded-full bg-white" />
                     )}
                   </span>
                 </div>

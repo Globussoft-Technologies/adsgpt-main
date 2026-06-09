@@ -12,7 +12,7 @@ const PREFIX_MAP = [
   ['/adinsights', 'Ad Insights'],
   ['/adfactory', 'Ad Factory'],
   ['/profile', 'Account'],
-  ['/assistant', 'AI Assistant'],
+  // ['/assistant', 'AI Assistant'],
   // `/meta-ads` is the post-connect Ads Manager dashboard, `/ads-manager`
   // is the platform picker. Both should read "Ads Manager".
   ['/meta-ads', 'Ads Manager'],

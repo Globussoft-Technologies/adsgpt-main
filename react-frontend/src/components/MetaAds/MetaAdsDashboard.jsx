@@ -188,17 +188,17 @@ export default function MetaAdsDashboard() {
         }}
       />
       {/* ambient glow */}
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-96 -translate-x-1/2 rounded-full bg-white/3 blur-3xl" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-96 -translate-x-1/2 rounded-full bg-gray-200 blur-3xl dark:bg-white/3" />
 
       {/* ── header ─────────────────────────────────────────────────────────── */}
-      <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3 2xl:px-6 2xl:py-4">
+      <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 pr-14 2xl:px-6 2xl:py-4 2xl:pr-16 dark:border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/20">
             <FaMeta className="h-5 w-5 text-[#0082FB]" />
           </div>
           <div>
-            <h1 className="text-[20px] font-bold text-white">Meta Ads Manager</h1>
-            <p className="text-[15px] text-[#BEBEBE]">Manage · Analyse · Optimise</p>
+            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white">Meta Ads Manager</h1>
+            <p className="text-[15px] text-gray-500 dark:text-[#BEBEBE]">Manage · Analyse · Optimise</p>
           </div>
         </div>
 
@@ -210,24 +210,24 @@ export default function MetaAdsDashboard() {
             trigger={
               <button
                 onClick={() => setAccountOpen((p) => !p)}
-                className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-[#171717] px-3 py-2 text-xs text-white backdrop-blur-xl transition-all hover:border-white/10"
+                className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
               >
                 {loadingAccounts ? (
-                  <Loader2 className="h-3 w-3 animate-spin text-[#BEBEBE]" />
+                  <Loader2 className="h-3 w-3 animate-spin text-gray-500 dark:text-[#BEBEBE]" />
                 ) : (
                   <>
-                    <Radio className="h-3 w-3 text-emerald-400" />
+                    <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                     <span className="max-w-[150px] truncate font-medium">
                       {selectedAccount?.name ?? 'Select Account'}
                     </span>
-                    <ChevronDown className="h-3 w-3 text-[#BEBEBE]" />
+                    <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
                   </>
                 )}
               </button>
             }
           >
             <div className="w-72 p-1">
-              <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
+              <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
                 {adAccounts.map((acc) => (
                   <button
                     key={acc.id}
@@ -236,15 +236,15 @@ export default function MetaAdsDashboard() {
                       setAccountOpen(false);
                       setActiveTab('analytics');
                     }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-white/5' : ''}`}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}
                   >
                     <div>
                       <p
-                        className={`text-xs font-medium ${selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-white'}`}
+                        className={`text-xs font-medium ${selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'}`}
                       >
                         {acc.name}
                       </p>
-                      <p className="text-10 text-white">Spent: {acc.amountSpent}</p>
+                      <p className="text-10 text-gray-900 dark:text-white">Spent: {acc.amountSpent}</p>
                     </div>
                     <StatusBadge status={acc.status === 1 ? 'ACTIVE' : 'PAUSED'} />
                   </button>
@@ -261,13 +261,13 @@ export default function MetaAdsDashboard() {
               trigger={
                 <button
                   onClick={() => setDateOpen((p) => !p)}
-                  className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-[#171717] px-3 py-2 text-xs text-white backdrop-blur-xl transition-all hover:border-white/10"
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
                 >
-                  <Calendar className="h-3 w-3 text-white" />
+                  <Calendar className="h-3 w-3 text-gray-900 dark:text-white" />
                   <span className="font-medium">
                     {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-[#BEBEBE]" />
+                  <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
                 </button>
               }
             >
@@ -279,7 +279,7 @@ export default function MetaAdsDashboard() {
                       setDatePreset(preset.value);
                       setDateOpen(false);
                     }}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-white/5 ${datePreset === preset.value ? 'bg-white/5 text-[#15DCFF]' : 'text-white'}`}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${datePreset === preset.value ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5' : 'text-gray-900 dark:text-white'}`}
                   >
                     {preset.label}
                   </button>
@@ -292,36 +292,36 @@ export default function MetaAdsDashboard() {
 
       {/* ── account summary strip ──────────────────────────────────────────── */}
       {selectedAccount && !loadingAccounts && (
-        <div className="relative z-30 flex flex-shrink-0 flex-wrap items-center justify-between gap-5 border-b border-white/[0.04] px-5 py-2 2xl:px-6">
+        <div className="relative z-30 flex flex-shrink-0 flex-wrap items-center justify-between gap-5 border-b border-gray-200 px-5 py-2 2xl:px-6 dark:border-white/[0.04]">
           {[
             {
               label: 'Account',
-              value: <span className="font-semibold text-white">{selectedAccount.name}</span>,
+              value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.name}</span>,
             },
             {
               label: 'Lifetime Spent',
-              value: <span className="font-semibold text-white">{selectedAccount.amountSpent}</span>,
+              value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.amountSpent}</span>,
             },
             {
               label: 'Campaigns',
               value: (
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-gray-900 dark:text-white">
                   {campaigns.length}
                   {activeCampaigns > 0 && (
-                    <span className="ml-1 text-emerald-400">({activeCampaigns} active)</span>
+                    <span className="ml-1 text-emerald-600 dark:text-emerald-400">({activeCampaigns} active)</span>
                   )}
                 </span>
               ),
             },
             {
               label: 'Currency',
-              value: <span className="font-semibold text-white">{selectedAccount.currency}</span>,
+              value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.currency}</span>,
             },
           ].map(({ label, value }, i) => (
             <React.Fragment key={label}>
-              {i > 0 && <div className="h-4 w-px bg-white/[0.06]" />}
+              {i > 0 && <div className="h-4 w-px bg-gray-200 dark:bg-white/[0.06]" />}
               <div className="flex items-center gap-2 text-sm 2xl:text-15">
-                <span className="text-xs font-medium uppercase tracking-wider text-white/40">{label}</span>
+                <span className="text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-white/40">{label}</span>
                 {value}
               </div>
             </React.Fragment>
@@ -329,7 +329,7 @@ export default function MetaAdsDashboard() {
           <button
             onClick={() => setShowDisconnectModal(true)}
             disabled={disconnecting}
-            className="ml-auto flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs  text-red-400 font-bold transition-all hover:border-red-500/40  hover:bg-red-500/10 disabled:opacity-50"
+            className="ml-auto flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs  text-red-600 font-bold transition-all hover:border-red-500/40  hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
           >
             {disconnecting ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -342,7 +342,7 @@ export default function MetaAdsDashboard() {
       )}
 
       {/* ── tabs ──────────────────────────────────────────────────────────── */}
-      <div className="relative z-40 flex flex-shrink-0 items-center justify-between border-b border-white/6 px-5 2xl:px-6">
+      <div className="relative z-40 flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-5 2xl:px-6 dark:border-white/6">
         <div className="flex items-center gap-0.5">
           {TABS.map((tab) => {
             const { id, label } = tab;
@@ -353,14 +353,14 @@ export default function MetaAdsDashboard() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`relative flex items-center gap-1.5 px-3 py-3 text-sm font-semibold transition-all duration-200 ${activeTab === id ? 'text-white' : 'text-[#BEBEBE] hover:text-white/70'}`}
+              className={`relative flex items-center gap-1.5 px-3 py-3 text-sm font-semibold transition-all duration-200 ${activeTab === id ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-[#BEBEBE] dark:hover:text-white/70'}`}
             >
               <TabIcon className="h-3.5 w-3.5" />
               {label}
               {activeTab === id && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-white/60"
+                  className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-gray-900 dark:bg-white/60"
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.35 }}
                 />
               )}
@@ -370,9 +370,9 @@ export default function MetaAdsDashboard() {
         </div>
         {activeTab === 'audit' && (
           <div className="flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5 shrink-0 text-white/30" />
-            <p className="text-xs text-white/40">
-              Audit data reflects the <span className="font-semibold text-white/60">last 14 days</span> of campaign activity.
+            <Info className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
+            <p className="text-xs text-gray-400 dark:text-white/40">
+              Audit data reflects the <span className="font-semibold text-gray-500 dark:text-white/60">last 14 days</span> of campaign activity.
             </p>
           </div>
         )}
@@ -393,14 +393,14 @@ export default function MetaAdsDashboard() {
             >
               <div className="flex shrink-0 items-center justify-between gap-2">
                 <div>
-                  <p className="text-base font-bold text-white 2xl:text-xl">Campaigns</p>
-                  <p className="text-xs 2xl:text-sm text-[#BEBEBE]">Build and manage Meta Ads Manager campaigns end-to-end</p>
+                  <p className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Campaigns</p>
+                  <p className="text-xs 2xl:text-sm text-gray-500 dark:text-[#BEBEBE]">Build and manage Meta Ads Manager campaigns end-to-end</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={reloadCampaigns}
                     disabled={loadingCampaigns}
-                    className="flex items-center gap-1.5 rounded-xl border border-white/6 bg-[#171717] px-3 py-1.5 text-10 2xl:text-xs font-medium text-[#BEBEBE] backdrop-blur-xl transition-all hover:border-white/10 hover:text-white disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 2xl:text-xs font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/6 dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
                   >
                     <RefreshCw className={`h-3 w-3 ${loadingCampaigns ? 'animate-spin' : ''}`} />
                     Refresh
@@ -408,7 +408,7 @@ export default function MetaAdsDashboard() {
                   <button
                     onClick={() => openWizard('create-full')}
                     disabled={!selectedAccount}
-                    className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-10 2xl:text-xs font-semibold text-black transition-all hover:opacity-90 disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-10 2xl:text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black"
                   >
                     <Plus className="h-3 w-3" />
                     New Campaign
@@ -441,12 +441,12 @@ export default function MetaAdsDashboard() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-base 2xl:text-xl font-bold text-white">Account Analytics</p>
+                  <p className="text-base 2xl:text-xl font-bold text-gray-900 dark:text-white">Account Analytics</p>
                 </div>
                 <button
                   onClick={loadAnalytics}
                   disabled={loadingInsights}
-                  className="flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-[#171717] px-3 py-1.5 text-10 font-medium text-[#BEBEBE] backdrop-blur-xl transition-all hover:border-white/10 hover:text-white disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
                 >
                   <RefreshCw className={`h-3 w-3 ${loadingInsights ? 'animate-spin' : ''}`} />
                   Refresh
@@ -543,20 +543,20 @@ export default function MetaAdsDashboard() {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-white/8 bg-[#161616] p-6 shadow-2xl"
+              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
-                <LogOut className="h-5 w-5 text-red-400" />
+                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-              <h2 className="mb-1 text-sm font-bold text-white">Disconnect Meta Account?</h2>
-              <p className="mb-6 text-xs text-[#BEBEBE]">
+              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Disconnect Meta Account?</h2>
+              <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
                 This will remove the connection to your Meta Ads account. You can reconnect at any
                 time from the Ads Manager.
               </p>
               <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => setShowDisconnectModal(false)}
-                  className="rounded-xl border border-white/8 bg-white/5 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/10"
+                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                 >
                   Cancel
                 </button>

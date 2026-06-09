@@ -14,31 +14,22 @@ const DescribeBrandDropdown = () => {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <div className="prompt_selection_button_no_gradient group 2xl:text-13 group backdrop-blur-80 relative flex max-w-[200px] items-center gap-2 rounded-[50px] px-4 py-1.5 text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 2xl:py-2 dark:border-none dark:bg-[#202020]/50 dark:text-[#AFAFAF]">
-          <span className="truncate font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+        <div className="prompt_selection_button_no_gradient group 2xl:text-13 group backdrop-blur-80 relative flex max-w-[200px] items-center gap-2 rounded-[50px] px-4 py-1.5 text-[9px] text-zinc-800 shadow-none transition-all duration-200 ease-in hover:bg-slate-100 2xl:py-2 dark:border-none dark:bg-[#202020]/50 dark:text-[#AFAFAF]">
+          <span className="truncate font-light text-inherit dark:group-data-[state=open]:text-white">
             {brand_name || 'Describe Brand'}
           </span>
-          <FaChevronDown className="flex-shrink-0 font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white" />
+          <FaChevronDown className="flex-shrink-0 font-light text-current dark:group-data-[state=open]:text-white" />
         </div>
       </PopoverTrigger>
 
       <PopoverContent
         side="bottom"
         align="end"
-        className="backdrop-blur-100 mb-2 w-86 rounded-3xl border border-white/20 bg-[#0D0D0D]/50 px-2 py-4.5 pb-8"
+        className="backdrop-blur-100 mb-2 w-86 rounded-3xl border border-black/10 bg-white px-2 py-4.5 pb-8 dark:border-white/20 dark:bg-[#0D0D0D]/50"
       >
         <div className="w-full">
           <Tabs defaultValue="brand" className="flex w-full">
-            {/* Tabs header */}
-            {/* <TabsList className="mx-auto h-12 rounded-full border border-white/30 !bg-[#0d0d0d]/50 p-1">
-              <TabsTrigger
-                value="brand"
-                className="bg-transparent px-4 !text-sm !font-medium !text-[#d9d9d9] !outline-0 transition-all duration-200 focus-within:!border-0 hover:!text-white focus:!ring-0 data-[state=active]:!rounded-full data-[state=active]:!bg-[#3c3c3c] data-[state=active]:!text-white"
-              >
-                Describe Brand
-              </TabsTrigger>
-            </TabsList> */}
-            <div className="text-center">Describe Brand</div>
+            <div className="text-center text-zinc-900 dark:text-white">Describe Brand</div>
 
             {/* Brand Content */}
             <TabsContent value="brand" className="mt-1 px-2">
@@ -49,12 +40,12 @@ const DescribeBrandDropdown = () => {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <label htmlFor="call-to-action" className="text-sm font-normal text-[#afafaf]">
+                    <label htmlFor="call-to-action" className="text-sm font-normal text-zinc-700 dark:text-[#afafaf]">
                       Call to Action
                     </label>
                     <Input
                       id="call-to-action"
-                      className="rounded-4xl border focus-within:border-white/50 focus:!ring-0 dark:bg-[#0d0d0d]/50"
+                      className="rounded-4xl border border-black/10 bg-zinc-50 text-zinc-800 placeholder:text-zinc-500 focus-within:border-zinc-400 focus:!ring-0 dark:border-white/20 dark:bg-[#0d0d0d]/50 dark:text-white dark:placeholder:text-[#ccc]/60 dark:focus-within:border-white/50"
                       onChange={(e) => {
                         dispatch(setFields({ cta: e.target.value }));
                       }}

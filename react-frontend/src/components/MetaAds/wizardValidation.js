@@ -28,6 +28,14 @@ export const CAPPED_BID_STRATEGIES = new Set([
 // and matches the backend Joi `min(100)` (100 minor units = 1 major).
 const MIN_BUDGET_MAJOR = 1;
 
+// Sanity ceilings in MAJOR currency units — typo-guard, not Meta's hard
+// limits. Mirror BUDGET_*_MAX_MINOR in meta.v2.validator.js (those are in
+// minor units; ÷100 → major). A user typing 999,999,999,999 in the
+// spend-cap box fails here with a clear message instead of getting a vague
+// Meta rejection at launch.
+const MAX_DAILY_BUDGET_MAJOR = 10_000_000;   // ₹1 crore / day
+const MAX_TOTAL_BUDGET_MAJOR = 100_000_000;  // ₹10 crore lifetime / spend cap
+
 // Meta requires an ad set's run window to span at least 24 hours — a
 // shorter schedule is rejected at launch with "Campaign schedule is too
 // short". Keep in sync with the same constant in meta.v2.validator.js.
@@ -86,6 +94,9 @@ function validateCampaign(form, ctx) {
   }
 
   if (form.cbo) {
+    const maxBudget = form.campaignBudgetType === 'daily'
+      ? MAX_DAILY_BUDGET_MAJOR
+      : MAX_TOTAL_BUDGET_MAJOR;
     if (isBlank(form.campaignBudget)) {
       e.campaignBudget = 'Campaign budget is required when CBO is on.';
     } else if (!isPositiveAmount(form.campaignBudget)) {
@@ -97,6 +108,10 @@ function validateCampaign(form, ctx) {
       e.campaignBudget = `Daily budget must be at least ${formatMoney(minDaily, ctx.currency)}.`;
     } else if (toNumber(form.campaignBudget) < MIN_BUDGET_MAJOR) {
       e.campaignBudget = `Campaign budget must be at least ${formatMoney(MIN_BUDGET_MAJOR, ctx.currency)}.`;
+    } else if (toNumber(form.campaignBudget) > maxBudget) {
+      // Typo-guard: 1cr/day or 10cr lifetime is the ceiling we accept.
+      // Anything higher is almost certainly a fat-finger.
+      e.campaignBudget = `That looks too large — max we accept here is ${formatMoney(maxBudget, ctx.currency)}.`;
     }
   }
 
@@ -112,6 +127,8 @@ function validateCampaign(form, ctx) {
       const minCap = ctx.minSpendCap || 0;
       if (minCap > 0 && cap < minCap) {
         e.spendCap = `Campaign spending limit must be at least ${formatMoney(minCap, ctx.currency)} for this ad account.`;
+      } else if (cap > MAX_TOTAL_BUDGET_MAJOR) {
+        e.spendCap = `That looks too large — max we accept here is ${formatMoney(MAX_TOTAL_BUDGET_MAJOR, ctx.currency)}.`;
       } else if (form.cbo && isPositiveAmount(form.campaignBudget)) {
         const budget = toNumber(form.campaignBudget);
         if (form.campaignBudgetType === 'daily' && cap <= budget) {
@@ -167,6 +184,9 @@ function validateAdSet(form, cell, ctx, mode) {
       e.bidAmount = 'A bid amount cap is required for this bid strategy.';
     } else if (!isPositiveAmount(form.bidAmount)) {
       e.bidAmount = 'Bid amount must be a positive number.';
+    } else if (toNumber(form.bidAmount) > MAX_DAILY_BUDGET_MAJOR) {
+      // A per-bid amount above ₹1cr is almost certainly a typo.
+      e.bidAmount = `That bid is too high — max we accept is ${formatMoney(MAX_DAILY_BUDGET_MAJOR, ctx.currency)}.`;
     }
   } else if (!isBlank(form.bidAmount)) {
     e.bidAmount = 'Bid amount can’t be set for an automatic bid strategy.';
@@ -174,6 +194,9 @@ function validateAdSet(form, cell, ctx, mode) {
 
   // Ad-set budget — only when the campaign isn't running CBO.
   if (!form.cbo) {
+    const maxAdSetBudget = form.adSetBudgetType === 'daily'
+      ? MAX_DAILY_BUDGET_MAJOR
+      : MAX_TOTAL_BUDGET_MAJOR;
     if (isBlank(form.adSetBudget)) {
       e.adSetBudget = 'Ad set budget is required.';
     } else if (!isPositiveAmount(form.adSetBudget)) {
@@ -185,6 +208,8 @@ function validateAdSet(form, cell, ctx, mode) {
       e.adSetBudget = `Daily budget must be at least ${formatMoney(minDaily, ctx.currency)}.`;
     } else if (toNumber(form.adSetBudget) < MIN_BUDGET_MAJOR) {
       e.adSetBudget = `Ad set budget must be at least ${formatMoney(MIN_BUDGET_MAJOR, ctx.currency)}.`;
+    } else if (toNumber(form.adSetBudget) > maxAdSetBudget) {
+      e.adSetBudget = `That looks too large — max we accept here is ${formatMoney(maxAdSetBudget, ctx.currency)}.`;
     }
   }
 
@@ -242,7 +267,18 @@ function validateAdSet(form, cell, ctx, mode) {
     }
   }
 
-  if (toNumber(form.ageMin) > toNumber(form.ageMax)) {
+  // Age range — floor 18, ceiling 65. The RangeField input clamps on edit,
+  // but guard here so a hand-crafted form / stale prefill can't slip past
+  // the clamp. Mirrors the backend Joi .min(18)/.max(65) on targetingSchemaV2.
+  const ageMinN = toNumber(form.ageMin);
+  const ageMaxN = toNumber(form.ageMax);
+  if (Number.isFinite(ageMinN) && ageMinN < 18) {
+    e.ageMin = 'Minimum age must be 18 or above.';
+  }
+  if (Number.isFinite(ageMaxN) && ageMaxN > 65) {
+    e.ageMax = 'Maximum age can’t exceed 65.';
+  }
+  if (ageMinN > ageMaxN) {
     e.ageMax = 'Maximum age must be greater than or equal to the minimum age.';
   }
 
@@ -316,8 +352,14 @@ function validateAd(form, cell, mode) {
   // Media — exactly one of image / video must be provided. Skipped in
   // edit-ad: the existing media is reused (v1 doesn't re-upload), so there's
   // no upload field to satisfy.
+  //
+  // mediaKind on the cell can lock the kind: 'video' forces video-only
+  // (e.g. Engagement/VIDEO_VIEWS — Meta rejects image creatives on
+  // THRUPLAY-optimised ad sets); 'image' forces image-only. When unset
+  // the cell accepts either kind.
+  const mediaKind = cell?.ad?.mediaKind || 'any';
   if (mode !== 'edit-ad') {
-    if (form.mediaType === 'video') {
+    if (mediaKind === 'video' || form.mediaType === 'video') {
       if (!form.videoFile && isBlank(form.videoUrl)) {
         e.media = 'Upload a video or pick one from the library.';
       }
@@ -375,8 +417,16 @@ export function validateStep(stepId, form, cell, ctx = {}, mode = 'create-full')
     case 'adSet':
       return validateAdSet(form, cell, ctx, mode);
     case 'leadForm':
-      return form.leadFormId
-        ? {}
+      if (form.leadFormId) return {};
+      // Mode-aware error so users know exactly where to look. In `build`
+      // mode the form is staged but not yet created — the Continue button
+      // can't proceed until they hit the "Create form" CTA further down
+      // the step (which submits to Meta and sets leadFormId on success).
+      return form.leadFormMode === 'build'
+        ? {
+            leadFormId:
+              "Finish your form below and click 'Create form' to attach it.",
+          }
         : { leadFormId: 'Select an existing lead form or create a new one.' };
     case 'ad':
       return validateAd(form, cell, mode);

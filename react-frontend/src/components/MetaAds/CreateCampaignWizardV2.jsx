@@ -30,6 +30,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 // eslint-disable-next-line no-unused-vars -- motion is used as <motion.div> below; the project's lint rule doesn't track JSX dotted access.
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -408,8 +409,8 @@ function StepRail({ steps, currentIndex }) {
                 active
                   ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
                   : done
-                  ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-                  : 'border border-white/8 bg-white/3 text-white/30'
+                  ? 'border border-emerald-400/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300'
+                  : 'border border-gray-200 bg-gray-50 text-gray-400 dark:border-white/8 dark:bg-white/3 dark:text-white/30'
               }`}
             >
               {done ? (
@@ -422,7 +423,7 @@ function StepRail({ steps, currentIndex }) {
             {i < steps.length - 1 && (
               <div
                 className={`h-0.5 w-2 2xl:w-3 shrink-0 ${
-                  i < currentIndex ? 'bg-emerald-400/30' : 'bg-white/15'
+                  i < currentIndex ? 'bg-emerald-400/30' : 'bg-gray-200 dark:bg-white/15'
                 }`}
               />
             )}
@@ -554,6 +555,20 @@ export default function CreateCampaignWizardV2({
       // wizard picks it up on next open.
       if (cell.adSet?.additionalFields?.includes('applicationId')) {
         next.applicationId = schemaDefaults?.appPromotion?.applicationId || '';
+      }
+      // Cell media-kind lock — Engagement/VIDEO_VIEWS sets
+      // mediaKind=video, so force the AdStep into video mode and clear
+      // any image inputs left from a prior cell pick. Mirror for
+      // mediaKind=image (none today, but the symmetry costs nothing).
+      if (cell.ad?.mediaKind === 'video') {
+        next.mediaType = 'video';
+        next.imageFile = null;
+        next.imageUrl = null;
+      } else if (cell.ad?.mediaKind === 'image') {
+        next.mediaType = 'image';
+        next.videoFile = null;
+        next.videoUrl = null;
+        next.videoThumbnailUrl = null;
       }
       return next;
     });
@@ -1102,16 +1117,23 @@ export default function CreateCampaignWizardV2({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center px-4"
+        // Snap the exit. Framer-motion's default 300ms exit kept heavy
+        // children (lazy-mounted Leaflet map, calendar popups) visible
+        // through the fade — they detached from React but Leaflet's
+        // own DOM persisted long enough to flash over the page behind.
+        // 60ms is below the perceptual threshold for "stuck UI" while
+        // still feeling intentional.
+        transition={{ exit: { duration: 0.06 } }}
+        className="fixed inset-0 z-60 bg-black/70 backdrop-blur-md flex items-center justify-center px-4"
       >
         <motion.div
           key="modal"
           initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.96, opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          transition={{ duration: 0.18, exit: { duration: 0.06 } }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-5xl max-h-[90vh] rounded-2xl border border-white/10 bg-[#141414] shadow-2xl flex flex-col overflow-hidden"
+          className="relative w-full max-w-5xl max-h-[90vh] rounded-2xl border border-none bg-white shadow-2xl flex flex-col overflow-hidden dark:border-white/10 dark:bg-[#141414]"
         >
           {/* Close button — pinned to the top-right corner of the modal so
               it's always reachable regardless of the header content. */}
@@ -1120,37 +1142,37 @@ export default function CreateCampaignWizardV2({
             onClick={requestClose}
             disabled={launching}
             aria-label="Close"
-            className="absolute right-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/8 hover:text-white disabled:opacity-30 2xl:h-8 2xl:w-8"
+            className="absolute right-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 dark:text-white/55 dark:hover:bg-white/8 dark:hover:text-white 2xl:h-8 2xl:w-8"
           >
             <X className="h-4 w-4 2xl:h-5 2xl:w-5" />
           </button>
 
           {/* Header — gradient icon tile + Posting-to pill + StepRail. */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/12 bg-white/3 px-3 py-2.5 pr-12 sm:gap-3 sm:px-5 sm:py-3 sm:pr-14 2xl:px-6 2xl:py-4 2xl:pr-16">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2.5 pr-12 dark:border-white/12 dark:bg-white/3 sm:gap-3 sm:px-5 sm:py-3 sm:pr-14 2xl:px-6 2xl:py-4 2xl:pr-16">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-r from-[#02C8C4] to-[#5867EB] ring-1 ring-white/10 2xl:h-12 2xl:w-12">
                 <Megaphone className="h-[18px] w-[18px] text-white 2xl:h-6 2xl:w-6" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white 2xl:text-lg">
+                <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-lg">
                   {WIZARD_MODE_META[mode]?.title || 'New Campaign'}
                   <span className="ml-2 inline-flex items-center rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#15DCFF] 2xl:text-[10px]">
                     V2
                   </span>
                 </p>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className="text-[11px] text-white/60 2xl:text-xs">
+                  <span className="text-[11px] text-gray-500 dark:text-white/60 2xl:text-xs">
                     {context?.parentLabel
                       ? `${editing ? 'Editing' : 'Adding to'} ${context.parentLabel} ·`
                       : 'Posting to'}
                   </span>
                   <span className="inline-flex rounded-[6px] bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-px transition-all">
-                    <span className="rounded-[5px] bg-[#141414] px-2 py-1 text-[11px] font-bold leading-tight text-white 2xl:text-xs">
+                    <span className="rounded-[5px] bg-white px-2 py-1 text-[11px] font-bold leading-tight text-gray-900 dark:bg-[#141414] dark:text-white 2xl:text-xs">
                       {account?.name || `act_${adAccountId || '—'}`}
                     </span>
                   </span>
                   {account?.currency && (
-                    <span className="font-mono text-[11px] text-white/45 2xl:text-xs">
+                    <span className="font-mono text-[11px] text-gray-400 dark:text-white/45 2xl:text-xs">
                       · {account.currency}
                     </span>
                   )}
@@ -1164,7 +1186,7 @@ export default function CreateCampaignWizardV2({
           <div className="flex min-h-0 flex-1">
             <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 2xl:px-8 2xl:py-8">
               {schemaLoading && (
-                <div className="flex items-center justify-center py-12 gap-3 text-white/60">
+                <div className="flex items-center justify-center py-12 gap-3 text-gray-500 dark:text-white/60">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading wizard schema…
                 </div>
@@ -1250,12 +1272,12 @@ export default function CreateCampaignWizardV2({
           {/* Footer — unified brand gradient on both Continue and Launch.
               V1's white-pill is dropped in V2 because the gradient reads as
               more on-brand and modern. */}
-          <div className="flex shrink-0 items-center justify-between border-t border-white/8 px-4 py-3 sm:px-6 2xl:px-8 2xl:py-4">
+          <div className="flex shrink-0 items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-white/8 sm:px-6 2xl:px-8 2xl:py-4">
             <button
               type="button"
               onClick={goBack}
               disabled={stepIndex === 0 || launching}
-              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/3 px-4 py-2 text-xs font-semibold text-white/70 transition-all hover:border-white/15 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed 2xl:px-5 2xl:py-2.5 2xl:text-sm"
+              className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/3 dark:text-white/70 dark:hover:border-white/15 dark:hover:text-white 2xl:px-5 2xl:py-2.5 2xl:text-sm"
             >
               <ChevronLeft className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" /> Back
             </button>
@@ -1331,15 +1353,15 @@ export default function CreateCampaignWizardV2({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.16 }}
-                  className="w-full max-w-sm rounded-2xl border border-white/12 bg-[#161616] p-5 shadow-2xl 2xl:max-w-md 2xl:p-6"
+                  className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-white/12 dark:bg-[#161616] 2xl:max-w-md 2xl:p-6"
                 >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 2xl:h-11 2xl:w-11">
-                    <AlertCircle className="h-5 w-5 text-red-300 2xl:h-6 2xl:w-6" />
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10 2xl:h-11 2xl:w-11">
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-300 2xl:h-6 2xl:w-6" />
                   </div>
-                  <h3 className="text-sm font-bold text-white 2xl:text-base">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">
                     {editing ? 'Discard changes?' : 'Discard this campaign?'}
                   </h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-white/55 2xl:text-sm">
+                  <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-white/55 2xl:text-sm">
                     {editing
                       ? "Your unsaved changes will be lost. The existing campaign in Meta isn't affected."
                       : "Everything you've entered in the wizard will be cleared. Your existing campaigns in Meta aren't affected."}
@@ -1348,7 +1370,7 @@ export default function CreateCampaignWizardV2({
                     <button
                       type="button"
                       onClick={() => setShowDiscardConfirm(false)}
-                      className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white/10 2xl:px-5 2xl:py-2.5 2xl:text-sm"
+                      className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-900 transition-all hover:bg-gray-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 2xl:px-5 2xl:py-2.5 2xl:text-sm"
                     >
                       Keep editing
                     </button>
@@ -1382,10 +1404,10 @@ export default function CreateCampaignWizardV2({
 function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToStep }) {
   const currentMessages = Object.values(stepErrors || {});
   return (
-    <aside className="scrollbar-thin hidden w-64 shrink-0 flex-col gap-5 overflow-y-auto border-l border-white/8 bg-white/2 px-4 py-5 md:flex">
+    <aside className="scrollbar-thin hidden w-64 shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-200 bg-gray-50 px-4 py-5 dark:border-white/8 dark:bg-white/2 md:flex">
       {/* Whole-wizard checklist */}
       <div>
-        <p className="text-10 font-bold uppercase tracking-wider text-white/40">
+        <p className="text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
           Campaign setup
         </p>
         <ul className="mt-2.5 flex flex-col gap-0.5">
@@ -1400,19 +1422,19 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
                   onClick={() => onJumpToStep?.(s.id)}
                   className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-13 transition-colors ${
                     isCurrent
-                      ? 'bg-white/8 font-semibold text-white'
-                      : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+                      ? 'bg-gray-100 font-semibold text-gray-900 dark:bg-white/8 dark:text-white'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white/55 dark:hover:bg-white/5 dark:hover:text-white/80'
                   }`}
                 >
                   <span
                     className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-10 font-bold ${
                       done
-                        ? 'bg-emerald-400/20 text-emerald-300'
+                        ? 'border border-emerald-400/40 bg-emerald-400/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300'
                         : hasErr
-                        ? 'bg-amber-400/20 text-amber-300'
+                        ? 'border border-amber-400/40 bg-amber-400/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
                         : isCurrent
-                        ? 'bg-[#15DCFF]/20 text-[#15DCFF]'
-                        : 'bg-white/8 text-white/40'
+                        ? 'border border-[#15DCFF]/40 bg-[#15DCFF]/10 text-[#0EA5C2] dark:border-[#15DCFF]/30 dark:bg-[#15DCFF]/15 dark:text-[#15DCFF]'
+                        : 'border border-gray-300 bg-gray-50 text-gray-500 dark:border-white/8 dark:bg-white/3 dark:text-white/40'
                     }`}
                   >
                     {done ? (
@@ -1437,17 +1459,17 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
           match the step-checklist labels above so the card doesn't read
           louder than the list it sits under. */}
       {currentMessages.length > 0 ? (
-        <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-2.5">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-400/20 dark:bg-amber-400/5">
           <div className="flex items-start gap-1.5">
-            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" />
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600 dark:text-amber-300" />
             <div className="min-w-0 flex-1">
               {currentMessages.length === 1 ? (
-                <p className="text-11 leading-snug text-amber-100">
+                <p className="text-11 leading-snug text-amber-700 dark:text-amber-100">
                   {currentMessages[0]}
                 </p>
               ) : (
                 <>
-                  <p className="text-10 font-semibold text-amber-200">
+                  <p className="text-10 font-semibold text-amber-700 dark:text-amber-200">
                     {currentMessages.length} things left on this step
                   </p>
                   {/* Plain <div>s — not <ul>/<li> — so browser/global
@@ -1457,7 +1479,7 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
                     {currentMessages.map((m) => (
                       <div
                         key={m}
-                        className="text-10 leading-snug text-amber-100/85"
+                        className="text-10 leading-snug text-amber-700/85 dark:text-amber-100/85"
                       >
                         • {m}
                       </div>
@@ -1469,7 +1491,7 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-2.5 py-2 text-11 text-emerald-200">
+        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-11 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/5 dark:text-emerald-200">
           <Check className="h-3 w-3 shrink-0" />
           Step is complete.
         </div>
@@ -1591,8 +1613,8 @@ function ObjectiveStep({ form, update, schema, applyTemplate }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-15 font-semibold text-white">Choose an objective</h3>
-          <p className="text-[12px] text-white/50 mt-1">
+          <h3 className="text-15 font-semibold text-gray-900 dark:text-white">Choose an objective</h3>
+          <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1">
             Each objective has its own form. Pick what you want users to do.
           </p>
         </div>
@@ -1651,8 +1673,8 @@ function ConversionLocationStep({ form, update, schema }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h3 className="text-15 font-semibold text-white">Where do you want people to go?</h3>
-        <p className="text-[12px] text-white/50 mt-1">
+        <h3 className="text-15 font-semibold text-gray-900 dark:text-white">Where do you want people to go?</h3>
+        <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1">
           Choose the destination — fields on the next steps adapt to this.
         </p>
       </div>
@@ -1660,8 +1682,8 @@ function ConversionLocationStep({ form, update, schema }) {
       {multipleCells.length > 0 && (
         <div className="flex flex-col gap-3">
           <div>
-            <div className="text-13 font-semibold text-white">Multiple</div>
-            <p className="text-[11px] text-white/45 mt-0.5">
+            <div className="text-13 font-semibold text-gray-900 dark:text-white">Multiple</div>
+            <p className="text-[11px] text-gray-500 dark:text-white/45 mt-0.5">
               Send people where they&apos;re most likely to convert. Meta routes per viewer.
             </p>
           </div>
@@ -1672,14 +1694,14 @@ function ConversionLocationStep({ form, update, schema }) {
       )}
 
       {multipleCells.length > 0 && singleCells.length > 0 && (
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-gray-200 dark:bg-white/5" />
       )}
 
       {singleCells.length > 0 && (
         <div className="flex flex-col gap-3">
           <div>
-            <div className="text-13 font-semibold text-white">Single</div>
-            <p className="text-[11px] text-white/45 mt-0.5">
+            <div className="text-13 font-semibold text-gray-900 dark:text-white">Single</div>
+            <p className="text-[11px] text-gray-500 dark:text-white/45 mt-0.5">
               Send people to one location where you want them to convert.
             </p>
           </div>
@@ -1723,9 +1745,9 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {isEdit ? (
             <FieldShell label="Budget type">
-              <div className="rounded-full border border-white/10 bg-white/3 px-4 py-2.5 text-13 text-white/70">
+              <div className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2.5 text-13 text-gray-600 dark:border-white/10 dark:bg-white/3 dark:text-white/70">
                 {form.campaignBudgetType === 'daily' ? 'Daily budget' : 'Lifetime budget'}
-                <span className="ml-2 text-white/35">· can’t be changed</span>
+                <span className="ml-2 text-gray-400 dark:text-white/35">· can’t be changed</span>
               </div>
             </FieldShell>
           ) : (
@@ -1785,8 +1807,8 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
             }
           />
           {form.iosOptimised && (
-            <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
-              <div className="text-13 font-semibold text-white">App promotion</div>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
+              <div className="text-13 font-semibold text-gray-900 dark:text-white">App promotion</div>
               <AppLinkagePicker
                 form={form}
                 update={update}
@@ -1834,10 +1856,29 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
     label: cellLabels[g] || globalLabels[g] || g,
   })) || [];
   const billingLabels = schema?.labels?.billingEvent || {};
-  const billingOptions = cell?.adSet?.billingEvents?.map((b) => ({
-    value: b,
-    label: billingLabels[b] || b,
-  })) || [];
+  // Billing event is goal-dependent — Meta rejects mismatched pairs with
+  // subcode 1815117 (e.g. LINK_CLICKS billing + LANDING_PAGE_VIEWS goal).
+  // Narrow the cell's full billingEvents list by Meta's per-goal
+  // allow-list shipped on the schema payload. Goals not in the map
+  // (every non-LINK_CLICKS goal) collapse to IMPRESSIONS-only.
+  const billingByGoal = schema?.billingEventsByOptimizationGoal || {};
+  const allowedBillings = billingByGoal[form.optimizationGoal] || ['IMPRESSIONS'];
+  const billingOptions = (cell?.adSet?.billingEvents || [])
+    .filter((b) => allowedBillings.includes(b))
+    .map((b) => ({ value: b, label: billingLabels[b] || b }));
+  // If the user picked a billing event that's no longer compatible with
+  // their current optimisation goal (e.g. they had LINK_CLICKS billing +
+  // LINK_CLICKS goal, then switched the goal to LANDING_PAGE_VIEWS),
+  // snap it to the first valid option before Meta gets the chance to
+  // reject. Edit modes leave the field alone — it's locked there.
+  useEffect(() => {
+    if (isEditMode(mode)) return;
+    if (!form.billingEvent || !form.optimizationGoal) return;
+    const valid = billingOptions.some((o) => o.value === form.billingEvent);
+    if (!valid && billingOptions[0]) {
+      update({ billingEvent: billingOptions[0].value });
+    }
+  }, [form.optimizationGoal, form.billingEvent, billingOptions, mode, update]);
   const additional = cell?.adSet?.additionalFields || [];
 
   // When the user picks a page, auto-fill the IG identity from the
@@ -1905,25 +1946,25 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           again mirroring Meta's Ads Manager. */}
       {!editing && additional.includes('applicationId') && (
         form.iosOptimised ? (
-          <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-3 2xl:p-5">
-            <div className="text-13 font-semibold text-white">App promotion</div>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-3 dark:border-white/12 dark:bg-white/4 2xl:p-5">
+            <div className="text-13 font-semibold text-gray-900 dark:text-white">App promotion</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FieldShell label="Mobile app store">
-                <div className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white/80 min-h-10.5 flex items-center">
+                <div className="w-full rounded-full border border-gray-200 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-600 min-h-10.5 flex items-center dark:border-white/5 dark:bg-[#909294]/15 dark:text-white/80">
                   Apple App Store
                 </div>
               </FieldShell>
               <FieldShell label="App" hint={form.applicationId ? 'set at campaign level' : 'none selected'}>
-                <div className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white/80 min-h-10.5 flex items-center">
+                <div className="w-full rounded-full border border-gray-200 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-600 min-h-10.5 flex items-center dark:border-white/5 dark:bg-[#909294]/15 dark:text-white/80">
                   {form.applicationId ? (
                     <span className="truncate">{form.applicationId}</span>
                   ) : (
-                    <span className="text-white/40">Pick the app on the Campaign step</span>
+                    <span className="text-gray-400 dark:text-white/40">Pick the app on the Campaign step</span>
                   )}
                 </div>
               </FieldShell>
             </div>
-            <div className="text-[11px] text-white/45">
+            <div className="text-[11px] text-gray-500 dark:text-white/45">
               To edit these settings, go to the <b>iOS 14+ campaign</b> toggle on the Campaign step.
             </div>
           </div>
@@ -2030,41 +2071,56 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <DateTimePicker
-          label="Start (optional)"
-          value={form.startTime}
-          onChange={(v) => update({ startTime: v })}
-        />
-        <FieldShell
-          label="End (optional)"
-          hint={form.hasEndTime ? undefined : 'No end set'}
-          error={errors.endTime}
-        >
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <GradientCheckbox
-                checked={form.hasEndTime}
-                onChange={(v) => update({ hasEndTime: v })}
-              />
-              <span className="text-[11px] text-white/60 select-none">Set end</span>
-            </label>
-            <div className="flex-1 min-w-0">
-              <DateTimePicker
-                value={form.endTime}
-                onChange={(v) => update({ endTime: v })}
-                disabled={!form.hasEndTime}
-                align="right"
-              />
-            </div>
+      {/* Schedule — Meta rejects past start times; "today at 00:00" is the
+          floor so the calendar greys out earlier days. End must come after
+          Start (and after today when Start is empty). The Joi/frontend
+          validators still enforce the ≥24h window — this just stops users
+          from picking days that are impossible to begin with. */}
+      {(() => {
+        const todayFloor = new Date();
+        todayFloor.setHours(0, 0, 0, 0);
+        const startFloor = form.startTime ? new Date(form.startTime) : todayFloor;
+        const endMin = startFloor > todayFloor ? startFloor : todayFloor;
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DateTimePicker
+              label="Start (optional)"
+              value={form.startTime}
+              onChange={(v) => update({ startTime: v })}
+              minDate={todayFloor}
+            />
+            <FieldShell
+              label="End (optional)"
+              hint={form.hasEndTime ? undefined : 'No end set'}
+              error={errors.endTime}
+            >
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <GradientCheckbox
+                    checked={form.hasEndTime}
+                    onChange={(v) => update({ hasEndTime: v })}
+                  />
+                  <span className="text-[11px] text-gray-500 dark:text-white/60 select-none">Set end</span>
+                </label>
+                <div className="flex-1 min-w-0">
+                  <DateTimePicker
+                    value={form.endTime}
+                    onChange={(v) => update({ endTime: v })}
+                    disabled={!form.hasEndTime}
+                    align="right"
+                    minDate={endMin}
+                  />
+                </div>
+              </div>
+            </FieldShell>
           </div>
-        </FieldShell>
-      </div>
+        );
+      })()}
 
       {/* Audience */}
-      <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-13 font-semibold text-white">Audience</div>
+          <div className="text-13 font-semibold text-gray-900 dark:text-white">Audience</div>
           {/* Saved-audience swap isn't offered in edit — the existing
               targeting is edited in place as an explicit audience. */}
           {!editing && (
@@ -2115,9 +2171,9 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
               minValue={form.ageMin}
               maxValue={form.ageMax}
               onChange={({ min, max }) =>
-                update({ ageMin: Math.max(13, Math.min(65, min || 13)), ageMax: Math.max(13, Math.min(65, max || 65)) })
+                update({ ageMin: Math.max(18, Math.min(65, min || 18)), ageMax: Math.max(18, Math.min(65, max || 65)) })
               }
-              min={13}
+              min={18}
               max={65}
               error={errors.ageMax}
             />
@@ -2156,8 +2212,8 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           only once the Ad step collects multiple creative variations.
           Hidden in edit — attribution_spec locks after delivery starts. */}
       {!editing && (
-        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
-          <div className="text-13 font-semibold text-white">Optimisation</div>
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
+          <div className="text-13 font-semibold text-gray-900 dark:text-white">Optimisation</div>
           <SelectField
             label="Attribution window"
             hint="How long a click or view counts. Each (objective, optimisation goal) accepts a different subset — leave on Meta default unless you know what you need."
@@ -2175,8 +2231,8 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
       )}
 
       {/* Placements — Advantage+ default, manual reveals checkboxes */}
-      <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
-        <div className="text-13 font-semibold text-white">Placements</div>
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
+        <div className="text-13 font-semibold text-gray-900 dark:text-white">Placements</div>
         <ToggleField
           label="Advantage+ Placements (recommended)"
           description="Meta auto-picks the best surfaces across Facebook, Instagram, Messenger and Audience Network. Turn off to pick manually."
@@ -2323,8 +2379,8 @@ function AppLinkagePicker({ form, update, adAccountId, iosOnly = false, errors =
             />
           )}
           {noApps && !appsError && (
-            <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-13 text-yellow-100">
-              <div className="font-semibold text-yellow-200 mb-1">
+            <div className="rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-13 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-100">
+              <div className="font-semibold text-yellow-900 mb-1 dark:text-yellow-200">
                 No {form.mobileAppStore === 'APPLE_APP_STORE' ? 'iOS' : 'Android'} apps linked to this Business Manager
               </div>
               Add the app at{' '}
@@ -2332,7 +2388,7 @@ function AppLinkagePicker({ form, update, adAccountId, iosOnly = false, errors =
                 href="https://business.facebook.com/settings/apps"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline text-yellow-50"
+                className="underline text-yellow-900 dark:text-yellow-50"
               >
                 Business Settings → Apps
               </a>
@@ -2362,7 +2418,7 @@ function AppLinkagePicker({ form, update, adAccountId, iosOnly = false, errors =
                 />
               </FieldShell>
               {form.applicationId && form.objectStoreUrl && (
-                <div className="text-[11px] text-white/45 -mt-3 wrap-break-word">
+                <div className="text-[11px] text-gray-500 dark:text-white/45 -mt-3 wrap-break-word">
                   → {form.objectStoreUrl}
                 </div>
               )}
@@ -2449,9 +2505,9 @@ function PixelEventPicker({ form, update, adAccountId, errors = {} }) {
   }
 
   return (
-    <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-13 font-semibold text-white">Conversion tracking</div>
+        <div className="text-13 font-semibold text-gray-900 dark:text-white">Conversion tracking</div>
         {!noPixels && (
           <div className="flex items-stretch gap-2 min-w-[280px]">
             <SegButton active={effectiveMode === 'pick'} onClick={() => setMode('pick')}>
@@ -2465,19 +2521,19 @@ function PixelEventPicker({ form, update, adAccountId, errors = {} }) {
       </div>
 
       {noPixels && (
-        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-[12px] text-yellow-100">
+        <div className="rounded-xl border border-yellow-300 bg-yellow-50 px-3 py-2 text-[12px] text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-100">
           No Pixels on this ad account yet. Create one below — you&apos;ll get the snippet-install link after.
         </div>
       )}
 
       {snippetUrl && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-100">
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
           ✓ Pixel created. Install the Meta JS snippet on your website to start firing events —{' '}
           <a
             href={snippetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-emerald-50"
+            className="underline text-emerald-700 dark:text-emerald-50"
           >
             open install instructions in Events Manager
           </a>
@@ -2637,8 +2693,8 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h3 className="text-15 font-semibold text-white">Instant Form</h3>
-        <p className="text-[12px] text-white/50 mt-1">
+        <h3 className="text-15 font-semibold text-gray-900 dark:text-white">Instant Form</h3>
+        <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1">
           The form Meta shows after a click. Pick an existing form on your Page or build a new one.
         </p>
       </div>
@@ -2647,7 +2703,7 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
           Shown if we couldn't resolve it, so the step never dead-ends. */}
       {showPagePicker && (
         <>
-          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-13 text-yellow-100">
+          <div className="rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-13 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-100">
             We couldn’t detect this ad set’s Facebook Page — pick it to load its Lead Forms.
           </div>
           <SelectField
@@ -2663,7 +2719,7 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
       )}
 
       {!form.pageId && mode !== 'create-ad' && (
-        <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-13 text-yellow-100">
+        <div className="rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-13 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-100">
           Pick a Facebook Page on the previous step first — Lead Forms are scoped per Page.
         </div>
       )}
@@ -2714,7 +2770,13 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
           />
         </FieldShell>
       ) : (
-        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 flex flex-col gap-4 2xl:p-5">
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-4 dark:border-white/12 dark:bg-white/4 2xl:p-5">
+          {/* Up-front cue so users don't fill the builder, hit Continue,
+              and get blocked by the vague "select a form" error. The
+              build flow has its own CTA (Create form) further down. */}
+          <div className="rounded-xl border border-[#5867EB]/30 bg-[#5867EB]/10 px-3 py-2.5 text-12 text-white/80">
+            Fill in the fields below, then click <span className="font-semibold text-white">&ldquo;Create form&rdquo;</span> at the bottom of this step. The form will be saved to Meta and auto-attached to this ad — only then can you continue to the next step.
+          </div>
           {createError && (
             <LaunchErrorBanner
               error={{ title: "Couldn't create form", details: createError }}
@@ -2775,7 +2837,7 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
               maxLength={60}
             />
           </div>
-          <div className="text-[12px] text-white/55 -mb-2">Thank-you screen (optional)</div>
+          <div className="text-[12px] text-gray-600 dark:text-white/55 -mb-2">Thank-you screen (optional)</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <TextField
               label="Thank-you title"
@@ -2825,7 +2887,7 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
               'Create form'
             )}
           </button>
-          <div className="text-[11px] text-white/40">
+          <div className="text-[11px] text-gray-400 dark:text-white/40">
             On submit, Meta creates the form on Page &ldquo;{form.pageId}&rdquo;, returns its id, and we
             auto-attach it to this ad.
           </div>
@@ -2833,7 +2895,7 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
       )}
 
       {form.leadFormId && (
-        <div className="text-[11px] text-emerald-300/70">
+        <div className="text-[11px] text-emerald-600 dark:text-emerald-300/70">
           ✓ Lead Form id <span className="font-mono">{form.leadFormId}</span> will be attached to this ad.
         </div>
       )}
@@ -2869,6 +2931,13 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
   // AdsGPT path). ON shows the combined image+video picker; OFF shows the
   // manual Upload / URL fields.
   const [libraryMode, setLibraryMode] = useState(true);
+  // Cell media-kind lock — Engagement/VIDEO_VIEWS is video-only (Meta
+  // rejects image creatives on THRUPLAY-optimised ad sets). When set, the
+  // AdStep hides the Image/Video toggle and force-renders the video path.
+  // Cell-defaults effect upstream already pinned form.mediaType='video'.
+  const mediaKind = cell?.ad?.mediaKind || 'any';
+  const videoOnly = mediaKind === 'video';
+  const imageOnly = mediaKind === 'image';
 
   // Add-Ad inherits the ad set's Page silently. The picker only appears as
   // a fallback if the page couldn't be resolved (and only on cells without
@@ -2913,19 +2982,19 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           label="Media"
           hint="Media can't be changed here — create a new ad to use different media."
         >
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/3 p-3">
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/3">
             {form.previewUrl ? (
               <img
                 src={form.previewUrl}
                 alt="Current media"
-                className="h-16 w-24 shrink-0 rounded-lg border border-white/10 object-cover"
+                className="h-16 w-24 shrink-0 rounded-lg border border-gray-200 object-cover dark:border-white/10"
               />
             ) : (
-              <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1e1e1e]">
-                <ImageIcon className="h-5 w-5 text-white/25" />
+              <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
+                <ImageIcon className="h-5 w-5 text-gray-400 dark:text-white/25" />
               </div>
             )}
-            <div className="text-12 text-white/55">
+            <div className="text-12 text-gray-600 dark:text-white/55">
               {form.mediaType === 'video' ? 'Current video' : 'Current image'} · reused as-is
             </div>
           </div>
@@ -2961,9 +3030,9 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           </div>
 
           {libraryMode ? (
-            <div className="rounded-2xl border border-white/12 bg-white/4 p-3 2xl:p-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4 2xl:p-4">
               <LibraryPicker
-                type="all"
+                type={videoOnly ? 'video' : imageOnly ? 'image' : 'all'}
                 selectedUrl={form.mediaType === 'video' ? form.videoUrl : form.imageUrl}
                 onPick={(absoluteUrl, doc) => {
                   // Derive image-vs-video from the picked item's own type —
@@ -2993,25 +3062,30 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           ) : (
             <>
               {/* Manual upload genuinely differs by kind (video needs a
-                  poster), so the Image/Video switch lives here only. */}
-              <div className="flex items-stretch gap-2 max-w-xs">
-                <SegButton
-                  active={form.mediaType === 'image'}
-                  onClick={() =>
-                    update({ mediaType: 'image', videoFile: null, videoUrl: null, videoThumbnailUrl: null })
-                  }
-                >
-                  Image
-                </SegButton>
-                <SegButton
-                  active={form.mediaType === 'video'}
-                  onClick={() =>
-                    update({ mediaType: 'video', imageFile: null, imageUrl: null })
-                  }
-                >
-                  Video
-                </SegButton>
-              </div>
+                  poster), so the Image/Video switch lives here only.
+                  Hidden when the cell locks media kind (e.g. Engagement
+                  /VIDEO_VIEWS is video-only — Meta rejects images on
+                  THRUPLAY-optimised ad sets). */}
+              {!videoOnly && !imageOnly && (
+                <div className="flex items-stretch gap-2 max-w-xs">
+                  <SegButton
+                    active={form.mediaType === 'image'}
+                    onClick={() =>
+                      update({ mediaType: 'image', videoFile: null, videoUrl: null, videoThumbnailUrl: null })
+                    }
+                  >
+                    Image
+                  </SegButton>
+                  <SegButton
+                    active={form.mediaType === 'video'}
+                    onClick={() =>
+                      update({ mediaType: 'video', imageFile: null, imageUrl: null })
+                    }
+                  >
+                    Video
+                  </SegButton>
+                </div>
+              )}
               {form.mediaType === 'video' ? (
                 <VideoField
                   videoFile={form.videoFile}
@@ -3034,13 +3108,20 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
         </div>
       </FieldShell>
       )}
+      {/* Meta's display limits for single-image / single-video ads — the
+          formats every V2 cell currently produces. Beyond these, Meta
+          truncates with "…" on feed; backing them down here both matches
+          Ads Manager's own counters and prevents copy that nobody will
+          read in full. Carousel variants (Phase 3) will need their own
+          shorter caps (~18-char headline). Mirrors the .max() values in
+          buildAdSchemaV2 (meta.v2.validator.js). */}
       {requiredFields.has('headline') && (
         <TextField
           label="Headline"
           required
           value={form.headline}
           onChange={(v) => update({ headline: v })}
-          maxLength={255}
+          maxLength={40}
           placeholder="Short, punchy"
           error={errors.headline}
         />
@@ -3051,7 +3132,7 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           required
           value={form.primaryText}
           onChange={(v) => update({ primaryText: v })}
-          maxLength={2000}
+          maxLength={125}
           rows={3}
           placeholder="The main body copy"
           error={errors.primaryText}
@@ -3061,7 +3142,7 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
         label="Description"
         value={form.description}
         onChange={(v) => update({ description: v })}
-        maxLength={255}
+        maxLength={30}
         placeholder="Optional secondary copy"
       />
       {showLinkUrl && (
@@ -3167,14 +3248,14 @@ function SaveAsTemplateChip({ form, adAccountId }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/4 px-3 py-1.5 text-11 font-semibold text-white/75 transition-colors hover:border-white/25 hover:text-white"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-11 font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-white/12 dark:bg-white/4 dark:text-white/75 dark:hover:border-white/25 dark:hover:text-white"
       >
         <BookmarkPlus className="h-3.5 w-3.5" /> Save as template
       </button>
     );
   }
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/4 px-1 py-1">
+    <div className="flex items-center gap-1.5 rounded-full border border-gray-300 bg-gray-50 px-1 py-1 dark:border-white/15 dark:bg-white/4">
       <input
         type="text"
         autoFocus
@@ -3189,7 +3270,7 @@ function SaveAsTemplateChip({ form, adAccountId }) {
         }}
         placeholder="Template name…"
         maxLength={120}
-        className="w-56 rounded-full bg-transparent px-3 py-1 text-12 text-white placeholder:text-white/40 focus:outline-none"
+        className="w-56 rounded-full bg-transparent px-3 py-1 text-12 text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-white/40"
       />
       <button
         type="button"
@@ -3204,7 +3285,7 @@ function SaveAsTemplateChip({ form, adAccountId }) {
         type="button"
         onClick={() => { setOpen(false); setName(''); }}
         disabled={saving}
-        className="flex h-6 w-6 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/8 hover:text-white"
+        className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white/45 dark:hover:bg-white/8 dark:hover:text-white"
         aria-label="Cancel"
       >
         <X className="h-3.5 w-3.5" />
@@ -3226,8 +3307,14 @@ function TemplatePicker({ onApply }) {
 
   // Lazy-load list when the dropdown opens, so an empty wizard doesn't
   // fire a GET on every mount.
+  //
+  // `loading` is intentionally NOT in the deps. If it were, `setLoading(true)`
+  // below would re-trigger this effect, run the cleanup (setting cancelled=
+  // true), and on resolution both `.then` and `.finally` would see
+  // cancelled=true and skip — leaving `loading` stuck at true forever
+  // (infinite-spinner bug).
   useEffect(() => {
-    if (!open || items.length || loading) return undefined;
+    if (!open || items.length) return undefined;
     let cancelled = false;
     setLoading(true);
     listCampaignTemplates()
@@ -3235,7 +3322,7 @@ function TemplatePicker({ onApply }) {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open, items.length, loading]);
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -3285,21 +3372,21 @@ function TemplatePicker({ onApply }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/4 px-3 py-1.5 text-12 font-semibold text-white/80 transition-colors hover:border-white/25 hover:text-white"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-12 font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-white/12 dark:bg-white/4 dark:text-white/80 dark:hover:border-white/25 dark:hover:text-white"
       >
         <Bookmark className="h-3.5 w-3.5" />
         Start from template
         <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-80 w-80 overflow-y-auto rounded-xl border border-white/12 bg-[#1A1A1A] shadow-xl">
+        <div className="absolute right-0 top-full z-50 mt-1.5 max-h-80 w-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-white/12 dark:bg-[#1A1A1A]">
           {loading && (
-            <div className="flex items-center justify-center gap-2 px-3 py-4 text-12 text-white/55">
+            <div className="flex items-center justify-center gap-2 px-3 py-4 text-12 text-gray-500 dark:text-white/55">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
             </div>
           )}
           {!loading && items.length === 0 && (
-            <div className="px-3 py-4 text-12 text-white/50">
+            <div className="px-3 py-4 text-12 text-gray-500 dark:text-white/50">
               No saved templates yet. Save the campaign you’re building on the Review step to reuse it later.
             </div>
           )}
@@ -3309,18 +3396,18 @@ function TemplatePicker({ onApply }) {
               key={t.id}
               disabled={!!applyingId}
               onClick={() => handlePick(t)}
-              className="flex w-full items-center gap-2 border-b border-white/5 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-white/5 disabled:opacity-50"
+              className="flex w-full items-center gap-2 border-b border-gray-200 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-gray-100 disabled:opacity-50 dark:border-white/5 dark:hover:bg-white/5"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-13 font-medium text-white">{t.name}</p>
+                <p className="truncate text-13 font-medium text-gray-900 dark:text-white">{t.name}</p>
                 {(t.objective || t.conversionLocation) && (
-                  <p className="truncate text-11 text-white/45">
+                  <p className="truncate text-11 text-gray-500 dark:text-white/45">
                     {[t.objective, t.conversionLocation].filter(Boolean).join(' · ')}
                   </p>
                 )}
               </div>
               {applyingId === t.id ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-white/55" />
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-gray-400 dark:text-white/55" />
               ) : (
                 <span
                   role="button"
@@ -3330,7 +3417,7 @@ function TemplatePicker({ onApply }) {
                     if (e.key === 'Enter' || e.key === ' ') handleDelete(e, t);
                   }}
                   title="Delete template"
-                  className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/8 hover:text-red-300"
+                  className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-white/35 dark:hover:bg-white/8 dark:hover:text-red-300"
                 >
                   {deletingId === t.id ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -3349,6 +3436,17 @@ function TemplatePicker({ onApply }) {
 
 // ─── Step: Review ───────────────────────────────────────────────────────────
 
+// Format a wizard datetime ("YYYY-MM-DDTHH:mm") for the Review summary.
+// Returns empty string for empty / invalid input so callers can supply a
+// sensible fallback (Start → "Now"; End → "—").
+function fmtSchedule(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function ReviewStep({
   form,
   schema,
@@ -3365,6 +3463,7 @@ function ReviewStep({
   steps = [],
   onJumpToStep,
 }) {
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
   const labels = schema?.labels || {};
   const showCampaign = mode === 'create-full';
   const showAdSet = mode === 'create-full' || mode === 'create-adset';
@@ -3410,10 +3509,10 @@ function ReviewStep({
       {errorForBanner && <LaunchErrorBanner error={errorForBanner} onDismiss={onDismissError} />}
 
       {failingSteps.length > 0 && (
-        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/8 px-4 py-3 2xl:px-5">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-400/30 dark:bg-amber-400/8 2xl:px-5">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
-            <p className="text-13 font-semibold text-amber-200">
+            <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+            <p className="text-13 font-semibold text-amber-700 dark:text-amber-200">
               Fix {failingSteps.length} step{failingSteps.length === 1 ? '' : 's'} before launching
             </p>
           </div>
@@ -3425,11 +3524,11 @@ function ReviewStep({
                   <button
                     type="button"
                     onClick={() => onJumpToStep?.(s.id)}
-                    className="rounded-md text-[12px] font-semibold text-amber-100 underline decoration-amber-300/40 underline-offset-2 hover:decoration-amber-300"
+                    className="rounded-md text-[12px] font-semibold text-amber-700 underline decoration-amber-300/40 underline-offset-2 hover:decoration-amber-300 dark:text-amber-100"
                   >
                     {s.label} →
                   </button>
-                  <span className="text-[11px] text-amber-100/70">
+                  <span className="text-[11px] text-amber-700/70 dark:text-amber-100/70">
                     {msgs.join(' · ')}
                   </span>
                 </li>
@@ -3445,21 +3544,22 @@ function ReviewStep({
         <div
           className="flex items-center gap-3 rounded-[15px] p-3.5 2xl:p-4"
           style={{
-            background:
-              'linear-gradient(to right, rgba(21,220,255,0.08), rgba(107,114,248,0.08)), #141414',
+            background: isDarkMode
+              ? 'linear-gradient(to right, rgba(21,220,255,0.08), rgba(107,114,248,0.08)), #141414'
+              : 'linear-gradient(to right, rgba(21,220,255,0.10), rgba(107,114,248,0.10)), #ffffff',
           }}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white 2xl:h-10 2xl:w-10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white 2xl:h-10 2xl:w-10 dark:border-white/15">
             <FaMeta className="h-4 w-4 text-[#0082FB] 2xl:h-5 2xl:w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#15DCFF] 2xl:text-xs">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#0082FB] 2xl:text-xs dark:text-[#15DCFF]">
               Posting to
             </p>
-            <p className="truncate text-sm font-bold text-white 2xl:text-base">
+            <p className="truncate text-sm font-bold text-gray-900 2xl:text-base dark:text-white">
               {account?.name || '—'}
             </p>
-            <p className="font-mono text-xs text-white/55 2xl:text-sm">
+            <p className="font-mono text-xs text-gray-500 2xl:text-sm dark:text-white/55">
               act_{adAccountId || account?.id || '—'}
               {account?.currency ? ` · ${account.currency}` : ''}
             </p>
@@ -3467,8 +3567,8 @@ function ReviewStep({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/8 px-4 py-3 2xl:px-5 2xl:py-3.5">
-        <p className="text-xs leading-relaxed text-emerald-100 2xl:text-sm">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-400/30 dark:bg-emerald-400/8 2xl:px-5 2xl:py-3.5">
+        <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-100 2xl:text-sm">
           Will be launched <b>ACTIVE</b>. Meta starts delivering after the ad set passes review —
           you can pause anytime from the Campaigns tab.
         </p>
@@ -3480,7 +3580,7 @@ function ReviewStep({
           wouldn't have enough to be useful. */}
       {mode === 'create-full' && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-11 text-white/55">
+          <p className="text-11 text-gray-600 dark:text-white/55">
             Reuse this setup for future campaigns — budget, account and name stay editable.
           </p>
           <SaveAsTemplateChip form={form} adAccountId={adAccountId} />
@@ -3490,7 +3590,7 @@ function ReviewStep({
       {/* Only count entities created on THIS run as "progress" — the
           pre-seeded parent ids in add modes aren't progress. */}
       {Object.keys(created).some((k) => created[k] && !seeded[k]) && (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-[12px] text-emerald-200">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[12px] text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/5 dark:text-emerald-200">
           Partial progress saved — retry only re-runs the failing step:
           {created.campaignId && !seeded.campaignId && <div>· Campaign {created.campaignId}</div>}
           {created.adSetId && !seeded.adSetId && <div>· Ad Set {created.adSetId}</div>}
@@ -3547,6 +3647,14 @@ function ReviewStep({
             }
           />
           <Field k="Age" v={`${form.ageMin}–${form.ageMax}`} />
+          {/* Schedule — surface what the user picked on the Ad Set step so
+              Launch is never a surprise. Start defaults to "Now" on Meta's
+              side when blank; End is hidden when the user opted out via
+              hasEndTime. fmtSchedule is defined just inside the file. */}
+          <Field k="Start" v={fmtSchedule(form.startTime) || 'Now'} />
+          {form.hasEndTime && (
+            <Field k="End" v={fmtSchedule(form.endTime) || '—'} />
+          )}
           {form.mobileAppStore && <Field k="App store" v={form.mobileAppStore} />}
           {form.applicationId && <Field k="App ID" v={form.applicationId} />}
         </Section>
@@ -3561,7 +3669,7 @@ function ReviewStep({
       </div>
 
       {launching && (
-        <div className="flex items-center gap-2 text-13 text-white/70">
+        <div className="flex items-center gap-2 text-13 text-gray-600 dark:text-white/70">
           <Loader2 className="h-4 w-4 animate-spin" />
           {mode === 'create-ad'
             ? 'Creating ad…'
@@ -3577,16 +3685,16 @@ function ReviewStep({
 function Section({ title, children, wide = false }) {
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-white/12 bg-[#303030]/20 ${
+      className={`overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#303030]/20 ${
         wide ? 'md:col-span-2' : ''
       }`}
     >
-      <div className="border-b border-white/10 bg-white/5 px-4 py-2 2xl:px-5 2xl:py-2.5">
-        <p className="text-xs font-bold uppercase tracking-wider text-white/85 2xl:text-sm">
+      <div className="border-b border-gray-200 bg-gray-100 px-4 py-2 dark:border-white/10 dark:bg-white/5 2xl:px-5 2xl:py-2.5">
+        <p className="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-white/85 2xl:text-sm">
           {title}
         </p>
       </div>
-      <dl className="divide-y divide-white/8">{children}</dl>
+      <dl className="divide-y divide-gray-200 dark:divide-white/8">{children}</dl>
     </div>
   );
 }
@@ -3594,11 +3702,11 @@ function Section({ title, children, wide = false }) {
 function Field({ k, v }) {
   return (
     <div className="flex items-start gap-3 px-4 py-2 2xl:px-5 2xl:py-2.5">
-      <dt className="w-28 shrink-0 text-xs font-semibold tracking-wider text-white/55 2xl:w-32 2xl:text-sm">
+      <dt className="w-28 shrink-0 text-xs font-semibold tracking-wider text-gray-500 dark:text-white/55 2xl:w-32 2xl:text-sm">
         {k}
       </dt>
-      <dd className="min-w-0 flex-1 wrap-break-word text-xs font-medium text-white 2xl:text-sm">
-        {v || <span className="text-white/30">—</span>}
+      <dd className="min-w-0 flex-1 wrap-break-word text-xs font-medium text-gray-900 dark:text-white 2xl:text-sm">
+        {v || <span className="text-gray-400 dark:text-white/30">—</span>}
       </dd>
     </div>
   );

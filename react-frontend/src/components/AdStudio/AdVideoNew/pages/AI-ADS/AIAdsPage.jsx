@@ -178,7 +178,7 @@ const AIAdsPage = ({ handleGenerate }) => {
     }
   };
 
-  return <div className="flex h-full flex-col text-white">{renderStep()}</div>;
+  return <div className="flex h-full flex-col text-gray-900 dark:text-white">{renderStep()}</div>;
 };
 
 export default AIAdsPage;

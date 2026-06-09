@@ -9,6 +9,73 @@ import ReadAloud from '@/components/common/ReadAloud';
 import { regenerateAdCopy } from '@/store/actions/adStudio/adCopyActions';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 
+const USER_TRUNCATE_AT = 280;
+const BOT_COLLAPSED_HEIGHT = 240;
+
+const UserBubble = ({ message }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = (message || '').length > USER_TRUNCATE_AT;
+  const visible = !isLong || expanded ? message : `${message.slice(0, USER_TRUNCATE_AT).trimEnd()}…`;
+
+  return (
+    <div
+      className="border border-solid border-zinc-200 bg-zinc-100 px-4 py-4 text-xs text-zinc-900 backdrop-blur-[100px] 2xl:text-sm dark:border-[#2A2A2A] dark:bg-[#212121] dark:text-white"
+      style={{ borderRadius: '30px 30px 1px 30px' }}
+    >
+      <span className="whitespace-pre-wrap">{visible || ''}</span>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-1 cursor-pointer font-semibold text-blue-600 hover:underline dark:text-blue-400"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const BotMarkdown = ({ message }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    setOverflows(ref.current.scrollHeight > BOT_COLLAPSED_HEIGHT + 8);
+  }, [message]);
+
+  return (
+    <>
+      <div
+        ref={ref}
+        style={
+          overflows && !expanded
+            ? { maxHeight: BOT_COLLAPSED_HEIGHT, overflow: 'hidden' }
+            : undefined
+        }
+        className={
+          overflows && !expanded
+            ? 'relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-12 after:bg-gradient-to-t after:from-white after:to-transparent dark:after:from-[#0f0f0f]'
+            : undefined
+        }
+      >
+        <ReactMarkdown>{message || ''}</ReactMarkdown>
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 self-start cursor-pointer text-xs font-semibold text-blue-600 hover:underline 2xl:text-sm dark:text-blue-400"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+};
+
 const ChatInterface = () => {
   const dispatch = useDispatch();
   const { conversations, isTyping, isLoading } = useSelector((state) => state.adCopy);
@@ -46,7 +113,7 @@ const ChatInterface = () => {
   };
 
   return (
-    <div className="flex w-full max-w-full flex-col gap-10 text-white">
+    <div className="flex w-full max-w-full flex-col gap-10 text-zinc-900 dark:text-white">
       {/* Chat Messages */}
       {historyLoading ? (
         <div className="flex min-h-[75vh] w-full items-center justify-center">
@@ -62,14 +129,7 @@ const ChatInterface = () => {
                 {conversation?.type === 'user' && (
                   <div className="flex justify-end gap-3">
                     <div className="ml-12 max-w-3xl">
-                      <div
-                        className="border border-solid border-[#2A2A2A] bg-[#212121] px-4 py-4 text-xs backdrop-blur-[100px] 2xl:text-sm"
-                        style={{
-                          borderRadius: '30px 30px 1px 30px',
-                        }}
-                      >
-                        {conversation?.message || ''}
-                      </div>
+                      <UserBubble message={conversation?.message} />
                     </div>
                   </div>
                 )}
@@ -104,9 +164,9 @@ const ChatInterface = () => {
 
                     {conversation?.message && (
                       <div className="mr-12 max-w-3xl">
-                        <div className="text-xs leading-relaxed 2xl:text-sm">
-                          <div className="prose prose-invert prose-sm flex max-w-none flex-col gap-2">
-                            <ReactMarkdown>{conversation?.message || ''}</ReactMarkdown>
+                        <div className="text-xs leading-relaxed text-zinc-900 2xl:text-sm dark:text-white">
+                          <div className="prose prose-sm flex max-w-none flex-col gap-2 dark:prose-invert">
+                            <BotMarkdown message={conversation?.message} />
                             {isTyping && index === conversations.length - 1 && (
                               <div className="typing-indicator">
                                 <div className="dot"></div>
@@ -117,12 +177,12 @@ const ChatInterface = () => {
                             {conversation?.complete && (
                               <div className="chat_actions_container z-0 flex gap-1 shadow-none">
                                 <ShadcnTooltip label="Read a Loud">
-                                  <span className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-gradient-to-br">
+                                  <span className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-zinc-100 dark:hover:bg-gradient-to-br">
                                     <ReadAloud text={conversation?.message} />
                                   </span>
                                 </ShadcnTooltip>
                                 <ShadcnTooltip label="Copy Response">
-                                  <span className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-gradient-to-br">
+                                  <span className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-zinc-100 dark:hover:bg-gradient-to-br">
                                     {copiedMessageId === index ? (
                                       <Check className="z-[5555] h-4 w-4 cursor-pointer text-black/80 shadow-none focus:outline-none dark:text-white" />
                                     ) : (
@@ -136,7 +196,7 @@ const ChatInterface = () => {
                                 <ShadcnTooltip label="Regenerate">
                                   <span
                                     onClick={() => handleRegenerateClick(conversation?.inputs)}
-                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-gradient-to-br"
+                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full from-[#222222] to-[#5771F6] hover:bg-zinc-100 dark:hover:bg-gradient-to-br"
                                   >
                                     <Repeat className="z-[5555] h-4 w-4 cursor-pointer text-black/80 shadow-none focus:outline-none dark:text-white" />
                                   </span>

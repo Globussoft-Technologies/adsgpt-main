@@ -60,6 +60,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         severity: rule.severity || 'medium',
         evaluateOn: rule.evaluateOn || 'campaign',
         lookbackDays: rule.lookbackDays || 14,
+        lookbackPreset: rule.lookbackPreset || null,
         conditions: rule.conditions || {
           operator: 'AND',
           rules: [{ field: '', op: '', value: '' }],
@@ -76,6 +77,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         severity: prefill.severity || 'medium',
         evaluateOn: prefill.evaluateOn || 'campaign',
         lookbackDays: prefill.lookbackDays || 14,
+        lookbackPreset: prefill.lookbackPreset || null,
         conditions: prefill.conditions || {
           operator: 'AND',
           rules: [{ field: '', op: '', value: '' }],
@@ -91,6 +93,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
       severity: 'medium',
       evaluateOn: 'campaign',
       lookbackDays: 14,
+      lookbackPreset: null,
       conditions: { operator: 'AND', rules: [{ field: '', op: '', value: '' }] },
       action: { type: 'pause' },
       attachments: [],
@@ -186,19 +189,23 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
     if (!form.action?.type) fieldErrors.action = 'Pick an action.';
 
     // Lookback window: integer in [1, 90]. Decimal is rejected client-side
-    // because the backend Joi schema requires an integer.
-    const lbRaw = form.lookbackDays;
-    const lbNum = Number(lbRaw);
-    if (
-      lbRaw === '' ||
-      lbRaw === null ||
-      lbRaw === undefined ||
-      !Number.isFinite(lbNum) ||
-      !Number.isInteger(lbNum) ||
-      lbNum < 1 ||
-      lbNum > 90
-    ) {
-      fieldErrors.lookbackDays = 'Enter a whole number between 1 and 90.';
+    // because the backend Joi schema requires an integer. Skipped entirely
+    // when `lookbackPreset` is set — the preset overrides the number at
+    // audit time, so the number's value is irrelevant.
+    if (form.lookbackPreset !== 'this_month') {
+      const lbRaw = form.lookbackDays;
+      const lbNum = Number(lbRaw);
+      if (
+        lbRaw === '' ||
+        lbRaw === null ||
+        lbRaw === undefined ||
+        !Number.isFinite(lbNum) ||
+        !Number.isInteger(lbNum) ||
+        lbNum < 1 ||
+        lbNum > 90
+      ) {
+        fieldErrors.lookbackDays = 'Enter a whole number between 1 and 90.';
+      }
     }
 
     const conds = form.conditions?.rules || [];
@@ -361,311 +368,318 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="fixed top-0 right-0 bottom-0 z-100 flex w-full max-w-[680px] flex-col overflow-hidden border-l border-white/10 bg-[#14181D] shadow-[-12px_0_40px_rgba(0,0,0,0.5)] sm:w-[680px]"
+        className="fixed top-0 right-0 bottom-0 z-100 flex w-full max-w-[680px] flex-col overflow-hidden border-l border-gray-200 bg-white shadow-[-12px_0_40px_rgba(0,0,0,0.5)] sm:w-[680px] dark:border-white/10 dark:bg-[#14181D]"
       >
-          {/* header */}
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/12 bg-white/3 px-4 py-3 sm:px-5 sm:py-3.5">
-            <div>
-              <h2 className="text-sm font-bold text-white 2xl:text-base">
-                {isEdit ? 'Edit rule' : 'New rule'}
-              </h2>
-              <p className="mt-0.5 text-[11px] text-white/55 2xl:text-xs">
-                Pause campaigns or get alerts when conditions you define
-                match.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/8 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        {/* header */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5 sm:py-3.5 dark:border-white/12 dark:bg-white/3">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 2xl:text-base dark:text-white">
+              {isEdit ? 'Edit rule' : 'New rule'}
+            </h2>
+            <p className="mt-0.5 text-[11px] text-gray-500 2xl:text-xs dark:text-white/55">
+              Pause campaigns or get alerts when conditions you define match.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white/55 dark:hover:bg-white/8 dark:hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-          {/* body */}
-          <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-            <div className="flex flex-col gap-5 lg:gap-6">
-              {/* Basics */}
-              <div>
-                <FieldLabel>Name</FieldLabel>
-                <TextInput
-                  value={form.name}
-                  onChange={(v) => set({ name: v })}
-                  placeholder="e.g. Pause if no conversions"
-                  maxLength={80}
-                  invalid={showError('name')}
-                />
-                {showError('name') && <FieldError>{errorFor('name')}</FieldError>}
+        {/* body */}
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-5 lg:gap-6">
+            {/* Basics */}
+            <div>
+              <FieldLabel>Name</FieldLabel>
+              <TextInput
+                value={form.name}
+                onChange={(v) => set({ name: v })}
+                placeholder="e.g. Pause if no conversions"
+                maxLength={80}
+                invalid={showError('name')}
+              />
+              {showError('name') && <FieldError>{errorFor('name')}</FieldError>}
+            </div>
+
+            <div>
+              <FieldLabel>Description</FieldLabel>
+              <TextArea
+                value={form.description}
+                onChange={(v) => set({ description: v })}
+                placeholder="Why is this rule here? What problem does it solve?"
+                maxLength={500}
+                invalid={showError('description')}
+              />
+              {showError('description') && <FieldError>{errorFor('description')}</FieldError>}
+            </div>
+
+            <div>
+              <FieldLabel>Severity</FieldLabel>
+              <div className="grid grid-cols-3 gap-2">
+                {SEVERITIES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => set({ severity: s.value })}
+                    className={`flex items-center justify-center gap-1.5 rounded-full border py-2 text-xs font-medium transition-all 2xl:text-sm ${
+                      form.severity === s.value
+                        ? s.tone
+                        : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/8 dark:bg-white/4 dark:text-white/65 dark:hover:border-white/15 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                    {s.label}
+                  </button>
+                ))}
               </div>
+              {showError('severity') && <FieldError>{errorFor('severity')}</FieldError>}
+            </div>
 
-              <div>
-                <FieldLabel>Description</FieldLabel>
-                <TextArea
-                  value={form.description}
-                  onChange={(v) => set({ description: v })}
-                  placeholder="Why is this rule here? What problem does it solve?"
-                  maxLength={500}
-                  invalid={showError('description')}
-                />
-                {showError('description') && (
-                  <FieldError>{errorFor('description')}</FieldError>
-                )}
+            {/* Evaluation level */}
+            <div>
+              <FieldLabel hint="Where the rule walks once it matches">When to evaluate</FieldLabel>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                {EVALUATE_ON.map((opt) => (
+                  <ChoiceCard
+                    key={opt.value}
+                    selected={form.evaluateOn === opt.value}
+                    label={opt.label}
+                    hint={opt.hint}
+                    onClick={() => set({ evaluateOn: opt.value })}
+                  />
+                ))}
               </div>
+            </div>
 
-              <div>
-                <FieldLabel>Severity</FieldLabel>
-                <div className="grid grid-cols-3 gap-2">
-                  {SEVERITIES.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => set({ severity: s.value })}
-                      className={`flex items-center justify-center gap-1.5 rounded-full border py-2 text-xs font-medium transition-all 2xl:text-sm ${
-                        form.severity === s.value
-                          ? s.tone
-                          : 'border-white/8 bg-white/4 text-white/65 hover:border-white/15 hover:text-white'
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-                {showError('severity') && (
-                  <FieldError>{errorFor('severity')}</FieldError>
-                )}
-              </div>
-
-              {/* Evaluation level */}
-              <div>
-                <FieldLabel hint="Where the rule walks once it matches">
-                  When to evaluate
-                </FieldLabel>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                  {EVALUATE_ON.map((opt) => (
-                    <ChoiceCard
-                      key={opt.value}
-                      selected={form.evaluateOn === opt.value}
-                      label={opt.label}
-                      hint={opt.hint}
-                      onClick={() => set({ evaluateOn: opt.value })}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Lookback window — controls how many days of Meta insights
+            {/* Lookback window — controls how many days of Meta insights
                   are rolled up before evaluating this rule. Rules sharing
-                  the same window dedupe their Meta fetch on the cron side. */}
-              <div>
-                <FieldLabel hint="Window of Meta insights the rule's metrics roll up over">
-                  Evaluate over
-                </FieldLabel>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                  {[1, 3, 7, 14, 30].map((d) => (
+                  the same window dedupe their Meta fetch on the cron side.
+                  "This month" is a calendar-resolved preset (`lookbackPreset:
+                  'this_month'`) that the backend re-resolves at every cron
+                  tick to today's day-of-month, so the window grows from 1
+                  → 31 across the month and resets on the 1st. */}
+            <div>
+              <FieldLabel hint="Window of Meta insights the rule's metrics roll up over">
+                Evaluate over
+              </FieldLabel>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {[1, 3, 7, 14, 30].map((d) => {
+                  const selected = !form.lookbackPreset && Number(form.lookbackDays) === d;
+                  return (
                     <button
                       key={d}
                       type="button"
-                      onClick={() => set({ lookbackDays: d })}
-                      className={`rounded-full border py-2 text-13 font-medium transition-all ${
-                        Number(form.lookbackDays) === d
-                          ? 'border-[#15DCFF]/50 bg-[#15DCFF]/8 text-white'
-                          : 'border-white/10 bg-[#262626] text-white/65 hover:border-white/20 hover:text-white'
+                      onClick={() => set({ lookbackDays: d, lookbackPreset: null })}
+                      className={`text-13 rounded-full border py-2 font-medium transition-all ${
+                        selected
+                          ? 'border-[#15DCFF]/50 bg-[#15DCFF]/8 text-gray-900 dark:text-white'
+                          : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-[#262626] dark:text-white/65 dark:hover:border-white/20 dark:hover:text-white'
                       }`}
                     >
                       {d}d
                     </button>
-                  ))}
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-[11px] text-white/45">Custom:</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={90}
-                    step={1}
-                    value={form.lookbackDays}
-                    onChange={(e) => set({ lookbackDays: e.target.value })}
-                    onBlur={(e) => {
-                      // Clamp + integer-ize on blur so the field always
-                      // settles to a valid value. Empty stays empty so the
-                      // error message can fire; otherwise: floor → clamp.
-                      const raw = e.target.value;
-                      if (raw === '' || raw === null) return;
-                      const n = Math.floor(Number(raw));
-                      if (!Number.isFinite(n)) {
-                        set({ lookbackDays: 14 });
-                        return;
-                      }
-                      set({ lookbackDays: Math.min(90, Math.max(1, n)) });
-                    }}
-                    className={`h-8 w-24 rounded-full border bg-[#909294]/15 px-3 text-13 text-white placeholder:text-[#AFAFAF] transition-colors focus:outline-none ${
-                      showError('lookbackDays')
-                        ? 'border-red-400/60 focus:border-red-400'
-                        : 'border-white/5 hover:border-white/15 focus:border-white/20'
-                    }`}
-                  />
-                  <span className="text-[11px] text-white/45">
-                    days (1–90, whole numbers)
-                  </span>
-                </div>
-                {showError('lookbackDays') && (
-                  <FieldError>{errorFor('lookbackDays')}</FieldError>
-                )}
+                  );
+                })}
+                {(() => {
+                  const selected = form.lookbackPreset === 'this_month';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => set({ lookbackPreset: 'this_month' })}
+                      className={`text-13 rounded-full border py-2 font-medium transition-all ${
+                        selected
+                          ? 'border-[#15DCFF]/50 bg-[#15DCFF]/8 text-gray-900 dark:text-white'
+                          : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-[#262626] dark:text-white/65 dark:hover:border-white/20 dark:hover:text-white'
+                      }`}
+                      title="Days since the 1st of the current month — resolved fresh each cron run."
+                    >
+                      This month
+                    </button>
+                  );
+                })()}
               </div>
-
-              {/* Conditions */}
-              <div className="rounded-2xl border border-white/12 bg-white/4 p-4 2xl:p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-white 2xl:text-base">
-                      Conditions
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-white/55 2xl:text-xs">
-                      ALL must match (AND). Up to 8.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-white/8 px-2 py-0.5 text-10 font-medium uppercase tracking-wider text-white/60">
-                    {form.conditions.rules.length} of 8
-                  </span>
-                </div>
-                <div className="flex flex-col gap-2.5">
-                  {form.conditions.rules.map((c, i) => (
-                    <ConditionRow
-                      key={i}
-                      index={i}
-                      condition={c}
-                      onChange={(patch) => setCondition(i, patch)}
-                      onRemove={
-                        form.conditions.rules.length > 1
-                          ? () => removeCondition(i)
-                          : null
-                      }
-                      errors={
-                        submitAttempted
-                          ? validity.fieldErrors.conditions?.[i] || null
-                          : null
-                      }
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={addCondition}
-                  disabled={form.conditions.rules.length >= 8}
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-white/15 bg-transparent px-3 py-2 text-xs font-medium text-white/65 transition-all hover:border-white/30 hover:text-white disabled:opacity-40"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add condition
-                </button>
-                {showError('conditionsTop') && (
-                  <FieldError>{errorFor('conditionsTop')}</FieldError>
-                )}
-              </div>
-
-              {/* Action */}
-              <div>
-                <FieldLabel>Action when matched</FieldLabel>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {ACTION_TYPES.map((opt) => (
-                    <ChoiceCard
-                      key={opt.value}
-                      selected={form.action.type === opt.value}
-                      label={opt.label}
-                      hint={opt.hint}
-                      onClick={() => set({ action: { type: opt.value } })}
-                    />
-                  ))}
-                </div>
-                {showError('action') && (
-                  <FieldError>{errorFor('action')}</FieldError>
-                )}
-              </div>
-
-              {/* Attached campaigns */}
-              <div>
-                <FieldLabel hint={`${form.attachments.length} attached`}>
-                  Attached campaigns
-                </FieldLabel>
-                <AttachmentPicker
-                  attachments={form.attachments}
-                  onChange={setAttachments}
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[11px] text-gray-400 dark:text-white/45">Custom:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  step={1}
+                  value={form.lookbackDays}
+                  disabled={form.lookbackPreset === 'this_month'}
+                  onChange={(e) =>
+                    set({
+                      lookbackDays: e.target.value,
+                      lookbackPreset: null,
+                    })
+                  }
+                  onBlur={(e) => {
+                    // Clamp + integer-ize on blur so the field always
+                    // settles to a valid value. Empty stays empty so the
+                    // error message can fire; otherwise: floor → clamp.
+                    const raw = e.target.value;
+                    if (raw === '' || raw === null) return;
+                    const n = Math.floor(Number(raw));
+                    if (!Number.isFinite(n)) {
+                      set({ lookbackDays: 14 });
+                      return;
+                    }
+                    set({ lookbackDays: Math.min(90, Math.max(1, n)) });
+                  }}
+                  className={`text-13 h-8 w-24 rounded-full border bg-gray-100 px-3 text-gray-900 transition-colors placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
+                    showError('lookbackDays')
+                      ? 'border-red-400/60 focus:border-red-400'
+                      : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
+                  }`}
                 />
-                {showError('attachments') && (
-                  <FieldError>{errorFor('attachments')}</FieldError>
-                )}
+                <span className="text-[11px] text-gray-400 dark:text-white/45">
+                  {form.lookbackPreset === 'this_month'
+                    ? `disabled — "This month" resolves to today's day (currently ${new Date().getDate()}d)`
+                    : 'days (1–90, whole numbers)'}
+                </span>
               </div>
-
-              {/* Save error */}
-              {saveError && <Banner variant="error">{saveError}</Banner>}
-
-              {/* Test result */}
-              {testResult && (
-                <div className="rounded-2xl border border-white/10 bg-white/4 p-3 text-xs">
-                  {testResult.notSaved && (
-                    <p className="text-white/70">{testResult.message}</p>
-                  )}
-                  {testResult.error && (
-                    <p className="text-red-300">{testResult.error}</p>
-                  )}
-                  {testResult.notImplemented && (
-                    <p className="text-white/55">
-                      Live preview is on the way — wiring is in place but the
-                      preview hits aren't connected to the cron's fetch
-                      helpers yet. Save and watch the Action log on the next
-                      cron tick.
-                    </p>
-                  )}
-                </div>
+              {showError('lookbackDays') && form.lookbackPreset !== 'this_month' && (
+                <FieldError>{errorFor('lookbackDays')}</FieldError>
               )}
             </div>
-          </div>
 
-          {/* footer */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/12 bg-white/3 px-4 py-3 sm:px-5">
-            {/* Test button is always clickable while not loading — onTest
+            {/* Conditions */}
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 2xl:p-5 dark:border-white/12 dark:bg-white/4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
+                    Conditions
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-500 2xl:text-xs dark:text-white/55">
+                    ALL must match (AND). Up to 8.
+                  </p>
+                </div>
+                <span className="text-10 rounded-full bg-gray-200 px-2 py-0.5 font-medium tracking-wider text-gray-500 uppercase dark:bg-white/8 dark:text-white/60">
+                  {form.conditions.rules.length} of 8
+                </span>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                {form.conditions.rules.map((c, i) => (
+                  <ConditionRow
+                    key={i}
+                    index={i}
+                    condition={c}
+                    onChange={(patch) => setCondition(i, patch)}
+                    onRemove={form.conditions.rules.length > 1 ? () => removeCondition(i) : null}
+                    errors={submitAttempted ? validity.fieldErrors.conditions?.[i] || null : null}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addCondition}
+                disabled={form.conditions.rules.length >= 8}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-gray-300 bg-transparent px-3 py-2 text-xs font-medium text-gray-500 transition-all hover:border-gray-400 hover:text-gray-900 disabled:opacity-40 dark:border-white/15 dark:text-white/65 dark:hover:border-white/30 dark:hover:text-white"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add condition
+              </button>
+              {showError('conditionsTop') && <FieldError>{errorFor('conditionsTop')}</FieldError>}
+            </div>
+
+            {/* Action */}
+            <div>
+              <FieldLabel>Action when matched</FieldLabel>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {ACTION_TYPES.map((opt) => (
+                  <ChoiceCard
+                    key={opt.value}
+                    selected={form.action.type === opt.value}
+                    label={opt.label}
+                    hint={opt.hint}
+                    onClick={() => set({ action: { type: opt.value } })}
+                  />
+                ))}
+              </div>
+              {showError('action') && <FieldError>{errorFor('action')}</FieldError>}
+            </div>
+
+            {/* Attached campaigns */}
+            <div>
+              <FieldLabel hint={`${form.attachments.length} attached`}>
+                Attached campaigns
+              </FieldLabel>
+              <AttachmentPicker attachments={form.attachments} onChange={setAttachments} />
+              {showError('attachments') && <FieldError>{errorFor('attachments')}</FieldError>}
+            </div>
+
+            {/* Save error */}
+            {saveError && <Banner variant="error">{saveError}</Banner>}
+
+            {/* Test result */}
+            {testResult && (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs dark:border-white/10 dark:bg-white/4">
+                {testResult.notSaved && (
+                  <p className="text-gray-600 dark:text-white/70">{testResult.message}</p>
+                )}
+                {testResult.error && (
+                  <p className="text-red-600 dark:text-red-300">{testResult.error}</p>
+                )}
+                {testResult.notImplemented && (
+                  <p className="text-gray-500 dark:text-white/55">
+                    Live preview is on the way — wiring is in place but the preview hits aren't
+                    connected to the cron's fetch helpers yet. Save and watch the Action log on the
+                    next cron tick.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* footer */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-5 dark:border-white/12 dark:bg-white/3">
+          {/* Test button is always clickable while not loading — onTest
                 handles the "must save first" case in create mode by
                 surfacing an inline message. Disabled-only-on-loading
                 avoids the dead-button feedback gap testers hit. */}
-            <SecondaryButton
-              onClick={onTest}
-              disabled={testing}
-              title={
-                !isEdit
-                  ? 'Save the rule first, then test against current Meta state.'
-                  : 'Run this rule against current Meta data without saving any changes.'
-              }
-            >
-              {testing ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" /> Testing…
-                </>
-              ) : (
-                'Test rule'
-              )}
-            </SecondaryButton>
-            <div className="flex items-center gap-2">
-              <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-              {/* Button stays clickable while invalid so a click can mark
+          <SecondaryButton
+            onClick={onTest}
+            disabled={testing}
+            title={
+              !isEdit
+                ? 'Save the rule first, then test against current Meta state.'
+                : 'Run this rule against current Meta data without saving any changes.'
+            }
+          >
+            {testing ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" /> Testing…
+              </>
+            ) : (
+              'Test rule'
+            )}
+          </SecondaryButton>
+          <div className="flex items-center gap-2">
+            <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+            {/* Button stays clickable while invalid so a click can mark
                   the form as submit-attempted; the onSave handler does the
                   real gating and short-circuits if the form isn't valid. */}
-              <PrimaryButton onClick={onSave} disabled={saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" /> Saving…
-                  </>
-                ) : isEdit ? (
-                  'Save changes'
-                ) : (
-                  'Create rule'
-                )}
-              </PrimaryButton>
-            </div>
+            <PrimaryButton onClick={onSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                </>
+              ) : isEdit ? (
+                'Save changes'
+              ) : (
+                'Create rule'
+              )}
+            </PrimaryButton>
           </div>
+        </div>
       </motion.div>
     </AnimatePresence>,
-    document.body,
+    document.body
   );
 };
 
@@ -673,9 +687,9 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
 
 function FieldLabel({ children, hint }) {
   return (
-    <label className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-sm font-medium text-[#afafaf]">
+    <label className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-sm font-medium text-gray-600 dark:text-[#afafaf]">
       <span>{children}</span>
-      {hint && <span className="text-[11px] font-normal text-white/45">{hint}</span>}
+      {hint && <span className="text-[11px] font-normal text-gray-400 dark:text-white/45">{hint}</span>}
     </label>
   );
 }
@@ -696,10 +710,10 @@ function TextInput({
       placeholder={placeholder}
       maxLength={maxLength}
       aria-invalid={invalid || undefined}
-      className={`w-full rounded-full border bg-[#909294]/15 px-4 py-2.5 text-13 text-white placeholder:text-13 placeholder:text-[#AFAFAF] transition-colors focus:outline-none ${
+      className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-13 text-gray-900 placeholder:text-13 placeholder:text-gray-400 transition-colors focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
         invalid
           ? 'border-red-400/60 focus:border-red-400'
-          : 'border-white/5 hover:border-white/15 focus:border-white/20'
+          : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
       }`}
     />
   );
@@ -721,10 +735,10 @@ function TextArea({
       rows={rows}
       maxLength={maxLength}
       aria-invalid={invalid || undefined}
-      className={`w-full resize-none rounded-2xl border bg-[#909294]/15 px-4 py-3 text-13 text-white placeholder:text-[#AFAFAF] transition-colors focus:outline-none ${
+      className={`w-full resize-none rounded-2xl border bg-gray-100 px-4 py-3 text-13 text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
         invalid
           ? 'border-red-400/60 focus:border-red-400'
-          : 'border-white/5 hover:border-white/15 focus:border-white/20'
+          : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
       }`}
     />
   );
@@ -734,7 +748,7 @@ function TextArea({
 // input. Color matches the red border on `invalid` state for consistency.
 function FieldError({ children }) {
   return (
-    <p className="mt-1.5 text-[11px] leading-snug text-red-300">{children}</p>
+    <p className="mt-1.5 text-[11px] leading-snug text-red-600 dark:text-red-300">{children}</p>
   );
 }
 
@@ -747,25 +761,25 @@ function ChoiceCard({ selected, label, hint, onClick }) {
       className={`rounded-2xl p-px transition-all ${
         selected
           ? 'bg-linear-to-r from-[#02C8C4] to-[#5867EB]'
-          : 'bg-white/8 hover:bg-white/15'
+          : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
       }`}
     >
       <button
         type="button"
         onClick={onClick}
         className={`flex h-full w-full flex-col gap-1 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-          selected ? 'bg-[#1d1d1d]' : 'bg-[#181818] hover:bg-[#1d1d1d]'
+          selected ? 'bg-white dark:bg-[#1d1d1d]' : 'bg-gray-50 hover:bg-white dark:bg-[#181818] dark:hover:bg-[#1d1d1d]'
         }`}
       >
         <span
           className={`text-13 font-semibold ${
-            selected ? 'text-white' : 'text-white/85'
+            selected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-white/85'
           }`}
         >
           {label}
         </span>
         {hint && (
-          <span className="text-[11px] leading-snug text-white/55">{hint}</span>
+          <span className="text-[11px] leading-snug text-gray-500 dark:text-white/55">{hint}</span>
         )}
       </button>
     </div>
@@ -857,25 +871,25 @@ function SelectInput({
         disabled={disabled}
         aria-invalid={invalid || undefined}
         onClick={() => setOpen((p) => !p)}
-        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-[#909294]/15 px-4 py-2.5 text-left text-13 font-medium transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-white/3 disabled:bg-white/3 disabled:text-white/30 ${
+        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-gray-100 px-4 py-2.5 text-left text-13 font-medium transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 dark:bg-[#909294]/15 dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 ${
           invalid
             ? 'border-red-400/60'
             : open
-              ? 'border-white/20'
-              : 'border-white/5 hover:border-white/15'
+              ? 'border-gray-400 dark:border-white/20'
+              : 'border-gray-300 hover:border-gray-400 dark:border-white/5 dark:hover:border-white/15'
         }`}
       >
         <span
           className={`min-w-0 truncate ${
-            selected ? 'text-white' : 'text-[#AFAFAF]'
+            selected ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#AFAFAF]'
           }`}
         >
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
-            open ? 'rotate-180 text-white/85' : 'text-white/55'
-          } ${disabled ? 'text-white/20' : ''}`}
+            open ? 'rotate-180 text-gray-700 dark:text-white/85' : 'text-gray-500 dark:text-white/55'
+          } ${disabled ? 'text-gray-300 dark:text-white/20' : ''}`}
         />
       </button>
 
@@ -894,13 +908,13 @@ function SelectInput({
                 left: pos.left,
                 minWidth: pos.width,
               }}
-              className="z-200 overflow-hidden rounded-xl border border-white/12 bg-[#0F0F0F]/98 shadow-xl backdrop-blur-xl"
+              className="z-200 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl backdrop-blur-xl dark:border-white/12 dark:bg-[#0F0F0F]/98"
             >
               <div className="scrollbar-thin max-h-72 overflow-y-auto p-1.5">
                 {isGrouped
                   ? options.map((group) => (
                       <div key={group.groupLabel}>
-                        <div className="px-3 py-1.5 text-10 font-bold uppercase tracking-wider text-white/40">
+                        <div className="px-3 py-1.5 text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
                           {group.groupLabel}
                         </div>
                         {group.items.map((o) => (
@@ -944,8 +958,8 @@ function SelectMenuItem({ option, isSelected, onPick }) {
       onClick={onPick}
       className={`flex w-full items-start justify-between gap-2 rounded-md px-3 py-2 text-left transition-colors ${
         isSelected
-          ? 'bg-white/10 text-white'
-          : 'text-white/85 hover:bg-white/5 hover:text-white'
+          ? 'bg-gray-100 text-gray-900 dark:bg-white/10 dark:text-white'
+          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-white/85 dark:hover:bg-white/5 dark:hover:text-white'
       }`}
     >
       <span className="flex min-w-0 flex-col">
@@ -953,7 +967,7 @@ function SelectMenuItem({ option, isSelected, onPick }) {
           {option.label}
         </span>
         {option.hint && (
-          <span className="truncate text-10 text-white/45">
+          <span className="truncate text-10 text-gray-400 dark:text-white/45">
             {option.hint}
           </span>
         )}
@@ -976,9 +990,9 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
   const numericValueInvalid = !!valueErr;
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-[#181818] p-3">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-[#181818]">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-white/45">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-white/45">
           Condition #{index + 1}
         </span>
         {onRemove && (
@@ -986,7 +1000,7 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
             type="button"
             onClick={onRemove}
             aria-label="Remove condition"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-colors hover:bg-white/8 hover:text-red-300"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-white/40 dark:hover:bg-white/8 dark:hover:text-red-300"
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -1054,10 +1068,10 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
                   ? 'numeric value'
                   : 'value'
             }
-            className={`h-9 w-full rounded-full border bg-[#909294]/15 px-4 text-13 text-white placeholder:text-[#AFAFAF] transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-white/3 disabled:bg-white/3 disabled:text-white/30 disabled:placeholder:text-white/25 ${
+            className={`h-9 w-full rounded-full border bg-gray-100 px-4 text-13 text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:placeholder:text-gray-300 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 dark:disabled:placeholder:text-white/25 ${
               numericValueInvalid
                 ? 'border-red-400/60 focus:border-red-400'
-                : 'border-white/5 hover:border-white/15 focus:border-white/20'
+                : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
             }`}
           />
         )}
@@ -1069,7 +1083,7 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
       {!fieldErr && opErr && <FieldError>{opErr}</FieldError>}
       {!fieldErr && !opErr && valueErr && <FieldError>{valueErr}</FieldError>}
       {!fieldErr && !opErr && !valueErr && meta?.hint && (
-        <p className="mt-2 text-[11px] text-white/45">{meta.hint}</p>
+        <p className="mt-2 text-[11px] text-gray-400 dark:text-white/45">{meta.hint}</p>
       )}
     </div>
   );
@@ -1221,27 +1235,27 @@ function AttachmentPicker({ attachments, onChange }) {
       */}
 
       {/* Inline picker */}
-      <div className="rounded-2xl border border-white/10 bg-white/3">
-        <div className="border-b border-white/10 p-2.5">
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/3">
+        <div className="border-b border-gray-200 p-2.5 dark:border-white/10">
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-white/45" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45" />
             <input
               type="text"
               placeholder="Search campaigns…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-full border border-white/5 bg-[#909294]/15 pl-9 pr-3 text-13 text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+              className="h-9 w-full rounded-full border border-gray-300 bg-gray-100 pl-9 pr-3 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
             />
           </div>
         </div>
         <div className="max-h-72 overflow-y-auto">
           {accountsLoading && (
-            <p className="px-3 py-3 text-[12px] text-white/55">
+            <p className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/55">
               Loading ad accounts…
             </p>
           )}
           {!accountsLoading && accounts.length === 0 && (
-            <p className="px-3 py-3 text-[12px] text-white/55">
+            <p className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/55">
               No connected ad accounts.
             </p>
           )}
@@ -1276,9 +1290,9 @@ function AttachmentPicker({ attachments, onChange }) {
               visibleAccounts.length === 0
             ) {
               return (
-                <p className="px-3 py-3 text-[12px] text-white/55">
+                <p className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/55">
                   No accounts or campaigns match{' '}
-                  <span className="font-mono text-white/70">
+                  <span className="font-mono text-gray-600 dark:text-white/70">
                     "{search}"
                   </span>
                   .
@@ -1298,22 +1312,22 @@ function AttachmentPicker({ attachments, onChange }) {
             return (
               <div
                 key={acct.id}
-                className="border-b border-white/10 last:border-b-0"
+                className="border-b border-gray-200 last:border-b-0 dark:border-white/10"
               >
                 <button
                   type="button"
                   onClick={() => toggleAccount(acctKey)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
                 >
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-13 font-medium text-white">
+                    <span className="truncate text-13 font-medium text-gray-900 dark:text-white">
                       {acct.name}
                     </span>
-                    <span className="text-[11px] font-mono text-white/45">
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-white/45">
                       {acctKey}
                     </span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2 text-[11px] text-white/55">
+                  <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500 dark:text-white/55">
                     {attachedHere > 0 && (
                       <span className="rounded-full bg-linear-to-r from-[#02C8C4] to-[#5867EB] px-2 py-0.5 text-white">
                         {attachedHere}
@@ -1327,13 +1341,13 @@ function AttachmentPicker({ attachments, onChange }) {
                   </div>
                 </button>
                 {isOpen && (
-                  <div className="border-t border-white/10 bg-[#181818]">
+                  <div className="border-t border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#181818]">
                     {loadingAccount === acctKey || !campaigns ? (
-                      <p className="px-3 py-2.5 text-[12px] text-white/55">
+                      <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
                         Loading campaigns…
                       </p>
                     ) : filtered.length === 0 ? (
-                      <p className="px-3 py-2.5 text-[12px] text-white/55">
+                      <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
                         {search
                           ? 'No campaigns match your search.'
                           : 'No campaigns in this account.'}
@@ -1350,8 +1364,8 @@ function AttachmentPicker({ attachments, onChange }) {
                             key={c.id}
                             type="button"
                             onClick={() => toggle(acctKey, String(c.id))}
-                            className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors hover:bg-white/5 ${
-                              checked ? 'bg-white/5' : ''
+                            className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors hover:bg-gray-200 dark:hover:bg-white/5 ${
+                              checked ? 'bg-gray-200 dark:bg-white/5' : ''
                             }`}
                           >
                             <div className="flex min-w-0 items-center gap-2.5">
@@ -1359,7 +1373,7 @@ function AttachmentPicker({ attachments, onChange }) {
                                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors ${
                                   checked
                                     ? 'bg-linear-to-r from-[#02C8C4] to-[#5867EB]'
-                                    : 'border border-white/20'
+                                    : 'border border-gray-300 dark:border-white/20'
                                 }`}
                               >
                                 {checked && (
@@ -1370,19 +1384,19 @@ function AttachmentPicker({ attachments, onChange }) {
                                 <div
                                   className={`truncate text-13 ${
                                     checked
-                                      ? 'font-medium text-white'
-                                      : 'text-white/85'
+                                      ? 'font-medium text-gray-900 dark:text-white'
+                                      : 'text-gray-700 dark:text-white/85'
                                   }`}
                                 >
                                   {c.name || `(unnamed)`}
                                 </div>
-                                <div className="truncate text-[11px] font-mono text-white/45">
+                                <div className="truncate text-[11px] font-mono text-gray-400 dark:text-white/45">
                                   {c.id}
                                 </div>
                               </div>
                             </div>
                             {c.status && (
-                              <span className="shrink-0 text-10 uppercase tracking-wider text-white/45">
+                              <span className="shrink-0 text-10 uppercase tracking-wider text-gray-400 dark:text-white/45">
                                 {c.status}
                               </span>
                             )}

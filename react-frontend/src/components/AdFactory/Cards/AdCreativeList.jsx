@@ -374,7 +374,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
   const renderImage = (item, key, isHistory = false, editImage, index) => {
     if (!item?.fullUrl && item?.status === 200) {
       return (
-        <div className="rounded-xl bg-[#292929] text-center">
+        <div className="rounded-xl bg-gray-50 text-center dark:bg-[#292929]">
           <p className="text-sm text-red-400">Image data missing</p>
         </div>
       );
@@ -384,14 +384,14 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
         className={`h-[19rem] cursor-pointer rounded-xl bg-gradient-to-r p-[1px] transition ${
           selected === key
             ? 'from-[#02C8C4] to-[#5867EB] p-[3px]'
-            : 'from-white/10 to-white/10 hover:from-[#02C8C4]/30 hover:to-[#5867EB]/30'
+            : 'from-black/5 to-black/5 hover:from-[#02C8C4]/30 hover:to-[#5867EB]/30 dark:from-white/10 dark:to-white/10'
         }`}
         onClick={() => handleImageClick(item, key, index)}
       >
-        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-[#292929] transition">
+        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-gray-50 transition dark:bg-[#292929]">
           {/* Version badge for history images */}
           {(isHistory || item?.timestamp || item?.createdAt) && item?.status === 200 && (
-            <div className="flex items-center justify-between bg-[#1a1a1a] px-4 py-2">
+            <div className="flex items-center justify-between bg-gray-100 px-4 py-2 dark:bg-[#1a1a1a]">
               <span className="text-xs font-medium text-[#02C8C4]">
                 {item?.prompt === 'Edited image' ? 'Edited Image' : (() => {
                   const model = isHistory ? item?.imageModel : imageModelLabel;
@@ -404,7 +404,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                   );
                 })()}
               </span>
-              <span className="text-xs text-[#888]">
+              <span className="text-xs text-gray-500 dark:text-[#888]">
                 {new Date(item?.timestamp || item?.createdAt).toLocaleDateString()}
               </span>
             </div>
@@ -435,7 +435,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
               </div>
             ) : item?.status !== 200 ? (
               <div className="relative h-full w-full overflow-hidden rounded-lg">
-                <div className="relative h-full w-full animate-pulse rounded-l-2xl bg-[#212121]">
+                <div className="relative h-full w-full animate-pulse rounded-l-2xl bg-gray-100 dark:bg-[#212121]">
                   <div className="absolute inset-0 flex items-center justify-center">
                     <CreativeGeneratingLoader />
                   </div>
@@ -445,7 +445,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
               <div className="relative h-full w-full">
                 {/* Loading skeleton - only show if not loaded and not error */}
                 {!loadedImages[key] && loadedImages[key] !== 'error' && (
-                  <div className="absolute inset-0 z-10 animate-pulse rounded-xl bg-[#212121]">
+                  <div className="absolute inset-0 z-10 animate-pulse rounded-xl bg-gray-100 dark:bg-[#212121]">
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#02C8C4] border-t-transparent"></div>
@@ -559,7 +559,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
 
                 {/* Error overlay for broken images */}
                 {loadedImages[key] === 'error' && (
-                  <div className="absolute inset-0 flex h-full items-center justify-center bg-[#1a1a1a]">
+                  <div className="absolute inset-0 flex h-full items-center justify-center bg-gray-100 dark:bg-[#1a1a1a]">
                     <div className="text-center">
                       <p className="text-sm text-red-400">Failed to load image</p>
                       <p className="text-xs text-gray-500">Image may have been deleted</p>
@@ -582,7 +582,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
           <div className="flex items-center justify-end gap-4">
             <div className="flex flex-col items-end gap-2">
               {isDownloadingViaAPI && downloadProgress > 0 && (
-                <div className="w-48 rounded-full bg-[#363636]">
+                <div className="w-48 rounded-full bg-gray-100 dark:bg-[#363636]">
                   <div
                     className="h-2 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] transition-all duration-300"
                     style={{ width: `${downloadProgress}%` }}
@@ -616,7 +616,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <h3 className="text-lg font-semibold text-white">Current Images</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Current Images</h3>
                 {/* <ShadcnTooltip label={`Download ${currentImagesWithUrls.length} current images as ZIP`}>
                   <button
                     onClick={() => downloadSelectedSet(currentImagesWithUrls, 'current_images')}
@@ -632,7 +632,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                   </button>
                 </ShadcnTooltip> */}
               </div>
-              <span className="text-sm text-[#B0B0B0]">
+              <span className="text-sm text-gray-500 dark:text-[#B0B0B0]">
                 {currentImagesWithUrls?.length} image
                 {currentImagesWithUrls?.length !== 1 ? 's' : ''}
               </span>
@@ -654,7 +654,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
             <div className="mt-8">
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-semibold text-white">History</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">History</h3>
                   {/* {displayHistoryImages?.length > 0 && (
                     <ShadcnTooltip label={`Download ${displayHistoryImages.length} history images as ZIP`}>
                       <button
@@ -677,7 +677,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                   <div className="relative">
                     <button
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
-                      className="flex items-center gap-2 rounded-full bg-[#363636] px-4 py-2 text-sm text-white hover:bg-[#444444]"
+                      className="flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-900 hover:bg-gray-200 dark:bg-[#363636] dark:text-white dark:hover:bg-[#444444]"
                     >
                       <Filter className="h-4 w-4" />
                       <span>{getCurrentFilterLabel()}</span>
@@ -694,7 +694,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -10, scale: 0.95 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-white/10 bg-[#292929] py-2 shadow-lg"
+                          className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-black/10 bg-white py-2 shadow-lg dark:border-white/10 dark:bg-[#292929]"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {/* All Versions Option */}
@@ -703,8 +703,8 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                               setSelectedHistoryVersion('all');
                               setIsFilterOpen(false);
                             }}
-                            className={`flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#363636] ${
-                              selectedHistoryVersion === 'all' ? 'text-[#02C8C4]' : 'text-white'
+                            className={`flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-[#363636] ${
+                              selectedHistoryVersion === 'all' ? 'text-[#02C8C4]' : 'text-gray-900 dark:text-white'
                             }`}
                           >
                             <span>All Versions</span>
@@ -714,7 +714,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                           </button>
 
                           {/* Divider */}
-                          <div className="my-2 border-t border-white/10" />
+                          <div className="my-2 border-t border-black/10 dark:border-white/10" />
 
                           {/* Version Options */}
                           <div className="max-h-60 overflow-y-auto">
@@ -726,10 +726,10 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                                   setSelectedHistoryVersionIndex(index + 1);
                                   setIsFilterOpen(false);
                                 }}
-                                className={`flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#363636] ${
+                                className={`flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-[#363636] ${
                                   selectedHistoryVersion === versionInfo?.id
                                     ? 'text-[#02C8C4]'
-                                    : 'text-white'
+                                    : 'text-gray-900 dark:text-white'
                                 }`}
                               >
                                 <span>Version {index + 1}</span>
@@ -761,8 +761,8 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl bg-[#292929] p-8 text-center">
-                  <p className="text-[#D5D5D5]">
+                <div className="rounded-xl bg-gray-50 p-8 text-center dark:bg-[#292929]">
+                  <p className="text-gray-500 dark:text-[#D5D5D5]">
                     {selectedHistoryVersion === 'all'
                       ? 'No historical images found.'
                       : 'No images found for this version.'}
@@ -775,8 +775,8 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
 
         {/* Empty States */}
         {currentImagesWithUrls?.length === 0 && allHistoryImages?.length === 0 && (
-          <div className="rounded-xl bg-[#292929] p-8 text-center">
-            <p className="text-[#D5D5D5]">No images generated yet for this campaign.</p>
+          <div className="rounded-xl bg-gray-50 p-8 text-center dark:bg-[#292929]">
+            <p className="text-gray-500 dark:text-[#D5D5D5]">No images generated yet for this campaign.</p>
           </div>
         )}
       </div>

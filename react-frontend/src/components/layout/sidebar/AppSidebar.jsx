@@ -10,6 +10,7 @@ import {
   Library,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
+import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
 import brandIQDarkLogo from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
 import brandIQDarkLogoActive from '@/assets/layouts/appsidebar/brand-iq-dark-active.svg';
 import adStudioDarkLogo from '@/assets/layouts/appsidebar/ad-studio-dark.svg';
@@ -50,12 +51,12 @@ const navigationItems = [
     label: 'Ad Factory',
     link: '/adfactory',
   },
-  {
-    id: 'ai',
-    label: 'AI',
-    link: '/assistant',
-    lucideIcon: Bot,
-  },
+  // {
+  //   id: 'ai',
+  //   label: 'AI',
+  //   link: '/assistant',
+  //   lucideIcon: Bot,
+  // },
   {
     id: 'adstudio',
     icon: adStudioDarkLogo,
@@ -127,6 +128,8 @@ const AppSidebar = () => {
   } = useSidebar();
   const location = useLocation();
   const currentRoute = location.pathname;
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
+  
 
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
@@ -182,12 +185,16 @@ const AppSidebar = () => {
         // > */}
         layout
         transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className={`flex h-full w-full flex-col justify-between border-none ${currentRoute === '/assistant' ? 'bg-black' : 'bg-[#0F0F0F]'}`}
+        className={`flex h-full w-full flex-col justify-between bg-[#fcfcfc] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-black' : 'dark:bg-[#0F0F0F]'}`}
       >
         {/* Logo */}
         <div className="logo_and_history flex w-full flex-col gap-0">
           <div className="logo_app relative flex cursor-pointer items-center justify-between p-4 2xl:p-5.5">
             <div className="relative flex h-12 w-22 items-center justify-center 2xl:h-14 2xl:w-32">
+              {/* Soft brand glow behind the logo — light mode only. The gold/dark
+                  logo mark sits flat on the white sidebar, so this radial halo
+                  gives it depth. Hidden in dark mode where the bg is already dark. */}
+              <span className="pointer-events-none absolute h-10 w-10 rounded-full bg-[radial-gradient(circle,#15DCFF_0%,#6b72f8_55%,transparent_72%)] opacity-35 blur-xl 2xl:h-12 2xl:w-12 dark:hidden" />
               <AnimatePresence mode="wait">
                 {(isMobile ? openHistory : isSidebarOpen && openHistory) ? (
                   <motion.img
@@ -195,7 +202,7 @@ const AppSidebar = () => {
                       navigate(`${currentRoute}`);
                     }}
                     key="expanded-logo"
-                    src={AdsGPTLogo}
+                    src={ isDarkMode? AdsGPTLogo : AdsGPTLightModeLogo}
                     initial={{ opacity: 0, scale: 0.9, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: -5 }}
@@ -229,7 +236,7 @@ const AppSidebar = () => {
             {isSidebarOpen && (
               <SidebarTrigger>
                 <ShadcnTooltip label="Close Sidebar">
-                  <button className="right_icon prompt_selection_button absolute top-0.5 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full border border-transparent text-[#AFAFAF] hover:border-white/20 hover:text-white 2xl:h-8 2xl:min-w-8">
+                  <button className="right_icon prompt_selection_button absolute top-0.5 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full border border-transparent text-zinc-700 hover:border-black/20 hover:text-black 2xl:h-8 2xl:min-w-8 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:text-white">
                     <ChevronsLeft className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   </button>
                 </ShadcnTooltip>
@@ -289,11 +296,11 @@ const AppSidebar = () => {
                           (navActive ||
                             (item.link !== '/' && currentRoute.startsWith(item.link))) &&
                           !(item.id === 'adstudio' && isMySpace);
-                        return `group flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-[#AFAFAF] transition-all duration-200 hover:text-white 2xl:gap-0 ${trulyActive ? 'active dark:text-white' : ''}`;
+                        return `group flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-zinc-700 transition-all duration-200 hover:text-black 2xl:gap-0 dark:text-[#AFAFAF] dark:hover:text-white ${trulyActive ? 'active text-zinc-900 dark:text-white' : ''}`;
                       }}
                     >
                       <div
-                        className={`active_container relative flex h-7 w-7 items-center justify-center rounded-sm group-[.active]:bg-gradient-to-r group-[.active]:from-[#15DCFF] group-[.active]:to-[#6b72f8] 2xl:h-10 2xl:w-10 dark:hover:bg-[#2A2A2A]/70`}
+                        className={`active_container relative flex h-7 w-7 items-center justify-center rounded-sm group-[.active]:bg-gradient-to-r group-[.active]:from-[#0fafcb] group-[.active]:to-[#6b72f8] hover:bg-zinc-200 2xl:h-10 2xl:w-10 dark:group-[.active]:from-[#15DCFF] dark:hover:bg-[#2A2A2A]/70`}
                       >
                         {item.badge && (
                           // BETA uses an amber gradient to distinguish
@@ -310,10 +317,10 @@ const AppSidebar = () => {
                           </span>
                         )}
                         {item.lucideIcon ? (
-                          <item.lucideIcon className="w-4 text-white opacity-60 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6" />
+                          <item.lucideIcon className="w-4 text-zinc-700 opacity-80 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:text-white dark:opacity-60" />
                         ) : (
                           <img
-                            className="block w-4 opacity-60 brightness-0 invert group-hover:opacity-100 group-[.active]:hidden 2xl:w-6"
+                            className="block w-4 opacity-80 brightness-0 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:opacity-60 dark:invert"
                             src={item.icon}
                           />
                         )}
@@ -427,7 +434,7 @@ const AppSidebar = () => {
                       toggleSidebar();
                     }
                   }}
-                  className={`flex ${isSidebarOpen || openHistory ? 'w-full p-2' : 'h-9 w-9 py-1 2xl:h-12.5 2xl:w-12.5'} items-center justify-center rounded-full border-2 border-white/10 text-[#AFAFAF] hover:bg-gray-800/50 hover:text-white`}
+                  className={`flex ${isSidebarOpen || openHistory ? 'w-full p-2' : 'h-9 w-9 py-1 2xl:h-12.5 2xl:w-12.5'} items-center justify-center rounded-full border-2 border-black/10 text-zinc-600 hover:bg-zinc-100 hover:text-black dark:border-white/10 dark:text-[#AFAFAF] dark:hover:bg-gray-800/50 dark:hover:text-white`}
                 >
                   {(!isMobile ? !isSidebarOpen : !openHistory) ? (
                     <History className="w-3.5 2xl:w-5" />
@@ -439,7 +446,7 @@ const AppSidebar = () => {
                       className="flex w-full items-center gap-3.5 2xl:px-2 2xl:py-1"
                     >
                       <img src={rotateGradientIcon} className="h-3.5 2xl:h-5" />
-                      <p className="text-[10px] whitespace-nowrap text-white 2xl:text-sm">
+                      <p className="text-[10px] whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white">
                         Chat History
                       </p>
                     </motion.div>
@@ -476,8 +483,14 @@ const AppSidebar = () => {
             ) : (
               <div className="h-9 w-9 2xl:h-12.5 2xl:w-12.5" />
             )} */}
-            {currentRoute === '/adstudio' && activeAdStudioTabId !== 'adVideoNew' ? (
-              // Chat History button — unchanged
+            {currentRoute == '/adstudio' &&
+            activeAdStudioTabId !== 'adVideoNew' &&
+            activeAdStudioTabId !== 'adCreativeNew' ? (
+              // Chat History button — only meaningful on the legacy chat-style
+              // surfaces. The new AdCreativeNew (and AdVideoNew) flows are
+              // form-based, not conversational, so the History affordance is
+              // hidden there. The else-branch renders an empty spacer so the
+              // slot keeps its size and nothing below shifts.
               <ShadcnTooltip label="Chat History" side="right">
                 <button
                   onClick={() => {
@@ -488,7 +501,7 @@ const AppSidebar = () => {
                       toggleSidebar();
                     }
                   }}
-                  className={`flex ${isSidebarOpen || openHistory ? 'w-full p-2' : 'h-9 w-9 py-1 2xl:h-12.5 2xl:w-12.5'} items-center justify-center rounded-full border-2 border-white/10 text-[#AFAFAF] hover:bg-gray-800/50 hover:text-white`}
+                  className={`flex ${isSidebarOpen || openHistory ? 'w-full p-2' : 'h-9 w-9 py-1 2xl:h-12.5 2xl:w-12.5'} items-center justify-center rounded-full border-2 border-black/10 text-zinc-600 hover:bg-zinc-100 hover:text-black dark:border-white/10 dark:text-[#AFAFAF] dark:hover:bg-gray-800/50 dark:hover:text-white`}
                 >
                   {(!isMobile ? !isSidebarOpen : !openHistory) ? (
                     <History className="w-3.5 2xl:w-5" />
@@ -500,7 +513,7 @@ const AppSidebar = () => {
                       className="flex w-full items-center gap-3.5 2xl:px-2 2xl:py-1"
                     >
                       <img src={rotateGradientIcon} className="h-3.5 2xl:h-5" />
-                      <p className="text-[10px] whitespace-nowrap text-white 2xl:text-sm">
+                      <p className="text-[10px] whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white">
                         Chat History
                       </p>
                     </motion.div>
@@ -539,8 +552,8 @@ const AppSidebar = () => {
                   currentRoute === '/adstudio' &&
                   activeAdStudioTabId === 'adVideoNew' &&
                   activePage === 'myVideos'
-                    ? 'text-white'
-                    : 'text-[#AFAFAF] hover:text-white'
+                    ? 'text-zinc-900 dark:text-white'
+                    : 'text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
                 } ${isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'}`}
               >
                 <div
@@ -549,7 +562,7 @@ const AppSidebar = () => {
                     activeAdStudioTabId === 'adVideoNew' &&
                     activePage === 'myVideos'
                       ? 'mb-2 bg-gradient-to-r from-[#15DCFF] to-[#6b72f8]'
-                      : 'hover:bg-[#2A2A2A]/70'
+                      : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
                   }`}
                 >
                   <Library className="w-4 2xl:w-5" />
@@ -591,7 +604,7 @@ const AppSidebar = () => {
               </button> */}
                 <>
                   <button
-                    className={`border_white_gradient_2px relative inline-flex h-9 w-9 items-center justify-center rounded-full p-1 hover:bg-gray-800/50 2xl:h-12.5 2xl:w-12.5`}
+                    className={`border_white_gradient_2px relative inline-flex h-9 w-9 items-center justify-center rounded-full p-1 hover:bg-gray-300 2xl:h-12.5 2xl:w-12.5 dark:hover:bg-gray-800/50`}
                   >
                     {userData?.profileImage ? (
                       <img
@@ -633,7 +646,7 @@ const AppSidebar = () => {
           </div>
         </div>
 
-        <div className="absolute right-0 h-full w-px bg-gradient-to-b from-white/0 via-white to-white/0 opacity-30"></div>
+        <div className="from-to-black/10 absolute right-0 h-full w-px bg-gradient-to-b from-black/10 via-black/40 opacity-30 dark:from-white/0 dark:via-white dark:to-white/0"></div>
       </motion.div>
     </Sidebar>
   );

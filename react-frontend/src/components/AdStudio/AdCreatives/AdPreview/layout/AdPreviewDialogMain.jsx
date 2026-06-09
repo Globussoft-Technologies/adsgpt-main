@@ -29,7 +29,7 @@ const adComponents = {
 // Ad options section component
 const AdOptionsSection = ({ selectedAd, title, adTypes, onAdClick, adCreativeData }) => (
   <div className="feeds_section_container mb-5 w-full">
-    <h3 className="mb-3 text-base font-semibold text-white">{title}</h3>
+    <h3 className="mb-3 text-base font-semibold text-zinc-900 dark:text-white">{title}</h3>
     <div className="flex w-full grid-cols-1 gap-5 overflow-x-auto md:grid md:grid-cols-2 md:overflow-x-hidden lg:grid-cols-3">
       {adTypes?.map((adType) => {
         const AdComponent = adComponents[adType];
@@ -37,7 +37,7 @@ const AdOptionsSection = ({ selectedAd, title, adTypes, onAdClick, adCreativeDat
           <div
             key={adType}
             onClick={() => onAdClick(adType)}
-            className={`flex w-full max-w-[300px] min-w-[200px] cursor-pointer items-center justify-center rounded-xl p-4 md:min-w-auto ${selectedAd === adType ? 'rounded-xl border border-[#5E66F5] bg-[#0A0A0A]/50' : 'bg-[#535353]/50'} `}
+            className={`flex w-full max-w-[300px] min-w-[200px] cursor-pointer items-center justify-center rounded-xl p-4 md:min-w-auto ${selectedAd === adType ? 'rounded-xl border border-[#5E66F5] bg-zinc-100 dark:bg-[#0A0A0A]/50' : 'bg-zinc-200 dark:bg-[#535353]/50'} `}
           >
             <AdComponent adCreativesData={adCreativeData} />
           </div>
@@ -105,9 +105,9 @@ function AdPreviewDialogMain({
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger className=""></DialogTrigger>
 
-      <DialogContent className="flex h-[90vh] w-full max-w-[95vw] flex-col overflow-x-hidden rounded-3xl !bg-[#0D0D0D]/30 !backdrop-blur-[50px] sm:scale-[0.65] sm:p-6 md:max-w-[90vw] lg:h-[140vh] lg:max-h-[150vh] lg:max-w-7xl 2xl:h-fit 2xl:max-h-full 2xl:scale-100">
+      <DialogContent className="flex h-[90vh] w-full max-w-[95vw] flex-col overflow-x-hidden rounded-3xl !bg-white !backdrop-blur-[50px] sm:scale-[0.65] sm:p-6 md:max-w-[90vw] lg:h-[140vh] lg:max-h-[150vh] lg:max-w-7xl 2xl:h-fit 2xl:max-h-full 2xl:scale-100 dark:!bg-[#0D0D0D]/30">
         {/* Heading */}
-        <div className="flex items-center justify-center gap-1">
+        <div className="flex items-center justify-center gap-1 text-zinc-900 dark:text-white">
           <FaPlay className="h-4 w-4" />
           <h2 className="font-public text-center text-base font-medium">Ad Preview</h2>
         </div>
@@ -119,8 +119,8 @@ function AdPreviewDialogMain({
               <img src={FacbookLogo} alt="Facebook" />
             </div>
             <div>
-              <p className="text-sm">Facebook</p>
-              <p className="text-sm text-gray-500 dark:text-white">
+              <p className="text-sm text-zinc-900 dark:text-white">Facebook</p>
+              <p className="text-sm text-zinc-500 dark:text-white">
                 {selectedAd === 'Reel3'
                   ? 'Story'
                   : selectedAd == 'Reel2'
@@ -138,13 +138,13 @@ function AdPreviewDialogMain({
           <div className="col-span-6 grid grid-cols-6 gap-8 sm:col-span-12 sm:grid-cols-12">
             {/* Left Column: Selected Ad / Default */}
             <div className="left_container_preview col-span-6 h-full max-h-[calc(140vh-150px)] overflow-y-auto sm:col-span-12 md:col-span-3 2xl:max-h-[calc(100vh-200px)]">
-              <div className="rounded-3xl border-2 border-white/20 p-5 py-14">
+              <div className="rounded-3xl border-2 border-black/10 p-5 py-14 dark:border-white/20">
                 {renderSelectedAd()}
               </div>
             </div>
 
             {/* Right Column: Options */}
-            <div className="col-span-6 flex max-h-[calc(140vh-150px)] w-full flex-col overflow-y-auto rounded-3xl border-2 border-white/20 p-5 text-black sm:col-span-12 md:col-span-9 2xl:max-h-[calc(100vh-200px)]">
+            <div className="col-span-6 flex max-h-[calc(140vh-150px)] w-full flex-col overflow-y-auto rounded-3xl border-2 border-black/10 p-5 text-black sm:col-span-12 md:col-span-9 2xl:max-h-[calc(100vh-200px)] dark:border-white/20">
               <AdOptionsSection
                 selectedAd={selectedAd}
                 title="Feeds"

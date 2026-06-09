@@ -38,10 +38,11 @@ function getQueryParam(query, names) {
   return undefined;
 }
 const googleRules = require("../../config/googleAuditRulesConfig");
+const { getGoogleCtas, GOOGLE_CTA_MAP } = require("../../config/googleCtaConfig");
 const { updateGoogleAdStatusSchema, createCampaignSchema, createAdGroupSchema, createAdSchema, deleteGoogleCampaignSchema } = require("../../Validations/google.validator");
 
 const REDIS_TTL = 7200;
-const VOLATILE_TTL = 300;
+const VOLATILE_TTL = 900;
 
 // Cache key prefixes whose payloads embed status — invalidated on status change.
 const STATUS_CACHE_PREFIXES = [
@@ -131,8 +132,7 @@ function mapGoogleAccountErrorStatus(err) {
   const statusCode = err.response?.status;
   const errorPayload = err.response?.data?.error || {};
   const errorStatus = errorPayload.status || errorPayload.code || "";
-  const details = errorPayload.details?.[0]?.errors?.[0] || {};
-  const errorCode = details.errorCode ? Object.keys(details.errorCode)[0] : "";
+  const errorCode = getGoogleAdsErrorReason(err);
 
   const isRestricted =
     statusCode === 403 ||
@@ -140,9 +140,49 @@ function mapGoogleAccountErrorStatus(err) {
     errorStatus === "DEVELOPER_TOKEN_NOT_APPROVED" ||
     errorStatus === "ACCESS_DENIED" ||
     errorCode === "DEVELOPER_TOKEN_PROBATION_ORDER_ERROR" ||
+    errorCode === "DEVELOPER_TOKEN_PROHIBITED" ||
+    errorCode === "DEVELOPER_TOKEN_NOT_APPROVED" ||
     errorCode === "QUOTA_ERROR";
 
   return isRestricted ? "PRODUCTION_BLOCKED" : "INACCESSIBLE";
+}
+
+function getGoogleAdsErrorReason(err) {
+  const googleAdsErrors =
+    err.response?.data?.error?.details?.flatMap((detail) => detail.errors || []) || [];
+  const firstErrorCode = googleAdsErrors[0]?.errorCode || {};
+  const nestedReason = Object.values(firstErrorCode).find(Boolean);
+  const topLevelStatus = err.response?.data?.error?.status;
+  return nestedReason || topLevelStatus || null;
+}
+
+function isGoogleAdsPermissionRestricted(err) {
+  const statusCode = err.response?.status;
+  const reason = getGoogleAdsErrorReason(err);
+  return (
+    statusCode === 403 &&
+    [
+      "PERMISSION_DENIED",
+      "DEVELOPER_TOKEN_PROHIBITED",
+      "DEVELOPER_TOKEN_NOT_APPROVED",
+      "DEVELOPER_TOKEN_PROBATION_ORDER_ERROR",
+      "ACCESS_DENIED",
+    ].includes(reason)
+  );
+}
+
+function isPostableGoogleAccount(account) {
+  const hasName = account?.name && account.name !== String(account?.id);
+  return (
+    account?.status === "ENABLED" &&
+    formatAccountStatus(account?.rawStatus) === "ENABLED" &&
+    account?.isManager !== true &&
+    account?.isTestAccount !== true &&
+    account?.status !== "PRODUCTION_BLOCKED" &&
+    account?.errorReason == null &&
+    account?.hierarchyLocked !== true &&
+    hasName
+  );
 }
 
 function isGoogleTokenRestrictedMessage(message) {
@@ -285,41 +325,34 @@ function datePresetToRange(preset) {
 async function resolveManagerForAccount(customerId, accessToken, userId = null) {
   const tid = normalizeCustomerId(customerId);
   const cacheKey = `googleManagerMap:${tid}`;
-  
+
   try {
-    // 1. Check Redis cache first if userId or tid is provided
+    // 1. Redis cache (fastest)
     if (redisClient) {
       const cachedManager = await redisClient.get(cacheKey);
-      if (cachedManager) {
-        return cachedManager === "SELF" ? tid : cachedManager;
+      if (cachedManager) return cachedManager === "SELF" ? tid : cachedManager;
+    }
+
+    // 2. MongoDB cache (survives Redis restart)
+    if (userId) {
+      const dbUser = await GoogleUsers.findOne({ userId }).lean();
+      const dbManager = dbUser?.managerMap?.[tid];
+      if (dbManager) {
+        const resolved = dbManager === "SELF" ? tid : dbManager;
+        if (redisClient) await redisClient.set(cacheKey, dbManager, "EX", 86400);
+        return resolved;
       }
     }
 
-    // 2. Try to find if this account has a manager via the customer resource
-    const resp = await axios.post(
-      `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-      { query: "SELECT customer_client.manager_customer FROM customer_client WHERE customer_client.id = " + tid + " LIMIT 1" },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-          "login-customer-id": tid,
-          "Content-Type": "application/json",
-        },
-      }
-    ).catch(() => null);
-
-    // 3. If we can't find it directly, check accessible customers
+    // 3. Parallel: check accessible customers to find manager
     const accessibleResp = await axios.get("https://googleads.googleapis.com/v23/customers:listAccessibleCustomers", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
       },
     });
-    
     const candidates = (accessibleResp.data.resourceNames || []).map(rn => rn.split("/").pop());
-    
-    // Parallel check for candidates
+
     const checkTasks = candidates.map(async (managerId) => {
       try {
         const checkResp = await axios.post(
@@ -335,18 +368,23 @@ async function resolveManagerForAccount(customerId, accessToken, userId = null) 
             timeout: 5000,
           }
         );
-        const results = checkResp.data?.[0]?.results || [];
-        return results.length > 0 ? managerId : null;
+        return (checkResp.data?.[0]?.results || []).length > 0 ? managerId : null;
       } catch (e) {
         return null;
       }
     });
 
     const results = await Promise.all(checkTasks);
-    const foundManager = results.find(m => m !== null);
+    const foundManager = results.find(m => m !== null) || null;
+    const cacheValue = foundManager && foundManager !== tid ? foundManager : "SELF";
 
-    if (foundManager && redisClient) {
-      await redisClient.set(cacheKey, foundManager === tid ? "SELF" : foundManager, "EX", 86400); // Cache for 24 hours
+    // Persist to both Redis and MongoDB
+    if (redisClient) await redisClient.set(cacheKey, cacheValue, "EX", 86400);
+    if (userId) {
+      GoogleUsers.findOneAndUpdate(
+        { userId },
+        { $set: { [`managerMap.${tid}`]: cacheValue } }
+      ).catch(() => {});
     }
 
     return foundManager || null;
@@ -386,7 +424,7 @@ class GoogleAdController {
     try {
       const userId = req.user.user_id;
 
-      const cacheKey = `googleAdAccounts:${userId}`;
+      const cacheKey = `googleAdAccounts:${userId}:postable`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
@@ -405,11 +443,31 @@ class GoogleAdController {
         const status = axiosErr.response?.status;
         const detail = JSON.stringify(axiosErr.response?.data || axiosErr.message);
         logger.error(`Google listAccessibleCustomers failed [${status}]: ${detail}`);
-        return res.status(status || 500).json({
-          status: false,
-          error: status === 401 ? "Google access token expired. Please reconnect your Google account." : "Failed to fetch ad accounts from Google",
-          details: detail,
-        });
+        if (isGoogleAdsPermissionRestricted(axiosErr)) {
+          // Basic access requires login-customer-id. Retry using stored customerIds.
+          const storedIds = googleUser.customerIds || [];
+          if (storedIds.length > 0) {
+            tokenResp = { data: { resourceNames: storedIds.map((id) => `customers/${id}`) } };
+          } else {
+            // No stored IDs and PERMISSION_DENIED — truly locked, can't list accounts
+            const response = {
+              status: true,
+              adAccounts: [],
+              count: 0,
+              hasNoAccount: true,
+              noAccountReason: "google_ads_developer_token_restricted",
+              message: "Google Ads is connected, but no accessible accounts found. Please reconnect your Google account.",
+            };
+            await redisClient.set(cacheKey, JSON.stringify(response), "EX", VOLATILE_TTL);
+            return res.status(200).json(response);
+          }
+        } else {
+          return res.status(status || 500).json({
+            status: false,
+            error: status === 401 ? "Google access token expired. Please reconnect your Google account." : "Failed to fetch ad accounts from Google",
+            details: detail,
+          });
+        }
       }
 
       const resourceNames = tokenResp.data?.resourceNames || [];
@@ -558,25 +616,19 @@ class GoogleAdController {
         }
       });
 
-      const enabledAccounts = accounts.filter((a) => a.status === "ENABLED");
-      const accessibleAccounts = accounts.filter((a) => a.status !== "PRODUCTION_BLOCKED");
+      const postableAccounts = accounts.filter(isPostableGoogleAccount);
       const hasProductionBlockedAccounts = accounts.some((a) => a.status === "PRODUCTION_BLOCKED");
-      const allDeactivated =
-        accounts.length > 0 &&
-        enabledAccounts.length === 0 &&
-        accessibleAccounts.length === 0 &&
-        !hasProductionBlockedAccounts;
 
       const response = {
         status: true,
-        adAccounts: accounts,
-        count: accounts.length,
-        hasNoAccount: accounts.length === 0,
-        allDeactivated: accounts.length > 0 && accounts.every(a => a.status !== "ENABLED"),
-        hasProductionBlockedAccounts: accounts.some((a) => a.status === "PRODUCTION_BLOCKED"),
-        message: accounts.length > 0 
+        adAccounts: postableAccounts,
+        count: postableAccounts.length,
+        hasNoAccount: postableAccounts.length === 0,
+        allDeactivated: postableAccounts.length === 0 && accounts.length > 0,
+        hasProductionBlockedAccounts,
+        message: postableAccounts.length > 0
           ? "Google Ads accounts fetched successfully."
-          : "No Google Ads accounts found for this user."
+          : "No postable Google Ads accounts found for this user."
       };
 
       await redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL);
@@ -615,21 +667,10 @@ class GoogleAdController {
 
       let accountsToFetch = [];
 
-      // 1. Get base accessible customers
-      const tokenResp = await axios.get("https://googleads.googleapis.com/v23/customers:listAccessibleCustomers", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-        },
-      });
-      const accessibleCustomers = (tokenResp.data?.resourceNames || []).map(r =>
-        normalizeCustomerId(r.replace("customers/", ""))
-      );
-
       if (adAccountId) {
-        // Mode A: Specific Account
+        // Mode A: Specific Account — skip listAccessibleCustomers entirely
         const tid = normalizeCustomerId(adAccountId);
-        let resolvedMcc = await resolveManagerForAccount(tid, accessToken);
+        let resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
         const mccId = normalizeCustomerId(resolvedMcc || tid);
         accountsToFetch.push({ id: tid, loginCustomerId: mccId });
 
@@ -660,8 +701,13 @@ class GoogleAdController {
         }
       } else {
         // Mode B: Discovery Mode (All accounts + children)
+        const tokenResp = await axios.get("https://googleads.googleapis.com/v23/customers:listAccessibleCustomers", {
+          headers: { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN },
+        });
+        const accessibleCustomers = (tokenResp.data?.resourceNames || []).map(r =>
+          normalizeCustomerId(r.replace("customers/", ""))
+        );
 
-        
         const discoveryTasks = accessibleCustomers.map(async (cid) => {
           const accs = [{ id: cid, loginCustomerId: cid }]; // Use itself as loginCustomerId for discovery
           try {
@@ -744,10 +790,11 @@ class GoogleAdController {
                   campaign.advertising_channel_type,
                   campaign.bidding_strategy_type,
                   campaign_budget.amount_micros,
-                  campaign_budget.period
+                  campaign_budget.period,
+                  customer.test_account
                 FROM campaign
                 WHERE campaign.status != 'REMOVED'
-                  AND campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'PERFORMANCE_MAX', 'MULTI_CHANNEL')
+                  AND customer.test_account = FALSE
                 ORDER BY campaign.id DESC
               `,
             },
@@ -760,21 +807,29 @@ class GoogleAdController {
               },
             }
           );
-          
+
           const results = resp.data?.[0]?.results || [];
-          return results.map(r => ({
-            id: String(r.campaign.id),
-            name: r.campaign.name,
-            status: robustFormatStatus(r.campaign.status),
-            primaryStatus: r.campaign.primary_status || null,
-            servingStatus: r.campaign.serving_status || null,
-            channelType: robustFormatChannelType(r.campaign.advertising_channel_type),
-            objective: deriveObjective(r.campaign.advertising_channel_type),
-            biddingStrategy: robustFormatBiddingStrategy(r.campaign.bidding_strategy_type),
-            budgetMicros: r.campaign_budget?.amount_micros || 0,
-            budget: formatBudget(r.campaign_budget?.amount_micros),
-            budgetPeriod: r.campaign_budget?.period || "DAILY",
-          }));
+          return results.map(r => {
+            const c = r.campaign;
+            const channelType = robustFormatChannelType(c.advertisingChannelType || c.advertising_channel_type);
+            const primaryStatus = c.primaryStatus || c.primary_status;
+            const servingStatus = c.servingStatus || c.serving_status;
+            const biddingStrategyType = c.biddingStrategyType || c.bidding_strategy_type;
+            const budget = r.campaignBudget || r.campaign_budget;
+            return {
+              id: String(c.id),
+              name: c.name,
+              status: robustFormatStatus(c.status),
+              primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
+              servingStatus: (servingStatus && servingStatus !== "UNKNOWN" && servingStatus !== "UNSPECIFIED") ? servingStatus : null,
+              channelType: (channelType && channelType !== "UNKNOWN") ? channelType : null,
+              objective: deriveObjective(c.advertisingChannelType || c.advertising_channel_type),
+              biddingStrategy: robustFormatBiddingStrategy(biddingStrategyType),
+              budgetMicros: budget?.amountMicros || budget?.amount_micros || 0,
+              budget: formatBudget(budget?.amountMicros || budget?.amount_micros),
+              budgetPeriod: budget?.period || "DAILY",
+            };
+          });
         };
 
         const fetchAdGroups = async (targetId, loginId) => {
@@ -793,7 +848,7 @@ class GoogleAdController {
                     campaign.id,
                     campaign.name
                   FROM ad_group
-                  WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'PERFORMANCE_MAX', 'MULTI_CHANNEL')
+                  WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL')
                 `,
               },
               {
@@ -806,16 +861,67 @@ class GoogleAdController {
               }
             );
             const results = resp.data?.[0]?.results || [];
-            return results.map(r => ({
-              id: String(r.ad_group.id),
-              name: r.ad_group.name,
-              status: robustFormatStatus(r.ad_group.status),
-              type: r.ad_group.type,
-              targetCpa: r.ad_group.target_cpa_micros ? r.ad_group.target_cpa_micros / 1e6 : null,
-              targetRoas: r.ad_group.target_roas || null,
-              campaignId: String(r.campaign.id),
-              campaignName: r.campaign.name,
-            }));
+            return results.map(r => {
+              const ag = r.adGroup || r.ad_group;
+              return {
+                id: String(ag.id),
+                name: ag.name,
+                status: robustFormatStatus(ag.status),
+                type: ag.type,
+                targetCpa: (ag.targetCpaMicros || ag.target_cpa_micros) ? (ag.targetCpaMicros || ag.target_cpa_micros) / 1e6 : null,
+                targetRoas: ag.targetRoas || ag.target_roas || null,
+                campaignId: String(r.campaign.id),
+                campaignName: r.campaign.name,
+                isPmax: false,
+              };
+            });
+          } catch (e) {
+            return [];
+          }
+        };
+
+        const fetchAssetGroups = async (targetId, loginId) => {
+          try {
+            const resp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${targetId}/googleAds:searchStream`,
+              {
+                query: `
+                  SELECT
+                    asset_group.id,
+                    asset_group.name,
+                    asset_group.status,
+                    asset_group.primary_status,
+                    campaign.id,
+                    campaign.name
+                  FROM asset_group
+                  WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+                    AND asset_group.status != 'REMOVED'
+                `,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+                  "login-customer-id": loginId,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            const results = resp.data?.[0]?.results || [];
+            return results.map(r => {
+              const ag = r.assetGroup || r.asset_group;
+              const primaryStatus = ag.primaryStatus || ag.primary_status;
+              return {
+                id: String(ag.id),
+                name: ag.name,
+                status: robustFormatStatus(ag.status),
+                primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
+                type: "ASSET_GROUP",
+                campaignId: String(r.campaign.id),
+                campaignName: r.campaign.name,
+                isPmax: true,
+              };
+            });
           } catch (e) {
             return [];
           }
@@ -825,20 +931,23 @@ class GoogleAdController {
           const tid = normalizeCustomerId(acc.id);
           const lid = normalizeCustomerId(acc.loginCustomerId || acc.id);
 
-          // Parallel fetch campaigns and ad groups
-          let [campaigns, adGroups] = await Promise.all([
+          // Parallel fetch campaigns, ad groups, and asset groups (PMax)
+          let [campaigns, adGroups, assetGroups] = await Promise.all([
             fetchCampaigns(tid, lid),
-            fetchAdGroups(tid, lid)
+            fetchAdGroups(tid, lid),
+            fetchAssetGroups(tid, lid),
           ]);
 
           // If no campaigns found with MCC, try with account itself as login customer
           if (!campaigns.length && lid !== tid) {
             try {
-              const [retryCampaigns, retryAdGroups] = await Promise.all([
+              const [retryCampaigns, retryAdGroups, retryAssetGroups] = await Promise.all([
                 fetchCampaigns(tid, tid),
-                fetchAdGroups(tid, tid)
+                fetchAdGroups(tid, tid),
+                fetchAssetGroups(tid, tid),
               ]);
               if (retryCampaigns.length) {
+                assetGroups = retryAssetGroups;
                 campaigns = retryCampaigns;
                 adGroups = retryAdGroups;
                 acc.loginCustomerId = tid; // Update login customer ID for the response
@@ -848,8 +957,9 @@ class GoogleAdController {
             }
           }
 
+          // Merge ad groups + asset groups (PMax) into one map keyed by campaignId
           const adGroupsByCampaign = {};
-          adGroups.forEach(ag => {
+          [...adGroups, ...assetGroups].forEach(ag => {
             if (!adGroupsByCampaign[ag.campaignId]) adGroupsByCampaign[ag.campaignId] = [];
             adGroupsByCampaign[ag.campaignId].push(ag);
           });
@@ -923,54 +1033,59 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      }
+      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
 
-      const resp = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-        {
-          query: `
-            SELECT
-              ad_group.id,
-              ad_group.name,
-              ad_group.status,
-              ad_group.type,
-              ad_group.target_cpa_micros,
-              ad_group.target_roas,
-              campaign.id,
-              campaign.name
-            FROM ad_group
-            WHERE campaign.id = ${sanitizeId(campaignId)}
-          `,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-            "login-customer-id": lid,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const cleanCampaignId = sanitizeId(campaignId);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
-      const results = resp.data?.[0]?.results || [];
-      const adGroups = results.map((r) => {
-        const ag = r.adGroup || r.ad_group || {};
-        const camp = r.campaign || {};
-        return {
-          id: String(ag.id || ""),
-          name: ag.name || "",
-          status: robustFormatStatus(ag.status),
-          type: ag.type || "",
-          targetCpa: ag.targetCpaMicros ? ag.targetCpaMicros / 1e6 : (ag.target_cpa_micros ? ag.target_cpa_micros / 1e6 : null),
-          targetRoas: ag.targetRoas || ag.target_roas || null,
-          campaignId: String(camp.id || ""),
-          campaignName: camp.name || "",
-        };
-      });
+      // Run both ad_group and asset_group queries in parallel — no pre-detection call needed
+      const [adGroupResp, assetGroupResp] = await Promise.all([
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
+          { headers }
+        ).catch(() => ({ data: [] })),
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+          { query: `SELECT asset_group.id, asset_group.name, asset_group.status, asset_group.primary_status, campaign.id, campaign.name FROM asset_group WHERE campaign.id = ${cleanCampaignId} AND asset_group.status != 'REMOVED'` },
+          { headers }
+        ).catch(() => ({ data: [] })),
+      ]);
+
+      const agResults = adGroupResp.data?.[0]?.results || [];
+      const assetResults = assetGroupResp.data?.[0]?.results || [];
+      const isPmax = assetResults.length > 0 && agResults.length === 0;
+
+      const adGroups = isPmax
+        ? assetResults.map(r => {
+            const ag = r.assetGroup || r.asset_group || {};
+            const camp = r.campaign || {};
+            const primaryStatus = ag.primaryStatus || ag.primary_status;
+            return {
+              id: String(ag.id || ""),
+              name: ag.name || "",
+              status: robustFormatStatus(ag.status),
+              primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
+              type: "ASSET_GROUP",
+              campaignId: String(camp.id || ""),
+              campaignName: camp.name || "",
+              isPmax: true,
+            };
+          })
+        : agResults.map(r => {
+            const ag = r.adGroup || r.ad_group || {};
+            const camp = r.campaign || {};
+            return {
+              id: String(ag.id || ""),
+              name: ag.name || "",
+              status: robustFormatStatus(ag.status),
+              type: ag.type || "",
+              targetCpa: ag.targetCpaMicros ? ag.targetCpaMicros / 1e6 : (ag.target_cpa_micros ? ag.target_cpa_micros / 1e6 : null),
+              targetRoas: ag.targetRoas || ag.target_roas || null,
+              campaignId: String(camp.id || ""),
+              campaignName: camp.name || "",
+              isPmax: false,
+            };
+          });
 
       const response = {
         status: true,
@@ -1019,80 +1134,116 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      }
+      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
 
-      const resp = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-        {
+      const cleanCampaignId = sanitizeId(campaignId);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
+
+      // Run both PMax and standard ad queries in parallel — no pre-detection call
+      const [pmaxResp, standardResp] = await Promise.all([
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
           query: `
             SELECT
-              ad_group_ad.ad.id,
-              ad_group_ad.ad.name,
-              ad_group_ad.status,
-              ad_group_ad.ad.type,
-              ad_group_ad.ad.final_urls,
-              ad_group_ad.ad.responsive_search_ad.headlines,
-              ad_group_ad.ad.responsive_search_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.headlines,
-              ad_group_ad.ad.responsive_display_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.marketing_images,
-              ad_group_ad.ad.responsive_display_ad.logo_images,
-              ad_group_ad.ad.responsive_display_ad.business_name,
-              ad_group.id,
-              ad_group.name,
-              campaign.id,
-              campaign.name
-            FROM ad_group_ad
-            WHERE campaign.id = ${sanitizeId(campaignId)}
-              AND campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'PERFORMANCE_MAX', 'MULTI_CHANNEL')
-              AND ad_group_ad.ad.type IN ('RESPONSIVE_SEARCH_AD', 'RESPONSIVE_DISPLAY_AD')
+              asset_group_asset.field_type, asset_group_asset.status,
+              asset_group.id, asset_group.name, asset_group.status, asset_group.final_urls,
+              asset.id, asset.name, asset.type,
+              asset.text_asset.text, asset.image_asset.full_size.url, asset.image_asset.mime_type,
+              campaign.id, campaign.name
+            FROM asset_group_asset
+            WHERE campaign.id = ${cleanCampaignId} AND asset_group_asset.status != 'REMOVED'
           `,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-            "login-customer-id": lid,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+        }, { headers }).catch(() => ({ data: [] })),
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
+          query: `
+            SELECT
+              ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.type,
+              ad_group_ad.ad.final_urls,
+              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_display_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images,
+              ad_group_ad.ad.responsive_display_ad.business_name,
+              ad_group.id, ad_group.name, campaign.id, campaign.name
+            FROM ad_group_ad
+            WHERE campaign.id = ${cleanCampaignId} AND ad_group_ad.status != 'REMOVED'
+          `,
+        }, { headers }).catch(() => ({ data: [] })),
+      ]);
 
-      const results = resp.data?.[0]?.results || [];
-      const ads = results.map((r) => {
-        const aga = r.adGroupAd || r.ad_group_ad || {};
-        const ad = aga.ad || {};
-        const ag = r.adGroup || r.ad_group || {};
-        const camp = r.campaign || {};
-        const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
-        const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
-        const adType = ad.type || "";
-        return {
-          id: String(ad.id || ""),
-          name: ad.name || "",
-          status: robustFormatStatus(aga.status),
-          type: adType,
-          finalUrls: ad.finalUrls || ad.final_urls || [],
-          adGroupId: String(ag.id || ""),
-          adGroupName: ag.name || "",
-          campaignId: String(camp.id || ""),
-          campaignName: camp.name || "",
-          content: adType === "RESPONSIVE_SEARCH_AD" ? {
-            headlines: (rsa.headlines || []).map(h => h.text),
-            descriptions: (rsa.descriptions || []).map(d => d.text),
-          } : {
-            headlines: (rda.headlines || []).map(h => h.text),
-            descriptions: (rda.descriptions || []).map(d => d.text),
-            marketingImages: (rda.marketingImages || rda.marketing_images || []).map(i => i.url || i.asset),
-            logoImages: (rda.logoImages || rda.logo_images || []).map(i => i.url || i.asset),
-            businessName: rda.businessName || rda.business_name || "",
-          },
-        };
-      });
+      const pmaxResults = pmaxResp.data?.[0]?.results || [];
+      const standardResults = standardResp.data?.[0]?.results || [];
+      const isPmax = pmaxResults.length > 0;
+
+      let ads = [];
+
+      if (isPmax) {
+        const resp = { data: pmaxResp.data };
+        const results = resp.data?.[0]?.results || [];
+        const byGroup = {};
+        results.forEach(r => {
+          const ag = r.assetGroup || r.asset_group || {};
+          const asset = r.asset || {};
+          const aga = r.assetGroupAsset || r.asset_group_asset || {};
+          const fieldType = aga.fieldType || aga.field_type || "";
+          const gid = String(ag.id || "");
+          const agFinalUrls = ag.finalUrls || ag.final_urls || [];
+          if (!byGroup[gid]) {
+            byGroup[gid] = {
+              id: gid,
+              name: ag.name || "",
+              status: robustFormatStatus(ag.status),
+              type: "ASSET_GROUP",
+              isPmax: true,
+              campaignId: String((r.campaign || {}).id || ""),
+              campaignName: (r.campaign || {}).name || "",
+              finalUrls: agFinalUrls,
+              headlines: [],
+              descriptions: [],
+              images: [],
+              logos: [],
+            };
+          }
+          if (!byGroup[gid].finalUrls.length && agFinalUrls.length) {
+            byGroup[gid].finalUrls = agFinalUrls;
+          }
+          const text = (asset.textAsset || asset.text_asset)?.text;
+          const imgData = asset.imageAsset || asset.image_asset;
+          const imageUrl = imgData?.fullSize?.url || imgData?.full_size?.url;
+          const mimeType = imgData?.mimeType || imgData?.mime_type || "";
+          if (fieldType === "HEADLINE" && text) byGroup[gid].headlines.push(text);
+          else if (fieldType === "DESCRIPTION" && text) byGroup[gid].descriptions.push(text);
+          else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
+            byGroup[gid].images.push({ url: imageUrl, mimeType, fieldType });
+          } else if ((fieldType === "LOGO" || fieldType === "LANDSCAPE_LOGO") && imageUrl) {
+            byGroup[gid].logos.push({ url: imageUrl, mimeType, fieldType });
+          }
+        });
+        ads = Object.values(byGroup);
+      } else {
+        ads = standardResults.map((r) => {
+          const aga = r.adGroupAd || r.ad_group_ad || {};
+          const ad = aga.ad || {};
+          const ag = r.adGroup || r.ad_group || {};
+          const camp = r.campaign || {};
+          const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
+          const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
+          const adType = ad.type || "";
+          const headlines = adType === "RESPONSIVE_SEARCH_AD"
+            ? (rsa.headlines || []).map(h => h.text)
+            : (rda.headlines || []).map(h => h.text);
+          const descriptions = adType === "RESPONSIVE_SEARCH_AD"
+            ? (rsa.descriptions || []).map(d => d.text)
+            : (rda.descriptions || []).map(d => d.text);
+          const finalUrls = ad.finalUrls || ad.final_urls || [];
+          return {
+            id: String(ad.id || ""),
+            status: robustFormatStatus(aga.status),
+            headline: headlines[0] || "",
+            description: descriptions[0] || "",
+            finalUrl: finalUrls[0] || "",
+          };
+        });
+      }
 
       const response = {
         status: true,
@@ -1101,6 +1252,7 @@ class GoogleAdController {
         accountId: tid,
         campaignId: String(campaignId),
         loginCustomerId: lid,
+        isPmax,
       };
 
       await redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL);
@@ -1141,75 +1293,99 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      }
+      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
 
-      const resp = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-        {
+      const cleanAdGroupId = sanitizeId(adGroupId);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
+
+      // Run both PMax and standard queries in parallel — no pre-detection call
+      const [pmaxResp, standardResp] = await Promise.all([
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
           query: `
             SELECT
-              ad_group_ad.ad.id,
-              ad_group_ad.ad.name,
-              ad_group_ad.status,
-              ad_group_ad.ad.type,
-              ad_group_ad.ad.final_urls,
-              ad_group_ad.ad.responsive_search_ad.headlines,
-              ad_group_ad.ad.responsive_search_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.headlines,
-              ad_group_ad.ad.responsive_display_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.marketing_images,
-              ad_group_ad.ad.responsive_display_ad.logo_images,
-              ad_group_ad.ad.responsive_display_ad.business_name,
-              ad_group.id,
-              ad_group.name
-            FROM ad_group_ad
-            WHERE ad_group.id = ${sanitizeId(adGroupId)}
-              AND campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'PERFORMANCE_MAX', 'MULTI_CHANNEL')
-              AND ad_group_ad.ad.type IN ('RESPONSIVE_SEARCH_AD', 'RESPONSIVE_DISPLAY_AD')
+              asset_group_asset.field_type, asset_group_asset.status,
+              asset_group.id, asset_group.name, asset_group.status, asset_group.final_urls,
+              asset.id, asset.name, asset.type,
+              asset.text_asset.text, asset.image_asset.full_size.url, asset.image_asset.mime_type,
+              campaign.id, campaign.name
+            FROM asset_group_asset
+            WHERE asset_group.id = ${cleanAdGroupId} AND asset_group_asset.status != 'REMOVED'
           `,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-            "login-customer-id": lid,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+        }, { headers }).catch(() => ({ data: [] })),
+        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
+          query: `
+            SELECT
+              ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.type,
+              ad_group_ad.ad.final_urls,
+              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_display_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images,
+              ad_group_ad.ad.responsive_display_ad.business_name,
+              ad_group.id, ad_group.name
+            FROM ad_group_ad
+            WHERE ad_group.id = ${cleanAdGroupId} AND ad_group_ad.status != 'REMOVED'
+          `,
+        }, { headers }).catch(() => ({ data: [] })),
+      ]);
 
-      const results = resp.data?.[0]?.results || [];
-      const ads = results.map((r) => {
-        const aga = r.adGroupAd || r.ad_group_ad || {};
-        const ad = aga.ad || {};
-        const ag = r.adGroup || r.ad_group || {};
-        const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
-        const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
-        const adType = ad.type || "";
-        return {
-          id: String(ad.id || ""),
-          name: ad.name || "",
-          status: robustFormatStatus(aga.status),
-          type: adType,
-          finalUrls: ad.finalUrls || ad.final_urls || [],
-          adGroupId: String(ag.id || ""),
-          adGroupName: ag.name || "",
-          content: adType === "RESPONSIVE_SEARCH_AD" ? {
-            headlines: (rsa.headlines || []).map(h => h.text),
-            descriptions: (rsa.descriptions || []).map(d => d.text),
-          } : {
-            headlines: (rda.headlines || []).map(h => h.text),
-            descriptions: (rda.descriptions || []).map(d => d.text),
-            marketingImages: (rda.marketingImages || rda.marketing_images || []).map(i => i.url || i.asset),
-            logoImages: (rda.logoImages || rda.logo_images || []).map(i => i.url || i.asset),
-            businessName: rda.businessName || rda.business_name || "",
-          },
-        };
-      });
+      const pmaxResults = pmaxResp.data?.[0]?.results || [];
+      const standardResults = standardResp.data?.[0]?.results || [];
+      const isPmax = pmaxResults.length > 0;
+
+      let ads = [];
+
+      if (isPmax) {
+        const results = pmaxResults;
+        const grouped = { id: String(adGroupId), type: "ASSET_GROUP", isPmax: true, finalUrls: [], headlines: [], descriptions: [], images: [], logos: [] };
+        results.forEach(r => {
+          const asset = r.asset || {};
+          const aga = r.assetGroupAsset || r.asset_group_asset || {};
+          const fieldType = aga.fieldType || aga.field_type || "";
+          const ag = r.assetGroup || r.asset_group || {};
+          grouped.name = ag.name || "";
+          grouped.status = robustFormatStatus(ag.status);
+          grouped.campaignId = String((r.campaign || {}).id || "");
+          grouped.campaignName = (r.campaign || {}).name || "";
+          const agFinalUrls = ag.finalUrls || ag.final_urls || [];
+          if (!grouped.finalUrls.length && agFinalUrls.length) grouped.finalUrls = agFinalUrls;
+          const text = (asset.textAsset || asset.text_asset)?.text;
+          const imgData = asset.imageAsset || asset.image_asset;
+          const imageUrl = imgData?.fullSize?.url || imgData?.full_size?.url;
+          const mimeType = imgData?.mimeType || imgData?.mime_type || "";
+          if (fieldType === "HEADLINE" && text) grouped.headlines.push(text);
+          else if (fieldType === "DESCRIPTION" && text) grouped.descriptions.push(text);
+          else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
+            grouped.images.push({ url: imageUrl, mimeType, fieldType });
+          } else if ((fieldType === "LOGO" || fieldType === "LANDSCAPE_LOGO") && imageUrl) {
+            grouped.logos.push({ url: imageUrl, mimeType, fieldType });
+          }
+        });
+        ads = results.length ? [grouped] : [];
+      } else {
+        ads = standardResults.map((r) => {
+          const aga = r.adGroupAd || r.ad_group_ad || {};
+          const ad = aga.ad || {};
+          const ag = r.adGroup || r.ad_group || {};
+          const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
+          const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
+          const adType = ad.type || "";
+          const headlines = adType === "RESPONSIVE_SEARCH_AD"
+            ? (rsa.headlines || []).map(h => h.text)
+            : (rda.headlines || []).map(h => h.text);
+          const descriptions = adType === "RESPONSIVE_SEARCH_AD"
+            ? (rsa.descriptions || []).map(d => d.text)
+            : (rda.descriptions || []).map(d => d.text);
+          const finalUrls = ad.finalUrls || ad.final_urls || [];
+          return {
+            id: String(ad.id || ""),
+            status: robustFormatStatus(aga.status),
+            headline: headlines[0] || "",
+            description: descriptions[0] || "",
+            finalUrl: finalUrls[0] || "",
+          };
+        });
+      }
 
       const response = {
         status: true,
@@ -1218,6 +1394,7 @@ class GoogleAdController {
         accountId: tid,
         adGroupId: String(adGroupId),
         loginCustomerId: lid,
+        isPmax,
       };
 
       await redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL);
@@ -1270,14 +1447,13 @@ class GoogleAdController {
         const detail = JSON.stringify(axiosErr.response?.data || axiosErr.message);
         logger.error(`Google checkAccount listAccessibleCustomers failed [${status}]: ${detail}`);
         
-        // If it's a 403, it means the developer token is banned or invalid, but we might still have a linked account
-        if (status === 403) {
+        // If Google rejects the developer token/project, the user may still be connected.
+        if (isGoogleAdsPermissionRestricted(axiosErr)) {
            return res.status(200).json({
              hasAccount: true,
              isConnected: true,
              connectedEmail: googleUser.email,
-             isLocked: true,
-             message: "Google Ads account found, but access is restricted (Test Token vs Production).",
+             connectedName: googleUser.name,
            });
         }
 
@@ -1342,49 +1518,50 @@ class GoogleAdController {
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken);
-      }
-
-      const customer = getCustomerClient(client, adAccountId, resolvedLoginCustomerId, refreshToken);
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
+      const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
       const [startDate, endDate] = datePresetToRange(datePreset);
 
+      const search = (query) => axios.post(
+        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+        { query },
+        { headers }
+      ).then(r => r.data?.[0]?.results || []);
+
       const [summaryRows, dailyRows, campaignRows] = await Promise.all([
-        customer.query(`
-          SELECT metrics.cost_micros, metrics.conversions
-          FROM campaign
-          WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-        `),
-        customer.query(`
-          SELECT segments.date, metrics.cost_micros, metrics.conversions, metrics.clicks
-          FROM campaign
-          WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-        `),
-        customer.query(`
-          SELECT campaign.id, campaign.status
-          FROM campaign
-          WHERE campaign.status = 'ENABLED'
-        `),
+        search(`SELECT metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`),
+        search(`SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`),
+        search(`SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status != 'REMOVED'`),
       ]);
 
-      let totalSpend = 0;
-      let totalConversions = 0;
+      let totalSpend = 0, totalImpressions = 0, totalClicks = 0, totalConversions = 0;
       summaryRows.forEach((r) => {
-        totalSpend += (r.metrics.cost_micros || 0) / 1e6;
-        totalConversions += r.metrics.conversions || 0;
+        const m = r.metrics || {};
+        totalSpend += (m.costMicros || m.cost_micros || 0) / 1e6;
+        totalImpressions += m.impressions || 0;
+        totalClicks += m.clicks || 0;
+        totalConversions += m.conversions || 0;
       });
+
+      const activeCampaigns = campaignRows.filter(r => {
+        const s = r.campaign?.status;
+        return s === "ENABLED" || s === 2;
+      }).length;
 
       const dailyMap = {};
       dailyRows.forEach((r) => {
-        const date = r.segments.date;
-        if (!dailyMap[date]) dailyMap[date] = { spend: 0, conversions: 0, clicks: 0 };
-        dailyMap[date].spend += (r.metrics.cost_micros || 0) / 1e6;
-        dailyMap[date].conversions += r.metrics.conversions || 0;
-        dailyMap[date].clicks += r.metrics.clicks || 0;
+        const date = r.segments?.date;
+        if (!date) return;
+        if (!dailyMap[date]) dailyMap[date] = { spend: 0, impressions: 0, clicks: 0, conversions: 0 };
+        const m = r.metrics || {};
+        dailyMap[date].spend += (m.costMicros || m.cost_micros || 0) / 1e6;
+        dailyMap[date].impressions += m.impressions || 0;
+        dailyMap[date].clicks += m.clicks || 0;
+        dailyMap[date].conversions += m.conversions || 0;
       });
 
       const chartData = Object.keys(dailyMap)
@@ -1393,20 +1570,32 @@ class GoogleAdController {
           name: dayjs(date).format("DD MMM"),
           fullDate: date,
           spend: parseFloat(dailyMap[date].spend.toFixed(2)),
-          conversions: Math.round(dailyMap[date].conversions),
+          impressions: dailyMap[date].impressions,
           clicks: dailyMap[date].clicks,
+          conversions: Math.round(dailyMap[date].conversions),
+          ctr: dailyMap[date].impressions > 0 ? parseFloat(((dailyMap[date].clicks / dailyMap[date].impressions) * 100).toFixed(2)) : 0,
           cpa: dailyMap[date].conversions > 0
             ? parseFloat((dailyMap[date].spend / dailyMap[date].conversions).toFixed(2))
             : 0,
         }));
 
+      const ctr = totalImpressions > 0 ? parseFloat(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0;
+      const cpc = totalClicks > 0 ? parseFloat((totalSpend / totalClicks).toFixed(2)) : 0;
+      const cpm = totalImpressions > 0 ? parseFloat(((totalSpend / totalImpressions) * 1000).toFixed(2)) : 0;
+
       const response = {
         status: true,
         stats: {
           totalSpend: parseFloat(totalSpend.toFixed(2)),
+          totalImpressions,
+          totalClicks,
           totalConversions: Math.round(totalConversions),
+          ctr,
+          cpc,
+          cpm,
           avgCpa: totalConversions > 0 ? parseFloat((totalSpend / totalConversions).toFixed(2)) : 0,
-          activeCampaigns: campaignRows.length,
+          activeCampaigns,
+          totalCampaigns: campaignRows.length,
         },
         chartData,
       };
@@ -1447,110 +1636,94 @@ class GoogleAdController {
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken);
-      }
-
-      const customer = getCustomerClient(client, adAccountId, resolvedLoginCustomerId, refreshToken);
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
+      const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
       const [startDate, endDate] = datePresetToRange(datePreset);
       const prevEnd = dayjs(startDate).subtract(1, "day");
       const prevStart = prevEnd.subtract(dayjs(endDate).diff(dayjs(startDate), "day"), "day");
 
-      const query = (start, end) => customer.query(`
-        SELECT
-          metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr,
-          metrics.average_cpc, metrics.average_cpm, metrics.conversions,
-          metrics.conversions_value, metrics.view_through_conversions
+      const search = (query) => axios.post(
+        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+        { query },
+        { headers }
+      ).then(r => r.data?.[0]?.results || []);
+
+      const metricsQuery = (start, end) => `
+        SELECT metrics.cost_micros, metrics.impressions, metrics.clicks,
+               metrics.conversions, metrics.conversions_value, metrics.view_through_conversions
         FROM campaign
         WHERE segments.date BETWEEN '${start}' AND '${end}'
-      `);
-
-      const dailyQuery = customer.query(`
-        SELECT segments.date, metrics.cost_micros, metrics.clicks
-        FROM campaign
-        WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-      `);
+      `;
 
       const [currRows, prevRows, dailyRows] = await Promise.all([
-        query(startDate, endDate),
-        query(prevStart.format("YYYY-MM-DD"), prevEnd.format("YYYY-MM-DD")),
-        dailyQuery,
+        search(metricsQuery(startDate, endDate)),
+        search(metricsQuery(prevStart.format("YYYY-MM-DD"), prevEnd.format("YYYY-MM-DD"))),
+        search(`SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`),
       ]);
 
-      const aggregate = (rows) =>
-        rows.reduce(
-          (acc, r) => ({
-            spend: acc.spend + (r.metrics.cost_micros || 0) / 1e6,
-            impressions: acc.impressions + (r.metrics.impressions || 0),
-            clicks: acc.clicks + (r.metrics.clicks || 0),
-            ctr: acc.ctr + (r.metrics.ctr || 0),
-            cpc: acc.cpc + (r.metrics.average_cpc || 0) / 1e6,
-            cpm: acc.cpm + (r.metrics.average_cpm || 0) / 1e6,
-            conversions: acc.conversions + (r.metrics.conversions || 0),
-            conversions_value: acc.conversions_value + (r.metrics.conversions_value || 0),
-            view_through_conversions: acc.view_through_conversions + (r.metrics.view_through_conversions || 0),
-            count: acc.count + 1,
-          }),
-          { spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0, conversions: 0, conversions_value: 0, view_through_conversions: 0, count: 0 },
-        );
+      const aggregate = (rows) => rows.reduce((acc, r) => {
+        const m = r.metrics || {};
+        return {
+          spend: acc.spend + (m.costMicros || m.cost_micros || 0) / 1e6,
+          impressions: acc.impressions + (m.impressions || 0),
+          clicks: acc.clicks + (m.clicks || 0),
+          conversions: acc.conversions + (m.conversions || 0),
+          conversionsValue: acc.conversionsValue + (m.conversionsValue || m.conversions_value || 0),
+          viewThroughConversions: acc.viewThroughConversions + (m.viewThroughConversions || m.view_through_conversions || 0),
+        };
+      }, { spend: 0, impressions: 0, clicks: 0, conversions: 0, conversionsValue: 0, viewThroughConversions: 0 });
 
       const curr = aggregate(currRows);
       const prev = aggregate(prevRows);
 
-      const change = (c, p) => (p === 0 ? 0 : parseFloat((((c - p) / p) * 100).toFixed(1)));
+      const change = (c, p) => p === 0 ? 0 : parseFloat((((c - p) / p) * 100).toFixed(1));
 
       const currCtr = curr.impressions > 0 ? parseFloat(((curr.clicks / curr.impressions) * 100).toFixed(2)) : 0;
       const prevCtr = prev.impressions > 0 ? parseFloat(((prev.clicks / prev.impressions) * 100).toFixed(2)) : 0;
-
       const currCpc = curr.clicks > 0 ? parseFloat((curr.spend / curr.clicks).toFixed(2)) : 0;
       const prevCpc = prev.clicks > 0 ? parseFloat((prev.spend / prev.clicks).toFixed(2)) : 0;
-
       const currCpm = curr.impressions > 0 ? parseFloat(((curr.spend / curr.impressions) * 1000).toFixed(2)) : 0;
       const prevCpm = prev.impressions > 0 ? parseFloat(((prev.spend / prev.impressions) * 1000).toFixed(2)) : 0;
-
-      const currReach = curr.impressions ? Math.round(curr.impressions * 0.85) : 0;
-      const prevReach = prev.impressions ? Math.round(prev.impressions * 0.85) : 0;
-      const currFreq = currReach > 0 ? parseFloat((curr.impressions / currReach).toFixed(2)) : 0;
-      const prevFreq = prevReach > 0 ? parseFloat((prev.impressions / prevReach).toFixed(2)) : 0;
 
       const stats = {
         spend: { val: parseFloat(curr.spend.toFixed(2)), change: change(curr.spend, prev.spend) },
         impressions: { val: curr.impressions, change: change(curr.impressions, prev.impressions) },
         clicks: { val: curr.clicks, change: change(curr.clicks, prev.clicks) },
+        conversions: { val: Math.round(curr.conversions), change: change(curr.conversions, prev.conversions) },
         ctr: { val: currCtr, change: change(currCtr, prevCtr) },
         cpc: { val: currCpc, change: change(currCpc, prevCpc) },
         cpm: { val: currCpm, change: change(currCpm, prevCpm) },
-        reach: { val: currReach, change: change(currReach, prevReach) },
-        frequency: { val: currFreq, change: change(currFreq, prevFreq) },
+        conversionsValue: { val: parseFloat(curr.conversionsValue.toFixed(2)), change: change(curr.conversionsValue, prev.conversionsValue) },
+        viewThroughConversions: { val: Math.round(curr.viewThroughConversions), change: change(curr.viewThroughConversions, prev.viewThroughConversions) },
       };
 
       const dailyMap = {};
       dailyRows.forEach((r) => {
-        const date = r.segments.date;
-        if (!dailyMap[date]) dailyMap[date] = { spend: 0, clicks: 0 };
-        dailyMap[date].spend += (r.metrics.cost_micros || 0) / 1e6;
-        dailyMap[date].clicks += r.metrics.clicks || 0;
+        const date = r.segments?.date;
+        if (!date) return;
+        if (!dailyMap[date]) dailyMap[date] = { spend: 0, impressions: 0, clicks: 0, conversions: 0 };
+        const m = r.metrics || {};
+        dailyMap[date].spend += (m.costMicros || m.cost_micros || 0) / 1e6;
+        dailyMap[date].impressions += m.impressions || 0;
+        dailyMap[date].clicks += m.clicks || 0;
+        dailyMap[date].conversions += m.conversions || 0;
       });
 
-      const chartData = Object.keys(dailyMap)
-        .sort()
-        .map((date) => ({
-          name: dayjs(date).format("DD MMM"),
-          spend: parseFloat(dailyMap[date].spend.toFixed(2)),
-          clicks: dailyMap[date].clicks,
-        }));
+      const chartData = Object.keys(dailyMap).sort().map((date) => ({
+        name: dayjs(date).format("DD MMM"),
+        fullDate: date,
+        spend: parseFloat(dailyMap[date].spend.toFixed(2)),
+        impressions: dailyMap[date].impressions,
+        clicks: dailyMap[date].clicks,
+        conversions: Math.round(dailyMap[date].conversions),
+        ctr: dailyMap[date].impressions > 0 ? parseFloat(((dailyMap[date].clicks / dailyMap[date].impressions) * 100).toFixed(2)) : 0,
+      }));
 
-      const actions = [
-        { action_type: "conversions", value: Math.round(curr.conversions) },
-        { action_type: "conversions_value", value: parseFloat(curr.conversions_value.toFixed(2)) },
-        { action_type: "view_through_conversions", value: Math.round(curr.view_through_conversions) }
-      ];
-
-      const response = { status: true, stats, chartData, actions };
+      const response = { status: true, stats, chartData };
 
       await redisClient.set(cacheKey, JSON.stringify(response), "EX", VOLATILE_TTL);
       return res.status(200).json(response);
@@ -1593,18 +1766,14 @@ class GoogleAdController {
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken);
-      }
-
-      const customer = getCustomerClient(client, adAccountId, resolvedLoginCustomerId, refreshToken);
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
+      const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
       const [startDate, endDate] = datePresetToRange(datePreset);
 
-      // GAQL: each FROM resource only supports selecting its own fields
       let fromClause, selectFields, whereExtra = "";
       if (level === "ad") {
         fromClause = "ad_group_ad";
@@ -1622,39 +1791,37 @@ class GoogleAdController {
         if (campaignId) whereExtra += ` AND campaign.id = ${sanitizeId(campaignId)}`;
       }
 
-      const rows = await customer.query(`
-        SELECT
-          ${selectFields}
-          segments.date,
-          metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr,
-          metrics.average_cpc, metrics.average_cpm, metrics.conversions,
-          metrics.conversions_value, metrics.view_through_conversions
-        FROM ${fromClause}
-        WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'${whereExtra}
-      `);
+      const resp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+        { query: `SELECT ${selectFields} segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value, metrics.view_through_conversions FROM ${fromClause} WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'${whereExtra}` },
+        { headers }
+      );
+      const rows = resp.data?.[0]?.results || [];
 
       const insights = rows.map((r) => {
         const m = r.metrics || {};
         const camp = r.campaign || {};
         const ag = r.adGroup || r.ad_group || {};
         const aga = r.adGroupAd || r.ad_group_ad || {};
-        const costMicros = m.costMicros || m.cost_micros || 0;
+        const spend = (m.costMicros || m.cost_micros || 0) / 1e6;
         const convs = m.conversions || 0;
+        const imps = m.impressions || 0;
+        const clicks = m.clicks || 0;
         return {
           date: r.segments?.date,
-          spend: costMicros / 1e6,
-          impressions: m.impressions || 0,
-          clicks: m.clicks || 0,
-          ctr: parseFloat((m.ctr || 0).toFixed(2)),
-          cpc: (m.averageCpc || m.average_cpc || 0) / 1e6,
-          cpm: (m.averageCpm || m.average_cpm || 0) / 1e6,
+          spend: parseFloat(spend.toFixed(2)),
+          impressions: imps,
+          clicks,
+          ctr: imps > 0 ? parseFloat(((clicks / imps) * 100).toFixed(2)) : 0,
+          cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(2)) : 0,
+          cpm: imps > 0 ? parseFloat(((spend / imps) * 1000).toFixed(2)) : 0,
           conversions: convs,
-          conversionValue: m.conversionsValue || m.conversions_value || 0,
-          cpa: convs > 0 ? parseFloat(((costMicros / 1e6) / convs).toFixed(2)) : 0,
+          conversionValue: parseFloat((m.conversionsValue || m.conversions_value || 0).toFixed(2)),
+          cpa: convs > 0 ? parseFloat((spend / convs).toFixed(2)) : 0,
           viewThroughConversions: m.viewThroughConversions || m.view_through_conversions || 0,
           ...(camp.id ? { campaignId: String(camp.id), campaignName: camp.name } : {}),
           ...(ag.id ? { adGroupId: String(ag.id), adGroupName: ag.name } : {}),
-          ...(aga.ad?.id ? { adId: String(aga.ad.id) } : {}),
+          ...(aga.ad?.id ? { adId: String(aga.ad?.id) } : {}),
         };
       });
 
@@ -1693,14 +1860,10 @@ class GoogleAdController {
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken);
-      }
-
-      const customer = getCustomerClient(client, adAccountId, resolvedLoginCustomerId, refreshToken);
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
+      const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
 
       const [endDate] = datePresetToRange("today");
       const startDate = dayjs(endDate).subtract(14, "day").format("YYYY-MM-DD");
@@ -1779,7 +1942,7 @@ class GoogleAdController {
         };
       };
 
-      const { campaignRows, adGroupRows, adRows } = await fetchAuditData(adAccountId, resolvedLoginCustomerId);
+      const { campaignRows, adGroupRows, adRows } = await fetchAuditData(tid, lid);
 
       const findings = [];
 
@@ -2127,82 +2290,138 @@ class GoogleAdController {
       } = value;
 
       // ── Init ──────────────────────────────────────────────────────────────
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
+      const { accessToken } = await initGoogleApiForUser(userId);
       const tid = normalizeCustomerId(adAccountId);
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
-      const customer = getCustomerClient(client, adAccountId, mccId, refreshToken);
-
       const customerId = tid;
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
 
       // ── Objective → channel type ──────────────────────────────────────────
       const channelTypeMap = {
-        // UI goal labels
         SALES: "SEARCH", LEADS: "SEARCH", WEBSITE_TRAFFIC: "SEARCH", LOCAL_STORE: "SEARCH",
         APP_PROMOTION: "MULTI_CHANNEL",
-        // Raw channel types (pass-through)
+        YOUTUBE_REACH: "VIDEO",
         SEARCH: "SEARCH", DISPLAY: "DISPLAY", SHOPPING: "SHOPPING",
-        PERFORMANCE_MAX: "PERFORMANCE_MAX",
+        PERFORMANCE_MAX: "PERFORMANCE_MAX", VIDEO: "VIDEO",
       };
       const channelType = channelTypeMap[String(objective).toUpperCase().replace(/ /g, "_")] || "SEARCH";
 
-      // ── Step 1: Create campaign budget ────────────────────────────────────
-      const budgetResult = await customer.campaignBudgets.create([{
-        name: `${name} Budget`,
-        amount_micros: String(dailyBudgetMicros),
-        delivery_method: "STANDARD",
-        explicitly_shared: false,
-      }]);
-
-      const budgetResource = budgetResult.results[0]?.resource_name;
-      if (!budgetResource) throw new Error("Campaign budget creation failed");
-
-      // ── Step 2: Create campaign ───────────────────────────────────────────
-      const biddingField = channelType === "DISPLAY" ? { target_spend: {} }
-        : channelType === "VIDEO" ? { maximize_conversions: {} }
+      // ── Bidding strategy per channel type (snake_case for REST API) ──────
+      const biddingStrategy =
+        channelType === "DISPLAY"           ? { target_spend: {} }
+        : channelType === "VIDEO"           ? { target_cpv: {} }
         : channelType === "PERFORMANCE_MAX" ? { maximize_conversion_value: {} }
         : { manual_cpc: { enhanced_cpc_enabled: false } };
 
-      const campaignPayload = {
+      // ── Step 1: Create campaign budget ────────────────────────────────────
+      const budgetResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        {
+          mutateOperations: [{
+            campaignBudgetOperation: {
+              create: {
+                name: `${name} Budget`,
+                amount_micros: String(dailyBudgetMicros),
+                delivery_method: "STANDARD",
+                explicitly_shared: false,
+              },
+            },
+          }],
+        },
+        { headers }
+      );
+      const budgetResource = budgetResp.data?.mutateOperationResponses?.[0]?.campaignBudgetResult?.resourceName;
+      if (!budgetResource) throw new Error("Campaign budget creation failed — no resourceName returned");
+
+      // ── Step 2: Create campaign ───────────────────────────────────────────
+      const campaignBody = {
         name,
         status,
         advertising_channel_type: channelType,
         campaign_budget: budgetResource,
-        contains_eu_political_advertising: 2,
-        ...biddingField,
+        contains_eu_political_advertising: 2,  // NOT_EU_POLITICAL_ADVERTISING = 2 in v23 proto
+        ...biddingStrategy,
       };
 
-      if (startTime) campaignPayload.start_date = dayjs(startTime).format("YYYYMMDD");
-      if (endTime) campaignPayload.end_date = dayjs(endTime).format("YYYYMMDD");
-
-      const campaignResult = await customer.campaigns.create([campaignPayload]);
-      const campaignResource = campaignResult.results[0]?.resource_name;
+      const campaignResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        {
+          mutateOperations: [{
+            campaignOperation: { create: campaignBody },
+          }],
+        },
+        { headers }
+      );
+      const campaignResource = campaignResp.data?.mutateOperationResponses?.[0]?.campaignResult?.resourceName;
       const campaignId = campaignResource?.split("/").pop();
+      if (!campaignId) throw new Error("Campaign creation failed — no resourceName returned");
 
-      // ── Step 3: Location targeting ───────────────────────────────────────
-      if (targeting && targeting.countries && targeting.countries.length > 0) {
+      // ── Step 3: Apply start/end dates via update mutate ───────────────────
+      if (startTime || endTime) {
+        try {
+          const updateBody = { resource_name: campaignResource };
+          const updateFields = [];
+          if (startTime) {
+            const sd = dayjs(startTime);
+            const today = dayjs();
+            updateBody.start_date = (sd.isBefore(today) ? today : sd).format("YYYYMMDD");
+            updateFields.push("start_date");
+          }
+          if (endTime) {
+            updateBody.end_date = dayjs(endTime).format("YYYYMMDD");
+            updateFields.push("end_date");
+          }
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            {
+              mutateOperations: [{
+                campaignOperation: {
+                  update: updateBody,
+                  update_mask: updateFields.join(","),
+                },
+              }],
+            },
+            { headers }
+          );
+        } catch (e) {
+          logger.error(`Campaign date update failed (non-fatal): ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
+        }
+      }
+
+      // ── Step 4: Location targeting ────────────────────────────────────────
+      if (targeting?.countries?.length) {
         try {
           const COMMON_LOCATIONS = {
             US: 2840, IN: 2356, GB: 2826, CA: 2124, AU: 2036, DE: 2276, FR: 2250,
             BR: 2076, IT: 2380, ES: 2724, JP: 2392, SG: 2702, AE: 2784,
           };
-
-          const locationCriteria = targeting.countries
+          const locOps = targeting.countries
             .map((code) => COMMON_LOCATIONS[code.toUpperCase()])
             .filter(Boolean)
             .map((locId) => ({
-              campaign: campaignResource,
-              location: {
-                geo_target_constant: `geoTargetConstants/${locId}`,
+              campaignCriterionOperation: {
+                create: {
+                  campaign: campaignResource,
+                  location: { geo_target_constant: `geoTargetConstants/${locId}` },
+                },
               },
             }));
-
-          if (locationCriteria.length > 0) {
-            await customer.campaignCriteria.create(locationCriteria);
+          if (locOps.length) {
+            await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+              { mutateOperations: locOps },
+              { headers }
+            );
           }
         } catch (e) {
-          // Silent fail for location targeting
-
+          logger.error(`Location targeting failed (non-fatal): ${e.message}`);
         }
       }
 
@@ -2225,29 +2444,32 @@ class GoogleAdController {
         },
       });
     } catch (error) {
-      logger.error(`GOOGLE CREATE CAMPAIGN ERROR => ${error.message}`);
-
+      const rawDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`GOOGLE CREATE CAMPAIGN ERROR => ${rawDetail}`);
 
       const googleErrors =
         error.response?.data?.error?.details?.[0]?.errors || [];
 
+      const isMutateNotAllowed = googleErrors.some(
+        (e) => e.errorCode?.mutateError === "MUTATE_NOT_ALLOWED"
+      );
+
       const formattedErrors = googleErrors.map((e) => ({
         message: e.message,
-        field:
-          e.location?.fieldPathElements
-            ?.map((f) => f.fieldName)
-            .join(".") || null,
+        field: e.location?.fieldPathElements?.map((f) => f.fieldName).join(".") || null,
         code: Object.keys(e.errorCode || {})[0] || null,
       }));
 
       return res.status(error.response?.status || 500).json({
         status: false,
-        error:
-          formattedErrors[0]?.message ||
-          error.response?.data?.error?.message ||
-          error.message ||
-          "Failed to create campaign",
+        error: isMutateNotAllowed
+          ? "YouTube/VIDEO campaign creation requires Google Ads API Standard Access. Your account currently has Basic Access. Please apply for Standard Access at: Google Ads → MCC account → Tools & Settings → API Center → Apply for Standard Access."
+          : formattedErrors[0]?.message ||
+            error.response?.data?.error?.message ||
+            error.message ||
+            "Failed to create campaign",
         validations: formattedErrors,
+        details: error.response?.data || null,
       });
     }
   }
@@ -2332,7 +2554,10 @@ class GoogleAdController {
             };
 
             if (startTime) {
-              campaignUpdate.start_date = dayjs(startTime).format("YYYYMMDD");
+              const startDate = dayjs(startTime);
+              // Google rejects past start dates — clamp to today
+              const today = dayjs();
+              campaignUpdate.start_date = (startDate.isBefore(today) ? today : startDate).format("YYYYMMDD");
             }
 
             if (endTime) {
@@ -2370,15 +2595,28 @@ class GoogleAdController {
       }
 
       // ── Step 2: Detect campaign channel type ────────
-      const campData = await customer.report({
-        entity: "campaign",
-        attributes: ["campaign.advertising_channel_type"],
-        constraints: { "campaign.id": cleanCampaignId },
-        limit: 1,
-      });
+      const campTypeResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+        { query: `SELECT campaign.advertising_channel_type FROM campaign WHERE campaign.id = ${cleanCampaignId} LIMIT 1` },
+        { headers: { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": mccId, "Content-Type": "application/json" } }
+      );
+      const channelType = campTypeResp.data?.[0]?.results?.[0]?.campaign?.advertisingChannelType || "SEARCH";
 
-      const channelType = campData[0]?.campaign?.advertising_channel_type || "SEARCH";
-      const adGroupType = channelType === "DISPLAY" ? "DISPLAY_STANDARD" : "SEARCH_STANDARD";
+      if (channelType === "PERFORMANCE_MAX") {
+        return res.status(400).json({
+          status: false,
+          error: "Performance Max campaigns do not support ad groups. Create a Search or Display campaign to use ad groups.",
+        });
+      }
+
+      const adGroupTypeMap = {
+        SEARCH: "SEARCH_STANDARD",
+        DISPLAY: "DISPLAY_STANDARD",
+        SHOPPING: "SHOPPING_PRODUCT_ADS",
+        VIDEO: "VIDEO_TRUE_VIEW_IN_STREAM",
+        MULTI_CHANNEL: "SEARCH_STANDARD",
+      };
+      const adGroupType = adGroupTypeMap[channelType] || "SEARCH_STANDARD";
 
       // ── Step 3: Create ad group ───────────────────────────
       const adGroupResult = await customer.adGroups.create([{
@@ -2411,7 +2649,8 @@ class GoogleAdController {
             const min = targeting.ageMin || 18;
             const max = targeting.ageMax || 65;
 
-            const selectedAges = ageRanges.filter((r) => r.min >= min && r.max <= max);
+            // Include any range that overlaps with [min, max]
+            const selectedAges = ageRanges.filter((r) => r.min <= max && r.max >= min);
 
             selectedAges.forEach((age) => {
               demographicOps.push({
@@ -2506,7 +2745,7 @@ class GoogleAdController {
                  adFactoryCampaignId: { type: "string", example: "" },
                  campaignDetails: { type: "object", example: { campaignName: "My Campaign", campaignObjective: "SEARCH", dailyBudgetMicros: 5000000 } },
                  adGroupDetails: { type: "object", example: { adGroupName: "Ad Group 1", cpcBidMicros: 1000000 } },
-                 ads: { type: "array", example: [{ headlines: ["Headline 1", "Headline 2", "Headline 3"], descriptions: ["Desc 1", "Desc 2"], finalUrl: "https://example.com" }] }
+                 ads: { type: "array", example: [{ headlines: ["Headline 1", "Headline 2", "Headline 3"], descriptions: ["Desc 1", "Desc 2"], finalUrl: "https://example.com", imageUrl: "https://example.com/img.png", callToAction: "SHOP_NOW" }] }
                }
              }
            }
@@ -2595,6 +2834,7 @@ class GoogleAdController {
               description: Array.isArray(adData.descriptions) ? adData.descriptions[0] : adData.descriptions,
               finalUrl: adData.finalUrl,
               imageUrl: adData.imageUrl || null,
+              callToAction: adData.callToAction || null,
               adType: objective,
             },
             metaData: {
@@ -2629,8 +2869,8 @@ class GoogleAdController {
 
       await invalidateUserGoogleCache(userId);
 
-      return res.status(200).json({
-        success: true,
+      return res.status(201).json({
+        status: true,
         message: `Created ${createdAds.length} out of ${ads.length} ads successfully`,
         data: {
           campaignId: String(campaignId),
@@ -2665,7 +2905,7 @@ class GoogleAdController {
   async createAdAPI(req, res) {
     /* #swagger.tags = ['Google Ads']
        #swagger.summary = 'Create ads'
-       #swagger.description = 'Create one or more responsive search ads under an ad group in a single request. Pass an "ads" array — one item for a single ad, multiple for bulk.'
+       #swagger.description = 'Create one or more ads (SEARCH / DISPLAY / VIDEO) under an ad group. Pass campaignId so the backend auto-detects ad type. SEARCH needs headlines+descriptions. DISPLAY needs imageUrl. VIDEO needs videoUrl (MP4, auto-uploaded to YouTube).'
        #swagger.security = [{ "BearerAuth": [] }]
        #swagger.requestBody = {
          required: true,
@@ -2675,19 +2915,23 @@ class GoogleAdController {
                type: "object",
                required: ["adAccountId", "adGroupId", "ads"],
                properties: {
-                 adAccountId: { type: "string", example: "7984091200" },
+                 adAccountId: { type: "string", example: "7138174374" },
                  adGroupId: { type: "string", example: "9988776655" },
-                 campaignId: { type: "string", example: "12345678901" },
+                 campaignId: { type: "string", example: "12345678901", description: "Used to auto-detect SEARCH / DISPLAY / VIDEO ad type" },
                  ads: {
                    type: "array",
                    minItems: 1,
                    items: {
                      type: "object",
-                     required: ["headline", "description", "finalUrl"],
                      properties: {
-                       headline: { type: "string", example: "Buy Now - Best Deals" },
-                       description: { type: "string", example: "Shop the best deals online today." },
-                       finalUrl: { type: "string", example: "https://example.com" }
+                       headlines: { type: "array", items: { type: "string", maxLength: 30 }, minItems: 3, maxItems: 15, example: ["Buy Now", "Best Deals", "Shop Today"], description: "SEARCH only — 3 to 15 headlines, max 30 chars each" },
+                       descriptions: { type: "array", items: { type: "string", maxLength: 90 }, minItems: 2, maxItems: 4, example: ["Shop the best deals online.", "Get started today."], description: "SEARCH only — 2 to 4 descriptions, max 90 chars each" },
+                       headline: { type: "string", example: "Buy Now - Best Deals", description: "DISPLAY / VIDEO — single headline" },
+                       description: { type: "string", example: "Shop the best deals online today.", description: "DISPLAY — single description" },
+                       finalUrl: { type: "string", example: "https://example.com" },
+                       imageUrl: { type: "string", example: "https://example.com/image.jpg", description: "DISPLAY only — landscape image URL (min 1200x628)" },
+                       videoUrl: { type: "string", example: "https://example.com/video.mp4", description: "VIDEO only — direct MP4 URL, auto-uploaded to YouTube" },
+                       callToAction: { type: "string", example: "LEARN_MORE", description: "DISPLAY / VIDEO — call to action" }
                      }
                    }
                  }
@@ -2696,27 +2940,27 @@ class GoogleAdController {
            }
          }
        }
+       #swagger.responses[201] = {
+         description: "Ads created successfully",
+         schema: {
+           status: true,
+           message: "2 ads created successfully",
+           adType: "SEARCH",
+           ads: [{ adId: "123456", adResourceName: "customers/xxx/adGroupAds/yyy~zzz" }]
+         }
+       }
+       #swagger.responses[400] = { description: "Bad Request — validation error or missing required field" }
+       #swagger.responses[401] = { description: "Unauthorized" }
+       #swagger.responses[500] = { description: "Internal Server Error" }
     */
     try {
-      const { adAccountId, customerId: customerIdAlias, adGroupId, campaignId, ads: adsArray } = req.body;
-      const resolvedAccountId = adAccountId || customerIdAlias;
-
-      // ── Validation ────────────────────────────────────────────────────────
-      if (!resolvedAccountId)                          return res.status(400).json({ status: false, error: "adAccountId is required" });
-      if (!adGroupId)                                  return res.status(400).json({ status: false, error: "adGroupId is required" });
-      if (!Array.isArray(adsArray) || adsArray.length === 0)
-        return res.status(400).json({ status: false, error: "ads must be a non-empty array" });
-
-      for (let i = 0; i < adsArray.length; i++) {
-        const ad = adsArray[i];
-        if (!ad.headline)    return res.status(400).json({ status: false, error: `ads[${i}].headline is required` });
-        if (!ad.description) return res.status(400).json({ status: false, error: `ads[${i}].description is required` });
-        if (!ad.finalUrl)    return res.status(400).json({ status: false, error: `ads[${i}].finalUrl is required` });
-        if (String(ad.headline).length > 30)
-          return res.status(400).json({ status: false, error: `ads[${i}].headline must be 30 characters or fewer (currently ${String(ad.headline).length})` });
-        if (String(ad.description).length > 90)
-          return res.status(400).json({ status: false, error: `ads[${i}].description must be 90 characters or fewer (currently ${String(ad.description).length})` });
+      const { error: schemaError, value: schemaValue } = createAdSchema.validate(req.body, { abortEarly: true });
+      if (schemaError) {
+        return res.status(400).json({ status: false, error: schemaError.details[0].message });
       }
+
+      const { adAccountId, customerId: customerIdAlias, adGroupId, campaignId, ads: adsArray } = schemaValue;
+      const resolvedAccountId = adAccountId || customerIdAlias;
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
@@ -2737,6 +2981,7 @@ class GoogleAdController {
       };
 
       // ── Step 1: Detect channel type ───────────────────────────────────────
+      // Try ad group query first, fall back to direct campaign query if campaignId provided
       const searchResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
         {
@@ -2751,37 +2996,155 @@ class GoogleAdController {
       );
 
       const agResults = searchResp.data?.[0]?.results || [];
-      const channelType = agResults[0]?.campaign?.advertisingChannelType || "SEARCH";
+      let channelType = agResults[0]?.campaign?.advertisingChannelType;
 
+      // Fallback: query campaign directly if ad group query returned nothing
+      if (!channelType && campaignId) {
+        const cleanCampaignId = sanitizeId(campaignId);
+        const campResp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+          { query: `SELECT campaign.advertising_channel_type FROM campaign WHERE campaign.id = ${cleanCampaignId} LIMIT 1` },
+          { headers }
+        );
+        channelType = campResp.data?.[0]?.results?.[0]?.campaign?.advertisingChannelType;
+      }
+
+      channelType = channelType || "SEARCH";
+      logger.info(`createAdAPI: adGroup=${cleanAdGroupId} campaignId=${campaignId} → channelType=${channelType}`);
+
+      // ── VIDEO campaign: YouTube ad creation (channelType derived from campaignId via ad group query) ──
       if (channelType === "VIDEO") {
-        return res.status(400).json({
-          status: false,
-          error: "This ad group belongs to a VIDEO campaign. Video ads cannot be created via this endpoint.",
-          adGroupChannelType: channelType,
+        const missingVideo = adsArray.findIndex((ad) => !ad.videoUrl);
+        if (missingVideo !== -1) {
+          return res.status(400).json({
+            status: false,
+            error: `videoUrl is required for YouTube/VIDEO ads${adsArray.length > 1 ? ` (missing in ad ${missingVideo + 1})` : ""}.`,
+          });
+        }
+
+        const results = [];
+        for (const ad of adsArray) {
+          let videoId;
+
+          // videoUrl — upload to YouTube first
+          try {
+            videoId = await this._uploadVideoToYouTube(accessToken, ad.videoUrl, ad.headline || "Ad Video");
+          } catch (uploadErr) {
+            return res.status(400).json({ status: false, error: uploadErr.message });
+          }
+
+          // adType derived from channelType (VIDEO) — client can optionally override with VIDEO_DISCOVERY
+          const adType = ad.adType === "VIDEO_DISCOVERY" ? "VIDEO_DISCOVERY" : "IN_STREAM";
+          let adPayload;
+          if (adType === "VIDEO_DISCOVERY") {
+            adPayload = {
+              videoAd: {
+                video: { resourceName: `customers/${customerId}/videos/${videoId}` },
+                videoDiscovery: {
+                  headline: String(ad.headline || "").slice(0, 100),
+                  description1: String(ad.description1 || ad.description || "").slice(0, 35),
+                  description2: String(ad.description2 || "").slice(0, 35),
+                },
+              },
+              finalUrls: [ad.finalUrl],
+            };
+          } else {
+            adPayload = {
+              videoAd: {
+                video: { resourceName: `customers/${customerId}/videos/${videoId}` },
+                inStream: {
+                  actionButtonLabel: String(ad.callToAction || "LEARN_MORE").toUpperCase().replace(/ /g, "_").slice(0, 15),
+                  actionHeadline: String(ad.headline || "").slice(0, 15),
+                },
+              },
+              finalUrls: [ad.finalUrl],
+            };
+          }
+
+          const mutateResp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            {
+              mutateOperations: [{
+                adGroupAdOperation: {
+                  create: {
+                    adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
+                    status: "PAUSED",
+                    ad: adPayload,
+                  },
+                },
+              }],
+            },
+            { headers }
+          );
+
+          const adResource = mutateResp.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName;
+          results.push({
+            adId: adResource?.split("~").pop(),
+            adResourceName: adResource,
+            videoId,
+            adType,
+          });
+        }
+
+        return res.status(201).json({
+          status: true,
+          message: `${results.length} YouTube ad${results.length > 1 ? "s" : ""} created successfully`,
+          ads: results,
         });
+      }
+
+      if (channelType === "DISPLAY") {
+        const missingImage = adsArray.findIndex((ad) => !ad.imageUrl);
+        if (missingImage !== -1) {
+          return res.status(400).json({
+            status: false,
+            error: `imageUrl is required for Display ads${adsArray.length > 1 ? ` (missing in ad ${missingImage + 1})` : ""}.`,
+          });
+        }
       }
 
       // ── Step 2: Build helpers ─────────────────────────────────────────────
       const buildHeadlines = (h) => {
+        const primary = String(h).slice(0, 30);
         const todaySuffix = " Today";
-        const primary = String(h);
-        const withToday = (primary.length + todaySuffix.length <= 30) ? primary + todaySuffix : primary;
-        const arr = [primary, withToday, "Shop Now", "Get Started", "Learn More"];
-        return arr.slice(0, 3).map((text) => ({ text }));
+        const withToday = (primary.length + todaySuffix.length <= 30) ? primary + todaySuffix : null;
+        const candidates = [primary, withToday, "Get Started", "Learn More", "Discover More"].filter(Boolean);
+        // Deduplicate case-insensitively — Google rejects duplicate asset text
+        const seen = new Set();
+        const unique = [];
+        for (const text of candidates) {
+          const key = text.toLowerCase();
+          if (!seen.has(key)) { seen.add(key); unique.push({ text }); }
+        }
+        return unique.slice(0, 5);
       };
-      const buildDescriptions = (d) => [
-        { text: String(d) },
-        { text: "Trusted by thousands. Get started today." },
-      ];
+      const buildDescriptions = (d) => {
+        const primary = String(d).slice(0, 90);
+        const fallback = "Trusted by thousands. Get started today.";
+        if (primary.toLowerCase() === fallback.toLowerCase()) return [{ text: primary }];
+        return [{ text: primary }, { text: fallback }];
+      };
 
-      const buildAdPayload = (h, d, url) => {
+      const businessName = req.body.businessName || "Brand";
+      // Google Ads API v23 responsive_display_ad call_to_action_text valid values
+      // Source: https://developers.google.com/google-ads/api/reference/rpc/v23/ResponsiveDisplayAdInfo
+      const VALID_DISPLAY_CTA = new Set([
+        "LEARN_MORE", "GET_QUOTE", "APPLY_NOW", "BOOK_NOW", "DOWNLOAD",
+        "GET_OFFER", "ORDER_NOW", "VISIT_SITE", "SUBSCRIBE", "CONTACT_US",
+      ]);
+      const buildAdPayload = (h, d, url, callToAction, assetResourceName, squareAssetResourceName) => {
         if (channelType === "DISPLAY") {
+          const ctaInput = callToAction ? String(callToAction).toUpperCase().replace(/ /g, "_") : null;
+          const cta = ctaInput && VALID_DISPLAY_CTA.has(ctaInput) ? ctaInput : null;
           return {
             responsiveDisplayAd: {
               headlines: buildHeadlines(h).slice(0, 5),
               descriptions: buildDescriptions(d).slice(0, 5),
               longHeadline: { text: String(h) },
-              businessName: "Brand",
+              businessName,
+              ...(cta && { callToActionText: cta }),
+              marketingImages: assetResourceName ? [{ asset: assetResourceName }] : [],
+              squareMarketingImages: squareAssetResourceName ? [{ asset: squareAssetResourceName }] : [],
             },
             finalUrls: [url],
           };
@@ -2795,46 +3158,62 @@ class GoogleAdController {
         };
       };
 
+      // ── Step 2.5: Upload images if needed ─────────────────────────────────
+      const assetResourceNames = [];
+      const squareAssetResourceNames = [];
+      for (const ad of adsArray) {
+        if (channelType === "DISPLAY" && ad.imageUrl) {
+          try {
+            const { landscape, square } = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, ad.imageUrl);
+            assetResourceNames.push(landscape);
+            squareAssetResourceNames.push(square);
+          } catch (uploadErr) {
+            return res.status(400).json({ status: false, error: uploadErr.message });
+          }
+        } else {
+          assetResourceNames.push(null);
+          squareAssetResourceNames.push(null);
+        }
+      }
+
       // ── Step 3: Build mutate operations ───────────────────────────────────
-      const mutateOperations = adsArray.map(({ headline: h, description: d, finalUrl: url }) => ({
-        adGroupAdOperation: {
-          create: {
-            adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
-            status: "PAUSED",
-            ad: buildAdPayload(h, d, url),
+      // ── Step 4: One mutate per ad (avoids DUPLICATE_ASSET when same image used) ──
+      const createdAds = [];
+      for (let i = 0; i < adsArray.length; i++) {
+        const { headline: h, description: d, finalUrl: url, callToAction, imageUrl } = adsArray[i];
+        const adPayload = buildAdPayload(h, d, url, callToAction, assetResourceNames[i], squareAssetResourceNames[i]);
+
+        const adResponse = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          {
+            mutateOperations: [{
+              adGroupAdOperation: {
+                create: {
+                  adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
+                  status: "PAUSED",
+                  ad: adPayload,
+                },
+              },
+            }],
           },
-        },
-      }));
+          { headers }
+        );
 
-      // ── Step 4: Single API call to Google ─────────────────────────────────
-      const adResponse = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-        { mutateOperations },
-        { headers }
-      );
+        const adResource = adResponse.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName;
+        const adId = adResource?.split("~").pop();
 
-      const responses = adResponse.data?.mutateOperationResponses || [];
+        await GooglePostedAd.create({
+          userId,
+          googleAdId: String(adId),
+          adAccountId: resolvedAccountId,
+          campaignId: campaignId || "",
+          adGroupId,
+          status: "PAUSED",
+          content: { headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, callToAction: callToAction || null, adType: channelType },
+        });
 
-      // ── Step 5: Persist to DB & build response ────────────────────────────
-      const createdAds = await Promise.all(
-        responses.map(async (r, i) => {
-          const adResource = r?.adGroupAdResult?.resourceName;
-          const adId = adResource?.split("~").pop();
-          const { headline: h, description: d, finalUrl: url } = adsArray[i];
-
-          await GooglePostedAd.create({
-            userId,
-            googleAdId: String(adId),
-            adAccountId: resolvedAccountId,
-            campaignId: campaignId || "",
-            adGroupId,
-            status: "PAUSED",
-            content: { headline: h, description: d, finalUrl: url, adType: channelType },
-          });
-
-          return { adId: String(adId), headline: h, description: d, finalUrl: url, status: "PAUSED" };
-        })
-      );
+        createdAds.push({ adId: String(adId), headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, status: "PAUSED" });
+      }
 
       await invalidateUserGoogleCache(userId);
 
@@ -2855,7 +3234,18 @@ class GoogleAdController {
       if (m.reason === "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE") {
         friendlyError = "The selected campaign or ad group has been deleted in Google Ads. Please select an active one.";
       } else if (m.reason === "TOO_LONG") {
-        friendlyError = "One of the text fields exceeds Google's character limit. Try shortening your headline or description.";
+        const violations = error.response?.data?.error?.details?.flatMap((d) => d.fieldViolations || []) || [];
+        const tooLongMsg = violations.find((v) => v.description?.includes("characters"))?.description;
+        if (tooLongMsg) {
+          const match = tooLongMsg.match(/\"([^\"]+)\" .* (\d+) characters.*currently (\d+)/i);
+          if (match) {
+            friendlyError = `Your ${match[1]} is too long — maximum ${match[2]} characters, but you entered ${match[3]}. Please shorten it and try again.`;
+          } else {
+            friendlyError = tooLongMsg;
+          }
+        } else {
+          friendlyError = "One of your text fields exceeds Google's character limit. Please shorten your headline (max 30) or description (max 90) and try again.";
+        }
       }
 
       return res.status(error.response?.status || 500).json({
@@ -3005,6 +3395,7 @@ class GoogleAdController {
           mutateOperations: [{
             assetOperation: {
               create: {
+                name: `img_${Date.now()}`,
                 type: "IMAGE",
                 imageAsset: { data: imageData },
               },
@@ -3125,7 +3516,7 @@ class GoogleAdController {
   }
 
   async _createAdByType(accessToken, loginCustomerId, customerId, adGroupId, adData, objective) {
-    const { headlines = [], descriptions = [], finalUrl, callToAction } = adData;
+    const { headlines = [], descriptions = [], finalUrl, callToAction, imageUrl } = adData;
 
     const padHeadlines = (arr) => {
       const fallbacks = ["Discover More", "Shop Now", "Learn More", "Get Started", "Try Today"];
@@ -3145,6 +3536,11 @@ class GoogleAdController {
     const hl = padHeadlines(Array.isArray(headlines) ? headlines : [headlines]);
     const dl = padDescriptions(Array.isArray(descriptions) ? descriptions : [descriptions]);
 
+    let assetResourceName = null;
+    if (objective === "DISPLAY" && imageUrl) {
+      assetResourceName = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, imageUrl);
+    }
+
     let adPayload;
     if (objective === "DISPLAY") {
       adPayload = {
@@ -3154,12 +3550,16 @@ class GoogleAdController {
           longHeadline: { text: String(hl[0]?.text || "Discover More") },
           businessName: "Brand",
           ...(callToAction && { callToActionText: callToAction }),
+          ...(assetResourceName && { marketingImages: [{ asset: assetResourceName }] }),
         },
         finalUrls: [finalUrl],
       };
     } else {
       adPayload = {
-        responsiveSearchAd: { headlines: hl, descriptions: dl },
+        responsiveSearchAd: {
+          headlines: hl,
+          descriptions: dl,
+        },
         finalUrls: [finalUrl],
       };
     }
@@ -3189,6 +3589,192 @@ class GoogleAdController {
 
     const adId = resp.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName?.split("~").pop();
     return adId;
+  }
+
+  // Download a video from URL and upload it to YouTube — returns the YouTube videoId
+  async _uploadVideoToYouTube(accessToken, videoUrl, title = "Ad Video") {
+    try {
+      // Step 1: Download video into buffer
+      const downloaded = await axios.get(videoUrl, { responseType: "arraybuffer", timeout: 180000 });
+      const videoBuffer = Buffer.from(downloaded.data);
+      const contentType = downloaded.headers["content-type"] || "video/mp4";
+      const fileSize = videoBuffer.length;
+
+      // Step 2: Initiate YouTube resumable upload session
+      const initResp = await axios.post(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        {
+          snippet: {
+            title: String(title).slice(0, 100),
+            description: "Ad video uploaded via AdsGPT",
+            categoryId: "22",
+          },
+          status: { privacyStatus: "unlisted" },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "X-Upload-Content-Type": contentType,
+            "X-Upload-Content-Length": String(fileSize),
+          },
+        }
+      );
+
+      const uploadUrl = initResp.headers.location;
+      if (!uploadUrl) throw new Error("YouTube upload session URL not returned");
+
+      // Step 3: Upload the buffered video
+      const uploadResp = await axios.put(uploadUrl, videoBuffer, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": contentType,
+          "Content-Length": String(fileSize),
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+
+      const videoId = uploadResp.data?.id;
+      if (!videoId) throw new Error("YouTube upload succeeded but no video ID returned");
+
+      logger.info(`YouTube video uploaded successfully: videoId=${videoId}`);
+      return videoId;
+    } catch (e) {
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      logger.error(`Failed to upload video to YouTube from URL ${videoUrl}: ${detail}`);
+      throw new Error(`Video upload to YouTube failed: ${detail}`);
+    }
+  }
+
+  // Upload a single image buffer to Google Ads and return its resourceName
+  async _uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, imageBuffer, label) {
+    const assetResp = await axios.post(
+      `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+      {
+        mutateOperations: [{
+          assetOperation: {
+            create: {
+              name: `${label}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              type: "IMAGE",
+              imageAsset: { data: imageBuffer.toString("base64") },
+            },
+          },
+        }],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+          "login-customer-id": loginCustomerId,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName || null;
+  }
+
+  // Download imageUrl and upload two variants:
+  //   landscape → marketingImages     (min 600×314, ratio 1.91:1)
+  //   square    → squareMarketingImages (min 300×300, ratio 1:1)
+  // Returns { landscape, square } resource names.
+  async _uploadImageFromUrl(accessToken, loginCustomerId, customerId, imageUrl) {
+    try {
+      const sharp = require("sharp");
+      const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
+      const rawBuffer = Buffer.from(downloaded.data);
+
+      // Decode original dimensions
+      const meta = await sharp(rawBuffer).metadata();
+      const origW = meta.width || 1200;
+      const origH = meta.height || 628;
+
+      // ── Landscape variant (1.91:1) ──────────────────────────────────────────
+      // Target: 1200×628. Crop to 1.91:1 from center then resize.
+      const landscapeW = 1200;
+      const landscapeH = 628;
+      const landscapeBuffer = await sharp(rawBuffer)
+        .resize({
+          width: landscapeW,
+          height: landscapeH,
+          fit: "cover",
+          position: "centre",
+        })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+
+      // ── Square variant (1:1) ────────────────────────────────────────────────
+      // Target: 1200×1200. Crop to 1:1 from center then resize.
+      const squareSize = 1200;
+      const squareBuffer = await sharp(rawBuffer)
+        .resize({
+          width: squareSize,
+          height: squareSize,
+          fit: "cover",
+          position: "centre",
+        })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+
+      const [landscape, square] = await Promise.all([
+        this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, landscapeBuffer, "img_land"),
+        this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, squareBuffer, "img_sq"),
+      ]);
+
+      return { landscape, square };
+    } catch (e) {
+      logger.error(`Failed to upload image from URL ${imageUrl}: ${e.message}`);
+      return null;
+    }
+  }
+  // * GET /cta-options?objective=SEARCH
+  async getCtaOptions(req, res) {
+    /* #swagger.tags = ['Google Ads']
+       #swagger.summary = 'Get CTA options by objective'
+       #swagger.description = 'Returns allowed call-to-action values for a given Google Ads campaign objective. Pass the objective as a query param.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['objective'] = {
+         in: 'query',
+         required: true,
+         type: 'string',
+         description: 'Google Ads campaign objective',
+         enum: ['SALES', 'LEADS', 'WEBSITE_TRAFFIC', 'APP_PROMOTION', 'LOCAL_STORE', 'SEARCH', 'DISPLAY', 'PERFORMANCE_MAX', 'SHOPPING', 'MULTI_CHANNEL'],
+         example: 'SALES'
+       }
+       #swagger.responses[200] = {
+         description: 'List of allowed CTAs for the given objective',
+         schema: {
+           type: 'object',
+           properties: {
+             success: { type: 'boolean', example: true },
+             objective: { type: 'string', example: 'SALES' },
+             data: {
+               type: 'array',
+               items: {
+                 type: 'object',
+                 properties: {
+                   value: { type: 'string', example: 'SHOP_NOW' },
+                   label: { type: 'string', example: 'Shop now' }
+                 }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[400] = { description: 'Missing or unknown objective' }
+    */
+    const objective = String(req.query.objective || "").toUpperCase().replace(/ /g, "_");
+
+    if (!objective) {
+      return res.status(400).json({ status: false, error: "objective query param is required" });
+    }
+
+    const ctas = getGoogleCtas(objective);
+    if (!ctas) {
+      return res.status(400).json({ success: false, error: `Unknown objective "${objective}". Valid values: ${Object.keys(GOOGLE_CTA_MAP).join(", ")}` });
+    }
+
+    return res.json({ success: true, objective, data: ctas });
   }
 }
 

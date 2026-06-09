@@ -76,24 +76,498 @@
   color: white;
   padding: 0 6px;
 }
-.sc-ugtqr7-0.FIE_root .sc-qhd6ow-0.gZJoJo.FIE_tab {
-  background: transparent;
+
+.dark .FIE_tabs {
+  box-shadow: none !important;
+  border-right: 1px solid #cccccc10 !important;
 }
-.sc-ugtqr7-0.FIE_root .sc-qhd6ow-0.gZJoJo.FIE_tab[aria-selected='false'] svg path,
-.sc-ugtqr7-0.FIE_root
-  .sc-qhd6ow-0.gZJoJo.FIE_tab[aria-selected='false']
-  .sc-16k2ql4-1.fyFPrL.SfxLabel-text {
+/* Left-sidebar tab styling — dark-mode only. Uses the stable `FIE_tab`
+   semantic class so it's not coupled to styled-components hashes that
+   change between builds. */
+.dark .FIE_tab {
+  background: transparent !important;
+}
+
+/* Inactive tab — both icon (svg path) and label text at white/90% */
+.dark .FIE_tab[aria-selected='false'] svg path,
+.dark .FIE_tab[aria-selected='false'] .FIE_tab-label {
   color: #ffffff90 !important;
+  fill: #ffffff90 !important;
 }
-.sc-ugtqr7-0.FIE_root .sc-qhd6ow-0.gZJoJo.FIE_tab:hover {
-  background: #2a2a2a60;
+
+/* Hover on inactive tab — subtle dark wash */
+.dark .FIE_tab:not([aria-selected='true']):hover {
+  background: #2a2a2a60 !important;
 }
-.sc-ugtqr7-0.FIE_root .sc-qhd6ow-0.gZJoJo.FIE_tab[aria-selected='true'] {
-  background-color: #2a2a2a80;
+
+/* Active tab — slightly stronger dark bg + white icon/text.
+   The label sometimes renders without the explicit `FIE_tab-label`
+   class, so also target any descendant text node to be safe. */
+.dark .FIE_tab[aria-selected='true'] {
+  background: #2a2a2a80 !important;
 }
-.sc-ugtqr7-0.FIE_root .sc-qhd6ow-0.gZJoJo.FIE_tab[aria-selected='true'] svg path {
+.dark .FIE_tab[aria-selected='true'],
+.dark .FIE_tab[aria-selected='true'] *,
+.dark .FIE_tab[aria-selected='true'] svg path {
+  color: white !important;
+  fill: white !important;
+}
+
+/* ─── Top bar — dimension + zoom label should read white in dark mode.
+   Filerobot puts both inside `FIE_topbar`; the zoom % chip also gets the
+   stable `FIE_topbar-zoom-label`. Selecting all text/svg descendants in
+   the topbar covers the dimension readout, the zoom %, and the zoom-in /
+   zoom-out icons in one rule. */
+.dark .FIE_topbar,
+.dark .FIE_topbar *,
+.dark .FIE_topbar-zoom-label,
+.dark .FIE_topbar-zoom-in-btn svg,
+.dark .FIE_topbar-zoom-out-btn svg {
   color: white !important;
 }
+.dark .FIE_topbar-zoom-label {
+  padding: 0 8px;
+}
+.dark .FIE_topbar svg path {
+  fill: white !important;
+}
+
+/* ─── Move the Save button to the top-right corner of the top bar.
+   Filerobot's default lays it out in the center; pin it absolutely
+   against the right edge so it sits alongside undo / redo / close. */
+.dark .FIE_topbar {
+  position: relative !important;
+}
+.dark .FIE_topbar-buttons-wrapper {
+  position: absolute;
+  right: 11rem;
+}
+.dark .FIE_topbar-save-button {
+  /* position: absolute !important;
+  right: 11rem !important; */
+  padding: 8px 16px !important;
+  /* top: 50% !important;
+  transform: translateY(-50%) !important; */
+}
+
+/* ─── Bottom tools-bar — every tool button (Crop / Rotate / Flip X /
+   Flip Y / etc.) and its label/icon should be white in dark mode. */
+.dark .FIE_tools-bar,
+.dark .FIE_tools-bar *,
+.dark .FIE_tools,
+.dark .FIE_tools * {
+  color: white !important;
+}
+.dark .FIE_tools-bar svg path,
+.dark .FIE_tools svg path {
+  fill: white !important;
+}
+
+/* ─── Top-bar history buttons (reset / undo / redo) + close button.
+   Translucent ghost buttons with white icons; soft #2a2a2a80 wash on
+   hover. Targets the stable `FIE_topbar-*` classes so we don't rely on
+   the hashed `.sc-21g986-*` / `.gSMVuS` chains. */
+.dark .FIE_topbar-history-buttons button,
+.dark .FIE_topbar-reset-button,
+.dark .FIE_topbar-undo-button,
+.dark .FIE_topbar-redo-button,
+.dark .FIE_topbar-close-button {
+  background: transparent !important;
+  backdrop-filter: blur(80px) !important;
+  color: white !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+.dark .FIE_topbar-history-buttons button:hover,
+.dark .FIE_topbar-reset-button:hover,
+.dark .FIE_topbar-undo-button:hover,
+.dark .FIE_topbar-redo-button:hover,
+.dark .FIE_topbar-close-button:hover {
+  background: #2a2a2a80 !important;
+}
+.dark .FIE_topbar-history-buttons button svg path,
+.dark .FIE_topbar-reset-button svg path,
+.dark .FIE_topbar-undo-button svg path,
+.dark .FIE_topbar-redo-button svg path,
+.dark .FIE_topbar-close-button svg path {
+  fill: white !important;
+}
+
+/* Disabled state — when there's nothing to undo/redo/reset, dim the
+   button to 50% and disable the hover wash so it doesn't feel active. */
+.dark .FIE_topbar-history-buttons button:disabled,
+.dark .FIE_topbar-history-buttons button[disabled],
+.dark .FIE_topbar-reset-button:disabled,
+.dark .FIE_topbar-reset-button[disabled],
+.dark .FIE_topbar-undo-button:disabled,
+.dark .FIE_topbar-undo-button[disabled],
+.dark .FIE_topbar-redo-button:disabled,
+.dark .FIE_topbar-redo-button[disabled] {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+.dark .FIE_topbar-history-buttons button:disabled:hover,
+.dark .FIE_topbar-history-buttons button[disabled]:hover,
+.dark .FIE_topbar-reset-button:disabled:hover,
+.dark .FIE_topbar-reset-button[disabled]:hover,
+.dark .FIE_topbar-undo-button:disabled:hover,
+.dark .FIE_topbar-undo-button[disabled]:hover,
+.dark .FIE_topbar-redo-button:disabled:hover,
+.dark .FIE_topbar-redo-button[disabled]:hover {
+  background: transparent !important;
+}
+
+/* ─── Rotate slider — the degree readout in the centre + numeric ticks
+   ("0", "-45", "+45" etc.) need to be white in dark mode. */
+.dark .FIE_rotate-slider,
+.dark .FIE_rotate-slider * {
+  color: white !important;
+}
+.dark .FIE_rotate-slider svg path {
+  fill: white !important;
+}
+
+/* ─── Finetune slider label ("Brightness", "Contrast", "Hue", etc.).
+   Filerobot's default theme renders these via Scaleflex's Label component
+   at a muted gray; force white in dark mode so they're readable. */
+.dark .FIE_brightness-option-label,
+.dark .FIE_contrast-option-label,
+.dark .FIE_hue-option-label,
+.dark .FIE_saturation-option-label,
+.dark .FIE_value-option-label,
+.dark .FIE_warmth-option-label,
+.dark .FIE_blur-option-label {
+  color: white !important;
+}
+
+/* ─── Finetune value boxes (Brightness / Contrast / HSV / Blur / Warmth).
+   The structure is:
+     .FIE_<name>-option-wrapper           → outer column container
+       └ .SfxInput-root  (StyledSliderInput, 40px wide by default)
+           └ .SfxInput-Base  (the actual <input>)
+   The default 40px box clips negative decimals like "-0.65", and the
+   parent tools-bar hover was bleeding into the input, blanking the text. */
+.dark .FIE_brightness-option-wrapper .SfxInput-root,
+.dark .FIE_contrast-option-wrapper .SfxInput-root,
+.dark .FIE_hue-option-wrapper .SfxInput-root,
+.dark .FIE_saturation-option-wrapper .SfxInput-root,
+.dark .FIE_value-option-wrapper .SfxInput-root,
+.dark .FIE_warmth-option-wrapper .SfxInput-root,
+.dark .FIE_blur-option-wrapper .SfxInput-root {
+  width: 64px !important;
+  min-width: 64px !important;
+  background: #2a2a2a80 !important;
+  border: 1px solid #cccccc30 !important;
+  border-radius: 5px !important;
+}
+.dark .FIE_brightness-option-wrapper .SfxInput-root:hover,
+.dark .FIE_contrast-option-wrapper .SfxInput-root:hover,
+.dark .FIE_hue-option-wrapper .SfxInput-root:hover,
+.dark .FIE_saturation-option-wrapper .SfxInput-root:hover,
+.dark .FIE_value-option-wrapper .SfxInput-root:hover,
+.dark .FIE_warmth-option-wrapper .SfxInput-root:hover,
+.dark .FIE_blur-option-wrapper .SfxInput-root:hover {
+  background: #2a2a2aa0 !important;
+  border-color: #cccccc50 !important;
+}
+/* The actual <input> — Scaleflex's hover state was forcing a colour that
+   matched the surrounding background, blanking the digits. Pin it white in
+   every state (idle / wrapper-hover / input-hover / focus). */
+.dark .FIE_brightness-option-wrapper .SfxInput-Base,
+.dark .FIE_contrast-option-wrapper .SfxInput-Base,
+.dark .FIE_hue-option-wrapper .SfxInput-Base,
+.dark .FIE_saturation-option-wrapper .SfxInput-Base,
+.dark .FIE_value-option-wrapper .SfxInput-Base,
+.dark .FIE_warmth-option-wrapper .SfxInput-Base,
+.dark .FIE_blur-option-wrapper .SfxInput-Base,
+.dark .FIE_brightness-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_contrast-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_hue-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_saturation-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_value-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_warmth-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_blur-option-wrapper .SfxInput-root:hover .SfxInput-Base,
+.dark .FIE_brightness-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_contrast-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_hue-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_saturation-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_value-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_warmth-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_blur-option-wrapper .SfxInput-Base:hover,
+.dark .FIE_brightness-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_contrast-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_hue-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_saturation-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_value-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_warmth-option-wrapper .SfxInput-Base:focus,
+.dark .FIE_blur-option-wrapper .SfxInput-Base:focus {
+  color: white !important;
+  /* background: transparent !important; */
+  text-align: center !important;
+}
+
+/* ─── Color picker modal — hex value input.
+   The hex input sits inside `.SfxColorPicker-action .SfxInput-root`.
+   On hover, Scaleflex's default Input :hover swaps the text colour to
+   one that matches the field's hover bg, blanking the hex value. Same
+   pattern as the brightness slider fix above — pin the `.SfxInput-Base`
+   text white across idle / wrapper-hover / input-hover / focus, and
+   give the wrapper a clearer dark hover wash so the field still reads
+   as interactive. */
+.dark .SfxColorPicker-action .SfxInput-root:hover {
+  background: #2a2a2aa0 !important;
+  border-color: #cccccc50 !important;
+}
+.dark .SfxColorPicker-action .SfxInput-Base,
+.dark .SfxColorPicker-action .SfxInput-root:hover .SfxInput-Base,
+.dark .SfxColorPicker-action .SfxInput-Base:hover,
+.dark .SfxColorPicker-action .SfxInput-Base:focus {
+  color: white !important;
+  background: transparent !important;
+}
+
+/* ─── Annotate tab — Text controls (Bold / Italic / option triggerers).
+   Filerobot's StyledIconWrapper paints a near-white `bg-active` (#f3f7fa)
+   when its `active` prop is true (bold or italic toggled, or a popup
+   triggerer with its menu open). styled-components v6 doesn't forward the
+   `active` prop to the DOM, so we can't conditionally select; instead we
+   replace the active light bg with a darker translucent wash that matches
+   the rest of the toolbar, and pin the icons white so they read on it. */
+
+.FIE_text-bold-option svg:hover,
+.FIE_text-italic-option svg:hover,
+.FIE_annotation-option-triggerer svg:hover {
+  background: none !important;
+}
+
+/* Bold / Italic / triggerer / watermark-padding-triggerer icon visibility
+   on the active (white) chip.
+   `TextControls` is rendered in BOTH the Annotate tab and the Watermark
+   tab's "Add text" flow — same classes. The watermark tab also has its
+   own padding triggerer (FIE_watermark-padding-triggerer) that wraps the
+   same StyledIconWrapper.
+   styled-components v6 strips the `active` prop from the DOM, so there's
+   no `[active]` or `aria-selected` selector for the active state — only
+   way to selectively style it would be a JS observer.
+   `mix-blend-mode: difference` removes the dependency on which rule wins:
+   white svg on the white active chip renders dark, white svg on the dark
+   inactive surface renders light. Auto-adapts per state without needing
+   to detect it. */
+.dark .FIE_text-bold-option svg,
+.dark .FIE_text-italic-option svg,
+.dark .FIE_annotation-option-triggerer svg,
+.dark .FIE_watermark-padding-triggerer svg {
+  mix-blend-mode: difference !important;
+}
+
+/* ─── Font family dropdown items — keep non-selected rows muted (the
+   `.dark .SfxMenu-root *` rule later in this file paints them #afafaf,
+   which is the intent for unselected fonts), and flip ONLY the active row
+   and the hover row to white. Scaleflex's Select doesn't add an
+   `aria-selected` attribute on the MenuItem — instead it injects a
+   `MenuItemActions` child (the Tick checkmark) inside the currently-
+   selected item only. We detect active via `:has(.SfxMenuItem-Actions)`.
+   `.SfxMenu-root` is added to every selector to bump specificity above
+   the (0,2,0) muted-gray rule defined later. */
+.dark .SfxMenu-root .FIE_text-font-family-item:hover,
+.dark .SfxMenu-root .FIE_text-font-family-item:hover *,
+.dark .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions),
+.dark .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions) * {
+  color: white !important;
+}
+.dark .SfxMenu-root .FIE_text-font-family-item:hover svg path,
+.dark .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions) svg path {
+  fill: white !important;
+}
+
+/* ─── Annotate "option" popups (Alignment, Spacings, Opacity, Stroke,
+   Shadow, Position). The popup is an `SfxMenu-root.FIE_annotation-option-popup`;
+   the buttons inside are plain `StyledIconWrapper` (no FIE_ class), so we
+   anchor via the deterministic componentId `.sc-qvjmv1-6`. Specificity is
+   bumped via the `.SfxMenu-root.FIE_…` double-class so we beat the
+   `.dark .SfxMenu-root *` gray rule defined later (image 1). */
+.dark .SfxMenu-root.FIE_annotation-option-popup,
+.dark .SfxMenu-root.FIE_annotation-option-popup *,
+.dark .SfxMenu-root.FIE_annotation-option-popup svg,
+.dark .SfxMenu-root.FIE_annotation-option-popup svg path {
+  color: white !important;
+  fill: white !important;
+}
+/* Give the popup a clearer dark surface so the white icons sit on real
+   contrast — `.sc-qvjmv1-2` (StyledOptionPopupContent) defaults to
+   `bg-secondary` (white) which washed the popup out. */
+/* .dark .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-2 {
+  background: #0d0d0d80 !important;
+  border-radius: 6px !important;
+  padding: 6px !important;
+} */
+ 
+/* Icon button shape — DON'T blanket-override the background. Filerobot's
+   StyledIconWrapper sets `background-color: bg-active` (light) only on the
+   `active` prop, which is how it shows the currently-selected alignment.
+   By leaving that bg alone, the selection persists visibly. We only paint
+   the :hover state and use a brighter wash (#ffffff20) than #2a2a2a80
+   because the popup surface is already dark — a dark-on-dark hover was
+   nearly invisible. */
+.dark .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-6 {
+  border: 1px solid transparent !important;
+  border-radius: 4px !important;
+}
+.dark .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-6:not(.fxXbsV):hover {
+  background: #ffffff20 !important;
+}
+
+/* Selected alignment option had the white `bg-active` from Filerobot AND
+   my forced-white svg fill → white-on-white, icon invisible. styled-
+   components v6 drops the `active` prop from the DOM so I can't target
+   "only the active button" from CSS. `mix-blend-mode: difference` on the
+   svg naturally adapts: on the white selected bg it renders dark, on the
+   dark/transparent inactive bg it renders light. The forced `fill: white`
+   set earlier in this section becomes the source the difference is
+   computed against, so the math is predictable. */
+.dark .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-6 svg {
+  mix-blend-mode: difference !important;
+}
+
+/* ─── Bottom tools-bar selected state — applied to EVERY tab's tools row
+   (Adjust, Finetune, Filters, Watermark, Annotate, Resize). Hover stays at
+   the existing #2a2a2a80 wash; selected drops to a solid darker tone so
+   the two are visually distinct anywhere in the tools-bar. */
+.dark .FIE_tools-bar [aria-selected='true'],
+.dark .FIE_tools-bar button[aria-selected='true'] {
+  background-color: #0d0d0d85 !important;
+}
+.dark .FIE_tools-bar [aria-selected='true'] svg path,
+.dark .FIE_tools-bar button[aria-selected='true'] svg path {
+  fill: white !important;
+}
+
+/* ─── Filters tab carousel arrows.
+   Filerobot's StyledPrevArrowWrapper / NextArrowWrapper hardcodes a white
+   linear-gradient as the arrow's faux scrim. In dark mode that gradient
+   reads as a bright vertical strip on the dark editor, and the arrow
+   icon (default gray `IconsSecondary`) becomes invisible against it.
+   Replace the gradient with a matching dark fade and force the SVG white. */
+.dark .FIE_carousel-prev-button {
+  background: linear-gradient(
+    90deg,
+    #0d0d0d 1.56%,
+    rgba(13, 13, 13, 0.89) 52.4%,
+    rgba(13, 13, 13, 0.53) 76.04%,
+    rgba(13, 13, 13, 0) 100%
+  ) !important;
+}
+.dark .FIE_carousel-next-button {
+  background: linear-gradient(
+    270deg,
+    #0d0d0d 1.56%,
+    rgba(13, 13, 13, 0.89) 52.4%,
+    rgba(13, 13, 13, 0.53) 76.04%,
+    rgba(13, 13, 13, 0) 100%
+  ) !important;
+}
+.dark .FIE_carousel-prev-button svg,
+.dark .FIE_carousel-prev-button svg path,
+.dark .FIE_carousel-next-button svg,
+.dark .FIE_carousel-next-button svg path {
+  color: white !important;
+  fill: white !important;
+}
+
+/* ─── Crop preset dropdown — surface + items.
+   Surface matches the watermark-add-menu treatment (translucent dark
+   with blur and a hairline white border). Items are #afafaf by default
+   and flip to white on a #0d0d0d60 hover wash. */
+.dark .FIE_crop-presets-menu {
+  background: #0d0d0d50 !important;
+  backdrop-filter: blur(80px) !important;
+  color: white !important;
+  box-shadow: none !important;
+  border: 1px solid #ffffff10 !important;
+  border-radius: 10px !important;
+}
+
+/* Items inside the crop menu. The text label is several layers deep
+   (`.SfxMenuItem-wrapper > div > span`), so blanket every descendant
+   and force the color — that catches the span no matter how Filerobot
+   wraps it. */
+.dark .FIE_crop-presets-menu,
+.dark .FIE_crop-presets-menu * {
+  color: #afafaf !important;
+}
+.dark .FIE_crop-presets-menu svg path {
+  fill: #afafaf !important;
+}
+
+/* Hover row — light dark wash on the wrapper + flip every descendant
+   (text, icon, ratio suffix like "16:9") to white. */
+.dark .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover {
+  background: #0d0d0d60 !important;
+}
+.dark .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover,
+.dark .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover * {
+  color: white !important;
+}
+.dark .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover svg path {
+  fill: white !important;
+}
+
+/* Selected (currently active) preset row — Filerobot defaults this to a
+   white highlight. Force the same #0d0d0d60 wash as hover so it blends
+   with the dark menu and the text/icon read in white. */
+.dark .FIE_crop-presets-menu .SfxMenuItem-wrapper[aria-selected='true'],
+.dark .FIE_crop-presets-menu .SfxMenuItem-root[aria-selected='true'],
+.dark .FIE_crop-presets-menu [aria-selected='true'] {
+  background: #0d0d0d60 !important;
+  color: white !important;
+}
+.dark .FIE_crop-presets-menu [aria-selected='true'] * {
+  color: white !important;
+}
+.dark .FIE_crop-presets-menu [aria-selected='true'] svg path {
+  fill: white !important;
+}
+
+/* ─── Sfx popper menus (rendered via portal, so they sit OUTSIDE
+   .FIE_crop-presets-menu in the DOM). The Social-Media → Facebook
+   submenu is one of these. Apply the same dark surface + #afafaf text /
+   #0d0d0d60-hover treatment to any `.SfxMenu-root` in dark mode. */
+.dark .SfxMenu-root {
+  background: #0d0d0d50 !important;
+  backdrop-filter: blur(80px) !important;
+  box-shadow: none !important;
+  border: 1px solid #ffffff10 !important;
+  border-radius: 10px !important;
+}
+.dark .SfxMenu-root,
+.dark .SfxMenu-root * {
+  color: #afafaf !important;
+}
+.dark .SfxMenu-root svg path {
+  fill: #afafaf !important;
+}
+.dark .SfxMenu-root .SfxMenuItem-wrapper,
+.dark .SfxMenu-root .SfxMenuItem-wrapper * {
+  background: none !important;
+}
+.dark .SfxMenu-root .SfxMenuItem-wrapper:hover {
+  background: #0d0d0d60 !important;
+  color: white !important;
+}
+
+.dark .SfxMenu-root .SfxMenuItem-wrapper:hover svg path {
+  fill: white !important;
+}
+ 
+.dark .SfxMenu-root .SfxMenuItem-wrapper .ghINBM {
+  background: #0d0d0d60 !important;
+  color: white !important;
+}
+.dark .SfxMenu-root [aria-selected='true'] svg path {
+  fill: white !important;
+}
+
 .sc-ugtqr7-0.FIE_root .krcTsV {
   box-shadow: none;
 }
@@ -106,13 +580,22 @@
   border-right: 1px solid #cccccc10;
 }
 
+/* The left sidebar tabs container reads `bg-secondary` from the Filerobot
+   palette. In dark mode that palette value is `#0D0D0D50` (31% opacity),
+   which lets the library's default white surface bleed through and makes
+   the tabs look white. Force a solid dark bg in dark mode only — light
+   mode keeps the palette's `#f4f4f5` so the tabs blend with the page. */
+.dark .sc-ugtqr7-0.FIE_root .sc-ugtqr7-3.krcTsV.FIE_tabs {
+  background: #0D0D0D;
+}
+
 /* menu */
 .SfxMenu-root,
 .SfxMenu-root {
   background: transparent !important;
 }
 
-.FIE_watermark-add-menu,
+.dark .FIE_watermark-add-menu,
 .SfxMenu-root {
   background: #0d0d0d50 !important;
   backdrop-filter: blur(80px) !important;
@@ -296,15 +779,6 @@ button.FIE_crop-presets-opener-button {
   border: none !important;
 }
 
-.sc-qvjmv1-6.wFXdJ.FIE_text-bold-option,
-.sc-qvjmv1-6.wFXdJ.FIE_text-italic-option,
-.sc-qvjmv1-6.lahdsY.FIE_annotation-option-triggerer,
-.sc-qvjmv1-6.lahdsY.FIE_annotation-option-triggerer,
-.sc-qvjmv1-6.gKZqHK,
-.sc-qvjmv1-6.lahdsY {
-  background: #2a2a2a;
-}
-
 .sc-1nr0bka-2.FIE_tools-item-wrapper.FIE_carousel-item:has(.sc-dwg14p-2.FIE_warmth-tool-button) {
   display: none !important;
 }
@@ -464,3 +938,492 @@ button.FIE_crop-presets-opener-button {
 .FIE_topbar-redo-button svg {
   color: white !important;
 }
+
+/* .lagtkV, .lkvIvq {
+  background: transparent !important;
+} */
+
+/* ════════════════════════════════════════════════════════════════════════
+   LIGHT MODE
+   ════════════════════════════════════════════════════════════════════════
+   All selectors are scoped under `html:not(.dark)` so they DO NOT touch
+   the dark-mode rules above. The unscoped dark-leaning declarations at
+   the top of this file (lines 1–78, plus a few later blocks targeting
+   `.SfxMenu-root` / `.SfxModal-*` without a `.dark` prefix) bleed into
+   light mode by default; everything below counters that bleed and
+   re-skins the editor for the project's zinc/indigo palette.
+
+   Specificity note: `html:not(.dark) .FIE_x` evaluates to (0,2,1), which
+   beats the unscoped `.sc-… .FIE_x` (0,2,0) rules at the top of the file
+   on equal-class-count tiebreaks. `!important` is added on declarations
+   that conflict with `!important` rules elsewhere.
+
+   Palette:
+     surface:     #ffffff
+     surface-2:   #fafafa
+     hover:       #f4f4f5  (zinc-100)
+     border:      #e4e4e7  (zinc-200)
+     text:        #18181b  (zinc-900)
+     text-muted:  #52525b  (zinc-600)
+     accent:      #3F51B5  (project indigo)
+     accent-bg:   #ebedfc  (indigo-50-ish)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Editor root */
+html:not(.dark) .FIE_root {
+  border: 1px solid #e4e4e7 !important;
+  background: #ffffff !important;
+}
+
+/* ─── Top bar — light surface, dark text */
+html:not(.dark) .FIE_topbar {
+  background: #ffffff !important;
+  position: relative !important;
+}
+html:not(.dark) .FIE_topbar,
+html:not(.dark) .FIE_topbar *,
+html:not(.dark) .FIE_topbar-zoom-label,
+html:not(.dark) .FIE_topbar-zoom-in-btn svg,
+html:not(.dark) .FIE_topbar-zoom-out-btn svg {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_topbar svg path {
+  fill: #52525b !important;
+}
+html:not(.dark) .FIE_topbar-zoom-label {
+  padding: 0 8px;
+}
+html:not(.dark) .FIE_topbar-buttons-wrapper {
+  position: absolute;
+  right: 11rem;
+}
+
+/* ─── Save button — indigo primary */
+html:not(.dark) .sc-ugtqr7-0.FIE_root button.FIE_topbar-save-button,
+html:not(.dark) .FIE_topbar-save-button {
+  background: #3f51b5 !important;
+  color: #ffffff !important;
+  border: 1px solid #3f51b5 !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  backdrop-filter: none !important;
+}
+html:not(.dark) .sc-ugtqr7-0.FIE_root button.FIE_topbar-save-button:hover,
+html:not(.dark) .FIE_topbar-save-button:hover {
+  background: #3949ab !important;
+  transform: scale(1.02);
+}
+
+/* ─── Generic SfxButton inside the editor (Cancel/Apply etc.) */
+html:not(.dark) .sc-ugtqr7-0.FIE_root button.SfxButton-root,
+html:not(.dark) .sc-lxwit0-3.SfxButton-root {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 8px !important;
+  backdrop-filter: none !important;
+}
+html:not(.dark) .sc-ugtqr7-0.FIE_root button.SfxButton-root:hover,
+html:not(.dark) .sc-lxwit0-3.SfxButton-root:hover {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+}
+html:not(.dark) .SfxCrossButton-root:hover {
+  background: #f4f4f5 !important;
+}
+
+/* ─── Top-bar history buttons (reset / undo / redo) + close button */
+html:not(.dark) .FIE_topbar-history-buttons button,
+html:not(.dark) .FIE_topbar-reset-button,
+html:not(.dark) .FIE_topbar-undo-button,
+html:not(.dark) .FIE_topbar-redo-button,
+html:not(.dark) .FIE_topbar-close-button {
+  background: transparent !important;
+  color: #18181b !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  backdrop-filter: none !important;
+  transition: all 0.2s ease !important;
+}
+html:not(.dark) .FIE_topbar-history-buttons button:hover,
+html:not(.dark) .FIE_topbar-reset-button:hover,
+html:not(.dark) .FIE_topbar-undo-button:hover,
+html:not(.dark) .FIE_topbar-redo-button:hover,
+html:not(.dark) .FIE_topbar-close-button:hover {
+  background: #f4f4f5 !important;
+}
+html:not(.dark) .FIE_topbar-history-buttons button svg,
+html:not(.dark) .FIE_topbar-history-buttons button svg path,
+html:not(.dark) .FIE_topbar-reset-button svg,
+html:not(.dark) .FIE_topbar-reset-button svg path,
+html:not(.dark) .FIE_topbar-undo-button svg,
+html:not(.dark) .FIE_topbar-undo-button svg path,
+html:not(.dark) .FIE_topbar-redo-button svg,
+html:not(.dark) .FIE_topbar-redo-button svg path,
+html:not(.dark) .FIE_topbar-close-button svg,
+html:not(.dark) .FIE_topbar-close-button svg path {
+  fill: #52525b !important;
+  color: #52525b !important;
+}
+
+/* Disabled history buttons — dim, no hover wash */
+html:not(.dark) .FIE_topbar-history-buttons button:disabled,
+html:not(.dark) .FIE_topbar-history-buttons button[disabled],
+html:not(.dark) .FIE_topbar-reset-button:disabled,
+html:not(.dark) .FIE_topbar-reset-button[disabled],
+html:not(.dark) .FIE_topbar-undo-button:disabled,
+html:not(.dark) .FIE_topbar-undo-button[disabled],
+html:not(.dark) .FIE_topbar-redo-button:disabled,
+html:not(.dark) .FIE_topbar-redo-button[disabled] {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+html:not(.dark) .FIE_topbar-history-buttons button:disabled:hover,
+html:not(.dark) .FIE_topbar-reset-button:disabled:hover,
+html:not(.dark) .FIE_topbar-undo-button:disabled:hover,
+html:not(.dark) .FIE_topbar-redo-button:disabled:hover {
+  background: transparent !important;
+}
+
+/* Override the SfxLabel-text rule that paints labels white */
+html:not(.dark) .sc-ugtqr7-0.FIE_root .SfxLabel-text {
+  color: #18181b !important;
+}
+
+/* ─── Left sidebar tabs */
+html:not(.dark) .FIE_tabs {
+  box-shadow: none !important;
+  border-right: 1px solid #e4e4e7 !important;
+  background: #ffffff !important;
+}
+html:not(.dark) .FIE_tab {
+  background: transparent !important;
+}
+html:not(.dark) .FIE_tab[aria-selected='false'] svg path,
+html:not(.dark) .FIE_tab[aria-selected='false'] .FIE_tab-label {
+  color: #52525b !important;
+  fill: #52525b !important;
+}
+html:not(.dark) .FIE_tab:not([aria-selected='true']):hover {
+  background: #f4f4f5 !important;
+}
+html:not(.dark) .FIE_tab[aria-selected='true'] {
+  background: #ebedfc !important;
+}
+html:not(.dark) .FIE_tab[aria-selected='true'],
+html:not(.dark) .FIE_tab[aria-selected='true'] *,
+html:not(.dark) .FIE_tab[aria-selected='true'] svg path {
+  color: #3f51b5 !important;
+  fill: #3f51b5 !important;
+}
+
+/* ─── Bottom tools-bar — dark text on light surface */
+html:not(.dark) .FIE_tools-bar,
+html:not(.dark) .FIE_tools-bar *,
+html:not(.dark) .FIE_tools,
+html:not(.dark) .FIE_tools * {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_tools-bar svg path,
+html:not(.dark) .FIE_tools svg path {
+  fill: #52525b !important;
+}
+
+/* Selected tool button — subtle indigo tint, indigo icon */
+html:not(.dark) .FIE_tools-bar [aria-selected='true'],
+html:not(.dark) .FIE_tools-bar button[aria-selected='true'] {
+  background-color: #ebedfc !important;
+}
+html:not(.dark) .FIE_tools-bar [aria-selected='true'],
+html:not(.dark) .FIE_tools-bar [aria-selected='true'] *,
+html:not(.dark) .FIE_tools-bar button[aria-selected='true'],
+html:not(.dark) .FIE_tools-bar button[aria-selected='true'] * {
+  color: #3f51b5 !important;
+}
+html:not(.dark) .FIE_tools-bar [aria-selected='true'] svg path,
+html:not(.dark) .FIE_tools-bar button[aria-selected='true'] svg path {
+  fill: #3f51b5 !important;
+}
+
+/* ─── Rotate slider — dark readout */
+html:not(.dark) .FIE_rotate-slider,
+html:not(.dark) .FIE_rotate-slider * {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_rotate-slider svg path {
+  fill: #52525b !important;
+}
+
+/* ─── Finetune slider labels */
+html:not(.dark) .FIE_brightness-option-label,
+html:not(.dark) .FIE_contrast-option-label,
+html:not(.dark) .FIE_hue-option-label,
+html:not(.dark) .FIE_saturation-option-label,
+html:not(.dark) .FIE_value-option-label,
+html:not(.dark) .FIE_warmth-option-label,
+html:not(.dark) .FIE_blur-option-label {
+  color: #52525b !important;
+}
+
+/* Finetune value boxes (Brightness / Contrast / HSV / Blur / Warmth) */
+html:not(.dark) .FIE_brightness-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_contrast-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_hue-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_saturation-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_value-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_warmth-option-wrapper .SfxInput-root,
+html:not(.dark) .FIE_blur-option-wrapper .SfxInput-root {
+  width: 64px !important;
+  min-width: 64px !important;
+  background: #fafafa !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 5px !important;
+}
+html:not(.dark) .FIE_brightness-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_contrast-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_hue-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_saturation-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_value-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_warmth-option-wrapper .SfxInput-root:hover,
+html:not(.dark) .FIE_blur-option-wrapper .SfxInput-root:hover {
+  background: #f4f4f5 !important;
+  border-color: #d4d4d8 !important;
+}
+html:not(.dark) .FIE_brightness-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_contrast-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_hue-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_saturation-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_value-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_warmth-option-wrapper .SfxInput-Base,
+html:not(.dark) .FIE_blur-option-wrapper .SfxInput-Base {
+  color: #18181b !important;
+  background: transparent !important;
+  text-align: center !important;
+}
+
+/* ─── Crop preset menu */
+html:not(.dark) .FIE_crop-presets-menu {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 10px !important;
+}
+html:not(.dark) .FIE_crop-presets-menu,
+html:not(.dark) .FIE_crop-presets-menu * {
+  color: #52525b !important;
+}
+html:not(.dark) .FIE_crop-presets-menu svg path {
+  fill: #52525b !important;
+}
+html:not(.dark) .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover {
+  background: #f4f4f5 !important;
+}
+html:not(.dark) .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover,
+html:not(.dark) .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover * {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_crop-presets-menu .SfxMenuItem-wrapper:hover svg path {
+  fill: #18181b !important;
+}
+html:not(.dark) .FIE_crop-presets-menu .SfxMenuItem-wrapper[aria-selected='true'],
+html:not(.dark) .FIE_crop-presets-menu [aria-selected='true'] {
+  background: #ebedfc !important;
+  color: #3f51b5 !important;
+}
+html:not(.dark) .FIE_crop-presets-menu [aria-selected='true'] *,
+html:not(.dark) .FIE_crop-presets-menu [aria-selected='true'] svg path {
+  color: #3f51b5 !important;
+  fill: #3f51b5 !important;
+}
+
+/* ─── SfxMenu portal surfaces (font dropdown, social-media submenu, etc.) */
+html:not(.dark) .SfxMenu-root,
+html:not(.dark) .FIE_watermark-add-menu {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 10px !important;
+}
+html:not(.dark) .SfxMenu-root,
+html:not(.dark) .SfxMenu-root * {
+  color: #52525b !important;
+}
+html:not(.dark) .SfxMenu-root svg path {
+  fill: #52525b !important;
+}
+html:not(.dark) .SfxMenu-root .SfxMenuItem-wrapper:hover {
+  background: #f4f4f5 !important;
+}
+html:not(.dark) .SfxMenu-root .SfxMenuItem-wrapper:hover,
+html:not(.dark) .SfxMenu-root .SfxMenuItem-wrapper:hover * {
+  color: #18181b !important;
+}
+html:not(.dark) .SfxMenu-root .SfxMenuItem-wrapper:hover svg path {
+  fill: #18181b !important;
+}
+
+/* Font family dropdown — only selected + hover get the indigo accent */
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:hover,
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:hover *,
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions),
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions) * {
+  color: #3f51b5 !important;
+}
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:hover svg path,
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions) svg path {
+  fill: #3f51b5 !important;
+}
+html:not(.dark) .SfxMenu-root .FIE_text-font-family-item:has(.SfxMenuItem-Actions) {
+  background: #ebedfc !important;
+}
+
+/* ─── Annotate "option" popups (Alignment, Spacings, Opacity, etc.) */
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup,
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup *,
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup svg,
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup svg path {
+  color: #52525b !important;
+  fill: #52525b !important;
+}
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-2 {
+  background: #ffffff !important;
+  border-radius: 6px !important;
+  padding: 6px !important;
+}
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-6 {
+  border: 1px solid transparent !important;
+  border-radius: 4px !important;
+}
+html:not(.dark) .SfxMenu-root.FIE_annotation-option-popup .sc-qvjmv1-6:not(.lkTlRe):hover {
+  background: #f4f4f5 !important;
+}
+
+/* ─── Annotate tab — font family + font size inputs */
+html:not(.dark) .FIE_text-font-family-option,
+html:not(.dark) .FIE_text-size-option {
+  background: #fafafa !important;
+  backdrop-filter: none !important;
+  color: #18181b !important;
+  box-shadow: none !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 8px !important;
+}
+html:not(.dark) .FIE_text-size-option input {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_text-font-family-option .SfxSelect-Label {
+  color: #18181b !important;
+}
+html:not(.dark) .FIE_color-picker-triggerer {
+  border: 1px solid #e4e4e7 !important;
+}
+
+/* Bold / Italic / option-triggerers — keep Filerobot's `bg-active` (light)
+   for the selected state; just provide a subtle hover wash. */
+html:not(.dark) .FIE_text-bold-option:hover,
+html:not(.dark) .FIE_text-italic-option:hover,
+html:not(.dark) .FIE_annotation-option-triggerer:hover {
+  background: #f4f4f5 !important;
+}
+
+/* ─── Watermark "add image" button */
+html:not(.dark) button.FIE_watermark-add-button {
+  background: #3f51b5 !important;
+  color: #ffffff !important;
+  border: 1px solid #3f51b5 !important;
+  border-radius: 8px !important;
+  backdrop-filter: none !important;
+}
+html:not(.dark) button.FIE_watermark-add-button:hover {
+  background: #3949ab !important;
+}
+
+/* ─── Color picker hex input (modal) */
+html:not(.dark) .SfxColorPicker-action .SfxInput-root {
+  background: #fafafa !important;
+  border: 1px solid #e4e4e7 !important;
+}
+html:not(.dark) .SfxColorPicker-action .SfxInput-root:hover {
+  background: #f4f4f5 !important;
+  border-color: #d4d4d8 !important;
+}
+html:not(.dark) .SfxColorPicker-action .SfxInput-Base,
+html:not(.dark) .SfxColorPicker-action .SfxInput-root:hover .SfxInput-Base,
+html:not(.dark) .SfxColorPicker-action .SfxInput-Base:hover,
+html:not(.dark) .SfxColorPicker-action .SfxInput-Base:focus {
+  color: #18181b !important;
+  background: transparent !important;
+}
+
+/* ─── Sfx Select on hover — the "Hex" / "RGB" dropdown.
+   An unscoped rule earlier in this file (`.sc-150k0cz-5.SfxInput-root
+   .SfxSelect-root:hover { color: white }`) was painting the label
+   white on hover for both themes; in light mode that's white-on-white,
+   so the "Hex" label vanished. Pin it dark in light mode. */
+html:not(.dark) .SfxInput-root.SfxSelect-root:hover,
+html:not(.dark) .SfxInput-root.SfxSelect-root:hover *,
+html:not(.dark) .SfxInput-root.SfxSelect-root:hover .SfxSelect-Label {
+  color: #18181b !important;
+}
+html:not(.dark) .SfxInput-root.SfxSelect-root:hover svg path {
+  fill: #52525b !important;
+}
+
+/* ─── Generic Sfx inputs (resize / save dialog / etc.) */
+html:not(.dark) .sc-150k0cz-5.SfxInput-root {
+  background: #fafafa !important;
+  color: #18181b !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 5px;
+}
+html:not(.dark) .sc-150k0cz-5.SfxInput-root .SfxInput-Base {
+  color: #18181b !important;
+}
+
+/* ─── Save / common modal container */
+html:not(.dark) .SfxModal-Container {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 15px !important;
+  border: 1px solid #e4e4e7 !important;
+}
+html:not(.dark) .SfxModalTitle-root {
+  color: #18181b !important;
+}
+html:not(.dark) .SfxModal-root .SfxModalTitle-Icon svg path {
+  fill: #52525b !important;
+}
+
+/* Save-modal label spacing (mirrors the dark-mode rule) */
+html:not(.dark) .FIE_save-quality-wrapper label.SfxLabel-root {
+  padding-bottom: 7px;
+  padding-top: 11px;
+  color: #18181b !important;
+}
+
+/* ─── Slider rail — Filerobot's `.SfxSlider-rail` defaults to
+   `BordersItem` (#e2e8ec), which is nearly invisible on the white
+   light-mode popup surfaces (Shadow → Horizontal/Vertical/Blur/Opacity,
+   plus Brightness/Contrast/HSV/Blur sliders in the Finetune tab). Bump
+   the rail to a stronger zinc-300 so the inactive portion of the track
+   reads on white. */
+html:not(.dark) .SfxSlider-rail {
+  background-color: #68686b !important;
+}
+
+/* ─── Filters tab carousel arrows in light mode.
+   The white-fade gradient that Filerobot bakes into the arrow is fine on
+   the light editor (it matches the bg). The only thing missing is icon
+   contrast — default gray on a white gradient is too washed-out. Force
+   the arrow svg to a darker zinc tone so it reads. */
+html:not(.dark) .FIE_carousel-prev-button svg,
+html:not(.dark) .FIE_carousel-prev-button svg path,
+html:not(.dark) .FIE_carousel-next-button svg,
+html:not(.dark) .FIE_carousel-next-button svg path {
+  color: #fff !important;
+  fill: #fff !important;
+}
+

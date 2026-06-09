@@ -127,14 +127,14 @@ const FbAdCarousel = () => {
 
   if (postnodecreatives.length === 0) {
     return (
-      <div className="flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/2 px-4 py-10 text-center">
+      <div className="flex w-full items-center justify-center rounded-xl border border-black/10 bg-black/5 px-4 py-10 text-center dark:border-white/10 dark:bg-white/2">
         <div className="max-w-md">
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
             No Meta creatives ready to post
           </p>
           <p className="mt-1.5 text-xs text-gray-400">
             Go back to the Ad Studio and generate creatives on the{' '}
-            <span className="font-medium text-gray-200">Meta</span> platform
+            <span className="font-medium text-gray-600 dark:text-gray-200">Meta</span> platform
             tab. Google-tagged creatives only appear on the Google posting
             screen.
           </p>
@@ -173,12 +173,12 @@ const FbAdCarousel = () => {
         ))}
       </Swiper>
 
-      <button className="swiper-btn-prev absolute top-1/2 left-0 z-10 -translate-y-12 rounded-full border border-white/20 bg-black/40 p-3 text-white backdrop-blur-md transition hover:bg-black/60 active:scale-95 disabled:hidden">
+      <button className="swiper-btn-prev absolute top-1/2 left-0 z-10 -translate-y-12 rounded-full border border-black/10 bg-white/70 p-3 text-gray-700 backdrop-blur-md transition hover:bg-white active:scale-95 disabled:hidden dark:border-white/20 dark:bg-black/40 dark:text-white dark:hover:bg-black/60">
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <button className="swiper-btn-next absolute top-1/2 right-0 z-10 -translate-y-12 rounded-full border border-white/20 bg-black/40 p-3 text-white backdrop-blur-md transition hover:bg-black/60 active:scale-95 disabled:hidden">
+      <button className="swiper-btn-next absolute top-1/2 right-0 z-10 -translate-y-12 rounded-full border border-black/10 bg-white/70 p-3 text-gray-700 backdrop-blur-md transition hover:bg-white active:scale-95 disabled:hidden dark:border-white/20 dark:bg-black/40 dark:text-white dark:hover:bg-black/60">
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
         </svg>

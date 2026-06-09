@@ -144,20 +144,20 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
     >
       {/* Ultra-Minimal Floating Selection Bar */}
       {selectedVideos.length > 0 && (
-        <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-4 fixed bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-full border border-white/5 bg-[#1a1a1a]/90 px-2 py-2 text-white shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-500">
+        <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-4 fixed bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-full border border-black/10 bg-white/90 px-2 py-2 text-gray-900 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-500 dark:border-white/5 dark:bg-[#1a1a1a]/90 dark:text-white">
           <div className="flex items-center pr-2 pl-4">
-            <span className="text-[13px] font-semibold text-white/90">{selectedVideos.length}</span>
+            <span className="text-[13px] font-semibold text-gray-900 dark:text-white/90">{selectedVideos.length}</span>
             <span className="ml-1.5 text-[11px] font-medium tracking-widest text-gray-400 uppercase">
               Selected
             </span>
           </div>
 
-          <div className="h-4 w-[1px] bg-white/10" />
+          <div className="h-4 w-[1px] bg-black/10 dark:bg-white/10" />
 
           <div className="ml-1 flex items-center gap-2 pr-1">
             <button
               onClick={() => setSelectedVideos([])}
-              className="rounded-full px-3 py-1.5 text-[11px] font-bold text-gray-400 transition-all hover:bg-white/5 hover:text-white"
+              className="rounded-full px-3 py-1.5 text-[11px] font-bold text-gray-400 transition-all hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
             >
               CLEAR
             </button>
@@ -176,7 +176,7 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
       <div className="mb-6 flex justify-end px-2">
         <button
           onClick={selectAll}
-          className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-white"
+          className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
         >
           <div
             className={`h-4 w-4 rounded border transition-colors ${
@@ -185,7 +185,7 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
                 displayedVideos.filter((v) => v.status === 'completed' && v.results?.[0]?.url)
                   .length
                 ? 'border-blue-600 bg-blue-600'
-                : 'border-gray-600 group-hover:border-gray-400'
+                : 'border-gray-400 bg-white group-hover:border-gray-600 dark:border-gray-600 dark:bg-transparent dark:group-hover:border-gray-400'
             } flex items-center justify-center`}
           >
             {selectedVideos.length > 0 &&

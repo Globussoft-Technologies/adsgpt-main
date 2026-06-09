@@ -70,7 +70,7 @@ const SpeechToText = () => {
   return (
     <ShadcnTooltip label="Use Microphone">
       <Mic
-        className={`h-4 w-4 cursor-pointer text-black 2xl:h-5 2xl:w-5 ${listening ? 'mic-loader animate-pulse' : ''}`}
+        className={`h-4 w-4 cursor-pointer text-current 2xl:h-5 2xl:w-5 ${listening ? 'mic-loader animate-pulse' : ''}`}
         onClick={listening ? stopListening : handleMicClick}
       />
     </ShadcnTooltip>

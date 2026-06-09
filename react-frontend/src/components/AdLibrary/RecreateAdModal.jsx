@@ -53,8 +53,8 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 const MODEL_OPTIONS = [
   { name: 'Nano Banana 2', available: true, iconSrc: geminiIcon },
   { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
-  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
-  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
+  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-700 dark:text-white/80" /> },
+  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-700 dark:text-white/80" /> },
   { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
 ];
 
@@ -277,7 +277,9 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
     // is null since we only have the URL — they pass through resolveAsset
     // untouched at submit time).
     const refs = Array.isArray(inp.referenceImages) ? inp.referenceImages : [];
-    setReferenceImages(refs.filter(Boolean).map((u) => ({ file: null, preview: u })));
+    setReferenceImages(
+      refs.filter(Boolean).map((u) => ({ file: null, preview: u, selected: true })),
+    );
 
     dispatch(clearImageRecreateInputs());
   }, [open, recreateInputs, dispatch]);
@@ -455,9 +457,12 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       // resolveAsset uploads File → S3, passes strings through.
       // For reference images (multi-upload), resolve each entry in
       // parallel — files become hosted URLs, pasted URLs pass through.
+      // Only chips the user kept selected are sent; unselected ones stay
+      // in the UI for quick re-toggling but are excluded from the payload.
+      const selectedRefs = referenceImages.filter((it) => it.selected !== false);
       const [logoHosted, ...refsHosted] = await Promise.all([
         resolveAsset(brandLogoFile || brandLogoUrl.trim() || brandLogoPicked, uid),
-        ...referenceImages.map((it) => resolveAsset(it.file || it.preview, uid)),
+        ...selectedRefs.map((it) => resolveAsset(it.file || it.preview, uid)),
       ]);
 
       // Reference images payload combines:
@@ -541,14 +546,23 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       />
       <DialogContent
         ref={modalRef}
-        className="max-w-[960px] gap-0 rounded-[30px] border border-white/10 bg-[#303030]/30 p-0 text-white ring-1 ring-white/10 backdrop-blur-md sm:!max-w-[960px] sm:scale-100"
+        className="max-w-[960px] gap-0 rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[960px] sm:scale-100"
         showCloseButton
-        // Only the X / Escape closes the modal. Clicking outside (or
-        // dragging an upload over the page) should NOT dismiss it.
+        // The X and Escape both close the modal. Clicking outside (or
+        // dragging an upload over the page) does NOT — that protects
+        // in-progress prompts. Escape behavior is layered: if the chip
+        // lightbox is open, the keystroke is consumed by closing it (and
+        // prevented from bubbling up to Radix so the modal stays mounted).
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (lightboxUrl) {
+            e.preventDefault();
+            setLightboxUrl('');
+          }
+        }}
       >
-        <DialogTitle className="px-6 pt-5 pb-3 text-center text-sm font-medium text-white/80">
+        <DialogTitle className="px-6 pt-5 pb-3 text-center text-sm font-medium text-gray-600 dark:text-white/80">
           Recreate this Ad with your own configurations
         </DialogTitle>
 
@@ -561,7 +575,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
             {/* aspect-square on the wrapper itself + h-full keeps the
                 source ad visually square AND the wrapper at the same
                 height as the right-column scroll area. */}
-            <div className="aspect-square h-full overflow-hidden rounded-2xl bg-black/40">
+            <div className="aspect-square h-full overflow-hidden rounded-2xl bg-gray-100 dark:bg-black/40">
               {image ? (
                 <img src={image} alt="Source ad" className="h-full w-full object-cover" />
               ) : (
@@ -570,9 +584,13 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
             </div>
           </div>
 
-          {/* Right column: scrollable Sections on top, Generate pinned
-              under them. min-h-0 lets the inner overflow-y-auto actually
-              clip instead of letting the column stretch the modal. */}
+          {/* Right column: Brand Voice + Brand logo scroll on top; Prompt
+              AND Generate are pinned together at the bottom. Prompt is the
+              primary input, so growing the upper sections (brand image
+              chips, brand logo chips appearing after a brand is picked)
+              must never push the textarea off-screen. min-h-0 on the
+              scroll area lets it clip cleanly instead of stretching the
+              modal. */}
           <div className="flex w-full min-w-0 flex-1 flex-col md:h-full">
             <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 [scrollbar-color:rgba(255,255,255,0.2)_transparent] [scrollbar-width:thin]">
             <Section title="Attach your Brand Voice">
@@ -583,19 +601,19 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     onClick={openBrandIqPicker}
                     className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
                       brandSource.kind === 'list'
-                        ? 'bg-white/15 text-white ring-white/20'
-                        : 'bg-[#909294]/10 text-[#f0f0f0] ring-white/5 hover:bg-[#33333a]'
+                        ? 'bg-black/10 dark:bg-white/15 text-gray-900 dark:text-white ring-black/10 dark:ring-white/20'
+                        : 'bg-gray-100 dark:bg-[#909294]/10 text-gray-600 dark:text-[#f0f0f0] ring-black/10 dark:ring-white/5 hover:bg-black/5 dark:hover:bg-[#33333a]'
                     }`}
                   >
                     <img src={brandIqIcon} alt="" className="h-4 w-4" />
                     {brandPillLabel}
-                    <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+                    <ChevronDown size={18} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                   </button>
                   {showBrandIqPicker && (
-                    <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10">
+                    <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
                       <div className="max-h-[280px] overflow-y-auto">
                         {brandListState === 'loading' && (
-                          <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-white/60">
+                          <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-600 dark:text-white/60">
                             <Loader2 size={12} className="animate-spin" />
                             Loading brands…
                           </div>
@@ -606,7 +624,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                           </div>
                         )}
                         {brandListState === 'loaded' && brandList.length === 0 && (
-                          <div className="px-4 py-3 text-[12px] text-white/50">No brands found.</div>
+                          <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">No brands found.</div>
                         )}
                         {brandListState === 'loaded' &&
                           brandList.map((b) => {
@@ -619,24 +637,24 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                                 onClick={() => handleBrandIqSelect(b)}
                                 className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
                                   selected
-                                    ? 'bg-[#373839] text-white'
-                                    : 'text-white/80 hover:bg-white/5 hover:text-white'
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                    : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                                 }`}
                               >
                                 {b.logoUrls?.[0] ? (
                                   <img
                                     src={b.logoUrls[0]}
                                     alt=""
-                                    className="h-7 w-7 shrink-0 rounded-full bg-white/10 object-cover"
+                                    className="h-7 w-7 shrink-0 rounded-full bg-black/10 dark:bg-white/10 object-cover"
                                   />
                                 ) : (
-                                  <span className="h-7 w-7 shrink-0 rounded-full bg-white/10" />
+                                  <span className="h-7 w-7 shrink-0 rounded-full bg-black/10 dark:bg-white/10" />
                                 )}
                                 <span className="min-w-0 flex-1">
                                   <span className="block truncate text-[13px] font-medium">
                                     {b.name}
                                   </span>
-                                  <span className="block truncate text-[11px] text-white/50">
+                                  <span className="block truncate text-[11px] text-gray-500 dark:text-white/50">
                                     {b.websiteUrl || b.description}
                                   </span>
                                 </span>
@@ -650,7 +668,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     </div>
                   )}
                 </div>
-                <span className="shrink-0 text-[14px] text-white/60">or</span>
+                <span className="shrink-0 text-[14px] text-gray-600 dark:text-white/60">or</span>
                 <div className="relative min-w-0 flex-1">
                   <input
                     type="text"
@@ -667,13 +685,13 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="h-[39px] w-full rounded-full bg-[#909294]/10 px-4 pr-20 text-[13px] font-light text-white outline-none ring-1 ring-white/5 placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-white/20"
+                    className="h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 pr-20 text-[13px] font-light text-gray-900 dark:text-white outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20"
                   />
                   <button
                     type="button"
                     onClick={handleAutofill}
                     disabled={!websiteUrl.trim() || autofillState === 'loading'}
-                    className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-white/20 px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-gray-900 dark:bg-white/20 px-4 py-1.5 text-[12px] font-medium text-white dark:text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {autofillState === 'loading' && <Loader2 size={12} className="animate-spin" />}
                     Add
@@ -709,7 +727,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   }
                   setReferenceImages((prev) => [
                     ...prev,
-                    { file: null, preview: trimmed },
+                    { file: null, preview: trimmed, selected: true },
                   ]);
                   setReferenceImageUrl('');
                   setImagesError('');
@@ -721,7 +739,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   }
                   setReferenceImages((prev) => [
                     ...prev,
-                    { file: f, preview: URL.createObjectURL(f) },
+                    { file: f, preview: URL.createObjectURL(f), selected: true },
                   ]);
                   setImagesError('');
                 }}
@@ -729,11 +747,21 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 inputRef={referenceInputRef}
                 multipleFiles
               />
-              {/* Multi-upload chips. Single click removes that specific
-                  chip; double click opens the lightbox preview. */}
+              {/* Multi-upload chips. Single click toggles whether the
+                  image is included in the generation payload (cyan border
+                  + check when selected). The small red × at the top-right
+                  removes the chip entirely. Double click opens the
+                  lightbox preview. */}
               {referenceImages.length > 0 && (
                 <UploadedChipList
                   items={referenceImages}
+                  onToggle={(idx) =>
+                    setReferenceImages((prev) =>
+                      prev.map((it, i) =>
+                        i === idx ? { ...it, selected: it.selected === false } : it,
+                      ),
+                    )
+                  }
                   onRemove={(idx) => {
                     setReferenceImages((prev) => prev.filter((_, i) => i !== idx));
                     setImagesError('');
@@ -824,15 +852,22 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 <p className="mt-2 text-[11px] text-red-300">{logoError}</p>
               )}
             </Section>
+            </div>
 
+            {/* Pinned Prompt — lives outside the scroll area so the
+                textarea + model/aspect pickers remain visible no matter
+                how many brand images or logos populate the sections
+                above. shrink-0 keeps it from being squeezed by the
+                scroll container's flex-1. */}
+            <div className="mt-5 shrink-0">
             <Section title="Prompt">
-              <div className="rounded-[24px] bg-[#909294]/10 p-3 ring-1 ring-white/10">
+              <div className="rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-3 ring-1 ring-black/10 dark:ring-white/10">
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
                   placeholder="Describe the changes you want in the image..."
-                  className="w-full resize-none bg-transparent px-2 pt-1 text-[13px] text-white placeholder:text-[#afafaf] focus:outline-none"
+                  className="w-full resize-none bg-transparent px-2 pt-1 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none"
                 />
 
                 <div className="flex items-center justify-end gap-2 px-1 pt-2">
@@ -844,7 +879,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {isSuggestingPrompt ? (
-                      <Loader2 size={20} className="animate-spin text-white" />
+                      <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
                     ) : (
                       <img
                         src={chatResponseDark}
@@ -862,14 +897,14 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                         setShowAspectPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2b2a2a]/80 px-3 py-1.5 text-[12px] font-light text-white/80 ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-1.5 text-[12px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
                       <ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />
                       {model}
-                      <ChevronDown size={14} strokeWidth={2} className="text-white/40" />
+                      <ChevronDown size={14} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
                     {showModelPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10">
+                      <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
                         {MODEL_OPTIONS.map((opt) => {
                           const selected = opt.name === model;
                           return (
@@ -884,10 +919,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                               }}
                               className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
                                 !opt.available
-                                  ? 'cursor-not-allowed text-white/40'
+                                  ? 'cursor-not-allowed text-gray-400 dark:text-white/40'
                                   : selected
-                                    ? 'bg-[#373839] text-white'
-                                    : 'text-white/80 hover:bg-white/5 hover:text-white'
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                    : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                               }`}
                             >
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center">
@@ -909,42 +944,42 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                         setShowModelPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2b2a2a]/80 px-3 py-1.5 font-light text-[#afafaf] ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-1.5 font-light text-gray-600 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      <span className="text-[12px] text-white/90">{primaryRatio(aspectCounts)}</span>
-                      <span className="h-3 w-px bg-white/20" />
-                      <LayoutGrid size={11} strokeWidth={1.8} className="text-white/50" />
+                      <span className="text-[12px] text-gray-900 dark:text-white/90">{primaryRatio(aspectCounts)}</span>
+                      <span className="h-3 w-px bg-black/15 dark:bg-white/20" />
+                      <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-400 dark:text-white/50" />
                       <span className="text-[12px]">
                         {total} Image{total !== 1 ? 's' : ''}
                       </span>
-                      <ChevronDown size={14} strokeWidth={2} className="text-white/40" />
+                      <ChevronDown size={14} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
 
                     {showAspectPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 w-[280px] rounded-[20px] bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-white/10">
-                        <p className="mb-2 text-center text-[13px] font-medium text-[#d9d9d9]">
+                      <div className="absolute right-0 bottom-full z-40 mb-2 w-[280px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        <p className="mb-2 text-center text-[13px] font-medium text-gray-900 dark:text-[#d9d9d9]">
                           Aspect Ratio per Image
                         </p>
                         <div className="flex items-center justify-center gap-1.5 text-sm">
-                          <span className="text-white/70">Total Number of Images :</span>
-                          <span className="font-medium text-white">{total}</span>
+                          <span className="text-gray-600 dark:text-white/70">Total Number of Images :</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{total}</span>
                         </div>
-                        <p className="mt-1 mb-6 text-center text-[11px] text-white/50">
+                        <p className="mt-1 mb-6 text-center text-[11px] text-gray-500 dark:text-white/50">
                           {creditsPerImage} credits per image
                         </p>
                         <div className="space-y-1">
                           {allowedAspectLabels(model).map(({ key, label }) => (
                             <div key={key} className="flex items-center justify-between pl-4">
-                              <span className="text-[12px] text-white">{label}</span>
+                              <span className="text-[12px] text-gray-900 dark:text-white">{label}</span>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => adjustCount(key, -1)}
-                                  className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                                  className="flex h-5 w-5 items-center justify-center text-gray-600 dark:text-white/60 hover:text-gray-900 dark:hover:text-white"
                                 >
                                   <span className="text-[18px] leading-none select-none">−</span>
                                 </button>
-                                <span className="w-8 rounded-full bg-[#9092941A] py-0.5 text-center text-[11px] font-medium text-white">
+                                <span className="w-8 rounded-full bg-gray-100 dark:bg-[#9092941A] py-0.5 text-center text-[11px] font-medium text-gray-900 dark:text-white">
                                   {aspectCounts[key]}
                                 </span>
                                 <button
@@ -952,7 +987,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                                   onClick={() =>
                                     adjustCount(key, Math.min(4 - aspectCounts[key], 1))
                                   }
-                                  className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                                  className="flex h-5 w-5 items-center justify-center text-gray-600 dark:text-white/60 hover:text-gray-900 dark:hover:text-white"
                                 >
                                   <span className="text-[18px] leading-none select-none">+</span>
                                 </button>
@@ -960,7 +995,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                             </div>
                           ))}
                         </div>
-                        <p className="mt-3 text-right text-[10px] text-white/40">Max 4 per ratio</p>
+                        <p className="mt-3 text-right text-[10px] text-gray-500 dark:text-white/40">Max 4 per ratio</p>
                       </div>
                     )}
                   </div>
@@ -970,12 +1005,23 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
             </div>
 
             {/* Pinned footer — stays visible while the form above scrolls. */}
-            <div className="mt-4 flex shrink-0 justify-end">
+            <div className="mt-4 flex shrink-0 items-center justify-end gap-3">
+              {/* Live credit estimate. Mirrors the pill from AiCreativesCustom
+                  + AdSetupStep so the user sees the deduction before they
+                  click Generate. Hidden when no images are queued. The
+                  per-image cost is pulled from the shared
+                  useImageCreditsForModel hook so it tracks the model's
+                  live value (no hardcoded number). */}
+              {total > 0 && (
+                <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
+                  –{total * creditsPerImage} credits
+                </span>
+              )}
               <button
                 type="button"
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || total === 0 || isSubmitting}
-                className="flex items-center gap-2 rounded-full bg-white px-6 py-2 text-sm font-medium text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-2 rounded-full bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-white/90 px-6 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isSubmitting && <Loader2 size={14} className="animate-spin" />}
                 {isSubmitting ? 'Generating…' : 'Generate'}
@@ -1032,7 +1078,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
 
 const Section = ({ title, children }) => (
   <div className="flex flex-col gap-2">
-    <p className="text-[14px] font-medium text-white">{title}</p>
+    <p className="text-[14px] font-medium text-gray-900 dark:text-white">{title}</p>
     {children}
   </div>
 );
@@ -1046,7 +1092,7 @@ const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounde
   const clickTimers = useRef({});
   return (
     <div className="mt-1">
-      <p className="mb-1.5 text-[11px] text-white/50">{label}</p>
+      <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">{label}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((url, i) => {
           const selected = isSelected?.(url);
@@ -1073,7 +1119,7 @@ const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounde
               className={`relative h-10 w-10 shrink-0 ${shape} transition ${
                 selected
                   ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-white/10 hover:border-white/30'
+                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
               }`}
             >
               <img
@@ -1181,7 +1227,7 @@ const UploadRow = ({
       }}
       className="flex items-center gap-2"
     >
-      <div className="flex h-[39px] flex-1 items-center gap-2 rounded-full bg-[#909294]/10 px-4 text-[13px] ring-1 ring-white/5">
+      <div className="flex h-[39px] flex-1 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[13px] ring-1 ring-black/10 dark:ring-white/5">
         <input
           type="text"
           value={url}
@@ -1219,9 +1265,9 @@ const UploadRow = ({
             }
           }}
           placeholder={placeholder}
-          className="w-full bg-transparent text-[13px] font-light text-white placeholder:text-[#afafaf] focus:outline-none"
+          className="w-full bg-transparent text-[13px] font-light text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none"
         />
-        <Link2 className="h-4 w-4 text-white/50" />
+        <Link2 className="h-4 w-4 text-gray-400 dark:text-white/50" />
       </div>
       <input
         ref={inputRef}
@@ -1238,7 +1284,7 @@ const UploadRow = ({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="flex h-[39px] items-center gap-1.5 rounded-full bg-[#909294]/10 px-4 text-[12px] font-light text-white ring-1 ring-white/5 hover:bg-[#33333a]"
+        className="flex h-[39px] items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[12px] font-light text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/5 hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
         <Upload className="h-3.5 w-3.5" />
         Upload Image
@@ -1248,40 +1294,78 @@ const UploadRow = ({
 };
 
 // Row of user-supplied chips (multi-upload). Single click on a chip
-// removes it from the array; double click opens the lightbox preview.
-// 220ms delay disambiguates single from double click.
-const UploadedChipList = ({ items, onRemove, onPreview }) => {
+// toggles whether it's included in the payload; the small red × at the
+// top-right corner removes the chip entirely. Double click opens the
+// lightbox preview. 220 ms delay disambiguates single from double click.
+const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
   const clickTimers = useRef({});
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {items.map((it, i) => {
         const key = `${it.preview}-${i}`;
+        const isSelected = it.selected !== false;
+        const cancelPendingClick = () => {
+          clearTimeout(clickTimers.current[key]);
+          delete clickTimers.current[key];
+        };
         const handleSingle = () => {
           clearTimeout(clickTimers.current[key]);
           clickTimers.current[key] = setTimeout(() => {
-            onRemove?.(i);
+            onToggle?.(i);
             delete clickTimers.current[key];
           }, 220);
         };
         const handleDouble = () => {
-          clearTimeout(clickTimers.current[key]);
-          delete clickTimers.current[key];
+          cancelPendingClick();
           onPreview?.(it.preview);
         };
         return (
-          <button
-            type="button"
-            key={key}
-            onClick={handleSingle}
-            onDoubleClick={handleDouble}
-            title="Click to remove · double-click to preview"
-            className="relative h-10 w-10 shrink-0 cursor-pointer rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition"
-          >
-            <img src={it.preview} alt="" className="h-full w-full rounded-md object-cover" />
-            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow">
-              <Check className="h-3 w-3" strokeWidth={3} />
-            </span>
-          </button>
+          <div key={key} className="relative h-10 w-10 shrink-0">
+            <button
+              type="button"
+              onClick={handleSingle}
+              onDoubleClick={handleDouble}
+              title={
+                isSelected
+                  ? 'Click to deselect · double-click to preview'
+                  : 'Click to select · double-click to preview'
+              }
+              className={`relative h-full w-full cursor-pointer overflow-hidden rounded-md transition ${
+                isSelected
+                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
+                  : 'border border-white/15 opacity-60 hover:border-white/30 hover:opacity-80'
+              }`}
+            >
+              <img src={it.preview} alt="" className="h-full w-full rounded-md object-cover" />
+            </button>
+            {/* Top-right corner badge — flips by selection state:
+                  selected   → cyan check (decorative, non-interactive)
+                  unselected → red × (clickable to remove the chip)
+                A selected chip is therefore removed in two steps:
+                single-click to deselect, then click the × that appears. */}
+            {isSelected ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow"
+              >
+                <Check className="h-2.5 w-2.5" strokeWidth={3} />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cancelPendingClick();
+                  onRemove?.(i);
+                }}
+                aria-label="Remove image"
+                title="Remove"
+                className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow transition-colors hover:bg-red-600"
+              >
+                <X className="h-2.5 w-2.5" strokeWidth={3} />
+              </button>
+            )}
+          </div>
         );
       })}
     </div>

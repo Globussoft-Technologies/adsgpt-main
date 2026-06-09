@@ -30,7 +30,8 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
       <img
         src={gifUrl}
         alt={`${title}-preview`}
-        className={`absolute inset-0 ${type === 'b-roll' ? 'h-[180%]' : 'h-full'} w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
+        // className={`absolute inset-0 ${type === 'b-roll' ? 'h-[180%]' : 'h-full'} w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
+         className="absolute inset-0 'h-full' w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
 
       {/* overlay */}
@@ -44,10 +45,10 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
       )}
 
       {/* content */}
-      <div className="absolute right-0 sm:right-2 bottom-4 left-2 sm:left-4 flex items-end justify-between transition duration-300 group-hover:-translate-y-2">
+      <div className="absolute right-0 sm:right-2 bottom-4 left-2 sm:left-4 flex items-end justify-between text-white transition duration-300 group-hover:-translate-y-2">
         <div>
           <h3
-            className={`text-base sm:text-lg font-semibold tracking-wide 2xl:text-2xl ${comingSoon ? 'text-white/60' : ''}`}
+            className={`text-base sm:text-lg font-semibold tracking-wide 2xl:text-2xl ${comingSoon ? 'text-white/60' : 'text-white'}`}
           >
             {title}
           </h3>
@@ -56,7 +57,7 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
 
         {!comingSoon && (
           <div className="flex h-8 w-8 items-center justify-center rounded-full">
-            <ChevronRight className="h-6.5 w-6.5 2xl:h-8 2xl:w-8" />
+            <ChevronRight className="h-6.5 w-6.5 text-white 2xl:h-8 2xl:w-8" />
           </div>
         )}
       </div>

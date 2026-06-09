@@ -350,13 +350,13 @@ const AdsPreviewDialog = ({ open, onOpenChange, onProgressUpdate }) => {
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-screen max-h-screen! w-screen max-w-screen! scale-100! rounded-none! border-none bg-[#0F0F0F] p-0">
+      <DialogContent className="h-screen max-h-screen! w-screen max-w-screen! scale-100! rounded-none! border-none bg-white dark:bg-[#0F0F0F] p-0">
         <div className="flex h-full w-full max-w-screen overflow-hidden pb-10 md:pb-0">
           {/* Mobile menu button */}
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute top-4 left-6 z-50 rounded-full bg-white/10 p-2 text-white md:hidden"
+              className="absolute top-4 left-6 z-50 rounded-full bg-black/10 dark:bg-white/10 p-2 text-gray-900 dark:text-white md:hidden"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -387,11 +387,11 @@ const AdsPreviewDialog = ({ open, onOpenChange, onProgressUpdate }) => {
               />
 
               {/* Drawer */}
-              <div className="relative h-full w-[90px] bg-[#0f0f0f] shadow-xl">
+              <div className="relative h-full w-[90px] bg-white dark:bg-[#0f0f0f] shadow-xl">
                 {/* Close button */}
                 <button
                   onClick={() => setIsSidebarOpen(false)}
-                  className="absolute top-3 -right-4 z-50 rounded-full bg-white/20 p-2 text-white sm:-right-7"
+                  className="absolute top-3 -right-4 z-50 rounded-full bg-black/10 dark:bg-white/20 p-2 text-gray-900 dark:text-white sm:-right-7"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -430,7 +430,7 @@ const AdsPreviewDialog = ({ open, onOpenChange, onProgressUpdate }) => {
                 isloading={isloading}
               />
             ) : (
-              <div className="flex flex-1 items-center justify-center text-xl text-white/60">
+              <div className="flex flex-1 items-center justify-center text-xl text-gray-500 dark:text-white/60">
                 No creatives. Click "Add More" to create a new ad creative.
               </div>
             ))}

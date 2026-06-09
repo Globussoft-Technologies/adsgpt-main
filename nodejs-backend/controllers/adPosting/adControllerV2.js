@@ -174,12 +174,12 @@ async function uploadVideoFromUrl(account, videoUrl) {
   }
 
   // Poll until Meta finishes encoding (status: ready).
-  const MAX_POLLS = 20;
-  const POLL_INTERVAL_MS = 3000;
+  const MAX_POLLS = 3;
+  const POLL_INTERVAL_MS = 2000;
   let thumbnailUrl = null;
   for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    const info = await new bizSdk.AdVideo(videoId).get(["status", "thumbnails"]);
+    const info = await new bizSdk.AdVideo(videoId).read(["status", "thumbnails"]);
     const data = info?._data || info || {};
     const status = data?.status?.video_status || data?.status;
     if (status === "ready") {

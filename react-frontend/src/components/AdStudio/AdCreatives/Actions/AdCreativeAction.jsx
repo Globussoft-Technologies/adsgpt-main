@@ -32,16 +32,19 @@ const AdCreativeAction = ({ imageUrl, baseUrl, adText, userInput }) => {
     <>
       <div ref={ref} className="relative">
         <button
-          className="prompt_selection_button flex items-center justify-center rounded-full p-1.5 text-white"
-          style={{ backgroundColor: '#000000' }}
-          onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+          className="bg-[#3c3c3c] flex items-center justify-center rounded-full p-1.5 text-white"
+          // style={{ backgroundColor: '#000000' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
         >
-          <MoreVertical className="h-4 w-4" />
+          <MoreVertical className="h-4 w-4 text-white" />
         </button>
 
         {open && (
           <div
-            className="absolute left-full top-0 z-[9999] ml-1 w-52 overflow-hidden rounded-md border border-white/20 bg-[#0D0D0D] shadow-lg"
+            className="absolute top-0 left-full z-[9999] ml-1 w-52 overflow-hidden rounded-md border border-black/10 bg-white shadow-lg dark:border-white/20 dark:bg-[#0D0D0D]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col">
@@ -52,8 +55,11 @@ const AdCreativeAction = ({ imageUrl, baseUrl, adText, userInput }) => {
                 userInput?.platform?.toLowerCase() === 'google_display_ads'
               ) && (
                 <button
-                  onClick={() => { setOpen(false); handleButtonClick(userInput?.platform || 'meta'); }}
-                  className="flex items-center gap-2 px-3 py-2 text-left text-xs text-[#AFAFAF] hover:bg-slate-800 hover:text-white"
+                  onClick={() => {
+                    setOpen(false);
+                    handleButtonClick(userInput?.platform || 'meta');
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:bg-slate-800 dark:hover:text-white"
                 >
                   <Eye className="h-4 w-4" />
                   <span>Ad Preview</span>
@@ -62,15 +68,21 @@ const AdCreativeAction = ({ imageUrl, baseUrl, adText, userInput }) => {
               {imageUrl && (
                 <>
                   <button
-                    onClick={() => { setOpen(false); handleDownloadAs(imageUrl, 'webp'); }}
-                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-[#AFAFAF] hover:bg-slate-800 hover:text-white"
+                    onClick={() => {
+                      setOpen(false);
+                      handleDownloadAs(imageUrl, 'webp');
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <Download className="h-4 w-4" />
                     <span>Download as WebP</span>
                   </button>
                   <button
-                    onClick={() => { setOpen(false); handleDownloadAs(imageUrl, 'jpeg'); }}
-                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-[#AFAFAF] hover:bg-slate-800 hover:text-white"
+                    onClick={() => {
+                      setOpen(false);
+                      handleDownloadAs(imageUrl, 'jpeg');
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <Download className="h-4 w-4" />
                     <span>Download as JPEG</span>
@@ -80,15 +92,21 @@ const AdCreativeAction = ({ imageUrl, baseUrl, adText, userInput }) => {
               {baseUrl && (
                 <>
                   <button
-                    onClick={() => { setOpen(false); handleDownloadAs(baseUrl, 'webp'); }}
-                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-[#AFAFAF] hover:bg-slate-800 hover:text-white"
+                    onClick={() => {
+                      setOpen(false);
+                      handleDownloadAs(baseUrl, 'webp');
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <DownloadCloud className="h-4 w-4" />
                     <span>Download (without logo) as WebP</span>
                   </button>
                   <button
-                    onClick={() => { setOpen(false); handleDownloadAs(baseUrl, 'jpeg'); }}
-                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-[#AFAFAF] hover:bg-slate-800 hover:text-white"
+                    onClick={() => {
+                      setOpen(false);
+                      handleDownloadAs(baseUrl, 'jpeg');
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <DownloadCloud className="h-4 w-4" />
                     <span>Download (without logo) as JPEG</span>

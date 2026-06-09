@@ -64,9 +64,13 @@ const avatarSchema = Joi.object({
 const cloneSchema = Joi.object({
   ...baseInputSchema,
   type: Joi.valid("clone").required(),
-  videoSample: Joi.string().required(),
-  script: Joi.string().required(),
-  voiceClone: Joi.boolean().required(),
+  uploadedAvatars: Joi.array().items(Joi.string()).length(3).required(),
+  productName: Joi.string().required(),
+  image: Joi.string().required(),
+  promotion: Joi.string().allow("", null),
+  notes: Joi.string().allow("", null),
+  tone: Joi.string().required(),
+  voiceSampleUrl: Joi.string().allow("", null),
 });
 
 // ai_ads generate-video input schema (type="ai_ads", scenes required)

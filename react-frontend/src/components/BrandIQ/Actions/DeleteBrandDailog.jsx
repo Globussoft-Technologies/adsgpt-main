@@ -22,14 +22,14 @@ const DeleteBrandDailog = ({ open, onOpenChange, onDelete }) => {
           Delete
         </button>
       </DialogTrigger>
-      <DialogContent className="flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[30px] !bg-[#303030]/50 !backdrop-blur-[100px] sm:p-8">
+      <DialogContent className="flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[30px] !bg-white !backdrop-blur-[100px] sm:p-8 dark:!bg-[#303030]/50">
         <div className="icon prompt_selection_button mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-full">
           <Trash2 className="w-6" />
         </div>
         <DialogHeader>
           <DialogTitle className="text-center font-medium">Delete Brand?</DialogTitle>
           <DialogDescription className="mx-auto my-2 max-w-[80%] text-center text-base">
-            <p className="text-[#CCCCCC]">Are you sure you want to delete </p>
+            <p className="text-gray-500 dark:text-[#CCCCCC]">Are you sure you want to delete </p>
           </DialogDescription>
         </DialogHeader>
         {/* {campaignNames && campaignNames.length > 0 && (
@@ -41,14 +41,14 @@ const DeleteBrandDailog = ({ open, onOpenChange, onDelete }) => {
         <div className="flex w-full flex-col items-center justify-center space-y-2">
           <div className="flex w-full items-center justify-center space-x-3">
             <button
-              className="prompt_selection_button h-[46px] rounded-[81px] bg-[#202020]/50 px-8 py-2 text-base backdrop-blur-[130px]"
+              className="prompt_selection_button h-[46px] rounded-[81px] bg-gray-100 px-8 py-2 text-base backdrop-blur-[130px] dark:bg-[#202020]/50"
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </button>
             <button
-              className="prompt_selection_button flex h-[46px] items-center justify-center gap-2 rounded-[81px] !bg-[#9D1414] px-8 py-2 text-base backdrop-blur-[130px]"
+              className="prompt_selection_button flex h-[46px] items-center justify-center gap-2 rounded-[81px] !bg-[#9D1414] px-8 py-2 text-base text-white! backdrop-blur-[130px]"
               onClick={onDelete}
             >
               {deleteLoading ? (

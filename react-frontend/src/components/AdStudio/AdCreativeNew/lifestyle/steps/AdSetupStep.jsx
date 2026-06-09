@@ -17,6 +17,8 @@ import { SiOpenai } from 'react-icons/si';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { LifestyleShell } from '../LifestyleShell';
+import { TemplatesPanel, TemplatesTrigger } from '../../components/PromptTemplatesPicker';
+import { usePromptTemplates } from '../../components/usePromptTemplates';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png';
@@ -45,8 +47,8 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 const MODEL_OPTIONS = [
   { name: 'Nano Banana 2', available: true, iconSrc: geminiIcon },
   { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
-  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
-  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
+  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
+  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
   { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
 ];
 
@@ -175,6 +177,36 @@ export function AdSetupStep({
   // brandInfo payload at submit time without re-fetching anything.
   //   { kind: 'none' } | { kind: 'list', item } | { kind: 'autofill', data, websiteUrl }
   const [brandSource, setBrandSource] = useState({ kind: 'none' });
+  // Brand name + first target audience drive {brand} / {target_audience}
+  // token substitution in the Templates picker. Recomputed on every render
+  // so live-resolve picks up brand changes automatically.
+  const brandNameForTemplates =
+    brandSource.kind === 'list'
+      ? brandSource.item?.name || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.brandInfo?.brandName || ''
+        : '';
+  const targetAudienceForTemplates =
+    brandSource.kind === 'list'
+      ? brandSource.item?.targetAudiences?.[0] || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.objectives?.targetAudience?.[0] || ''
+        : '';
+
+  const templates = usePromptTemplates({
+    type: VARIANT_TO_API_TYPE[variant] || 'lifestyle',
+    brandName: brandNameForTemplates,
+    targetAudience: targetAudienceForTemplates,
+    currentValue: instructions,
+    onSelect: (text) => {
+      setInstructions(text);
+      // clearError is defined further down the component; closure handles it.
+      if (text) clearError('instructions');
+    },
+    // Manual edit of a {brand}/{target_audience} token deselects the brand
+    // chip so the UI matches the new source of truth (the typed values).
+    onClearBrand: () => setBrandSource({ kind: 'none' }),
+  });
   const [bvWebsiteUrl, setBvWebsiteUrl] = useState('');
   // Brand-image chip pool — populated when the user picks a brand or
   // autofills a website. Chips render below the brand-voice section.
@@ -714,7 +746,7 @@ export function AdSetupStep({
 
   return (
     <LifestyleShell title={title} onClose={onClose}>
-      <div className="relative w-full min-w-[420px] max-w-[1100px] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-[#303030]/30 p-6 ring-1 ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:max-h-[calc(100svh-140px)]">
+      <div className="relative w-full min-w-[420px] max-w-[1100px] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:max-h-[calc(100svh-140px)]">
         {/* Back arrow always shows. With the single-step flow, there's no
             prior step to return to — so falls back to `onClose`, which
             exits the module (same as AI Creatives Custom). */}
@@ -723,22 +755,22 @@ export function AdSetupStep({
             type="button"
             onClick={onBack ?? onClose}
             aria-label="Back"
-            className="absolute top-4 left-4 z-10 flex h-12 w-12 items-center justify-center text-white/70 transition-colors hover:text-white"
+            className="absolute top-4 left-4 z-10 flex h-12 w-12 items-center justify-center text-gray-500 dark:text-white/70 transition-colors hover:text-black dark:hover:text-white"
           >
             <ArrowLeft size={26} strokeWidth={2} />
           </button>
         )}
-        <h3 className="mb-3 text-center text-[16px] font-semibold text-white">{cfg.title}</h3>
+        <h3 className="mb-3 text-center text-[16px] font-semibold text-gray-900 dark:text-white">{cfg.title}</h3>
 
         {errorMessage && (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-[13px] text-red-200 ring-1 ring-red-500/30">
+          <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-[13px] text-red-700 ring-1 ring-red-500/30 dark:text-red-200">
             <AlertCircle size={14} />
             {errorMessage}
             {onDismissError && (
               <button
                 type="button"
                 onClick={onDismissError}
-                className="ml-auto text-red-200/80 hover:text-white"
+                className="ml-auto text-red-600 hover:text-red-800 dark:text-red-200/80 dark:hover:text-white"
                 aria-label="Dismiss"
               >
                 <X size={14} />
@@ -750,13 +782,19 @@ export function AdSetupStep({
         <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
           {/* Left — Instructions textarea + model + ratio pills */}
           <div className={`flex min-h-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
-            <p className="mb-3 text-[16px] text-white">
-              {/* Instructions<span>*</span> */}
-              Prompt<span>*</span>
-            </p>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[16px] text-gray-900 dark:text-white">
+                {/* Instructions<span>*</span> */}
+                Prompt<span>*</span>
+              </p>
+              <TemplatesTrigger controller={templates} />
+            </div>
+            <TemplatesPanel controller={templates} />
             <div
-              className={`relative flex min-h-[380px] flex-1 flex-col rounded-[24px] bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-white/20 ${
-                errors.instructions ? 'ring-2 ring-red-500/60' : 'ring-white/10'
+              className={`relative flex flex-1 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20 transition-[min-height] duration-[250ms] ease-out ${
+                templates.open ? 'min-h-[200px]' : 'min-h-[380px]'
+              } ${
+                errors.instructions ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/10'
               }`}
             >
               <textarea
@@ -766,7 +804,7 @@ export function AdSetupStep({
                   clearError('instructions');
                 }}
                 placeholder="How would you like your creatives....."
-                className="min-h-0 flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[15px] font-light text-white outline-none placeholder:text-[#afafaf]/80"
+                className="min-h-0 flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[15px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
               />
               {/* Prompt-box preview row — selected images (key visuals +
                   model refs for Lifestyle; product/reference images
@@ -778,7 +816,7 @@ export function AdSetupStep({
                   {promptThumbs.map((t, i) => (
                     <div
                       key={`prompt-thumb-${t.kind}-${i}-${t.preview}`}
-                      className="relative h-[160px] w-[90px] shrink-0 overflow-hidden rounded-[10px] ring-1 ring-white/10"
+                      className="relative h-[160px] w-[90px] shrink-0 overflow-hidden rounded-[10px] ring-1 ring-black/10 dark:ring-white/10"
                     >
                       <img
                         src={t.preview}
@@ -829,7 +867,7 @@ export function AdSetupStep({
                   className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {isSuggestingPrompt ? (
-                    <Loader2 size={20} className="animate-spin text-white" />
+                    <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
                   ) : (
                     <img
                       src={chatResponseDark}
@@ -860,14 +898,14 @@ export function AdSetupStep({
                   URL autofills the form below. */}
               <div ref={brandIqWrapperRef} className="relative lg:mr-3">
                 <FieldLabel>Attach your Brand Voice</FieldLabel>
-                <div className="mt-3 flex items-center gap-2 rounded-full bg-[#909294]/10 p-1 ring-1 ring-white/5">
+                <div className="mt-3 flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 p-1 ring-1 ring-black/10 dark:ring-white/5">
                   <button
                     type="button"
                     onClick={handleBrandIqOpen}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-white transition-colors ${
+                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-colors ${
                       brandSource.kind === 'list' || brandSource.kind === 'autofill'
-                        ? 'bg-white/15 ring-1 ring-white/20'
-                        : 'bg-[#303030] hover:bg-[#3a3a3a]'
+                        ? 'bg-black/5 dark:bg-white/15 ring-1 ring-black/10 dark:ring-white/20'
+                        : 'bg-white dark:bg-[#303030] hover:bg-black/5 dark:hover:bg-[#3a3a3a]'
                     }`}
                   >
                     <img src={brandIqIcon} alt="" className="h-3.5 w-3.5" />
@@ -881,7 +919,7 @@ export function AdSetupStep({
                       className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`}
                     />
                   </button>
-                  <span className="text-[11px] text-white/40">or</span>
+                  <span className="text-[11px] text-gray-500 dark:text-white/40">or</span>
                   <input
                     type="text"
                     inputMode="url"
@@ -900,13 +938,13 @@ export function AdSetupStep({
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="flex-1 bg-transparent px-2 text-[13px] text-white outline-none placeholder:text-[#afafaf]/80"
+                    className="flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
                   />
                   <button
                     type="button"
                     onClick={handleAutofill}
                     disabled={!bvWebsiteUrl.trim() || autofillState === 'loading'}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#606060] px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-gray-700 dark:bg-[#606060] px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {autofillState === 'loading' && (
                       <Loader2 size={12} className="animate-spin" />
@@ -927,9 +965,9 @@ export function AdSetupStep({
 
                 {/* BrandIQ dropdown */}
                 {showBrandIqPicker && (
-                  <div className="absolute z-30 mt-2 max-h-72 w-full max-w-sm overflow-y-auto rounded-2xl bg-[#1f1f1f] p-2 shadow-xl ring-1 ring-white/10">
+                  <div className="absolute z-30 mt-2 max-h-72 w-full max-w-sm overflow-y-auto rounded-2xl bg-white dark:bg-[#1f1f1f] p-2 shadow-xl ring-1 ring-black/10 dark:ring-white/10">
                     {brandListState === 'loading' && (
-                      <div className="flex items-center justify-center py-6 text-[12px] text-white/50">
+                      <div className="flex items-center justify-center py-6 text-[12px] text-gray-500 dark:text-white/50">
                         <Loader2 size={14} className="mr-2 animate-spin" /> Loading brands…
                       </div>
                     )}
@@ -939,7 +977,7 @@ export function AdSetupStep({
                       </p>
                     )}
                     {brandListState === 'loaded' && brandList.length === 0 && (
-                      <p className="px-3 py-4 text-[12px] text-white/50">
+                      <p className="px-3 py-4 text-[12px] text-gray-500 dark:text-white/50">
                         No brands saved yet.
                       </p>
                     )}
@@ -957,24 +995,24 @@ export function AdSetupStep({
                             key={itemId || item.name}
                             onClick={() => handleBrandIqSelect(item)}
                             className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
-                              selected ? 'bg-[#373839] text-white' : 'hover:bg-white/5'
+                              selected ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white' : 'hover:bg-black/5 dark:hover:bg-white/5'
                             }`}
                           >
                             {item.logoUrls?.[0] ? (
                               <img
                                 src={item.logoUrls[0]}
                                 alt=""
-                                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+                                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/10"
                               />
                             ) : (
-                              <div className="h-8 w-8 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10" />
+                              <div className="h-8 w-8 shrink-0 rounded-full bg-black/5 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10" />
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium text-white">
+                              <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">
                                 {item.name}
                               </p>
                               {item.description && (
-                                <p className="truncate text-[11px] text-white/50">
+                                <p className="truncate text-[11px] text-gray-500 dark:text-white/50">
                                   {item.description}
                                 </p>
                               )}
@@ -1020,7 +1058,7 @@ export function AdSetupStep({
               {isLifestyle && (
                 <div className="space-y-3 lg:mr-3">
                   <FieldLabel>Model Description</FieldLabel>
-                  <div className="rounded-[24px] bg-[#909294]/10 p-4 ring-1 ring-white/5 sm:p-5">
+                  <div className="rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-4 ring-1 ring-black/10 dark:ring-white/5 sm:p-5">
                     <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:gap-x-8">
                       <PillDropdown
                         label="Age"
@@ -1184,7 +1222,7 @@ export function AdSetupStep({
 
         <div className="mt-2 flex items-center justify-end gap-3">
           {total > 0 && (
-            <span className="rounded-full bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-white/70 ring-1 ring-white/5">
+            <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
               –{total * creditsPerImage} credits
             </span>
           )}
@@ -1192,7 +1230,7 @@ export function AdSetupStep({
             type="button"
             onClick={handleGenerate}
             disabled={!canGenerate}
-            className="flex items-center justify-center rounded-full bg-white px-8 py-2.5 text-base font-semibold text-black transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-semibold dark:text-black transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Generate
           </button>
@@ -1213,7 +1251,7 @@ export function AdSetupStep({
 
 function FieldLabel({ children, required }) {
   return (
-    <p className="text-[14px] text-white">
+    <p className="text-[14px] text-gray-900 dark:text-white">
       {children}
       {required && <span>*</span>}
     </p>
@@ -1239,7 +1277,7 @@ function LabeledInput({ label, required, value, onChange, placeholder, error, cl
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-3 h-[50px] w-full rounded-full bg-[#909294]/10 px-5 text-[14px] font-light text-white outline-none ring-1 placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-white/5'}`}
+        className={`mt-3 h-[50px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-5 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
       />
       <FieldError message={error} />
     </div>
@@ -1255,7 +1293,7 @@ function LabeledTextarea({ label, required, value, onChange, placeholder, error 
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-white outline-none ring-1 placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-white/5'}`}
+        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
       />
       <FieldError message={error} />
     </div>
@@ -1351,7 +1389,7 @@ function FileUploadField({
             onUrlChange('');
           }
         }}
-        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-[#909294]/10 pl-4 pr-1 ring-1 ring-white/5"
+        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 pl-4 pr-1 ring-1 ring-black/10 dark:ring-white/5"
       >
         <input
           type="url"
@@ -1380,13 +1418,13 @@ function FileUploadField({
             }
           }}
           placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-white outline-none placeholder:text-[#afafaf]/80"
+          className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
         />
-        <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-white/40" />
+        <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-gray-500 dark:text-white/40" />
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-white/20 px-4 text-[12px] font-medium text-white ring-1 ring-white/10 transition-colors hover:bg-white/25"
+          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 text-[12px] font-medium text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 transition-colors hover:bg-black/10 dark:hover:bg-white/25"
         >
           <UploadCloud size={14} strokeWidth={1.8} />
           Upload Image
@@ -1452,7 +1490,7 @@ function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
   const clickTimers = useRef({});
   return (
     <div className="mt-3">
-      <p className="mb-1.5 text-[11px] text-white/50">
+      <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">
         Brand images — click to select, double-click to preview
       </p>
       <div className="flex flex-wrap gap-2">
@@ -1483,7 +1521,7 @@ function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
               className={`relative h-10 w-10 shrink-0 cursor-pointer rounded-md transition ${
                 selected
                   ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-white/10 hover:border-white/30'
+                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
               }`}
             >
               <img src={url} alt="" className="h-full w-full rounded-md object-cover" />
@@ -1507,7 +1545,7 @@ function ThumbList({ items }) {
       {items.map(({ src, onRemove, label }, i) => (
         <div
           key={`${src}-${i}`}
-          className="group relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-md ring-1 ring-white/10"
+          className="group relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-md ring-1 ring-black/10 dark:ring-white/10"
         >
           <img src={src} alt="" className="h-full w-full object-cover" />
           <button
@@ -1558,15 +1596,15 @@ function PillDropdown({ label, value, onChange, options }) {
 
   return (
     <div className="relative flex items-center justify-between gap-4">
-      <span className="min-w-16 shrink-0 text-[13px] text-white/85">{label}</span>
+      <span className="min-w-16 shrink-0 text-[13px] text-gray-500 dark:text-white/85">{label}</span>
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-[#909294]/10 px-3 py-1.5 ring-1 ring-white/5 transition-colors hover:bg-[#909294]/20"
+        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#909294]/20"
       >
-        <span className="truncate text-[12px] font-light text-white/85">{value || 'Select…'}</span>
-        <ChevronDown size={18} strokeWidth={2} className="shrink-0 text-white/50" />
+        <span className="truncate text-[12px] font-light text-gray-900 dark:text-white/85">{value || 'Select…'}</span>
+        <ChevronDown size={18} strokeWidth={2} className="shrink-0 text-gray-500 dark:text-white/50" />
       </button>
       {open &&
         createPortal(
@@ -1579,7 +1617,7 @@ function PillDropdown({ label, value, onChange, options }) {
               width: Math.max(pos.width, 100),
               zIndex: 9999,
             }}
-            className="scale-85 -translate-y-2 -translate-x-2 2xl:translate-0 2xl:scale-100 2xl:max-h-[180px] max-h-[120px] overflow-y-auto rounded-[14px] border border-white/10 bg-[#0D0D0D]/50 py-1 shadow-2xl backdrop-blur-[100px]"
+            className="scale-85 -translate-y-2 -translate-x-2 2xl:translate-0 2xl:scale-100 2xl:max-h-[180px] max-h-[120px] overflow-y-auto rounded-[14px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#0D0D0D]/50 py-1 shadow-2xl backdrop-blur-[100px]"
           >
             {options.map((opt) => (
               <button
@@ -1589,8 +1627,8 @@ function PillDropdown({ label, value, onChange, options }) {
                   onChange(opt);
                   setOpen(false);
                 }}
-                className={`block w-full px-3 py-2 text-left 2xl:text-[12px] text-[10px] transition-colors hover:bg-white/5 ${
-                  opt === value ? 'bg-[#3d3d3d] text-white' : 'text-white/80'
+                className={`block w-full px-3 py-2 text-left 2xl:text-[12px] text-[10px] transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
+                  opt === value ? 'bg-gray-100 text-gray-900 dark:bg-[#3d3d3d] dark:text-white' : 'text-gray-500 dark:text-white/80'
                 }`}
               >
                 {opt}
@@ -1621,16 +1659,16 @@ function ModelPickerPill({ value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-white/80 ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
           <ModelIcon option={MODEL_OPTIONS.find((m) => m.name === value)} />
         </span>
         {value}
-        <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10">
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
           {MODEL_OPTIONS.map((opt) => {
             const { name, available } = opt;
             const selected = name === value;
@@ -1647,10 +1685,10 @@ function ModelPickerPill({ value, onChange }) {
                 title={available ? undefined : 'Coming soon'}
                 className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
                   !available
-                    ? 'cursor-not-allowed text-white/80'
+                    ? 'cursor-not-allowed text-gray-500 dark:text-white/80'
                     : selected
-                      ? 'bg-[#373839] text-white'
-                      : 'text-white/80 hover:bg-white/5 hover:text-white'
+                      ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                      : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
@@ -1658,7 +1696,7 @@ function ModelPickerPill({ value, onChange }) {
                 </span>
                 <span className="flex-1">{name}</span>
                 {!available && (
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] uppercase tracking-wide text-white/50">
+                  <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[9px] uppercase tracking-wide text-gray-500 dark:text-white/50">
                     soon
                   </span>
                 )}
@@ -1699,48 +1737,48 @@ function RatioPickerPill({ counts, onChange, model }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full bg-[#2b2a2a]/50 px-4 py-2.5 font-light text-[#afafaf] ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+        className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
-        <span className="text-[14px] text-white/90">{primary}</span>
-        <span className="h-3 w-px bg-white/20" />
-        <LayoutGrid size={11} strokeWidth={1.8} className="text-white/50" />
+        <span className="text-[14px] text-gray-900 dark:text-white/90">{primary}</span>
+        <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
+        <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
         <span className="text-[14px]">
           {total} Image{total !== 1 ? 's' : ''}
         </span>
-        <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute right-0 bottom-full z-30 mb-2 w-[280px] rounded-[20px] bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-white/10">
-          <p className="mb-2 text-center text-[13px] font-medium text-[#d9d9d9]">
+        <div className="absolute right-0 bottom-full z-30 mb-2 w-[280px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+          <p className="mb-2 text-center text-[13px] font-medium text-gray-500 dark:text-[#d9d9d9]">
             Aspect Ratio per Image
           </p>
           <div className="flex items-center justify-center gap-1.5 text-sm">
-            <span className="text-white/70">Total Number of Images :</span>
-            <span className="font-medium text-white">{total}</span>
+            <span className="text-gray-500 dark:text-white/70">Total Number of Images :</span>
+            <span className="font-medium text-gray-900 dark:text-white">{total}</span>
           </div>
-          <p className="mb-6 mt-1 text-center text-[11px] text-white/50">
+          <p className="mb-6 mt-1 text-center text-[11px] text-gray-500 dark:text-white/50">
             {creditsPerImage} credits per image
           </p>
           <div className="space-y-1">
             {allowedAspectLabels(model).map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between pl-4">
-                <span className="text-[12px] text-white">{label}</span>
+                <span className="text-[12px] text-gray-900 dark:text-white">{label}</span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => adjust(key, -1)}
-                    className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                    className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
                     aria-label={`Decrease ${label}`}
                   >
                     <span className="text-[18px] leading-none select-none">−</span>
                   </button>
-                  <span className="w-8 rounded-full bg-[#9092941A] py-0.5 text-center text-[11px] font-medium text-white">
+                  <span className="w-8 rounded-full bg-gray-100 dark:bg-[#9092941A] py-0.5 text-center text-[11px] font-medium text-gray-900 dark:text-white">
                     {counts[key] ?? 0}
                   </span>
                   <button
                     type="button"
                     onClick={() => adjust(key, 1)}
-                    className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                    className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
                     aria-label={`Increase ${label}`}
                   >
                     <span className="text-[18px] leading-none select-none">+</span>
@@ -1749,7 +1787,7 @@ function RatioPickerPill({ counts, onChange, model }) {
               </div>
             ))}
           </div>
-          <p className="mt-3 text-right text-[10px] text-white/40">Max 4 per ratio</p>
+          <p className="mt-3 text-right text-[10px] text-gray-500 dark:text-white/40">Max 4 per ratio</p>
         </div>
       )}
     </div>

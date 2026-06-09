@@ -45,6 +45,30 @@ export async function fetchBrandList(userId, authToken, signal) {
   return Array.isArray(json) ? json : (json.data ?? []);
 }
 
+// ── Prompt templates ───────────────────────────────────────────────────────
+
+// GET /adsgpt/prompt-templates?type=<type> — returns the curated prompt list
+// shown in the "Templates" picker next to the Prompt label. `type` is one of
+// lifestyle, product_shot, apps_saas, brand_awareness, ai_custom.
+export async function fetchPromptTemplates(type, signal) {
+  const authToken = getAuthToken();
+  if (!authToken) throw new Error('Missing auth token');
+  const url = `${BRAND_API_BASE}/adsgpt/prompt-templates?type=${encodeURIComponent(type)}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      Accept: 'application/json',
+    },
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load templates (${res.status})`);
+  }
+  const json = await res.json();
+  const templates = Array.isArray(json?.templates) ? json.templates : [];
+  return templates;
+}
+
 // ── Autofill ───────────────────────────────────────────────────────────────
 
 export const AUTOFILL_FAILURE_MESSAGE = 'Website fetching failed. Please add manually.';

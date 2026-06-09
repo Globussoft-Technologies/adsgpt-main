@@ -411,7 +411,7 @@ const PreviewCanvas = ({
       <div className="ml-2 flex md:ml-5 lg:hidden">
         <button
           onClick={() => setIsPreviewOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+          className="flex items-center gap-2 rounded-full bg-black/5 dark:bg-white/10 px-4 py-2 text-xs font-semibold text-gray-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/20"
         >
           <Smartphone className="inline-block h-4 w-4" /> Mobile Preview
         </button>
@@ -419,7 +419,7 @@ const PreviewCanvas = ({
 
       {/* Mobile Preview */}
       <div className="hidden lg:flex">
-        {selectedPlatformTab === 'google' ? (
+        {/* {selectedPlatformTab === 'google' ? (
           <GoogleMobilePreview
             key={creative?.id}
             image={creative?.image}
@@ -427,7 +427,7 @@ const PreviewCanvas = ({
             cta={creative?.cta}
             ctaLink={creative?.ctaLink}
           />
-        ) : (
+        ) : ( */}
           <MobilePreview
             key={creative?.id}
             image={creative?.image}
@@ -435,7 +435,7 @@ const PreviewCanvas = ({
             cta={creative?.cta}
             ctaLink={creative?.ctaLink}
           />
-        )}
+        {/* )} */}
       </div>
 
       {/* Creative Controls */}
@@ -459,15 +459,17 @@ const PreviewCanvas = ({
                     <div className="flex items-center gap-3">
                       <span>Ad Copy</span>
                       {hasAnyCopies && (
-                        <div className="flex gap-1 rounded-full bg-white/10 p-0.5">
-                          {['meta', 'google'].map((p) => (
+                        <div className="flex gap-1 rounded-full bg-black/5 dark:bg-white/10 p-0.5">
+                          {['meta'
+                            // , 'google'
+                          ].map((p) => (
                             <button
                               key={p}
                               onClick={() => setSelectedPlatformTab(p)}
                               className={`rounded-full px-3 py-0.5 text-xs font-medium transition-all ${
                                 selectedPlatformTab === p
-                                  ? 'bg-white text-black'
-                                  : 'text-white/60 hover:text-white'
+                                  ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                                  : 'text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white'
                               }`}
                             >
                               {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -492,7 +494,7 @@ const PreviewCanvas = ({
                       onSelect={(text) => update?.({ text })}
                     />
                   ) : (
-                    <div className="flex h-24 items-center justify-center rounded-xl bg-white/5 text-sm text-white/40">
+                    <div className="flex h-24 items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-sm text-gray-500 dark:text-white/40">
                       No ad copies generated for this platform
                     </div>
                   )}
@@ -507,10 +509,10 @@ const PreviewCanvas = ({
                     <button
                       key={cta}
                       onClick={() => update?.({ cta })}
-                      className={`rounded-lg border bg-white/10 px-4 py-1.5 text-xs font-medium text-white 2xl:text-sm ${
+                      className={`rounded-lg border bg-black/5 dark:bg-white/10 px-4 py-1.5 text-xs font-medium text-gray-900 dark:text-white 2xl:text-sm ${
                         creative?.cta === cta
-                          ? 'border-white text-white'
-                          : 'border-white/10 hover:bg-white/20'
+                          ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white'
+                          : 'border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/20'
                       }`}
                     >
                       {cta}
@@ -531,8 +533,8 @@ const PreviewCanvas = ({
                   className={`w-full rounded-3xl border ${
                     ctaLinkError
                       ? 'border-red-500 focus:ring-red-500'
-                      : 'border-white/40 focus:border-white'
-                  } bg-transparent px-4 py-2.5 text-xs text-white placeholder:text-white/60 focus:outline-none 2xl:text-sm`}
+                      : 'border-black/20 dark:border-white/40 focus:border-gray-900 dark:focus:border-white'
+                  } bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/60 focus:outline-none 2xl:text-sm`}
                 />
                 {ctaLinkError && <p className="mt-1 px-2 text-sm text-red-500">{ctaLinkError}</p>}
               </CreativeSection>
@@ -542,10 +544,10 @@ const PreviewCanvas = ({
               <button
                 onClick={handleSave}
                 disabled={saveStatus === 'saving' || !creative?.canSave}
-                className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs font-semibold text-[#0F1010] 2xl:text-base ${
+                className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs font-semibold text-white dark:text-[#0F1010] 2xl:text-base ${
                   saveStatus === 'saved' || !creative?.canSave
-                    ? 'cursor-not-allowed bg-[#3C3C3C]/50 text-white/50'
-                    : 'bg-white hover:opacity-75'
+                    ? 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-[#3C3C3C]/50 dark:text-white/50'
+                    : 'bg-gray-900 dark:bg-white hover:opacity-75'
                 } ${saveStatus === 'saving' ? 'cursor-not-allowed opacity-80' : ''} `}
               >
                 {saveStatus === 'saving' && (
@@ -569,8 +571,8 @@ const PreviewCanvas = ({
                 disabled={isloading || !enableId || creative?.canSave}
                 className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs 2xl:text-base ${
                   isloading || !enableId || creative?.canSave
-                    ? 'cursor-not-allowed bg-[#3C3C3C]/50 text-white/50'
-                    : 'bg-[#3C3C3C] text-white hover:bg-white/10'
+                    ? 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-[#3C3C3C]/50 dark:text-white/50'
+                    : 'bg-gray-100 text-gray-900 dark:bg-[#3C3C3C] dark:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 {isloading ? (

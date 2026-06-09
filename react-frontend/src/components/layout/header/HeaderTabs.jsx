@@ -43,7 +43,7 @@ const HeaderTabs = ({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0, opacity: 0 }}
           transition={{ duration: 0.1, ease: 'easeOut' }}
-          className="backdrop-blur-80 rounded-10 fixed top-18 right-4 flex flex-col gap-2 border border-slate-600/40 bg-[#0D0D0D] p-4 lg:relative lg:inset-0 lg:flex-row lg:items-center lg:gap-0 lg:border-none lg:bg-transparent lg:p-1"
+          className="backdrop-blur-80 rounded-10 fixed top-18 right-4 flex flex-col gap-2 border border-black/10 bg-white p-4 lg:relative lg:inset-0 lg:flex-row lg:items-center lg:gap-0 lg:border-none lg:bg-transparent lg:p-1 dark:border-slate-600/40 dark:bg-[#0D0D0D]"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -62,7 +62,9 @@ const HeaderTabs = ({
                   }
                 }}
                 className={`2xl:text-13 relative flex items-center rounded-full px-[11px] py-[5px] text-[10px] font-medium whitespace-nowrap transition 2xl:px-4 2xl:py-[7px] ${
-                  isActive ? '' : 'text-[#AFAFAF] hover:text-white'
+                  isActive
+                    ? 'text-zinc-900 dark:text-white'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
                 }`}
               >
                 <div
@@ -80,7 +82,7 @@ const HeaderTabs = ({
                   {isActive && (
                     <motion.div
                       layoutId="activeTabBg"
-                      className="absolute inset-0 -z-10 rounded-full from-[#3C3C3C] to-[#3C3C3C] dark:bg-gradient-to-br"
+                      className="absolute inset-0 -z-10 rounded-full bg-zinc-200 from-[#3C3C3C] to-[#3C3C3C] dark:bg-gradient-to-br"
                       transition={{ type: 'spring', duration: 0.4 }}
                     />
                   )}

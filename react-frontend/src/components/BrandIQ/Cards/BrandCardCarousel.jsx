@@ -101,7 +101,7 @@ const BrandCardCarousel = ({ from = '', images, onImagesLoaded }) => {
           <button
             ref={prevRef}
             aria-label="Previous image"
-            className={`absolute top-1/2 left-2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-white/20 p-1 text-white backdrop-blur-sm hover:bg-white/10 hover:backdrop-blur-md ${isBeginning ? 'invisible' : ''} `}
+            className={`absolute top-1/2 left-2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-white/20 p-1 text-white shadow-md ring-1 ring-black/5 backdrop-blur-sm hover:bg-white/10 hover:backdrop-blur-md ${isBeginning ? 'invisible' : ''} `}
             style={{ backgroundColor: bgColors?.current || 'rgba(255,255,255,0.2)' }}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -109,7 +109,7 @@ const BrandCardCarousel = ({ from = '', images, onImagesLoaded }) => {
           <button
             ref={nextRef}
             aria-label="Next image"
-            className={`absolute top-1/2 right-2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-white/20 p-1 text-white backdrop-blur-sm hover:bg-white/10 hover:backdrop-blur-md ${isEnd ? 'invisible' : ''}`}
+            className={`absolute top-1/2 right-2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-white/20 p-1 text-white shadow-md ring-1 ring-black/5 backdrop-blur-sm hover:bg-white/10 hover:backdrop-blur-md ${isEnd ? 'invisible' : ''}`}
             style={{ backgroundColor: bgColors?.current || 'rgba(255,255,255,0.2)' }}
           >
             <ChevronRight className="h-5 w-5" />

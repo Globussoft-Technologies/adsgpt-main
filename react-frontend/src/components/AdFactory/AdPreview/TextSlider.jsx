@@ -1,9 +1,11 @@
 import { Check, CheckCircle, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 
 const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
   const [editingId, setEditingId] = useState(null);
   const [localCopies, setLocalCopies] = useState(adCopies);
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
 
   // Sync with parent adCopies when they change
   useEffect(() => {
@@ -62,7 +64,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
   };
 
   return (
-    <div className="scrollbar-white flex gap-2 overflow-x-auto pb-4">
+    <div className={`${isDarkMode ? "scrollbar-white" : ""} flex gap-2 overflow-x-auto pb-4`}>
       {localCopies.map((adCopy, index) => {
         const isSelected =
           adCopy?.headline + adCopy?.primaryText ===
@@ -76,20 +78,20 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
             className={`scrollbar-hide relative flex h-64 w-55 flex-shrink-0 flex-col overflow-auto rounded-xl p-4 text-xs 2xl:h-78 2xl:w-[240px] ${
               isSelected
                 ? 'bg-gradient-to-br from-[#424CFF] to-[#22C5FD] text-white'
-                : 'bg-white/10 text-white/70'
+                : 'bg-black/5 dark:bg-white/10 text-gray-500 dark:text-white/70'
             }`}
             onClick={() => handleSelect(adCopy)}
           >
             <button>
               {isEditing && (
                 <CheckCircle
-                  className="h-4.5 w-4.5 text-white/70 hover:text-white"
+                  className="h-4.5 w-4.5 text-gray-500 dark:text-white/70 hover:text-black dark:hover:text-white"
                   onClick={() => handleSelect(adCopy)}
                 />
               )}
             </button>
 
-            <p className="mb-2 text-base font-bold text-white 2xl:text-lg">Ad Copy {index + 1}</p>
+            <p className={`mb-2 text-base font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'} 2xl:text-lg`}>Ad Copy {index + 1}</p>
 
             {isEditing ? (
               <textarea
@@ -100,7 +102,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
               />
             ) : (
               <p
-                className={`mb-3 max-h-[150px] overflow-auto text-xs 2xl:text-sm ${isSelected ? 'scrollbar-white text-white' : 'scrollbar-thin text-[#DFDFDF]'}`}
+                className={`mb-3 max-h-[150px] overflow-auto text-xs 2xl:text-sm ${isSelected ? 'scrollbar-white text-white' : 'scrollbar-thin text-gray-500 dark:text-[#DFDFDF]'}`}
               >
                 Primary Text: {adCopy?.primaryText} <br />
                 {adCopy?.ctaLabel}
@@ -115,7 +117,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
               />
             ) : (
               <p
-                className={`${isSelected ? 'text-white' : 'text-[#DFDFDF]'} my-2 text-xs 2xl:text-sm`}
+                className={`${isSelected ? 'text-white' : 'text-gray-500 dark:text-[#DFDFDF]'} my-2 text-xs 2xl:text-sm`}
               >
                 Headline: {adCopy?.headline}
               </p>

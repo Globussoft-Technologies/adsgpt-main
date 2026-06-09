@@ -20,6 +20,7 @@ import {
   incrementSavedCount,
   showSavedFolder as showSavedFolderAction,
   setAvatarStep,
+  setCloneStep,
   setAIAdsStep,
   setAiAdsSceneData,
   setImageAndScript,
@@ -107,6 +108,7 @@ const AdVideoLayout = () => {
     isLoading,
     imageAndScript,
     currentAvatarStep,
+    currentCloneStep,
     currentAIAdsStep,
     aiAdsSceneData,
     aiAdsSceneLoading,
@@ -171,6 +173,27 @@ const AdVideoLayout = () => {
       dispatch(setImageAndScript(null));
       dispatch(setFields({ brand_name: '', brandInfo: {}, selectedBrand: {} }));
     }
+    if (activePage === 'clone') {
+      const generatedData = imageAndScript?.data || imageAndScript;
+      const urlId = searchParams.get('id');
+      const isMissingData =
+        urlId && (!generatedData?.generatedImage || !generatedData?.generatedScript);
+      const hasAnyError =
+        generatedData?.generatedImage === 'failed' || generatedData?.generatedScript === 'failed';
+
+      if ((isLoading || isMissingData) && !hasAnyError) {
+        toast.dismiss();
+        toast.error('Clone video is generating, please wait');
+        return;
+      }
+      if (generatedData?.generatedImage && generatedData?.generatedScript && !hasAnyError) {
+        emitter.emit('clone:request-discard');
+        return;
+      }
+      setSearchParams({}, { replace: true });
+      dispatch(setImageAndScript(null));
+      dispatch(setFields({ brand_name: '', brandInfo: {}, selectedBrand: {} }));
+    }
     if (activePage === 'ai-ads') {
       // Block back navigation while scenes are not fully ready:
       //   - initial gen in flight (no scripts yet)
@@ -205,6 +228,7 @@ const AdVideoLayout = () => {
       dispatch(setAIAdsStep('selection'));
     }
     dispatch(setAvatarStep('options'));
+    dispatch(setCloneStep('upload'));
     dispatch(setActivePage('home'));
   };
 
@@ -287,7 +311,7 @@ const AdVideoLayout = () => {
       ) : activePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="flex w-full items-center justify-between gap-2 p-4 text-white">
+          <div className="flex w-full items-center justify-between gap-2 p-4 pr-14 text-gray-900 2xl:pr-16 dark:text-white">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleBackNavigation}
@@ -298,7 +322,7 @@ const AdVideoLayout = () => {
               </button>
 
               {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs */}
-              <div className="relative flex items-center gap-0 rounded-full border border-slate-600/40 bg-[#0D0D0D] p-1 backdrop-blur-md">
+              <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-gray-100 p-1 backdrop-blur-md dark:border-slate-600/40 dark:bg-[#0D0D0D]">
                 {[
                   { id: 'images', label: 'Images', Icon: Images },
                   { id: 'videos', label: 'Videos', Icon: Video },
@@ -310,7 +334,7 @@ const AdVideoLayout = () => {
                       type="button"
                       onClick={() => dispatch(setMySpaceTab(id))}
                       className={`2xl:text-13 relative flex items-center rounded-full px-[11px] py-[5px] text-[10px] font-medium whitespace-nowrap transition 2xl:px-4 2xl:py-[7px] ${
-                        isActive ? 'text-white' : 'text-[#AFAFAF] hover:text-white'
+                        isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
                       }`}
                     >
                       <div className="flex gap-1 2xl:gap-2">
@@ -320,7 +344,7 @@ const AdVideoLayout = () => {
                       {isActive && (
                         <motion.div
                           layoutId="mySpaceTabBg"
-                          className="absolute inset-0 -z-10 rounded-full from-[#3C3C3C] to-[#3C3C3C] dark:bg-gradient-to-br"
+                          className="absolute inset-0 -z-10 rounded-full bg-white shadow-sm dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
                           transition={{ type: 'spring', duration: 0.4 }}
                         />
                       )}
@@ -361,7 +385,7 @@ const AdVideoLayout = () => {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-center gap-2 p-4 text-white">
+          <div className="flex items-center gap-2 p-4 text-zinc-900 dark:text-white">
             <button
               onClick={handleBackNavigation}
               className="flex items-center gap-2 text-xl 2xl:text-3xl"
@@ -382,7 +406,7 @@ const AdVideoLayout = () => {
                   : 'h-fit scale-75 2xl:scale-100'
               } ${
                 activePage !== 'ugc'
-                  ? 'rounded-[30px] border border-white/10 bg-[#303030]/50 backdrop-blur-xl'
+                  ? 'rounded-[30px] border border-black/10 bg-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
                   : ''
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'

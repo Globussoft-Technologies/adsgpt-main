@@ -1,7 +1,14 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// Bharath's request 2026-06-08: every session starts on the new Ad
+// Creative surface (`adCreativeNew`, which occupies the "Ad Creative"
+// slot in TopHeader after the [[project-hide-recipe-adlibrary-adcreativenew]]
+// pass marked the legacy `adCreative` tab declaration with HIDE-MARK).
+// localStorage is intentionally NOT read here — the landing tab is forced
+// regardless of the user's last click — but `setActiveAdStudioTab` still
+// writes to it because other consumers in the codebase grep for the key.
 const initialState = {
-  activeAdStudioTabId: localStorage.getItem('activeAdStudioTabId') || 'adCreative',
+  activeAdStudioTabId: localStorage.getItem('activeAdStudioTabId') || 'adCreativeNew',
   adCreativeNewActivePage: 'home',
 };
 

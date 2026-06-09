@@ -2,7 +2,7 @@ import { ChevronLeft } from 'lucide-react';
 
 export function LifestyleShell({ title = 'Lifestyle Ads', onClose, children }) {
   return (
-    <div className="relative flex h-[calc(100svh-16px)] w-full flex-col overflow-hidden text-white">
+    <div className="relative flex h-[calc(100svh-16px)] w-full flex-col overflow-hidden text-gray-900 dark:text-white">
       {/* <div
         aria-hidden
         className="pointer-events-none absolute -bottom-[20%] left-[-10%] h-[80vmin] w-[80vmin] rounded-full bg-[linear-gradient(332.23deg,#15dcff_29.66%,#5e66f5_74.52%)] opacity-25 blur-[140px]"
@@ -12,7 +12,7 @@ export function LifestyleShell({ title = 'Lifestyle Ads', onClose, children }) {
         className="pointer-events-none absolute -top-[20%] right-[-5%] h-[36vmin] w-[36vmin] rounded-full bg-[linear-gradient(332.23deg,#15dcff_29.66%,#5e66f5_74.52%)] opacity-40 blur-[80px]"
       /> */}
 
-      <div className="relative flex items-center gap-2 p-4 text-white">
+      <div className="relative flex items-center gap-2 p-4 text-gray-900 dark:text-white">
         {onClose ? (
           <button
             type="button"

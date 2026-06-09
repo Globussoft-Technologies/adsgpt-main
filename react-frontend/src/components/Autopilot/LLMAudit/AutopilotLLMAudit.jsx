@@ -39,15 +39,15 @@ function LoadingState({ label = 'Running AI Audit' }) {
         </div>
       </div>
       <div>
-        <p className="text-sm font-bold text-white">{label}</p>
-        <p className="mt-1 max-w-sm text-xs text-white/50">{LOADING_STAGES[stage]}</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white">{label}</p>
+        <p className="mt-1 max-w-sm text-xs text-gray-500 dark:text-white/50">{LOADING_STAGES[stage]}</p>
       </div>
       <div className="flex items-center gap-1.5">
         {LOADING_STAGES.map((_, i) => (
           <span
             key={i}
             className={`h-1 w-6 rounded-full transition-colors ${
-              i <= stage ? 'bg-[#15DCFF]' : 'bg-white/10'
+              i <= stage ? 'bg-[#15DCFF]' : 'bg-gray-200 dark:bg-white/10'
             }`}
           />
         ))}
@@ -59,7 +59,7 @@ function LoadingState({ label = 'Running AI Audit' }) {
 function FetchingSpinner() {
   return (
     <div className="flex flex-1 items-center justify-center py-16">
-      <Loader2 className="h-5 w-5 animate-spin text-white/40" />
+      <Loader2 className="h-5 w-5 animate-spin text-gray-400 dark:text-white/40" />
     </div>
   );
 }
@@ -227,9 +227,9 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
   // Picker — rendered above whatever view is active. Click-to-open dropdown
   // matching the rest of the autopilot/Meta-Ads visual language.
   const picker = (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#14181D] px-4 py-2.5 backdrop-blur-xl">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]">
       <div className="flex items-center gap-2">
-        <span className="text-10 font-medium uppercase tracking-wider text-white/40">
+        <span className="text-10 font-medium uppercase tracking-wider text-gray-400 dark:text-white/40">
           Account
         </span>
         <Dropdown
@@ -241,18 +241,18 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
               type="button"
               onClick={() => setAccountOpen((p) => !p)}
               disabled={adAccounts.length === 0}
-              className="flex items-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-xs text-white transition-all hover:border-white/10 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-900 transition-all hover:border-gray-300 disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.06] dark:text-white dark:hover:border-white/10"
             >
-              <Radio className="h-3 w-3 text-emerald-400" />
+              <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
               <span className="max-w-45 truncate font-medium">
                 {selectedAccount?.name ?? 'Pick an account'}
               </span>
-              <ChevronDown className="h-3 w-3 text-[#BEBEBE]" />
+              <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
             </button>
           }
         >
           <div className="w-72 p-1">
-            <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
+            <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
               {adAccounts.map((acc) => (
                 <button
                   key={acc.id}
@@ -260,19 +260,19 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
                     setAdAccountId(acc.id);
                     setAccountOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-white/5 ${
-                    adAccountId === acc.id ? 'bg-white/5' : ''
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                    adAccountId === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''
                   }`}
                 >
                   <div>
                     <p
                       className={`text-xs font-medium ${
-                        adAccountId === acc.id ? 'text-[#15DCFF]' : 'text-white'
+                        adAccountId === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
                       }`}
                     >
                       {acc.name}
                     </p>
-                    <p className="text-10 text-white/50">act_{acc.id}</p>
+                    <p className="text-10 text-gray-500 dark:text-white/50">act_{acc.id}</p>
                   </div>
                   <StatusBadge status={acc.status === 1 ? 'ACTIVE' : 'PAUSED'} />
                 </button>
@@ -283,21 +283,21 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
       </div>
       {selectedAccount && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 px-2.5 py-1.5 2xl:px-3 2xl:py-2">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
             <Coins className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-            <span className="text-10 font-medium uppercase tracking-wider text-white/55 2xl:text-[11px]">
+            <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
               Currency
             </span>
-            <span className="text-xs font-bold text-white 2xl:text-13">
+            <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
               {selectedAccount.currency}
             </span>
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 px-2.5 py-1.5 2xl:px-3 2xl:py-2">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
             <Clock className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-            <span className="text-10 font-medium uppercase tracking-wider text-white/55 2xl:text-[11px]">
+            <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
               Timezone
             </span>
-            <span className="text-xs font-bold text-white 2xl:text-13">
+            <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
               {selectedAccount.timezone || '—'}
             </span>
           </span>
@@ -312,10 +312,10 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
       <>
         {picker}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10">
             <Sparkles className="h-6 w-6 text-[#15DCFF]" />
           </div>
-          <p className="text-sm text-white/60">
+          <p className="text-sm text-gray-600 dark:text-white/60">
             Pick an account above to start an AI audit.
           </p>
         </div>

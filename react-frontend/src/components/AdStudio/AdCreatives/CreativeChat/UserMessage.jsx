@@ -1,9 +1,16 @@
 import { motion } from 'framer-motion';
 import { CornerDownRight } from 'lucide-react';
+import { useState } from 'react';
 import { FADE_UP_ANIMATION_VARIANT } from '@/utils/ui/framerMotionVariants';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
+const TRUNCATE_AT = 280;
+
 const UserMessage = ({ c, setLightboxOpen, handleReplyImageClick }) => {
+  const [expanded, setExpanded] = useState(false);
+  const message = c?.message || '';
+  const isLong = message.length > TRUNCATE_AT;
+  const visibleMessage = !isLong || expanded ? message : `${message.slice(0, TRUNCATE_AT).trimEnd()}…`;
   return (
     <motion.div
       variants={FADE_UP_ANIMATION_VARIANT}
@@ -43,10 +50,19 @@ const UserMessage = ({ c, setLightboxOpen, handleReplyImageClick }) => {
           </div>
         )}
         <div
-          className="border border-[#2A2A2A] bg-[#212121] px-4 py-3 text-xs break-words 2xl:text-sm"
+          className="border border-zinc-200 bg-zinc-100 px-4 py-3 text-xs break-words text-zinc-900 2xl:text-sm dark:border-[#2A2A2A] dark:bg-[#212121] dark:text-white"
           style={{ borderRadius: '30px 30px 1px 30px' }}
         >
-          {c?.message}
+          <span className="whitespace-pre-wrap">{visibleMessage}</span>
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="ml-1 cursor-pointer font-semibold text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
         </div>
       </div>
     </motion.div>

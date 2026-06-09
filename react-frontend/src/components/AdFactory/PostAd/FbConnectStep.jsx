@@ -33,29 +33,29 @@ const PLATFORMS = [
       `${BACKEND_HOST}/api/auth/facebook?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`,
     available: true,
   },
-  {
-    key: 'google',
-    label: 'Google',
-    iconImg: googleAdsIcon,
-    iconBg: 'bg-white',
-    glowColor: 'shadow-[0_0_30px_-8px_#4285F4]',
-    gradientFrom: 'from-[#4285F4]',
-    gradientVia: 'via-[#34A853]',
-    gradientTo: 'to-[#EA4335]',
-    getAuthUrl: ({ feUrl }) => getGoogleAuthUrl(feUrl),
-    available: true,
-  },
+  // {
+  //   key: 'google',
+  //   label: 'Google',
+  //   iconImg: googleAdsIcon,
+  //   iconBg: 'bg-white',
+  //   glowColor: 'shadow-[0_0_30px_-8px_#4285F4]',
+  //   gradientFrom: 'from-[#4285F4]',
+  //   gradientVia: 'via-[#34A853]',
+  //   gradientTo: 'to-[#EA4335]',
+  //   getAuthUrl: ({ feUrl }) => getGoogleAuthUrl(feUrl),
+  //   available: true,
+  // },
 ];
 
 const DisconnectModal = ({ platformLabel, onConfirm, onCancel, isLoading }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1a1a1a] p-6 shadow-2xl">
+    <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]">
       <div className="mb-4 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
           <AlertTriangle className="h-5 w-5 text-red-400" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-white">Disconnect {platformLabel}?</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Disconnect {platformLabel}?</h3>
           <p className="text-xs text-gray-400">This will remove your connected account.</p>
         </div>
       </div>
@@ -63,7 +63,7 @@ const DisconnectModal = ({ platformLabel, onConfirm, onCancel, isLoading }) => (
         <button
           onClick={onCancel}
           disabled={isLoading}
-          className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-gray-400 transition hover:border-white/20 hover:text-white disabled:opacity-50"
+          className="flex-1 rounded-xl border border-black/10 py-2 text-sm text-gray-400 transition hover:border-black/20 hover:text-black disabled:opacity-50 dark:border-white/10 dark:hover:border-white/20 dark:hover:text-white"
         >
           Cancel
         </button>
@@ -99,7 +99,7 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
   };
 
   return (
-    <div className="group relative flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md transition-all duration-300 hover:border-white/20 hover:bg-white/[0.08] sm:flex-row sm:gap-5">
+    <div className="group relative flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-6 backdrop-blur-md transition-all duration-300 hover:border-black/20 hover:bg-black/[0.08] sm:flex-row sm:gap-5 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20 dark:hover:bg-white/[0.08]">
       {/* Platform icon */}
       <div
         className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${platform.iconImg ? 'bg-transparent' : `bg-linear-to-br ${platform.gradientFrom} ${platform.gradientVia} ${platform.gradientTo} ${platform.glowColor}`}`}
@@ -113,11 +113,11 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
       {/* Label + status */}
       <div className="flex flex-1 flex-col items-center text-center sm:items-start sm:text-left">
         <div className="flex items-center gap-1.5">
-          <span className="text-base font-semibold text-white">{platform.label}</span>
-          {isConnected && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+          <span className="text-base font-semibold text-gray-900 dark:text-white">{platform.label}</span>
+          {isConnected && <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
         </div>
         {!platform.comingSoon && (
-          <span className="mt-0.5 text-xs text-white/80">
+          <span className="mt-0.5 text-xs text-gray-500 dark:text-white/80">
             {isConnected ? 'Connected — click to continue' : 'Click to connect your account'}
           </span>
         )}
@@ -141,9 +141,9 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
             ${
               platform.available
                 ? isConnected
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300'
-                  : 'border-white/10 bg-[#0D0D0D]/60 text-[#AFAFAF] hover:border-white/20 hover:bg-[#0D0D0D]/80 hover:text-white'
-                : 'cursor-not-allowed border-white/5 bg-[#0D0D0D]/30 text-gray-600'
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                  : 'border-black/10 bg-black/5 text-gray-500 hover:border-black/20 hover:bg-black/10 hover:text-black dark:border-white/10 dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:bg-[#0D0D0D]/80 dark:hover:text-white'
+                : 'cursor-not-allowed border-black/5 bg-black/5 text-gray-600 dark:border-white/5 dark:bg-[#0D0D0D]/30'
             }
           `}
         >
@@ -155,7 +155,7 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
               platform.available
                 ? isConnected
                   ? ''
-                  : 'bg-linear-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text text-transparent group-hover:text-white/70'
+                  : 'bg-linear-to-t from-[#0ea5c4] to-[#4f55d4] bg-clip-text text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70'
                 : 'text-gray-600'
             }
           >
@@ -242,7 +242,7 @@ const FbConnectStep = ({ onSelectPlatform, connectedActionLabel }) => {
       <div className="flex w-full flex-col items-center justify-center space-y-8 px-4 text-center">
         {/* Header */}
         <div className="max-w-md space-y-2">
-          <h2 className="text-2xl font-semibold text-white sm:text-3xl">Connect Your Accounts</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 sm:text-3xl dark:text-white">Connect Your Accounts</h2>
           <p className="text-sm leading-relaxed text-gray-400 sm:text-base">
             Link your social platforms to start creating and publishing ads.
           </p>

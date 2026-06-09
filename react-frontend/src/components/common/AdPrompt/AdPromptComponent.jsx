@@ -600,7 +600,7 @@ const AdPromptComponent = () => {
         className={`layout_for_chat prompt_containerr bottom-0 z-50 w-full max-w-[850px] scale-100 p-2 2xl:bottom-0 2xl:max-w-[1000px] ${getPositionClasses()}`}
       >
         {/* Main Input Container */}
-        <div className="relative flex min-h-28 flex-col justify-between rounded-3xl bg-[#0d0d0d]/50 px-3 py-4 backdrop-blur-[80px] sm:p-4 2xl:min-h-32">
+        <div className="relative flex min-h-28 flex-col justify-between rounded-3xl border border-black/10 bg-white px-3 py-4 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] backdrop-blur-[80px] sm:p-4 2xl:min-h-32 dark:border-transparent dark:bg-[#0d0d0d]/50 dark:shadow-none">
           {/* Gemini Suggest Button - Top Right */}
           <div className="absolute top-4 right-4.5 z-[60] flex items-center gap-2">
 
@@ -635,13 +635,13 @@ const AdPromptComponent = () => {
                 <PopoverTrigger asChild>
                   <button
                     id="tour_adcreatives_upload"
-                    className={` ${popoverOpen ? 'prompt_selection_button' : ''} relative -top-[0.2rem] -left-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full hover:bg-[#202020]/50 data-[state=open]:border data-[state=open]:border-white/30 data-[state=open]:bg-[#202020]/50 2xl:-top-1.5 2xl:h-8 2xl:w-8`}
+                    className={` ${popoverOpen ? 'prompt_selection_button' : ''} relative -top-[0.2rem] -left-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full hover:bg-zinc-200 data-[state=open]:border data-[state=open]:border-black/20 data-[state=open]:bg-zinc-200 2xl:-top-1.5 2xl:h-8 2xl:w-8 dark:hover:bg-[#202020]/50 dark:data-[state=open]:border-white/30 dark:data-[state=open]:bg-[#202020]/50`}
                   >
                     <ShadcnTooltip label={popoverOpen ? 'Close Options' : 'More Options'}>
                       {isImageUploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-white 2xl:h-5 2xl:w-5" />
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-700 2xl:h-5 2xl:w-5 dark:text-white" />
                       ) : (
-                        <Plus className="h-4 w-4 text-white 2xl:h-5 2xl:w-5" />
+                        <Plus className="h-4 w-4 text-zinc-700 2xl:h-5 2xl:w-5 dark:text-white" />
                       )}
                     </ShadcnTooltip>
                   </button>
@@ -650,9 +650,9 @@ const AdPromptComponent = () => {
                 <PopoverContent
                   side="top"
                   align="start"
-                  className="backdrop-blur-100 w-56 rounded-2xl border border-white/20 bg-[#0D0D0D]/50 px-2 py-3 pb-4"
+                  className="backdrop-blur-100 w-56 rounded-2xl border border-black/10 bg-white px-2 py-3 pb-4 dark:border-white/20 dark:bg-[#0D0D0D]/50"
                 >
-                  <p className="mb-2.5 ml-2 text-xs font-light text-[#d9d9d9] 2xl:text-sm">
+                  <p className="mb-2.5 ml-2 text-xs font-light text-zinc-700 2xl:text-sm dark:text-[#d9d9d9]">
                     Add Images
                   </p>
 
@@ -664,7 +664,7 @@ const AdPromptComponent = () => {
 
                     <label
                       htmlFor="choose_from_device"
-                      className="flex cursor-pointer items-center gap-2 px-2 py-0.5 text-[#AFAFAF] hover:text-white"
+                      className="flex cursor-pointer items-center gap-2 px-2 py-0.5 text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white"
                     >
                       <ImageUp className="h-4 w-4" />
                       <span className="text-xs 2xl:text-sm">Upload from device</span>
@@ -693,7 +693,7 @@ const AdPromptComponent = () => {
                     ? 'Describe how you want to recreate or modify the reference image…'
                     : 'Turn your ideas into visuals — start typing in any language…'
               }
-              className="md:text-13 md:placeholder:text-13 max-h-[110px] min-h-8 w-full resize-none border-none bg-transparent pr-17 text-xs text-slate-200 outline-none placeholder:text-xs placeholder:font-normal placeholder:text-[#CCCCCC]/60 sm:pr-58 2xl:max-h-[180px] 2xl:pr-70 2xl:text-sm 2xl:placeholder:text-sm"
+              className="md:text-13 md:placeholder:text-13 max-h-[110px] min-h-8 w-full resize-none border-none bg-transparent pr-17 text-xs text-zinc-800 outline-none [scrollbar-width:none] placeholder:text-xs placeholder:font-normal placeholder:text-zinc-500 [&::-webkit-scrollbar]:hidden sm:pr-58 2xl:max-h-[180px] 2xl:pr-70 2xl:text-sm 2xl:placeholder:text-sm dark:text-slate-200 dark:placeholder:text-[#CCCCCC]/60"
               onKeyDown={handleEnterKeyPress}
               onPaste={handlePaste}
               ref={textAreaRef}
@@ -736,7 +736,7 @@ const AdPromptComponent = () => {
                     </button>
                   </ShadcnTooltip>
                 )}
-                <span className="hidden md:flex items-center gap-1 rounded-full border border-white/10 bg-white/15 px-2 py-1 text-[10px] text-white 2xl:text-xs whitespace-nowrap">
+                <span className="hidden md:flex items-center gap-1 rounded-full border border-black/10 bg-zinc-100 px-2 py-1 text-[10px] text-zinc-700 2xl:text-xs whitespace-nowrap dark:border-white/10 dark:bg-white/15 dark:text-white">
                   🌐 All regional languages supported
                 </span>
                 <div id="tour_describe_brand_for_copy">
@@ -746,17 +746,17 @@ const AdPromptComponent = () => {
                 {prompt && !isListening ? (
                   <button
                     id="tour_copy_prompt_by_mic"
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white 2xl:h-9 2xl:w-9"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-white 2xl:h-9 2xl:w-9 dark:bg-white dark:text-black"
                     onClick={handleRequestSubmit}
                   >
                     <ShadcnTooltip label="Generate Ad Copy">
-                      <Send className="h-4 w-4 text-black xl:h-5 xl:w-5" />
+                      <Send className="h-4 w-4 text-current xl:h-5 xl:w-5" />
                     </ShadcnTooltip>
                   </button>
                 ) : (
                   <button
                     id="tour_copy_prompt_by_mic"
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white 2xl:h-9 2xl:w-9"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-white 2xl:h-9 2xl:w-9 dark:bg-white dark:text-black"
                   >
                     <SpeechToText />
                   </button>
@@ -832,7 +832,7 @@ const AdPromptComponent = () => {
                     </button>
                   </ShadcnTooltip>
                 )}
-                <span className="hidden md:flex items-center gap-1 rounded-full border border-white/10 bg-white/15 px-2 py-1 text-[10px] text-white 2xl:text-xs whitespace-nowrap">
+                <span className="hidden md:flex items-center gap-1 rounded-full border border-black/10 bg-zinc-100 px-2 py-1 text-[10px] text-zinc-700 2xl:text-xs whitespace-nowrap dark:border-white/10 dark:bg-white/15 dark:text-white">
                   🌐 All regional languages supported
                 </span>
                 <BrandPreferenceDropdown />
@@ -851,7 +851,7 @@ const AdPromptComponent = () => {
                     }
                   >
                     <span
-                      className={`cursor-default rounded-full px-2 py-0.5 text-10 font-medium 2xl:text-xs ${hasEnoughCredits ? 'bg-white/20 text-white/90' : 'bg-red-500 text-white'}`}
+                      className={`cursor-default rounded-full px-2 py-0.5 text-10 font-medium 2xl:text-xs ${hasEnoughCredits ? 'bg-zinc-200 text-zinc-700 dark:bg-white/20 dark:text-white/90' : 'bg-red-500 text-white'}`}
                     >
                       {creditEstimate.label}
                     </span>
@@ -861,17 +861,17 @@ const AdPromptComponent = () => {
                   <button
                     // id="tour_creative_prompt_by_mic"
                     disabled={!hasEnoughCredits}
-                    className={`absolute top-4 right-12 flex h-6.75 w-6.75 items-center justify-center rounded-full sm:static 2xl:h-9 2xl:w-9 ${hasEnoughCredits ? 'bg-white' : 'cursor-not-allowed bg-white/30'}`}
+                    className={`absolute top-4 right-12 flex h-6.75 w-6.75 items-center justify-center rounded-full sm:static 2xl:h-9 2xl:w-9 ${hasEnoughCredits ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-white/30 dark:text-white/50'}`}
                     onClick={handleRequestSubmit}
                   >
                     <ShadcnTooltip label={hasEnoughCredits ? 'Generate Ad Creative' : 'Not enough credits'}>
-                      <Send className="h-4 w-4 text-black xl:h-5 xl:w-5" />
+                      <Send className="h-4 w-4 text-current xl:h-5 xl:w-5" />
                     </ShadcnTooltip>
                   </button>
                 ) : (
                   <button
                     id="tour_creative_prompt_by_mic"
-                    className="absolute top-4 right-12 flex h-[27px] w-[27px] items-center justify-center rounded-full bg-white sm:static 2xl:h-9 2xl:w-9"
+                    className="absolute top-4 right-12 flex h-[27px] w-[27px] items-center justify-center rounded-full bg-zinc-900 text-white sm:static 2xl:h-9 2xl:w-9 dark:bg-white dark:text-black"
                   >
                     <SpeechToText />
                   </button>
@@ -989,7 +989,7 @@ const AdPromptComponent = () => {
                     }
                   >
                     <span
-                      className={`cursor-default rounded-full px-2 py-0.5 text-10 font-medium 2xl:text-xs ${hasEnoughCredits ? 'bg-white/20 text-white/90' : 'bg-red-500 text-white'}`}
+                      className={`cursor-default rounded-full px-2 py-0.5 text-10 font-medium 2xl:text-xs ${hasEnoughCredits ? 'bg-zinc-200 text-zinc-700 dark:bg-white/20 dark:text-white/90' : 'bg-red-500 text-white'}`}
                     >
                       {creditEstimate.label}
                     </span>
@@ -999,17 +999,17 @@ const AdPromptComponent = () => {
                   <button
                     // id="tour_video_prompt_by_mic"
                     disabled={!hasEnoughCredits}
-                    className={`flex h-6.75 w-6.75 items-center justify-center rounded-full 2xl:h-9 2xl:w-9 ${hasEnoughCredits ? 'bg-white' : 'cursor-not-allowed bg-white/30'}`}
+                    className={`flex h-6.75 w-6.75 items-center justify-center rounded-full 2xl:h-9 2xl:w-9 ${hasEnoughCredits ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-white/30 dark:text-white/50'}`}
                     onClick={handleRequestSubmit}
                   >
                     <ShadcnTooltip label={hasEnoughCredits ? 'Generate Ad Video' : 'Not enough credits'}>
-                      <Send className="h-4 w-4 text-black xl:h-5 xl:w-5" />
+                      <Send className="h-4 w-4 text-current xl:h-5 xl:w-5" />
                     </ShadcnTooltip>
                   </button>
                 ) : (
                   <button
                     id="tour_video_prompt_by_mic"
-                    className="flex h-6.75 w-6.75 items-center justify-center rounded-full bg-white 2xl:h-9 2xl:w-9"
+                    className="flex h-6.75 w-6.75 items-center justify-center rounded-full bg-zinc-900 text-white 2xl:h-9 2xl:w-9 dark:bg-white dark:text-black"
                   >
                     <SpeechToText />
                   </button>

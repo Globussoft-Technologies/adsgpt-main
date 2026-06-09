@@ -248,9 +248,57 @@ const orchestrator = require("../../services/autopilot/userRuleOrchestrator");
 const {
   groupRulesByUserAndAccount,
   collectTargetsForRule,
+  resolveEffectiveLookback,
 } = orchestrator._internals;
 
 // ─── pure helpers ───────────────────────────────────────────────────────────
+group("resolveEffectiveLookback", () => {
+  test("numeric lookbackDays passes through", () => {
+    assert.equal(resolveEffectiveLookback({ lookbackDays: 7 }), 7);
+    assert.equal(resolveEffectiveLookback({ lookbackDays: 30 }), 30);
+  });
+
+  test("missing lookbackDays defaults to 14", () => {
+    assert.equal(resolveEffectiveLookback({}), 14);
+    assert.equal(resolveEffectiveLookback(null), 14);
+  });
+
+  test("lookbackPreset='this_month' resolves to day-of-month from `now`", () => {
+    // Pin `now` so the test isn't time-of-run dependent.
+    const may18 = new Date(2026, 4, 18); // May 18, 2026 (month index 4)
+    assert.equal(
+      resolveEffectiveLookback({ lookbackPreset: "this_month" }, may18),
+      18,
+    );
+    const jun1 = new Date(2026, 5, 1);
+    assert.equal(
+      resolveEffectiveLookback({ lookbackPreset: "this_month" }, jun1),
+      1,
+    );
+  });
+
+  test("this_month overrides a numeric lookbackDays on the same rule", () => {
+    const may18 = new Date(2026, 4, 18);
+    assert.equal(
+      resolveEffectiveLookback(
+        { lookbackDays: 7, lookbackPreset: "this_month" },
+        may18,
+      ),
+      18,
+    );
+  });
+
+  test("unknown preset falls back to numeric lookbackDays", () => {
+    assert.equal(
+      resolveEffectiveLookback({
+        lookbackDays: 7,
+        lookbackPreset: "this_week",
+      }),
+      7,
+    );
+  });
+});
+
 group("groupRulesByUserAndAccount", () => {
   test("groups one rule across multiple attached accounts", () => {
     const out = groupRulesByUserAndAccount([

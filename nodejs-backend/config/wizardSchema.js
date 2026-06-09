@@ -51,6 +51,7 @@ const OBJECTIVE_LABELS = {
   OUTCOME_TRAFFIC: "Traffic",
   OUTCOME_LEADS: "Leads",
   OUTCOME_APP_PROMOTION: "App Promotion",
+  OUTCOME_ENGAGEMENT: "Engagement",
 };
 
 const CONVERSION_LOCATION_LABELS = {
@@ -69,6 +70,11 @@ const CONVERSION_LOCATION_LABELS = {
   WEBSITE_AND_INSTANT_FORMS: "Website and instant forms",
   WEBSITE_AND_CALLS: "Website and calls",
   INSTANT_FORMS_AND_MESSENGER: "Instant forms and Messenger",
+  // Engagement-specific "On your ad" sub-options. Both map to
+  // destination_type=ON_AD; the optimisation goal disambiguates the cell
+  // in reverse-inference (see cellInference.js).
+  VIDEO_VIEWS: "Video views",
+  POST_ENGAGEMENT: "Post engagement",
 };
 
 // User-facing labels — match Meta Ads Manager's "Performance goal"
@@ -88,12 +94,50 @@ const OPTIMIZATION_GOAL_LABELS = {
   APP_INSTALLS: "Maximise number of app installs",
   OFFSITE_CONVERSIONS: "Maximise number of conversions",
   CONVERSATIONS: "Maximise number of conversations",
+  // Engagement-specific. THRUPLAY counts a view as 15s OR full play
+  // (Meta's recommended default for video ads). POST_ENGAGEMENT
+  // optimises for likes / shares / comments on the rendered post.
+  THRUPLAY: "Maximise ThruPlay views",
+  POST_ENGAGEMENT: "Maximise post engagement",
+  // 2-second continuous video views — Meta's lower-watch-threshold goal,
+  // surfaced as an alternative to THRUPLAY on VIDEO_VIEWS cells.
+  TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: "Maximise 2-second continuous video views",
+  // Profile / Page engagement goals — Meta UI surfaces these on the
+  // "Instagram or Facebook" cell. PAGE_LIKES is the historic FB-Page
+  // goal (Meta auto-renders the UI label as "Maximise number of
+  // Facebook Page visits" — the API still accepts the PAGE_LIKES enum).
+  PAGE_LIKES: "Maximise Facebook Page visits",
+  VISIT_INSTAGRAM_PROFILE: "Maximise Instagram profile visits",
 };
 
 const BILLING_EVENT_LABELS = {
   IMPRESSIONS: "Impressions",
   LINK_CLICKS: "Link clicks",
 };
+
+// Meta's documented rule: most billing events are only valid for the
+// matching optimisation goal. Specifically, `LINK_CLICKS` billing is
+// accepted ONLY when `optimization_goal === "LINK_CLICKS"` — pairing it
+// with LANDING_PAGE_VIEWS / REACH / etc. throws Meta error subcode
+// 1815117 ("Billing event invalid for optimisation goal").
+//
+// Every goal not listed here defaults to IMPRESSIONS-only — the safe
+// universal billing event Meta accepts across all goals.
+const BILLING_EVENTS_BY_OPTIMIZATION_GOAL = {
+  LINK_CLICKS: ["IMPRESSIONS", "LINK_CLICKS"],
+};
+
+// Returns the billing events allowed for a given (cell, optimisation goal)
+// pair — the intersection of the cell's declared `billingEvents` and the
+// per-goal allow-list above. Used by both the frontend AdSetStep
+// renderer + backend Joi cross-field check.
+function getAllowedBillingEvents(cell, optimizationGoal) {
+  const cellList = cell?.adSet?.billingEvents || [];
+  const goalList = BILLING_EVENTS_BY_OPTIMIZATION_GOAL[optimizationGoal] || ["IMPRESSIONS"];
+  // Preserve cell-declared order so the UI default (first item) stays
+  // consistent across goals.
+  return cellList.filter((b) => goalList.includes(b));
+}
 
 // User-facing CTA labels — match Meta Ads Manager's wording. Both
 // BOOK_NOW and BOOK_TRAVEL render as "Book now" in Meta's UI; both
@@ -189,6 +233,18 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // it objective-qualified only; do NOT add a bare WEBSITE_AND_CALLS key.
   "OUTCOME_TRAFFIC:WEBSITE_AND_CALLS": "WEBSITE",
   "OUTCOME_LEADS:WEBSITE_AND_CALLS": null,
+  // Engagement "On your ad" cells — both VIDEO_VIEWS and POST_ENGAGEMENT
+  // map to destination_type=ON_AD on the Meta side. Reverse-inference
+  // (cellInference.js) disambiguates by reading optimization_goal.
+  VIDEO_VIEWS: "ON_AD",
+  POST_ENGAGEMENT: "ON_AD",
+  // Engagement Phase 2 cells. INSTAGRAM_OR_FACEBOOK reuses the same
+  // destination_type=WEBSITE pattern as Traffic/INSTAGRAM_OR_FACEBOOK —
+  // the profile-visit signal lives on the CTA enum. Bare WEBSITE / APP
+  // keys would clash with the Traffic / Leads cells if added at this
+  // layer (different objective + same conversionLocation), so the
+  // generic bare keys (WEBSITE → WEBSITE, APP → APP) already cover
+  // Engagement too. No new bare keys needed.
 };
 
 // ─── The matrix ──────────────────────────────────────────────────────────────
@@ -719,6 +775,289 @@ const CELLS = {
     },
   },
 
+  // Engagement — matches Meta Ads Manager's 6 conversion-location options.
+  // MVP ships 5 cells: Messenger, WhatsApp, Calls, Video views, Post
+  // engagement. Instagram-DM messaging, Website, App, Facebook Page,
+  // Instagram Profile, and "Automatic destination" messaging are deferred —
+  // see docs/ENGAGEMENT_CELLS_SPEC.md for rationale.
+  //
+  // VIDEO_VIEWS introduces the first `mediaKind: 'video'` cell — the AdStep
+  // hides the image-upload path and force-renders the video uploader, and
+  // both the frontend validator + backend Joi factory enforce videoId
+  // (rejecting imageHash). Every other Engagement cell accepts image OR
+  // video like Traffic/Leads.
+  OUTCOME_ENGAGEMENT: {
+    MESSENGER: {
+      adSet: {
+        // Engagement/Messenger optimises for STARTED conversations, not
+        // clicks. LINK_CLICKS is still offered as a fallback for reach-style
+        // delivery; Meta surfaces both.
+        optimizationGoals: ["CONVERSATIONS", "LINK_CLICKS"],
+        defaultOptimizationGoal: "CONVERSATIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // Same shape as Traffic/Message-destinations — fallback link
+        // required (Meta enforces it on every creative).
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "messenger_click_to_message",
+      },
+      ctas: {
+        allowed: ["MESSAGE_PAGE", "LEARN_MORE"],
+        default: "MESSAGE_PAGE",
+      },
+      identity: { required: ["page", "messengerEnabled"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive Messenger conversations. Meta opens a chat with your Page when viewers tap.",
+    },
+
+    WHATSAPP: {
+      adSet: {
+        // Meta surfaces only CONVERSATIONS for this cell — same as Leads/WhatsApp.
+        optimizationGoals: ["CONVERSATIONS"],
+        defaultOptimizationGoal: "CONVERSATIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "whatsapp_click_to_message",
+      },
+      // Single CTA — Meta locks the dropdown.
+      ctas: {
+        allowed: ["WHATSAPP_MESSAGE"],
+        default: "WHATSAPP_MESSAGE",
+      },
+      identity: { required: ["page", "whatsappBusinessConnected"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive WhatsApp conversations. The Page must have a connected WhatsApp Business account.",
+    },
+
+    PHONE_CALL: {
+      adSet: {
+        // Meta UI: only "Maximise number of calls" for Engagement/Calls.
+        optimizationGoals: ["QUALITY_CALL"],
+        defaultOptimizationGoal: "QUALITY_CALL",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "click_to_call",
+      },
+      ctas: {
+        allowed: ["CALL_NOW", "LEARN_MORE"],
+        default: "CALL_NOW",
+      },
+      identity: { required: ["page", "pagePhoneNumber"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive inbound calls to the Page's phone number.",
+    },
+
+    VIDEO_VIEWS: {
+      adSet: {
+        // Meta UI default: ThruPlay (15s OR full play). Phase 2 adds
+        // TWO_SECOND_CONTINUOUS_VIDEO_VIEWS as the alternate goal Meta's
+        // UI surfaces for shorter-watch-threshold optimisation. Per-cell
+        // custom goals (e.g. AD_RECALL_LIFT) still deferred.
+        optimizationGoals: ["THRUPLAY", "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"],
+        defaultOptimizationGoal: "THRUPLAY",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // mediaKind=video forces the AdStep into video-only mode (the
+        // image segmented button is hidden) and both validators reject
+        // imageHash. The existing link_data builder emits `video_data`
+        // automatically when `videoId` is set, so no new shape needed.
+        // `videoId` lives in requiredFields so the renderer surfaces the
+        // video field and validateAd reads the contract generically.
+        mediaKind: "video",
+        requiredFields: ["videoId", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: ["LEARN_MORE", "SHOP_NOW", "WATCH_MORE", "SIGN_UP", "DOWNLOAD", "NO_BUTTON"],
+        default: "LEARN_MORE",
+      },
+      identity: { required: ["page"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Maximise video views. ThruPlay counts a view at 15s or full play, whichever comes first.",
+    },
+
+    POST_ENGAGEMENT: {
+      adSet: {
+        // Meta UI: only POST_ENGAGEMENT for this cell. Optimises for likes,
+        // shares, and comments on the rendered creative.
+        optimizationGoals: ["POST_ENGAGEMENT"],
+        defaultOptimizationGoal: "POST_ENGAGEMENT",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // image OR video — both work for post engagement. Uses the generic
+        // link_data shape; builder emits video_data when videoId is set.
+        // "Boost existing post" path (object_story_id) is deferred.
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: [
+          "LEARN_MORE", "SHOP_NOW", "SIGN_UP", "WATCH_MORE",
+          "DOWNLOAD", "GET_OFFER", "NO_BUTTON",
+        ],
+        default: "LEARN_MORE",
+      },
+      identity: { required: ["page"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive likes, shares and comments on your post.",
+    },
+
+    // ─── Engagement Phase 2 cells ─────────────────────────────────────────
+    // Added 2026-06-02. All reuse existing object_story_spec shapes — no
+    // new builder work. See docs/ENGAGEMENT_CELLS_SPEC.md §"Phase 2".
+
+    INSTAGRAM: {
+      adSet: {
+        // Engagement/IG-Direct optimises for STARTED conversations — same
+        // pattern as Engagement/WhatsApp + Leads/Instagram.
+        optimizationGoals: ["CONVERSATIONS"],
+        defaultOptimizationGoal: "CONVERSATIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // Same shape as Leads/Instagram — external link required as
+        // bypass-fallback, CTA value carries app_destination=INSTAGRAM_DIRECT.
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "instagram_direct",
+      },
+      // Single CTA — Meta locks the dropdown for IG-Direct messaging.
+      ctas: {
+        allowed: ["INSTAGRAM_MESSAGE"],
+        default: "INSTAGRAM_MESSAGE",
+      },
+      // IG identity required (destination IS the IG account's DMs).
+      identity: { required: ["page", "instagram"], optional: [] },
+      additionalSteps: [],
+      notes: "Drive Instagram DM conversations. Requires a connected Instagram account on the Page.",
+    },
+
+    WEBSITE: {
+      adSet: {
+        // Mirror of Leads/Website goal list — Meta surfaces the same
+        // 5 goals for Engagement/Website. OFFSITE_CONVERSIONS is the
+        // recommended default (pixel-tracked conversions).
+        optimizationGoals: [
+          "OFFSITE_CONVERSIONS",
+          "LANDING_PAGE_VIEWS",
+          "LINK_CLICKS",
+          "REACH",
+          "IMPRESSIONS",
+        ],
+        defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "pixel",
+        additionalFields: ["pixelId", "pixelEventType"],
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description", "urlTags"],
+        objectStorySpecShape: "pixel_website",
+      },
+      ctas: {
+        allowed: [
+          "LEARN_MORE", "SHOP_NOW", "SIGN_UP", "SUBSCRIBE", "CONTACT_US",
+          "DOWNLOAD", "BOOK_NOW", "GET_QUOTE", "APPLY_NOW", "GET_OFFER",
+          "ORDER_NOW", "WATCH_MORE", "NO_BUTTON",
+        ],
+        default: "LEARN_MORE",
+      },
+      identity: { required: ["page", "pixel"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive on-site engagement. Requires a Meta Pixel + conversion event configured in Events Manager.",
+    },
+
+    APP: {
+      adSet: {
+        // Engagement/App — drive engagement WITH an existing app (not
+        // installs). OFFSITE_CONVERSIONS deferred because it requires an
+        // MMP forwarding in-app events; without MMP delivery starves.
+        // LINK_CLICKS + REACH + IMPRESSIONS use Meta's own signals.
+        optimizationGoals: ["LINK_CLICKS", "REACH", "IMPRESSIONS"],
+        defaultOptimizationGoal: "LINK_CLICKS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "app",
+        additionalFields: ["mobileAppStore", "applicationId", "objectStoreUrl"],
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText"],
+        optionalFields: ["description", "deferredDeepLink"],
+        objectStorySpecShape: "app_link",
+      },
+      ctas: {
+        allowed: ["USE_APP", "USE_MOBILE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
+        default: "USE_APP",
+      },
+      identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive engagement with your existing app (re-opens / in-app actions). For installs, use the App Promotion objective.",
+    },
+
+    INSTAGRAM_OR_FACEBOOK: {
+      adSet: {
+        // Meta's "Instagram or Facebook" location — one cell, the CTA
+        // picks which profile destination Meta routes to. Goals: profile
+        // visit goals (FB Page + IG profile) + reach/impressions.
+        // PAGE_LIKES is Meta's API enum for the FB-Page-visit goal
+        // (the UI shows "Maximise Facebook Page visits" — Meta auto-
+        // translates the legacy enum). VISIT_INSTAGRAM_PROFILE is the
+        // Instagram equivalent. If either is rejected post-launch (Meta
+        // can phase-out enums silently), fall back to REACH.
+        optimizationGoals: [
+          "PAGE_LIKES",
+          "VISIT_INSTAGRAM_PROFILE",
+          "REACH",
+          "IMPRESSIONS",
+        ],
+        defaultOptimizationGoal: "PAGE_LIKES",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // Reuse link_data — the link points at the profile / page URL.
+        // Meta auto-renders the click as a profile-visit when the CTA is
+        // VIEW_INSTAGRAM_PROFILE / LIKE_PAGE.
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: ["LIKE_PAGE", "VIEW_INSTAGRAM_PROFILE", "LEARN_MORE"],
+        default: "LIKE_PAGE",
+      },
+      identity: { required: ["page", "instagram"], optional: [] },
+      additionalSteps: [],
+      notes: "Grow your Facebook Page and/or Instagram profile. The CTA decides which profile Meta routes viewers to.",
+    },
+  },
+
   OUTCOME_APP_PROMOTION: {
     APP: {
       adSet: {
@@ -880,6 +1219,10 @@ function toJSON() {
       billingEvent: BILLING_EVENT_LABELS,
       cta: CTA_LABELS,
     },
+    // Meta's optimisation-goal → billing-event compatibility rule, shipped
+    // to the frontend so the AdSetStep can narrow the billing dropdown
+    // when the goal changes. See subcode 1815117.
+    billingEventsByOptimizationGoal: BILLING_EVENTS_BY_OPTIMIZATION_GOAL,
   };
 }
 
@@ -892,6 +1235,7 @@ module.exports = {
   BILLING_EVENT_LABELS,
   CTA_LABELS,
   CONVERSION_LOCATION_TO_META_DESTINATION,
+  BILLING_EVENTS_BY_OPTIMIZATION_GOAL,
 
   // Accessors — the consumer surface.
   listObjectives,
@@ -901,5 +1245,6 @@ module.exports = {
   getMetaDestinationType,
   getAllowedCtas,
   getAllowedOptimizationGoals,
+  getAllowedBillingEvents,
   toJSON,
 };

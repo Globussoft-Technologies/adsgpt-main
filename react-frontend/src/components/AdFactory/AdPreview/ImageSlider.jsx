@@ -44,21 +44,21 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage }) => {
       <button
         onClick={() => swiper?.slidePrev()}
         disabled={isBeginning}
-        className={`absolute top-1/2 -left-3 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 shadow-lg backdrop-blur-lg transition-all md:left-[-22px] 2xl:h-10 2xl:w-10 ${
-          isBeginning ? 'pointer-events-none opacity-0 invisible' : 'opacity-100 hover:bg-white/20'
+        className={`absolute top-1/2 -left-3 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 dark:bg-white/10 shadow-lg backdrop-blur-lg transition-all md:left-[-22px] 2xl:h-10 2xl:w-10 ${
+          isBeginning ? 'pointer-events-none opacity-0 invisible' : 'opacity-100 hover:bg-black/5 dark:hover:bg-white/20'
         }`}
       >
-        <ChevronLeft className="h-6 w-6 text-white 2xl:h-7 2xl:w-7" />
+        <ChevronLeft className="h-6 w-6 text-gray-900 dark:text-white 2xl:h-7 2xl:w-7" />
       </button>
 
       <button
         onClick={() => swiper?.slideNext()}
         disabled={isEnd}
-        className={`absolute top-1/2 -right-3 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 shadow-lg backdrop-blur-lg transition-all md:right-[-22px] 2xl:h-10 2xl:w-10 ${
-          isEnd ? 'pointer-events-none opacity-0 invisible' : 'opacity-100 hover:bg-white/20'
+        className={`absolute top-1/2 -right-3 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 dark:bg-white/10 shadow-lg backdrop-blur-lg transition-all md:right-[-22px] 2xl:h-10 2xl:w-10 ${
+          isEnd ? 'pointer-events-none opacity-0 invisible' : 'opacity-100 hover:bg-black/5 dark:hover:bg-white/20'
         }`}
       >
-        <ChevronRight className="h-6 w-6 text-white 2xl:h-7 2xl:w-7" />
+        <ChevronRight className="h-6 w-6 text-gray-900 dark:text-white 2xl:h-7 2xl:w-7" />
       </button>
 
       <Swiper
@@ -95,7 +95,7 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage }) => {
         {mockImages.map(({ src, id }, index) => (
           <SwiperSlide key={id}>
             <div
-              className={`group relative h-38 cursor-pointer overflow-hidden rounded-xl bg-white/5 hover:opacity-80 2xl:h-45 ${
+              className={`group relative h-38 cursor-pointer overflow-hidden rounded-xl bg-gray-100 dark:bg-white/5 hover:opacity-80 2xl:h-45 ${
                 selectedImage === src ? 'border-3 border-[#2364B8]' : ''
               }`}
               onClick={() => onSelect(src)}

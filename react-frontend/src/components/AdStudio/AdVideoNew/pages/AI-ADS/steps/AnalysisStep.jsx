@@ -150,30 +150,30 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
   };
 
   return (
-    <div className="custom-scrollbar relative flex h-full min-w-[450px] w-screen max-w-md sm:max-w-xl shrink-0 flex-col items-center justify-center overflow-y-auto bg-[#1C1C1F] p-4 sm:p-8 2xl:max-w-[40rem]">
+    <div className="custom-scrollbar relative flex h-full min-w-[450px] w-screen max-w-md sm:max-w-xl shrink-0 flex-col items-center justify-center overflow-y-auto bg-white dark:bg-[#1C1C1F] p-4 sm:p-8 2xl:max-w-[40rem]">
       {/* Close button */}
-      <button onClick={onClose} className="absolute top-6 right-6 text-white/50 hover:text-white">
+      <button onClick={onClose} className="absolute top-6 right-6 text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white">
         <X className="h-5 w-5" />
       </button>
       <div className="relative w-full rounded-2xl px-2 pt-4 2xl:pt-5">
         {isBrand ? (
           <>
             {/* Title */}
-            <h2 className="mb-10 text-center text-xl font-bold text-white 2xl:text-2xl">
+            <h2 className="mb-10 text-center text-xl font-bold text-gray-900 dark:text-white 2xl:text-2xl">
              Bring Your Brand Vision to Life
             </h2>
 
             {/* URL Input + BrandIQ */}
             <div className="mb-6">
-              <label className="mb-2 block text-sm font-medium text-white">Transform your ideas into studio-quality videos</label>
+              <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Transform your ideas into studio-quality videos</label>
               <div
-                className={`relative w-full rounded-xl border bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
+                className={`relative w-full rounded-xl border bg-gray-100 dark:bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
               >
                 <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={analysisImages.length >= 5 || loading}
-                    className="absolute top-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-dashed border-white/20 text-white/60 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    className="absolute top-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-dashed border-black/10 dark:border-white/20 text-gray-500 dark:text-white/60 transition hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                     title="Add image"
                   >
                     <Plus className="h-4 w-4" />
@@ -187,11 +187,11 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
                   onKeyDown={handleScriptKeyDown}
                   placeholder="Describe your video idea"
                   disabled={loading}
-                  className="w-full resize-none rounded-xl bg-transparent pt-4 pr-4 pb-1 pl-15 text-sm text-white placeholder:text-[#afafaf] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full resize-none rounded-xl bg-transparent pt-4 pr-4 pb-1 pl-15 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
                   {analysisImages.map((img, idx) => (
-                    <div key={idx} className="group relative h-9 w-9 cursor-pointer rounded-md border border-white/10">
+                    <div key={idx} className="group relative h-9 w-9 cursor-pointer rounded-md border border-black/10 dark:border-white/10">
                       <img
                         src={img.preview}
                         alt="preview"
@@ -218,7 +218,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
                     onChange={handleAddImages}
                   />
                 </div>
-                <div className={`border-white/10 px-2 py-0.5 mb-2 w-50 [&_input]:h-7! [&_input]:text-xs! [&_input]:px-2! **:min-h-0! [&_svg]:h-3.5! [&_svg]:w-3.5! ${loading ? 'pointer-events-none opacity-50' : ''}`}>
+                <div className={`border-black/10 dark:border-white/10 px-2 py-0.5 mb-2 w-50 [&_input]:h-7! [&_input]:text-xs! [&_input]:px-2! **:min-h-0! [&_svg]:h-3.5! [&_svg]:w-3.5! ${loading ? 'pointer-events-none opacity-50' : ''}`}>
                   <BrandSearch isAvatarAdsSearch={true} className="" placeholder="Select a brand" portal={true} />
                 </div>
               </div>
@@ -238,7 +238,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
               <button
                 onClick={handleAnalyze}
                 disabled={loading}
-                className="rounded-md min-w-25 bg-white px-6 py-2 text-[13px] font-semibold text-black transition hover:bg-white/90 disabled:opacity-60 flex items-center gap-2"
+                className="rounded-md min-w-25 bg-gray-900 dark:bg-white px-6 py-2 text-[13px] font-semibold text-white dark:text-black transition hover:bg-gray-800 dark:hover:bg-white/90 disabled:opacity-60 flex items-center gap-2"
               >
                 {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Analyze
@@ -248,21 +248,21 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
         ) : (
           <>
             {/* Title */}
-            <h2 className="mb-10 text-center text-xl font-bold text-white">
+            <h2 className="mb-10 text-center text-xl font-bold text-gray-900 dark:text-white">
              Bring Your Product Vision to Life
             </h2>
 
             {/* URL Input */}
             <div className="mb-6">
-              <label className="mb-2 block text-sm font-medium text-white">Transform your ideas into studio-quality videos</label>
+              <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Transform your ideas into studio-quality videos</label>
               <div
-                className={`relative w-full rounded-xl border bg-[#909294]/15 transition-all ${scriptError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
+                className={`relative w-full rounded-xl border bg-gray-100 dark:bg-[#909294]/15 transition-all ${scriptError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
               >
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={analysisImages.length >= 5 || loading}
-                  className="absolute top-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-dashed border-white/20 text-white/60 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="absolute top-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-dashed border-black/10 dark:border-white/20 text-gray-500 dark:text-white/60 transition hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                   title="Add image"
                 >
                   <Plus className="h-4 w-4" />
@@ -276,11 +276,11 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
                   onKeyDown={handleScriptKeyDown}
                   placeholder="Describe your video idea"
                   disabled={loading}
-                  className="w-full resize-none rounded-xl bg-transparent pt-4 pr-4 pb-1 pl-15 text-[13px] text-white placeholder:text-[#afafaf] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full resize-none rounded-xl bg-transparent pt-4 pr-4 pb-1 pl-15 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
                   {analysisImages.map((img, idx) => (
-                    <div key={idx} className="group relative h-9 w-9 cursor-pointer rounded-md border border-white/10">
+                    <div key={idx} className="group relative h-9 w-9 cursor-pointer rounded-md border border-black/10 dark:border-white/10">
                       <img
                         src={img.preview}
                         alt="preview"
@@ -322,7 +322,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
               <button
                 onClick={handleAnalyze}
                 disabled={loading}
-                className="min-w-25 rounded-md bg-white px-6 py-1.5 text-[13px] font-semibold text-black transition hover:bg-white/90 disabled:opacity-60 flex items-center gap-2"
+                className="min-w-25 rounded-md bg-gray-900 dark:bg-white px-6 py-1.5 text-[13px] font-semibold text-white dark:text-black transition hover:bg-gray-800 dark:hover:bg-white/90 disabled:opacity-60 flex items-center gap-2"
               >
                 {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Analyze 

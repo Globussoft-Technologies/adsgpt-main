@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Target, Inbox } from 'lucide-react';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
+import AdSetMultiSelect from './AdSetMultiSelect';
 import {
   fetchAdAccounts,
   fetchFacebookPages,
@@ -86,7 +87,7 @@ export default function TargetSection({ value, onChange, disabled }) {
       adAccountId,
       campaignId: null,
       campaignObjective: null,
-      adSetId: null,
+      adSetId: [],
       leadFormId: null,
     });
   };
@@ -98,10 +99,12 @@ export default function TargetSection({ value, onChange, disabled }) {
     patch({
       campaignId: newCampaignId,
       campaignObjective: picked?.objective || null,
-      adSetId: null,
+      adSetId: [],
       leadFormId: null,
     });
   };
+  // adSetId is an ordered array — backend rotates through it when one ad set
+  // hits the 50-ad limit. AdSetMultiSelect preserves insertion order.
   const handleAdSetChange = (adSetId) => patch({ adSetId });
   // Page change invalidates the Instant Form selection — forms are scoped
   // to a Page on Meta, so a different Page means a different form list.
@@ -128,6 +131,8 @@ export default function TargetSection({ value, onChange, disabled }) {
     value: f.id,
     label: f.name,
   }));
+
+  const selectedAdSetIds = Array.isArray(target.adSetId) ? target.adSetId : [];
 
   const noAccounts = !accountOptions.length;
   const noCampaigns = target.adAccountId && !campaignOptions.length;
@@ -188,17 +193,21 @@ export default function TargetSection({ value, onChange, disabled }) {
         </Field>
 
         <Field
-          label="Ad set"
+          label="Ad sets"
           empty={
             !target.campaignId
               ? 'Pick a campaign first.'
-              : noAdSets && 'No ad sets under this campaign yet.'
+              : noAdSets
+                ? 'No ad sets under this campaign yet.'
+                : selectedAdSetIds.length > 1
+                  ? `${selectedAdSetIds.length} selected — backend rotates when one fills up.`
+                  : null
           }
         >
-          <InputCommonDropdown
-            label="Select ad set"
+          <AdSetMultiSelect
+            label="Select ad sets"
             options={adSetOptions}
-            value={target.adSetId || ''}
+            value={selectedAdSetIds}
             onChange={handleAdSetChange}
             disabled={disabled || !target.campaignId || noAdSets}
           />

@@ -10,7 +10,7 @@
   "author": "Rajdeep Sadhu",
   "license": "ISC",
   "dependencies": {
-    "@elastic/elasticsearch": "^8.14.0",
+    "@elastic/elasticsearch": "^7.17.0",
     "axios": "^1.7.2",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",

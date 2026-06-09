@@ -25,8 +25,9 @@ import React, {
   useState,
 } from 'react';
 import { Search, X, Loader2, MapPin } from 'lucide-react';
-import { searchGeoLocations, geocodeLocation } from '@/apis/metaAds/metaAdsApi';
+import { searchGeoLocations, geocodeLocation, reverseGeocodeLocation } from '@/apis/metaAds/metaAdsApi';
 import { FieldShell } from './wizardFields';
+import { globalToast } from '@/utils/globalToast';
 
 // Lazy — keeps Leaflet (~150 KB + CSS) out of the main bundle until the
 // user opens the map.
@@ -39,17 +40,41 @@ const CITY_RADIUS_MAX_KM = 80;
 const CITY_RADIUS_DEFAULT_KM = 25;
 
 // Visible badge per type — short, distinct colours so Country / City /
-// Region / Area read at a glance.
+// Region / Area read at a glance. Each badge needs both a light-mode and
+// a dark-mode treatment: in light mode the previous `text-emerald-200`
+// style was washed out against the white wizard surface and the COUNTRY
+// chip read as invisible. Light = solid pale fill + ~700 text; dark =
+// translucent fill + ~200 text (the original look).
 const TYPE_BADGE = {
-  country: { label: 'Country', color: 'bg-emerald-400/15 text-emerald-200' },
-  city: { label: 'City', color: 'bg-sky-400/15 text-sky-200' },
-  region: { label: 'Region', color: 'bg-violet-400/15 text-violet-200' },
-  country_group: { label: 'Area', color: 'bg-amber-400/15 text-amber-200' },
-  custom: { label: 'Pin', color: 'bg-cyan-400/15 text-cyan-200' },
+  country: {
+    label: 'Country',
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200',
+  },
+  city: {
+    label: 'City',
+    color: 'bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-200',
+  },
+  region: {
+    label: 'Region',
+    color: 'bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200',
+  },
+  country_group: {
+    label: 'Area',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+  },
+  custom: {
+    label: 'Pin',
+    color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-400/15 dark:text-cyan-200',
+  },
 };
 
 function typeBadge(type) {
-  return TYPE_BADGE[type] || { label: type, color: 'bg-white/10 text-white/70' };
+  return (
+    TYPE_BADGE[type] || {
+      label: type,
+      color: 'bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-white/70',
+    }
+  );
 }
 
 // Friendly secondary line — for cities: "Delhi, India"; for regions:
@@ -271,18 +296,44 @@ export default function LocationTargeting({
   );
 
   // Drop a pin → add a `custom` location (radius around the point).
+  // First reverse-geocodes the click to make sure it's on LAND — Meta's
+  // own Ads Manager won't let you pin in water, and a custom location in
+  // the middle of the ocean delivers to nobody. The backend's Nominatim
+  // proxy returns `result: null` for ocean / no-match; we surface that
+  // to the user and bail. If Nominatim is down the backend marks the
+  // response `degraded: true` and we fail open (let the user drop the
+  // pin) — better than blocking work over a transient outage.
   const addPin = useCallback(
-    (lat, lng) => {
+    async (lat, lng) => {
       const latitude = Number(lat.toFixed(6));
       const longitude = Number(lng.toFixed(6));
       const key = `custom:${latitude},${longitude}`;
       if (value.some((l) => l.key === key)) return; // already dropped here
+
+      let displayName = null;
+      try {
+        const r = await reverseGeocodeLocation({ lat: latitude, lng: longitude });
+        if (r?.result) {
+          displayName = r.result.displayName || null;
+        } else if (!r?.degraded) {
+          globalToast.error(
+            'Pick a point on land — that location has no addressable audience.',
+          );
+          return;
+        }
+      } catch {
+        // Network blip: fail open so the user isn't blocked by our
+        // dependency. Backend Joi + Meta still bound-check at launch.
+      }
+
       onChange?.([
         ...value,
         {
           type: 'custom',
           key,
-          name: `Pin @ ${latitude.toFixed(3)}, ${longitude.toFixed(3)}`,
+          // Use the reverse-geocoded place name when available; fall back
+          // to the bare coordinates so the chip is always readable.
+          name: displayName || `Pin @ ${latitude.toFixed(3)}, ${longitude.toFixed(3)}`,
           latitude,
           longitude,
           radius: CITY_RADIUS_DEFAULT_KM,
@@ -299,7 +350,7 @@ export default function LocationTargeting({
       <div ref={containerRef} className="relative flex flex-col gap-2.5">
         {/* Search input */}
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-white/40" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
           <input
             type="text"
             value={query}
@@ -314,19 +365,19 @@ export default function LocationTargeting({
             }}
             placeholder="Search countries, cities, regions…"
             disabled={disabled}
-            className="w-full rounded-full border border-white/10 bg-[#171717] py-2.5 pl-9 pr-9 text-13 text-white placeholder:text-white/40 transition-colors hover:border-white/15 focus:border-white/25 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-full border border-gray-300 bg-gray-100 py-2.5 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
           />
           {loading && (
-            <Loader2 className="absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-white/55" />
+            <Loader2 className="absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-gray-500 dark:text-white/55" />
           )}
 
           {/* Suggestions dropdown — anchored to the input so it drops just
               below it; z above Leaflet's panes/controls so the map can't
               cover it. */}
           {open && query.trim() && (
-            <div className="scrollbar-thin absolute top-full left-0 right-0 z-1200 mt-1 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-[#1A1A1A] shadow-xl">
+            <div className="scrollbar-thin absolute top-full left-0 right-0 z-1200 mt-1 max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-[#1A1A1A]">
             {!loading && results.length === 0 ? (
-              <div className="px-3 py-3 text-12 text-white/45">
+              <div className="px-3 py-3 text-12 text-gray-500 dark:text-white/45">
                 No matches. Try a different spelling.
               </div>
             ) : (
@@ -340,18 +391,18 @@ export default function LocationTargeting({
                     key={k}
                     disabled={already}
                     onClick={() => add(r)}
-                    className={`flex w-full items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-left transition-colors last:border-b-0 ${
+                    className={`flex w-full items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 text-left transition-colors last:border-b-0 dark:border-white/5 ${
                       already
                         ? 'cursor-not-allowed opacity-40'
-                        : 'hover:bg-white/5'
+                        : 'hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-13 font-medium text-white">
+                      <p className="truncate text-13 font-medium text-gray-900 dark:text-white">
                         {r.name}
                       </p>
                       {secondaryLine(r) && (
-                        <p className="truncate text-11 text-white/45">
+                        <p className="truncate text-11 text-gray-500 dark:text-white/45">
                           {secondaryLine(r)}
                         </p>
                       )}
@@ -375,20 +426,20 @@ export default function LocationTargeting({
         {mapVisible && (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-11 text-white/40">
+              <span className="text-11 text-gray-400 dark:text-white/40">
                 Click the map to drop a custom radius pin.
               </span>
               <button
                 type="button"
                 onClick={() => setMapDismissed(true)}
-                className="text-11 text-white/45 transition-colors hover:text-white"
+                className="text-11 text-gray-500 transition-colors hover:text-gray-900 dark:text-white/45 dark:hover:text-white"
               >
                 Hide map
               </button>
             </div>
             <Suspense
               fallback={
-                <div className="flex h-70 items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#171717] text-12 text-white/50">
+                <div className="flex h-70 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-100 text-12 text-gray-500 dark:border-white/10 dark:bg-[#171717] dark:text-white/50">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
                 </div>
               }
@@ -407,15 +458,15 @@ export default function LocationTargeting({
               return (
                 <li
                   key={`${l.type}:${l.key}`}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-white/3 px-3 py-2"
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/8 dark:bg-white/3"
                 >
-                  <MapPin className="h-3.5 w-3.5 shrink-0 text-white/45" />
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/45" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-13 font-medium text-white">
+                    <p className="truncate text-13 font-medium text-gray-900 dark:text-white">
                       {l.name || l.key}
                     </p>
                     {subsumed && (
-                      <p className="truncate text-11 text-amber-300/80">
+                      <p className="truncate text-11 text-amber-600 dark:text-amber-300/80">
                         Already covered by a country you’ve added — radius
                         won’t apply.
                       </p>
@@ -435,7 +486,7 @@ export default function LocationTargeting({
                       vanishes on the user. */}
                   {(l.type === 'city' || l.type === 'custom') && (
                     <label
-                      className={`flex items-center gap-2 text-11 text-white/55 ${
+                      className={`flex items-center gap-2 text-11 text-gray-500 dark:text-white/55 ${
                         subsumed ? 'opacity-40' : ''
                       }`}
                     >
@@ -449,24 +500,24 @@ export default function LocationTargeting({
                         onChange={(e) =>
                           setRadius(idx, Number(e.target.value))
                         }
-                        className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/15 accent-sky-400 disabled:cursor-not-allowed"
+                        className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-gray-200 accent-sky-400 disabled:cursor-not-allowed dark:bg-white/15"
                       />
-                      <span className="w-12 shrink-0 tabular-nums text-white/70">
+                      <span className="w-12 shrink-0 tabular-nums text-gray-600 dark:text-white/70">
                         {l.radius ?? CITY_RADIUS_DEFAULT_KM} km
                       </span>
                     </label>
                   )}
 
                   {/* Include / Exclude segmented */}
-                  <div className="flex items-stretch overflow-hidden rounded-md border border-white/10 text-10">
+                  <div className="flex items-stretch overflow-hidden rounded-md border border-gray-200 text-10 dark:border-white/10">
                     <button
                       type="button"
                       disabled={disabled}
                       onClick={() => setMode(idx, 'include')}
                       className={`px-2 py-1 font-semibold transition-colors ${
                         l.mode !== 'exclude'
-                          ? 'bg-emerald-400/20 text-emerald-200'
-                          : 'text-white/55 hover:bg-white/5'
+                          ? 'bg-emerald-400/20 text-emerald-600 dark:text-emerald-200'
+                          : 'text-gray-500 hover:bg-gray-100 dark:text-white/55 dark:hover:bg-white/5'
                       }`}
                     >
                       Include
@@ -477,8 +528,8 @@ export default function LocationTargeting({
                       onClick={() => setMode(idx, 'exclude')}
                       className={`px-2 py-1 font-semibold transition-colors ${
                         l.mode === 'exclude'
-                          ? 'bg-red-400/20 text-red-200'
-                          : 'text-white/55 hover:bg-white/5'
+                          ? 'bg-red-400/20 text-red-600 dark:text-red-200'
+                          : 'text-gray-500 hover:bg-gray-100 dark:text-white/55 dark:hover:bg-white/5'
                       }`}
                     >
                       Exclude
@@ -490,7 +541,7 @@ export default function LocationTargeting({
                     disabled={disabled}
                     onClick={() => remove(idx)}
                     aria-label="Remove location"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/40 transition-colors hover:bg-white/8 hover:text-white"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white/40 dark:hover:bg-white/8 dark:hover:text-white"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -501,7 +552,7 @@ export default function LocationTargeting({
         )}
 
         {value.length === 0 && !query.trim() && (
-          <p className="text-11 text-white/40">
+          <p className="text-11 text-gray-400 dark:text-white/40">
             Add at least one country, city, region, or free-trade area —
             or use the Worldwide toggle above for a global reach.
           </p>

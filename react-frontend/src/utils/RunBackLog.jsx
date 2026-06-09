@@ -58,8 +58,8 @@ function RunBackLog({ children }) {
   // --- EXISTING amember login/token logic ---
   useEffect(() => {
     
-    const userName = Cookies.get('amember_login') || 'Gajendratest';
-    const password = Cookies.get('amember_pass') || 'gajendratest';
+    const userName = Cookies.get('amember_login') || '';
+    const password = Cookies.get('amember_pass') || '';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
 
@@ -123,8 +123,8 @@ function RunBackLog({ children }) {
 
   if (isLoading || isLoadingQueryBacklog) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center">
-        <Loader className="h-8 w-8 animate-spin text-gray-600" />
+      <div className="bg-background text-foreground flex h-screen w-screen items-center justify-center">
+        <Loader className="h-8 w-8 animate-spin opacity-60" />
       </div>
     );
   }

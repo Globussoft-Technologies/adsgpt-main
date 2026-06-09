@@ -193,7 +193,7 @@ const AdGalleryCard = ({ image, editimg, setLightboxOpen, onClick }) => {
         ad: {},
       };
       dispatch(addImage(newImage));
-      dispatch(setActiveAdStudioTab('adCreative'));
+      dispatch(setActiveAdStudioTab('adCreativeNew'));
       dispatch(createNewSession({ tab: 'adCreative' }));
       dispatch(resetAdCreativeSlice());
       navigate('/adstudio');
@@ -466,7 +466,7 @@ const AdGalleryCard = ({ image, editimg, setLightboxOpen, onClick }) => {
 
                   {/* Error State */}
                   {imageError && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-t-xl bg-gradient-to-r from-gray-100 to-gray-200">
+                    <div className="flex min-h-[250px] w-full items-center justify-center rounded-t-xl bg-gradient-to-r from-gray-100 to-gray-200">
                       <div className="text-center text-gray-400">
                         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gray-300">
                           <span className="text-lg">⚠️</span>

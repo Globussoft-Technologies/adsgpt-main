@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
-import { Analyzingsweburl, createCampaign } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { Analyzingsweburl, createCampaign, deleteAdFactoryCampaign, deleteAdFactoryCampaignn } from '@/store/actions/adFactoryNew/adFactoryActions';
 import { updateMetaData } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import AdFactoryBgEffect from './AdFactoryBgEffect';
 import { useNavigate } from 'react-router-dom';
@@ -30,13 +30,13 @@ export default function StartFormDialog({ open, onOpenChange }) {
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="backdrop-blur-100 w-[96%] max-w-3xl! scale-100! rounded-[30px] border border-white/10 bg-[#303030]/50 p-10 text-white md:w-full">
+        <DialogContent className="backdrop-blur-100 w-[96%] max-w-3xl! scale-100! rounded-[30px] border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#303030]/50 dark:text-white p-10 md:w-full">
           {/* Headings */}
           <div className="headings flex flex-col gap-0.5">
-            <p className="mb-0 bg-gradient-to-b from-[#5E66F5] to-[#15DCFF] bg-clip-text text-center text-[26px] font-semibold text-transparent">
+            <p className="mb-0 bg-gradient-to-b from-[#5057d6] to-[#0c9fbd] dark:from-[#5E66F5] dark:to-[#15DCFF] bg-clip-text text-center text-[26px] font-semibold text-transparent">
               Start — Create Campaign
             </p>
-            <p className="mb-2 text-center text-[16px] font-medium text-[#AFAFAF]">
+            <p className="mb-2 text-center text-[16px] font-medium text-gray-500 dark:text-[#AFAFAF]">
               Give your campaign a name to get started.
             </p>
           </div>
@@ -62,6 +62,7 @@ export default function StartFormDialog({ open, onOpenChange }) {
                   };
 
                   dispatch(updateMetaData(values));
+
                   const result = await dispatch(createCampaign(payload));
 
                   if (!createCampaign.fulfilled.match(result)) {
@@ -69,11 +70,15 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     return;
                   }
 
+                  const campaignId = result.payload;
+
                   if (values.website_url) {
                     const urlresult = await dispatch(
                       Analyzingsweburl({ website_url: values.website_url })
                     );
                     if (Analyzingsweburl.rejected.match(urlresult)) {
+                      // Autofill failed — delete the campaign we just created
+                      await dispatch(deleteAdFactoryCampaignn({ userId: userData?.user_id, campaignId }));
                       setFieldError(
                         'website_url',
                         urlresult.payload ||
@@ -83,7 +88,7 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     }
                   }
 
-                  navigate(`/adfactory?campaignId=${result.payload}`);
+                  navigate(`/adfactory?campaignId=${campaignId}`);
                 } finally {
                   setSubmitting(false);
                 }
@@ -93,11 +98,11 @@ export default function StartFormDialog({ open, onOpenChange }) {
                 <Form className="space-y-5">
                   {/* Campaign Name */}
                   <div>
-                    <label className="text-[18px] font-medium text-white">Campaign Name*</label>
+                    <label className="text-[18px] font-medium text-gray-900 dark:text-white">Campaign Name*</label>
                     <div className="mt-2">
                       <Field
                         name="campaignName"
-                        className={`rounded-10 h-[52px] w-full bg-[#909294]/20 px-5 py-2.5 text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#AFAFAF] ${
+                        className={`rounded-10 h-[52px] w-full bg-gray-100 dark:bg-[#909294]/20 px-5 py-2.5 text-gray-900 dark:text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] ${
                           errors.campaignName && touched.campaignName
                             ? 'border border-red-500'
                             : 'border border-transparent'
@@ -113,11 +118,11 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     />
                   </div>
                   <div>
-                    <label className="text-[18px] font-medium text-white">Website URL</label>
+                    <label className="text-[18px] font-medium text-gray-900 dark:text-white">Website URL</label>
                     <div className="mt-2">
                       <Field
                         name="website_url"
-                        className={`rounded-10 h-[52px] w-full bg-[#909294]/20 px-5 py-2.5 text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#AFAFAF] ${
+                        className={`rounded-10 h-[52px] w-full bg-gray-100 dark:bg-[#909294]/20 px-5 py-2.5 text-gray-900 dark:text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] ${
                           errors.website_url
                             ? 'border border-red-500'
                             : 'border border-transparent'
@@ -136,7 +141,7 @@ export default function StartFormDialog({ open, onOpenChange }) {
                   <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-end">
                     <button
                       type="button"
-                      className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-1.5 text-[#E3E3E3] hover:bg-zinc-800 disabled:opacity-50"
+                      className="rounded-lg border border-gray-300 dark:border-[#E3E3E3] bg-transparent px-10 py-1.5 text-gray-700 dark:text-[#E3E3E3] hover:bg-black/5 dark:hover:bg-zinc-800 disabled:opacity-50"
                       disabled={isSubmitting}
                       onClick={handleClose}
                     >
@@ -146,11 +151,11 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     <button
                       type="submit"
                       disabled={!isValid || !dirty || isSubmitting || loading}
-                      className="rounded-lg bg-white px-4 py-2 font-semibold text-black shadow-lg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg bg-gray-900 dark:bg-white px-4 py-2 font-semibold text-white dark:text-black shadow-lg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isSubmitting || loading ? (
                         <div className="flex items-center gap-2">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent"></div>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white dark:border-black border-t-transparent dark:border-t-transparent"></div>
                           Creating...
                         </div>
                       ) : (

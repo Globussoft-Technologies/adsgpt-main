@@ -721,6 +721,76 @@ exports.uploadVideo = async (req, res) => {
   }
 };
 
+exports.uploadVoice = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Upload a voice file to S3'
+       #swagger.description = 'Uploads a voice audio file to S3 and returns the relative path. Requires JWT authentication.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+           required: true,
+           content: {
+               "multipart/form-data": {
+                   schema: {
+                       type: "object",
+                       required: ["userId", "voice"],
+                       properties: {
+                           userId: {
+                               type: "string",
+                               description: "User ID for the upload path",
+                               example: "GPT-409"
+                           },
+                           voice: {
+                               type: "string",
+                               format: "binary",
+                               description: "The voice audio file to upload"
+                           }
+                       }
+                   }
+               }
+           }
+       }
+       #swagger.responses[200] = {
+           description: 'Voice uploaded successfully',
+           content: {
+               "application/json": {
+                   schema: {
+                       type: "object",
+                       properties: {
+                           data: { type: "string", example: "/voices/GPT-409/1234567890.mp3" }
+                       }
+                   }
+               }
+           }
+       }
+       #swagger.responses[400] = { description: 'No voice file received' }
+       #swagger.responses[500] = { description: 'Internal server error' }
+    */
+    const userId = req?.body?.userId;
+    const file = req.file;
+
+    if (!file) {
+      console.error("No Voice file received");
+      return res.status(400).json({ error: "No Voice file received" });
+    }
+
+    const fileName = getFileName(".mp3");
+    const uploadParams = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: `voices/${userId}/${fileName}`,
+      Body: file.buffer,
+      ContentType: "audio/mpeg",
+    };
+
+    await s3Client.send(new PutObjectCommand(uploadParams));
+    const s3Url = `/${uploadParams.Key}`;
+    return res.status(200).json({ data: s3Url });
+  } catch (error) {
+    console.error("Error in uploadVoice:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 exports.generateImageAndScript = async (req, res) => {
   try {
     /* #swagger.tags = ['Video Generation']
@@ -2551,5 +2621,475 @@ exports.getAiAdsProduct = async (req, res) => {
       return res.status(err.response.status).json(err.response.data);
     }
     return res.status(500).json({ error: err.message });
+  }
+};
+exports.generateImageAndScriptClone = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Submit request for image and script generation for Avatar type'
+       #swagger.description = 'Accepts inputs for Avatar type, generates an image and script by calling Python APIs, and updates the record accordingly. This is a two-step process where the frontend first calls this endpoint to generate the image and script, and then calls the /generate-avatar-video endpoint to create the final video using those assets.'
+       #swagger.requestBody = {
+            required: true,
+            content: {
+                "application/json": {
+                    schema: {
+                        type: 'object',
+                        required: ['inputs'],
+                        properties: { 
+                            inputs:  { $ref: "#/components/schemas/avatar_Payload" }
+                        }
+                    }
+                }
+            }
+        } 
+      */
+    // * STEP 1: Validate request body using avatarSchema
+    const { error, value } = inputSchemasByType.clone.validate(
+      req.body.inputs,
+      {
+        abortEarly: false,
+      },
+    );
+
+    if (error) {
+      const fieldErrors = error.details.map((d) => d.message).join("; ");
+      return res.status(400).json({ success: false, error: fieldErrors });
+    }
+
+    const inputs = value;
+    const userId = req.user.user_id; // Extracted from authenticateJWT middleware
+
+    // * STEP 2: Model-based credit logic
+    const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
+    const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
+
+    // Calculate how many credits 1 video takes: duration * model_multiplier
+    const videoMinCount =
+      durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+
+    const numberOfVideos = inputs.numberOfVideos;
+    // Calculate total required credits for the entire batch
+    const totalRequiredCredits = numberOfVideos * videoMinCount;
+
+    // NOTE: no freeze here. generateImageAndScript is only the preview step
+    // (generates image + script for user review) — the user hasn't committed
+    // to spending video credits yet. The freeze happens at generateAvatarVideo,
+    // which is the actual commit. This avoids leaked holds when users preview
+    // a script and walk away.
+    const unifiedCheck = await UnifiedCreditController.checkCredits(
+      userId,
+      totalRequiredCredits,
+    );
+
+    const userRemainingCredits = unifiedCheck.remainingCredits || 0;
+
+    if (!unifiedCheck.isAllowed) {
+      if (userRemainingCredits >= videoMinCount) {
+        return res.status(400).json({
+          success: false,
+          error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
+        });
+      }
+      return res.status(400).json({ success: false, error: "Not enough credits" });
+    }
+
+    const video = await VideoGeneration.create({
+      userId,
+      inputs: value,
+      status: "pending",
+    });
+
+    const videoId = video._id.toString();
+
+    const pythonPayload = {
+      sessionId: videoId,
+      userId,
+      watermark: inputs.watermark ?? false,
+      inputs: {
+        person_images: inputs.uploadedAvatars || [],
+        product_img: inputs.image ? [inputs.image] : [],
+        productName: inputs.productName,
+        promotion: inputs.promotion || "",
+        duration: inputs.duration,
+        aspectRatio: inputs.aspectRatio,
+        tone: inputs.tone,
+        notes: inputs.notes || "",
+        voiceSampleUrl: inputs.voiceSampleUrl || null,
+      },
+    };
+
+    // * Call Python API to generate clone avatar video
+    const pythonResponse = await axios.post(
+      process.env.CLONE_YOURSELF_IMAGE_SCRIPT_PYTHON_API,
+      pythonPayload,
+    );
+
+    const pyData = pythonResponse.data;
+
+    if (pyData.error) {
+      return res.status(500).json({ success: false, error: pyData.error });
+    }
+
+    return res.status(200).json({
+      success: true,
+      sessionId: videoId,
+      userId,
+      status: pyData.status || "accepted",
+      message: pyData.message || "Clone yourself generation started",
+      data: video,
+    });
+  } catch (err) {
+    console.error("Error in generateImageAndScriptClone:", err);
+
+    if (err.response || err.code === "ECONNREFUSED") {
+      return res.status(500).json({
+        success: false,
+        error: `Python API error: ${err.message}`,
+      });
+    }
+
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+exports.updateImageAndScriptClone = async (req, res) => {
+  /*
+    #swagger.tags = ['Video Generation']
+    #swagger.summary = 'Callback: update generated image/script from Python clone worker'
+    #swagger.description = 'Called by Python after script_generation step. Handles success and failure for type=image, type=text, or type=both. On failure only marks the relevant field(s) as failed. On text success also persists videoPrompt and duration.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: 'object',
+            required: ['sessionId', 'type', 'status'],
+            properties: {
+              sessionId:   { type: 'string', example: '6654abc...' },
+              type:        { type: 'string', enum: ['image', 'text', 'both'] },
+              image:       { type: 'string', example: '/creatives/user_42/123.webp' },
+              text:        { type: 'object', description: 'creativeBrief script object' },
+              status:      { type: 'number', example: 200 },
+              error:       { type: 'string', example: '' },
+              videoPrompt: { type: 'string' },
+              duration:    { type: 'number' }
+            }
+          }
+        }
+      }
+    }
+  */
+  try {
+    const { sessionId, type, image, text, status, error, videoPrompt, duration } = req.body;
+
+    if (!sessionId || !type) {
+      return res.status(400).json({ success: false, error: "sessionId and type are required" });
+    }
+
+    if (!["image", "text", "both"].includes(type)) {
+      return res.status(400).json({ success: false, error: "type must be one of: image, text, both" });
+    }
+
+    if (status === undefined || status === null) {
+      return res.status(400).json({ success: false, error: "status is required" });
+    }
+
+    // ── Failure path ──────────────────────────────────────────────────────────
+    if (Number(status) !== 200 || (error && error !== "")) {
+      const updateFields = { status: "failed" };
+      if (type === "image" || type === "both") updateFields.generatedImage = "failed";
+      if (type === "text"  || type === "both") updateFields.generatedScript = "failed";
+
+      const video = await VideoGeneration.findByIdAndUpdate(
+        sessionId,
+        { $set: updateFields },
+        { new: true, lean: true },
+      );
+
+      if (!video) {
+        return res.status(404).json({ success: false, error: "Video record not found" });
+      }
+
+      if (global.io) {
+        global.io.to(video.userId).emit("CloneImageScriptUpdate", {
+          _id: video._id,
+          userId: video.userId,
+          status: "failed",
+          error,
+          ...updateFields,
+        });
+      }
+
+      return res.status(200).json({ success: true, message: "Step failed, record updated", error });
+    }
+
+    // ── Success path — validate required fields ───────────────────────────────
+    if (type === "image" && !image) {
+      return res.status(400).json({ success: false, error: "image is required when type is 'image'" });
+    }
+    if (type === "text" && !text) {
+      return res.status(400).json({ success: false, error: "text is required when type is 'text'" });
+    }
+    if (type === "both" && (!image || !text)) {
+      return res.status(400).json({ success: false, error: "image and text are required when type is 'both'" });
+    }
+
+    // ── Build update ──────────────────────────────────────────────────────────
+    const updateFields = {};
+
+    if (type === "image" || type === "both") {
+      updateFields.generatedImage = image;
+    }
+    if (type === "text" || type === "both") {
+      updateFields.generatedScript = text;
+      if (videoPrompt) updateFields.videoPrompt = videoPrompt;
+      if (duration)    updateFields["inputs.duration"] = String(duration);
+    }
+
+    const video = await VideoGeneration.findByIdAndUpdate(
+      sessionId,
+      { $set: updateFields },
+      { new: true, lean: true },
+    );
+
+    if (!video) {
+      return res.status(404).json({ success: false, error: "Video record not found" });
+    }
+
+    if (global.io) {
+      global.io.to(video.userId).emit("CloneImageScriptUpdate", {
+        _id: video._id,
+        userId: video.userId,
+        ...updateFields,
+      });
+    }
+
+    return res.status(200).json({ success: true, data: video });
+  } catch (err) {
+    console.error("Error in updateImageAndScriptClone:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+exports.regenerateScriptClone = async (req, res) => {
+  /*
+    #swagger.tags = ['Video Generation']
+    #swagger.summary = 'Regenerate clone-yourself script with a new tone'
+    #swagger.description = 'Accepts video ID and new tone, calls Python /api/v1/clone-yourself/script_generation, saves creativeBrief + tone to DB, and returns the updated script along with videoPrompt.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: 'object',
+            required: ['id', 'tone'],
+            properties: {
+              id:   { type: 'string', description: 'ID of the video record', example: '64a1f0e5c9d1b2a3f4e56789' },
+              tone: { type: 'string', description: 'New tone for script regeneration', example: 'Casual' }
+            }
+          }
+        }
+      }
+    }
+  */
+  try {
+    const { id, tone } = req.body;
+
+    if (!id || !tone) {
+      return res.status(400).json({ success: false, error: "id and tone are required" });
+    }
+
+    const video = await VideoGeneration.findById(id);
+    if (!video) {
+      return res.status(404).json({ success: false, error: "Video not found" });
+    }
+
+    const inputs = video.inputs;
+    const payload = {
+      sessionId: video._id,
+      userId: video.userId,
+      watermark: video.watermark ?? false,
+      inputs: {
+        person_images: inputs.uploadedAvatars || [],
+        product_img: inputs.image ? [inputs.image] : [],
+        productName: inputs.productName,
+        promotion: inputs.promotion || "",
+        duration: inputs.duration,
+        aspectRatio: inputs.aspectRatio,
+        tone,
+        notes: inputs.notes || "",
+        voiceSampleUrl: inputs.voiceSampleUrl || null,
+      },
+    };
+
+    const pythonResponse = await axios.post(
+      process.env.CLONE_YOURSELF_SCRIPT_REGENERATION_PYTHON_API,
+      payload,
+    );
+
+    const data = pythonResponse.data;
+
+    if (!data.success || data.error) {
+      return res.status(500).json({ success: false, error: data.error || "Python service failed" });
+    }
+
+    const updateFields = {
+      generatedScript: data.creativeBrief,
+      "inputs.tone": tone,
+    };
+    if (data.videoPrompt) updateFields.videoPrompt = data.videoPrompt;
+
+    await VideoGeneration.findByIdAndUpdate(id, { $set: updateFields });
+
+    return res.status(200).json({
+      success: true,
+      sessionId: video._id,
+      userId: video.userId,
+      creativeBrief: data.creativeBrief,
+      videoPrompt: data.videoPrompt,
+      duration: data.duration,
+      tone: data.tone,
+      message: data.message,
+    });
+  } catch (error) {
+    console.error("Error in regenerateScriptClone:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+exports.generateCloneVideo = async (req, res) => {
+  /*
+      #swagger.tags = ['Video Generation']
+      #swagger.summary = 'Generate Clone Yourself video using script and avatar images'
+      #swagger.description = 'Called after script_generation is complete. Fetches the DB record, freezes credits, and sends the job to Python /api/v1/clone-yourself/generate_avatar.'
+      #swagger.parameters['id'] = { in: 'path', description: 'ID of the video record to generate', required: true, schema: { type: 'string' } }
+      #swagger.requestBody = {
+          required: false,
+          content: {
+              "application/json": {
+                  schema: {
+                      type: 'object',
+                      properties: {
+                          script: { type: 'object', description: 'Script object to store in DB before generating video' }
+                      }
+                  }
+              }
+          }
+      }
+  */
+  try {
+    const { id } = req.params;
+    const { script } = req.body;
+    const userId = req.user.user_id;
+
+    // * STEP 1: Fetch the video record
+    const video = await VideoGeneration.findOne({ _id: id, userId });
+
+    if (!video) {
+      return res.status(404).json({
+         success: false,
+         error: "Clone video record not found" });
+    }
+
+    if (script) {
+      video.generatedScript = script;
+      video.markModified("generatedScript"); // Required for Mixed type fields
+      await video.save();
+    }
+
+    if (!video.generatedScript) {
+      return res.status(400).json({ success: false, error: "Script not yet generated for this record" });
+    }
+
+    const inputs = video.inputs;
+
+    const selectedModel = inputs.model;
+    const durationNum = Number(inputs.duration.replace("s", "")) || 0;
+    const videoMinCount = durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+    const numberOfVideos = inputs.numberOfVideos;
+    // Calculate total required credits for the entire batch
+    const totalRequiredCredits = numberOfVideos * videoMinCount;
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+
+    const freeze = await UnifiedCreditController.freezeCredits({
+      userId,
+      reservationKey: id,
+      amount: totalRequiredCredits,
+      meta: { service_type: "ad_video", model: selectedModel, duration: inputs.duration, numberOfVideos, phase: "cloneVideo" },
+    });
+
+    if (!freeze.ok) {
+      if (freeze.reason === "NO_BASE_PLAN") {
+        return res.status(403).json({
+          success: false,
+          error: "An active subscription plan is required."
+        });
+      }
+      if (freeze.reason === "INSUFFICIENT") {
+        return res.status(402).json({
+          success: false,
+          error: "Insufficient credits",
+          required: totalRequiredCredits,
+          remaining: freeze.remaining,
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: "Could not reserve credits. Please try again."
+      });
+    }
+
+    // generatedScript is stored as creativeBrief { videoDuration, script: [...] }
+    // Python /generate expects the flat script array, not the wrapper object
+    const scriptArray = Array.isArray(video.generatedScript)
+      ? video.generatedScript
+      : video.generatedScript?.script || [];
+
+    const pythonPayload = {
+      sessionId: id,
+      userId,
+      watermark: plan == "8",
+      inputs: {
+        person_images: inputs.uploadedAvatars || [],
+        product_img: inputs.image ? [inputs.image] : [],
+        firstFrameUrl: video.generatedImage || null,
+        videoPrompt: video.videoPrompt || null,
+        script: scriptArray,
+        duration: inputs.duration,
+        aspectRatio: inputs.aspectRatio,
+        productName: inputs.productName,
+        promotion: inputs.promotion || "",
+        voiceSampleUrl: inputs.voiceSampleUrl || null,
+        existingVoiceId: inputs.existingVoiceId || null,
+      },
+    };
+
+    try {
+      const pythonResponse = await axios.post(
+        process.env.CLONE_YOURSELF_GENERATION_PYTHON_API,
+        pythonPayload
+      );
+      const pyData = pythonResponse.data;
+
+      if (pyData.error) {
+        await UnifiedCreditController.releaseCredits(id);
+        return res.status(500).json({ success: false, error: pyData.error });
+      }
+
+      if (pythonResponse.status === 200) {
+        await VideoGeneration.updateOne({ _id: id }, { $set: { status: "processing" } });
+        return res.status(200).json({
+          success: true,
+          sessionId: id,
+          jobId: pyData.jobId || null,
+          status: pyData.status || "processing",
+          message: pyData.message || "Clone yourself video generation started",
+        });
+      }
+    } catch (pythonErr) {
+      // Python never accepted the job → refund the freeze.
+      await UnifiedCreditController.releaseCredits(id);
+      throw pythonErr;
+    }
+  } catch (err) {
+    console.error("Error in generateCloneVideo:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 };

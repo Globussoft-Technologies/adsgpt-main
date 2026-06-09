@@ -339,13 +339,13 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           {/* Search */}
           <div className="relative w-full xl:max-w-sm">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-white/45 2xl:h-4 2xl:w-4" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45 2xl:h-4 2xl:w-4" />
             <input
               type="text"
               value={filters.search}
               onChange={(e) => setFilter('search', e.target.value)}
               placeholder="Search entity, rule, account…"
-              className="h-9 w-full rounded-xl border border-white/10 bg-white/[0.06] pr-3 pl-9 text-xs text-white placeholder:text-white/45 focus:border-[#15DCFF]/40 focus:outline-none 2xl:h-10 2xl:text-13"
+              className="h-9 w-full rounded-xl border border-gray-200 bg-gray-100 pr-3 pl-9 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-white/45 2xl:h-10 2xl:text-13"
             />
           </div>
 
@@ -405,13 +405,13 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
         </div>
 
         {/* Result count + utility buttons */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
-          <div className="text-10 text-white/70 2xl:text-xs">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3 dark:border-white/10">
+          <div className="text-10 text-gray-500 dark:text-white/70 2xl:text-xs">
             Showing{' '}
-            <span className="text-white">
+            <span className="text-gray-900 dark:text-white">
               {Math.min(pageSize, total).toLocaleString()}
             </span>{' '}
-            of <span className="text-white">{total.toLocaleString()}</span>{' '}
+            of <span className="text-gray-900 dark:text-white">{total.toLocaleString()}</span>{' '}
             action{total === 1 ? '' : 's'}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -442,8 +442,8 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
       <Section className="overflow-hidden p-0!">
         <div className="scrollbar-thin max-h-[65vh] overflow-auto">
           <table className="w-full min-w-[820px] text-xs 2xl:text-13">
-            <thead className="sticky top-0 z-10 bg-[#14181D]">
-              <tr className="border-b border-white/10 bg-white/2 text-left">
+            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-[#14181D]">
+              <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-white/10 dark:bg-white/2">
                 <Th>Trigger</Th>
                 <Th>Entity</Th>
                 <Th>Rule</Th>
@@ -455,7 +455,7 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
               {loading && pagedRows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-12 text-center">
-                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-white/40" />
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400 dark:text-white/40" />
                   </td>
                 </tr>
               )}
@@ -463,7 +463,7 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-3 py-12 text-center text-xs text-white/70 2xl:text-13"
+                    className="px-3 py-12 text-center text-xs text-gray-500 dark:text-white/70 2xl:text-13"
                   >
                     No actions match this filter.
                   </td>
@@ -511,22 +511,22 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
 const PageHeader = ({ loading }) => (
   <div className="flex flex-wrap items-start justify-between gap-3">
     <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#1A2027] 2xl:h-11 2xl:w-11">
-        <ClipboardList className="h-5 w-5 text-white/85 2xl:h-5.5 2xl:w-5.5" />
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-[#1A2027] 2xl:h-11 2xl:w-11">
+        <ClipboardList className="h-5 w-5 text-gray-700 dark:text-white/85 2xl:h-5.5 2xl:w-5.5" />
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-bold text-white 2xl:text-lg">Action log</h2>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white 2xl:text-lg">Action log</h2>
           {/* Removed the standalone "Live" pill — it was hardcoded and
               made the page look like Autopilot was running even when
               the user had it toggled OFF. Each row already shows its
               own dry-run/live mode badge in the Mode column, which is
               the source of truth. */}
           {loading && (
-            <Loader2 className="h-3 w-3 animate-spin text-white/40" />
+            <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-white/40" />
           )}
         </div>
-        <p className="mt-1 text-xs text-white/70 2xl:text-13">
+        <p className="mt-1 text-xs text-gray-500 dark:text-white/70 2xl:text-13">
           Every action Autopilot has taken — what it did, why, and the result.
         </p>
       </div>
@@ -536,25 +536,25 @@ const PageHeader = ({ loading }) => (
 
 // ─── KPI card ──────────────────────────────────────────────────────────────
 const KpiCard = ({ label, value, sub, valueClassName = '', truncateValue }) => (
-  <div className="rounded-2xl border border-white/10 bg-[#14181D] p-4 backdrop-blur-xl transition-colors hover:border-white/15 2xl:p-5">
-    <div className="text-10 font-bold tracking-wider text-white/55 uppercase 2xl:text-[11px]">
+  <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15 2xl:p-5">
+    <div className="text-10 font-bold tracking-wider text-gray-500 uppercase dark:text-white/55 2xl:text-[11px]">
       {label}
     </div>
     <div
-      className={`mt-2 font-bold text-white 2xl:text-[28px] ${valueClassName || 'text-2xl'} ${
+      className={`mt-2 font-bold text-gray-900 dark:text-white 2xl:text-[28px] ${valueClassName || 'text-2xl'} ${
         truncateValue ? 'line-clamp-2 break-words' : ''
       }`}
       title={typeof value === 'string' ? value : undefined}
     >
       {value}
     </div>
-    <div className="mt-1.5 text-10 text-white/70 2xl:text-xs">{sub}</div>
+    <div className="mt-1.5 text-10 text-gray-500 dark:text-white/70 2xl:text-xs">{sub}</div>
   </div>
 );
 
 // ─── table primitives ─────────────────────────────────────────────────────
 const Th = ({ children }) => (
-  <th className="px-3 py-2.5 text-10 font-bold tracking-wider text-white/60 uppercase 2xl:py-3 2xl:text-[11px]">
+  <th className="px-3 py-2.5 text-10 font-bold tracking-wider text-gray-500 uppercase dark:text-white/60 2xl:py-3 2xl:text-[11px]">
     {children}
   </th>
 );
@@ -567,8 +567,8 @@ const LogRow = ({ row, expanded, onToggle }) => {
     <>
       <tr
         onClick={onToggle}
-        className={`group cursor-pointer border-b border-white/10 align-top transition-colors hover:bg-white/3 ${
-          expanded ? 'bg-white/4' : ''
+        className={`group cursor-pointer border-b border-gray-200 align-top transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/3 ${
+          expanded ? 'bg-gray-100 dark:bg-white/4' : ''
         }`}
       >
         {/* Trigger */}
@@ -586,10 +586,10 @@ const LogRow = ({ row, expanded, onToggle }) => {
               />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-white 2xl:text-13">
+              <div className="text-xs font-bold text-gray-900 dark:text-white 2xl:text-13">
                 {formatActionTitle(row)}
               </div>
-              <div className="mt-0.5 truncate font-mono text-10 text-white/70 2xl:text-[11px]">
+              <div className="mt-0.5 truncate font-mono text-10 text-gray-500 dark:text-white/70 2xl:text-[11px]">
                 {formatTriggerDelta(row) || '—'}
               </div>
             </div>
@@ -599,7 +599,7 @@ const LogRow = ({ row, expanded, onToggle }) => {
         {/* Entity */}
         <td className="px-3 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-xs font-bold text-white 2xl:text-13">
+            <span className="truncate text-xs font-bold text-gray-900 dark:text-white 2xl:text-13">
               {row.entityName || '—'}
             </span>
             <EntityLevelPill level={row.level} />
@@ -615,25 +615,25 @@ const LogRow = ({ row, expanded, onToggle }) => {
               <span
                 className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-10 font-bold tracking-wide uppercase ${
                   isUndo
-                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300'
                     : 'border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]'
                 }`}
               >
                 {isUndo ? 'AI · Reverted' : 'AI Audit'}
               </span>
             )}
-            <span className="truncate text-xs text-white/90 2xl:text-13">
+            <span className="truncate text-xs text-gray-700 dark:text-white/90 2xl:text-13">
               {formatRuleLabel(row)}
             </span>
           </div>
         </td>
 
         {/* When */}
-        <td className="px-3 py-3 text-xs whitespace-nowrap text-white/90 2xl:text-13">
+        <td className="px-3 py-3 text-xs whitespace-nowrap text-gray-700 dark:text-white/90 2xl:text-13">
           <div className="font-medium">
             {formatDate(row.runAt || row.createdAt)}
           </div>
-          <div className="font-mono text-10 text-white/60 2xl:text-[11px]">
+          <div className="font-mono text-10 text-gray-500 dark:text-white/60 2xl:text-[11px]">
             {formatTime(row.runAt || row.createdAt)}
           </div>
         </td>
@@ -643,12 +643,12 @@ const LogRow = ({ row, expanded, onToggle }) => {
           <div className="flex items-center gap-2">
             <OutcomePill outcome={row.outcome} />
             {row.dryRun && (
-              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-10 font-bold tracking-wide text-amber-400 uppercase">
+              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-10 font-bold tracking-wide text-amber-600 uppercase dark:text-amber-400">
                 Dry
               </span>
             )}
             <ChevronDown
-              className={`h-3.5 w-3.5 text-white/40 transition-transform ${
+              className={`h-3.5 w-3.5 text-gray-400 transition-transform dark:text-white/40 ${
                 expanded ? 'rotate-180' : ''
               }`}
             />
@@ -656,7 +656,7 @@ const LogRow = ({ row, expanded, onToggle }) => {
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-white/10 bg-white/[0.015]">
+        <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.015]">
           <td colSpan={5} className="px-4 py-4 sm:px-6 sm:py-5">
             <ExpandedDetail row={row} />
           </td>
@@ -676,7 +676,7 @@ const ExpandedDetail = ({ row }) => {
       <div className="flex flex-col gap-4">
         <DetailBlock label="What happened">
           <div
-            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border border-white/12 bg-white/[0.04] p-3`}
+            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 p-3 dark:border-white/12 dark:bg-white/[0.04]`}
           >
             <span
               className={`absolute top-2 bottom-2 left-0 w-0.5 rounded-full ${actionAccent(row.action).bar}`}
@@ -690,10 +690,10 @@ const ExpandedDetail = ({ row }) => {
               />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-bold text-white">
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
                 {formatActionTitle(row)}
               </div>
-              <div className="mt-0.5 text-11 text-white/60">
+              <div className="mt-0.5 text-11 text-gray-500 dark:text-white/60">
                 {formatActionSubtitle(row)}
               </div>
             </div>
@@ -701,12 +701,12 @@ const ExpandedDetail = ({ row }) => {
         </DetailBlock>
 
         <DetailBlock label="Rule fired">
-          <div className="rounded-xl border border-white/12 bg-white/[0.04] p-3">
-            <div className="text-sm font-medium text-white">
+          <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 dark:border-white/12 dark:bg-white/[0.04]">
+            <div className="text-sm font-medium text-gray-900 dark:text-white">
               {formatRuleLabel(row) || '—'}
             </div>
             {row.ruleMessage && row.ruleMessage !== formatRuleLabel(row) && (
-              <div className="mt-1 text-11 text-white/55">
+              <div className="mt-1 text-11 text-gray-500 dark:text-white/55">
                 {row.ruleMessage}
               </div>
             )}
@@ -764,7 +764,7 @@ const ExpandedDetail = ({ row }) => {
 
 const DetailBlock = ({ label, children }) => (
   <div>
-    <div className="mb-2 text-10 font-bold tracking-[0.14em] text-white/45 uppercase">
+    <div className="mb-2 text-10 font-bold tracking-[0.14em] text-gray-400 uppercase dark:text-white/45">
       {label}
     </div>
     {children}
@@ -784,7 +784,7 @@ const AuditTable = ({ row }) => {
             <span>
               {row.adAccountName}
               {row.adAccountId && (
-                <span className="ml-2 font-mono text-white/55">
+                <span className="ml-2 font-mono text-gray-500 dark:text-white/55">
                   {row.adAccountId}
                 </span>
               )}
@@ -800,7 +800,9 @@ const AuditTable = ({ row }) => {
     {
       label: 'Mode',
       value: row.dryRun ? 'Dry-run' : 'Live',
-      tone: row.dryRun ? 'text-amber-300' : 'text-emerald-300',
+      tone: row.dryRun
+        ? 'text-amber-600 dark:text-amber-300'
+        : 'text-emerald-600 dark:text-emerald-300',
     },
   ];
   // Run ID hidden from the audit table — internal-only identifier.
@@ -808,7 +810,11 @@ const AuditTable = ({ row }) => {
   if (row.skipReason)
     rows.push({ label: 'Skip reason', value: row.skipReason });
   if (row.error)
-    rows.push({ label: 'Error', value: row.error, tone: 'text-red-400' });
+    rows.push({
+      label: 'Error',
+      value: row.error,
+      tone: 'text-red-600 dark:text-red-400',
+    });
   return (
     <dl className="text-11">
       {rows.map((r) => (
@@ -816,10 +822,10 @@ const AuditTable = ({ row }) => {
           key={r.label}
           className="grid grid-cols-[88px_1fr] items-baseline gap-x-3 py-1"
         >
-          <dt className="text-white/45">{r.label}</dt>
+          <dt className="text-gray-400 dark:text-white/45">{r.label}</dt>
           <dd
             className={`min-w-0 break-all ${r.mono ? 'font-mono' : ''} ${
-              r.tone || 'text-white/90'
+              r.tone || 'text-gray-700 dark:text-white/90'
             }`}
           >
             {r.value}
@@ -838,7 +844,7 @@ const ActionLinkButton = ({ href, children }) => (
     href={href}
     target="_blank"
     rel="noopener noreferrer"
-    className="inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/85 transition-all hover:border-white/20 hover:bg-white/[0.07] hover:text-white"
+    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white"
   >
     {children}
   </a>
@@ -849,7 +855,7 @@ const ActionButton = ({ onClick, disabled, children }) => (
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className="inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/85 transition-all hover:border-white/20 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-white/12 disabled:hover:bg-white/[0.04] disabled:hover:text-white/85"
+    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-gray-200 disabled:hover:bg-gray-100 disabled:hover:text-gray-700 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white dark:disabled:hover:border-white/12 dark:disabled:hover:bg-white/[0.04] dark:disabled:hover:text-white/85"
   >
     {children}
   </button>
@@ -858,7 +864,7 @@ const ActionButton = ({ onClick, disabled, children }) => (
 const MetricsGrid = ({ snapshot, currency }) => {
   if (!snapshot || typeof snapshot !== 'object') {
     return (
-      <div className="rounded-xl border border-white/12 bg-white/[0.04] p-3 text-11 text-white/45">
+      <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
         No metric snapshot recorded.
       </div>
     );
@@ -928,7 +934,7 @@ const MetricsGrid = ({ snapshot, currency }) => {
 
   if (!metrics.length) {
     return (
-      <div className="rounded-xl border border-white/12 bg-white/[0.04] p-3 text-11 text-white/45">
+      <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
         No metrics recorded for this trigger.
       </div>
     );
@@ -938,12 +944,12 @@ const MetricsGrid = ({ snapshot, currency }) => {
       {metrics.map((m) => (
         <div
           key={m.key}
-          className="rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2.5 transition-colors hover:border-white/16 hover:bg-white/[0.06]"
+          className="rounded-xl border border-gray-200 bg-gray-100 px-3 py-2.5 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-white/12 dark:bg-white/[0.04] dark:hover:border-white/16 dark:hover:bg-white/[0.06]"
         >
-          <div className="text-10 font-bold tracking-[0.14em] text-white/45 uppercase">
+          <div className="text-10 font-bold tracking-[0.14em] text-gray-400 uppercase dark:text-white/45">
             {m.label}
           </div>
-          <div className="mt-1 font-mono text-sm font-semibold text-white">
+          <div className="mt-1 font-mono text-sm font-semibold text-gray-900 dark:text-white">
             {m.value}
           </div>
         </div>
@@ -968,10 +974,10 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-white transition-all hover:border-white/20 hover:bg-white/[0.07]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 dark:border-white/12 dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
         >
           {value}
-          <ChevronDown className="h-3 w-3 text-[#BEBEBE]" />
+          <ChevronDown className="h-3 w-3 text-gray-400 dark:text-[#BEBEBE]" />
         </button>
       }
     >
@@ -984,8 +990,10 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
               onChange(s);
               setOpen(false);
             }}
-            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all hover:bg-white/5 ${
-              value === s ? 'bg-white/5 text-[#15DCFF]' : 'text-white'
+            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+              value === s
+                ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5'
+                : 'text-gray-900 dark:text-white'
             }`}
           >
             {s}
@@ -1009,15 +1017,15 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className={`flex ${widthClass} items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white transition-all hover:border-white/10`}
+          className={`flex ${widthClass} items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-900 transition-all hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:border-white/10`}
         >
           <span className="truncate font-medium">{selected.label}</span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-[#BEBEBE]" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-gray-400 dark:text-[#BEBEBE]" />
         </button>
       }
     >
       <div className="w-56 p-1">
-        <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
+        <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
           {options.map((o) => (
             <button
               key={o.value}
@@ -1025,8 +1033,10 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
                 onChange(o.value);
                 setOpen(false);
               }}
-              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-white/5 ${
-                value === o.value ? 'bg-white/5 text-[#15DCFF]' : 'text-white'
+              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                value === o.value
+                  ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5'
+                  : 'text-gray-900 dark:text-white'
               }`}
             >
               {o.label}
@@ -1052,14 +1062,14 @@ const Pagination = ({
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#14181D] p-3 backdrop-blur-xl">
-      <div className="flex flex-wrap items-center gap-3 text-10 text-white/70 2xl:text-xs">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]">
+      <div className="flex flex-wrap items-center gap-3 text-10 text-gray-500 dark:text-white/70 2xl:text-xs">
         <span>
           Showing{' '}
-          <span className="text-white">
+          <span className="text-gray-900 dark:text-white">
             {from.toLocaleString()}–{to.toLocaleString()}
           </span>{' '}
-          of <span className="text-white">{total.toLocaleString()}</span>
+          of <span className="text-gray-900 dark:text-white">{total.toLocaleString()}</span>
         </span>
         <span className="flex items-center gap-1.5">
           Rows per page
@@ -1083,7 +1093,7 @@ const Pagination = ({
         >
           <ChevronLeft className="h-3 w-3" /> Prev
         </SecondaryButton>
-        <span className="px-2 text-xs text-white/80 2xl:text-13">
+        <span className="px-2 text-xs text-gray-600 dark:text-white/80 2xl:text-13">
           Page {page} of {pages}
         </span>
         <SecondaryButton
@@ -1109,7 +1119,7 @@ const EntityLevelPill = ({ level }) => {
   const label =
     level === 'ad' ? 'AD' : level === 'adset' ? 'AD-SET' : 'CAMPAIGN';
   return (
-    <span className="inline-flex items-center rounded-md border border-white/8 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white/55 uppercase">
+    <span className="inline-flex items-center rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-gray-500 uppercase dark:border-white/8 dark:bg-white/5 dark:text-white/55">
       {label}
     </span>
   );
@@ -1132,7 +1142,7 @@ const ParentCrumb = ({ row }) => {
   return (
     <div className="mt-0.5 space-y-0.5">
       {lines.map((l, i) => (
-        <div key={i} className="truncate text-10 text-white/65 2xl:text-[11px]">
+        <div key={i} className="truncate text-10 text-gray-500 dark:text-white/65 2xl:text-[11px]">
           {l}
         </div>
       ))}
@@ -1144,19 +1154,19 @@ const OutcomePill = ({ outcome }) => {
   const map = {
     success: {
       dot: 'bg-emerald-400',
-      cls: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+      cls: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     },
     failed: {
       dot: 'bg-red-400',
-      cls: 'border-red-500/20 bg-red-500/10 text-red-400',
+      cls: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
     },
     skipped: {
-      dot: 'bg-white/40',
-      cls: 'border-white/15 bg-white/5 text-white/65',
+      dot: 'bg-gray-400 dark:bg-white/40',
+      cls: 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/15 dark:bg-white/5 dark:text-white/65',
     },
     pending: {
       dot: 'bg-amber-400',
-      cls: 'border-amber-500/20 bg-amber-500/10 text-amber-400',
+      cls: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
     },
   };
   const c = map[outcome] || map.skipped;
@@ -1211,9 +1221,10 @@ const actionAccent = (action) => {
       };
     case 'alert_only':
       return {
-        bar: 'bg-white/20',
-        iconBg: 'border border-white/15 bg-white/[0.05]',
-        iconFg: 'text-white/70',
+        bar: 'bg-gray-300 dark:bg-white/20',
+        iconBg:
+          'border border-gray-200 bg-gray-100 dark:border-white/15 dark:bg-white/[0.05]',
+        iconFg: 'text-gray-500 dark:text-white/70',
       };
     case 'rotate_creative':
       return {
@@ -1229,9 +1240,10 @@ const actionAccent = (action) => {
       };
     default:
       return {
-        bar: 'bg-white/20',
-        iconBg: 'border border-white/15 bg-white/[0.05]',
-        iconFg: 'text-white/60',
+        bar: 'bg-gray-300 dark:bg-white/20',
+        iconBg:
+          'border border-gray-200 bg-gray-100 dark:border-white/15 dark:bg-white/[0.05]',
+        iconFg: 'text-gray-500 dark:text-white/60',
       };
   }
 };

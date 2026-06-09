@@ -69,16 +69,16 @@ const PreviewSidebar = ({
   };
   return (
     <>
-      <aside className="flex h-full w-22 flex-col border-r border-white/10 bg-[#0f0f0f] py-4 sm:w-[102px]">
+      <aside className="flex h-full w-22 flex-col border-r border-black/10 dark:border-white/10 bg-white dark:bg-[#0f0f0f] py-4 sm:w-[102px]">
         <div className="flex flex-1 flex-col items-center justify-center">
           <button
             onClick={() => swiperRef.current?.slidePrev()}
             disabled={isBeginning}
             className={`mb-2.5 rounded-md transition ${
-              isBeginning ? 'hidden' : 'block hover:bg-white/10'
+              isBeginning ? 'hidden' : 'block hover:bg-black/5 dark:hover:bg-white/10'
             }`}
           >
-            <ChevronUp className="h-7 w-7 text-white 2xl:h-8 2xl:w-8" />
+            <ChevronUp className="h-7 w-7 text-gray-900 dark:text-white 2xl:h-8 2xl:w-8" />
           </button>
 
           <div className="h-fit max-h-35 min-h-17 2xl:max-h-40 2xl:min-h-20">
@@ -118,15 +118,15 @@ const PreviewSidebar = ({
                       </button>
 
                       <div
-                        className={`flex h-8 w-8 items-center justify-center rounded-sm bg-[#2a2a2a] group-hover:bg-white/20 ${isActive ? 'border border-white/60 text-white' : 'text-white/70'} 2xl:h-10.5 2xl:w-10.5`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-sm bg-gray-50 dark:bg-[#2a2a2a] group-hover:bg-black/5 dark:group-hover:bg-white/20 ${isActive ? 'border border-black/10 dark:border-white/60 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'} 2xl:h-10.5 2xl:w-10.5`}
                       >
-                        <Image className="h-5 w-5 group-hover:text-white 2xl:h-6 2xl:w-6" />
+                        <Image className="h-5 w-5 group-hover:text-black dark:group-hover:text-white 2xl:h-6 2xl:w-6" />
                       </div>
 
                       <span
                         className={`line-clamp-1 text-[10px] ${
-                          isActive ? 'text-white' : 'text-white/70'
-                        } group-hover:text-white`}
+                          isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'
+                        } group-hover:text-black dark:group-hover:text-white`}
                       >
                         {c.name}
                       </span>
@@ -140,9 +140,9 @@ const PreviewSidebar = ({
           <button
             onClick={() => swiperRef.current?.slideNext()}
             disabled={isEnd}
-            className={`-mt-1 mb-1 rounded-md transition ${isEnd ? 'hidden' : 'block hover:bg-white/10'}`}
+            className={`-mt-1 mb-1 rounded-md transition ${isEnd ? 'hidden' : 'block hover:bg-black/5 dark:hover:bg-white/10'}`}
           >
-            <ChevronDown className="h-7 w-7 text-white 2xl:h-8 2xl:w-8" />
+            <ChevronDown className="h-7 w-7 text-gray-900 dark:text-white 2xl:h-8 2xl:w-8" />
           </button>
 
           {/* Add More */}
@@ -152,28 +152,28 @@ const PreviewSidebar = ({
             disabled={!enableId}
           >
             <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2a] 2xl:h-10 2xl:w-10 ${enableId ? 'group-hover:bg-white/20' : ''}`}
+              className={`flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 dark:bg-[#2a2a2a] 2xl:h-10 2xl:w-10 ${enableId ? 'group-hover:bg-black/5 dark:group-hover:bg-white/20' : ''}`}
             >
               <Plus className="h-5 w-5 2xl:h-6 2xl:w-6" />
             </div>
-            <span className="text-[10px] text-white/80">Add More</span>
+            <span className="text-[10px] text-gray-500 dark:text-white/80">Add More</span>
           </button>
         </div>
 
         {/* Bottom section */}
         <button className="group flex flex-col items-center gap-2" onClick={onOpenSaved}>
           <div
-            className={`relative flex h-8 w-8 items-center justify-center rounded-sm bg-[#2a2a2a] group-hover:bg-white/20 2xl:h-10 2xl:w-10 ${activeView === 'saved' ? 'border border-white/60 text-white' : 'text-white/70'}`}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-sm bg-gray-50 dark:bg-[#2a2a2a] group-hover:bg-black/5 dark:group-hover:bg-white/20 2xl:h-10 2xl:w-10 ${activeView === 'saved' ? 'border border-black/10 dark:border-white/60 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'}`}
           >
             <Save className="h-5 w-5 2xl:h-6 2xl:w-6" />
             {savedCount > 0 && (
-              <span className="absolute -top-2.5 -right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-black">
+              <span className="absolute -top-2.5 -right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-white text-xs font-bold dark:text-black">
                 {savedCount}
               </span>
             )}
           </div>
           <span
-            className={`text-[10px] group-hover:text-white ${activeView === 'saved' ? 'text-white' : 'text-white/70'}`}
+            className={`text-[10px] group-hover:text-black dark:group-hover:text-white ${activeView === 'saved' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'}`}
           >
             Saved Folder
           </span>

@@ -16,7 +16,7 @@ function SummaryPill({ icon: Icon, color, barColor, label, value }) {
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-2xl border border-white/12 bg-[#14181D] p-4"
+      className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/12 dark:bg-[#14181D]"
     >
       <div className="absolute top-0 left-0 h-full w-0.5" style={{ background: barColor }} />
       <div className="flex items-center justify-between">
@@ -26,7 +26,7 @@ function SummaryPill({ icon: Icon, color, barColor, label, value }) {
             {label}
           </span>
         </div>
-        <span className="text-xl font-bold text-white 2xl:text-2xl">{value}</span>
+        <span className="text-xl font-bold text-gray-900 2xl:text-2xl dark:text-white">{value}</span>
       </div>
     </motion.div>
   );
@@ -45,8 +45,8 @@ function FilterPill({ label, active, onClick, disabled = false }) {
         active
           ? 'border-[#15DCFF]/40 bg-[#15DCFF]/10 text-[#15DCFF]'
           : disabled
-            ? 'cursor-not-allowed border-white/4 bg-transparent text-white/25'
-            : 'border-white/12 bg-transparent text-[#BEBEBE] hover:text-white/80'
+            ? 'cursor-not-allowed border-gray-200 bg-transparent text-gray-400 dark:border-white/4 dark:text-white/25'
+            : 'border-gray-200 bg-transparent text-gray-500 hover:text-gray-900 dark:border-white/12 dark:text-[#BEBEBE] dark:hover:text-white/80'
       }`}
     >
       {label}
@@ -104,7 +104,7 @@ export default function AuditFindings({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.05] text-white/60 transition-all hover:bg-white/10 hover:text-white"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 text-gray-500 transition-all hover:bg-gray-50 hover:text-gray-900 dark:border-white/12 dark:bg-white/[0.05] dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -112,8 +112,8 @@ export default function AuditFindings({
             <Sparkles className="h-5 w-5 text-[#15DCFF]" />
           </div>
           <div>
-            <p className="text-base font-bold text-white 2xl:text-lg">Audit findings</p>
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-white/40">
+            <p className="text-base font-bold text-gray-900 2xl:text-lg dark:text-white">Audit findings</p>
+            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-400 dark:text-white/40">
               <span className="font-mono">{audit?.auditId?.slice(0, 8)}</span>
             </div>
           </div>
@@ -131,9 +131,9 @@ export default function AuditFindings({
           chips. Each row also has its own card so the visual grouping
           is unambiguous. Zero-count chips render disabled to stop users
           clicking into a "No findings match" dead-end. */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-white/12 bg-white/[0.04] p-3">
+      <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/[0.04]">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-white/55">
+          <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/55">
             Severity
           </span>
           {['all', 'critical', 'warning', 'opportunity'].map((f) => {
@@ -152,9 +152,9 @@ export default function AuditFindings({
             );
           })}
         </div>
-        <div className="h-px w-full bg-white/6" />
+        <div className="h-px w-full bg-gray-200 dark:bg-white/6" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-white/55">
+          <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/55">
             Status
           </span>
           {['all', 'pending', 'applied', 'dismissed', 'failed'].map((f) => {
@@ -175,18 +175,18 @@ export default function AuditFindings({
 
       {/* findings grid */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/12 bg-white/[0.04] py-12">
-          <Sparkles className="h-5 w-5 text-white/20" />
-          <p className="text-sm text-white/40">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 py-12 dark:border-white/12 dark:bg-white/[0.04]">
+          <Sparkles className="h-5 w-5 text-gray-400 dark:text-white/20" />
+          <p className="text-sm text-gray-400 dark:text-white/40">
             No findings match{' '}
             {severityFilter !== 'all' && (
-              <span className="font-semibold capitalize text-white/70">
+              <span className="font-semibold capitalize text-gray-500 dark:text-white/70">
                 {severityFilter}
               </span>
             )}
             {severityFilter !== 'all' && statusFilter !== 'all' && ' · '}
             {statusFilter !== 'all' && (
-              <span className="font-semibold capitalize text-white/70">
+              <span className="font-semibold capitalize text-gray-500 dark:text-white/70">
                 {statusFilter}
               </span>
             )}
@@ -223,7 +223,7 @@ export default function AuditFindings({
 
       {/* rejected (debug, only on fresh audits) */}
       {audit?.rejected?.length > 0 && (
-        <details className="mt-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-[11px] text-white/40">
+        <details className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/40">
           <summary className="cursor-pointer font-semibold">
             {audit.rejected.length} suggestions were rejected by validation
           </summary>

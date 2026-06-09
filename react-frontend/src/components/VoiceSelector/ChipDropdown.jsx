@@ -86,7 +86,7 @@ const ChipDropdown = ({
   const renderSimpleRow = (key, label, isSelected, onClick) => (
     <div
       key={key}
-      className={`flex items-center gap-2 rounded-md px-3 py-2 text-[13px] transition ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}`}
+      className={`flex items-center gap-2 rounded-md px-3 py-2 text-[13px] transition ${isSelected ? 'bg-black/5 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
     >
       <button
         type="button"
@@ -94,11 +94,11 @@ const ChipDropdown = ({
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <span
-          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${isSelected ? 'border-emerald-400' : 'border-white/30'}`}
+          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${isSelected ? 'border-emerald-400' : 'border-gray-300 dark:border-white/30'}`}
         >
           {isSelected && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
         </span>
-        <span className="min-w-0 truncate text-white/90">{label}</span>
+        <span className="min-w-0 truncate text-gray-700 dark:text-white/90">{label}</span>
       </button>
     </div>
   );
@@ -115,7 +115,7 @@ const ChipDropdown = ({
       return (
         <div
           key={opt.voice_id}
-          className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-[13px] transition ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}`}
+          className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-[13px] transition ${isSelected ? 'bg-black/5 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
         >
           <button
             type="button"
@@ -123,11 +123,11 @@ const ChipDropdown = ({
             className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
             <span
-              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${isSelected ? 'border-emerald-400' : 'border-white/30'}`}
+              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${isSelected ? 'border-emerald-400' : 'border-gray-300 dark:border-white/30'}`}
             >
               {isSelected && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
             </span>
-            <span className="min-w-0 truncate text-white/90">{opt.name}</span>
+            <span className="min-w-0 truncate text-gray-700 dark:text-white/90">{opt.name}</span>
           </button>
           {opt.preview_url ? (
             <button
@@ -136,13 +136,13 @@ const ChipDropdown = ({
                 e.stopPropagation();
                 togglePreview(opt);
               }}
-              className="shrink-0 rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-white/20 hover:text-white"
+              className="shrink-0 rounded-full bg-black/5 p-1.5 text-gray-500 hover:bg-black/10 hover:text-black dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/20 dark:hover:text-white"
               title={isPlaying ? 'Pause preview' : 'Play preview'}
             >
               {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
             </button>
           ) : (
-            <span className="shrink-0 text-[10px] text-white/30">no preview</span>
+            <span className="shrink-0 text-[10px] text-gray-400 dark:text-white/30">no preview</span>
           )}
         </div>
       );
@@ -162,11 +162,11 @@ const ChipDropdown = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
-          className={`absolute z-50 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1A] shadow-2xl ${field === 'voice' ? 'right-0' : ''}`}
+          className={`absolute z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A] ${field === 'voice' ? 'right-0' : ''}`}
         >
           <div className="max-h-[120px] overflow-y-auto py-1">
             {loading && (
-              <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-white/50">
+              <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-gray-500 dark:text-white/50">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
               </div>
             )}
@@ -174,7 +174,7 @@ const ChipDropdown = ({
               <div className="px-3 py-3 text-[12px] text-red-400">{error}</div>
             )}
             {!loading && !error && options.length === 0 && (
-              <div className="px-3 py-3 text-[12px] text-white/40">No options</div>
+              <div className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/40">No options</div>
             )}
             {!loading && !error && options.map(renderOption)}
           </div>

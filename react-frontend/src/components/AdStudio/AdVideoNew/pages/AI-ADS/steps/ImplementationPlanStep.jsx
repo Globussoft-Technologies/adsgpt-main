@@ -10,11 +10,11 @@ const CustomLoader = ({ label }) => (
   <div className="flex h-full w-full flex-col items-center justify-center gap-4">
     <div className="relative h-6 w-6 animate-spin">
       <svg viewBox="0 0 50 50" className="h-full w-full">
-        <circle cx="25" cy="25" r="20" fill="none" stroke="#6b6b6b" strokeWidth="5" />
-        <path d="M25 5A20 20 0 0 1 45 25" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" />
+        <circle cx="25" cy="25" r="20" fill="none" className="stroke-gray-300 dark:stroke-[#6b6b6b]" strokeWidth="5" />
+        <path d="M25 5A20 20 0 0 1 45 25" fill="none" className="stroke-gray-900 dark:stroke-white" strokeWidth="5" strokeLinecap="round" />
       </svg>
     </div>
-    <span className="text-[11px] font-medium text-white 2xl:text-xs">{label}</span>
+    <span className="text-[11px] font-medium text-gray-900 dark:text-white 2xl:text-xs">{label}</span>
   </div>
 );
 
@@ -247,7 +247,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
 
 
   return (
-    <div className="relative flex h-full max-h-[100vh] min-h-[500px] rounded-3xl w-screen max-w-[450px] min-w-[450px] flex-col bg-[#303030]/30 px-1 pt-6 pb-3 md:max-w-[750px] 2xl:max-h-[80vh] 2xl:min-h-[600px] 2xl:max-w-[850px]">
+    <div className="relative flex h-full max-h-[100vh] min-h-[500px] rounded-3xl w-screen max-w-[450px] min-w-[450px] flex-col bg-white dark:bg-[#303030]/30 px-1 pt-6 pb-3 md:max-w-[750px] 2xl:max-h-[80vh] 2xl:min-h-[600px] 2xl:max-w-[850px]">
       {/* Close Button — disabled until ALL scenes (scripts + images) are
           ready, and during per-scene regen. Only enabled when full session
           is complete, or in error state (so user can dismiss the error). */}
@@ -256,8 +256,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
         disabled={(isInitialLoading || isStillGenerating || isRegenerating) && !sceneError}
         className={`pointer-events-auto absolute top-6 right-6 z-50 transition ${
           (isInitialLoading || isStillGenerating || isRegenerating) && !sceneError
-            ? 'cursor-not-allowed text-white/20'
-            : 'cursor-pointer text-white/50 hover:text-white'
+            ? 'cursor-not-allowed text-gray-400 dark:text-white/20'
+            : 'cursor-pointer text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white'
         }`}
         title={
           (isInitialLoading || isStillGenerating) && !sceneError
@@ -283,8 +283,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
 
           {/* Message */}
           <div className="flex w-full flex-col items-center gap-2">
-            <h3 className="text-base font-semibold text-white 2xl:text-lg">Scene Generation Failed</h3>
-            <p className="w-full max-w-sm text-[13px] leading-relaxed text-white/55 2xl:text-sm">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white 2xl:text-lg">Scene Generation Failed</h3>
+            <p className="w-full max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-white/55 2xl:text-sm">
               {typeof sceneError === 'string' && sceneError
                 ? sceneError
                 : "We couldn't generate your AI ad scenes this time. Please try again."}
@@ -295,7 +295,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
           <button
             type="button"
             onClick={handleRetry}
-            className="mt-2 flex items-center gap-2 rounded-md border border-white/20 bg-white px-5 py-2 text-sm font-semibold text-black transition hover:opacity-90"
+            className="mt-2 flex items-center gap-2 rounded-md border border-black/20 dark:border-white/20 bg-gray-900 text-white dark:bg-white px-5 py-2 text-sm font-semibold dark:text-black transition hover:opacity-90"
           >
             <RefreshCw className="h-4 w-4" />
             Try Again
@@ -310,8 +310,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
           <button
             onClick={() => canPrev && setPage((p) => p - 1)}
             disabled={!canPrev || isInitialLoading}
-            className={`absolute top-[40%] -left-12 sm:-left-20 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[#5B5B5B]/20 text-white transition 2xl:-left-25 2xl:h-12 2xl:w-12 ${
-              canPrev && !isInitialLoading ? 'hover:bg-white/10' : 'cursor-not-allowed opacity-30'
+            className={`absolute top-[40%] -left-12 sm:-left-20 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-black/10 dark:border-white/20 bg-black/5 dark:bg-[#5B5B5B]/20 text-gray-900 dark:text-white transition 2xl:-left-25 2xl:h-12 2xl:w-12 ${
+              canPrev && !isInitialLoading ? 'hover:bg-black/5 dark:hover:bg-white/10' : 'cursor-not-allowed opacity-30'
             }`}
           >
             <ChevronLeft className="h-6 w-6" />
@@ -321,8 +321,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
           <button
             onClick={() => canNext && setPage((p) => p + 1)}
             disabled={!canNext || isInitialLoading}
-            className={`absolute top-[40%] -right-12 sm:-right-20 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[#5B5B5B]/20 text-white transition 2xl:-right-25 2xl:h-12 2xl:w-12 ${
-              canNext && !isInitialLoading ? 'hover:bg-white/10' : 'cursor-not-allowed opacity-30'
+            className={`absolute top-[40%] -right-12 sm:-right-20 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-black/10 dark:border-white/20 bg-black/5 dark:bg-[#5B5B5B]/20 text-gray-900 dark:text-white transition 2xl:-right-25 2xl:h-12 2xl:w-12 ${
+              canNext && !isInitialLoading ? 'hover:bg-black/5 dark:hover:bg-white/10' : 'cursor-not-allowed opacity-30'
             }`}
           >
             <ChevronRight className="h-6 w-6" />
@@ -330,7 +330,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
 
           <div className="relative m-auto flex w-full flex-col overflow-y-auto p-4 2xl:p-5">
             {/* Header */}
-            <h2 className="mt-4 mb-8 text-center text-lg font-semibold text-white 2xl:mt-3 2xl:mb-10 2xl:text-xl">
+            <h2 className="mt-4 mb-8 text-center text-lg font-semibold text-gray-900 dark:text-white 2xl:mt-3 2xl:mb-10 2xl:text-xl">
               AI Video Implementation Plan
             </h2>
 
@@ -339,12 +339,12 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
   {isEffectivelyLoading && !isRegenerating ? (
     <div className="flex gap-4">
       {/* Image Loader */}
-      <div className="relative h-[420px] w-[280px] overflow-hidden rounded-md border border-white/20 bg-[#100F0F]">
+      <div className="relative h-[420px] w-[280px] overflow-hidden rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#100F0F]">
         <CustomLoader label="Generating Image" />
       </div>
 
       {/* Script Loader */}
-      <div className="flex h-[420px] flex-1 flex-col rounded-md border border-white/20 bg-[#100F0F] p-4">
+      <div className="flex h-[420px] flex-1 flex-col rounded-md border border-black/10 dark:border-white/20 bg-gray-50 dark:bg-[#100F0F] p-4">
         <CustomLoader label="Generating Script" />
       </div>
     </div>
@@ -363,7 +363,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
           className="flex gap-4"
         >
           {/* LEFT IMAGE */}
-          <div className="relative h-[420px] w-[280px] shrink-0 overflow-hidden rounded-md border border-white/20 bg-[#100F0F]">
+          <div className="relative h-[420px] w-[280px] shrink-0 overflow-hidden rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#100F0F]">
             {regenImage ? (
               <CustomLoader label="Generating Image" />
             ) : scene.imageFailed ? (
@@ -433,7 +433,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                           const promptToSend = imagePromptText;
                           askConfirm({
                             title: 'Regenerate Image',
-                            message: <>We will use the AdsGPT Video Model to Re-generate this image, and <strong className="text-white">2 credits</strong> will be deducted for the process do you want to continue?</>,
+                            message: <>We will use the AdsGPT Video Model to Re-generate this image, and <strong className="text-gray-900 dark:text-white">2 credits</strong> will be deducted for the process do you want to continue?</>,
                             confirmLabel: 'Regenerate',
                             onConfirm: () => {
                               closeConfirm();
@@ -456,7 +456,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
           </div>
 
           {/* RIGHT CONTENT */}
-          <div className="relative flex h-[420px] flex-1 flex-col rounded-md border border-white/20 bg-[#100F0F] p-4">
+          <div className="relative flex h-[420px] flex-1 flex-col rounded-md border border-black/10 dark:border-white/20 bg-gray-50 dark:bg-[#100F0F] p-4">
             {regenText ? (
               <CustomLoader label="Generating Script" />
             ) : (
@@ -482,11 +482,11 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                   {/* Scene Description */}
                   {scene.sceneDescription && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold text-white">
+                      <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">
                         Scene Description
                       </h3>
 
-                      <p className="text-sm leading-relaxed text-white/80">
+                      <p className="text-sm leading-relaxed text-gray-500 dark:text-white/80">
                         {scene.sceneDescription}
                       </p>
                     </div>
@@ -496,7 +496,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                   {Array.isArray(scene.script) &&
                     scene.script.length > 0 && (
                       <div className="flex flex-col gap-3">
-                        <h3 className="text-sm font-semibold text-white">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                           Script
                         </h3>
 
@@ -515,7 +515,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                               key={line.id}
                               className="flex flex-col gap-1"
                             >
-                              <span className="text-[11px] text-white/80 font-bold">
+                              <span className="text-[11px] text-gray-500 dark:text-white/80 font-bold">
                                 {line.start} – {line.end}
                               </span>
 
@@ -563,7 +563,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                                     }));
                                   }
                                 }}
-                                className={`w-full rounded border bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:bg-white/10 ${
+                                className={`w-full rounded border bg-black/5 dark:bg-white/5 px-3 py-2 text-sm text-gray-900 dark:text-white outline-none transition focus:bg-black/5 dark:focus:bg-white/10 ${
                                   error
                                     ? 'border-red-500/70'
                                     : 'border-transparent'
@@ -597,7 +597,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                   <div
                     key={i}
                     className={`h-1.5 rounded-full transition-all ${
-                      i === page ? 'w-4 bg-white' : 'w-1.5 bg-white/30'
+                      i === page ? 'w-4 bg-gray-900 dark:bg-white' : 'w-1.5 bg-black/20 dark:bg-white/30'
                     }`}
                   />
                 ))}
@@ -610,7 +610,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                   <button
                     disabled={isEffectivelyLoading}
                     onClick={onBack}
-                    className="rounded-sm border border-[#efefef]/70 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-sm font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Back
                   </button>
@@ -632,8 +632,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
                   }
                   className={`min-w-35 rounded-sm px-8 py-1.5 text-sm font-medium transition ${
                     allImagesReady && !generating && !hasLineErrors
-                      ? 'bg-white text-black hover:bg-white/90'
-                      : 'cursor-not-allowed bg-white/20 text-white/40'
+                      ? 'bg-gray-900 text-white dark:bg-white dark:text-black hover:opacity-90 dark:hover:bg-white/90'
+                      : 'cursor-not-allowed bg-black/10 text-gray-400 dark:bg-white/20 dark:text-white/40'
                   }`}
                   title={!allImagesReady ? 'Waiting for all scene images to finish generating' : ''}
                 >
@@ -663,26 +663,26 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-[90%] max-w-[360px] rounded-2xl border border-white/10 bg-[#1C1C1F] p-5 shadow-2xl"
+            className="w-[90%] max-w-[360px] rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1C1C1F] p-5 shadow-2xl"
           >
-            <h3 className="mb-2 text-base font-semibold text-white">
+            <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-white">
               {confirmDialog.title}
             </h3>
-            <p className="mb-5 text-sm leading-relaxed text-white/70">
+            <p className="mb-5 text-sm leading-relaxed text-gray-500 dark:text-white/70">
               {confirmDialog.message}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={closeConfirm}
-                className="rounded-md border border-white/20 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/5"
+                className="rounded-md border border-black/20 dark:border-white/20 px-4 py-1.5 text-sm font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => confirmDialog.onConfirm?.()}
-                className="rounded-md bg-white px-4 py-1.5 text-sm font-semibold text-black transition hover:opacity-90"
+                className="rounded-md bg-gray-900 text-white dark:bg-white px-4 py-1.5 text-sm font-semibold dark:text-black transition hover:opacity-90"
               >
                 {confirmDialog.confirmLabel}
               </button>

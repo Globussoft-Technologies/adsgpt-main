@@ -198,14 +198,14 @@ const TagInput = ({
   return (
     <div ref={containerRef} className="space-y-2">
       <div
-        className="input-gradient-border flex min-h-9 cursor-text bg-[#383838]/50 px-4 py-2 backdrop-blur-md transition 2xl:min-h-[49px]"
+        className="input-gradient-border flex min-h-9 cursor-text bg-gray-100 px-4 py-2 backdrop-blur-md transition 2xl:min-h-[49px] dark:bg-[#383838]/50"
         onClick={focusInput}
       >
         <div className="flex flex-wrap items-center gap-2 p-2 2xl:p-2.5">
           {values.map((tag, index) => (
             <div
               key={index}
-              className="group flex cursor-pointer items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-sm text-white transition-colors hover:bg-white/30"
+              className="group flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-sm text-gray-900 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:hover:bg-white/30"
             >
               <span className="text-xs break-all 2xl:text-sm">{tag}</span>
               <button
@@ -215,7 +215,7 @@ const TagInput = ({
                   handleRemoveTag(index);
                 }}
                 disabled={disabled}
-                className="rounded-full p-0.5 text-white opacity-70 transition-all hover:bg-red-500/30 hover:text-red-200 hover:opacity-100 disabled:opacity-50"
+                className="rounded-full p-0.5 text-gray-900 opacity-70 transition-all hover:bg-red-500/30 hover:text-red-200 hover:opacity-100 disabled:opacity-50 dark:text-white"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -230,7 +230,7 @@ const TagInput = ({
             onBlur={handleBlur}
             placeholder={values.length === 0 ? placeholder : ''}
             disabled={disabled}
-            className="flex-1 bg-transparent pl-3 text-sm text-white outline-none placeholder:text-sm placeholder:text-[#AFAFAF] disabled:opacity-50 2xl:text-base placeholder:2xl:text-base"
+            className="flex-1 bg-transparent pl-3 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 disabled:opacity-50 2xl:text-base placeholder:2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
             style={{ minWidth: '120px' }}
           />
         </div>
@@ -242,7 +242,7 @@ const TagInput = ({
             {tagSuggestions?.map((item, idx) => (
               <div
                 key={idx}
-                className={`cursor-pointer rounded-[47px] bg-[#373637] px-5 py-1.5 text-sm whitespace-nowrap text-white hover:bg-gray-400/30 2xl:text-base ${
+                className={`cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white ${
                   values.includes(item) ? 'cursor-not-allowed opacity-50' : ''
                 }`}
                 onClick={() => handleTagSuggestionClick(item)}
@@ -495,7 +495,7 @@ export default function BrandForm({ onComplete }) {
           className={`group mb-1.5 flex items-center gap-1 rounded-full px-4 py-2.5 text-xs font-medium backdrop-blur-md transition-all duration-300 hover:shadow-lg 2xl:gap-2 2xl:text-sm ${
             isResetDisabled
               ? 'cursor-not-allowed bg-transparent text-gray-500 opacity-50'
-              : 'text-gray-300 hover:bg-[#1A1A1A] hover:text-white'
+              : 'text-gray-500 hover:bg-black/5 hover:text-black dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white'
           }`}
           title={isResetDisabled ? 'No values to reset' : 'Reset Form'}
           disabled={isResetDisabled}
@@ -510,17 +510,17 @@ export default function BrandForm({ onComplete }) {
 
         {/* Reset Confirmation Dialog */}
         <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-          <DialogContent className="z-[9999] flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[24px] border-none !bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-6 shadow-2xl shadow-orange-500/10 !backdrop-blur-[100px] sm:p-8">
+          <DialogContent className="z-[9999] flex w-full !max-w-[380px] flex-col overflow-x-hidden rounded-[24px] border-none !bg-gradient-to-b from-white to-gray-50 p-6 shadow-2xl shadow-orange-500/10 !backdrop-blur-[100px] sm:p-8 dark:from-[#1A1A1A] dark:to-[#0D0D0D]">
             <div className="mb-4 flex flex-col items-center justify-center space-y-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-orange-500/20 to-orange-600/20">
                 <AlertTriangle className="h-7 w-7 text-orange-500" />
               </div>
-              <DialogTitle className="text-center text-xl font-semibold text-white">
+              <DialogTitle className="text-center text-xl font-semibold text-gray-900 dark:text-white">
                 Reset Form?
               </DialogTitle>
             </div>
 
-            <DialogDescription className="text-center text-[#CCCCCC]">
+            <DialogDescription className="text-center text-gray-500 dark:text-[#CCCCCC]">
               <p>Are you sure you want to reset all fields?</p>
               {/* <ul className="mt-3 space-y-1 text-sm">
                 <li className="flex items-center gap-2">
@@ -553,7 +553,7 @@ export default function BrandForm({ onComplete }) {
                   onClick={() => {
                     setResetDialogOpen(false);
                   }}
-                  className="flex-1 rounded-xl bg-[#2A2A2A] px-6 py-2.5 text-sm font-medium text-gray-300 transition-all hover:bg-[#3A3A3A] hover:text-white"
+                  className="flex-1 rounded-xl bg-gray-50 px-6 py-2.5 text-sm font-medium text-gray-500 transition-all hover:bg-black/5 hover:text-black dark:bg-[#2A2A2A] dark:text-gray-300 dark:hover:bg-[#3A3A3A] dark:hover:text-white"
                   disabled={isResetting}
                 >
                   Cancel
@@ -585,9 +585,9 @@ export default function BrandForm({ onComplete }) {
       initial={{ opacity: 0, y: 25, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25 }}
-      className="relative z-10 text-white"
+      className="relative z-10 text-gray-900 dark:text-white"
     >
-      <h2 className="mb-5 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+      <h2 className="mb-5 text-center text-xl font-semibold text-gray-900 2xl:text-[23px] dark:text-white">
         Brand Information
       </h2>
 
@@ -630,7 +630,7 @@ export default function BrandForm({ onComplete }) {
                 <div className="flex flex-col">
                   {/* BRAND NAME */}
                   <div className="flex items-center justify-between">
-                    <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                    <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                       Brand Name *
                     </label>
                     <ResetButton disabled={isFormSubmitting} hasValues={hasValues} />
@@ -647,13 +647,13 @@ export default function BrandForm({ onComplete }) {
 
                 {/* DESCRIPTION */}
                 <div className="flex flex-col">
-                  <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                  <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                     Brand Description *
                   </label>
                   <Field
                     as="textarea"
                     name="brandDescription"
-                    className={`max-h-20 w-full resize-none rounded-[20px] border border-white/10 bg-[#383838]/50 px-[18px] py-3 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:max-h-[91px] 2xl:text-base placeholder:2xl:text-base ${errors.brandDescription && touched.brandDescription ? 'border-red-500' : ''}`}
+                    className={`max-h-20 w-full resize-none rounded-[20px] border border-black/10 bg-gray-100 px-[18px] py-3 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:max-h-[91px] 2xl:text-base placeholder:2xl:text-base dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandDescription && touched.brandDescription ? 'border-red-500' : ''}`}
                     placeholder="Briefly describe your brand including key features."
                     rows={3}
                     disabled={isFormSubmitting}
@@ -673,7 +673,7 @@ export default function BrandForm({ onComplete }) {
                 <div className="grid grid-cols-1 gap-x-7 gap-y-5 sm:grid-cols-2">
                   {/* BRAND LOGO */}
                   <div className="flex flex-col">
-                    <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                    <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                       Brand Logos
                     </label>
                     <FieldArray
@@ -681,9 +681,9 @@ export default function BrandForm({ onComplete }) {
                       render={(helpers) => (
                         <>
                           <div className="input-gradient-border">
-                            <div className="backdrop-blur-100 flex h-9 w-full items-center justify-between rounded-full bg-[#383838]/50 p-1 2xl:h-[49px]">
+                            <div className="backdrop-blur-100 flex h-9 w-full items-center justify-between rounded-full bg-gray-100 p-1 2xl:h-[49px] dark:bg-[#383838]/50">
                               <div
-                                className={`flex h-full cursor-pointer items-center gap-1 rounded-full bg-white/20 px-4 transition-colors hover:bg-[#454545] ${
+                                className={`flex h-full cursor-pointer items-center gap-1 rounded-full bg-black/5 px-4 transition-colors hover:bg-black/10 dark:bg-white/20 dark:hover:bg-[#454545] ${
                                   Object.values(uploadingLogos).some(Boolean)
                                     ? 'cursor-not-allowed opacity-50'
                                     : ''
@@ -705,8 +705,8 @@ export default function BrandForm({ onComplete }) {
                                   picker.click();
                                 }}
                               >
-                                <CloudUpload className="h-3.5 w-3.5 text-white 2xl:h-4 2xl:w-4" />
-                                <span className="text-xs font-normal text-white 2xl:text-sm">
+                                <CloudUpload className="h-3.5 w-3.5 text-gray-900 2xl:h-4 2xl:w-4 dark:text-white" />
+                                <span className="text-xs font-normal text-gray-900 2xl:text-sm dark:text-white">
                                   Choose file
                                 </span>
                               </div>
@@ -721,7 +721,7 @@ export default function BrandForm({ onComplete }) {
                                   return (
                                     <div
                                       key={idx}
-                                      className="relative h-16 min-w-fit rounded-lg border border-white/10 shadow-md"
+                                      className="relative h-16 min-w-fit rounded-lg border border-black/10 shadow-md dark:border-white/10"
                                     >
                                       <img
                                         src={logo}
@@ -762,11 +762,11 @@ export default function BrandForm({ onComplete }) {
 
                   {/* CATEGORY */}
                   <div className="flex flex-col">
-                    <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">Category</label>
+                    <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">Category</label>
                     <div className="input-gradient-border">
                       <Field
                         name="category"
-                        className={`h-9 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base ${errors.category && touched.category ? 'border-red-500' : ''}`}
+                        className={`h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.category && touched.category ? 'border-red-500' : ''}`}
                         placeholder="Enter Category"
                         disabled={isFormSubmitting}
                       />
@@ -779,12 +779,12 @@ export default function BrandForm({ onComplete }) {
 
                 {/* GUIDELINES */}
                 <div className="">
-                  <h3 className="my-2 mt-5 text-lg text-white 2xl:text-[21px]">Brand Guidelines</h3>
+                  <h3 className="my-2 mt-5 text-lg text-gray-900 2xl:text-[21px] dark:text-white">Brand Guidelines</h3>
 
                   <div className="grid grid-cols-1 gap-x-7 gap-y-4 sm:grid-cols-2">
                     {/* BRAND VOICE */}
                     <div className="flex flex-col">
-                      <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Brand Voice *
                       </label>
                       <TagInput
@@ -818,13 +818,13 @@ export default function BrandForm({ onComplete }) {
 
                     {/* TONE OF VOICE */}
                     <div className="flex flex-col">
-                      <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Tone of Voice
                       </label>
                       <div className="input-gradient-border">
                         <Field
                           name="brandGuidelines.toneOfVoice"
-                          className={`h-9 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base ${errors.brandGuidelines?.toneOfVoice && touched.brandGuidelines?.toneOfVoice ? 'border-red-500' : ''}`}
+                          className={`h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandGuidelines?.toneOfVoice && touched.brandGuidelines?.toneOfVoice ? 'border-red-500' : ''}`}
                           placeholder="Choose your brand tone"
                           disabled={isFormSubmitting}
                         />
@@ -834,7 +834,7 @@ export default function BrandForm({ onComplete }) {
                           {toneOfVoiceTags?.map((item, idx) => (
                             <div
                               key={idx}
-                              className="cursor-pointer rounded-[47px] bg-[#373637] px-5 py-1.5 text-sm whitespace-nowrap text-white hover:bg-gray-400/30 2xl:text-base"
+                              className="cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white"
                               onClick={() => {
                                 if (!isFormSubmitting) {
                                   setFieldValue('brandGuidelines.toneOfVoice', item);
@@ -853,7 +853,7 @@ export default function BrandForm({ onComplete }) {
 
                     {/* DOs */}
                     <div className="flex flex-col">
-                      <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">Do's *</label>
+                      <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">Do's *</label>
                       <TagInput
                         name="brandGuidelines.dos"
                         values={values.brandGuidelines.dos}
@@ -884,7 +884,7 @@ export default function BrandForm({ onComplete }) {
 
                     {/* DON'Ts */}
                     <div className="flex flex-col">
-                      <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Don'ts *
                       </label>
                       <TagInput
@@ -917,7 +917,7 @@ export default function BrandForm({ onComplete }) {
 
                   {/* COLOR PALETTE */}
                   <div className="mt-3 flex flex-col">
-                    <label className="mb-2 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                    <label className="mb-2 text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                       Color Palette *
                     </label>
                     <FieldArray
@@ -934,7 +934,7 @@ export default function BrandForm({ onComplete }) {
                                   <PopoverTrigger asChild>
                                     <button
                                       type="button"
-                                      className="h-10 w-10 overflow-hidden rounded-lg border border-white/10 shadow-sm transition-transform hover:scale-105 focus:ring-2 focus:ring-white/20 focus:outline-none"
+                                      className="h-10 w-10 overflow-hidden rounded-lg border border-black/10 shadow-sm transition-transform hover:scale-105 focus:ring-2 focus:ring-white/20 focus:outline-none dark:border-white/10"
                                       style={{ backgroundColor: color || '#383838' }}
                                     />
                                   </PopoverTrigger>
@@ -956,7 +956,7 @@ export default function BrandForm({ onComplete }) {
                                 </Popover>
                                 <button
                                   type="button"
-                                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-600 bg-zinc-800 text-zinc-400 opacity-100 shadow-md transition-colors group-hover:opacity-100 hover:border-red-500 hover:bg-red-500/80 hover:text-white md:opacity-0"
+                                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-black/10 bg-gray-100 text-zinc-400 opacity-100 shadow-md transition-colors group-hover:opacity-100 hover:border-red-500 hover:bg-red-500/80 hover:text-white md:opacity-0 dark:border-zinc-600 dark:bg-zinc-800"
                                   onClick={() => helpers.remove(idx)}
                                   disabled={isFormSubmitting}
                                 >
@@ -968,7 +968,7 @@ export default function BrandForm({ onComplete }) {
                               <button
                                 type="button"
                                 onClick={() => setShowAllColors(true)}
-                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#383838] text-xs text-white hover:bg-[#454545]"
+                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-black/10 bg-gray-100 text-xs text-gray-900 hover:bg-black/5 dark:border-white/10 dark:bg-[#383838] dark:text-white dark:hover:bg-[#454545]"
                               >
                                 +{hiddenCount}
                               </button>
@@ -984,10 +984,10 @@ export default function BrandForm({ onComplete }) {
                                 }}
                               >
                                 <PopoverTrigger asChild>
-                                  <div className="ml-1 h-fit rounded-[10px] bg-gradient-to-br from-white/40 to-white/10 p-[0.7px] 2xl:p-[1px]">
+                                  <div className="ml-1 h-fit rounded-[10px] bg-gradient-to-br from-black/20 to-black/5 p-[0.7px] 2xl:p-[1px] dark:from-white/40 dark:to-white/10">
                                     <button
                                       type="button"
-                                      className="m-0 flex min-h-9 min-w-9 items-center justify-center rounded-[10px] bg-[#333440] text-[#AAAAAA] transition-all hover:text-white"
+                                      className="m-0 flex min-h-9 min-w-9 items-center justify-center rounded-[10px] bg-gray-100 text-gray-500 transition-all hover:text-black dark:bg-[#333440] dark:text-[#AAAAAA] dark:hover:text-white"
                                       disabled={isFormSubmitting}
                                     >
                                       <Plus className="h-6 w-6" />
@@ -1038,7 +1038,7 @@ export default function BrandForm({ onComplete }) {
                     isFormSubmitting ||
                     (productionAndServices?.status == 'success' && results?.status != 'success')
                   }
-                  className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base dark:bg-white dark:text-black"
                 >
                   {isFormSubmitting ? (
                     <div className="flex items-center gap-2">

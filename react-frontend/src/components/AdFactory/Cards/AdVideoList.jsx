@@ -35,11 +35,11 @@ export const AdVideoList = () => {
             className={`cursor-pointer rounded-xl bg-gradient-to-r p-[1px] transition ${
               selected === index
                 ? 'from-[#02C8C4] to-[#5867EB] p-[3px]'
-                : 'from-white/10 to-white/10 hover:from-[#02C8C4]/30 hover:to-[#5867EB]/30'
+                : 'from-black/5 to-black/5 hover:from-[#02C8C4]/30 hover:to-[#5867EB]/30 dark:from-white/10 dark:to-white/10'
             } `}
             onClick={() => setSelected(index)}
           >
-            <div className="relative overflow-hidden rounded-xl bg-[#292929] transition">
+            <div className="relative overflow-hidden rounded-xl bg-gray-50 transition dark:bg-[#292929]">
               <div className="relative h-full w-full">
                 <img src={item.image} alt={item.title} className="w-full object-cover" />
                 <button className="absolute top-1/2 left-1/2 flex min-h-16 min-w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white bg-white/20 backdrop-blur-sm">
@@ -48,10 +48,10 @@ export const AdVideoList = () => {
               </div>
 
               <div className="p-5">
-                <p className="mb-1 text-[18px] font-bold text-white">{item.title}</p>
+                <p className="mb-1 text-[18px] font-bold text-gray-900 dark:text-white">{item.title}</p>
 
-                <p className="text-xs text-[#BEBEBE]">
-                  {item.description} <span className="text-white">Read More</span>
+                <p className="text-xs text-gray-500 dark:text-[#BEBEBE]">
+                  {item.description} <span className="text-gray-900 dark:text-white">Read More</span>
                 </p>
               </div>
             </div>

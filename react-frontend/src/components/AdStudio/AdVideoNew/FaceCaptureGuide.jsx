@@ -291,16 +291,16 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
           {onBack && (
             <button
               onClick={onBack}
-              className="group rounded-full bg-[#1c1c1c] p-2 transition-colors hover:bg-neutral-800 sm:p-2.5"
+              className="group rounded-full bg-gray-100 p-2 transition-colors hover:bg-black/5 sm:p-2.5 dark:bg-[#1c1c1c] dark:hover:bg-neutral-800"
             >
-              <ArrowLeft className="text-white" size={20} strokeWidth={2.5} />
+              <ArrowLeft className="text-gray-900 dark:text-white" size={20} strokeWidth={2.5} />
             </button>
           )}
-          <h1 className="text-[17px] font-semibold text-white sm:text-lg 2xl:text-2xl">
+          <h1 className="text-[17px] font-semibold text-gray-900 sm:text-lg 2xl:text-2xl dark:text-white">
             Move your face from left to right
           </h1>
         </div>
-        <p className="2xl:text-15 -mt-3 ml-0 text-sm text-[#AFAFAF] sm:ml-12 2xl:-mt-2">
+        <p className="2xl:text-15 -mt-3 ml-0 text-sm text-gray-500 sm:ml-12 2xl:-mt-2 dark:text-[#AFAFAF]">
           Add three photos: left, center, and right for Avatar Generation
         </p>
 
@@ -318,7 +318,7 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
                       ? 'border-green-500/50 bg-green-500/10 text-green-400'
                       : isCurrent
                         ? 'border-blue-500/50 bg-blue-500/10 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
-                        : 'border-white/5 bg-white/5 text-neutral-600'
+                        : 'border-black/10 bg-black/5 text-neutral-400 dark:border-white/5 dark:bg-white/5 dark:text-neutral-600'
                   }`}
                 >
                   {isCaptured ? (
@@ -335,7 +335,7 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
                         ? 'text-blue-400'
                         : isCaptured
                           ? 'text-green-500/70'
-                          : 'text-neutral-600'
+                          : 'text-neutral-400 dark:text-neutral-600'
                     }`}
                   >
                     Step 0{idx + 1}
@@ -343,17 +343,17 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
                   <span
                     className={`text-xs font-semibold whitespace-nowrap sm:text-sm ${
                       isCurrent
-                        ? 'text-white'
+                        ? 'text-gray-900 dark:text-white'
                         : isCaptured
-                          ? 'text-neutral-300'
-                          : 'text-neutral-500'
+                          ? 'text-neutral-600 dark:text-neutral-300'
+                          : 'text-neutral-500 dark:text-neutral-500'
                     }`}
                   >
                     {angle.label}
                   </span>
                 </div>
                 {idx < ANGLES.length - 1 && (
-                  <div className="mx-1 h-px w-4 bg-white/10 sm:mx-2 sm:w-6" />
+                  <div className="mx-1 h-px w-4 bg-black/10 sm:mx-2 sm:w-6 dark:bg-white/10" />
                 )}
               </div>
             );
@@ -541,7 +541,7 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
             {allCaptured && (
               <button
                 onClick={resetAll}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-[#1c1c1c] px-5 py-3 text-sm font-medium text-white transition-all hover:bg-neutral-800 2xl:px-8 2xl:py-3.5"
+                className="flex items-center gap-2 rounded-full border border-black/10 bg-gray-100 px-5 py-3 text-sm font-medium text-gray-900 transition-all hover:bg-black/5 2xl:px-8 2xl:py-3.5 dark:border-white/10 dark:bg-[#1c1c1c] dark:text-white dark:hover:bg-neutral-800"
               >
                 <RotateCcw className="size-3.5" strokeWidth={2.5} />
                 <span>Start Over</span>
@@ -551,8 +551,8 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
               disabled={!allCaptured}
               className={`flex items-center justify-center rounded-full p-2 transition-all duration-300 ${
                 allCaptured
-                  ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:bg-neutral-200'
-                  : 'cursor-not-allowed bg-[#1c1c1c] text-neutral-600 opacity-50'
+                  ? 'bg-gray-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:shadow-[0_0_20px_rgba(255,255,255,0.3)] dark:hover:bg-neutral-200'
+                  : 'cursor-not-allowed bg-gray-100 text-neutral-400 opacity-50 dark:bg-[#1c1c1c] dark:text-neutral-600'
               }`}
               onClick={() => onSubmit && onSubmit(captures)}
             >

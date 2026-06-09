@@ -22,7 +22,7 @@ import 'react-date-range/dist/theme/default.css';
 // ─── containers ────────────────────────────────────────────────────────────
 export const Section = ({ children, className = '' }) => (
   <section
-    className={`rounded-2xl border border-white/10 bg-[#14181D] p-4 backdrop-blur-xl 2xl:p-5 ${className}`}
+    className={`rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D] 2xl:p-5 ${className}`}
   >
     {children}
   </section>
@@ -31,8 +31,8 @@ export const Section = ({ children, className = '' }) => (
 export const SectionHeader = ({ title, subtitle, right }) => (
   <div className="mb-3 flex items-start justify-between gap-3">
     <div className="flex-1">
-      <h3 className="text-base font-bold text-white 2xl:text-lg">{title}</h3>
-      {subtitle && <p className="mt-1 text-13 text-white/70 2xl:text-sm">{subtitle}</p>}
+      <h3 className="text-base font-bold text-gray-900 dark:text-white 2xl:text-lg">{title}</h3>
+      {subtitle && <p className="mt-1 text-13 text-gray-500 dark:text-white/70 2xl:text-sm">{subtitle}</p>}
     </div>
     {right}
   </div>
@@ -68,7 +68,7 @@ export const SecondaryButton = ({
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur-xl transition-all hover:border-white/20 hover:text-white disabled:opacity-50 2xl:px-3.5 2xl:py-2 2xl:text-13 ${className}`}
+    className={`flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/20 dark:hover:text-white 2xl:px-3.5 2xl:py-2 2xl:text-13 ${className}`}
   >
     {children}
   </button>
@@ -78,17 +78,17 @@ export const SecondaryButton = ({
 export const DarkInput = (props) => (
   <input
     {...props}
-    className={`h-9 w-full rounded-xl border border-white/12 bg-white/[0.06] px-3 text-xs text-white placeholder:text-white/45 focus:border-[#15DCFF]/40 focus:bg-white/[0.08] focus:outline-none disabled:opacity-50 2xl:h-10 2xl:px-3.5 2xl:text-13 ${props.className || ''}`}
+    className={`h-9 w-full rounded-xl border border-gray-300 bg-gray-100 px-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:bg-gray-50 focus:outline-none disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-white/45 dark:focus:bg-white/[0.08] 2xl:h-10 2xl:px-3.5 2xl:text-13 ${props.className || ''}`}
   />
 );
 
 export const Field = ({ label, hint, children }) => (
   <div className="flex flex-col gap-1.5">
-    <label className="text-10 font-medium uppercase tracking-wider text-white/60 2xl:text-[11px]">
+    <label className="text-10 font-medium uppercase tracking-wider text-gray-500 dark:text-white/60 2xl:text-[11px]">
       {label}
     </label>
     {children}
-    {hint && <p className="text-10 leading-relaxed text-white/60 2xl:text-[11px]">{hint}</p>}
+    {hint && <p className="text-10 leading-relaxed text-gray-500 dark:text-white/60 2xl:text-[11px]">{hint}</p>}
   </div>
 );
 
@@ -97,7 +97,7 @@ export const CheckboxBox = ({ checked, disabled }) => (
     className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
       checked
         ? 'border-[#15DCFF] bg-[#15DCFF]'
-        : 'border-white/20 bg-transparent'
+        : 'border-gray-300 bg-transparent dark:border-white/20'
     } ${disabled ? 'opacity-50' : ''}`}
   >
     {checked && <Check className="h-3 w-3 text-black" strokeWidth={3} />}
@@ -108,12 +108,12 @@ export const CheckboxBox = ({ checked, disabled }) => (
 export const Banner = ({ variant = 'info', children, className = '' }) => {
   const cls =
     variant === 'success'
-      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
       : variant === 'warn'
-        ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
         : variant === 'error'
-          ? 'border-red-500/30 bg-red-500/10 text-red-400'
-          : 'border-white/6 bg-white/2 text-white/70';
+          ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+          : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-white/6 dark:bg-white/2 dark:text-white/70';
   return (
     <div className={`rounded-xl border p-2.5 text-xs 2xl:p-3 2xl:text-13 ${cls} ${className}`}>
       {children}
@@ -130,10 +130,10 @@ export const SeverityBadge = ({ severity }) => {
   // semantic; low-severity is informational, not positive.
   const cls =
     severity === 'high' || severity === 'critical'
-      ? 'border-red-500/30 bg-red-500/10 text-red-400'
+      ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
       : severity === 'medium' || severity === 'warning'
-        ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-        : 'border-sky-500/30 bg-sky-500/10 text-sky-400';
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+        : 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400';
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-10 font-bold uppercase tracking-wide ${cls}`}
@@ -145,7 +145,7 @@ export const SeverityBadge = ({ severity }) => {
 
 // ─── code span (for env vars / collection names in copy) ───────────────────
 export const CodeSpan = ({ children }) => (
-  <code className="rounded bg-white/5 px-1 text-[11px] text-white/70">
+  <code className="rounded bg-gray-100 px-1 text-[11px] text-gray-700 dark:bg-white/5 dark:text-white/70">
     {children}
   </code>
 );
@@ -153,7 +153,7 @@ export const CodeSpan = ({ children }) => (
 // ─── tiny inline spinner ───────────────────────────────────────────────────
 export const InlineSpinner = ({ className = '' }) => (
   <div className={`relative h-4 w-4 ${className}`}>
-    <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+    <div className="absolute inset-0 rounded-full border-2 border-gray-200 dark:border-white/10" />
     <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#15DCFF]" />
   </div>
 );
@@ -178,7 +178,7 @@ export const Switch = ({ checked, onChange, disabled, size = 'md', ariaLabel }) 
       }}
       disabled={disabled}
       className={`relative inline-flex shrink-0 items-center rounded-full transition-colors ${dims.w} ${dims.h} ${
-        checked ? 'bg-[#15DCFF]' : 'bg-white/15'
+        checked ? 'bg-[#15DCFF]' : 'bg-gray-300 dark:bg-white/15'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <span
@@ -215,25 +215,25 @@ export const CollapsibleCard = ({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div
-      className={`relative rounded-2xl border bg-[#14181D] transition-colors focus-within:z-50 ${
+      className={`relative rounded-2xl border bg-white transition-colors focus-within:z-50 dark:bg-[#14181D] ${
         open ? 'z-30' : ''
       } ${
         warn
           ? 'border-amber-500/30'
           : open
-            ? 'border-white/14'
-            : 'border-white/10'
+            ? 'border-gray-300 dark:border-white/14'
+            : 'border-gray-200 dark:border-white/10'
       }`}
     >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-all hover:bg-white/4 2xl:px-5 2xl:py-3.5"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 dark:hover:bg-white/4 2xl:px-5 2xl:py-3.5"
       >
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="min-w-0 truncate text-sm font-bold text-white 2xl:text-15">{title}</span>
+          <span className="min-w-0 truncate text-sm font-bold text-gray-900 dark:text-white 2xl:text-15">{title}</span>
           {subtitle && (
-            <span className="hidden text-10 uppercase tracking-wider text-white/55 sm:inline 2xl:text-[11px]">
+            <span className="hidden text-10 uppercase tracking-wider text-gray-500 dark:text-white/55 sm:inline 2xl:text-[11px]">
               {subtitle}
             </span>
           )}
@@ -242,21 +242,21 @@ export const CollapsibleCard = ({
           {!open && preview && (
             <span
               className={`hidden min-w-0 truncate text-xs sm:inline-block 2xl:text-13 ${
-                warn ? 'text-amber-400' : 'text-white/70'
+                warn ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-white/70'
               }`}
             >
               {preview}
             </span>
           )}
           <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 text-white/70 transition-transform 2xl:h-4 2xl:w-4 ${
+            className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform dark:text-white/70 2xl:h-4 2xl:w-4 ${
               open ? 'rotate-180' : ''
             }`}
           />
         </div>
       </button>
       {open && (
-        <div className="border-t border-white/10 p-4 2xl:p-5">{children}</div>
+        <div className="border-t border-gray-200 p-4 dark:border-white/10 2xl:p-5">{children}</div>
       )}
     </div>
   );
@@ -323,7 +323,7 @@ export const InfoTip = ({ text, className = '' }) => {
       onMouseLeave={() => setOpen(false)}
       onClick={(e) => e.stopPropagation()}
     >
-      <Info className="h-3.5 w-3.5 cursor-help text-white/55 hover:text-white/85 2xl:h-4 2xl:w-4" />
+      <Info className="h-3.5 w-3.5 cursor-help text-gray-400 hover:text-gray-600 dark:text-white/55 dark:hover:text-white/85 2xl:h-4 2xl:w-4" />
       {open && pos
         ? createPortal(
             <span
@@ -334,7 +334,7 @@ export const InfoTip = ({ text, className = '' }) => {
                 left: pos.left,
                 width: 220,
               }}
-              className="pointer-events-none z-[9999] rounded-md border border-white/12 bg-[#161B22] px-2 py-1.5 text-[10px] leading-snug font-normal whitespace-normal text-white/80 shadow-xl"
+              className="pointer-events-none z-[9999] rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[10px] leading-snug font-normal whitespace-normal text-gray-700 shadow-xl dark:border-white/12 dark:bg-[#161B22] dark:text-white/80"
             >
               {text}
             </span>,
@@ -424,7 +424,7 @@ export const DateRangeFilter = ({ from, to, onChange }) => {
         <button
           type="button"
           className={cn(
-            'inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/6 px-3 text-xs text-white transition-all hover:border-white/20 hover:bg-white/9 2xl:h-10 2xl:text-13',
+            'inline-flex h-9 items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 text-xs text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-200 dark:border-white/10 dark:bg-white/6 dark:text-white dark:hover:border-white/20 dark:hover:bg-white/9 2xl:h-10 2xl:text-13',
             hasRange &&
               !isDefault &&
               'border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]',
@@ -432,7 +432,7 @@ export const DateRangeFilter = ({ from, to, onChange }) => {
         >
           <CalendarIcon
             className={cn(
-              'h-3.5 w-3.5 text-white/70 2xl:h-4 2xl:w-4',
+              'h-3.5 w-3.5 text-gray-500 dark:text-white/70 2xl:h-4 2xl:w-4',
               hasRange && !isDefault && 'text-[#15DCFF]',
             )}
           />
@@ -450,11 +450,11 @@ export const DateRangeFilter = ({ from, to, onChange }) => {
               clear
             </span>
           )}
-          <ChevronDown className="h-3 w-3 shrink-0 text-white/50 2xl:h-3.5 2xl:w-3.5" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/50 2xl:h-3.5 2xl:w-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto overflow-hidden rounded-2xl border border-white/10 bg-[#14181D] p-0 shadow-2xl backdrop-blur-xl"
+        className="w-auto overflow-hidden rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]"
         align="end"
       >
         <div className="date-range-picker-dark p-1">
@@ -473,7 +473,7 @@ export const DateRangeFilter = ({ from, to, onChange }) => {
             direction="horizontal"
             rangeColors={['#15DCFF']}
             color="#15DCFF"
-            className="bg-transparent text-white"
+            className="bg-transparent text-gray-900 dark:text-white"
             maxDate={new Date()}
           />
         </div>

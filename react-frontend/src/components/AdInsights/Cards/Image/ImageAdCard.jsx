@@ -62,7 +62,7 @@ const ImageAdCard = ({
         description: description,
         ad: ad ? { ...ad, activeIndex } : {},
       };
-      dispatch(setActiveAdStudioTab('adCreative'));
+      dispatch(setActiveAdStudioTab('adCreativeNew'));
       dispatch(addImage(newImage));
       dispatch(createNewSession({ tab: 'adCreative' }));
       dispatch(resetAdCreativeSlice());

@@ -17,6 +17,7 @@ const {
   getCell,
   isCellImplemented,
   listObjectives,
+  getAllowedBillingEvents,
 } = require("../config/wizardSchema");
 
 // Bid strategies are objective-agnostic in MVP — V2 inherits the V1 list.
@@ -50,6 +51,21 @@ const SPECIAL_AD_CATEGORIES = [
 
 const MOBILE_APP_STORES = ["APPLE_APP_STORE", "GOOGLE_PLAY"];
 
+// Sanity ceilings for money fields, in minor currency units. These are NOT
+// Meta's hard limits (Meta varies by account / currency / cell and doesn't
+// publish them cleanly) — they're typo-guards. A user fat-fingering
+// 999,999,999,999 in the spend-cap box should fail at our layer with a
+// clear message, not get a vague Meta rejection at launch.
+//
+// Values picked vs. INR (the dominant currency on this platform), but they
+// work as a universal typo-floor in other currencies too — USD 10M daily
+// or EUR 10M daily is also clearly a typo.
+//
+//   DAILY  = ₹1 crore   (1e9 paise)  — daily / per-bid ceiling
+//   TOTAL  = ₹10 crore  (1e10 paise) — lifetime / spend-cap ceiling
+const BUDGET_DAILY_MAX_MINOR = 1_000_000_000;
+const BUDGET_TOTAL_MAX_MINOR = 10_000_000_000;
+
 // ─── Campaign schema ─────────────────────────────────────────────────────────
 // V2 campaigns accept only the 3 objectives currently implemented in
 // the schema. Other objectives flow through V1.
@@ -78,15 +94,16 @@ const createCampaignSchemaV2 = Joi.object({
     .default([]),
   // CBO (Campaign Budget Optimisation) — when set, AdSets cannot define
   // their own budget. Both values are in the account's minor currency
-  // unit. Mutually exclusive (enforced below).
-  dailyBudget: Joi.number().integer().min(100).optional(),
-  lifetimeBudget: Joi.number().integer().min(100).optional(),
+  // unit. Mutually exclusive (enforced below). Upper bound is a typo-
+  // guard, not Meta's hard limit — see BUDGET_*_MAX_MINOR above.
+  dailyBudget: Joi.number().integer().min(100).max(BUDGET_DAILY_MAX_MINOR).optional(),
+  lifetimeBudget: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
   bidStrategy: Joi.string()
     .valid(...V2_BID_STRATEGIES)
     .optional(),
   // Optional cap on TOTAL campaign spend in minor currency units. Maps
   // to Meta's `spend_cap` field. Once reached, campaign auto-pauses.
-  spendCap: Joi.number().integer().min(100).optional(),
+  spendCap: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
   // iOS 14.5+ delivery flag — App Promotion only. Without this, Apple's
   // ATT framework blocks Meta from delivering to iOS 14.5+ users. When
   // true, the campaign uses SKAdNetwork-aware attribution and Meta's
@@ -170,9 +187,9 @@ const updateCampaignSchemaV2 = Joi.object({
   adAccountId: Joi.string().required(),
   campaignId: Joi.string().required(),
   name: Joi.string().min(2).max(120).optional(),
-  dailyBudget: Joi.number().integer().min(100).optional(),
-  lifetimeBudget: Joi.number().integer().min(100).optional(),
-  spendCap: Joi.number().integer().min(100).optional(),
+  dailyBudget: Joi.number().integer().min(100).max(BUDGET_DAILY_MAX_MINOR).optional(),
+  lifetimeBudget: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
+  spendCap: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
   // Immutable post-creation — reject so a stale/edited client can't try.
   objective: Joi.any().forbidden().messages({
     "any.unknown": "A campaign's objective can't be changed after creation.",
@@ -239,8 +256,10 @@ const targetingSchemaV2 = Joi.object({
     )
     .default([]),
   worldwide: Joi.boolean().default(false),
-  ageMin: Joi.number().integer().min(13).max(65).default(18),
-  ageMax: Joi.number().integer().min(13).max(65).default(65),
+  // Floor raised to 18 (was 13) — product decision to never target minors.
+  // Meta's API accepts 13–65; the 18 floor is enforced at our layer.
+  ageMin: Joi.number().integer().min(18).max(65).default(18),
+  ageMax: Joi.number().integer().min(18).max(65).default(65),
   genders: Joi.array().items(Joi.number().valid(1, 2)).default([]),
   locales: Joi.array().items(Joi.number().integer()).default([]),
   advantageAudience: Joi.boolean().default(true),
@@ -264,9 +283,9 @@ const updateAdSetSchemaV2 = Joi.object({
   adAccountId: Joi.string().required(),
   adSetId: Joi.string().required(),
   name: Joi.string().min(2).max(120).optional(),
-  dailyBudget: Joi.number().integer().min(100).optional(),
-  lifetimeBudget: Joi.number().integer().min(100).optional(),
-  bidAmount: Joi.number().integer().min(1).optional(),
+  dailyBudget: Joi.number().integer().min(100).max(BUDGET_DAILY_MAX_MINOR).optional(),
+  lifetimeBudget: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
+  bidAmount: Joi.number().integer().min(1).max(BUDGET_DAILY_MAX_MINOR).optional(),
   targeting: targetingSchemaV2.optional(),
   startTime: Joi.date().iso().optional(),
   endTime: Joi.date().iso().optional(),
@@ -334,8 +353,9 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
     // Budget — mutually exclusive AND only valid when the campaign is
     // NOT using CBO. Cross-field check at the controller level (V2 has
     // the campaign context); Joi here only enforces the mutual exclusion.
-    dailyBudget: Joi.number().integer().min(100).optional(),
-    lifetimeBudget: Joi.number().integer().min(100).optional(),
+    // Upper bound is a typo-guard, see BUDGET_*_MAX_MINOR above.
+    dailyBudget: Joi.number().integer().min(100).max(BUDGET_DAILY_MAX_MINOR).optional(),
+    lifetimeBudget: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
     // NOTE — ad-set min/max daily spend (`daily_min_spend_target` /
     // `daily_spend_cap`) is intentionally NOT accepted. It only does
     // something with MULTIPLE ad sets per campaign; the V2 wizard creates
@@ -370,7 +390,7 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
     bidStrategy: Joi.string()
       .valid(...V2_BID_STRATEGIES)
       .default("LOWEST_COST_WITHOUT_CAP"),
-    bidAmount: Joi.number().integer().min(1).optional(),
+    bidAmount: Joi.number().integer().min(1).max(BUDGET_DAILY_MAX_MINOR).optional(),
 
     startTime: Joi.date().iso().optional(),
     endTime: Joi.date().iso().optional(),
@@ -447,6 +467,19 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
       return helpers.error("any.invalid", {
         message:
           "Add at least one location, enable Worldwide, or supply savedAudienceId",
+      });
+    }
+    // Optimisation goal ↔ billing event compatibility — Meta rejects
+    // mismatched pairs with subcode 1815117. The cell's `billingEvents`
+    // array lists everything the cell COULD bill on, but only a subset
+    // applies for each goal (e.g. LINK_CLICKS billing is valid only when
+    // optimization_goal === LINK_CLICKS). Reject the mismatch here so
+    // direct API callers + stale templates can't slip past.
+    const allowedBillings = getAllowedBillingEvents(cell, value.optimizationGoal);
+    if (allowedBillings.length && !allowedBillings.includes(value.billingEvent)) {
+      return helpers.error("any.invalid", {
+        message:
+          `billingEvent '${value.billingEvent}' isn't valid for optimisation goal '${value.optimizationGoal}'. Allowed: ${allowedBillings.join(", ")}.`,
       });
     }
     // Bid strategy ↔ bid amount — validated in BOTH directions, so the
@@ -527,15 +560,20 @@ function buildAdSchemaV2(objective, conversionLocation) {
     videoId: Joi.string().optional().allow(""),
     videoThumbnailUrl: Joi.string().trim().uri().optional().allow(""),
 
+    // Copy length caps — match Meta's display-without-truncation limits
+    // for single-image / single-video ads (the only formats V2 produces
+    // today). Carousel/Stories variants will need their own shorter caps
+    // when those cells land. Mirror these in the wizard's TextField
+    // maxLength props (CreateCampaignWizardV2.jsx Ad step).
     headline: req.has("headline")
-      ? Joi.string().min(1).max(255).required()
-      : Joi.string().allow("").max(255).default(""),
+      ? Joi.string().min(1).max(40).required()
+      : Joi.string().allow("").max(40).default(""),
     primaryText: req.has("primaryText")
-      ? Joi.string().min(1).max(2000).required()
-      : Joi.string().allow("").max(2000).default(""),
+      ? Joi.string().min(1).max(125).required()
+      : Joi.string().allow("").max(125).default(""),
     description: req.has("description")
-      ? Joi.string().min(1).max(255).required()
-      : Joi.string().allow("").max(255).default(""),
+      ? Joi.string().min(1).max(30).required()
+      : Joi.string().allow("").max(30).default(""),
 
     // `.trim()` before `.uri()` so a stray space from a paste doesn't
      // sink launch with "must be a valid uri" — Joi rejects on
@@ -597,6 +635,23 @@ function buildAdSchemaV2(objective, conversionLocation) {
     if (hasImage === hasVideo) {
       return helpers.error("any.invalid", {
         message: "Provide exactly one of imageHash OR videoId (not both, not neither)",
+      });
+    }
+    // Cell-level media-kind lock. Engagement/VIDEO_VIEWS sets
+    // `cell.ad.mediaKind = 'video'` to force video creatives only — Meta
+    // rejects image creatives on THRUPLAY-optimised ad sets. Tighten the
+    // generic XOR above: image not allowed when the cell is video-only.
+    // (mediaKind defaults to 'any' on cells that don't set it.)
+    if (cell.ad.mediaKind === "video" && hasImage) {
+      return helpers.error("any.invalid", {
+        message:
+          "This cell requires a video creative — pick or upload a video instead of an image.",
+      });
+    }
+    if (cell.ad.mediaKind === "image" && hasVideo) {
+      return helpers.error("any.invalid", {
+        message:
+          "This cell requires an image creative — pick or upload an image instead of a video.",
       });
     }
     return value;

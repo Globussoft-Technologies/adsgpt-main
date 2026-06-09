@@ -140,7 +140,7 @@ const BrandCard = ({ brand }) => {
       initial="initial"
       whileInView="whileInView"
       viewport={{ once: true }}
-      className="rounded-10 backdrop-blur-100 relative overflow-hidden border border-white/20 bg-[#0D0D0D]/50 text-white"
+      className="rounded-10 backdrop-blur-100 relative overflow-hidden border border-black/10 bg-white text-gray-900 shadow-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white dark:shadow-none"
     >
       {/* Top Banner */}
       <div className="relative h-64 w-full 2xl:h-72">
@@ -182,16 +182,16 @@ const BrandCard = ({ brand }) => {
               <span className="text-sm capitalize">{brand?.name}</span>
             </ShadcnTooltip>
           </div>
-          <span className="text-10 text-[#8B8B8B]">
+          <span className="text-10 text-gray-500 dark:text-[#8B8B8B]">
             {new Date(brand?.createdAt).toLocaleDateString('en-GB')}
           </span>
         </div>
 
         {/* Description */}
-        <p className="max-h-[66px] overflow-y-auto text-xs leading-4 text-[#BEBEBE] 2xl:text-xs">
+        <p className="max-h-[66px] overflow-y-auto text-xs leading-4 text-gray-600 2xl:text-xs dark:text-[#BEBEBE]">
           {displayText}
           {shouldTruncate && (
-            <span className="ml-1 cursor-pointer text-white" onClick={toggleReadMore}>
+            <span className="ml-1 cursor-pointer text-gray-900 dark:text-white" onClick={toggleReadMore}>
               {isExpanded ? 'Read Less' : 'Read More'}
             </span>
           )}
@@ -203,7 +203,7 @@ const BrandCard = ({ brand }) => {
             {brand.targetAudiences.map((audience) => (
               <span
                 key={audience}
-                className="rounded-full border border-[#2BB8FC]/40 bg-[#2BB8FC]/10 px-2.5 py-0.5 text-[11px] text-[#7dd9f8]"
+                className="rounded-full border border-[#2BB8FC]/40 bg-[#2BB8FC]/10 px-2.5 py-0.5 text-[11px] text-[#1593c9] dark:text-[#7dd9f8]"
               >
                 {audience}
               </span>
@@ -319,9 +319,9 @@ const BrandCard = ({ brand }) => {
               href={brand?.websiteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="icon_container flex h-6 w-6 items-center justify-center rounded-md p-1 dark:bg-[#2A2A2A]"
+              className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
             >
-              <Globe className="h-[14px] w-[14px] cursor-pointer text-white/60 hover:text-white" />
+              <Globe className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
             </a>
           </ShadcnTooltip>
           {brand?.facebookUrl && (
@@ -330,9 +330,9 @@ const BrandCard = ({ brand }) => {
                 href={brand?.facebookUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md p-1 dark:bg-[#2A2A2A]"
+                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
               >
-                <Facebook className="h-[14px] w-[14px] cursor-pointer text-white/60 hover:text-white" />
+                <Facebook className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
             </ShadcnTooltip>
           )}
@@ -342,9 +342,9 @@ const BrandCard = ({ brand }) => {
                 href={brand?.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md p-1 dark:bg-[#2A2A2A]"
+                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
               >
-                <Instagram className="h-[14px] w-[14px] cursor-pointer text-white/60 hover:text-white" />
+                <Instagram className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
             </ShadcnTooltip>
           )}
@@ -354,9 +354,9 @@ const BrandCard = ({ brand }) => {
                 href={brand?.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md p-1 dark:bg-[#2A2A2A]"
+                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
               >
-                <Linkedin className="h-[14px] w-[14px] cursor-pointer text-white/60 hover:text-white" />
+                <Linkedin className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
             </ShadcnTooltip>
           )}
@@ -368,7 +368,7 @@ const BrandCard = ({ brand }) => {
           <button
             id="tour_edit_brand"
             type="button"
-            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 p-1 hover:border-white/20 hover:text-green-400 dark:bg-[#353535]/50"
+            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-black/10 bg-black/5 p-1 hover:border-black/20 hover:text-green-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-green-400"
             onClick={handleEdit}
           >
             <SquarePen className="h-[14px] w-[14px]" />
@@ -378,7 +378,7 @@ const BrandCard = ({ brand }) => {
           <button
             id="tour_delete_brand"
             type="button"
-            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 p-1 hover:border-white/20 hover:text-red-400 dark:bg-[#353535]/50"
+            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-black/10 bg-black/5 p-1 hover:border-black/20 hover:text-red-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-red-400"
             onClick={() => {
               setIsDialogOpen(true);
               dispatch(setBrandIQError(null));

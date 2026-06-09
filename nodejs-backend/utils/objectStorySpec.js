@@ -159,7 +159,14 @@ function attachCopy(data, p) {
     if (p.videoId) data.title = p.headline;
     else data.name = p.headline;
   }
-  if (p.description) data.description = p.description;
+  if (p.description) {
+    // Description field name differs by media kind. video_data rejects
+    // `description` outright (Meta subcode 1443050: "The field description
+    // is not supported in the field video_data of object_story_spec") —
+    // for videos the equivalent field is `link_description`.
+    if (p.videoId) data.link_description = p.description;
+    else data.description = p.description;
+  }
   if (p.autoTranslate) data.automatic_translation = true;
   return data;
 }

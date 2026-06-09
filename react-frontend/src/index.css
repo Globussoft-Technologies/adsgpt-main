@@ -70,7 +70,7 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background: #fcfcfc;
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
@@ -146,6 +146,43 @@
   }
   button {
     @apply cursor-pointer;
+  }
+}
+
+/* Theme cross-fade via the View Transitions API.
+   When supported, the browser snapshots the page before + after the class
+   change and cross-fades them as one image, so every surface flips in sync. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 350ms;
+  animation-timing-function: ease;
+  mix-blend-mode: normal;
+}
+
+/* While the toggle is mid-flight, freeze every per-element CSS transition
+   so the "new" snapshot the browser captures reflects the final colors,
+   not whatever Tailwind's `transition-colors` happens to be tweening. */
+html.theme-changing,
+html.theme-changing *,
+html.theme-changing *::before,
+html.theme-changing *::after {
+  transition: none !important;
+}
+
+/* Fallback transition for browsers without View Transitions support.
+   Limited to color/background/border so unrelated transforms aren't slowed. */
+@supports not (view-transition-name: none) {
+  html,
+  body,
+  *,
+  *::before,
+  *::after {
+    transition:
+      background-color 300ms ease,
+      border-color 300ms ease,
+      color 300ms ease,
+      fill 300ms ease,
+      stroke 300ms ease;
   }
 }
 

@@ -43,12 +43,16 @@ const _runningJobs = new Set();
 const PLATFORM_POSTERS = {
 
   meta: {
-    isConfigured: (target) => !!(target?.adAccountId && target?.pageId && target?.adSetId?.length > 0),
+    isConfigured: (target) => {
+      const hasAdSet = Array.isArray(target?.adSetId) ? target.adSetId.length > 0 : !!target?.adSetId;
+      return !!(target?.adAccountId && target?.pageId && hasAdSet);
+    },
 
     post: async (target, job, creatives, campaign) => {
       const { adAccountId, pageId, leadFormId, campaignId: metaCampaignId } = target;
 
-      const adSetIds = target.adSetId && target.adSetId.length > 0 ? target.adSetId : [];
+      let adSetIds = target.adSetId || [];
+      if (typeof adSetIds === "string") adSetIds = [adSetIds];
       if (adSetIds.length === 0) throw new Error("No ad set configured on this job — set targets.meta.adSetId");
 
       const creative = creatives.find((c) => c.imageUrl) || creatives[0];
@@ -125,6 +129,7 @@ const PLATFORM_POSTERS = {
 
           // If we advanced the index, persist it so next run starts here
           if (i !== startIndex) {
+            target.activeAdSetIndex = i; // update memory
             await AdsFactoryJob.updateOne(
               { _id: job._id },
               { $set: { "targets.meta.activeAdSetIndex": i } }
@@ -145,6 +150,7 @@ const PLATFORM_POSTERS = {
 
       // All ad sets full — pause the job
       if (!ad) {
+        job.status = "paused"; // update memory so job.save() doesn't overwrite
         await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "paused" } });
         const { cancelJob } = require("./adsFactoryAutoQueue");
         await cancelJob(job._id.toString());
@@ -455,7 +461,7 @@ async function run(jobId) {
       // Rollback the campaign status so it isn't stuck 'in-progress' forever
       await Campaign.updateOne(
         { "metadata.campaignId": campaign.metadata.campaignId },
-        { $set: { "results.status": "error" } }
+        { $set: { status: "error", "results.status": "error" } }
       );
       throw err;
     }
@@ -471,7 +477,7 @@ async function run(jobId) {
           { "metadata.campaignId": campaign.metadata.campaignId },
           { 
             $push: { creatives: { $each: newCreatives } },
-            $set: { "results.status": "success" }
+            $set: { status: "success", "results.status": "success" }
           }
         );
         logger.info(`[adsFactoryAuto] Saved ${newCreatives.length} generated creatives to campaign ${campaign.metadata.campaignId}`);

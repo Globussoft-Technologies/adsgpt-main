@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
 import { LifestyleShell } from '../lifestyle/LifestyleShell';
+import { TemplatesPanel, TemplatesTrigger } from '../components/PromptTemplatesPicker';
+import { usePromptTemplates } from '../components/usePromptTemplates';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png';
 import chatResponseDark from '@/assets/layouts/adstudio/chat-response-dark.svg';
@@ -61,8 +63,8 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 const MODEL_OPTIONS = [
   { name: 'Nano Banana 2', available: true, iconSrc: geminiIcon },
   { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
-  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
-  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-white/80" /> },
+  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
+  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
   { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
 ];
 
@@ -308,6 +310,35 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // images ref stores the `preview` URLs (matches the `referenceImages` shape).
   const brandSourceLogoRef = useRef('');
   const brandSourceImagesRef = useRef([]);
+
+  // Pull brand name + first target audience out of whichever brand source
+  // is active so the Templates picker can substitute {brand} /
+  // {target_audience} placeholders live as the brand changes.
+  const brandName =
+    brandSource.kind === 'list'
+      ? brandSource.item?.name || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.brandInfo?.brandName || ''
+        : '';
+  const targetAudience =
+    brandSource.kind === 'list'
+      ? brandSource.item?.targetAudiences?.[0] || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.objectives?.targetAudience?.[0] || ''
+        : '';
+
+  const templates = usePromptTemplates({
+    type: 'ai_custom',
+    brandName,
+    targetAudience,
+    currentValue: prompt,
+    onSelect: setPrompt,
+    // Manual edit of a {brand}/{target_audience} token deselects the
+    // brand chip so the UI matches the new source of truth (the typed
+    // values). The hook's sync effect intentionally skips truthy → ''
+    // transitions so this clear doesn't wipe the user's typing.
+    onClearBrand: () => setBrandSource({ kind: 'none' }),
+  });
 
   // Hit the Gemini prompt-improve endpoint, replace the textarea content with
   // the suggested rewrite. Mirrors the Ad Studio chat-bar's suggestPrompt
@@ -796,12 +827,12 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   if (imageState.status === 'submitting' || imageState.status === 'pending') {
     return (
       <LifestyleShell title="AI Creatives - Custom Ads" onClose={onClose}>
-        <div className="flex flex-col items-center gap-4 text-white">
-          <Loader2 size={36} className="animate-spin text-white/80" />
-          <p className="text-[15px] text-white/80">
+        <div className="flex flex-col items-center gap-4 text-gray-900 dark:text-white">
+          <Loader2 size={36} className="animate-spin text-gray-500 dark:text-white/80" />
+          <p className="text-[15px] text-gray-500 dark:text-white/80">
             {imageState.status === 'submitting' ? 'Submitting…' : 'Generating your creatives…'}
           </p>
-          <p className="text-[12px] text-white/40">This usually takes 20–60 seconds.</p>
+          <p className="text-[12px] text-gray-500 dark:text-white/40">This usually takes 20–60 seconds.</p>
         </div>
       </LifestyleShell>
     );
@@ -850,27 +881,27 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       ) : (
         <>
       <form onSubmit={handleSubmit} className="relative w-full min-w-[420px] max-w-[1100px]">
-        <div className="2xl:max-h-[calc(100svh-140px)] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-[#303030]/30 p-6 ring-1 ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]">
+        <div className="2xl:max-h-[calc(100svh-140px)] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]">
           <div className="relative mb-6 flex items-center justify-center">
             <button
               type="button"
               onClick={onClose}
               aria-label="Back"
-              className="absolute left-0 flex h-7 w-7 items-center justify-center text-white/70 transition-colors hover:text-white"
+              className="absolute left-0 flex h-7 w-7 items-center justify-center text-gray-500 dark:text-white/70 transition-colors hover:text-black dark:hover:text-white"
             >
               <ArrowLeft size={24} strokeWidth={2} />
             </button>
-            <h3 className="text-[16px] font-medium text-white">Create Custom Ads</h3>
+            <h3 className="text-[16px] font-medium text-gray-900 dark:text-white">Create Custom Ads</h3>
           </div>
 
           {(view.kind === 'error' || imageState.status === 'failed') && (
-            <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-[13px] text-red-200 ring-1 ring-red-500/30">
+            <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-[13px] text-red-700 ring-1 ring-red-500/30 dark:text-red-200">
               <AlertCircle size={14} />
               {view.kind === 'error' ? view.message : imageState.error}
               <button
                 type="button"
                 onClick={resetToForm}
-                className="ml-auto text-red-200/80 hover:text-white"
+                className="ml-auto text-red-600 hover:text-red-800 dark:text-red-200/80 dark:hover:text-white"
                 aria-label="Dismiss"
               >
                 <X size={14} />
@@ -880,17 +911,32 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 
           <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <div className="flex flex-col">
-              <p className="mb-3 text-[16px] font-medium text-white">
-                Prompt<span>*</span>
-              </p>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[16px] font-medium text-gray-900 dark:text-white">
+                  Prompt<span>*</span>
+                </p>
+                <TemplatesTrigger controller={templates} />
+              </div>
 
-              <div className="relative flex min-h-[380px] flex-1 flex-col rounded-[24px] bg-[#909294]/10 ring-1 ring-white/10 focus-within:ring-2 focus-within:ring-white/20">
+              {/* Shared fixed-height container — panel + textarea-wrapper
+                  trade space inside it. When the panel animates open it
+                  eats height from the wrapper rather than pushing the
+                  whole card taller, so the outer card height stays
+                  constant at ~480 px in both states. The wrapper uses
+                  `flex-1 min-h-0` so it can actually shrink below its
+                  natural content size when the panel takes its share. */}
+              <div className="flex h-[480px] flex-col">
+                <TemplatesPanel controller={templates} />
+
+                <div
+                  className="relative flex flex-1 min-h-0 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 ring-black/10 dark:ring-white/10 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20"
+                >
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="write your prompt..."
                   required
-                  className="min-h-[320px] flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[16px] font-light text-white outline-none placeholder:text-[#afafaf]"
+                  className="flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[16px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]"
                 />
 
                 {(() => {
@@ -976,7 +1022,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {isSuggestingPrompt ? (
-                      <Loader2 size={20} className="animate-spin text-white" />
+                      <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
                     ) : (
                       <img
                         src={chatResponseDark}
@@ -997,7 +1043,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                     />
                     {showModelPicker && (
-                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10">
+                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
                         {MODEL_OPTIONS.map((opt) => {
                           const { name, available } = opt;
                           const selected = name === model;
@@ -1014,10 +1060,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                               title={available ? undefined : 'Coming soon'}
                               className={`flex w-full items-center gap-2 rounded-tl-[14px] rounded-tr-[14px] px-3 py-2.5 text-left text-[13px] transition-colors ${
                                 !available
-                                  ? 'cursor-not-allowed text-white/80'
+                                  ? 'cursor-not-allowed text-gray-500 dark:text-white/80'
                                   : selected
-                                    ? 'bg-[#373839] text-white'
-                                    : 'text-white/80 hover:bg-white/5 hover:text-white'
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                               }`}
                             >
                               <span
@@ -1042,43 +1088,43 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         setShowModelPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex items-center gap-2 rounded-full bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-[#afafaf] ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+                      className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      <span className="text-[14px] text-white/90">1:1</span>
-                      <span className="h-3 w-px bg-white/20" />
-                      <LayoutGrid size={11} strokeWidth={1.8} className="text-white/50" />
+                      <span className="text-[14px] text-gray-600 dark:text-white/90">1:1</span>
+                      <span className="h-3 w-px bg-black/10 dark:bg-white/20" />
+                      <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
                       <span className="text-[14px]">
                         {total} Image{total !== 1 ? 's' : ''}
                       </span>
-                      <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+                      <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
                     </button>
 
                     {showAspectPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 w-[280px] rounded-[20px] bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-white/10">
-                        <p className="mb-2 text-center text-[13px] font-medium text-[#d9d9d9]">
+                      <div className="absolute right-0 bottom-full z-40 mb-2 w-[280px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        <p className="mb-2 text-center text-[13px] font-medium text-gray-600 dark:text-[#d9d9d9]">
                           Aspect Ratio per Image
                         </p>
                         <div className="flex items-center justify-center gap-1.5 text-sm">
-                          <span className="text-white/70">Total Number of Images :</span>
-                          <span className="font-medium text-white">{total}</span>
+                          <span className="text-gray-500 dark:text-white/70">Total Number of Images :</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{total}</span>
                         </div>
-                        <p className="mb-6 mt-1 text-center text-[11px] text-white/50">
+                        <p className="mb-6 mt-1 text-center text-[11px] text-gray-500 dark:text-white/50">
                           {creditsPerImage} credits per image
                         </p>
                         <div className="space-y-1">
                           {allowedAspectLabels(model).map(({ key, label }) => (
                             <div key={key} className="flex pl-4 items-center justify-between">
-                              <span className="text-[12px] text-white">{label}</span>
+                              <span className="text-[12px] text-gray-900 dark:text-white">{label}</span>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => adjustCount(key, -1)}
-                                  className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                                  className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
                                   aria-label={`Decrease ${label}`}
                                 >
                                   <span className="text-[18px] leading-none select-none">−</span>
                                 </button>
-                                <span className="bg-[#9092941A] w-8 rounded-full py-0.5 text-center text-[11px] font-medium text-white">
+                                <span className="bg-black/5 dark:bg-[#9092941A] w-8 rounded-full py-0.5 text-center text-[11px] font-medium text-gray-900 dark:text-white">
                                   {aspectCounts[key]}
                                 </span>
                                 <button
@@ -1086,7 +1132,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                   onClick={() =>
                                     adjustCount(key, Math.min(4 - aspectCounts[key], 1))
                                   }
-                                  className="flex h-5 w-5 items-center justify-center text-white/60 hover:text-white"
+                                  className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
                                   aria-label={`Increase ${label}`}
                                 >
                                   <span className="text-[18px] leading-none select-none">+</span>
@@ -1095,21 +1141,22 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                             </div>
                           ))}
                         </div>
-                        <p className="mt-3 text-right text-[10px] text-white/40">Max 4 per ratio</p>
+                        <p className="mt-3 text-right text-[10px] text-gray-500 dark:text-white/40">Max 4 per ratio</p>
                       </div>
                     )}
                   </div>
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
             <div className="flex flex-col">
-              <p className="mb-3 text-[16px] font-medium text-white">References</p>
+              <p className="mb-3 text-[16px] font-medium text-gray-900 dark:text-white">References</p>
 
-              <div className="flex flex-1 flex-col gap-4 rounded-[30px] bg-[#202121] p-6">
+              <div className="flex flex-1 flex-col gap-4 rounded-[30px] bg-gray-50 dark:bg-[#202121] p-6">
                 <div className="mb-5">
-                  <p className="mb-2.5 text-[14px] font-medium text-white">
+                  <p className="mb-2.5 text-[14px] font-medium text-gray-900 dark:text-white">
                     Attach your Brand Voice
                   </p>
                   <div className="flex items-center gap-2">
@@ -1119,30 +1166,30 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onClick={openBrandIqPicker}
                         className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
                           brandSource.kind === 'list'
-                            ? 'bg-white/15 text-white ring-white/20'
-                            : 'bg-[#909294]/10 text-[#f0f0f0] ring-white/5 hover:bg-[#33333a]'
+                            ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/20'
+                            : 'bg-gray-100 text-gray-600 ring-black/10 hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]'
                         }`}
                       >
                         <img src={brandIqIcon} alt="" className="h-4 w-4" />
                         {brandSource.kind === 'list' ? brandSource.item.name : 'Brand IQ'}
-                        <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+                        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
                       </button>
                       {showBrandIqPicker && (
-                        <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10">
+                        <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
                           <div className="max-h-[280px] overflow-y-auto">
                             {brandListState === 'loading' && (
-                              <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-white/60">
+                              <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-500 dark:text-white/60">
                                 <Loader2 size={12} className="animate-spin" />
                                 Loading brands…
                               </div>
                             )}
                             {brandListState === 'error' && (
-                              <div className="px-4 py-3 text-[12px] text-red-300">
+                              <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-300">
                                 {brandListError || 'Failed to load.'}
                               </div>
                             )}
                             {brandListState === 'loaded' && brandList.length === 0 && (
-                              <div className="px-4 py-3 text-[12px] text-white/50">
+                              <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
                                 No brands found.
                               </div>
                             )}
@@ -1157,24 +1204,24 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                     onClick={() => handleBrandIqSelect(b)}
                                     className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
                                       selected
-                                        ? 'bg-[#373839] text-white'
-                                        : 'text-white/80 hover:bg-white/5 hover:text-white'
+                                        ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                        : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                                     }`}
                                   >
                                     {b.logoUrls?.[0] ? (
                                       <img
                                         src={b.logoUrls[0]}
                                         alt=""
-                                        className="h-7 w-7 shrink-0 rounded-full bg-white/10 object-cover"
+                                        className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10 object-cover"
                                       />
                                     ) : (
-                                      <span className="h-7 w-7 shrink-0 rounded-full bg-white/10" />
+                                      <span className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10" />
                                     )}
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-[13px] font-medium">
                                         {b.name}
                                       </span>
-                                      <span className="block truncate text-[11px] text-white/50">
+                                      <span className="block truncate text-[11px] text-gray-500 dark:text-white/50">
                                         {b.websiteUrl || b.description}
                                       </span>
                                     </span>
@@ -1188,7 +1235,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         </div>
                       )}
                     </div>
-                    <span className="shrink-0 text-[16px] text-white/60">or</span>
+                    <span className="shrink-0 text-[16px] text-gray-500 dark:text-white/60">or</span>
                     <div className="relative min-w-0 flex-1">
                       <input
                         // text (not "url") so the browser doesn't reject inputs
@@ -1214,7 +1261,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         type="button"
                         onClick={handleAutofill}
                         disabled={!websiteUrl.trim() || autofillState === 'loading'}
-                        className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-white/20 px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                       >
                         {autofillState === 'loading' ? (
                           <Loader2 size={12} className="animate-spin" />
@@ -1229,19 +1276,19 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     </p>
                   )}
                   {autofillState === 'error' && (
-                    <p className="mt-1.5 text-[11px] text-red-300">{autofillError}</p>
+                    <p className="mt-1.5 text-[11px] text-red-600 dark:text-red-300">{autofillError}</p>
                   )}
                 </div>
 
                 <div className="mb-4">
-                  <p className="mb-2 text-[14px] font-medium text-white">
+                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">
                     Upload your own reference Images
                   </p>
                   <div
                     onPaste={handleRefPaste}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleRefDrop}
-                    className="flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[10px] text-[#afafaf] 2xl:py-2"
+                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
                   >
                     <div className="flex flex-1 items-center justify-between">
                       <input
@@ -1257,23 +1304,23 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onDragOver={preventDefaultDragOver}
                         onDrop={handleRefDrop}
                         placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-white placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
+                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
                       />
                       <button
                         type="button"
                         onClick={handleRefImageUrlAdd}
                         disabled={!referenceImageUrl.trim()}
                         aria-label="Add image URL"
-                        className="shrink-0 px-1 text-[#909294] transition-colors hover:text-white disabled:opacity-40 disabled:hover:text-[#909294]"
+                        className="shrink-0 px-1 text-gray-500 dark:text-[#909294] transition-colors hover:text-black dark:hover:text-white disabled:opacity-40 disabled:hover:text-gray-500 dark:disabled:hover:text-[#909294]"
                       >
                         <LinkIcon className="h-3 w-3 2xl:h-4 2xl:w-4" />
                       </button>
                     </div>
                     <label
                       htmlFor="ref-image-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-[#606060] px-2.5 py-1.5 text-[10px] text-white hover:opacity-70 2xl:gap-2"
+                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
                     >
-                      <UploadCloud className="h-3 w-3 text-white 2xl:h-4 2xl:w-4" />
+                      <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
                       <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
                         Upload Image
                       </span>
@@ -1364,12 +1411,12 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     />
                   )}
                   {imagesError && (
-                    <p className="mt-2 text-[11px] text-red-300">{imagesError}</p>
+                    <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">{imagesError}</p>
                   )}
                 </div>
 
                 <div className="mb-5">
-                  <p className="mb-2 text-[14px] font-medium text-white">Brand logo</p>
+                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">Brand logo</p>
                   <div
                     onPaste={(e) => {
                       // Clipboard image → push as upload (strict type check).
@@ -1397,7 +1444,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     }}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleLogoDrop}
-                    className="flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[10px] text-[#afafaf] 2xl:py-2"
+                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
                   >
                     <div className="flex flex-1 items-center justify-between">
                       <input
@@ -1416,15 +1463,15 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onDragOver={preventDefaultDragOver}
                         onDrop={handleLogoDrop}
                         placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-white placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
+                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
                       />
-                      <LinkIcon className="h-3 w-3 text-[#909294] 2xl:h-4 2xl:w-4" />
+                      <LinkIcon className="h-3 w-3 text-gray-500 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
                     </div>
                     <label
                       htmlFor="brand-logo-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-[#606060] px-2.5 py-1.5 text-[10px] text-white hover:opacity-70 2xl:gap-2"
+                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
                     >
-                      <UploadCloud className="h-3 w-3 text-white 2xl:h-4 2xl:w-4" />
+                      <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
                       <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
                         Upload Image
                       </span>
@@ -1478,26 +1525,26 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     />
                   )}
                   {logoError && (
-                    <p className="mt-2 text-[11px] text-red-300">{logoError}</p>
+                    <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">{logoError}</p>
                   )}
                 </div>
 
                 <div className="mb-6">
-                  <p className="mb-2 text-[16px] font-medium text-white">
+                  <p className="mb-2 text-[16px] font-medium text-gray-900 dark:text-white">
                     Attach a Competitor Ad Reference
                   </p>
                   <div className="rounded-full max-w-90 p-px [background:linear-gradient(90deg,#02C8C4_0%,#5867EB_78%)]">
                     <button
                       type="button"
                       onClick={() => setShowCompetitorModal(true)}
-                      className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-[#2f2f30] py-2.5 text-[14px] 2xl:text-base font-semibold text-[#ebebeb] transition-colors hover:bg-[#363637]"
+                      className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-white dark:bg-[#2f2f30] py-2.5 text-[14px] 2xl:text-base font-semibold text-gray-900 dark:text-[#ebebeb] transition-colors hover:bg-gray-50 dark:hover:bg-[#363637]"
                     >
                       <Search size={18} strokeWidth={2} />
                       Search competitors ads
                     </button>
                   </div>
                   {competitorAdRef && (
-                    <p className="mt-2 text-[12px] text-white/50">✓ Reference added</p>
+                    <p className="mt-2 text-[12px] text-gray-500 dark:text-white/50">✓ Reference added</p>
                   )}
                 </div>
               </div>
@@ -1505,14 +1552,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           </div>
           <div className="mt-4 flex items-center justify-end gap-3">
             {total > 0 && (
-              <span className="rounded-full bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-white/70 ring-1 ring-white/5">
+              <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
                 –{total * creditsPerImage} credits
               </span>
             )}
             <button
               type="submit"
               disabled={!prompt.trim() || total === 0 || isSubmittingLocal}
-              className="flex items-center gap-2 rounded-full bg-white px-8 py-2.5 text-base font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-2 rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-medium dark:text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isSubmittingLocal && <Loader2 size={14} className="animate-spin" />}
               {isSubmittingLocal ? 'Generating…' : 'Generate'}
@@ -1542,7 +1589,7 @@ function ChipRow({ label, options, isSelected, onPick, onDoubleClick, rounded })
   const clickTimers = useRef({});
   return (
     <div className="mt-3">
-      <p className="mb-1.5 text-[11px] text-white/50">{label}</p>
+      <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">{label}</p>
       <div className="flex flex-wrap gap-2 2xl:gap-3">
         {options.map((url, i) => {
           const selected = isSelected?.(url);
@@ -1575,7 +1622,7 @@ function ChipRow({ label, options, isSelected, onPick, onDoubleClick, rounded })
               className={`relative shrink-0 cursor-pointer ${sizing} ${shape} transition ${
                 selected
                   ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-white/10 hover:border-white/30'
+                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
               }`}
             >
               <img
@@ -1602,15 +1649,15 @@ function ResultsView({ images, taskId, onClose, onBack }) {
       <div className="w-full max-w-[1100px]">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h3 className=" text-[18px] font-semibold text-white">
+            <h3 className=" text-[18px] font-semibold text-gray-900 dark:text-white">
               Generated {images.length} image{images.length === 1 ? '' : 's'}
             </h3>
-            {taskId && <p className="text-[11px] text-white/40">task {taskId.slice(0, 12)}…</p>}
+            {taskId && <p className="text-[11px] text-gray-500 dark:text-white/40">task {taskId.slice(0, 12)}…</p>}
           </div>
           <button
             type="button"
             onClick={onBack}
-            className="rounded-full bg-white px-6 py-2.5 text-[13px] font-medium text-black hover:opacity-90"
+            className="rounded-full bg-gray-900 text-white dark:bg-white px-6 py-2.5 text-[13px] font-medium dark:text-black hover:opacity-90"
           >
             Generate again
           </button>
@@ -1619,7 +1666,7 @@ function ResultsView({ images, taskId, onClose, onBack }) {
           {images.map((img, i) => (
             <figure
               key={i}
-              className="overflow-hidden rounded-[20px] bg-[#202121] ring-1 ring-white/5"
+              className="overflow-hidden rounded-[20px] bg-gray-50 dark:bg-[#202121] ring-1 ring-black/10 dark:ring-white/5"
             >
               <img
                 src={img.url}
@@ -1627,13 +1674,13 @@ function ResultsView({ images, taskId, onClose, onBack }) {
                 className="block h-auto w-full"
               />
               <figcaption className="flex items-center justify-between px-4 py-3 text-[11px]">
-                <span className="text-white/70">{img.aspect}</span>
+                <span className="text-gray-500 dark:text-white/70">{img.aspect}</span>
                 <a
                   href={img.url}
                   download
                   target="_blank"
                   rel="noreferrer"
-                  className="text-white/60 hover:text-white"
+                  className="text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
                 >
                   Open
                 </a>
@@ -1651,11 +1698,11 @@ function PillButton({ icon, label, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-full bg-[#2b2a2a]/80 px-3 py-3 text-[12px] font-light text-white/80 ring-1 ring-white/5 transition-colors hover:bg-[#33333a]"
+      className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-3 text-[12px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
     >
       {icon && <span aria-hidden>{icon}</span>}
       {label}
-      <ChevronDown size={18} strokeWidth={2} className="text-white/40" />
+      <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
     </button>
   );
 }
@@ -1767,11 +1814,11 @@ function CompetitorModal({
       {/* min-h on the OUTER panel guarantees the modal never collapses
           when the ads response is small. The grid below uses min-h too as
           a secondary safety net. */}
-      <div className="relative -mt-5 flex min-h-[680px] flex-col rounded-[30px] bg-[#303030]/30 p-6 ring-1 ring-white/10 backdrop-blur-md lg:px-8 2xl:min-h-[760px] 2xl:mt-0">
+      <div className="relative -mt-5 flex min-h-[680px] flex-col rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 2xl:min-h-[760px] 2xl:mt-0">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-7 right-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/60 transition-colors hover:text-white"
+          className="absolute top-7 right-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 dark:text-white/60 transition-colors hover:text-black dark:hover:text-white"
           aria-label="Close"
         >
           <X size={26} strokeWidth={2} />
@@ -1779,10 +1826,10 @@ function CompetitorModal({
 
         {/* Header */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 pr-6">
-          <h3 className="text-[18px] font-semibold text-white">Add a competitor visual</h3>
+          <h3 className="text-[18px] font-semibold text-gray-900 dark:text-white">Add a competitor visual</h3>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full bg-[#0d0d0d]/50 px-4 py-2 ring-1 ring-white/10">
-              <Search size={16} strokeWidth={1.8} className="shrink-0 text-[#969696]" />
+            <div className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#0d0d0d]/50 px-4 py-2 ring-1 ring-black/10 dark:ring-white/10">
+              <Search size={16} strokeWidth={1.8} className="shrink-0 text-gray-500 dark:text-[#969696]" />
               <input
                 type="text"
                 value={search}
@@ -1794,7 +1841,7 @@ function CompetitorModal({
                   }
                 }}
                 placeholder="Search..."
-                className="w-24 min-w-0 flex-1 bg-transparent text-[12px] font-light text-white outline-none placeholder:text-[#969696]"
+                className="w-24 min-w-0 flex-1 bg-transparent text-[12px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#969696]"
               />
               <div className="flex items-center gap-1">
                 {['Competitors', 'Keyword'].map((t) => (
@@ -1812,8 +1859,8 @@ function CompetitorModal({
                     }}
                     className={`rounded-2xl px-3 py-1 text-[12px] font-light whitespace-nowrap transition-colors ${
                       t === tab
-                        ? 'bg-[#3c3c3c] text-white ring-1 ring-white/20'
-                        : 'text-white/50 hover:text-white'
+                        ? 'bg-gray-200 text-gray-900 ring-1 ring-black/10 dark:bg-[#3c3c3c] dark:text-white dark:ring-white/20'
+                        : 'text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white'
                     }`}
                   >
                     {t}
@@ -1885,7 +1932,7 @@ function CompetitorModal({
           )}
           {onScrollLoading && (
             <div className="flex items-center justify-center py-3">
-              <Loader2 className="h-6 w-6 animate-spin text-white/50" />
+              <Loader2 className="h-6 w-6 animate-spin text-gray-500 dark:text-white/50" />
             </div>
           )}
         </div>
@@ -1896,7 +1943,7 @@ function CompetitorModal({
             type="button"
             disabled={!selectedImage}
             onClick={() => onSelect(selectedImage?.url || '')}
-            className="rounded-full bg-white px-8 py-2 text-[15px] font-bold text-[#151515] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2 text-[15px] font-bold dark:text-[#151515] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Add Reference
           </button>
@@ -1980,7 +2027,7 @@ function CompetitorImageCard({ image, isSelected, onSelect, onPreview }) {
 }
 
 const inputCls = `
-  h-[39px] w-full rounded-full bg-[#909294]/10 px-4  text-[13px] font-light text-white
-  outline-none ring-1 ring-white/5 placeholder:text-[#afafaf]
-  focus-visible:ring-2 focus-visible:ring-white/20
+  h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4  text-[13px] font-light text-gray-900 dark:text-white
+  outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]
+  focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20
 `;

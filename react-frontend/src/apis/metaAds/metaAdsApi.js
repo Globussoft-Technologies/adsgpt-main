@@ -164,6 +164,21 @@ export const geocodeLocation = async ({ q, countryCode } = {}) => {
   return data;
 };
 
+// Reverse-geocode lat/lng → { displayName, countryCode } via Nominatim.
+// The map-pin picker calls this to reject ocean clicks. Returns
+// `result: null` for water / no-match; on Nominatim outage the backend
+// returns `result: null, degraded: true` so the caller can fail open.
+export const reverseGeocodeLocation = async ({ lat, lng } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/reverse-geocode`,
+    {
+      params: { lat, lng },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
 // Apps promotable from THIS ad account — backend queries
 // `act_<adAccountId>/applications` only (matches Meta Ads Manager's own
 // scoping). Apps without a store URL (Instant Games / fb_canvas / web)

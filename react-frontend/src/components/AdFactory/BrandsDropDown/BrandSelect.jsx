@@ -74,7 +74,7 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
       <div ref={wrapperRef} className="relative w-full transition-colors focus-within:shadow-lg">
         <div className={isAvatarAdsSearch ? '' : 'input-gradient-border'}>
           <Command
-            className={`rounded-full ${isAvatarAdsSearch || isBrandInfoStep ? 'bg-[#9092941A]' : 'border border-white/10 bg-[#383838]/50'} shadow-md focus-within:border-white/50`}
+            className={`rounded-full ${isAvatarAdsSearch || isBrandInfoStep ? 'border border-black/10 bg-zinc-50 dark:border-transparent dark:bg-[#9092941A]' : 'border border-black/10 bg-zinc-50 dark:border-white/10 dark:bg-[#383838]/50'} shadow-md focus-within:border-zinc-400 dark:focus-within:border-white/50`}
             shouldFilter={false}
           >
             <div
@@ -85,7 +85,7 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                 placeholder={placeholder || 'Select brand or type a new one'}
                 onValueChange={handleBrandNameChange}
                 onFocus={() => setOpen(true)}
-                className={`h-12 rounded-full bg-transparent ${isAvatarAdsSearch ? 'px-1 text-sm placeholder:text-sm 2xl:placeholder:text-sm' : 'px-3 text-sm placeholder:text-sm 2xl:text-base placeholder:2xl:text-base'} text-white placeholder:text-[#AFAFAF]`}
+                className={`h-12 rounded-full bg-transparent ${isAvatarAdsSearch ? 'px-1 text-sm placeholder:text-sm 2xl:placeholder:text-sm' : 'px-3 text-sm placeholder:text-sm 2xl:text-base placeholder:2xl:text-base'} text-zinc-800 placeholder:text-zinc-500 dark:text-white dark:placeholder:text-[#AFAFAF]`}
               />
             </div>
             <Button
@@ -96,14 +96,14 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
               className="group absolute top-1/2 right-2 -translate-y-1/2 rounded-full hover:!bg-transparent"
             >
               <ChevronDown
-                className={` ${isAvatarAdsSearch ? 'size-5 text-white' : 'size-4 text-[#AFAFAF]'} group-hover:text-white`}
+                className={` ${isAvatarAdsSearch ? 'size-5 text-zinc-700 dark:text-white' : 'size-4 text-zinc-500 dark:text-[#AFAFAF]'} group-hover:text-zinc-900 dark:group-hover:text-white`}
               />
             </Button>
 
             {/* Dropdown list */}
             {open && !portal && (
-              <CommandList className="absolute top-full z-10 mt-1 max-h-52 w-full overflow-auto rounded-xl border border-white/10 bg-[#1b1c1f] p-1 shadow-lg backdrop-blur-[100px]">
-                <CommandEmpty className="py-2 text-center text-sm text-[#AFAFAF] 2xl:text-base">
+              <CommandList className="absolute top-full z-10 mt-1 max-h-52 w-full overflow-auto rounded-xl border border-black/10 bg-white p-1 shadow-lg backdrop-blur-[100px] dark:border-white/10 dark:bg-[#1b1c1f]">
+                <CommandEmpty className="py-2 text-center text-sm text-zinc-500 2xl:text-base dark:text-[#AFAFAF]">
                   No brand found
                 </CommandEmpty>
                 {filteredBrands.map((b) => (
@@ -111,20 +111,20 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                     key={b?.id}
                     value={b?.name}
                     onSelect={() => handleBrandSelect(b)}
-                    className={`flex w-full cursor-pointer justify-between rounded-lg px-3 py-2 text-sm text-white hover:bg-white/10 2xl:text-base data-[selected=true]:bg-white/10 data-[selected=true]:text-white ${
-                      selectedBrand?.name === b?.name ? 'bg-[#454545]' : ''
+                    className={`flex w-full cursor-pointer justify-between rounded-lg px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-100 2xl:text-base data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
+                      selectedBrand?.name === b?.name ? 'bg-zinc-100 dark:bg-[#454545]' : ''
                     }`}
                   >
                     {b?.name}
                     <span
                       className={`flex min-h-4 min-w-4 items-center justify-center rounded-full border ${
                         selectedBrand?.name === b?.name
-                          ? 'border-[#575757] bg-[#575757]'
-                          : 'border-[#AFAFAF]'
+                          ? 'border-zinc-700 bg-zinc-700 dark:border-[#575757] dark:bg-[#575757]'
+                          : 'border-zinc-400 dark:border-[#AFAFAF]'
                       }`}
                     >
                       {selectedBrand?.name === b?.name && (
-                        <div className="h-[6px] w-[6px] rounded-full bg-white" />
+                        <div className="h-[6px] w-[6px] rounded-full bg-white dark:bg-white" />
                       )}
                     </span>
                   </CommandItem>
@@ -138,12 +138,12 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                   <div className="absolute bottom-0 left-0 h-0 w-full" />
                 </PopoverAnchor>
                 <PopoverContent
-                  className="z-55 w-[var(--radix-popover-trigger-width)] p-1 rounded-xl border border-white/10 bg-[#1b1c1f] shadow-lg backdrop-blur-[100px]"
+                  className="z-55 w-[var(--radix-popover-trigger-width)] p-1 rounded-xl border border-black/10 bg-white shadow-lg backdrop-blur-[100px] dark:border-white/10 dark:bg-[#1b1c1f]"
                   align="start"
                   sideOffset={4}
                 >
                   <CommandList className="relative max-h-32 2xl:max-h-45 w-full overflow-auto bg-transparent border-none">
-                    <CommandEmpty className="py-2 text-center text-sm text-[#AFAFAF] 2xl:text-base">
+                    <CommandEmpty className="py-2 text-center text-sm text-zinc-500 2xl:text-base dark:text-[#AFAFAF]">
                       No brand found
                     </CommandEmpty>
                     {filteredBrands.map((b) => (
@@ -151,20 +151,20 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                         key={b?.id}
                         value={b?.name}
                         onSelect={() => handleBrandSelect(b)}
-                        className={`flex w-full cursor-pointer justify-between rounded-md px-3 2xl:px-4 py-2 2xl:py-3 text-[10px] text-white hover:bg-white/10 2xl:text-sm data-[selected=true]:bg-white/10 data-[selected=true]:text-white ${
-                          selectedBrand?.name === b?.name ? 'bg-[#454545]' : ''
+                        className={`flex w-full cursor-pointer justify-between rounded-md px-3 2xl:px-4 py-2 2xl:py-3 text-[10px] text-zinc-800 hover:bg-zinc-100 2xl:text-sm data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
+                          selectedBrand?.name === b?.name ? 'bg-zinc-100 dark:bg-[#454545]' : ''
                         }`}
                       >
                         {b?.name}
                         <span
                           className={`flex min-h-3 min-w-3 2xl:min-h-4 2xl:min-w-4 items-center justify-center rounded-full border ${
                             selectedBrand?.name === b?.name
-                              ? 'border-[#575757] bg-[#575757]'
-                              : 'border-[#AFAFAF]'
+                              ? 'border-zinc-700 bg-zinc-700 dark:border-[#575757] dark:bg-[#575757]'
+                              : 'border-zinc-400 dark:border-[#AFAFAF]'
                           }`}
                         >
                           {selectedBrand?.name === b?.name && (
-                            <div className="h-[6px] w-[6px] rounded-full bg-white" />
+                            <div className="h-[6px] w-[6px] rounded-full bg-white dark:bg-white" />
                           )}
                         </span>
                       </CommandItem>

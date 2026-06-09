@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSelector } from 'react-redux';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -277,9 +278,9 @@ const labelize = (s) => (s || '').replace(/_/g, ' ').toLowerCase().replace(/\b\w
 
 function FieldLabel({ children, hint }) {
   return (
-    <label className="mb-2 flex items-center justify-between flex-wrap gap-x-2 gap-y-0.5 text-sm font-medium text-[#afafaf] 2xl:text-base">
+    <label className="mb-2 flex items-center justify-between flex-wrap gap-x-2 gap-y-0.5 text-sm font-medium text-gray-600 dark:text-[#afafaf] 2xl:text-base">
       <span>{children}</span>
-      {hint && <span className="text-[11px] font-normal text-white/45 2xl:text-xs">{hint}</span>}
+      {hint && <span className="text-[11px] font-normal text-gray-400 dark:text-white/45 2xl:text-xs">{hint}</span>}
     </label>
   );
 }
@@ -292,7 +293,7 @@ function TextInput({ value, onChange, placeholder, type = 'text', maxLength, siz
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className={`w-full rounded-full border border-white/5 bg-[#909294]/15 ${sizingClass} text-[13px] placeholder:text-[13px] 2xl:placeholder:text-[15px] text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none 2xl:text-base`}
+      className={`w-full rounded-full border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 ${sizingClass} text-[13px] placeholder:text-[13px] 2xl:placeholder:text-[15px] text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-[#AFAFAF] transition-colors hover:border-gray-400 dark:hover:border-white/15 focus:border-gray-500 dark:focus:border-white/20 focus:outline-none 2xl:text-base`}
     />
   );
 }
@@ -305,7 +306,7 @@ function TextArea({ value, onChange, placeholder, rows = 3, maxLength }) {
       placeholder={placeholder}
       rows={rows}
       maxLength={maxLength}
-      className="w-full resize-none rounded-[16px] border border-white/5 bg-[#909294]/15 px-5 py-3 text-sm text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none 2xl:text-base"
+      className="w-full resize-none rounded-[16px] border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 px-5 py-3 text-sm text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-[#AFAFAF] transition-colors hover:border-gray-400 dark:hover:border-white/15 focus:border-gray-500 dark:focus:border-white/20 focus:outline-none 2xl:text-base"
     />
   );
 }
@@ -371,16 +372,16 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-[#909294]/15 px-4 py-2.5 text-left text-sm font-medium transition-colors hover:border-white/15 focus:outline-none 2xl:py-3 2xl:text-base ${
-          open ? 'border-white/20' : 'border-white/5'
+        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-gray-100 dark:bg-[#909294]/15 px-4 py-2.5 text-left text-sm font-medium transition-colors hover:border-gray-400 dark:hover:border-white/15 focus:outline-none 2xl:py-3 2xl:text-base ${
+          open ? 'border-gray-500 dark:border-white/20' : 'border-gray-300 dark:border-white/5'
         }`}
       >
-        <span className={`min-w-0 truncate ${selected ? 'text-white' : 'text-[#AFAFAF]'}`}>
+        <span className={`min-w-0 truncate ${selected ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#AFAFAF]'}`}>
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-white/55 transition-transform duration-150 ${
-            open ? 'rotate-180 text-white/85' : ''
+          className={`h-4 w-4 shrink-0 text-gray-500 dark:text-white/55 transition-transform duration-150 ${
+            open ? 'rotate-180 text-gray-700 dark:text-white/85' : ''
           }`}
         />
       </button>
@@ -395,7 +396,7 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
               style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
-              className="z-[200] overflow-hidden rounded-xl border border-white/12 bg-[#0F0F0F]/98 shadow-xl backdrop-blur-xl"
+              className="z-[200] overflow-hidden rounded-xl border border-gray-200 bg-white/98 dark:border-white/12 dark:bg-[#0F0F0F]/98 shadow-xl backdrop-blur-xl"
             >
               <div className="scrollbar-thin max-h-25 overflow-y-auto p-1.5 2xl:max-h-30">
                 {items.map((o) => {
@@ -410,8 +411,8 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
                       }}
                       className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-[7px] 2xl:py-2 text-left text-[11px] font-medium transition-all 2xl:text-sm ${
                         isSelected
-                          ? 'bg-white/10 text-white'
-                          : 'text-white/85 hover:bg-white/5 hover:text-white'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-white/10 dark:text-white'
+                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-white/85 dark:hover:bg-white/5 dark:hover:text-white'
                       }`}
                     >
                       <span className="min-w-0 truncate">{o.label}</span>
@@ -438,7 +439,7 @@ function Toggle({ value, onChange, disabled }) {
       disabled={disabled}
       onClick={() => onChange(!value)}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 2xl:h-6 2xl:w-11 ${
-        value ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]' : 'bg-white/15'
+        value ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]' : 'bg-gray-300 dark:bg-white/15'
       } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
     >
       <span
@@ -467,13 +468,13 @@ function InlineDropdown({ value, options, onChange, renderLabel }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#464951]"
+        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-[#464951]"
       >
         {renderLabel(value)}
         <ChevronDown size={14} className="opacity-70" />
       </button>
       {open && (
-        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-[#3a3c44] bg-[#303030] py-1 shadow-lg">
+        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-gray-200 bg-white dark:border-[#3a3c44] dark:bg-[#303030] py-1 shadow-lg">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -486,10 +487,10 @@ function InlineDropdown({ value, options, onChange, renderLabel }) {
               }}
               className={`mt-1 block w-full px-3 py-1.5 text-left text-sm ${
                 opt.disabled
-                  ? 'cursor-not-allowed text-white/30'
+                  ? 'cursor-not-allowed text-gray-400 dark:text-white/30'
                   : opt.value === value
-                  ? 'bg-[#464951] text-white'
-                  : 'text-white/80 hover:bg-[#464951] hover:text-white'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-[#464951] dark:text-white'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white'
               }`}
             >
               {opt.label}
@@ -517,7 +518,7 @@ function TimeColumn({ values, selected, onChange, label }) {
 
   return (
     <div className="flex flex-col items-center">
-      <span className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+      <span className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/45">
         {label}
       </span>
       <div ref={ref} className="scrollbar-hide h-[200px] w-12 overflow-y-auto pr-0.5">
@@ -530,7 +531,7 @@ function TimeColumn({ values, selected, onChange, label }) {
               data-selected={isSel}
               onClick={() => onChange(v)}
               className={`my-0.5 block w-full rounded py-1.5 text-center text-xs transition-colors ${
-                isSel ? 'bg-[#434343] text-white' : 'text-white/70 hover:bg-[#3a3c44] hover:text-white'
+                isSel ? 'bg-gray-200 text-gray-900 dark:bg-[#434343] dark:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-white/70 dark:hover:bg-[#3a3c44] dark:hover:text-white'
               }`}
             >
               {String(v).padStart(2, '0')}
@@ -552,6 +553,7 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
   const [tempDate, setTempDate] = useState(null);
   const [tempTime, setTempTime] = useState('');
   const ref = useRef(null);
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
 
   // Sync popover state from the external value whenever the popover opens
   // — keeps Cancel actually cancelling (it discards in-progress edits).
@@ -625,15 +627,15 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-[13px] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none 2xl:py-3 2xl:text-base ${
+        className={`flex w-full items-center justify-between rounded-full border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 px-4 py-2.5 text-[13px] transition-colors hover:border-gray-400 dark:hover:border-white/15 focus:border-gray-500 dark:focus:border-white/20 focus:outline-none 2xl:py-3 2xl:text-base ${
           disabled ? 'cursor-not-allowed opacity-40' : ''
         }`}
       >
-        <span className={value ? 'text-white' : 'text-[#AFAFAF]'}>{display}</span>
-        <CalendarDays className="h-4 w-4 text-white/55" />
+        <span className={value ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#AFAFAF]'}>{display}</span>
+        <CalendarDays className="h-4 w-4 text-gray-500 dark:text-white/55" />
       </button>
       {open && (
-        <div className="wiz-dt-pop absolute top-[10%] -right-[10%] 2xl:top-full 2xl:right-0 z-50 mt-1 scale-75 2xl:scale-100 rounded-md border border-[#3a3c44] bg-[#303030] shadow-lg">
+        <div className="wiz-dt-pop absolute top-[10%] -right-[10%] 2xl:top-full 2xl:right-0 z-50 mt-1 scale-75 2xl:scale-100 rounded-md border border-gray-200 bg-white dark:border-[#3a3c44] dark:bg-[#303030] shadow-lg">
           {/* Scoped overrides — only apply inside .wiz-dt-pop, so global
               react-date-range styles (used elsewhere in the app) are
               untouched. font-size shrinks the whole calendar uniformly
@@ -649,7 +651,7 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
             <Calendar
               date={tempDate || new Date()}
               onChange={setTempDate}
-              color="#434343"
+              color={isDarkMode ? '#434343' : '#e4e4e7'}
               minDate={minDate}
               maxDate={undefined}
               navigatorRenderer={(currentFocusedDate, changeShownDate) => {
@@ -674,7 +676,7 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
                   <div className="flex items-center justify-between px-2 pt-3 pb-2">
                     <button
                       type="button"
-                      className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67]"
+                      className="flex size-7 items-center justify-center rounded-md bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67]"
                       onClick={() => {
                         const d = new Date(currentFocusedDate);
                         d.setMonth(d.getMonth() - 1);
@@ -708,7 +710,7 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
                     <button
                       type="button"
                       disabled={atOrAfterCurrentMonth}
-                      className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#464951]"
+                      className="flex size-7 items-center justify-center rounded-md bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-gray-200 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67] dark:disabled:hover:bg-[#464951]"
                       onClick={() => {
                         const d = new Date(currentFocusedDate);
                         d.setMonth(d.getMonth() + 1);
@@ -721,7 +723,7 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
                 );
               }}
             />
-            <div className="flex items-start gap-1 border-l border-[#3a3c44] px-2 pt-3 pb-2">
+            <div className="flex items-start gap-1 border-l border-gray-200 dark:border-[#3a3c44] px-2 pt-3 pb-2">
               <TimeColumn values={HOURS} selected={tempHour} onChange={setHour} label="Hr" />
               <TimeColumn values={MINUTES} selected={tempMinute} onChange={setMinute} label="Min" />
             </div>
@@ -730,14 +732,14 @@ function DateTimePicker({ value, onChange, disabled, minDate }) {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-sm border border-[#EFEFEF]/60 bg-transparent px-6 py-1 text-sm font-semibold text-[#E3E3E3] hover:opacity-70"
+              className="rounded-sm border border-gray-300 bg-transparent px-6 py-1 text-sm font-semibold text-gray-700 dark:border-[#EFEFEF]/60 dark:text-[#E3E3E3] hover:opacity-70"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleApply}
-              className="rounded-sm bg-white px-8 py-1 text-sm font-bold text-[#151515] shadow-sm hover:bg-white/70"
+              className="rounded-sm bg-gray-900 px-8 py-1 text-sm font-bold text-white dark:bg-white dark:text-[#151515] shadow-sm hover:opacity-80 dark:hover:bg-white/70"
             >
               Apply
             </button>
@@ -755,8 +757,8 @@ function GradientCheckbox({ checked, onChange, size = 'sm' }) {
     <span
       className={`relative inline-flex shrink-0 items-center justify-center rounded ${boxDim} ${
         checked
-          ? 'bg-white'
-          : 'border border-white/50 hover:border-white/70'
+          ? 'bg-gray-900 dark:bg-white'
+          : 'border border-gray-400 hover:border-gray-600 dark:border-white/50 dark:hover:border-white/70'
       }`}
     >
       <input
@@ -765,7 +767,7 @@ function GradientCheckbox({ checked, onChange, size = 'sm' }) {
         onChange={(e) => onChange(e.target.checked)}
         className="absolute inset-0 cursor-pointer opacity-0"
       />
-      {checked && <Check className={`text-black ${iconDim}`} strokeWidth={3} />}
+      {checked && <Check className={`text-white dark:text-black ${iconDim}`} strokeWidth={3} />}
     </span>
   );
 }
@@ -776,14 +778,14 @@ function SegButton({ active, onClick, children }) {
       className={`flex-1 rounded-full p-[1px] transition-all ${
         active
           ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-          : 'bg-white/8 hover:bg-white/15'
+          : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
       }`}
     >
       <button
         type="button"
         onClick={onClick}
-        className={`w-full rounded-full bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:py-2.5 2xl:text-sm ${
-          active ? 'text-white' : 'text-white/55 hover:text-white/80'
+        className={`w-full rounded-full bg-white dark:bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:py-2.5 2xl:text-sm ${
+          active ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
         }`}
       >
         {children}
@@ -809,14 +811,14 @@ function StepRail({ step }) {
                 active
                   ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
                   : done
-                  ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-                  : 'border border-white/8 bg-white/3 text-white/30'
+                  ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300'
+                  : 'border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/8 dark:bg-white/3 dark:text-white/30'
               }`}
             >
               {done ? <Check className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" /> : <Icon className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" />}
               <span className="hidden sm:inline">{s.label}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`h-0.5 w-2 2xl:w-3 ${i < idx ? 'bg-emerald-400/30' : 'bg-white/15'}`} />}
+            {i < STEPS.length - 1 && <div className={`h-0.5 w-2 2xl:w-3 ${i < idx ? 'bg-emerald-400/30' : 'bg-gray-200 dark:bg-white/15'}`} />}
           </React.Fragment>
         );
       })}
@@ -862,31 +864,31 @@ function CampaignStep({ form, setForm, currency }) {
                 className={`rounded-2xl p-[1px] transition-all ${
                   selected
                     ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                    : 'bg-white/8 hover:bg-white/15'
+                    : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, objective: value }))}
-                  className="group flex h-full w-full items-start gap-3 rounded-2xl bg-[#181818] p-3 text-left transition-all hover:bg-[#1d1d1d] 2xl:p-4"
+                  className="group flex h-full w-full items-start gap-3 rounded-2xl bg-white dark:bg-[#181818] p-3 text-left transition-all hover:bg-gray-50 dark:hover:bg-[#1d1d1d] 2xl:p-4"
                 >
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg 2xl:h-10 2xl:w-10 ${
-                      selected ? 'bg-gradient-to-br from-[#02C8C4] to-[#5867EB] text-white' : 'bg-white/5 text-white/55'
+                      selected ? 'bg-gradient-to-br from-[#02C8C4] to-[#5867EB] text-white' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'
                     }`}
                   >
                     <Icon className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className={`text-sm font-semibold 2xl:text-base ${selected ? 'text-white' : 'text-white/85'}`}>{label}</p>
+                      <p className={`text-sm font-semibold 2xl:text-base ${selected ? 'text-gray-900 dark:text-white' : 'text-gray-800 dark:text-white/85'}`}>{label}</p>
                       {beta && (
-                        <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300 2xl:text-[10px]">
+                        <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300 2xl:text-[10px]">
                           Beta
                         </span>
                       )}
                     </div>
-                    <p className="mt-0.5 text-xs leading-snug text-white/60 2xl:text-sm">{desc}</p>
+                    <p className="mt-0.5 text-xs leading-snug text-gray-600 dark:text-white/60 2xl:text-sm">{desc}</p>
                   </div>
                 </button>
               </div>
@@ -910,14 +912,14 @@ function CampaignStep({ form, setForm, currency }) {
                 className={`rounded-full p-[1px] transition-all ${
                   selected
                     ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                    : 'bg-white/8 hover:bg-white/15'
+                    : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => toggleCategory(c.value)}
-                  className={`rounded-full bg-[#1d1d1d] px-3 py-1 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
-                    selected ? 'text-white' : 'text-white/55 hover:text-white/80'
+                  className={`rounded-full bg-white dark:bg-[#1d1d1d] px-3 py-1 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
+                    selected ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                   }`}
                 >
                   {c.label}
@@ -930,13 +932,13 @@ function CampaignStep({ form, setForm, currency }) {
 
       {/* Budget allocation — Campaign Budget Optimization (CBO) puts the
           budget on the campaign and disables per-adset budgets. */}
-      <div className="rounded-2xl border border-white/12 bg-white/4 p-4 2xl:p-5">
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-white/4 p-4 2xl:p-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <p className="flex items-center gap-2 text-sm font-medium text-white 2xl:text-base">
+            <p className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white 2xl:text-base">
               <Wallet className="h-4 w-4 2xl:h-5 2xl:w-5" /> Advantage campaign budget (CBO)
             </p>
-            <p className="mt-1 text-xs text-white/60 2xl:text-sm">
+            <p className="mt-1 text-xs text-gray-600 dark:text-white/60 2xl:text-sm">
               Meta distributes the budget across ad sets automatically
             </p>
           </div>
@@ -1076,7 +1078,7 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
         <div>
           <FieldLabel hint="Page used as the advertiser identity">Facebook Page</FieldLabel>
           {loadingPages ? (
-            <div className="flex items-center gap-2 rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-sm text-white/65 2xl:py-3 2xl:text-base">
+            <div className="flex items-center gap-2 rounded-full border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 px-4 py-2.5 text-sm text-gray-600 dark:text-white/65 2xl:py-3 2xl:text-base">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading pages…
             </div>
           ) : pages.length === 0 ? (
@@ -1116,7 +1118,7 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
               ]}
             />
           ) : (
-            <div className="rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-sm text-white/55 2xl:py-3 2xl:text-base">
+            <div className="rounded-full border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 px-4 py-2.5 text-sm text-gray-500 dark:text-white/55 2xl:py-3 2xl:text-base">
               {form.pageId ? 'No IG account linked to this page' : 'Pick a page first'}
             </div>
           )}
@@ -1153,18 +1155,18 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
 
       <div className="flex flex-col gap-5 2xl:gap-6">
         {/* budget ─ adset-level, only when CBO is OFF */}
-        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 2xl:p-5">
-          <div className="mb-4 flex items-center gap-2 text-white">
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-white/4 p-4 2xl:p-5">
+          <div className="mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
             <Wallet className="h-4 w-4 2xl:h-5 2xl:w-5" />
-            <p className="text-sm font-bold text-white 2xl:text-base">Budget</p>
-            <span className="ml-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-white/55 2xl:text-xs">
+            <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">Budget</p>
+            <span className="ml-1 rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-gray-500 dark:text-white/55 2xl:text-xs">
               {form.cbo ? 'Campaign-level' : 'Ad-set level'}
             </span>
           </div>
           {form.cbo ? (
-            <div className="rounded-2xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 px-4 py-3 text-xs leading-relaxed text-white/75 2xl:text-sm">
+            <div className="rounded-2xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 px-4 py-3 text-xs leading-relaxed text-gray-700 dark:text-white/75 2xl:text-sm">
               Campaign Budget Optimization is on — budget is set on the campaign (
-              <b className="text-white">
+              <b className="text-gray-900 dark:text-white">
                 {form.campaignBudget || 0} {currency} {cboBudgetUnit}
               </b>
               ). Per-adset budgets are disabled.
@@ -1232,10 +1234,10 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
         </div>
 
         {/* schedule */}
-        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 2xl:p-5">
-          <div className="mb-4 flex items-center gap-2 text-white">
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-white/4 p-4 2xl:p-5">
+          <div className="mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
             <CalendarDays className="h-4 w-4 2xl:h-5 2xl:w-5" />
-            <p className="text-sm font-bold text-white 2xl:text-base">Schedule</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">Schedule</p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:gap-5">
             <div>
@@ -1246,9 +1248,9 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
               />
             </div>
             <div>
-              <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-[#afafaf] 2xl:text-base">
+              <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-gray-600 dark:text-[#afafaf] 2xl:text-base">
                 <span>End date</span>
-                <label className="flex items-center gap-1.5 text-xs text-white/65 normal-case 2xl:text-sm">
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-white/65 normal-case 2xl:text-sm">
                   Set an end date
                   <GradientCheckbox
                     checked={form.hasEndTime}
@@ -1272,13 +1274,13 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
         </div>
 
         {/* audience ─ saved or custom */}
-        <div className="rounded-2xl border border-white/12 bg-white/4 p-4 2xl:p-5">
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-white/4 p-4 2xl:p-5">
           <div className="mb-5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-white">
+            <div className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Sparkles className="h-4 w-4 2xl:h-5 2xl:w-5" />
-              <p className="text-sm font-bold text-white 2xl:text-base">Audience</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">Audience</p>
             </div>
-            <label className="flex items-center gap-2 text-xs font-medium text-white/75 2xl:text-sm">
+            <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-white/75 2xl:text-sm">
               Use a saved audience
               <Toggle
                 value={form.useSavedAudience}
@@ -1289,7 +1291,7 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
 
           {form.useSavedAudience ? (
             loadingSavedAudiences ? (
-              <div className="flex items-center gap-2 rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-sm text-white/65 2xl:py-3 2xl:text-base">
+              <div className="flex items-center gap-2 rounded-full border border-gray-300 bg-gray-100 dark:border-white/5 dark:bg-[#909294]/15 px-4 py-2.5 text-sm text-gray-600 dark:text-white/65 2xl:py-3 2xl:text-base">
                 <Loader2 className="h-4 w-4 animate-spin text-[#15DCFF]" /> Loading saved audiences…
               </div>
             ) : savedAudiences.length === 0 ? (
@@ -1313,11 +1315,11 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
           ) : (
             <div className="flex flex-col gap-5 px-1 2xl:gap-7">
               <div>
-                <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-[#afafaf] 2xl:text-base">
+                <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-gray-600 dark:text-[#afafaf] 2xl:text-base">
                   <span className="flex items-center gap-1.5">
                     <Globe2 className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" /> Locations
                   </span>
-                  <label className="flex items-center gap-1.5 text-xs text-white/65 normal-case 2xl:text-sm">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-white/65 normal-case 2xl:text-sm">
                     Worldwide
                     <GradientCheckbox
                       checked={form.worldwide}
@@ -1335,14 +1337,14 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
                           className={`rounded-full p-[1px] transition-all ${
                             selected
                               ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                              : 'bg-white/8 hover:bg-white/15'
+                              : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
                           }`}
                         >
                           <button
                             type="button"
                             onClick={() => toggleCountry(c.code)}
-                            className={`rounded-full bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
-                              selected ? 'text-white' : 'text-white/55 hover:text-white/80'
+                            className={`rounded-full bg-white dark:bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
+                              selected ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                             }`}
                           >
                             {c.name}
@@ -1389,14 +1391,14 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
                           className={`flex-1 rounded-full p-[1px] transition-all ${
                             selected
                               ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                              : 'bg-white/8 hover:bg-white/15'
+                              : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
                           }`}
                         >
                           <button
                             type="button"
                             onClick={() => toggleGender(g.id)}
-                            className={`w-full rounded-full bg-[#1d1d1d] px-3 py-2 text-xs font-medium transition-all 2xl:py-2.5 2xl:text-sm ${
-                              selected ? 'text-white' : 'text-white/55 hover:text-white/80'
+                            className={`w-full rounded-full bg-white dark:bg-[#1d1d1d] px-3 py-2 text-xs font-medium transition-all 2xl:py-2.5 2xl:text-sm ${
+                              selected ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                             }`}
                           >
                             {g.label}
@@ -1423,14 +1425,14 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
                         className={`rounded-full p-[1px] transition-all ${
                           selected
                             ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                            : 'bg-white/8 hover:bg-white/15'
+                            : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
                         }`}
                       >
                         <button
                           type="button"
                           onClick={() => toggleLocale(l.id)}
-                          className={`rounded-full bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
-                            selected ? 'text-white' : 'text-white/55 hover:text-white/80'
+                          className={`rounded-full bg-white dark:bg-[#1d1d1d] px-3 py-1.5 text-xs font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
+                            selected ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                           }`}
                         >
                           {l.label}
@@ -1441,17 +1443,17 @@ function AdSetStep({ form, setForm, pages, loadingPages, savedAudiences, loading
                 </div>
               </div>
 
-              <label className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/2 px-4 py-3.5 2xl:px-5 2xl:py-4">
+              <label className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/8 dark:bg-white/2 px-4 py-3.5 2xl:px-5 2xl:py-4">
                 <GradientCheckbox
                   checked={form.advantageAudience}
                   onChange={(v) => setForm((f) => ({ ...f, advantageAudience: v }))}
                   size="md"
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-white 2xl:text-base">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white 2xl:text-base">
                     Advantage+ Audience
                   </p>
-                  <p className="mt-0.5 text-xs text-white/60 2xl:text-sm">
+                  <p className="mt-0.5 text-xs text-gray-600 dark:text-white/60 2xl:text-sm">
                     Let Meta expand reach beyond your hand-picked targeting
                   </p>
                 </div>
@@ -1542,7 +1544,7 @@ function AdStep({ form, setForm, currency }) {
           <FieldLabel>Image</FieldLabel>
           {/* Source tabs — let the user pick between uploading from disk or
               re-using a previously generated image from their library. */}
-          <div className="mb-3 inline-flex rounded-xl bg-white/5 p-0.5">
+          <div className="mb-3 inline-flex rounded-xl bg-gray-100 dark:bg-white/5 p-0.5">
             {[
               { value: 'upload', label: 'Upload your image' },
               { value: 'library', label: 'Select from library' },
@@ -1553,8 +1555,8 @@ function AdStep({ form, setForm, currency }) {
                 onClick={() => switchSource(opt.value)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all 2xl:text-sm ${
                   imageSource === opt.value
-                    ? 'bg-white text-black'
-                    : 'text-white/65 hover:text-white'
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                    : 'text-gray-600 hover:text-gray-900 dark:text-white/65 dark:hover:text-white'
                 }`}
               >
                 {opt.label}
@@ -1574,16 +1576,16 @@ function AdStep({ form, setForm, currency }) {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-3.5 text-left transition-all hover:border-white/25 hover:bg-white/5 2xl:py-4"
+                className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 dark:border-white/15 dark:bg-white/2 px-4 py-3.5 text-left transition-all hover:border-gray-400 hover:bg-gray-100 dark:hover:border-white/25 dark:hover:bg-white/5 2xl:py-4"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 2xl:h-11 2xl:w-11">
-                  <Upload className="h-4 w-4 text-white/55 2xl:h-5 2xl:w-5" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5 2xl:h-11 2xl:w-11">
+                  <Upload className="h-4 w-4 text-gray-500 dark:text-white/55 2xl:h-5 2xl:w-5" />
                 </div>
                 <div className="flex-1 truncate">
-                  <p className="text-sm font-semibold text-white 2xl:text-base">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white 2xl:text-base">
                     {form.imageFile ? form.imageFile.name : 'Click to upload an image'}
                   </p>
-                  <p className="mt-0.5 text-xs text-white/55 2xl:text-sm">JPG or PNG · up to 10MB · 1:1 recommended</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-white/55 2xl:text-sm">JPG or PNG · up to 10MB · 1:1 recommended</p>
                 </div>
               </button>
             </>
@@ -1658,9 +1660,9 @@ function AdStep({ form, setForm, currency }) {
             onChange={(v) => setForm((f) => ({ ...f, urlTags: v }))}
             placeholder="utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}"
           />
-          <p className="mt-1.5 text-xs text-white/35 2xl:text-sm">
-            Use Meta dynamic params like <code className="rounded bg-white/5 px-1 text-white/55">{'{{campaign.name}}'}</code> /
-            <code className="ml-1 rounded bg-white/5 px-1 text-white/55">{'{{adset.id}}'}</code>
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-white/35 2xl:text-sm">
+            Use Meta dynamic params like <code className="rounded bg-gray-100 px-1 text-gray-700 dark:bg-white/5 dark:text-white/55">{'{{campaign.name}}'}</code> /
+            <code className="ml-1 rounded bg-gray-100 px-1 text-gray-700 dark:bg-white/5 dark:text-white/55">{'{{adset.id}}'}</code>
           </p>
         </div>
       </div>
@@ -1668,48 +1670,48 @@ function AdStep({ form, setForm, currency }) {
       {/* live preview */}
       <div>
         <FieldLabel>Preview</FieldLabel>
-        <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#0D0D0D]">
-          <div className="flex items-center gap-2.5 border-b border-white/5 px-4 py-3 2xl:px-5 2xl:py-3.5">
-            <div className="h-8 w-8 rounded-full bg-white/10 2xl:h-9 2xl:w-9" />
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/8 dark:bg-[#0D0D0D]">
+          <div className="flex items-center gap-2.5 border-b border-gray-200 dark:border-white/5 px-4 py-3 2xl:px-5 2xl:py-3.5">
+            <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-white/10 2xl:h-9 2xl:w-9" />
             <div>
-              <p className="text-sm font-semibold text-white 2xl:text-base">Sponsored</p>
-              <p className="text-xs text-white/35 2xl:text-sm">Facebook · Feed</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white 2xl:text-base">Sponsored</p>
+              <p className="text-xs text-gray-500 dark:text-white/35 2xl:text-sm">Facebook · Feed</p>
             </div>
           </div>
           {form.primaryText && (
-            <p className="px-4 pt-3 text-sm leading-relaxed text-white/85 2xl:px-5 2xl:text-base">{form.primaryText}</p>
+            <p className="px-4 pt-3 text-sm leading-relaxed text-gray-800 dark:text-white/85 2xl:px-5 2xl:text-base">{form.primaryText}</p>
           )}
-          <div className="mt-3 aspect-square w-full overflow-hidden bg-[#111]">
+          <div className="mt-3 aspect-square w-full overflow-hidden bg-gray-100 dark:bg-[#111]">
             {preview ? (
               <img src={preview} alt="ad preview" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-2">
-                <ImageIcon className="h-10 w-10 text-white/15 2xl:h-12 2xl:w-12" />
-                <span className="text-sm text-white/30 2xl:text-base">No image yet</span>
+                <ImageIcon className="h-10 w-10 text-gray-300 dark:text-white/15 2xl:h-12 2xl:w-12" />
+                <span className="text-sm text-gray-400 dark:text-white/30 2xl:text-base">No image yet</span>
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-white/5 px-4 py-3 2xl:px-5 2xl:py-4">
+          <div className="flex items-center justify-between gap-3 border-t border-gray-200 dark:border-white/5 px-4 py-3 2xl:px-5 2xl:py-4">
             <div className="min-w-0">
-              <p className="truncate text-[11px] uppercase tracking-wider text-white/35 2xl:text-xs">
+              <p className="truncate text-[11px] uppercase tracking-wider text-gray-500 dark:text-white/35 2xl:text-xs">
                 {form.linkUrl ? new URL(maybeUrl(form.linkUrl) || 'https://example.com').hostname : 'example.com'}
               </p>
               {form.headline && (
-                <p className="mt-0.5 truncate text-sm font-bold text-white 2xl:text-base">{form.headline}</p>
+                <p className="mt-0.5 truncate text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">{form.headline}</p>
               )}
               {form.description && (
-                <p className="mt-0.5 truncate text-xs text-white/55 2xl:text-sm">{form.description}</p>
+                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-white/55 2xl:text-sm">{form.description}</p>
               )}
             </div>
             {form.callToAction !== 'NO_BUTTON' && (
-              <span className="ml-3 shrink-0 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white 2xl:px-4 2xl:py-2 2xl:text-sm">
+              <span className="ml-3 shrink-0 rounded-full border border-gray-200 bg-gray-100 dark:border-white/12 dark:bg-white/8 px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white 2xl:px-4 2xl:py-2 2xl:text-sm">
                 {labelize(form.callToAction)}
               </span>
             )}
           </div>
         </div>
-        <p className="mt-2 text-xs text-white/35 2xl:text-sm">
-          Daily budget: <span className="text-white/65">{form.dailyBudget || '—'}</span> {currency || ''}
+        <p className="mt-2 text-xs text-gray-500 dark:text-white/35 2xl:text-sm">
+          Daily budget: <span className="text-gray-700 dark:text-white/65">{form.dailyBudget || '—'}</span> {currency || ''}
         </p>
       </div>
     </div>
@@ -1727,6 +1729,7 @@ function maybeUrl(s) {
 // ─── step 4: review ───────────────────────────────────────────────────────────
 
 function ReviewStep({ form, currency, account, pageName, savedAudienceName, igName, launchError, onDismissError }) {
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
   const campaignBudgetLine = form.cbo
     ? `${form.campaignBudget} ${currency || ''} ${form.campaignBudgetType === 'lifetime' ? 'lifetime' : 'per day'} (CBO)`
     : 'Set on ad set (no CBO)';
@@ -1815,24 +1818,24 @@ function ReviewStep({ form, currency, account, pageName, savedAudienceName, igNa
   return (
     <div className="flex flex-col gap-5 2xl:gap-6">
       {launchError && (
-        <div className="rounded-2xl border border-red-400/30 bg-red-400/8 p-4 2xl:p-5">
+        <div className="rounded-2xl border border-red-400/30 bg-red-50 dark:bg-red-400/8 p-4 2xl:p-5">
           <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300 2xl:h-5 2xl:w-5" />
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-300 2xl:h-5 2xl:w-5" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-bold text-red-100 2xl:text-base">
+                <p className="text-sm font-bold text-red-700 dark:text-red-100 2xl:text-base">
                   {launchError.stage ? `${labelize(launchError.stage)} step failed` : 'Launch failed'}
                 </p>
                 <button
                   onClick={onDismissError}
-                  className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-red-200/60 transition-colors hover:bg-red-400/10 hover:text-red-100"
+                  className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-red-500 dark:text-red-200/60 transition-colors hover:bg-red-100 dark:hover:bg-red-400/10 hover:text-red-700 dark:hover:text-red-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <p className="mt-1 text-xs font-semibold text-red-100 2xl:text-sm">{launchError.title}</p>
+              <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-100 2xl:text-sm">{launchError.title}</p>
               {cleanedDetails && cleanedDetails !== launchError.title && (
-                <p className="mt-1 text-xs leading-relaxed text-red-200/85 2xl:text-sm">{cleanedDetails}</p>
+                <p className="mt-1 text-xs leading-relaxed text-red-600 dark:text-red-200/85 2xl:text-sm">{cleanedDetails}</p>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {launchError.helpUrl && (
@@ -1840,13 +1843,13 @@ function ReviewStep({ form, currency, account, pageName, savedAudienceName, igNa
                     href={launchError.helpUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded border border-red-400/30 bg-red-400/10 px-2 py-0.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-400/20 2xl:text-xs"
+                    className="rounded border border-red-400/30 bg-red-100 dark:bg-red-400/10 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:text-red-100 transition-colors hover:bg-red-200 dark:hover:bg-red-400/20 2xl:text-xs"
                   >
                     Open Meta help ↗
                   </a>
                 )}
                 {launchError.fbtraceId && (
-                  <span className="font-mono text-[11px] text-red-200/55 2xl:text-xs">
+                  <span className="font-mono text-[11px] text-red-500 dark:text-red-200/55 2xl:text-xs">
                     fbtrace {launchError.fbtraceId}
                   </span>
                 )}
@@ -1857,28 +1860,32 @@ function ReviewStep({ form, currency, account, pageName, savedAudienceName, igNa
       )}
 
       {/* Posting-target banner — surfaces the destination account up-front so
-          users can't miss which Meta account a paused campaign just landed in. */}
+          users can't miss which Meta account a paused campaign just landed in.
+          Uses Tailwind arbitrary bg-image values (underscores for spaces) so
+          the brand-tinted gradient overlay rides on top of a white surface in
+          light mode and the original #141414 in dark mode. */}
       <div className="rounded-2xl bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-px">
         <div
           className="flex items-center gap-3 rounded-[15px] p-3.5 2xl:p-4"
           style={{
-            background:
-              'linear-gradient(to right, rgba(21,220,255,0.08), rgba(107,114,248,0.08)), #141414',
+            background: isDarkMode
+              ? 'linear-gradient(to right, rgba(21,220,255,0.08), rgba(107,114,248,0.08)), #141414'
+              : 'linear-gradient(to right, rgba(21,220,255,0.10), rgba(107,114,248,0.10)), #ffffff',
           }}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white 2xl:h-10 2xl:w-10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white 2xl:h-10 2xl:w-10 dark:border-white/15">
             <FaMeta className="h-4 w-4 text-[#0082FB] 2xl:h-5 2xl:w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#15DCFF] 2xl:text-xs">Posting to</p>
-            <p className="truncate text-sm font-bold text-white 2xl:text-base">{account?.name || '—'}</p>
-            <p className="font-mono text-xs text-white/55 2xl:text-sm">act_{account?.id || '—'} · {currency || ''}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#0082FB] 2xl:text-xs dark:text-[#15DCFF]">Posting to</p>
+            <p className="truncate text-sm font-bold text-gray-900 2xl:text-base dark:text-white">{account?.name || '—'}</p>
+            <p className="font-mono text-xs text-gray-500 2xl:text-sm dark:text-white/55">act_{account?.id || '—'} · {currency || ''}</p>
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/8 px-4 py-3 2xl:px-5 2xl:py-3.5">
-        <p className="text-xs leading-relaxed text-emerald-100 2xl:text-sm">
+      <div className="rounded-2xl border border-emerald-400/30 bg-emerald-50 dark:bg-emerald-400/8 px-4 py-3 2xl:px-5 2xl:py-3.5">
+        <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-100 2xl:text-sm">
           Will be launched <b>ACTIVE</b>. Meta starts delivering once the ad set passes review — pause anytime from the Campaigns tab.
         </p>
       </div>
@@ -1889,20 +1896,20 @@ function ReviewStep({ form, currency, account, pageName, savedAudienceName, igNa
         {sections.map((s, i) => (
           <div
             key={s.title}
-            className={`overflow-hidden rounded-2xl border border-white/12 bg-[#303030]/20 ${
+            className={`overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-[#303030]/20 ${
               // The Ad section reads better full-width because its values
               // (URL, image filename) are longer than Campaign/Ad-Set rows.
               i === 2 ? 'md:col-span-2' : ''
             }`}
           >
-            <div className="border-b border-white/10 bg-white/5 px-4 py-2 2xl:px-5 2xl:py-2.5">
-              <p className="text-xs font-bold uppercase tracking-wider text-white/85 2xl:text-sm">{s.title}</p>
+            <div className="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5 px-4 py-2 2xl:px-5 2xl:py-2.5">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-white/85 2xl:text-sm">{s.title}</p>
             </div>
-            <dl className="divide-y divide-white/8">
+            <dl className="divide-y divide-gray-200 dark:divide-white/8">
               {s.rows.map(([k, v]) => (
                 <div key={k} className="flex items-start gap-3 px-4 py-2 2xl:px-5 2xl:py-2.5">
-                  <dt className="w-28 shrink-0 text-xs font-semibold capitalize tracking-wider text-white/55 2xl:w-32 2xl:text-sm">{k}</dt>
-                  <dd className="min-w-0 flex-1 wrap-break-word capitalize text-xs font-medium text-white 2xl:text-sm">{v || '—'}</dd>
+                  <dt className="w-28 shrink-0 text-xs font-semibold capitalize tracking-wider text-gray-500 dark:text-white/55 2xl:w-32 2xl:text-sm">{k}</dt>
+                  <dd className="min-w-0 flex-1 wrap-break-word capitalize text-xs font-medium text-gray-900 dark:text-white 2xl:text-sm">{v || '—'}</dd>
                 </div>
               ))}
             </dl>
@@ -2236,26 +2243,26 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 12 }}
           transition={{ duration: 0.18 }}
-          className="relative flex max-h-[98vh] 2xl:max-h-[92vh] w-full max-w-3xl scale-80 min-w-[370px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414] shadow-2xl 2xl:max-w-5xl 2xl:scale-100"
+          className="relative flex max-h-[98vh] 2xl:max-h-[92vh] w-full max-w-3xl scale-80 min-w-[370px] flex-col overflow-hidden rounded-2xl border border-none bg-white dark:border-white/10 dark:bg-[#141414] shadow-2xl 2xl:max-w-5xl 2xl:scale-100"
         >
           {/* header — surfaces destination account prominently so users
               never confuse which Meta account they're publishing into. */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/12 bg-white/3 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3 2xl:px-6 2xl:py-4">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-white/3 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3 2xl:px-6 2xl:py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-r from-[#02C8C4] to-[#5867EB] ring-1 ring-white/10 2xl:h-12 2xl:w-12">
                 <Megaphone className="h-4.5 w-4.5 text-white 2xl:h-[24px] 2xl:w-[24px]" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white 2xl:text-lg">New Campaign</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-lg">New Campaign</p>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className="text-[11px] text-white/60 2xl:text-xs">Posting to</span>
+                  <span className="text-[11px] text-gray-600 dark:text-white/60 2xl:text-xs">Posting to</span>
                   <span className="inline-flex rounded-[6px] bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-px transition-all">
-                    <span className="rounded-[5px] bg-[#141414] px-2 py-1 text-[11px] font-bold leading-tight text-white 2xl:text-xs">
+                    <span className="rounded-[5px] bg-white dark:bg-[#141414] px-2 py-1 text-[11px] font-bold leading-tight text-gray-900 dark:text-white 2xl:text-xs">
                       {account?.name || '—'}
                     </span>
                   </span>
                   {account?.currency && (
-                    <span className="font-mono text-[11px] text-white/45 2xl:text-xs">
+                    <span className="font-mono text-[11px] text-gray-500 dark:text-white/45 2xl:text-xs">
                       · {account.currency}
                     </span>
                   )}
@@ -2267,7 +2274,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
               <button
                 onClick={requestClose}
                 disabled={submitting}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/8 hover:text-white disabled:opacity-30 2xl:h-8 2xl:w-8"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 dark:text-white/55 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-30 2xl:h-8 2xl:w-8"
               >
                 <X className="h-4 w-4 2xl:h-5 2xl:w-5" />
               </button>
@@ -2284,19 +2291,19 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
               <div
                 className={`mb-5 flex items-start gap-3 rounded-2xl border p-4 2xl:p-5 ${
                   accountBlocked
-                    ? 'border-red-400/30 bg-red-400/8'
-                    : 'border-amber-400/30 bg-amber-400/8'
+                    ? 'border-red-400/30 bg-red-50 dark:bg-red-400/8'
+                    : 'border-amber-400/30 bg-amber-50 dark:bg-amber-400/8'
                 }`}
               >
                 <AlertCircle
                   className={`mt-0.5 h-4 w-4 shrink-0 2xl:h-5 2xl:w-5 ${
-                    accountBlocked ? 'text-red-300' : 'text-amber-300'
+                    accountBlocked ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300'
                   }`}
                 />
                 <div className="min-w-0 flex-1">
                   <p
                     className={`text-sm font-bold 2xl:text-base ${
-                      accountBlocked ? 'text-red-100' : 'text-amber-100'
+                      accountBlocked ? 'text-red-700 dark:text-red-100' : 'text-amber-700 dark:text-amber-100'
                     }`}
                   >
                     Ad account is {accountStatus.label.toLowerCase()}
@@ -2304,7 +2311,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
                   </p>
                   <p
                     className={`mt-1 text-xs leading-relaxed 2xl:text-sm ${
-                      accountBlocked ? 'text-red-200/80' : 'text-amber-200/80'
+                      accountBlocked ? 'text-red-600 dark:text-red-200/80' : 'text-amber-700 dark:text-amber-200/80'
                     }`}
                   >
                     {accountBlocked
@@ -2360,18 +2367,18 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
           </div>
 
           {/* footer */}
-          <div className="flex shrink-0 items-center justify-between border-t border-white/8 px-4 py-3 sm:px-6 2xl:px-8 2xl:py-4">
+          <div className="flex shrink-0 items-center justify-between border-t border-gray-200 dark:border-white/8 px-4 py-3 sm:px-6 2xl:px-8 2xl:py-4">
             <button
               onClick={goPrev}
               disabled={step === 'campaign' || submitting}
-              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/3 px-4 py-2 text-xs font-semibold text-white/70 transition-all hover:border-white/15 hover:text-white disabled:opacity-30 2xl:px-5 2xl:py-2.5 2xl:text-sm"
+              className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/3 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-white/70 transition-all hover:border-gray-300 hover:text-gray-900 dark:hover:border-white/15 dark:hover:text-white disabled:opacity-30 2xl:px-5 2xl:py-2.5 2xl:text-sm"
             >
               <ChevronLeft className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" /> Back
             </button>
 
             <div className="flex items-center gap-3">
               {progress && (
-                <div className="flex items-center gap-1.5 text-xs text-white/65 2xl:text-sm">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-white/65 2xl:text-sm">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-[#15DCFF] 2xl:h-4 2xl:w-4" />
                   {progress.message}
                 </div>
@@ -2379,7 +2386,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
               {!isLast ? (
                 <button
                   onClick={goNext}
-                  className="flex items-center gap-1.5 rounded-full bg-white px-5 py-2 text-xs font-bold text-black transition-all hover:opacity-90 2xl:px-6 2xl:py-2.5 2xl:text-sm"
+                  className="flex items-center gap-1.5 rounded-full bg-gray-900 px-5 py-2 text-xs font-bold text-white dark:bg-white dark:text-black transition-all hover:opacity-90 2xl:px-6 2xl:py-2.5 2xl:text-sm"
                 >
                   Next <ChevronRight className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                 </button>
@@ -2392,7 +2399,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
                       ? `Account ${accountStatus.label} — reactivate in Meta first`
                       : undefined
                   }
-                  className="flex items-center gap-1.5 rounded-full bg-white px-5 py-2 text-xs font-bold text-black transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 2xl:px-6 2xl:py-2.5 2xl:text-sm"
+                  className="flex items-center gap-1.5 rounded-full bg-gray-900 px-5 py-2 text-xs font-bold text-white dark:bg-white dark:text-black transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 2xl:px-6 2xl:py-2.5 2xl:text-sm"
                 >
                   {submitting ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin 2xl:h-4 2xl:w-4" />
@@ -2425,22 +2432,22 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.16 }}
-                  className="w-full max-w-sm rounded-2xl border border-white/12 bg-[#161616] p-5 shadow-2xl 2xl:max-w-md 2xl:p-6"
+                  className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white dark:border-white/12 dark:bg-[#161616] p-5 shadow-2xl 2xl:max-w-md 2xl:p-6"
                 >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 2xl:h-11 2xl:w-11">
-                    <AlertCircle className="h-5 w-5 text-red-300 2xl:h-6 2xl:w-6" />
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 dark:bg-red-500/10 2xl:h-11 2xl:w-11">
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-300 2xl:h-6 2xl:w-6" />
                   </div>
-                  <h3 className="text-sm font-bold text-white 2xl:text-base">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">
                     Discard this campaign?
                   </h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-white/55 2xl:text-sm">
+                  <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-white/55 2xl:text-sm">
                     Everything you've entered in the wizard will be cleared. Your existing campaigns
                     in Meta aren't affected.
                   </p>
                   <div className="mt-5 flex items-center justify-end gap-2">
                     <button
                       onClick={() => setShowDiscardConfirm(false)}
-                      className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white/10 2xl:px-5 2xl:py-2.5 2xl:text-sm"
+                      className="rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/5 px-4 py-2 text-xs font-semibold text-gray-900 dark:text-white transition-all hover:bg-gray-200 dark:hover:bg-white/10 2xl:px-5 2xl:py-2.5 2xl:text-sm"
                     >
                       Keep editing
                     </button>

@@ -38,14 +38,14 @@ export function WebsiteStep({
     <LifestyleShell title={title} onClose={onClose}>
       <form
         onSubmit={handleSubmit}
-        className="relative w-full min-w-[420px] max-w-[750px] rounded-[24px] bg-[#303030]/30 px-7 backdrop-blur-md sm:px-12 pb-5 pt-18"  
+        className="relative w-full min-w-[420px] max-w-[750px] rounded-[24px] bg-white dark:bg-[#303030]/30 px-7 backdrop-blur-md sm:px-12 pb-5 pt-18"
       >
         {onClose && (
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="absolute right-5 top-5 text-white/70 transition-colors hover:text-white"
+            className="absolute right-5 top-5 text-gray-500 dark:text-white/70 transition-colors hover:text-black dark:hover:text-white"
           >
             <X size={26} strokeWidth={1.8} />
           </button>
@@ -53,7 +53,7 @@ export function WebsiteStep({
 
         <label
           htmlFor="brand-website"
-          className="block text-[16px] font-semibold text-white sm:text-[17px]"
+          className="block text-[16px] font-semibold text-gray-900 dark:text-white sm:text-[17px]"
         >
           Brand Website
         </label>
@@ -71,9 +71,9 @@ export function WebsiteStep({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             className={`
-              h-[56px] w-full rounded-full bg-[#9092941A] pl-6 pr-14
-              text-[15px] text-white outline-none ring-1
-              placeholder:text-[#AFAFAF]
+              h-[56px] w-full rounded-full bg-gray-100 dark:bg-[#9092941A] pl-6 pr-14
+              text-[15px] text-gray-900 dark:text-white outline-none ring-1
+              placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF]
               focus-visible:ring-2 focus-visible:ring-white/30
               sm:h-[60px] sm:text-[16px]
               ${hasError ? 'ring-red-400/50' : 'ring-white/5'}
@@ -83,7 +83,7 @@ export function WebsiteStep({
           <LinkIcon
             size={20}
             strokeWidth={1.6}
-            className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/60"
+            className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-white/60"
           />
         </div>
 
@@ -94,7 +94,7 @@ export function WebsiteStep({
               <button
                 type="button"
                 onClick={onAddManually}
-                className="font-medium text-red-300 underline underline-offset-2 hover:text-red-200"
+                className="font-medium text-red-600 underline underline-offset-2 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
               >
                 Please add manually
               </button>
@@ -109,7 +109,7 @@ export function WebsiteStep({
             <button
               type="button"
               onClick={onSkip}
-              className="rounded-full bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-white/60 transition hover:bg-white/10 hover:text-white"
+              className="rounded-full bg-black/5 dark:bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-gray-500 dark:text-white/60 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
             >
               Skip
             </button>
@@ -117,7 +117,7 @@ export function WebsiteStep({
           <button
             type="submit"
             disabled={!canSubmit}
-            className={`rounded-full bg-white px-8 py-2.5 text-sm font-bold text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
+            className={`rounded-full bg-gray-900 dark:bg-white px-8 py-2.5 text-sm font-bold text-white dark:text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
               !canSubmit ? 'cursor-not-allowed opacity-50' : ''
             }`}
           >

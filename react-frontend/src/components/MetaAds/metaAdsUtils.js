@@ -24,25 +24,29 @@ export const CHART_COLORS = ['#15DCFF', '#6b72f8', '#f472b6', '#34d399', '#fbbf2
 
 export const STATUS_MAP = {
   ACTIVE: {
-    dot: 'bg-emerald-400',
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-400/10 border-emerald-400/20',
+    dot: 'bg-emerald-500 dark:bg-emerald-400',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-400/10 border-emerald-400/30 dark:border-emerald-400/20',
   },
   PAUSED: {
-    dot: 'bg-red-400',
-    text: 'text-red-400',
-    bg: 'bg-red-400/10 border-red-400/20',
+    dot: 'bg-red-500 dark:bg-red-400',
+    text: 'text-red-600 dark:text-red-400',
+    bg: 'bg-red-400/10 border-red-400/30 dark:border-red-400/20',
   },
-  DELETED: { dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-400/10     border-red-400/20' },
+  DELETED: {
+    dot: 'bg-red-500 dark:bg-red-400',
+    text: 'text-red-600 dark:text-red-400',
+    bg: 'bg-red-400/10 border-red-400/30 dark:border-red-400/20',
+  },
   ARCHIVED: {
-    dot: 'bg-[#AFAFAF]',
-    text: 'text-[#BEBEBE]',
-    bg: 'bg-white/5        border-white/10',
+    dot: 'bg-gray-400 dark:bg-[#AFAFAF]',
+    text: 'text-gray-500 dark:text-[#BEBEBE]',
+    bg: 'bg-gray-200/70 border-gray-300 dark:bg-white/5 dark:border-white/10',
   },
   1: {
-    dot: 'bg-emerald-400',
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-400/10 border-emerald-400/20',
+    dot: 'bg-emerald-500 dark:bg-emerald-400',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-400/10 border-emerald-400/30 dark:border-emerald-400/20',
   },
 };
 

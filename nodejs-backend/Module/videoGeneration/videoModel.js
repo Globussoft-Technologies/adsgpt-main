@@ -119,6 +119,7 @@ const videoSchema = new mongoose.Schema(
       videoSample: String,
       voiceClone: Boolean,
       tone: String,
+      voiceSampleUrl: String,
       characterGender: String,
       uploadedAvatars: [String],
 
@@ -155,6 +156,7 @@ const videoSchema = new mongoose.Schema(
     // ── Regular video outputs ─────────────────────────────────────────────────
     generatedImage: { type: String, default: null },
     generatedScript: { type: mongoose.Schema.Types.Mixed, default: null },
+    videoPrompt: { type: String, default: null },
     watermark: Boolean,
     results: [resultSchema],
 

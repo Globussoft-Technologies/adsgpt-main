@@ -181,6 +181,9 @@ const createRuleSchema = Joi.object({
     .min(MIN_LOOKBACK_DAYS)
     .max(MAX_LOOKBACK_DAYS)
     .default(DEFAULT_LOOKBACK_DAYS),
+  // Optional. When set, overrides `lookbackDays` with a calendar-resolved
+  // window computed at audit time (e.g. 'this_month' → days since the 1st).
+  lookbackPreset: Joi.string().valid("this_month").allow(null),
   conditions: conditionsSchema.required(),
   action: actionSchema.required(),
   attachments: Joi.array()
@@ -207,6 +210,7 @@ const updateRuleSchema = Joi.object({
     .integer()
     .min(MIN_LOOKBACK_DAYS)
     .max(MAX_LOOKBACK_DAYS),
+  lookbackPreset: Joi.string().valid("this_month").allow(null),
   conditions: conditionsSchema,
   action: actionSchema,
   attachments: Joi.array()

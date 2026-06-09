@@ -65,7 +65,7 @@ export default function AdCreativeNewHome({ categories = DEFAULT_CATEGORIES, onS
             <motion.h1
               variants={fadeUpVariants}
               custom={0}
-              className="mb-2 bg-gradient-to-t text-center from-[#15DCFF] to-[#6b72f8] bg-clip-text text-2xl font-semibold text-transparent 2xl:mb-4 2xl:text-4xl"
+              className="mb-2 bg-gradient-to-t text-center from-[#0c9fbd] to-[#5057d6] dark:from-[#15DCFF] dark:to-[#6b72f8] bg-clip-text text-2xl font-semibold text-transparent 2xl:mb-4 2xl:text-4xl"
             >
               Hello, {userName}
             </motion.h1>
@@ -73,7 +73,7 @@ export default function AdCreativeNewHome({ categories = DEFAULT_CATEGORIES, onS
             <motion.p
               variants={fadeUpVariants}
               custom={1}
-              className="mb-6 text-center text-sm text-[#BEBEBE] 2xl:mb-8 2xl:text-base"
+              className="mb-6 text-center text-sm text-gray-500 dark:text-[#BEBEBE] 2xl:mb-8 2xl:text-base"
             >
               Create scroll-stopping Image ads with AI <br />
               that understands your business.

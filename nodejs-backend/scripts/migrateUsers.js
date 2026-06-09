@@ -17,7 +17,7 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const { Redis } = require("ioredis");
-const UserProfile = require("./Module/user/userProfileModel");
+const UserProfile = require("../Module/user/userProfileModel");
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 

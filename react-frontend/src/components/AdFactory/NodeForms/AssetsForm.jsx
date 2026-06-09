@@ -260,6 +260,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
   const [extractedImages, setExtractedImages] = useState([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
+  // Backend validation / reachability error surfaced inline under the URL
+  // input (e.g. "We couldn't reach this URL right now. Try again or set up
+  // manually.").
+  const [urlError, setUrlError] = useState('');
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const campaignId = searchParams.get('campaignId');
@@ -425,15 +429,25 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
     } else {
       // It's a webpage URL - extract images from it
       setIsExtractingImages(true);
+      setUrlError('');
 
       try {
-        const images = await dispatch(AnalyzingsweburlForImages({ website_url: urlInput?.trim() }));
-        const result = images.payload.data.images;
+        // `.unwrap()` rethrows the rejectWithValue payload as the catch
+        // `error` so the backend's `detail` message surfaces here intact.
+        const res = await dispatch(
+          AnalyzingsweburlForImages({ website_url: urlInput?.trim() })
+        ).unwrap();
+        const result = res.data.images;
 
         setExtractedImages(result);
         setShowImageSelector(true);
       } catch (error) {
         console.error(error);
+        const message =
+          typeof error === 'string'
+            ? error
+            : error?.message || 'Failed to analyze website URL';
+        setUrlError(message);
 
         // try {
         //   const tempUrl = urlInput.trim();
@@ -658,10 +672,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
       >
         <div className="flex flex-col">
           <div className="mb-2.5 flex items-center justify-between">
-            <label className="mb-0.5 text-sm text-[#AFAFAF] 2xl:text-[18px]">
+            <label className="mb-0.5 text-sm text-gray-500 dark:text-[#AFAFAF] 2xl:text-[18px]">
               Upload a key visual
             </label>
-            <span className="text-xs text-[#AFAFAF] 2xl:text-sm">
+            <span className="text-xs text-gray-500 dark:text-[#AFAFAF] 2xl:text-sm">
               {assetsArray?.length} / 5 assets
             </span>
           </div>
@@ -673,9 +687,9 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                 {/* URL Input Section */}
                 {/* Upload Area */}
                 <div
-                  className={`backdrop-blur-100 flex max-w-full items-center gap-6 overflow-x-auto rounded-[20px] border border-gray-100/10 bg-[#383838]/50 p-1.5 transition ${
+                  className={`backdrop-blur-100 flex max-w-full items-center gap-6 overflow-x-auto rounded-[20px] border border-black/10 bg-gray-50 dark:border-gray-100/10 dark:bg-[#383838]/50 p-1.5 transition ${
                     !isSubmitting && assetsArray?.length < 5
-                      ? 'cursor-pointer hover:border-[#4D4D4D]/60 hover:bg-[#2F2F2F]'
+                      ? 'cursor-pointer hover:border-black/20 hover:bg-gray-100 dark:hover:border-[#4D4D4D]/60 dark:hover:bg-[#2F2F2F]'
                       : 'cursor-pointer opacity-50'
                   }`}
                 >
@@ -685,7 +699,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                       asset ? (
                         <div
                           key={index}
-                          className="group relative h-fit w-fit overflow-hidden rounded-xl bg-[#383838] p-[1px]"
+                          className="group relative h-fit w-fit overflow-hidden rounded-xl bg-gray-50 dark:bg-[#383838] p-[1px]"
                         >
                           <div className="relative">
                             {pasteLoaderIndex === index && (
@@ -733,7 +747,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
 
                     {/* Show paste loader in the next empty slot */}
                     {isPasting && pasteLoaderIndex === assetsArray.length && (
-                      <div className="flex min-w-[7rem] flex-col items-center justify-center gap-1 rounded-xl border border-amber-500/30 bg-[#383838] px-4 py-5">
+                      <div className="flex min-w-[7rem] flex-col items-center justify-center gap-1 rounded-xl border border-amber-500/30 bg-gray-50 dark:bg-[#383838] px-4 py-5">
                         <div className="mb-2 h-7 w-7 animate-spin rounded-full border-2 border-amber-400 border-t-transparent 2xl:h-8 2xl:w-8"></div>
                         <span className="text-center text-xs font-medium text-amber-400 2xl:text-sm">
                           Pasting...
@@ -748,13 +762,13 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                           if (isSubmitting || assetsArray?.length >= 5) return;
                           fileInputRef.current?.click();
                         }}
-                        className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#383838] px-4 py-5"
+                        className="flex flex-col items-center justify-center gap-1 rounded-xl border border-black/10 bg-gray-50 dark:border-white/10 dark:bg-[#383838] px-4 py-5"
                       >
                         <Plus
-                          className="mb-2 h-7 w-7 text-[#EDE8E8] 2xl:h-8 2xl:w-8"
+                          className="mb-2 h-7 w-7 text-gray-500 dark:text-[#EDE8E8] 2xl:h-8 2xl:w-8"
                           strokeWidth={2}
                         />
-                        <span className="text-center text-xs font-medium text-[#EDE8E8] 2xl:text-sm">
+                        <span className="text-center text-xs font-medium text-gray-500 dark:text-[#EDE8E8] 2xl:text-sm">
                           Upload from device
                         </span>
                       </div>
@@ -774,15 +788,15 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                 />
                 {/* Helper text */}
                 <div className="mt-1 space-y-1">
-                  <p className="text-sm text-[#AFAFAF] 2xl:text-base">
+                  <p className="text-sm text-gray-500 dark:text-[#AFAFAF] 2xl:text-base">
                     You can upload up to 5 images. Supported formats: JPG, PNG, WebP, GIF, SVG
                   </p>
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <div className="h-px flex-1 bg-gray-100/10"></div>
+                  <div className="h-px flex-1 bg-black/10 dark:bg-gray-100/10"></div>
                   <span className="text-xs text-gray-400 2xl:text-sm">OR</span>
-                  <div className="h-px flex-1 bg-gray-100/10"></div>
+                  <div className="h-px flex-1 bg-black/10 dark:bg-gray-100/10"></div>
                 </div>
 
                 <div className="space-y-2">
@@ -792,9 +806,16 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                         <input
                           type="text"
                           value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
+                          onChange={(e) => {
+                            setUrlInput(e.target.value);
+                            if (urlError) setUrlError('');
+                          }}
                           placeholder="Enter any URL (image URL or webpage)"
-                          className="flex-1 rounded-lg border border-gray-100/10 bg-[#2F2F2F] px-4 py-2.5 text-sm text-white placeholder-gray-400 focus:border-[#5867EB] focus:ring-1 focus:ring-[#5867EB] focus:outline-none 2xl:text-base"
+                          className={`flex-1 rounded-lg border bg-gray-100 text-gray-900 dark:bg-[#2F2F2F] dark:text-white px-4 py-2.5 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none 2xl:text-base ${
+                            urlError
+                              ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/40'
+                              : 'border-black/10 dark:border-gray-100/10 focus:border-[#5867EB] focus:ring-[#5867EB]'
+                          }`}
                           disabled={isLoadingUrl || isExtractingImages || isSubmitting}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -848,13 +869,20 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                             setUrlInput('');
                             setShowImageSelector(false);
                             setExtractedImages([]);
+                            setUrlError('');
                           }}
                           disabled={isLoadingUrl || isExtractingImages}
-                          className="rounded-lg border border-gray-100/10 bg-[#2F2F2F] px-4 py-2.5 text-sm text-gray-300 transition hover:bg-[#383838] disabled:opacity-50 2xl:text-base"
+                          className="rounded-lg border border-black/10 bg-gray-100 text-gray-500 dark:border-gray-100/10 dark:bg-[#2F2F2F] dark:text-gray-300 px-4 py-2.5 text-sm transition hover:bg-gray-200 dark:hover:bg-[#383838] disabled:opacity-50 2xl:text-base"
                         >
                           Cancel
                         </button>
                       </div>
+
+                      {urlError && (
+                        <p className="text-xs text-red-500 dark:text-red-400 2xl:text-sm">
+                          {urlError}
+                        </p>
+                      )}
 
                       {/* URL type indicator with extraction preview */}
                       {urlInput.trim() && (
@@ -920,7 +948,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                           type="button"
                           onClick={() => setCurrentStep(2)}
                           disabled={isSubmitting || assetsArray?.length >= 5}
-                          className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-100/10 bg-[#2F2F2F] px-4 py-3 text-xs whitespace-nowrap text-gray-300 transition hover:border-[#4D4D4D]/60 hover:bg-[#383838] disabled:opacity-50 sm:text-sm 2xl:text-base"
+                          className="flex w-full items-center justify-center gap-2 rounded-lg border border-black/10 bg-gray-100 text-gray-500 dark:border-gray-100/10 dark:bg-[#2F2F2F] dark:text-gray-300 px-4 py-3 text-xs whitespace-nowrap transition hover:border-black/20 hover:bg-gray-200 dark:hover:border-[#4D4D4D]/60 dark:hover:bg-[#383838] disabled:opacity-50 sm:text-sm 2xl:text-base"
                         >
                           Add visuals of your competitors ads
                         </button>
@@ -930,7 +958,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                         type="button"
                         onClick={() => setIsAddingUrl(true)}
                         disabled={isSubmitting || assetsArray?.length >= 5}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-100/10 bg-[#2F2F2F] px-4 py-3 text-xs text-gray-300 transition hover:border-[#4D4D4D]/60 hover:bg-[#383838] disabled:opacity-50 sm:text-sm 2xl:text-base"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-black/10 bg-gray-100 text-gray-500 dark:border-gray-100/10 dark:bg-[#2F2F2F] dark:text-gray-300 px-4 py-3 text-xs transition hover:border-black/20 hover:bg-gray-200 dark:hover:border-[#4D4D4D]/60 dark:hover:bg-[#383838] disabled:opacity-50 sm:text-sm 2xl:text-base"
                       >
                         <LinkIcon className="h-4 w-4" />
                         Add image from URL
@@ -1046,12 +1074,12 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                 )} */}
                 {/* Extracted Images Selector Modal */}
                 {showImageSelector && extractedImages.length > 0 && (
-                  <div className="rounded-lg border border-gray-100/10 bg-[#2F2F2F] p-4">
+                  <div className="rounded-lg border border-black/10 bg-gray-50 dark:border-gray-100/10 dark:bg-[#2F2F2F] p-4">
                     <div className="mb-3">
                       <div className="mb-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Globe className="h-4 w-4 text-blue-400" />
-                          <h3 className="text-sm font-medium text-white 2xl:text-base">
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-white 2xl:text-base">
                             Select images from {getDomain(urlInput) || 'webpage'}
                           </h3>
                         </div>
@@ -1078,7 +1106,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                             return (
                               <div
                                 key={index}
-                                className="group relative cursor-pointer overflow-hidden rounded-lg border border-gray-100/10 bg-[#383838] transition hover:border-[#5867EB]"
+                                className="group relative cursor-pointer overflow-hidden rounded-lg border border-black/10 bg-gray-50 dark:border-gray-100/10 dark:bg-[#383838] transition hover:border-[#5867EB]"
                                 onClick={() => {
                                   setLightboxOpen(true);
                                   setLightboxImages(extractedImages);
@@ -1157,7 +1185,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
 
                         {/* Scroll indicator for many images */}
                         {extractedImages.length > 9 && (
-                          <div className="mt-2 flex items-center justify-center border-t border-gray-100/10 pt-2">
+                          <div className="mt-2 flex items-center justify-center border-t border-black/10 dark:border-gray-100/10 pt-2">
                             <ArrowDown className="h-4 w-4 animate-bounce text-gray-400" />
                           </div>
                         )}
@@ -1170,7 +1198,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                           setShowImageSelector(false);
                           setExtractedImages([]);
                         }}
-                        className="rounded-lg border border-gray-100/10 bg-[#383838] px-3 py-1.5 text-xs text-gray-300 transition hover:bg-[#444] 2xl:text-sm"
+                        className="rounded-lg border border-black/10 bg-gray-100 text-gray-500 dark:border-gray-100/10 dark:bg-[#383838] dark:text-gray-300 px-3 py-1.5 text-xs transition hover:bg-gray-200 dark:hover:bg-[#444] 2xl:text-sm"
                       >
                         Cancel
                       </button>
@@ -1191,7 +1219,7 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
         <div className="mt-12 flex flex-wrap justify-end gap-3 sm:mt-16">
           <button
             type="button"
-            className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-1.5 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
+            className="rounded-lg border border-gray-300 bg-transparent text-gray-700 dark:border-[#E3E3E3] dark:text-[#E3E3E3] px-10 py-1.5 text-sm transition hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
             disabled={isSubmitting}
             onClick={() => dispatch(setActiveForm(null))}
           >
@@ -1205,11 +1233,11 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
               assetsArray?.length === 0 ||
               (productionAndServices?.status == 'success' && results?.status != 'success')
             }
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+            className="rounded-lg bg-gray-900 text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-semibold shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
           >
             {isSubmitting ? (
               <div className="flex items-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent"></div>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white dark:border-black border-t-transparent"></div>
                 Uploading...
               </div>
             ) : (
@@ -1227,10 +1255,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
         initial={{ opacity: 0, y: 25, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.25 }}
-        className="text-white"
+        className="text-gray-900 dark:text-white"
       >
         <>
-          <h2 className="mb-5 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+          <h2 className="mb-5 text-center text-xl font-semibold text-gray-900 dark:text-white 2xl:text-[23px]">
             Key visuals
           </h2>
 

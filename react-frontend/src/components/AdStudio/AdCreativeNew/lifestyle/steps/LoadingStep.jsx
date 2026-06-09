@@ -36,7 +36,7 @@ export function LoadingStep({ label, title, onCancel }) {
       <div
         className="
           relative flex w-full max-w-[950px] 2xl:max-w-[1100px] flex-col items-center justify-center gap-5
-          rounded-[30px] bg-[#303030]/30 px-8 py-20 backdrop-blur-md
+          rounded-[30px] bg-gray-50 dark:bg-[#303030]/30 px-8 py-20 backdrop-blur-md
           sm:py-24 lg:py-[160px] h-[78vh] 2xl:h-[64vh]
         "
       >
@@ -49,7 +49,7 @@ export function LoadingStep({ label, title, onCancel }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="text-[clamp(20px,2.4vw,28px)] font-normal leading-[1.2] tracking-wide text-white/75"
+              className="text-[clamp(20px,2.4vw,28px)] font-normal leading-[1.2] tracking-wide text-gray-500 dark:text-white/75"
             >
               {message}
             </Motion.p>
@@ -59,7 +59,7 @@ export function LoadingStep({ label, title, onCancel }) {
           <button
             type="button"
             onClick={onCancel}
-            className="absolute bottom-6 right-7 rounded-full px-3 py-1.5 text-sm text-white/60 transition-colors hover:text-white/80"
+            className="absolute bottom-6 right-7 rounded-full px-3 py-1.5 text-sm text-gray-500 dark:text-white/60 transition-colors hover:text-black/80 dark:hover:text-white/80"
           >
             Cancel
           </button>

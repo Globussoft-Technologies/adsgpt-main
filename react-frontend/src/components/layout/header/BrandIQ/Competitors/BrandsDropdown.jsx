@@ -19,7 +19,9 @@ const BrandsDropdown = ({ options = [], label = '', value = '', onChange }) => {
               key={optionValue}
               value={optionValue}
               className={`group cursor-pointer text-[10px] hover:bg-[#DFDFDF] 2xl:text-xs dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
-                value?.value === optionValue ? 'dark:bg-[#0D0D0D]/50' : 'bg-transparent'
+                value?.value === optionValue
+                  ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white dark:text-white'
+                  : 'bg-transparent'
               } focus:bg-transparent focus:text-inherit`}
             >
               <div className="flex w-full items-center justify-between">

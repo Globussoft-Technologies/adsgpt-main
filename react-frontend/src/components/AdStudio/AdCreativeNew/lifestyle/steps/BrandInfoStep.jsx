@@ -205,19 +205,19 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
 
   return (
     <LifestyleShell title={title} onClose={onClose}>
-      <div className="relative -mt-12 max-h-[calc(100svh-20px)] w-full max-w-[1100px] min-w-[420px] overflow-y-auto rounded-[30px] bg-[#303030]/30 p-5 backdrop-blur-md sm:p-6 lg:px-12 2xl:mt-0 2xl:max-h-[calc(100svh-140px)]">
+      <div className="relative -mt-12 max-h-[calc(100svh-20px)] w-full max-w-[1100px] min-w-[420px] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-5 backdrop-blur-md sm:p-6 lg:px-12 2xl:mt-0 2xl:max-h-[calc(100svh-140px)]">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="absolute top-4 left-6 flex h-12 w-12 items-center justify-center rounded-full text-white/60 transition-colors hover:text-white"
+            className="absolute top-4 left-6 flex h-12 w-12 items-center justify-center rounded-full text-gray-500 dark:text-white/60 transition-colors hover:text-black dark:hover:text-white"
             aria-label="Back"
           >
             <ArrowLeft size={26} strokeWidth={2} />
           </button>
         )}
         <div className="relative mb-5 flex items-center justify-center">
-          <h3 className="text-[16px] text-white sm:text-xl">Brand Information</h3>
+          <h3 className="text-[16px] text-gray-900 dark:text-white sm:text-xl">Brand Information</h3>
         </div>
 
         <div className="mt-12 grid grid-cols-1 gap-x-12 gap-y-6 lg:grid-cols-2">
@@ -259,7 +259,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                   <button
                     type="button"
                     onClick={() => setPickerOpen((v) => !v)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#909294]/10 text-white/70 ring-1 ring-white/10 transition-colors hover:bg-[#909294]/20"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 dark:bg-[#909294]/10 text-gray-500 dark:text-white/70 ring-1 ring-white/10 transition-colors hover:bg-black/5 dark:hover:bg-[#909294]/20"
                     aria-label="Add brand color"
                   >
                     <Plus size={20} strokeWidth={2} />
@@ -304,7 +304,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                     setBrandLogoUrl(text.trim());
                   }
                 }}
-                className="text-10 flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[#afafaf]"
+                className="text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
               >
                 <div className="flex flex-1 items-center justify-between">
                   <input
@@ -316,15 +316,15 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                     value={brandLogoUrl?.startsWith('blob:') ? '' : brandLogoUrl}
                     onChange={(e) => setBrandLogoUrl(e.target.value)}
                     placeholder="Paste your Brand logo"
-                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-white placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
+                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
                   />
-                  <LinkIcon className="h-3 w-3 text-[#909294] 2xl:h-4 2xl:w-4" />
+                  <LinkIcon className="h-3 w-3 text-gray-500 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
                 </div>
                 <label
                   htmlFor="brand-logo-upload"
-                  className="text-10 flex cursor-pointer items-center gap-1 rounded-full bg-white/20 px-2.5 py-3 text-white hover:opacity-70 2xl:gap-2"
+                  className="text-10 flex cursor-pointer items-center gap-1 rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-3 text-gray-900 dark:text-white hover:opacity-70 2xl:gap-2"
                 >
-                  <CloudUpload className="h-3 w-3 text-white 2xl:h-4 2xl:w-4" />
+                  <CloudUpload className="h-3 w-3 text-gray-900 dark:text-white 2xl:h-4 2xl:w-4" />
                   <span className="text-10! whitespace-nowrap 2xl:text-xs!">Upload Image</span>
                 </label>
                 <input
@@ -379,7 +379,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                           setSelectedLogo(url);
                           setBrandLogoUrl(url);
                         }}
-                        className={`relative h-9 w-9 shrink-0 rounded-full bg-white/5 ring-1 transition-transform hover:scale-105 ${
+                        className={`relative h-9 w-9 shrink-0 rounded-full bg-black/5 dark:bg-white/5 ring-1 transition-transform hover:scale-105 ${
                           active ? 'ring-2 ring-white/80' : 'ring-white/10'
                         }`}
                         aria-label="Use this logo"
@@ -392,7 +392,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                           className="h-full w-full rounded-full object-contain"
                         />
                         {active && (
-                          <span className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white">
+                          <span className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-gray-900 dark:text-white">
                             <CheckCircle size={16} strokeWidth={2.5} />
                           </span>
                         )}
@@ -406,7 +406,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
             <Field label="Brand Images">
               <div
                 onPaste={handleBrandImagePaste}
-                className="text-10 flex items-center gap-3 rounded-full bg-[#909294]/10 px-1 py-1 text-[#afafaf]"
+                className="text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
               >
                 <div className="flex flex-1 items-center justify-between">
                   <input
@@ -421,7 +421,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                       }
                     }}
                     placeholder="Paste your Brand image"
-                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-white placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
+                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
                   />
                   <button
                     type="button"
@@ -431,16 +431,16 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                     }}
                     disabled={!brandImageUrlInput.trim()}
                     aria-label="Add brand image URL"
-                    className="shrink-0 px-1 text-[#909294] transition-colors hover:text-white disabled:opacity-40"
+                    className="shrink-0 px-1 text-gray-500 dark:text-[#909294] transition-colors hover:text-black dark:hover:text-white disabled:opacity-40"
                   >
                     <LinkIcon className="h-3 w-3 2xl:h-4 2xl:w-4" />
                   </button>
                 </div>
                 <label
                   htmlFor="brand-image-upload"
-                  className="text-10 flex cursor-pointer items-center gap-1 rounded-full bg-white/20 px-2.5 py-3 text-white hover:opacity-70 2xl:gap-2"
+                  className="text-10 flex cursor-pointer items-center gap-1 rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-3 text-gray-900 dark:text-white hover:opacity-70 2xl:gap-2"
                 >
-                  <CloudUpload className="h-3 w-3 text-white 2xl:h-4 2xl:w-4" />
+                  <CloudUpload className="h-3 w-3 text-gray-900 dark:text-white 2xl:h-4 2xl:w-4" />
                   <span className="text-10! whitespace-nowrap 2xl:text-xs!">Upload Image</span>
                 </label>
                 <input
@@ -466,7 +466,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                           key={src}
                           type="button"
                           onClick={() => toggleImage(src)}
-                          className={`relative aspect-square overflow-hidden rounded-[10px] bg-white/5 ring-1 transition-transform hover:scale-[1.02] ${
+                          className={`relative aspect-square overflow-hidden rounded-[10px] bg-black/5 dark:bg-white/5 ring-1 transition-transform hover:scale-[1.02] ${
                             active ? 'ring-2 ring-white' : 'ring-white/10'
                           }`}
                           aria-pressed={active}
@@ -495,13 +495,13 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                   </div>
                 </div>
               ) : (
-                <p className="mt-3 text-[13px] text-white/40">
+                <p className="mt-3 text-[13px] text-gray-500 dark:text-white/40">
                   No brand images detected — paste a URL or upload one above.
                 </p>
               )}
 
               {brandImagePool.length > 0 && (
-                <p className="mt-2 text-[11px] text-white/40">
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-white/40">
                   {selectedImages.length} of {brandImagePool.length} selected · scroll for more
                 </p>
               )}
@@ -514,7 +514,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
             <button
               type="button"
               onClick={onSkip}
-              className="rounded-full bg-[#3B3C3D] px-10 py-2.5 text-[13px] font-medium text-white transition-opacity hover:opacity-80"
+              className="rounded-full bg-gray-100 dark:bg-[#3B3C3D] px-10 py-2.5 text-[13px] font-medium text-gray-900 dark:text-white transition-opacity hover:opacity-80"
             >
               Skip
             </button>
@@ -523,7 +523,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
             type="button"
             onClick={handleConfirm}
             disabled={!brandName?.trim()}
-            className="rounded-full bg-white px-8 py-2.5 text-[13px] font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-gray-900 dark:bg-white px-8 py-2.5 text-[13px] font-semibold text-white dark:text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Confirm
           </button>
@@ -541,16 +541,16 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
 }
 
 const inputClass = `
-  py-4 w-full rounded-full bg-[#909294]/10 px-5 text-[14px] text-white
+  py-4 w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-5 text-[14px] text-gray-900 dark:text-white
   outline-none ring-1 ring-white/5
-  placeholder:text-[#afafaf]/80
+  placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80
   focus-visible:ring-2 focus-visible:ring-white/30 sm:text-[15px]
 `;
 
 function Field({ label, children }) {
   return (
     <div>
-      <p className="text-[13px] text-white/90 sm:text-base">{label}</p>
+      <p className="text-[13px] text-gray-700 dark:text-white/90 sm:text-base">{label}</p>
       <div className="mt-3">{children}</div>
     </div>
   );

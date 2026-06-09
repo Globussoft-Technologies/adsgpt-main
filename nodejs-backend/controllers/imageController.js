@@ -10,6 +10,7 @@ const logger = require("../utils/logger");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const { findModel } = require("../config/modelRegistry");
 const GeneratedMediaController = require("./generatedMedia.controller");
+const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
 
 // Format Joi validation errors into user-friendly messages
 const formatValidationError = (errorDetails) => {
@@ -644,12 +645,31 @@ exports.updateImageResult = async (req, res) => {
 
         // Settle the freeze on success, release on failure.
         if (status === "completed" && images && images.length > 0) {
-            // NOTE: preserving legacy deduction shape — total cost is
-            // `getModelDeduction(model)` (per image) × image count.
-            const totalCreditsToDeduct =
-                UnifiedCreditController.getModelDeduction(model) * images.length;
+            // Charge only for the images that ACTUALLY succeeded. A request
+            // that asked for N images may return any mix of N successes and
+            // failures — releasePartial will keep `successfulCount × cost`
+            // debited and refund the rest of the freeze in one atomic step.
+            //
+            // Source of truth: `generatedImageUrl`. If Python returns a URL,
+            // the image was generated and is usable. The `error` field can
+            // carry non-fatal info (e.g. "status 401: Unauthorized" from a
+            // secondary call) without invalidating the result — we DO NOT
+            // check it here, otherwise a quirky-but-valid image is refunded.
+            const successfulImages = images.filter(
+                (img) => !!img?.generatedImageUrl,
+            );
+            const failedCount = images.length - successfulImages.length;
+            const perImage = UnifiedCreditController.getModelDeduction(model);
+            const totalCreditsToDeduct = perImage * successfulImages.length;
             const totalPromptTokens = images.reduce((sum, img) => sum + (img.promptTokens || 0), 0);
             const totalCompletionTokens = images.reduce((sum, img) => sum + (img.completionTokens || 0), 0);
+
+            console.log(
+                `[credits] updateImageResult settle session=${sessionId} ` +
+                    `requested=${priorDoc?.inputs?.numberOfImages || "?"} ` +
+                    `received=${images.length} successful=${successfulImages.length} ` +
+                    `failed=${failedCount} chargeAmount=${totalCreditsToDeduct}`,
+            );
 
             const settleResult = await UnifiedCreditController.releasePartial(
                 sessionId,
@@ -662,7 +682,7 @@ exports.updateImageResult = async (req, res) => {
                     {
                         model,
                         service_type: "ad_image",
-                        item_count: images.length,
+                        item_count: successfulImages.length,
                         duration: timing?.totalMs || 0,
                         resolution: "standard",
                         session_id: sessionId,
@@ -676,17 +696,30 @@ exports.updateImageResult = async (req, res) => {
                 totalPromptTokens,
                 totalCompletionTokens
             );
+            // Only persist GeneratedMedia / GeneratedCount rows for actually
+            // successful images. Failed items shouldn't show up in the user
+            // dashboard as "generated", and shouldn't inflate credit_deduction.
+            for (const img of successfulImages) {
+                GeneratedMediaController.saveGeneratedMedia({
+                    userId,
+                    model,
+                    type: "image",
+                    image: img?.generatedImageUrl || "",
+                    video: "",
+                    credit_deduction: perImage,
+                    cost: actualImageCost,
+                    duration: timing?.totalMs || 0,
+                });
+                const newCount = new GeneratedCount({
+                    userId: userId,
+                    type: "image",
+                    url: img?.generatedImageUrl,
+                    model: model,
+                });
+                newCount.save().catch(() => {});
+            }
 
-            GeneratedMediaController.saveGeneratedMedia({
-                userId,
-                model,
-                type: "image",
-                image: images[0]?.generatedImageUrl || "",
-                video: "",
-                credit_deduction: totalCreditsToDeduct,
-                cost: actualImageCost,
-                duration: timing?.totalMs || 0,
-            });
+            
         } else if (status === "completed" || status === "failed" || status === "error") {
             // Terminal status that didn't settle above (e.g. "completed" with
             // 0 images, or any failure) → refund the freeze in full. Leaving

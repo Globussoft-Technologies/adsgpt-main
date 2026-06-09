@@ -24,6 +24,12 @@ const initialState = {
   updateLoading: false,
   audienceSuggestions: {}, // keyed by brandId
   audienceSuggestionsLoading: {},
+  // Competitor Ads state
+  competitorAds: [],
+  competitorAdsLoading: false,
+  competitorAdsError: null,
+  selectedCompetitorBrand: null,
+  selectedCompetitorPlatform: null,
 };
 
 const brandIQTabsSlice = createSlice({
@@ -43,6 +49,22 @@ const brandIQTabsSlice = createSlice({
     setGetSessionError: (state, action) => {
       state.getSessionError = action.payload;
       state.getSessionLoading = false;
+    },
+    setCompetitorAds: (state, action) => {
+      state.competitorAds = action.payload;
+    },
+    setCompetitorAdsLoading: (state, action) => {
+      state.competitorAdsLoading = action.payload;
+    },
+    setCompetitorAdsError: (state, action) => {
+      state.competitorAdsError = action.payload;
+      state.competitorAdsLoading = false;
+    },
+    setSelectedCompetitorBrand: (state, action) => {
+      state.selectedCompetitorBrand = action.payload;
+    },
+    setSelectedCompetitorPlatform: (state, action) => {
+      state.selectedCompetitorPlatform = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -160,6 +182,6 @@ const brandIQTabsSlice = createSlice({
   },
 });
 
-export const { setActiveBrandIQTab, setBrandIQLoading, setBrandIQError, setGetSessionError } =
+export const { setActiveBrandIQTab, setBrandIQLoading, setBrandIQError, setGetSessionError, setCompetitorAds, setCompetitorAdsLoading, setCompetitorAdsError, setSelectedCompetitorBrand, setSelectedCompetitorPlatform } =
   brandIQTabsSlice.actions;
 export default brandIQTabsSlice.reducer;

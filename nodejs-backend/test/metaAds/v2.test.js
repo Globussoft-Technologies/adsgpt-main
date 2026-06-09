@@ -1303,7 +1303,8 @@ function adSetBody(objective, conversionLocation, cell) {
 }
 
 // A valid create-ad body for a cell — base + required copy/destination
-// fields + app fields when the shape needs them.
+// fields + app fields when the shape needs them. mediaKind drives the
+// media field (Engagement/VIDEO_VIEWS is video-only; rest accept either).
 function adBody(objective, conversionLocation, cell) {
   const req = new Set(cell.ad.requiredFields);
   const body = {
@@ -1313,12 +1314,17 @@ function adBody(objective, conversionLocation, cell) {
     name: "Test ad",
     objective,
     conversionLocation,
-    imageHash: "hash_abc",
     headline: "Test headline",
     primaryText: "Test primary text",
     description: "Test description",
     callToAction: cell.ctas.default,
   };
+  if (cell.ad.mediaKind === "video") {
+    body.videoId = "vid_1";
+    body.videoThumbnailUrl = "https://example.com/poster.jpg";
+  } else {
+    body.imageHash = "hash_abc";
+  }
   if (req.has("linkUrl") || cell.ad.optionalFields.includes("linkUrl")) {
     body.linkUrl = "https://example.com/landing";
   }
@@ -1565,6 +1571,181 @@ group("updateCampaignSchemaV2", () => {
     });
     assert.ok(error);
   });
+
+  // Sanity-ceiling tests — these are typo-guards, not Meta's hard limits.
+  // See BUDGET_*_MAX_MINOR in meta.v2.validator.js for the values.
+  test("rejects a daily budget above the ₹1cr typo-ceiling", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 999_999_999_999, // ₹999cr ≫ ₹1cr cap
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a spend cap above the ₹10cr typo-ceiling", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      spendCap: 999_999_999_999,
+    });
+    assert.ok(error);
+  });
+
+  test("accepts a daily budget exactly at the ₹1cr ceiling", () => {
+    const { error } = updateCampaignSchemaV2.validate({
+      adAccountId: "act_1",
+      campaignId: "c1",
+      dailyBudget: 1_000_000_000, // exactly ₹1cr in paise
+    });
+    assert.ok(!error, error && error.message);
+  });
+});
+
+// ─── buildObjectStorySpec — video_data description field-name remap ────────
+// Meta rejects `description` in video_data with subcode 1443050. The
+// builder must remap it to `link_description` for video creatives.
+
+group("buildObjectStorySpec — description ↔ link_description split by media kind", () => {
+  const params = {
+    pageId: "page_1",
+    headline: "Walk in unmatched comfort",
+    primaryText: "Upgrade your walk.",
+    description: "Stylish, durable, lightweight.",
+    linkUrl: "https://example.com",
+    callToAction: "SHOP_NOW",
+  };
+
+  test("image creative → uses `description` key", () => {
+    const oss = buildObjectStorySpec("link_data", { ...params, imageHash: "h" });
+    assert.equal(oss.link_data.description, "Stylish, durable, lightweight.");
+    assert.ok(!("link_description" in oss.link_data));
+  });
+
+  test("video creative → uses `link_description`, NOT `description` (subcode 1443050)", () => {
+    const oss = buildObjectStorySpec("link_data", {
+      ...params,
+      videoId: "vid_1",
+      videoThumbnailUrl: "https://example.com/p.jpg",
+    });
+    assert.equal(oss.video_data.link_description, "Stylish, durable, lightweight.");
+    assert.ok(
+      !("description" in oss.video_data),
+      "video_data must not carry the 'description' field — Meta rejects it",
+    );
+  });
+});
+
+// ─── buildAdSetSchemaV2 — billing event ↔ optimisation goal compatibility ──
+// Meta rejects mismatched pairs with subcode 1815117. The Joi factory
+// catches this before launch.
+
+group("buildAdSetSchemaV2 — billing event ↔ goal compatibility", () => {
+  const schema = buildAdSetSchemaV2("OUTCOME_TRAFFIC", "WEBSITE");
+  const base = {
+    adAccountId: "act1",
+    campaignId: "c1",
+    pageId: "page_1",
+    name: "Billing-goal test",
+    objective: "OUTCOME_TRAFFIC",
+    conversionLocation: "WEBSITE",
+    dailyBudget: 1000,
+    targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+  };
+
+  test("LANDING_PAGE_VIEWS + LINK_CLICKS billing → reject (subcode 1815117)", () => {
+    const { error } = schema.validate({
+      ...base,
+      optimizationGoal: "LANDING_PAGE_VIEWS",
+      billingEvent: "LINK_CLICKS",
+    });
+    assert.ok(error);
+  });
+
+  test("LANDING_PAGE_VIEWS + IMPRESSIONS billing → accept", () => {
+    const { error } = schema.validate({
+      ...base,
+      optimizationGoal: "LANDING_PAGE_VIEWS",
+      billingEvent: "IMPRESSIONS",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("LINK_CLICKS + LINK_CLICKS billing → accept (the only legal pair for LINK_CLICKS billing)", () => {
+    const { error } = schema.validate({
+      ...base,
+      optimizationGoal: "LINK_CLICKS",
+      billingEvent: "LINK_CLICKS",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("REACH + LINK_CLICKS billing → reject", () => {
+    const { error } = schema.validate({
+      ...base,
+      optimizationGoal: "REACH",
+      billingEvent: "LINK_CLICKS",
+    });
+    assert.ok(error);
+  });
+});
+
+// ─── buildAdSchemaV2 — Meta copy-length caps ────────────────────────────────
+// Headline 40 / primaryText 125 / description 30 mirror Meta's display-
+// without-truncation thresholds for single-image/video ads. Above these,
+// Ads Manager shows "…" on the rendered creative — we reject at our layer
+// so users don't ship copy nobody will read in full.
+
+group("buildAdSchemaV2 — Meta copy-length caps", () => {
+  const schema = buildAdSchemaV2("OUTCOME_TRAFFIC", "WEBSITE");
+  const base = {
+    adAccountId: "act1",
+    adSetId: "adset1",
+    pageId: "page_1",
+    name: "Length-cap test ad",
+    objective: "OUTCOME_TRAFFIC",
+    conversionLocation: "WEBSITE",
+    imageHash: "hash_abc",
+    linkUrl: "https://example.com/landing",
+    callToAction: "LEARN_MORE",
+  };
+
+  test("rejects a headline over 40 chars", () => {
+    const { error } = schema.validate({
+      ...base,
+      headline: "x".repeat(41),
+      primaryText: "ok",
+    });
+    assert.ok(error);
+  });
+
+  test("accepts a headline at exactly 40 chars", () => {
+    const { error } = schema.validate({
+      ...base,
+      headline: "x".repeat(40),
+      primaryText: "ok",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("rejects primary text over 125 chars", () => {
+    const { error } = schema.validate({
+      ...base,
+      headline: "ok",
+      primaryText: "x".repeat(126),
+    });
+    assert.ok(error);
+  });
+
+  test("rejects a description over 30 chars", () => {
+    const { error } = schema.validate({
+      ...base,
+      headline: "ok",
+      primaryText: "ok",
+      description: "x".repeat(31),
+    });
+    assert.ok(error);
+  });
 });
 
 // ─── updateAdSetSchemaV2 (edit ad set) ──────────────────────────────────────
@@ -1658,6 +1839,412 @@ group("updateAdSetSchemaV2", () => {
       endTime: "2026-06-01T06:00:00Z",
     });
     assert.ok(error);
+  });
+});
+
+// ─── OUTCOME_ENGAGEMENT — cell-specific tests ───────────────────────────────
+// The auto-sweep above already covers builder + Joi happy paths for every
+// engagement cell. These tests pin down the engagement-specific edges that
+// the auto-sweep can't: media-kind enforcement, optimisation-goal-based
+// reverse cell inference, and the new conversion-location → destination_type
+// mappings. `inferCellForMetaCampaign` is already imported above; pull
+// SUPPORTED_OBJECTIVES from the same module.
+
+const { SUPPORTED_OBJECTIVES } = require("../../controllers/adPosting/cellInference");
+
+group("OUTCOME_ENGAGEMENT — registered in SUPPORTED_OBJECTIVES (backend)", () => {
+  test("OUTCOME_ENGAGEMENT is listed in cellInference.SUPPORTED_OBJECTIVES", () => {
+    assert.ok(
+      SUPPORTED_OBJECTIVES.has("OUTCOME_ENGAGEMENT"),
+      "OUTCOME_ENGAGEMENT must be in SUPPORTED_OBJECTIVES",
+    );
+  });
+
+  test("listConversionLocations exposes all 9 engagement cells (Phase 1 + Phase 2)", () => {
+    const locs = listConversionLocations("OUTCOME_ENGAGEMENT");
+    assert.deepEqual(
+      [...locs].sort(),
+      [
+        // Phase 1 (MVP — shipped 2026-06-02 first half)
+        "MESSENGER", "WHATSAPP", "PHONE_CALL", "VIDEO_VIEWS", "POST_ENGAGEMENT",
+        // Phase 2 (shipped 2026-06-02 second half)
+        "INSTAGRAM", "WEBSITE", "APP", "INSTAGRAM_OR_FACEBOOK",
+      ].sort(),
+    );
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — destination_type mappings", () => {
+  test("MESSENGER → MESSENGER", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "MESSENGER"), "MESSENGER");
+  });
+  test("WHATSAPP → WHATSAPP", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "WHATSAPP"), "WHATSAPP");
+  });
+  test("PHONE_CALL → PHONE_CALL", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "PHONE_CALL"), "PHONE_CALL");
+  });
+  test("VIDEO_VIEWS → ON_AD", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS"), "ON_AD");
+  });
+  test("POST_ENGAGEMENT → ON_AD", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT"), "ON_AD");
+  });
+  // Phase 2 mappings — INSTAGRAM/WEBSITE/APP all reuse the generic bare
+  // keys; INSTAGRAM_OR_FACEBOOK uses the documented Traffic-shared key.
+  test("INSTAGRAM → INSTAGRAM_DIRECT (Phase 2)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM"), "INSTAGRAM_DIRECT");
+  });
+  test("WEBSITE → WEBSITE (Phase 2)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "WEBSITE"), "WEBSITE");
+  });
+  test("APP → APP (Phase 2)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "APP"), "APP");
+  });
+  test("INSTAGRAM_OR_FACEBOOK → WEBSITE (Phase 2 — same as Traffic; reverse-resolves via optimization_goal)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK"), "WEBSITE");
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — VIDEO_VIEWS cell shape", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
+
+  test("declares mediaKind='video'", () => {
+    assert.equal(cell.ad.mediaKind, "video");
+  });
+
+  test("default optimisation goal is THRUPLAY", () => {
+    assert.equal(cell.adSet.defaultOptimizationGoal, "THRUPLAY");
+    assert.ok(cell.adSet.optimizationGoals.includes("THRUPLAY"));
+  });
+
+  test("uses the existing link_data shape (builder emits video_data via media switch)", () => {
+    assert.equal(cell.ad.objectStorySpecShape, "link_data");
+  });
+
+  test("requiredFields contains videoId, not imageHash", () => {
+    assert.ok(cell.ad.requiredFields.includes("videoId"));
+    assert.ok(!cell.ad.requiredFields.includes("imageHash"));
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — VIDEO_VIEWS Joi factory enforces mediaKind", () => {
+  const schema = buildAdSchemaV2("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
+  const validBody = {
+    adAccountId: "act1",
+    adSetId: "adset1",
+    pageId: "page_1",
+    name: "Video views ad",
+    objective: "OUTCOME_ENGAGEMENT",
+    conversionLocation: "VIDEO_VIEWS",
+    videoId: "vid_1",
+    videoThumbnailUrl: "https://example.com/poster.jpg",
+    headline: "Watch this",
+    primaryText: "Body copy",
+    description: "",
+    linkUrl: "https://example.com/landing",
+    callToAction: "LEARN_MORE",
+  };
+
+  test("accepts a video body", () => {
+    const { error } = schema.validate(validBody);
+    assert.ok(!error, error && error.message);
+  });
+
+  test("rejects an image-only body (mediaKind='video' forbids imageHash)", () => {
+    const body = { ...validBody };
+    delete body.videoId;
+    delete body.videoThumbnailUrl;
+    body.imageHash = "hash_abc";
+    const { error } = schema.validate(body);
+    assert.ok(error, "image body must be rejected for a video-only cell");
+    // Joi's `.custom()` collapses our descriptive message into the generic
+    // "contains an invalid value" — the human message hides in
+    // error.details[0].context.message. Assert it's the mediaKind error
+    // and not e.g. the generic XOR (since the body has imageHash without
+    // videoId, both would fire — order matters and mediaKind wins).
+    const ctxMsg = error?.details?.[0]?.context?.message || "";
+    assert.match(ctxMsg, /video creative/i);
+  });
+
+  test("rejects providing BOTH image and video (XOR still applies)", () => {
+    const { error } = schema.validate({ ...validBody, imageHash: "hash_abc" });
+    assert.ok(error);
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — POST_ENGAGEMENT cell shape", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT");
+
+  test("optimisation goal locked to POST_ENGAGEMENT", () => {
+    assert.deepEqual(cell.adSet.optimizationGoals, ["POST_ENGAGEMENT"]);
+    assert.equal(cell.adSet.defaultOptimizationGoal, "POST_ENGAGEMENT");
+  });
+
+  test("accepts image OR video (mediaKind not locked)", () => {
+    assert.ok(cell.ad.mediaKind === undefined || cell.ad.mediaKind === "any");
+  });
+
+  test("Joi factory accepts an image body", () => {
+    const schema = buildAdSchemaV2("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT");
+    const { error } = schema.validate({
+      adAccountId: "act1",
+      adSetId: "adset1",
+      pageId: "page_1",
+      name: "Post engagement ad",
+      objective: "OUTCOME_ENGAGEMENT",
+      conversionLocation: "POST_ENGAGEMENT",
+      imageHash: "hash_abc",
+      headline: "Engage",
+      primaryText: "Body",
+      description: "",
+      linkUrl: "https://example.com",
+      callToAction: "LEARN_MORE",
+    });
+    assert.ok(!error, error && error.message);
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — MESSENGER cell shape", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "MESSENGER");
+
+  test("default optimisation goal is CONVERSATIONS (LINK_CLICKS still allowed)", () => {
+    assert.equal(cell.adSet.defaultOptimizationGoal, "CONVERSATIONS");
+    assert.ok(cell.adSet.optimizationGoals.includes("LINK_CLICKS"));
+  });
+
+  test("reuses the Traffic Messenger shape (messenger_click_to_message)", () => {
+    assert.equal(cell.ad.objectStorySpecShape, "messenger_click_to_message");
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — WHATSAPP cell shape", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "WHATSAPP");
+
+  test("optimisation goal locked to CONVERSATIONS", () => {
+    assert.deepEqual(cell.adSet.optimizationGoals, ["CONVERSATIONS"]);
+  });
+
+  test("single CTA (WHATSAPP_MESSAGE)", () => {
+    assert.deepEqual(cell.ctas.allowed, ["WHATSAPP_MESSAGE"]);
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — PHONE_CALL cell shape", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "PHONE_CALL");
+
+  test("optimisation goal locked to QUALITY_CALL", () => {
+    assert.deepEqual(cell.adSet.optimizationGoals, ["QUALITY_CALL"]);
+  });
+
+  test("reuses the Traffic click_to_call shape", () => {
+    assert.equal(cell.ad.objectStorySpecShape, "click_to_call");
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by optimization_goal", () => {
+  const campaign = { objective: "OUTCOME_ENGAGEMENT" };
+
+  test("ON_AD + THRUPLAY → VIDEO_VIEWS cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "ON_AD",
+      optimization_goal: "THRUPLAY",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "VIDEO_VIEWS");
+  });
+
+  test("ON_AD + POST_ENGAGEMENT → POST_ENGAGEMENT cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "ON_AD",
+      optimization_goal: "POST_ENGAGEMENT",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "POST_ENGAGEMENT");
+  });
+
+  test("ON_AD with no/unknown goal falls back to VIDEO_VIEWS", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "ON_AD",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "VIDEO_VIEWS");
+  });
+
+  test("MESSENGER destination → MESSENGER cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "MESSENGER",
+      optimization_goal: "CONVERSATIONS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "MESSENGER");
+  });
+
+  test("PHONE_CALL on engagement → PHONE_CALL cell (not CALLS — that's the Leads cell)", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "PHONE_CALL",
+      optimization_goal: "QUALITY_CALL",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "PHONE_CALL");
+  });
+
+  test("no destination falls back to VIDEO_VIEWS (most-common engagement cell)", () => {
+    const out = inferCellForMetaCampaign(campaign, {});
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "VIDEO_VIEWS");
+  });
+
+  // Phase 2 inference paths.
+  test("INSTAGRAM_DIRECT destination → INSTAGRAM cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "INSTAGRAM_DIRECT",
+      optimization_goal: "CONVERSATIONS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "INSTAGRAM");
+  });
+
+  test("WEBSITE + OFFSITE_CONVERSIONS → WEBSITE cell (pixel path)", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "WEBSITE",
+      optimization_goal: "OFFSITE_CONVERSIONS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "WEBSITE");
+  });
+
+  test("WEBSITE + PAGE_LIKES → INSTAGRAM_OR_FACEBOOK cell (profile path)", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "WEBSITE",
+      optimization_goal: "PAGE_LIKES",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
+  });
+
+  test("WEBSITE + VISIT_INSTAGRAM_PROFILE → INSTAGRAM_OR_FACEBOOK cell (profile path)", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "WEBSITE",
+      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
+  });
+
+  test("APP destination → APP cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "APP",
+      optimization_goal: "LINK_CLICKS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "APP");
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — Phase 2 cell shapes", () => {
+  test("INSTAGRAM cell reuses instagram_direct shape + locks CONVERSATIONS goal", () => {
+    const cell = getCell("OUTCOME_ENGAGEMENT", "INSTAGRAM");
+    assert.equal(cell.ad.objectStorySpecShape, "instagram_direct");
+    assert.deepEqual(cell.adSet.optimizationGoals, ["CONVERSATIONS"]);
+    assert.deepEqual(cell.ctas.allowed, ["INSTAGRAM_MESSAGE"]);
+    assert.ok(cell.identity.required.includes("instagram"));
+  });
+
+  test("WEBSITE cell uses pixel_website shape + requires pixel additionalFields", () => {
+    const cell = getCell("OUTCOME_ENGAGEMENT", "WEBSITE");
+    assert.equal(cell.ad.objectStorySpecShape, "pixel_website");
+    assert.equal(cell.adSet.promotedObjectShape, "pixel");
+    assert.deepEqual(cell.adSet.additionalFields, ["pixelId", "pixelEventType"]);
+    assert.equal(cell.adSet.defaultOptimizationGoal, "OFFSITE_CONVERSIONS");
+  });
+
+  test("APP cell uses app_link shape + does NOT include APP_INSTALLS goal (engagement, not install)", () => {
+    const cell = getCell("OUTCOME_ENGAGEMENT", "APP");
+    assert.equal(cell.ad.objectStorySpecShape, "app_link");
+    assert.ok(!cell.adSet.optimizationGoals.includes("APP_INSTALLS"));
+    assert.ok(cell.adSet.optimizationGoals.includes("LINK_CLICKS"));
+  });
+
+  test("INSTAGRAM_OR_FACEBOOK cell uses link_data + profile-visit CTAs", () => {
+    const cell = getCell("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
+    assert.equal(cell.ad.objectStorySpecShape, "link_data");
+    assert.ok(cell.ctas.allowed.includes("LIKE_PAGE"));
+    assert.ok(cell.ctas.allowed.includes("VIEW_INSTAGRAM_PROFILE"));
+    assert.ok(cell.adSet.optimizationGoals.includes("PAGE_LIKES"));
+    assert.ok(cell.adSet.optimizationGoals.includes("VISIT_INSTAGRAM_PROFILE"));
+  });
+
+  test("VIDEO_VIEWS now accepts TWO_SECOND_CONTINUOUS_VIDEO_VIEWS goal", () => {
+    const cell = getCell("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
+    assert.ok(cell.adSet.optimizationGoals.includes("THRUPLAY"));
+    assert.ok(cell.adSet.optimizationGoals.includes("TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"));
+    assert.equal(cell.adSet.defaultOptimizationGoal, "THRUPLAY");
+  });
+});
+
+group("OUTCOME_ENGAGEMENT — Phase 2 Joi factories accept valid bodies", () => {
+  test("VIDEO_VIEWS accepts a 2-second-continuous-views body", () => {
+    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
+    const { error } = schema.validate({
+      adAccountId: "act1",
+      campaignId: "c1",
+      pageId: "page_1",
+      name: "2-sec views adset",
+      objective: "OUTCOME_ENGAGEMENT",
+      conversionLocation: "VIDEO_VIEWS",
+      optimizationGoal: "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS",
+      dailyBudget: 1000,
+      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("INSTAGRAM_OR_FACEBOOK accepts a PAGE_LIKES body", () => {
+    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
+    const { error } = schema.validate({
+      adAccountId: "act1",
+      campaignId: "c1",
+      pageId: "page_1",
+      name: "FB Page visits adset",
+      objective: "OUTCOME_ENGAGEMENT",
+      conversionLocation: "INSTAGRAM_OR_FACEBOOK",
+      optimizationGoal: "PAGE_LIKES",
+      dailyBudget: 1000,
+      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("INSTAGRAM_OR_FACEBOOK rejects an off-cell goal (LEAD_GENERATION)", () => {
+    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
+    const { error } = schema.validate({
+      adAccountId: "act1",
+      campaignId: "c1",
+      pageId: "page_1",
+      name: "off-cell goal",
+      objective: "OUTCOME_ENGAGEMENT",
+      conversionLocation: "INSTAGRAM_OR_FACEBOOK",
+      optimizationGoal: "LEAD_GENERATION",
+      dailyBudget: 1000,
+      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+    });
+    assert.ok(error);
+  });
+
+  test("Engagement WEBSITE rejects body without pixelId (additionalFields enforced)", () => {
+    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "WEBSITE");
+    const { error } = schema.validate({
+      adAccountId: "act1",
+      campaignId: "c1",
+      pageId: "page_1",
+      name: "Missing pixel",
+      objective: "OUTCOME_ENGAGEMENT",
+      conversionLocation: "WEBSITE",
+      dailyBudget: 1000,
+      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+    });
+    assert.ok(error, "pixelId must be required");
   });
 });
 

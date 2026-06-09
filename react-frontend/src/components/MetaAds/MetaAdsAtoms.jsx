@@ -8,8 +8,8 @@ import { STATUS_MAP } from './metaAdsUtils';
 export function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#1A1A1A]/95 px-3 py-2 shadow-xl backdrop-blur-xl">
-      {label && <p className="mb-1 text-[10px] font-medium text-[#BEBEBE]">{label}</p>}
+    <div className="rounded-xl border border-gray-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1A1A1A]/95">
+      {label && <p className="mb-1 text-[10px] font-medium text-gray-500 dark:text-[#BEBEBE]">{label}</p>}
       {payload.map((p, i) => (
         <p key={i} className="text-xs font-semibold" style={{ color: p.color || '#15DCFF' }}>
           {p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
@@ -39,7 +39,7 @@ export function Spinner() {
   return (
     <div className="flex items-center justify-center py-10">
       <div className="relative h-8 w-8">
-        <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+        <div className="absolute inset-0 rounded-full border-2 border-gray-200 dark:border-white/10" />
         <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#15DCFF]" />
       </div>
     </div>
@@ -50,11 +50,11 @@ export function Spinner() {
 
 export function EmptyState({ message }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/5 bg-[#0D0D0D]/50 py-12">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
-        <Layers className="h-5 w-5 text-[#BEBEBE]" />
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 py-12 dark:border-white/5 dark:bg-[#0D0D0D]/50">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-white/5">
+        <Layers className="h-5 w-5 text-gray-500 dark:text-[#BEBEBE]" />
       </div>
-      <p className="text-sm text-[#BEBEBE]">{message}</p>
+      <p className="text-sm text-gray-500 dark:text-[#BEBEBE]">{message}</p>
     </div>
   );
 }
@@ -78,7 +78,7 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0D0D0D]/60 p-4 backdrop-blur-xl transition-all duration-300 hover:border-white/10 2xl:p-5"
+      className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-all duration-300 hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:hover:border-white/10 2xl:p-5"
     >
       <div
         className={`pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-15 blur-2xl ${glowColor ?? 'bg-[#15DCFF]'}`}
@@ -90,7 +90,7 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
           </div>
           {trend != null && !loading && (
             <span
-              className={`flex items-center gap-0.5 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-400' : trend < 0 ? 'text-red-400' : 'text-[#BEBEBE]'}`}
+              className={`flex items-center gap-0.5 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : trend < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-[#BEBEBE]'}`}
             >
               {trend > 0 ? (
                 <ArrowUpRight className="h-3 w-3" />
@@ -104,15 +104,15 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
           )}
         </div>
         <div>
-          <p className="text-[10px] font-medium tracking-widest text-[#BEBEBE] uppercase">
+          <p className="text-[10px] font-medium tracking-widest text-gray-500 uppercase dark:text-[#BEBEBE]">
             {label}
           </p>
           {loading ? (
-            <div className="mt-1.5 h-6 w-24 animate-pulse rounded-lg bg-white/5" />
+            <div className="mt-1.5 h-6 w-24 animate-pulse rounded-lg bg-gray-200 dark:bg-white/5" />
           ) : (
-            <p className="mt-0.5 text-xl font-bold text-white 2xl:text-2xl">{value}</p>
+            <p className="mt-0.5 text-xl font-bold text-gray-900 dark:text-white 2xl:text-2xl">{value}</p>
           )}
-          {sub && !loading && <p className="mt-0.5 text-[10px] text-[#BEBEBE]">{sub}</p>}
+          {sub && !loading && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-[#BEBEBE]">{sub}</p>}
         </div>
       </div>
     </motion.div>
@@ -163,7 +163,7 @@ export function Dropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: yIn, scale: 0.97 }}
             transition={{ duration: 0.14, ease: 'easeOut' }}
-            className={`absolute ${horizontal} ${vertical} z-50 overflow-hidden rounded-2xl border border-white/12 bg-[#14181D]/95 shadow-2xl backdrop-blur-xl`}
+            className={`absolute ${horizontal} ${vertical} z-50 overflow-hidden rounded-2xl border border-gray-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/12 dark:bg-[#14181D]/95`}
           >
             {children}
           </motion.div>

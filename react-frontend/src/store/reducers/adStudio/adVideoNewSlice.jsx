@@ -23,6 +23,7 @@ const initialState = {
   avatarsLoading: false,
   recreateInputs: null,
   currentAvatarStep: 'options',
+  currentCloneStep: 'upload',
   currentAIAdsStep: 'selection',
   aiAdsAnalysisData: null,
   aiAdsAnalysisLoading: false,
@@ -129,6 +130,9 @@ const adVideoNewSlice = createSlice({
     setAvatarStep: (state, action) => {
       state.currentAvatarStep = action.payload;
     },
+    setCloneStep: (state, action) => {
+      state.currentCloneStep = action.payload;
+    },
     setAIAdsStep: (state, action) => {
       state.currentAIAdsStep = action.payload;
     },
@@ -215,6 +219,7 @@ export const {
   setAvatarsLoading,
   setRecreateInputs,
   setAvatarStep,
+  setCloneStep,
   setAIAdsStep,
   setAiAdsAnalysisData,
   setAiAdsAnalysisLoading,

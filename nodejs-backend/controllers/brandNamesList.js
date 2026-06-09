@@ -1,5 +1,6 @@
 const brandNameLists = require("../Module/brandNames/brandNamesSchema");
 const { v4: uuidv4 } = require('uuid');
+const { runDiscoveryJob } = require('./competitorDiscoveryController');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { s3Client } = require("../storage/s3");
 const axios = require('axios');
@@ -429,6 +430,9 @@ const createBrands = async (req, res) => {
             targetAudiences: targetAudiences || [],
             campaignIds: [],
             createdAt: new Date(),
+            competitors: [],
+            keywords: [],
+            discoveryJob: null,
           },
         },
       },
@@ -456,6 +460,10 @@ const createBrands = async (req, res) => {
         campaignIds: [],
       },
     });
+
+    // ── Fire-and-forget: trigger async competitor discovery ──────────────
+    runDiscoveryJob(userId, brandId);
+
   } catch (err) {
     console.error('Error in createBrands:', err);
     res.status(500).json({ error: err.message || 'Failed to create brand' });

@@ -44,7 +44,7 @@ const AdsDialogLayout = ({ type, open, onOpenChange, handleDownloadWithFormat })
           e.stopPropagation();
           handleDownloadWithFormat(arg);
         }}
-        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3B3B3B] text-white transition-all duration-300 hover:scale-110 hover:bg-[#4A4A4A] active:scale-95 2xl:h-8 2xl:w-8"
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-[#3B3B3B] text-gray-900 dark:text-white transition-all duration-300 hover:scale-110 hover:bg-gray-200 dark:hover:bg-[#4A4A4A] active:scale-95 2xl:h-8 2xl:w-8"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
@@ -57,7 +57,7 @@ const AdsDialogLayout = ({ type, open, onOpenChange, handleDownloadWithFormat })
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-white/10 bg-[#303030]/50 px-6 pt-16 text-white md:w-full 2xl:!max-w-5xl 2xl:pt-20">
+        <DialogContent className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#303030]/50 dark:text-white px-6 pt-16 md:w-full 2xl:!max-w-5xl 2xl:pt-20">
           <div className="max-h-[calc(100svh-200px)] space-y-4 overflow-y-auto sm:px-6">
             {type === 'text' && <AdCopyList />}
             {type === 'image' && (

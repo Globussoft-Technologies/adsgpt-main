@@ -123,6 +123,7 @@ const UserRulesSection = () => {
       severity: rule.severity || 'medium',
       evaluateOn: rule.evaluateOn || 'campaign',
       lookbackDays: rule.lookbackDays || 14,
+      lookbackPreset: rule.lookbackPreset || null,
       conditions: rule.conditions,
       action: rule.action,
       attachments: (rule.attachments || []).map((a) => ({
@@ -226,7 +227,7 @@ const UserRulesSection = () => {
   else
     preview = [
       `${rules.length} rule${rules.length === 1 ? '' : 's'}`,
-      <span key="en" className="text-emerald-300">
+      <span key="en" className="text-emerald-600 dark:text-emerald-300">
         {enabledCount} enabled
       </span>,
       orphanCount > 0 ? `${orphanCount} with orphans` : null,
@@ -240,11 +241,11 @@ const UserRulesSection = () => {
       <CollapsibleCard
         title={
           <span className="inline-flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/6 text-white/75">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/6 dark:text-white/75">
               <Shield className="h-3.5 w-3.5" />
             </span>
             <span>Your Autopilot rules</span>
-            <span className="hidden text-13 font-normal text-white/65 2xl:text-sm sm:inline">
+            <span className="hidden text-13 font-normal text-gray-500 2xl:text-sm sm:inline dark:text-white/65">
               · Performance triggers and budget guardrails
             </span>
             <InfoTip text="Pause campaigns or get alerts when conditions match. Drag to reorder — rules run top to bottom." />
@@ -269,7 +270,7 @@ const UserRulesSection = () => {
             filter chips on the rows themselves). */}
         <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/35" />
             <input
               type="text"
               value={search}
@@ -278,7 +279,7 @@ const UserRulesSection = () => {
                 setPage(1);
               }}
               placeholder="Search rules…"
-              className="h-9 w-full rounded-xl border border-white/10 bg-white/[0.03] pr-3 pl-9 text-xs text-white placeholder:text-white/35 focus:border-[#15DCFF]/40 focus:outline-none"
+              className="h-9 w-full rounded-xl border border-gray-200 bg-gray-100 pr-3 pl-9 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:outline-none dark:border-white/10 dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/35"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -327,7 +328,7 @@ const UserRulesSection = () => {
         </div>
 
         {loading && (
-          <p className="flex items-center gap-2 text-xs text-white/75 2xl:text-13">
+          <p className="flex items-center gap-2 text-xs text-gray-500 2xl:text-13 dark:text-white/75">
             <Loader2 className="h-3 w-3 animate-spin" /> Loading rules…
           </p>
         )}
@@ -336,9 +337,9 @@ const UserRulesSection = () => {
         )}
 
         {!loading && !error && rules.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/2 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-white">No rules yet.</p>
-            <p className="mt-1 text-xs text-white/75 2xl:text-13">
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center dark:border-white/10 dark:bg-white/2">
+            <p className="text-sm font-medium text-gray-900 dark:text-white">No rules yet.</p>
+            <p className="mt-1 text-xs text-gray-500 2xl:text-13 dark:text-white/75">
               Start from a template, or build one from scratch.
             </p>
             <div className="mt-3 flex items-center justify-center gap-2">
@@ -353,7 +354,7 @@ const UserRulesSection = () => {
         )}
 
         {!loading && !error && rules.length > 0 && pagedRules.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/2 px-4 py-6 text-center text-xs text-white/75 2xl:text-13">
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-xs text-gray-500 2xl:text-13 dark:border-white/10 dark:bg-white/2 dark:text-white/75">
             No rules match these filters.
           </div>
         )}
@@ -424,12 +425,12 @@ const RuleRow = ({ rule, busy, onToggle, onEdit, onClone, onDelete }) => {
 
   return (
     <div
-      className={`group flex items-start gap-2 border-b border-white/8 py-2.5 transition-colors last:border-b-0 hover:bg-white/2.5 sm:items-center sm:gap-3 ${
+      className={`group flex items-start gap-2 border-b border-gray-200 py-2.5 transition-colors last:border-b-0 hover:bg-gray-50 sm:items-center sm:gap-3 dark:border-white/8 dark:hover:bg-white/2.5 ${
         enabled ? '' : 'opacity-70'
       }`}
     >
       <span
-        className="hidden h-7 w-5 shrink-0 items-center justify-center text-white/30 transition-colors hover:text-white/60 sm:flex"
+        className="hidden h-7 w-5 shrink-0 items-center justify-center text-gray-400 transition-colors hover:text-gray-500 sm:flex dark:text-white/30 dark:hover:text-white/60"
         title="Drag to reorder (coming soon)"
       >
         <GripVertical className="h-3.5 w-3.5" />
@@ -460,7 +461,7 @@ const RuleRow = ({ rule, busy, onToggle, onEdit, onClone, onDelete }) => {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
         <span
           className={`min-w-0 truncate text-sm font-semibold ${
-            enabled ? 'text-white' : 'text-white/65'
+            enabled ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/65'
           }`}
           title={rule.description || ''}
         >
@@ -475,7 +476,7 @@ const RuleRow = ({ rule, busy, onToggle, onEdit, onClone, onDelete }) => {
           />
           {orphanCount > 0 && (
             <span
-              className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-10 font-medium text-amber-300 2xl:px-2 2xl:text-[11px]"
+              className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-10 font-medium text-amber-600 2xl:px-2 2xl:text-[11px] dark:text-amber-300"
               title="One or more attached campaigns no longer exist on Meta."
             >
               <AlertCircle className="h-3 w-3" />
@@ -524,13 +525,13 @@ const SeverityPill = ({ sev }) => (
 );
 
 const ScopePill = ({ label }) => (
-  <span className="inline-flex shrink-0 items-center rounded-md border border-white/12 bg-white/[0.04] px-1.5 py-0.5 text-10 font-medium text-white/80 2xl:px-2 2xl:text-[11px]">
+  <span className="inline-flex shrink-0 items-center rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-10 font-medium text-gray-600 2xl:px-2 2xl:text-[11px] dark:border-white/12 dark:bg-white/[0.04] dark:text-white/80">
     {label}
   </span>
 );
 
 const ActionPill = ({ icon, label }) => (
-  <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/12 bg-white/[0.04] px-1.5 py-0.5 text-10 font-medium text-white/80 2xl:px-2 2xl:text-[11px]">
+  <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-10 font-medium text-gray-600 2xl:px-2 2xl:text-[11px] dark:border-white/12 dark:bg-white/[0.04] dark:text-white/80">
     {icon}
     {label}
   </span>
@@ -542,10 +543,10 @@ const IconButton = ({ children, onClick, title, disabled, danger }) => (
     onClick={onClick}
     disabled={disabled || !onClick}
     title={title}
-    className={`flex h-7 w-7 items-center justify-center rounded-md text-white/70 transition-all disabled:opacity-40 2xl:h-8 2xl:w-8 ${
+    className={`flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-all disabled:opacity-40 2xl:h-8 2xl:w-8 dark:text-white/70 ${
       danger
-        ? 'hover:bg-red-500/10 hover:text-red-400'
-        : 'hover:bg-white/5 hover:text-white'
+        ? 'hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400'
+        : 'hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-white/5 dark:hover:text-white'
     } ${!onClick ? 'cursor-default' : ''}`}
   >
     {children}
@@ -567,13 +568,13 @@ const LabeledDropdown = ({ label, value, options, onChange }) => {
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs transition-all hover:border-white/20 hover:bg-white/[0.06]"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs transition-all hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20 dark:hover:bg-white/[0.06]"
         >
-          <span className="text-10 font-bold tracking-wider text-white/60 uppercase 2xl:text-[11px]">
+          <span className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/60">
             {label}
           </span>
-          <span className="font-medium text-white">{selected.label}</span>
-          <ChevronDown className="h-3 w-3 text-white/70 2xl:h-3.5 2xl:w-3.5" />
+          <span className="font-medium text-gray-900 dark:text-white">{selected.label}</span>
+          <ChevronDown className="h-3 w-3 text-gray-500 2xl:h-3.5 2xl:w-3.5 dark:text-white/70" />
         </button>
       }
     >
@@ -586,8 +587,8 @@ const LabeledDropdown = ({ label, value, options, onChange }) => {
               onChange(o.value);
               setOpen(false);
             }}
-            className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-white/5 ${
-              value === o.value ? 'bg-white/5 text-[#15DCFF]' : 'text-white'
+            className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+              value === o.value ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5' : 'text-gray-900 dark:text-white'
             }`}
           >
             {o.label}
@@ -612,13 +613,13 @@ const Pagination = ({ page, totalPages, total, pageSize, onPage }) => {
           (v, i, a) => v >= 1 && v <= totalPages && a.indexOf(v) === i,
         );
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/8 pt-3">
-      <span className="text-10 text-white/70 2xl:text-[11px]">
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3 dark:border-white/8">
+      <span className="text-10 text-gray-500 2xl:text-[11px] dark:text-white/70">
         Showing{' '}
-        <span className="text-white">
+        <span className="text-gray-900 dark:text-white">
           {from}–{to}
         </span>{' '}
-        of <span className="text-white">{total}</span>
+        of <span className="text-gray-900 dark:text-white">{total}</span>
       </span>
       <div className="flex items-center gap-1">
         <PagerButton
@@ -658,7 +659,7 @@ const PagerButton = ({ active, disabled, onClick, children, ...rest }) => (
     className={`inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-md border px-1.5 text-10 font-medium transition-all disabled:opacity-40 2xl:h-7 2xl:min-w-7 2xl:px-2 2xl:text-[11px] ${
       active
         ? 'border-[#15DCFF]/40 bg-[#15DCFF]/10 text-[#15DCFF]'
-        : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-white/20 hover:bg-white/[0.07] hover:text-white'
+        : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/70 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white'
     }`}
   >
     {children}

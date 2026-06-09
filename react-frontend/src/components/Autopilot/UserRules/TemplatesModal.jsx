@@ -79,15 +79,15 @@ const TemplatesModal = ({ open, onClose, onPick }) => {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 12 }}
           transition={{ duration: 0.18 }}
-          className="relative flex max-h-[92vh] w-full max-w-4xl min-w-92.5 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#131820] shadow-2xl"
+          className="relative flex max-h-[92vh] w-full max-w-4xl min-w-92.5 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/12 dark:bg-[#131820]"
         >
           {/* header */}
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/12 bg-white/[0.03] px-4 py-3 sm:px-5 sm:py-3.5">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5 sm:py-3.5 dark:border-white/12 dark:bg-white/[0.03]">
             <div>
-              <h2 className="text-sm font-bold text-white 2xl:text-base">
+              <h2 className="text-sm font-bold text-gray-900 2xl:text-base dark:text-white">
                 Rule templates
               </h2>
-              <p className="mt-0.5 text-[11px] text-white/55 2xl:text-xs">
+              <p className="mt-0.5 text-[11px] text-gray-500 2xl:text-xs dark:text-white/55">
                 Pick a starting point. Every field is editable before you
                 save.
               </p>
@@ -96,7 +96,7 @@ const TemplatesModal = ({ open, onClose, onPick }) => {
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
@@ -105,13 +105,13 @@ const TemplatesModal = ({ open, onClose, onPick }) => {
           {/* body */}
           <div className="scrollbar-thin flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {loading && (
-              <div className="flex items-center gap-2 text-[12px] text-white/55">
+              <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-white/55">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
             )}
             {err && <Banner variant="error">{err}</Banner>}
             {!loading && !err && templates.length === 0 && (
-              <p className="text-[12px] text-white/55">
+              <p className="text-[12px] text-gray-500 dark:text-white/55">
                 No templates available.
               </p>
             )}
@@ -119,7 +119,7 @@ const TemplatesModal = ({ open, onClose, onPick }) => {
               !err &&
               Object.entries(grouped).map(([category, list]) => (
                 <div key={category}>
-                  <h3 className="mb-2 text-10 font-bold uppercase tracking-wider text-white/40">
+                  <h3 className="mb-2 text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
                     {category}
                   </h3>
                   <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
@@ -150,15 +150,15 @@ const TemplateCard = ({ template, onPick }) => {
     <button
       type="button"
       onClick={onPick}
-      className="group flex flex-col gap-2 rounded-2xl border border-white/12 bg-white/[0.04] p-3 text-left transition-all hover:border-[#15DCFF]/40 hover:bg-white/[0.07]"
+      className="group flex flex-col gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-left transition-all hover:border-[#15DCFF]/40 hover:bg-gray-100 dark:border-white/12 dark:bg-white/[0.04] dark:hover:bg-white/[0.07]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
-          <div className="text-13 font-bold text-white">
+          <div className="text-13 font-bold text-gray-900 dark:text-white">
             {template.headline}
           </div>
           {template.blurb && (
-            <p className="mt-1 text-[11px] 2xl:text-xs leading-relaxed text-white/55">
+            <p className="mt-1 text-[11px] 2xl:text-xs leading-relaxed text-gray-500 dark:text-white/55">
               {template.blurb}
             </p>
           )}
@@ -171,12 +171,12 @@ const TemplateCard = ({ template, onPick }) => {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 border-t border-white/12 pt-2 text-10 text-white/55">
-        <span className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-medium tracking-wider text-white/70 uppercase">
+      <div className="flex items-center gap-2 border-t border-gray-200 pt-2 text-10 text-gray-500 dark:border-white/12 dark:text-white/55">
+        <span className="rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 font-medium tracking-wider text-gray-600 uppercase dark:border-white/10 dark:bg-white/[0.05] dark:text-white/70">
           {template.template?.evaluateOn}
         </span>
-        <span className="text-white/25">·</span>
-        <span className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-medium tracking-wider text-white/70 uppercase">
+        <span className="text-gray-400 dark:text-white/25">·</span>
+        <span className="rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 font-medium tracking-wider text-gray-600 uppercase dark:border-white/10 dark:bg-white/[0.05] dark:text-white/70">
           {template.template?.action?.type === 'pause' ? 'Pause' : 'Alert'}
         </span>
         <span className="ml-auto text-[#15DCFF] opacity-0 transition-opacity group-hover:opacity-100">

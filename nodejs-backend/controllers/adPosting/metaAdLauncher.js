@@ -28,6 +28,31 @@ const {
   getAccessTokenForAccount,
 } = require("../../config/autopilotConfig");
 const REDIS_TTL = 7200;
+
+// Cursor-pagination helper for the Meta SDK. Meta's edges default to 25
+// items per call — agencies routinely have more campaigns / ad sets / ads
+// than that, so a single SDK call truncates their list. Pass the first-
+// page cursor (e.g. `account.getCampaigns(fields, { limit: 100 })`) and
+// this walks the rest. 50-page safety cap (= 5000 items) prevents a
+// malformed cursor from looping forever.
+async function fetchAllPaged(firstPageCursor, label = "items") {
+  let cursor = await firstPageCursor;
+  const items = [...cursor];
+  let pages = 1;
+  while (
+    typeof cursor?.hasNext === "function" &&
+    cursor.hasNext() &&
+    pages < 50
+  ) {
+    cursor = await cursor.next();
+    items.push(...cursor);
+    pages += 1;
+  }
+  if (pages > 1) {
+    logger.info(`fetchAllPaged: ${items.length} ${label} across ${pages} pages`);
+  }
+  return items;
+}
 // Volatile metrics (spend, impressions, clicks, period summaries) drift in
 // real time. A long TTL across multiple datePresets cached at different
 // moments produces visibly inconsistent numbers (e.g. "today" appearing to
@@ -679,9 +704,12 @@ class MetaAdLauncher {
                 date_preset: datePreset,
                 time_increment: 1,
               }),
-              account.getCampaigns(["id", "status"], {
-                limit: 100,
-              }),
+              // Paginated — agencies with >100 campaigns previously got an
+              // undercount on the dashboard tile.
+              fetchAllPaged(
+                account.getCampaigns(["id", "status"], { limit: 100 }),
+                `campaigns (dashboard, ${id})`,
+              ),
             ]);
 
             return { summary, daily, campaigns };
@@ -951,7 +979,10 @@ class MetaAdLauncher {
       const accountInfo = await account.read(["currency"]);
       const currency = accountInfo.currency;
 
-      const campaigns = await account.getCampaigns(getCampaignFields());
+      const campaigns = await fetchAllPaged(
+        account.getCampaigns(getCampaignFields(), { limit: 100 }),
+        "campaigns",
+      );
 
       const formattedCampaigns = campaigns.map((campaign) => ({
         id: campaign.id,
@@ -1042,9 +1073,15 @@ class MetaAdLauncher {
 
       if (campaignId) {
         const campaign = new Campaign(campaignId);
-        adSets = await campaign.getAdSets(getAdSetFields());
+        adSets = await fetchAllPaged(
+          campaign.getAdSets(getAdSetFields(), { limit: 100 }),
+          "ad sets (by campaign)",
+        );
       } else {
-        adSets = await account.getAdSets(getAdSetFields());
+        adSets = await fetchAllPaged(
+          account.getAdSets(getAdSetFields(), { limit: 100 }),
+          "ad sets (account-wide)",
+        );
       }
 
       const formattedAdSets = adSets.map((adSet) => ({
@@ -1125,7 +1162,10 @@ class MetaAdLauncher {
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
       const campaign = new Campaign(campaignId);
-      const ads = await campaign.getAds(getAdFields());
+      const ads = await fetchAllPaged(
+        campaign.getAds(getAdFields(), { limit: 100 }),
+        "ads (by campaign)",
+      );
 
       const formattedAds = ads.map((ad) => ad?._data);
 
@@ -1192,7 +1232,10 @@ class MetaAdLauncher {
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
       const adSet = new AdSet(adSetId);
-      const ads = await adSet.getAds(getAdFields());
+      const ads = await fetchAllPaged(
+        adSet.getAds(getAdFields(), { limit: 100 }),
+        "ads (by ad set)",
+      );
 
       const formattedAds = ads.map((ad) => ad?._data);
 
@@ -2527,6 +2570,61 @@ class MetaAdLauncher {
         status: false,
         error: "Failed to geocode location",
       });
+    }
+  }
+
+  // Reverse-geocode lat/lng → { displayName, countryCode } via Nominatim.
+  // Used by the wizard's map-pin picker to reject ocean / uninhabited
+  // clicks (Meta's own Ads Manager won't let you pin in water; mirroring
+  // that here avoids "campaign delivers to nobody" surprises).
+  //
+  // Response shape:
+  //   { status: true, result: { displayName, countryCode } }  → land
+  //   { status: true, result: null }                          → ocean / no match
+  async reverseGeocodeLocation(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Reverse-geocode lat/lng (OpenStreetMap Nominatim) to verify a map pin lies on land'
+    */
+    try {
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res
+          .status(400)
+          .json({ status: false, error: "lat and lng query params are required" });
+      }
+      // zoom=10 is a sensible middle: high enough to find a settlement
+      // around most coastal pins, low enough that Nominatim doesn't
+      // demand a specific address. Pure-ocean coords return
+      // `{ error: "Unable to geocode" }` at any zoom.
+      const { data } = await axios.get(
+        "https://nominatim.openstreetmap.org/reverse",
+        {
+          params: { lat, lon: lng, format: "jsonv2", zoom: 10, addressdetails: 1 },
+          headers: {
+            "User-Agent": "AdsGPT/1.0 (Meta Ads location targeting)",
+            "Accept-Language": "en",
+          },
+          timeout: 8000,
+        },
+      );
+
+      if (!data || data.error || !data.display_name) {
+        return res.status(200).json({ status: true, result: null });
+      }
+      return res.status(200).json({
+        status: true,
+        result: {
+          displayName: data.display_name,
+          countryCode: (data.address?.country_code || "").toUpperCase() || null,
+        },
+      });
+    } catch (error) {
+      console.error("reverseGeocodeLocation error:", error?.message || error);
+      // Fail open — if Nominatim is down, don't block the user. The
+      // backend Joi validator + Meta API will still catch wildly invalid
+      // coords at launch time.
+      return res.status(200).json({ status: true, result: null, degraded: true });
     }
   }
 

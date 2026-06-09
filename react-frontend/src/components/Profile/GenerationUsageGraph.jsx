@@ -55,14 +55,14 @@ const InlineDropdown = ({ value, options, onChange, renderLabel }) => {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#464951]"
+        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100 dark:text-white dark:hover:bg-[#464951]"
       >
         {renderLabel(value)}
         <FiChevronDown size={14} className="opacity-70" />
       </button>
 
       {open && (
-        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-[#3a3c44] bg-[#303030] py-1 shadow-lg">
+        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-black/10 bg-white py-1 shadow-lg dark:border-[#3a3c44] dark:bg-[#303030]">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -73,8 +73,8 @@ const InlineDropdown = ({ value, options, onChange, renderLabel }) => {
               }}
               className={`mt-1 block w-full px-3 py-1.5 text-left text-sm ${
                 opt.value === value
-                  ? 'bg-[#464951] text-white'
-                  : 'text-white/80 hover:bg-[#464951] hover:text-white'
+                  ? 'bg-zinc-100 text-zinc-900 dark:bg-[#464951] dark:text-white'
+                  : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white'
               }`}
             >
               {opt.label}
@@ -96,34 +96,39 @@ const formatForBackend = (date) => {
 };
 
 const GraphSkeleton = () => {
+  const isDark =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const baseColor = isDark ? '#2A2A2A' : '#e4e4e7';
+  const highlightColor = isDark ? '#3A3A3A' : '#f4f4f5';
+
   return (
-    <div className="relative h-[260px] w-full rounded-lg bg-[#303030]/50 p-4">
+    <div className="relative h-[260px] w-full rounded-lg bg-zinc-50 p-4 dark:bg-[#303030]/50">
       <div className="absolute top-0 right-4 mt-4 flex gap-3">
         <Skeleton
           width={80}
           height={50}
           borderRadius={8}
-          baseColor="#2A2A2A"
-          highlightColor="#3A3A3A"
+          baseColor={baseColor}
+          highlightColor={highlightColor}
         />
         <Skeleton
           width={80}
           height={50}
           borderRadius={8}
-          baseColor="#2A2A2A"
-          highlightColor="#3A3A3A"
+          baseColor={baseColor}
+          highlightColor={highlightColor}
         />
       </div>
 
       {/* Chart area */}
       <div className="mt-12">
-        <Skeleton height={140} borderRadius={8} baseColor="#2A2A2A" highlightColor="#3A3A3A" />
+        <Skeleton height={140} borderRadius={8} baseColor={baseColor} highlightColor={highlightColor} />
       </div>
 
       {/* Fake X-axis labels */}
       <div className="mt-4 flex justify-between px-2">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} width={40} height={10} baseColor="#2A2A2A" highlightColor="#3A3A3A" />
+          <Skeleton key={i} width={40} height={10} baseColor={baseColor} highlightColor={highlightColor} />
         ))}
       </div>
     </div>
@@ -138,6 +143,7 @@ const GenerationUsageGraph = ({ userId }) => {
     totalVideos,
     loading,
   } = useSelector((s) => s.usage || {});
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
 
   /* ---------- Date Filter State ---------- */
   const [range, setRange] = useState([{ startDate: null, endDate: null, key: 'selection' }]);
@@ -219,7 +225,7 @@ const GenerationUsageGraph = ({ userId }) => {
       <div className="mb-3 flex items-center gap-2" ref={pickerRef}>
         <button
           onClick={() => setIsOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-md border bg-black px-3 py-2 text-sm"
+          className="flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
         >
           <FiCalendar />
           <span className="text-xs">
@@ -229,7 +235,11 @@ const GenerationUsageGraph = ({ userId }) => {
           </span>
         </button>
 
-        <button onClick={handleReset} title="Reset" className="rounded-md border bg-black p-2">
+        <button
+          onClick={handleReset}
+          title="Reset"
+          className="rounded-md border border-black/10 bg-white p-2 text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+        >
           <GrPowerReset />
         </button>
 
@@ -237,19 +247,19 @@ const GenerationUsageGraph = ({ userId }) => {
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="appearance-none rounded-md border border-white/10 bg-black px-4 py-2 pr-10 text-xs text-white/90 shadow-sm transition-all hover:border-white/20 focus:border-[#6366F1] focus:ring-1 focus:ring-[#6366F1]/50 focus:outline-none"
+            className="appearance-none rounded-md border border-black/10 bg-white px-4 py-2 pr-10 text-xs text-zinc-800 shadow-sm transition-all hover:border-black/20 focus:border-[#6366F1] focus:ring-1 focus:ring-[#6366F1]/50 focus:outline-none dark:border-white/10 dark:bg-black dark:text-white/90 dark:hover:border-white/20"
           >
-            <option value="both" className="bg-[#1a1a1a] py-2">
+            <option value="both" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
               Select Type
             </option>
-            <option value="images" className="bg-[#1a1a1a] py-2">
+            <option value="images" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
               Images Only
             </option>
-            <option value="videos" className="bg-[#1a1a1a] py-2">
+            <option value="videos" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
               Videos Only
             </option>
           </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-white/50">
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 dark:text-white/50">
             <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
               <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
             </svg>
@@ -257,12 +267,12 @@ const GenerationUsageGraph = ({ userId }) => {
         </div>
 
         {isOpen && (
-          <div className="absolute z-50 mt-2 rounded-md border bg-white shadow-lg backdrop-blur-xl dark:bg-[#303030]/50">
+          <div className="absolute z-50 mt-2 rounded-md border border-black/10 bg-white shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50">
             <DateRange
               ranges={tempRange}
               onChange={(r) => setTempRange([r.selection])}
               moveRangeOnFirstSelection={false}
-              rangeColors={['#434343']}
+              rangeColors={[isDarkMode ? '#434343' : '#e4e4e7']}
               maxDate={new Date()}
               navigatorRenderer={(currentFocusedDate, changeShownDate) => {
                 const month = currentFocusedDate.getMonth();
@@ -272,7 +282,7 @@ const GenerationUsageGraph = ({ userId }) => {
                   <div className="flex items-center justify-between px-2 pt-3 pb-2">
                     <button
                       type="button"
-                      className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67]"
+                      className="flex size-7 items-center justify-center rounded-md bg-zinc-200 text-zinc-800 hover:bg-zinc-300 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67]"
                       onClick={() => {
                         const d = new Date(currentFocusedDate);
                         d.setMonth(d.getMonth() - 1);
@@ -307,7 +317,7 @@ const GenerationUsageGraph = ({ userId }) => {
 
                     <button
                       type="button"
-                      className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67] disabled:opacity-50"
+                      className="flex size-7 items-center justify-center rounded-md bg-zinc-200 text-zinc-800 hover:bg-zinc-300 disabled:opacity-50 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67]"
                       onClick={() => {
                         const d = new Date(currentFocusedDate);
                         d.setMonth(d.getMonth() + 1);
@@ -327,13 +337,13 @@ const GenerationUsageGraph = ({ userId }) => {
                   setTempRange(range);
                   setIsOpen(false);
                 }}
-                className="rounded-sm border border-[#EFEFEF]/60 bg-transparent px-6 py-1 text-sm font-semibold text-[#E3E3E3] hover:opacity-70"
+                className="rounded-sm border border-zinc-300 bg-transparent px-6 py-1 text-sm font-semibold text-zinc-700 hover:opacity-70 dark:border-[#EFEFEF]/60 dark:text-[#E3E3E3]"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApply}
-                className="rounded-sm bg-white px-8 py-1 text-sm font-bold text-[#151515] shadow-sm hover:bg-white/70"
+                className="rounded-sm bg-zinc-900 px-8 py-1 text-sm font-bold text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-[#151515] dark:hover:bg-white/70"
               >
                 Apply
               </button>
@@ -367,17 +377,17 @@ const GenerationUsageGraph = ({ userId }) => {
         </div>
 
         {chartData.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-400">
+          <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-gray-400">
             No usage data available
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#2a2a2a' : '#e4e4e7'} />
 
               <XAxis
                 dataKey="date"
-                stroke="#9ca3af"
+                stroke={isDarkMode ? '#9ca3af' : '#71717a'}
                 tickFormatter={(v) =>
                   new Date(v).toLocaleDateString('en-IN', {
                     day: '2-digit',
@@ -386,15 +396,28 @@ const GenerationUsageGraph = ({ userId }) => {
                 }
               />
 
-              <YAxis stroke="#9ca3af" allowDecimals={false} />
+              <YAxis stroke={isDarkMode ? '#9ca3af' : '#71717a'} allowDecimals={false} />
 
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#111827',
-                  border: '1px solid #374151',
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
+                contentStyle={
+                  isDarkMode
+                    ? {
+                        backgroundColor: '#111827',
+                        border: '1px solid #374151',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: '#fff',
+                      }
+                    : {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid rgba(0,0,0,0.1)',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: '#18181b',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                      }
+                }
+                labelStyle={{ color: isDarkMode ? '#e5e7eb' : '#52525b' }}
               />
 
               <Legend verticalAlign="bottom" height={36} />

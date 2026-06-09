@@ -1,0 +1,1844 @@
+{
+    "Ad Safety Risk": {
+        "id": 1001,
+        "sub_categories": {
+            "General Ad Safety Risk": {
+                "id": 10010001
+            }
+        }
+    },
+    "Adult Products and Services": {
+        "id": 1002,
+        "sub_categories": {
+            "General Adult Products and Services": {
+                "id": 10020001
+            }
+        }
+    },
+    "Alcohol": {
+        "id": 1003,
+        "sub_categories": {
+            "Bars": {
+                "id": 10030001
+            },
+            "Beer": {
+                "id": 10030002
+            },
+            "Hard Sodas, Seltzers, Alco Pops": {
+                "id": 10030003
+            },
+            "Spirits": {
+                "id": 10030004
+            },
+            "Wine": {
+                "id": 10030005
+            }
+        }
+    },
+    "Culture and Fine Arts": {
+        "id": 1004,
+        "sub_categories": {
+            "General Culture and Fine Arts": {
+                "id": 10040001
+            }
+        }
+    },
+    "Business and Industrial": {
+        "id": 1005,
+        "sub_categories": {
+            "Advertising and Marketing": {
+                "id": 10050001
+            },
+            "Business Services": {
+                "id": 10050002
+            },
+            "Consulting": {
+                "id": 10050003
+            },
+            "Employee Expense and Time Tracking Services": {
+                "id": 10050004
+            },
+            "Event Planning": {
+                "id": 10050005
+            },
+            "Human Resources and Recruiting": {
+                "id": 10050006
+            },
+            "Information Technology Services": {
+                "id": 10050007
+            },
+            "Laundry and Dry Cleaning Services": {
+                "id": 10050008
+            },
+            "Logistics and Delivery": {
+                "id": 10050009
+            },
+            "Office Equipment and Supplies": {
+                "id": 10050010
+            },
+            "Photographers": {
+                "id": 10050011
+            },
+            "Printing/Fax/WiFi Services": {
+                "id": 10050012
+            },
+            "Public Relations and Strategic Communication": {
+                "id": 10050013
+            },
+            "Security and Protection": {
+                "id": 10050014
+            },
+            "Storage Facilities": {
+                "id": 10050015
+            },
+            "Telecom Services": {
+                "id": 10050016
+            },
+            "Web Hosting and Cloud Computing": {
+                "id": 10050017
+            },
+            "Construction": {
+                "id": 10050018
+            },
+            "Energy Industry": {
+                "id": 10050019
+            },
+            "Electric Power Industry": {
+                "id": 10050020
+            },
+            "Energy Services": {
+                "id": 10050021
+            },
+            "Green Energy": {
+                "id": 10050022
+            },
+            "Oil, Gas and Consumable Fuels": {
+                "id": 10050023
+            },
+            "Forestry and Logging": {
+                "id": 10050024
+            },
+            "Industrial Storage": {
+                "id": 10050025
+            },
+            "Industrials": {
+                "id": 10050026
+            },
+            "Aerospace and Defense": {
+                "id": 10050027
+            },
+            "Construction and Engineering": {
+                "id": 10050028
+            },
+            "Industrial Conglomerates": {
+                "id": 10050029
+            },
+            "Trading Companies and Distributors": {
+                "id": 10050030
+            },
+            "Transportation": {
+                "id": 10050031
+            },
+            "Manufacturing": {
+                "id": 10050032
+            },
+            "Medical and Biotechnology": {
+                "id": 10050033
+            },
+            "Mining and Quarrying": {
+                "id": 10050034
+            },
+            "Science and Laboratory": {
+                "id": 10050035
+            },
+            "Signage": {
+                "id": 10050036
+            },
+            "Small Business": {
+                "id": 10050037
+            },
+            "Waste Disposal and Recycling": {
+                "id": 10050038
+            }
+        }
+    },
+    "Cannabis": {
+        "id": 1006,
+        "sub_categories": {
+            "Cannabis Consumables": {
+                "id": 10060001
+            },
+            "Cannabis Drinks": {
+                "id": 10060002
+            },
+            "Cannabis Edibles": {
+                "id": 10060003
+            },
+            "Cannabis Equipment": {
+                "id": 10060004
+            },
+            "Cannabis Stores": {
+                "id": 10060005
+            },
+            "Cannabis Stocks": {
+                "id": 10060006
+            },
+            "CBD Consumables": {
+                "id": 10060007
+            },
+            "CBD Topicals": {
+                "id": 10060008
+            }
+        }
+    },
+    "Clothing and Accessories": {
+        "id": 1007,
+        "sub_categories": {
+            "Clothing": {
+                "id": 10070001
+            },
+            "Children's Clothing": {
+                "id": 10070002
+            },
+            "Maternity Clothing": {
+                "id": 10070003
+            },
+            "Men's Clothing": {
+                "id": 10070004
+            },
+            "Sportswear": {
+                "id": 10070005
+            },
+            "Swimwear": {
+                "id": 10070006
+            },
+            "Underwear and Lingerie": {
+                "id": 10070007
+            },
+            "Wedding Dresses/Bridal Wear/Tuxedos": {
+                "id": 10070008
+            },
+            "Women's Clothing": {
+                "id": 10070009
+            },
+            "Clothing Accessories": {
+                "id": 10070010
+            },
+            "Costumes and Accessories": {
+                "id": 10070011
+            },
+            "Footwear": {
+                "id": 10070012
+            },
+            "Footwear Accessories": {
+                "id": 10070013
+            },
+            "Handbags and Wallets": {
+                "id": 10070014
+            },
+            "Jewelry and Watches": {
+                "id": 10070015
+            },
+            "Sunglasses": {
+                "id": 10070016
+            }
+        }
+    },
+    "Collectables and Antiques": {
+        "id": 1008,
+        "sub_categories": {
+            "Antiques": {
+                "id": 10080001
+            },
+            "Coins and Paper Money": {
+                "id": 10080002
+            },
+            "Collectibles": {
+                "id": 10080003
+            },
+            "Entertainment Memorabilia": {
+                "id": 10080004
+            },
+            "Sports Memorabilia and Trading Cards": {
+                "id": 10080005
+            },
+            "Stamps": {
+                "id": 10080006
+            }
+        }
+    },
+    "Computer Software": {
+        "id": 1009,
+        "sub_categories": {
+            "Browser Extensions": {
+                "id": 10090001
+            },
+            "Downloadable Utilities": {
+                "id": 10090002
+            },
+            "Enterprise Computer Software": {
+                "id": 10090003
+            },
+            "Personal Computer Software": {
+                "id": 10090004
+            },
+            "Toolbars": {
+                "id": 10090005
+            }
+        }
+    },
+    "Cosmetic Services": {
+        "id": 1010,
+        "sub_categories": {
+            "Beauty Salons": {
+                "id": 10100001
+            },
+            "Hair Salons": {
+                "id": 10100002
+            },
+            "Hair Removal": {
+                "id": 10100003
+            },
+            "Hair Restoration": {
+                "id": 10100004
+            },
+            "Nail Salons": {
+                "id": 10100005
+            },
+            "Med Spas": {
+                "id": 10100006
+            },
+            "Piercing and Tattooing": {
+                "id": 10100007
+            },
+            "Tanning Salons": {
+                "id": 10100008
+            }
+        }
+    },
+    "Consumer Electronics": {
+        "id": 1011,
+        "sub_categories": {
+            "Arcade Equipment": {
+                "id": 10110001
+            },
+            "Camcorders": {
+                "id": 10110002
+            },
+            "Cameras and Photo": {
+                "id": 10110003
+            },
+            "Camera and Photo Accessories": {
+                "id": 10110004
+            },
+            "Cameras": {
+                "id": 10110005
+            },
+            "Photo Applications": {
+                "id": 10110006
+            },
+            "Circuit Boards and Components": {
+                "id": 10110007
+            },
+            "Communications Electronics": {
+                "id": 10110008
+            },
+            "Computers": {
+                "id": 10110009
+            },
+            "Laptops": {
+                "id": 10110010
+            },
+            "Desktops": {
+                "id": 10110011
+            },
+            "E-Readers": {
+                "id": 10110012
+            },
+            "Electronics Accessories": {
+                "id": 10110013
+            },
+            "Headphones": {
+                "id": 10110014
+            },
+            "Home Theater Systems": {
+                "id": 10110015
+            },
+            "Marine Electronics": {
+                "id": 10110016
+            },
+            "Mobile Phones and Accessories": {
+                "id": 10110017
+            },
+            "Networking": {
+                "id": 10110018
+            },
+            "Printers/Copiers/Scanners/Fax": {
+                "id": 10110019
+            },
+            "Security Devices": {
+                "id": 10110020
+            },
+            "Tablets": {
+                "id": 10110021
+            },
+            "Televisions": {
+                "id": 10110022
+            },
+            "Video Games": {
+                "id": 10110023
+            },
+            "Video Game Consoles": {
+                "id": 10110024
+            },
+            "Video Game Console Accessories": {
+                "id": 10110025
+            }
+        }
+    },
+    "Consumer Packaged Goods": {
+        "id": 1012,
+        "sub_categories": {
+            "Baby and Toddler Products": {
+                "id": 10120001
+            },
+            "Diapers": {
+                "id": 10120002
+            },
+            "Nursing and Feeding Products": {
+                "id": 10120003
+            },
+            "Back to School Supplies": {
+                "id": 10120004
+            },
+            "Barbeque": {
+                "id": 10120005
+            },
+            "Charcoal": {
+                "id": 10120006
+            },
+            "Charcoal Lighter Fluids": {
+                "id": 10120007
+            },
+            "Beverages": {
+                "id": 10120008
+            },
+            "Carbonated Soft Drinks": {
+                "id": 10120009
+            },
+            "Coffee and Tea": {
+                "id": 10120010
+            },
+            "Drink Mixes": {
+                "id": 10120011
+            },
+            "Juices": {
+                "id": 10120012
+            },
+            "Sports/Energy Drinks": {
+                "id": 10120013
+            },
+            "Water": {
+                "id": 10120014
+            },
+            "Cosmetics": {
+                "id": 10120015
+            },
+            "Cosmetics Accessories": {
+                "id": 10120016
+            },
+            "Cosmetics-Nail": {
+                "id": 10120017
+            },
+            "Eye": {
+                "id": 10120018
+            },
+            "Facial": {
+                "id": 10120019
+            },
+            "Lip": {
+                "id": 10120020
+            },
+            "Storage": {
+                "id": 10120021
+            },
+            "Disposable Tableware": {
+                "id": 10120022
+            },
+            "Cups and Plates": {
+                "id": 10120023
+            },
+            "Foils, Wraps, and Bags": {
+                "id": 10120024
+            },
+            "Foil Pans": {
+                "id": 10120025
+            },
+            "Foils and Wraps": {
+                "id": 10120026
+            },
+            "Food and Trash Bags": {
+                "id": 10120027
+            },
+            "Fragrance": {
+                "id": 10120028
+            },
+            "Fragrances - Women's": {
+                "id": 10120029
+            },
+            "Shaving Lotion/Men's Fragrance": {
+                "id": 10120030
+            },
+            "Frozen": {
+                "id": 10120031
+            },
+            "Frozen Baked Goods": {
+                "id": 10120032
+            },
+            "Frozen Beverages": {
+                "id": 10120033
+            },
+            "Frozen Desserts": {
+                "id": 10120034
+            },
+            "Frozen Fruits and Vegetables": {
+                "id": 10120035
+            },
+            "Frozen Juices": {
+                "id": 10120036
+            },
+            "Frozen Meals": {
+                "id": 10120037
+            },
+            "Frozen Meat/Poultry/Seafood": {
+                "id": 10120038
+            },
+            "Frozen Snacks": {
+                "id": 10120039
+            },
+            "Other Frozen": {
+                "id": 10120040
+            },
+            "General Food": {
+                "id": 10120041
+            },
+            "Baby Food": {
+                "id": 10120042
+            },
+            "Bakery": {
+                "id": 10120043
+            },
+            "Baking": {
+                "id": 10120044
+            },
+            "Breakfast": {
+                "id": 10120045
+            },
+            "Candy": {
+                "id": 10120046
+            },
+            "Condiments and Sauces": {
+                "id": 10120047
+            },
+            "Cookies and Crackers": {
+                "id": 10120048
+            },
+            "Fruit": {
+                "id": 10120049
+            },
+            "Meals": {
+                "id": 10120050
+            },
+            "Snacks": {
+                "id": 10120051
+            },
+            "Vegetables": {
+                "id": 10120052
+            },
+            "General Merchandise": {
+                "id": 10120053
+            },
+            "Grooming Supplies": {
+                "id": 10120054
+            },
+            "Hair Care": {
+                "id": 10120055
+            },
+            "Hair Accessories": {
+                "id": 10120056
+            },
+            "Hair Coloring": {
+                "id": 10120057
+            },
+            "Hair Conditioner": {
+                "id": 10120058
+            },
+            "Hair Growth Products": {
+                "id": 10120059
+            },
+            "Hair Spray/Spritz": {
+                "id": 10120060
+            },
+            "Hair Styling Gel/Mousse": {
+                "id": 10120061
+            },
+            "Home Permanent/Relaxer Kits": {
+                "id": 10120062
+            },
+            "Shampoo": {
+                "id": 10120063
+            },
+            "HFSS Products [High Fat, Sugar, Salt]": {
+                "id": 10120064
+            },
+            "Home Care": {
+                "id": 10120065
+            },
+            "Household Cleaning": {
+                "id": 10120066
+            },
+            "Laundry": {
+                "id": 10120067
+            },
+            "Hosiery": {
+                "id": 10120068
+            },
+            "Pantyhose/Nylons": {
+                "id": 10120069
+            },
+            "Socks": {
+                "id": 10120070
+            },
+            "Tights": {
+                "id": 10120071
+            },
+            "Household/Plastics/Storage": {
+                "id": 10120072
+            },
+            "Bottles": {
+                "id": 10120073
+            },
+            "Drinkware": {
+                "id": 10120074
+            },
+            "Household Plastics": {
+                "id": 10120075
+            },
+            "Kitchen Storage": {
+                "id": 10120076
+            },
+            "Meal Kits": {
+                "id": 10120077
+            },
+            "Miscellaneous General Merch": {
+                "id": 10120078
+            },
+            "Office/School Supplies": {
+                "id": 10120079
+            },
+            "Children's Art Supplies": {
+                "id": 10120080
+            },
+            "Computer Disks Frmtd/UnFrmtd": {
+                "id": 10120081
+            },
+            "Office Products": {
+                "id": 10120082
+            },
+            "Writing Instruments": {
+                "id": 10120083
+            },
+            "Over the Counter Medication": {
+                "id": 10120084
+            },
+            "Paper Products": {
+                "id": 10120085
+            },
+            "Facial Tissue": {
+                "id": 10120086
+            },
+            "Paper Napkins": {
+                "id": 10120087
+            },
+            "Paper Towels": {
+                "id": 10120088
+            },
+            "Toilet Tissue": {
+                "id": 10120089
+            },
+            "Personal Care": {
+                "id": 10120090
+            },
+            "Personal Cleansing": {
+                "id": 10120091
+            },
+            "Bath Products": {
+                "id": 10120092
+            },
+            "Bath/Body Scrubbers/Massagers": {
+                "id": 10120093
+            },
+            "Deodorant": {
+                "id": 10120094
+            },
+            "Moist Towelettes": {
+                "id": 10120095
+            },
+            "Soap": {
+                "id": 10120096
+            },
+            "Pest Control": {
+                "id": 10120097
+            },
+            "Outdoor Insect/Rodent Control Chem": {
+                "id": 10120098
+            },
+            "Pet Care": {
+                "id": 10120099
+            },
+            "Cat/Dog Litter": {
+                "id": 10120100
+            },
+            "Pet Food": {
+                "id": 10120101
+            },
+            "Pet Supplies": {
+                "id": 10120102
+            },
+            "Pet Treats": {
+                "id": 10120103
+            },
+            "Refrigerated": {
+                "id": 10120104
+            },
+            "Dairy": {
+                "id": 10120105
+            },
+            "Refrigerated Baked Goods": {
+                "id": 10120106
+            },
+            "Refrigerated Beverages": {
+                "id": 10120107
+            },
+            "Refrigerated Condiments": {
+                "id": 10120108
+            },
+            "Refrigerated Desserts": {
+                "id": 10120109
+            },
+            "Refrigerated Dough": {
+                "id": 10120110
+            },
+            "Refrigerated Meals": {
+                "id": 10120111
+            },
+            "Refrigerated Meats": {
+                "id": 10120112
+            },
+            "Refrigerated Miscellaneous": {
+                "id": 10120113
+            },
+            "Religious Items": {
+                "id": 10120114
+            },
+            "Shaving": {
+                "id": 10120115
+            },
+            "Blades": {
+                "id": 10120116
+            },
+            "Razors": {
+                "id": 10120117
+            },
+            "Shaving Cream": {
+                "id": 10120118
+            },
+            "Skin Care": {
+                "id": 10120119
+            },
+            "Hand and Body Lotion": {
+                "id": 10120120
+            },
+            "Suntan Products": {
+                "id": 10120121
+            },
+            "Toys and Games": {
+                "id": 10120122
+            },
+            "Games": {
+                "id": 10120123
+            },
+            "Outdoor Play Equipment": {
+                "id": 10120124
+            },
+            "Puzzles": {
+                "id": 10120125
+            },
+            "Toys": {
+                "id": 10120126
+            },
+            "Vitamins and Supplements": {
+                "id": 10120127
+            },
+            "Digestive Supplements": {
+                "id": 10120128
+            },
+            "Weightloss Supplements": {
+                "id": 10120129
+            },
+            "Water Treatment": {
+                "id": 10120130
+            },
+            "Water Filter/Devices": {
+                "id": 10120131
+            },
+            "Water Softeners/Treatment": {
+                "id": 10120132
+            }
+        }
+    },
+    "Dating": {
+        "id": 1013,
+        "sub_categories": {
+            "Casual Relationships": {
+                "id": 10130001
+            },
+            "Serious Relationships": {
+                "id": 10130002
+            }
+        }
+    },
+    "Debated Sensitive Social Issue": {
+        "id": 1014,
+        "sub_categories": {
+            "General Debated Sensitive Social Issue": {
+                "id": 10140001
+            }
+        }
+    },
+    "Durable Goods": {
+        "id": 1015,
+        "sub_categories": {
+            "Electronics/Photography": {
+                "id": 10150001
+            },
+            "Batteries": {
+                "id": 10150002
+            },
+            "Blank Audio/Video Media": {
+                "id": 10150003
+            },
+            "Photography Supplies": {
+                "id": 10150004
+            },
+            "Furniture": {
+                "id": 10150005
+            },
+            "Indoor Furniture": {
+                "id": 10150006
+            },
+            "Outdoor Furniture": {
+                "id": 10150007
+            },
+            "Grooming Supplies": {
+                "id": 10150008
+            },
+            "Electric Shaver Groomer": {
+                "id": 10150009
+            },
+            "Hair Appliances": {
+                "id": 10150010
+            },
+            "Tools and Hardware": {
+                "id": 10150011
+            },
+            "Consumer Hardware Supplies": {
+                "id": 10150012
+            },
+            "Industrial Hardware Supplies": {
+                "id": 10150013
+            },
+            "Home and Garden Products": {
+                "id": 10150014
+            },
+            "Bathroom Accessories": {
+                "id": 10150015
+            },
+            "Bedroom Furniture and Accessories": {
+                "id": 10150016
+            },
+            "Carpets and Rugs": {
+                "id": 10150017
+            },
+            "Fireplaces": {
+                "id": 10150018
+            },
+            "Home Decor": {
+                "id": 10150019
+            },
+            "Housewares": {
+                "id": 10150020
+            },
+            "Kitchen and Dining Products": {
+                "id": 10150021
+            },
+            "Lawn and Garden Products": {
+                "id": 10150022
+            },
+            "Lighting": {
+                "id": 10150023
+            },
+            "Linens and Bedding": {
+                "id": 10150024
+            },
+            "Plants": {
+                "id": 10150025
+            },
+            "Household Appliances": {
+                "id": 10150026
+            },
+            "Luggage and Bags": {
+                "id": 10150027
+            }
+        }
+    },
+    "Dieting and Weightloss": {
+        "id": 1016,
+        "sub_categories": {
+            "Food Logging": {
+                "id": 10160001
+            },
+            "Weightloss Services": {
+                "id": 10160002
+            },
+            "Workout and Step Tracking Applications": {
+                "id": 10160003
+            }
+        }
+    },
+    "Education and Careers": {
+        "id": 1017,
+        "sub_categories": {
+            "Adult Education": {
+                "id": 10170001
+            },
+            "Certificaiton Programs": {
+                "id": 10170002
+            },
+            "Colleges and Universities": {
+                "id": 10170003
+            },
+            "Post-Graduate Education": {
+                "id": 10170004
+            },
+            "Education Applications": {
+                "id": 10170005
+            },
+            "Employment Agencies": {
+                "id": 10170006
+            },
+            "Higher Education": {
+                "id": 10170007
+            },
+            "Language Learning": {
+                "id": 10170008
+            },
+            "Online Education": {
+                "id": 10170009
+            },
+            "Primary Education": {
+                "id": 10170010
+            },
+            "Remote work and school": {
+                "id": 10170011
+            },
+            "Distance learning": {
+                "id": 10170012
+            },
+            "Homeschooling": {
+                "id": 10170013
+            },
+            "Online Surveys": {
+                "id": 10170014
+            },
+            "Multi-Level Marketing": {
+                "id": 10170015
+            },
+            "Telecommuting": {
+                "id": 10170016
+            },
+            "Study Skills": {
+                "id": 10170017
+            },
+            "Teaching Resources": {
+                "id": 10170018
+            },
+            "Trade Schools": {
+                "id": 10170019
+            }
+        }
+    },
+    "Events and Performances": {
+        "id": 1018,
+        "sub_categories": {
+            "Auctions": {
+                "id": 10180001
+            },
+            "Cinemas and Movie Events": {
+                "id": 10180002
+            },
+            "Comedy Events": {
+                "id": 10180003
+            },
+            "Concerts": {
+                "id": 10180004
+            },
+            "Conferences, Lectures and Workshops": {
+                "id": 10180005
+            },
+            "Exhibitions": {
+                "id": 10180006
+            },
+            "Fan Conventions": {
+                "id": 10180007
+            },
+            "Fashion Events": {
+                "id": 10180008
+            },
+            "Nightlife Experiences": {
+                "id": 10180009
+            },
+            "Sporting Events": {
+                "id": 10180010
+            },
+            "Seasonal and Holiday Events": {
+                "id": 10180011
+            },
+            "Theatre and Musicals": {
+                "id": 10180012
+            }
+        }
+    },
+    "Family and Parenting": {
+        "id": 1019,
+        "sub_categories": {
+            "Childcare": {
+                "id": 10190001
+            },
+            "Day Care Centers": {
+                "id": 10190002
+            },
+            "Nanny Services": {
+                "id": 10190003
+            },
+            "Genealogy and Family Trees": {
+                "id": 10190004
+            },
+            "Kids Activities": {
+                "id": 10190005
+            },
+            "Senior Living": {
+                "id": 10190006
+            }
+        }
+    },
+    "Finance and Insurance": {
+        "id": 1020,
+        "sub_categories": {
+            "Accountants and Bookkeepers": {
+                "id": 10200001
+            },
+            "Banking": {
+                "id": 10200002
+            },
+            "Credit and Debt Repair/Credit Reporting": {
+                "id": 10200003
+            },
+            "Credit Cards": {
+                "id": 10200004
+            },
+            "Insurance": {
+                "id": 10200005
+            },
+            "Auto Insurance": {
+                "id": 10200006
+            },
+            "Home Insurance": {
+                "id": 10200007
+            },
+            "Life Insurance": {
+                "id": 10200008
+            },
+            "Medical Insurance": {
+                "id": 10200009
+            },
+            "Pet Insurance": {
+                "id": 10200010
+            },
+            "Travel Insurance": {
+                "id": 10200011
+            },
+            "Insurance Coverage Apps": {
+                "id": 10200012
+            },
+            "Mortgage Lenders and Brokers": {
+                "id": 10200013
+            },
+            "Payday and Emergency Loans": {
+                "id": 10200014
+            },
+            "Retirement Planning": {
+                "id": 10200015
+            },
+            "Stocks and Investments": {
+                "id": 10200016
+            },
+            "Financial Investment and Management Applications": {
+                "id": 10200017
+            },
+            "Student Financial Aid": {
+                "id": 10200018
+            },
+            "Tax Preparation Services": {
+                "id": 10200019
+            }
+        }
+    },
+    "Food and Beverage Services": {
+        "id": 1021,
+        "sub_categories": {
+            "Bakeries": {
+                "id": 10210001
+            },
+            "Catering": {
+                "id": 10210002
+            },
+            "Fast Food": {
+                "id": 10210003
+            },
+            "Food Delivery Services": {
+                "id": 10210004
+            },
+            "Restaurants": {
+                "id": 10210005
+            }
+        }
+    },
+    "Gambling": {
+        "id": 1022,
+        "sub_categories": {
+            "Casinos": {
+                "id": 10220001
+            },
+            "Contests": {
+                "id": 10220002
+            },
+            "Give Aways": {
+                "id": 10220003
+            },
+            "Lottery": {
+                "id": 10220004
+            },
+            "Sports Betting": {
+                "id": 10220005
+            },
+            "Virtual Betting": {
+                "id": 10220006
+            }
+        }
+    },
+    "Green/Eco": {
+        "id": 1023,
+        "sub_categories": {
+            "General Green/Eco": {
+                "id": 10230001
+            }
+        }
+    },
+    "Gifts and Holiday Items": {
+        "id": 1024,
+        "sub_categories": {
+            "Flowers": {
+                "id": 10240001
+            },
+            "Gift Baskets": {
+                "id": 10240002
+            },
+            "Gift Cards and Coupons": {
+                "id": 10240003
+            },
+            "Gift Certificates": {
+                "id": 10240004
+            },
+            "Greeting Cards": {
+                "id": 10240005
+            },
+            "Party Goods": {
+                "id": 10240006
+            }
+        }
+    },
+    "Health and Medical Services": {
+        "id": 1025,
+        "sub_categories": {
+            "Alternative and Natural Medicine": {
+                "id": 10250001
+            },
+            "Assisted Living": {
+                "id": 10250002
+            },
+            "Chiropractors": {
+                "id": 10250003
+            },
+            "Clinical Research": {
+                "id": 10250004
+            },
+            "Cosmetic Medical Services": {
+                "id": 10250005
+            },
+            "Dental Care": {
+                "id": 10250006
+            },
+            "Dermatology": {
+                "id": 10250007
+            },
+            "Drugstores and Pharmacies": {
+                "id": 10250008
+            },
+            "Fertility and Family Planning": {
+                "id": 10250009
+            },
+            "General Practitioners": {
+                "id": 10250010
+            },
+            "Home Healthcare": {
+                "id": 10250011
+            },
+            "Hospitals": {
+                "id": 10250012
+            },
+            "Mental Health": {
+                "id": 10250013
+            },
+            "Physical Therapists": {
+                "id": 10250014
+            },
+            "Service Provider Search and Scheduling": {
+                "id": 10250015
+            },
+            "Symptom Monitoring Apps": {
+                "id": 10250016
+            },
+            "Vision Care": {
+                "id": 10250017
+            }
+        }
+    },
+    "Home and Garden Services": {
+        "id": 1026,
+        "sub_categories": {
+            "Appliance Repair": {
+                "id": 10260001
+            },
+            "Business and Home Security Services": {
+                "id": 10260002
+            },
+            "Carpeting and Flooring Services": {
+                "id": 10260003
+            },
+            "Do It Yourself Applications": {
+                "id": 10260004
+            },
+            "Emergency Preparedness": {
+                "id": 10260005
+            },
+            "Flood, Fire and Gas Safety": {
+                "id": 10260006
+            },
+            "Gas and Electric Services": {
+                "id": 10260007
+            },
+            "Home Improvement and Repair": {
+                "id": 10260008
+            },
+            "Home Security and Monitoring Applications": {
+                "id": 10260009
+            },
+            "Home Service Provider Review": {
+                "id": 10260010
+            },
+            "Housekeeping Services": {
+                "id": 10260011
+            },
+            "Landscaping Services": {
+                "id": 10260012
+            },
+            "Lawn and Garden Services": {
+                "id": 10260013
+            },
+            "Pest Exterminators": {
+                "id": 10260014
+            },
+            "Plumbers": {
+                "id": 10260015
+            },
+            "Pool and Spa Installation and Maintenance": {
+                "id": 10260016
+            },
+            "Remodeling and Construction": {
+                "id": 10260017
+            },
+            "Water Services": {
+                "id": 10260018
+            },
+            "Window Installation and Treatments": {
+                "id": 10260019
+            }
+        }
+    },
+    "Legal Services": {
+        "id": 1027,
+        "sub_categories": {
+            "General Legal Services": {
+                "id": 10270001
+            }
+        }
+    },
+    "Media": {
+        "id": 1028,
+        "sub_categories": {
+            "Blogs/Forums/Social Networks": {
+                "id": 10280001
+            },
+            "Book Reading and Review Applications": {
+                "id": 10280002
+            },
+            "Books and Audio Books": {
+                "id": 10280003
+            },
+            "Casual Games": {
+                "id": 10280004
+            },
+            "Casual Games Apps": {
+                "id": 10280005
+            },
+            "Core Gaming": {
+                "id": 10280006
+            },
+            "Core Gaming Apps": {
+                "id": 10280007
+            },
+            "CDs and Vinyl Records": {
+                "id": 10280008
+            },
+            "DVDs": {
+                "id": 10280009
+            },
+            "Live Television": {
+                "id": 10280010
+            },
+            "Magazines and Newspapers": {
+                "id": 10280011
+            },
+            "Music and Video Streaming Services": {
+                "id": 10280012
+            },
+            "News and Analysis": {
+                "id": 10280013
+            },
+            "Radio and Podcasts": {
+                "id": 10280014
+            },
+            "Sports": {
+                "id": 10280015
+            },
+            "Fantasy Sports": {
+                "id": 10280016
+            },
+            "Sports Highlights": {
+                "id": 10280017
+            },
+            "Team News and Analysis": {
+                "id": 10280018
+            },
+            "Utilities Apps": {
+                "id": 10280019
+            },
+            "Productivity Apps": {
+                "id": 10280020
+            },
+            "Reference Apps": {
+                "id": 10280021
+            },
+            "Search Engine Apps": {
+                "id": 10280022
+            },
+            "Weather Apps": {
+                "id": 10280023
+            }
+        }
+    },
+    "Metals": {
+        "id": 1029,
+        "sub_categories": {
+            "Coin Trade In": {
+                "id": 10290001
+            },
+            "Gold Trade In": {
+                "id": 10290002
+            },
+            "Platinum Trade In": {
+                "id": 10290003
+            },
+            "Silver Trade In": {
+                "id": 10290004
+            }
+        }
+    },
+    "Crypto": {
+        "id": 1030,
+        "sub_categories": {
+            "Non-Fiat Currency": {
+                "id": 10300001
+            },
+            "Cryptocurrency Exchanges": {
+                "id": 10300002
+            },
+            "Cryptocurrency Stock": {
+                "id": 10300003
+            },
+            "NFTs": {
+                "id": 10300004
+            }
+        }
+    },
+    "Non-Profits": {
+        "id": 1031,
+        "sub_categories": {
+            "Charities and Donations": {
+                "id": 10310001
+            },
+            "Civic Organizations": {
+                "id": 10310002
+            },
+            "Federations and Professional Associations": {
+                "id": 10310003
+            },
+            "Military Organizations": {
+                "id": 10310004
+            },
+            "Non-Governmental Organizations": {
+                "id": 10310005
+            },
+            "Public Service Announcements": {
+                "id": 10310006
+            },
+            "Scholarships": {
+                "id": 10310007
+            }
+        }
+    },
+    "Pet Ownership": {
+        "id": 1032,
+        "sub_categories": {
+            "Pet Adoption": {
+                "id": 10320001
+            },
+            "Pet Breeders": {
+                "id": 10320002
+            },
+            "Pet Care and Supply Applications": {
+                "id": 10320003
+            },
+            "Pet Grooming": {
+                "id": 10320004
+            },
+            "Pet Sitting": {
+                "id": 10320005
+            },
+            "Veterinary Services": {
+                "id": 10320006
+            }
+        }
+    },
+    "Personal/Consumer Telecom": {
+        "id": 1033,
+        "sub_categories": {
+            "Personal/Consumer Telcom": {
+                "id": 10330001
+            },
+            "Home Internet Services": {
+                "id": 10330002
+            },
+            "Home Phone Services": {
+                "id": 10330003
+            },
+            "Home Television Services": {
+                "id": 10330004
+            },
+            "Mobile Phone Plans": {
+                "id": 10330005
+            },
+            "Prepaid International Phone Services": {
+                "id": 10330006
+            }
+        }
+    },
+    "Pharmaceuticals": {
+        "id": 1034,
+        "sub_categories": {
+            "General Pharmaceuticals": {
+                "id": 10340001
+            }
+        }
+    },
+    "Politics": {
+        "id": 1035,
+        "sub_categories": {
+            "Ballot measures": {
+                "id": 10350001
+            },
+            "Elections": {
+                "id": 10350002
+            },
+            "Political Action Committees": {
+                "id": 10350003
+            },
+            "Political Analysis and Opinion": {
+                "id": 10350004
+            },
+            "Political candidates": {
+                "id": 10350005
+            },
+            "Political Donations": {
+                "id": 10350006
+            },
+            "Referendums or promoting causes; eg: Healthcare reform, energy trades (Oil/Solar), etc...": {
+                "id": 10350007
+            }
+        }
+    },
+    "Real Estate": {
+        "id": 1036,
+        "sub_categories": {
+            "Commercial Real Estate": {
+                "id": 10360001
+            },
+            "Real Estate Rentals": {
+                "id": 10360002
+            },
+            "Real Estate Sales": {
+                "id": 10360003
+            },
+            "Real Estate Services For Owners": {
+                "id": 10360004
+            }
+        }
+    },
+    "Religion and Spirituality": {
+        "id": 1037,
+        "sub_categories": {
+            "Astrology": {
+                "id": 10370001
+            },
+            "Prayer and Mindfullness Applications": {
+                "id": 10370002
+            },
+            "Prayer and Worship Services": {
+                "id": 10370003
+            },
+            "Religious Causes": {
+                "id": 10370004
+            },
+            "Religious Charities": {
+                "id": 10370005
+            },
+            "Religious Organizaitions": {
+                "id": 10370006
+            }
+        }
+    },
+    "Retail": {
+        "id": 1038,
+        "sub_categories": {
+            "Arts and Crafts Supplies": {
+                "id": 10380001
+            },
+            "Cell Phone Stores": {
+                "id": 10380002
+            },
+            "Clothing Stores": {
+                "id": 10380003
+            },
+            "Department Stores": {
+                "id": 10380004
+            },
+            "eCommerce": {
+                "id": 10380005
+            },
+            "Factory Outlet Stores": {
+                "id": 10380006
+            },
+            "Grocery Stores and Supermarkets": {
+                "id": 10380007
+            },
+            "Hardware Stores": {
+                "id": 10380008
+            },
+            "Musical Instruments and Record Stores": {
+                "id": 10380009
+            },
+            "Pawn Shops": {
+                "id": 10380010
+            },
+            "Pet and Pet Supply Stores": {
+                "id": 10380011
+            },
+            "Shopping Malls": {
+                "id": 10380012
+            },
+            "Specialty Stores": {
+                "id": 10380013
+            },
+            "Sporting Goods Stores": {
+                "id": 10380014
+            },
+            "Ticket Services": {
+                "id": 10380015
+            }
+        }
+    },
+    "Fitness Activities": {
+        "id": 1039,
+        "sub_categories": {
+            "Dance Studios": {
+                "id": 10390001
+            },
+            "Gyms and Health Clubs": {
+                "id": 10390002
+            },
+            "Participant Sports Leagues": {
+                "id": 10390003
+            },
+            "Personal Trainers": {
+                "id": 10390004
+            },
+            "Self Defense and Martial Arts Classes": {
+                "id": 10390005
+            },
+            "Swimming Facilities": {
+                "id": 10390006
+            },
+            "Workout and Step Tracking Applications": {
+                "id": 10390007
+            },
+            "Yoga Studios": {
+                "id": 10390008
+            }
+        }
+    },
+    "Sexual Health": {
+        "id": 1040,
+        "sub_categories": {
+            "Contraceptives": {
+                "id": 10400001
+            },
+            "Doctor Perscribed Medicines": {
+                "id": 10400002
+            },
+            "Fertility Tracking Applications": {
+                "id": 10400003
+            },
+            "Non-Perscribed Performance Enhancers": {
+                "id": 10400004
+            }
+        }
+    },
+    "Sporting Goods": {
+        "id": 1041,
+        "sub_categories": {
+            "Athletics Equipment": {
+                "id": 10410001
+            },
+            "Exercise and Fitness Equipment": {
+                "id": 10410002
+            },
+            "Indoor Games Equipment": {
+                "id": 10410003
+            },
+            "Outdoor Recreation Equipment": {
+                "id": 10410004
+            }
+        }
+    },
+    "Travel and Tourism": {
+        "id": 1042,
+        "sub_categories": {
+            "Accommodations": {
+                "id": 10420001
+            },
+            "Bed and Breakfasts": {
+                "id": 10420002
+            },
+            "Camping and Camp Grounds": {
+                "id": 10420003
+            },
+            "Hotels and Resorts": {
+                "id": 10420004
+            },
+            "Motels": {
+                "id": 10420005
+            },
+            "Timeshares": {
+                "id": 10420006
+            },
+            "Vacation Rentals": {
+                "id": 10420007
+            },
+            "Air Travel": {
+                "id": 10420008
+            },
+            "Cruises": {
+                "id": 10420009
+            },
+            "Rail Travel": {
+                "id": 10420010
+            },
+            "Sightseeing Tours and Activities": {
+                "id": 10420011
+            },
+            "Travel Agents and Online Travel Services": {
+                "id": 10420012
+            },
+            "Travel Packages": {
+                "id": 10420013
+            },
+            "Travel Planning and Itinerary Management Applications": {
+                "id": 10420014
+            }
+        }
+    },
+    "Tobacco": {
+        "id": 1043,
+        "sub_categories": {
+            "Cigars": {
+                "id": 10430001
+            },
+            "Cigarettes": {
+                "id": 10430002
+            },
+            "Smokeless Tobacco": {
+                "id": 10430003
+            },
+            "Vaping": {
+                "id": 10430004
+            },
+            "Vaping Cartridges": {
+                "id": 10430005
+            },
+            "Vaporizors": {
+                "id": 10430006
+            }
+        }
+    },
+    "Vehicles": {
+        "id": 1044,
+        "sub_categories": {
+            "Automotive Leasing": {
+                "id": 10440001
+            },
+            "Automotive Ownership": {
+                "id": 10440002
+            },
+            "New Vehicle Ownership": {
+                "id": 10440003
+            },
+            "Pre-owned Automotive Ownership": {
+                "id": 10440004
+            },
+            "Automotive Products": {
+                "id": 10440005
+            },
+            "Automotive Care Products": {
+                "id": 10440006
+            },
+            "Automotive Parts and Accessories": {
+                "id": 10440007
+            },
+            "Aftermarket Parts and Accessories": {
+                "id": 10440008
+            },
+            "Automotive Services": {
+                "id": 10440009
+            },
+            "Auto Towing": {
+                "id": 10440010
+            },
+            "Auto Repair": {
+                "id": 10440011
+            },
+            "Car Wash": {
+                "id": 10440012
+            },
+            "Automotive Sales Applications": {
+                "id": 10440013
+            },
+            "Ride-sharing Services": {
+                "id": 10440014
+            },
+            "Taxi Services": {
+                "id": 10440015
+            },
+            "Vehicle Rental": {
+                "id": 10440016
+            },
+            "Vehicle Type": {
+                "id": 10440017
+            },
+            "Boats": {
+                "id": 10440018
+            },
+            "Diesel Vehicles": {
+                "id": 10440019
+            },
+            "Electric Vehicles": {
+                "id": 10440020
+            },
+            "Gas Vehicles": {
+                "id": 10440021
+            },
+            "Hybrid Vehicles": {
+                "id": 10440022
+            },
+            "Recreational Vehicles": {
+                "id": 10440023
+            },
+            "Scooters, Motorbikes, and E-bikes": {
+                "id": 10440024
+            }
+        }
+    },
+    "Weapons and Ammunition": {
+        "id": 1045,
+        "sub_categories": {
+            "Ammunition": {
+                "id": 10450001
+            },
+            "Guns": {
+                "id": 10450002
+            },
+            "Gun Accessories": {
+                "id": 10450003
+            },
+            "Gun Shows and Auctions": {
+                "id": 10450004
+            },
+            "Non-Projectile Weapons": {
+                "id": 10450005
+            },
+            "Taser and Stun Guns": {
+                "id": 10450006
+            }
+        }
+    }
+}

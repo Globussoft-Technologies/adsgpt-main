@@ -275,6 +275,13 @@ export default function AdFactoryWorkflowDarkReal() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const socketio = getSocket();
+  // React Flow edges, the dot grid and the canvas tint are styled with inline
+  // SVG/CSS values, so they can't use Tailwind `dark:` variants — switch them
+  // off the theme flag instead. Light mode uses darker greys so lines stay
+  // legible on the white canvas.
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
+  const trunkStroke = isDarkMode ? '#737373' : '#94a3b8';
+  const idleEdgeStroke = isDarkMode ? '#6B7280' : '#94a3b8';
   const {
     campaignId,
     activeForm,
@@ -490,7 +497,7 @@ export default function AdFactoryWorkflowDarkReal() {
       target: 'objectives',
       animated: true,
       type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
+      style: { stroke: trunkStroke, strokeWidth: 3 },
     },
     {
       id: 'e2',
@@ -498,7 +505,7 @@ export default function AdFactoryWorkflowDarkReal() {
       target: 'assets',
       animated: true,
       type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
+      style: { stroke: trunkStroke, strokeWidth: 3 },
     },
     {
       id: 'e3',
@@ -506,7 +513,7 @@ export default function AdFactoryWorkflowDarkReal() {
       target: 'validate',
       animated: true,
       type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
+      style: { stroke: trunkStroke, strokeWidth: 3 },
     },
     {
       id: 'e4',
@@ -514,7 +521,7 @@ export default function AdFactoryWorkflowDarkReal() {
       target: 'services',
       animated: true,
       type: 'smoothstep',
-      style: { stroke: '#737373', strokeWidth: 3 },
+      style: { stroke: trunkStroke, strokeWidth: 3 },
     },
   ];
   const initialEdges = IS_AUTOMATION_ENABLED
@@ -526,7 +533,7 @@ export default function AdFactoryWorkflowDarkReal() {
           target: MANUAL_GROUP_ID,
           animated: true,
           type: 'smoothstep',
-          style: { stroke: '#737373', strokeWidth: 3 },
+          style: { stroke: trunkStroke, strokeWidth: 3 },
         },
         {
           id: 'e-services-to-auto',
@@ -534,7 +541,7 @@ export default function AdFactoryWorkflowDarkReal() {
           target: AUTO_GROUP_ID,
           animated: true,
           type: 'smoothstep',
-          style: { stroke: '#737373', strokeWidth: 3 },
+          style: { stroke: trunkStroke, strokeWidth: 3 },
         },
       ]
     : [
@@ -545,7 +552,7 @@ export default function AdFactoryWorkflowDarkReal() {
           target: 'image-generation',
           animated: true,
           type: 'smoothstep',
-          style: { stroke: '#737373', strokeWidth: 3 },
+          style: { stroke: trunkStroke, strokeWidth: 3 },
         },
         {
           id: 'e-services-to-text',
@@ -553,7 +560,7 @@ export default function AdFactoryWorkflowDarkReal() {
           target: 'text-generation',
           animated: true,
           type: 'smoothstep',
-          style: { stroke: '#737373', strokeWidth: 3 },
+          style: { stroke: trunkStroke, strokeWidth: 3 },
         },
       ];
 
@@ -574,7 +581,12 @@ export default function AdFactoryWorkflowDarkReal() {
 
   // Helper function to generate nodes based on current state
   const generateNodes = useCallback(() => {
+    const hasMeta = selectedPlatforms?.includes('meta');
+
     const stepNodes = FlowCardArray.filter((card) => {
+      // Hide Prepare Creatives and Post Ad entirely when meta is not selected.
+      if ((card.id === 'preview' || card.id === 'post-ad') && !hasMeta) return false;
+
       // Manual sub-pipeline nodes live inside the manual group container.
       // They only render while the manual group is expanded; collapsed =
       // hidden. With the automation flag off, the group container doesn't
@@ -593,16 +605,13 @@ export default function AdFactoryWorkflowDarkReal() {
       const isActive = activeForm === card.id;
       let isEnabled = reduxNode?.isEnabled || completedNodes.includes(card.id);
 
-      // "Prepare Creatives" (preview node) enabled if Meta or Google is selected.
+      // "Prepare Creatives" and "Post Ad" nodes enabled only when Meta is selected.
       if (card.id === 'preview') {
-        const hasMetaOrGoogle = selectedPlatforms?.includes('meta') || selectedPlatforms?.includes('google');
-        isEnabled = isEnabled && hasMetaOrGoogle;
+        isEnabled = isEnabled && selectedPlatforms?.includes('meta');
       }
 
-      // "Post Ad" node enabled if Meta or Google is selected.
       if (card.id === 'post-ad') {
-        const hasMetaOrGoogle = selectedPlatforms?.includes('meta') || selectedPlatforms?.includes('google');
-        isEnabled = isEnabled && hasMetaOrGoogle;
+        isEnabled = isEnabled && selectedPlatforms?.includes('meta');
       }
 
       // Determine status
@@ -860,6 +869,47 @@ export default function AdFactoryWorkflowDarkReal() {
     setNodes(generateNodes());
   }, [generateNodes, setNodes]);
 
+  // When the automation feature is OFF the canvas renders the flat layout —
+  // Brand Info on the far left through Post Ad on the far right — which is
+  // wider than the group-container layout that fitView was tuned for. The
+  // built-in <ReactFlow fitView /> prop measures on first mount when the
+  // nodes array is still empty, so it ends up zoomed wrong and Post Ad gets
+  // cropped on the right edge.
+  //
+  // Just calling fitView after a fixed delay isn't enough on cold reloads:
+  // ReactFlow only includes nodes with measured dimensions in its bounds
+  // calculation, so if even one node hasn't laid out yet (Post Ad in
+  // particular, since it's the last one rendered), the resulting viewport
+  // excludes it. We poll with rAF until every node reports a `measured`
+  // width/height, then run fitView exactly once.
+  const didInitialFlatFit = useRef(false);
+  useEffect(() => {
+    if (IS_AUTOMATION_ENABLED) return undefined;
+    if (didInitialFlatFit.current) return undefined;
+    if (!rfInstance || nodes.length === 0) return undefined;
+
+    let rafId;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30; // ~500ms upper bound at 60fps; bail rather than spin forever
+    const tryFit = () => {
+      attempts += 1;
+      const rfNodes = rfInstance.getNodes();
+      const allMeasured =
+        rfNodes.length === nodes.length &&
+        rfNodes.every((n) => n.measured?.width && n.measured?.height);
+      if (allMeasured || attempts >= MAX_ATTEMPTS) {
+        didInitialFlatFit.current = true;
+        rfInstance.fitView({ padding: 0.12, duration: 0 });
+        return;
+      }
+      rafId = requestAnimationFrame(tryFit);
+    };
+    rafId = requestAnimationFrame(tryFit);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [rfInstance, nodes.length]);
+
   // Hydrate automation state on mount so an active automation shows up on the
   // canvas without the user having to open the form first. Skipped entirely
   // when the feature flag is off — slice stays at initialState.
@@ -901,7 +951,7 @@ export default function AdFactoryWorkflowDarkReal() {
             target: 'preview',
             type: 'smoothstep',
             animated: true,
-            style: { stroke: '#737373', strokeWidth: 3 },
+            style: { stroke: trunkStroke, strokeWidth: 3 },
           },
           {
             id: 'e-text-prep',
@@ -909,7 +959,7 @@ export default function AdFactoryWorkflowDarkReal() {
             target: 'preview',
             type: 'smoothstep',
             animated: true,
-            style: { stroke: '#737373', strokeWidth: 3 },
+            style: { stroke: trunkStroke, strokeWidth: 3 },
           },
           {
             id: 'e-prep-post',
@@ -917,7 +967,7 @@ export default function AdFactoryWorkflowDarkReal() {
             target: 'post-ad',
             type: 'smoothstep',
             animated: true,
-            style: { stroke: '#737373', strokeWidth: 3 },
+            style: { stroke: trunkStroke, strokeWidth: 3 },
           },
         ]
       : [];
@@ -989,11 +1039,21 @@ export default function AdFactoryWorkflowDarkReal() {
           animated: !isCompleted,
           style: isCompleted
             ? { stroke: '#3CE0A8', strokeWidth: 3, opacity: 0.9 }
-            : { stroke: '#6B7280', strokeWidth: 3, opacity: 0.5 },
+            : { stroke: idleEdgeStroke, strokeWidth: 3, opacity: isDarkMode ? 0.5 : 0.8 },
         };
       })
     );
-  }, [completedNodes, manualExpanded, autoExpanded, isAutoActive, isManualActive, setEdges]);
+  }, [
+    completedNodes,
+    manualExpanded,
+    autoExpanded,
+    isAutoActive,
+    isManualActive,
+    setEdges,
+    isDarkMode,
+    trunkStroke,
+    idleEdgeStroke,
+  ]);
 
   const onConnect = useCallback(
     (params) =>
@@ -1056,7 +1116,7 @@ export default function AdFactoryWorkflowDarkReal() {
             e.stopPropagation();
             handleBackClick();
           }}
-          className="group flex items-center gap-2 rounded-full bg-[#0D0D0D]/80 px-4 py-2.5 text-sm font-medium text-gray-300 backdrop-blur-md transition-all duration-300 hover:bg-[#1A1A1A] hover:text-white hover:shadow-lg"
+          className="group flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2.5 text-sm font-medium text-gray-700 backdrop-blur-md transition-all duration-300 hover:bg-white hover:text-black hover:shadow-lg dark:border-transparent dark:bg-[#0D0D0D]/80 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           <span>Back</span>
@@ -1066,7 +1126,7 @@ export default function AdFactoryWorkflowDarkReal() {
             e.stopPropagation();
             handleReset();
           }}
-          className="group flex items-center gap-2 rounded-full bg-[#0D0D0D]/80 px-4 py-2.5 text-sm font-medium text-gray-300 backdrop-blur-md transition-all duration-300 hover:bg-[#1A1A1A] hover:text-white hover:shadow-lg"
+          className="group flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2.5 text-sm font-medium text-gray-700 backdrop-blur-md transition-all duration-300 hover:bg-white hover:text-black hover:shadow-lg dark:border-transparent dark:bg-[#0D0D0D]/80 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
           title="Reset Flow"
         >
           <RotateCcw className="h-4 w-4 transition-transform group-hover:rotate-180" />
@@ -1075,8 +1135,8 @@ export default function AdFactoryWorkflowDarkReal() {
       </div>
       <div className="relative h-full w-full">
         {loading && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-            <Loader className="h-8 w-8 animate-spin text-white" />
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-gray-900/40">
+            <Loader className="h-8 w-8 animate-spin text-gray-700 dark:text-white" />
           </div>
         )}
         <ReactFlow
@@ -1102,9 +1162,9 @@ export default function AdFactoryWorkflowDarkReal() {
           panOnScroll={false}
           zoomOnDoubleClick={false}
           preventScrolling={false}
-          className="bg-gray-900/50"
+          className="bg-transparent dark:bg-gray-900/50"
         >
-          <Background color="#333" gap={16} />
+          <Background color={isDarkMode ? '#333' : '#a3acba'} gap={16} />
           <Controls />
           <img
             src={FlowChartEffectBg}

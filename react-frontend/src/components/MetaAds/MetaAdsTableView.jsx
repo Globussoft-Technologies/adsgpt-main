@@ -47,6 +47,7 @@ const V2_SUPPORTED_OBJECTIVES = new Set([
   'OUTCOME_TRAFFIC',
   'OUTCOME_LEADS',
   'OUTCOME_APP_PROMOTION',
+  'OUTCOME_ENGAGEMENT',
 ]);
 
 // Small toolbar button used above the Ad Set / Ads tables to launch the
@@ -90,9 +91,9 @@ function BudgetBar({ budget, remaining }) {
   if (b == null || r == null) return null;
   const pct = Math.min(100, Math.max(0, ((b - r) / b) * 100));
   return (
-    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.08]">
+    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/[0.08]">
       <div
-        className="h-full rounded-full bg-white/40 transition-all duration-500"
+        className="h-full rounded-full bg-gray-400 dark:bg-white/40 transition-all duration-500"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -147,12 +148,12 @@ function SortTh({ label, colKey, sortKey, sortDir, onSort, className = '' }) {
   return (
     <th
       onClick={() => onSort(colKey)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white/70 transition-colors hover:text-white ${className}`}
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-white/70 dark:hover:text-white ${className}`}
     >
       <span className="flex items-center gap-2">
         {label}
         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all
-          ${active ? 'bg-white/15 text-white' : 'bg-white/6 text-white/25'}`}>
+          ${active ? 'bg-gray-200 text-gray-900 dark:bg-white/15 dark:text-white' : 'bg-gray-100 text-gray-400 dark:bg-white/6 dark:text-white/25'}`}>
           <ArrowUpDown className={`h-3 w-3 transition-transform ${active && sortDir === 'desc' ? 'rotate-180' : ''}`} />
         </span>
       </span>
@@ -168,17 +169,17 @@ function Breadcrumb({ level, campaign, adSet, onClickCampaigns, onClickCampaign 
       <button
         onClick={onClickCampaigns}
         className={`font-semibold transition-colors
-          ${level === 'campaigns' ? 'text-white' : 'text-white/35 hover:text-white/70'}`}
+          ${level === 'campaigns' ? 'text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-white/35 dark:hover:text-white/70'}`}
       >
         Campaigns
       </button>
       {campaign && (
         <>
-          <ChevronRight className="h-3.5 w-3.5 text-white/15" />
+          <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/15" />
           <button
             onClick={onClickCampaign}
             className={`max-w-[220px] truncate font-semibold transition-colors
-              ${level === 'adsets' ? 'text-white' : 'text-white/35 hover:text-white/70'}`}
+              ${level === 'adsets' ? 'text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-white/35 dark:hover:text-white/70'}`}
           >
             {campaign.name}
           </button>
@@ -186,8 +187,8 @@ function Breadcrumb({ level, campaign, adSet, onClickCampaigns, onClickCampaign 
       )}
       {adSet && (
         <>
-          <ChevronRight className="h-3.5 w-3.5 text-white/15" />
-          <span className="max-w-[220px] truncate font-semibold text-white">{adSet.name}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/15" />
+          <span className="max-w-[220px] truncate font-semibold text-gray-900 dark:text-white">{adSet.name}</span>
         </>
       )}
     </div>
@@ -208,14 +209,14 @@ function LevelPills({ level, campaign, adSet }) {
         const active = level === key;
         return (
           <React.Fragment key={key}>
-            {i > 0 && <ChevronRight className="h-3 w-3 text-white/15" />}
+            {i > 0 && <ChevronRight className="h-3 w-3 text-gray-300 dark:text-white/15" />}
             <span
               className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all
                 ${active
-                  ? 'border-white/20 bg-white/8 text-white'
+                  ? 'border-gray-300 bg-gray-100 text-gray-900 dark:border-white/20 dark:bg-white/8 dark:text-white'
                   : enabled
-                  ? 'border-white/12 text-white/30'
-                  : 'border-white/4 text-white/15'}`}
+                  ? 'border-gray-200 text-gray-400 dark:border-white/12 dark:text-white/30'
+                  : 'border-gray-200 text-gray-300 dark:border-white/4 dark:text-white/15'}`}
             >
               {label}
             </span>
@@ -230,7 +231,7 @@ function LevelPills({ level, campaign, adSet }) {
 
 function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.10] bg-[#141414]">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/[0.10] dark:bg-[#141414]">
       {toolbar}
       <div className="scrollbar-thin overflow-x-auto">
         <table className="w-full border-collapse">
@@ -323,19 +324,19 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
 
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
-            <tr className="border-b border-white/12 bg-[#181818]">
+            <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <SortTh label="Campaign"         colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[36%] pl-5" />
               <SortTh label="Status"           colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Objective"        colKey="objective"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Daily Budget"     colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <th className="w-16 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white/70">Actions</th>
+              <th className="w-16 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -356,15 +357,15 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   animate={{ opacity: 1 }}
                   transition={{ delay: idx * 0.03 }}
                   onClick={() => onDrillDown(c)}
-                  className="group cursor-pointer border-b border-white/10 transition-colors hover:bg-white/3 last:border-b-0"
+                  className="group cursor-pointer border-b border-gray-200 transition-colors hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/3 last:border-b-0"
                 >
                   {/* campaign name */}
                   <td className="pl-5 pr-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-white/20" />
+                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white leading-tight">{c.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-white/40">ID: {c.id}</p>
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white leading-tight">{c.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {c.id}</p>
                         {budget != null && <BudgetBar budget={budget} remaining={remaining} />}
                       </div>
                     </div>
@@ -378,30 +379,30 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   </td>
                   {/* objective */}
                   <td className="px-4 py-4">
-                    <span className="flex items-center gap-1.5 text-sm text-white/80">
-                      <Target className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                    <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                      <Target className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
                       {labelObjective(c.objective) ?? '—'}
                     </span>
                   </td>
                   {/* budget — CBO campaigns set this on the campaign (daily
                       or lifetime); non-CBO campaigns push it down to adsets. */}
-                  <td className="px-4 py-4 text-sm font-medium text-white/80">
+                  <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
                     {hasBudget(c.daily_budget)
                       ? c.daily_budget
                       : hasBudget(c.lifetime_budget)
-                        ? <span>{c.lifetime_budget} <span className="text-white/40">lifetime</span></span>
-                        : <span className="text-white/40">Set on ad set</span>}
+                        ? <span>{c.lifetime_budget} <span className="text-gray-400 dark:text-white/40">lifetime</span></span>
+                        : <span className="text-gray-400 dark:text-white/40">Set on ad set</span>}
                   </td>
                   {/* remaining */}
-                  <td className="px-4 py-4 text-sm text-white/80">
+                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
                     {hasBudget(c.budget_remaining)
                       ? c.budget_remaining
-                      : <span className="text-white/40">—</span>}
+                      : <span className="text-gray-400 dark:text-white/40">—</span>}
                   </td>
                   {/* date + analytics drill */}
                   <td className="px-4 py-4">
-                    <span className="flex items-center gap-1.5 text-sm text-white/80">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                    <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
                       {c.start_time ? new Date(c.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
@@ -413,7 +414,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                           onClick={(e) => handleEdit(e, c)}
                           disabled={editingId === c.id}
                           title="Edit campaign"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
                         >
                           {editingId === c.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -428,7 +429,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                           setPendingDelete(c);
                         }}
                         title="Delete campaign"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -457,22 +458,22 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-white/8 bg-[#161616] p-6 shadow-2xl"
+              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-              <h2 className="mb-1 text-sm font-bold text-white">Delete this campaign?</h2>
-              <p className="mb-2 text-xs text-[#BEBEBE]">
-                <span className="font-semibold text-white">{pendingDelete.name}</span> will be permanently
+              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Delete this campaign?</h2>
+              <p className="mb-2 text-xs text-gray-500 dark:text-[#BEBEBE]">
+                <span className="font-semibold text-gray-900 dark:text-white">{pendingDelete.name}</span> will be permanently
                 removed from Meta along with its ad sets and ads. This cannot be undone.
               </p>
-              <p className="mb-6 font-mono text-[11px] text-white/40">ID: {pendingDelete.id}</p>
+              <p className="mb-6 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {pendingDelete.id}</p>
               <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => setPendingDelete(null)}
                   disabled={deleting}
-                  className="rounded-xl border border-white/8 bg-white/5 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/10 disabled:opacity-50"
+                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -624,24 +625,24 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-2.5">
-        <p className="truncate text-xs font-semibold text-white/70">
-          Ad sets in <span className="text-white">{campaign.name}</span>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
+        <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+          Ad sets in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
         </p>
         {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
       </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-[680px] border-collapse">
           <thead>
-            <tr className="border-b border-white/12 bg-[#181818]">
+            <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <SortTh label="Ad Set"            colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-5" />
               <SortTh label="Status"            colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Daily Budget"      colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Optimization Goal" colKey="optimization_goal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white/70">Edit</th>}
+              {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
             </tr>
           </thead>
           <tbody>
@@ -660,14 +661,14 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                   animate={{ opacity: 1 }}
                   transition={{ delay: idx * 0.03 }}
                   onClick={() => onDrillDown(s)}
-                  className="group cursor-pointer border-b border-white/10 transition-colors hover:bg-white/3 last:border-b-0"
+                  className="group cursor-pointer border-b border-gray-200 transition-colors hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/3 last:border-b-0"
                 >
                   <td className="pl-5 pr-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-white/20" />
+                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{s.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-white/40">ID: {s.id}</p>
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{s.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {s.id}</p>
                       </div>
                     </div>
                   </td>
@@ -677,25 +678,25 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                       <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, s)} toggling={!!toggling[s.id]} />
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm font-medium text-white/80">
+                  <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
                     {hasBudget(s.daily_budget)
                       ? s.daily_budget
                       : hasBudget(s.lifetime_budget)
-                        ? <span>{s.lifetime_budget} <span className="text-white/40">lifetime</span></span>
-                        : <span className="text-white/40">{cboParent ? 'Set on campaign (CBO)' : '—'}</span>}
+                        ? <span>{s.lifetime_budget} <span className="text-gray-400 dark:text-white/40">lifetime</span></span>
+                        : <span className="text-gray-400 dark:text-white/40">{cboParent ? 'Set on campaign (CBO)' : '—'}</span>}
                   </td>
                   <td className="px-4 py-4">
-                    <span className="flex items-center gap-1.5 text-sm text-white/80">
-                      <Activity className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                    <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                      <Activity className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
                       {labelBillingEvent(s.billing_event) ?? '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-sm text-white/80">
+                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
                     {labelOptimizationGoal(s.optimization_goal) ?? '—'}
                   </td>
-                  <td className="px-4 py-4 text-sm text-white/80">
+                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
                       {s.start_time ? new Date(s.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
@@ -706,7 +707,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                           onClick={(e) => handleEditAdSet(e, s)}
                           disabled={editingId === s.id}
                           title="Edit ad set"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
                         >
                           {editingId === s.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -731,7 +732,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
 
 function SectionLabel({ children }) {
   return (
-    <p className="mb-2.5 text-10 font-bold uppercase tracking-[0.12em] text-[#444]">
+    <p className="mb-2.5 text-10 font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-[#444]">
       {children}
     </p>
   );
@@ -767,17 +768,17 @@ function AdDrawer({ ad, onClose }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#181818]"
+      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#181818]"
     >
       {/* ── header ── */}
-      <div className="flex items-center justify-between border-b border-white/12 px-5 py-4">
+      <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/12">
         <div>
-          <p className="text-sm font-bold text-white">Ad Preview</p>
-          <p className="mt-0.5 max-w-60 truncate text-xs text-[#555]">{name}</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Ad Preview</p>
+          <p className="mt-0.5 max-w-60 truncate text-xs text-gray-400 dark:text-[#555]">{name}</p>
         </div>
         <button
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-[#555] transition-colors hover:bg-white/8 hover:text-white"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-[#555] dark:hover:bg-white/8 dark:hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>
@@ -786,23 +787,23 @@ function AdDrawer({ ad, onClose }) {
       <div className="scrollbar-thin flex-1 overflow-y-auto">
 
         {/* ── creative mockup ── */}
-        <div className="relative w-full bg-[#141414]">
+        <div className="relative w-full bg-gray-50 dark:bg-[#141414]">
           {/* simulated feed chrome — top bar */}
-          <div className="flex items-center gap-2.5 border-b border-white/5 px-4 py-2.5">
-            <div className="h-7 w-7 rounded-full bg-white/10" />
+          <div className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-2.5 dark:border-white/5">
+            <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-white/10" />
             <div>
-              <p className="text-xs font-semibold text-white">Sponsored</p>
-              <p className="text-10 text-[#444]">Instagram · Feed</p>
+              <p className="text-xs font-semibold text-gray-900 dark:text-white">Sponsored</p>
+              <p className="text-10 text-gray-400 dark:text-[#444]">Instagram · Feed</p>
             </div>
             <div className="ml-auto flex gap-1">
-              <span className="h-1 w-1 rounded-full bg-[#333]" />
-              <span className="h-1 w-1 rounded-full bg-[#333]" />
-              <span className="h-1 w-1 rounded-full bg-[#333]" />
+              <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-[#333]" />
+              <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-[#333]" />
+              <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-[#333]" />
             </div>
           </div>
 
           {/* creative media */}
-          <div className="relative aspect-square w-full overflow-hidden bg-[#111]">
+          <div className="relative aspect-square w-full overflow-hidden bg-gray-100 dark:bg-[#111]">
             {isVideo ? (
               /* video: try direct source URL, fall back to thumbnail poster */
               <video
@@ -821,8 +822,8 @@ function AdDrawer({ ad, onClose }) {
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-                <ImageIcon className="h-10 w-10 text-[#2a2a2a]" />
-                <span className="text-xs text-[#333]">No creative</span>
+                <ImageIcon className="h-10 w-10 text-gray-300 dark:text-[#2a2a2a]" />
+                <span className="text-xs text-gray-400 dark:text-[#333]">No creative</span>
               </div>
             )}
             {/* status chip over media */}
@@ -832,28 +833,28 @@ function AdDrawer({ ad, onClose }) {
           </div>
 
           {/* simulated feed chrome — bottom bar */}
-          <div className="border-t border-white/5 px-4 py-3">
+          <div className="border-t border-gray-200 px-4 py-3 dark:border-white/5">
             {creative?.title && (
-              <p className="mb-0.5 text-sm font-bold leading-snug text-white">{creative.title}</p>
+              <p className="mb-0.5 text-sm font-bold leading-snug text-gray-900 dark:text-white">{creative.title}</p>
             )}
             {creative?.body && (
-              <p className="line-clamp-2 text-xs leading-relaxed text-[#777]">{creative.body}</p>
+              <p className="line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-[#777]">{creative.body}</p>
             )}
             {ctaLabel && (
               <div className="mt-3 flex items-center justify-between">
                 {destLink ? (
                   <a href={destLink} target="_blank" rel="noopener noreferrer"
-                    className="rounded-lg border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-white/20 hover:bg-white/10">
+                    className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-900 transition-colors hover:border-gray-300 hover:bg-gray-200 dark:border-white/10 dark:bg-white/6 dark:text-white dark:hover:border-white/20 dark:hover:bg-white/10">
                     {ctaLabel}
                   </a>
                 ) : (
-                  <span className="rounded-lg border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold text-white">
+                  <span className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white">
                     {ctaLabel}
                   </span>
                 )}
                 {creative?.instagram_permalink_url && (
                   <a href={creative.instagram_permalink_url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-[11px] font-medium text-white/50 hover:text-white/80">
+                    className="flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-white/50 dark:hover:text-white/80">
                     See Original <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
@@ -868,7 +869,7 @@ function AdDrawer({ ad, onClose }) {
           {/* status control */}
           <div>
             <SectionLabel>Status</SectionLabel>
-            <div className="flex items-center justify-between rounded-xl border border-white/12 bg-white/3 px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-white/12 dark:bg-white/3">
               <StatusBadge status={currentStatus} />
               <ToggleSwitch status={currentStatus} onToggle={handleToggle} toggling={toggling} />
             </div>
@@ -884,9 +885,9 @@ function AdDrawer({ ad, onClose }) {
                 { label: 'Created',   value: new Date(ad.created_time).toLocaleDateString()        },
                 { label: 'CTA Type',  value: ctaLabel                                              },
               ].filter(({ value }) => !!value).map(({ label, value, mono }) => (
-                <div key={label} className="rounded-xl border border-white/[0.07] bg-white/2.5 p-3">
-                  <p className="mb-1 text-10 font-semibold uppercase tracking-wider text-[#444]">{label}</p>
-                  <p className={`truncate text-xs font-medium text-white ${mono ? 'font-mono text-[11px]' : ''}`}>
+                <div key={label} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/[0.07] dark:bg-white/2.5">
+                  <p className="mb-1 text-10 font-semibold uppercase tracking-wider text-gray-400 dark:text-[#444]">{label}</p>
+                  <p className={`truncate text-xs font-medium text-gray-900 dark:text-white ${mono ? 'font-mono text-[11px]' : ''}`}>
                     {value}
                   </p>
                 </div>
@@ -900,11 +901,11 @@ function AdDrawer({ ad, onClose }) {
               <SectionLabel>Body Variants · {bodyVariants.length}</SectionLabel>
               <div className="flex flex-col gap-2">
                 {bodyVariants.map((b, i) => (
-                  <div key={i} className="flex gap-3 rounded-xl border border-white/12 bg-white/3 px-3.5 py-3">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-10 font-bold text-white/50">
+                  <div key={i} className="flex gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 dark:border-white/12 dark:bg-white/3">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-10 font-bold text-gray-400 dark:bg-white/10 dark:text-white/50">
                       {i + 1}
                     </span>
-                    <p className="text-xs leading-relaxed text-[#ccc]">{b.text}</p>
+                    <p className="text-xs leading-relaxed text-gray-600 dark:text-[#ccc]">{b.text}</p>
                   </div>
                 ))}
               </div>
@@ -917,9 +918,9 @@ function AdDrawer({ ad, onClose }) {
               <SectionLabel>Headline Variants · {titleVariants.length}</SectionLabel>
               <div className="flex flex-col gap-1.5">
                 {titleVariants.map((t, i) => (
-                  <div key={i} className="flex items-start gap-2.5 rounded-xl border border-white/12 bg-white/3 px-3.5 py-2.5">
-                    <span className="mt-px text-10 font-bold text-white/40">{i + 1}</span>
-                    <p className="text-xs font-medium leading-snug text-white/80">{t.text}</p>
+                  <div key={i} className="flex items-start gap-2.5 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 dark:border-white/12 dark:bg-white/3">
+                    <span className="mt-px text-10 font-bold text-gray-400 dark:text-white/40">{i + 1}</span>
+                    <p className="text-xs font-medium leading-snug text-gray-600 dark:text-white/80">{t.text}</p>
                   </div>
                 ))}
               </div>
@@ -1042,24 +1043,24 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       {/* main table */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-2.5">
-          <p className="truncate text-xs font-semibold text-white/70">
-            Ads in <span className="text-white">{adSet.name}</span>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
+          <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+            Ads in <span className="text-gray-900 dark:text-white">{adSet.name}</span>
           </p>
           {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
         </div>
         <div className="scrollbar-thin flex-1 overflow-auto">
           <table className="w-full min-w-140 border-collapse">
             <thead>
-              <tr className="border-b border-white/12 bg-[#181818]">
-                <th className="w-18 py-3 pl-5 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-white/70">Preview</th>
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
+                <th className="w-18 py-3 pl-5 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
                 <SortTh label="Ad Name"  colKey="name"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%]" />
                 <SortTh label="Status"   colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Bid Type" colKey="bid_type"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="CTA"      colKey="creative.call_to_action_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white/70">Edit</th>}
+                {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
               </tr>
             </thead>
             <tbody>
@@ -1079,16 +1080,16 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
                     animate={{ opacity: 1 }}
                     transition={{ delay: idx * 0.03 }}
                     onClick={() => setSelectedAd((p) => (p?.id === a.id ? null : a))}
-                    className={`group cursor-pointer border-b border-white/10 transition-colors last:border-b-0
-                      ${isSelected ? 'bg-white/5' : 'hover:bg-white/3'}`}
+                    className={`group cursor-pointer border-b border-gray-200 transition-colors last:border-b-0 dark:border-white/10
+                      ${isSelected ? 'bg-gray-100 dark:bg-white/5' : 'hover:bg-gray-100 dark:hover:bg-white/3'}`}
                   >
                     <td className="py-3 pl-5 pr-3">
-                      <div className="relative h-11 w-16 overflow-hidden rounded-lg border border-white/10 bg-[#1e1e1e]">
+                      <div className="relative h-11 w-16 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
                         {a.creative?.thumbnail_url ? (
                           <img src={a.creative.thumbnail_url} alt={a.name} className="h-full w-full object-cover" />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center">
-                            <ImageIcon className="h-4 w-4 text-white/20" />
+                            <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
                           </div>
                         )}
                         {a.creative?.object_type === 'VIDEO' && (
@@ -1100,11 +1101,11 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className={`h-6 w-0.5 shrink-0 rounded-full transition-colors ${isSelected ? 'bg-white/50' : 'bg-white/15'}`} />
+                        <div className={`h-6 w-0.5 shrink-0 rounded-full transition-colors ${isSelected ? 'bg-gray-400 dark:bg-white/50' : 'bg-gray-300 dark:bg-white/15'}`} />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">{a.name}</p>
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{a.name}</p>
                           {a.creative?.title && (
-                            <p className="truncate text-xs text-white/40">{a.creative.title}</p>
+                            <p className="truncate text-xs text-gray-400 dark:text-white/40">{a.creative.title}</p>
                           )}
                         </div>
                       </div>
@@ -1115,9 +1116,9 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
                         <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, a)} toggling={!!toggling[a.id]} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-white/80">{labelCTA(a.creative?.call_to_action_type) ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelCTA(a.creative?.call_to_action_type) ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
                     {canAdd && (
                       <td className="pr-5 pl-2 py-3">
                         <div className="flex items-center justify-end">
@@ -1125,7 +1126,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
                             onClick={(e) => handleEditAd(e, a)}
                             disabled={editingId === a.id}
                             title="Edit ad"
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/2 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white disabled:opacity-50"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
                           >
                             {editingId === a.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -17,7 +17,7 @@ function formatStatus(statusEnum) {
     PAUSED: "PAUSED",
     REMOVED: "REMOVED",
   };
-  return map[statusEnum] || map[String(statusEnum).toUpperCase()] || "UNKNOWN";
+  return map[statusEnum] || map[String(statusEnum).toUpperCase()] || null;
 }
 
 // Google Ads bidding strategy enum
@@ -47,7 +47,7 @@ function formatBiddingStrategy(val) {
     COMMISSION: "COMMISSION",
     ENHANCED_CPC: "ENHANCED_CPC",
   };
-  return map[val] || map[String(val).toUpperCase()] || "UNKNOWN";
+  return map[val] || map[String(val).toUpperCase()] || null;
 }
 
 // Google Ads advertising channel type enum
@@ -78,7 +78,7 @@ function formatChannelType(val) {
     DISCOVERY: "DISCOVERY",
     TRAVEL: "TRAVEL",
   };
-  return map[val] || map[String(val).toUpperCase()] || "UNKNOWN";
+  return map[val] || map[String(val).toUpperCase()] || null;
 }
 
 function sanitizeId(val) {

@@ -13,11 +13,11 @@ const AdCreativeWelcome = () => {
 
       {/* Card Container */}
       <div className="flex items-center justify-center">
-        <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-white/10 p-[1px]">
-          <div className="flex flex-col items-center justify-center bg-[#0D0D0D]/50 p-2 pb-4 text-center backdrop-blur-[100px]">
+        <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-black/10 p-[1px] dark:border-white/10">
+          <div className="flex flex-col items-center justify-center bg-white/70 p-2 pb-4 text-center backdrop-blur-[100px] dark:bg-[#0D0D0D]/50">
             <img src={AddieFullImage} alt="Welcome" className="h-52 w-auto sm:h-full" />
 
-            <p className="max-w-full text-xs leading-relaxed font-normal text-[#BEBEBE] sm:text-[16px]">
+            <p className="max-w-full text-xs leading-relaxed font-normal text-zinc-600 sm:text-[16px] dark:text-[#BEBEBE]">
               Create scroll-stopping ads in seconds with AI that understands your business.
             </p>
           </div>

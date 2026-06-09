@@ -1,11 +1,11 @@
 const { Queue, Worker } = require("bullmq");
 const logger = require("../../utils/logger");
 
-// TEST MODE: all presets fire every minute. Revert to production values before deploy.
+// TEST MODE: all presets fire every 10 minutes. Revert to production values before deploy.
 const FREQUENCY_CRON_MAP = {
-  daily:         "* * * * *",
-  every_weekday: "* * * * *",
-  every_weekend: "* * * * *",
+  daily:         "*/10 * * * *",
+  every_weekday: "*/10 * * * *",
+  every_weekend: "*/10 * * * *",
 };
 
 // BullMQ needs its own dedicated ioredis connection — cannot share pub/sub connections

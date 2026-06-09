@@ -397,9 +397,9 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
       initial={{ opacity: 0, y: 25, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25 }}
-      className="flex max-h-[calc(95vh-56px)] flex-col text-white 2xl:max-h-[calc(92vh-72px)]"
+      className="flex max-h-[calc(95vh-56px)] flex-col text-gray-900 dark:text-white 2xl:max-h-[calc(92vh-72px)]"
     >
-      <h2 className="mb-5 shrink-0 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+      <h2 className="mb-5 shrink-0 text-center text-xl font-semibold text-gray-900 dark:text-white 2xl:text-[23px]">
         Services Selection
       </h2>
 
@@ -449,273 +449,289 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                       transition={{ duration: 0.2 }}
                       className="space-y-5"
                     >
-                {/* SERVICE QUANTITY INPUTS */}
-                <div className="space-y-5">
-                  <h3 className="relative top-1.5 flex items-center gap-2 text-base text-white 2xl:text-lg">
-                    Service Quantities
-                    <span className="rounded-full border border-green-500/30 bg-green-600/20 px-3 py-1 text-sm font-semibold text-green-400">
-                      Credits Available: {availableCredits}
-                    </span>
-                  </h3>
+                      {/* SERVICE QUANTITY INPUTS */}
+                      <div className="space-y-5">
+                        <h3 className="relative top-1.5 flex items-center gap-2 text-base text-gray-900 2xl:text-lg dark:text-white">
+                          Service Quantities
+                          <span className="rounded-full border border-green-500/30 bg-green-600/20 px-3 py-1 text-sm font-semibold text-green-400">
+                            Credits Available: {availableCredits}
+                          </span>
+                        </h3>
 
-                  {/* Text Service */}
-                  <div className="rounded-xl border border-white/10 bg-transparent p-5">
-                    <div className="mb-4 flex items-center gap-1.5 2xl:gap-2">
-                      <FileType className="size-4.5 text-[#AFAFAF] 2xl:size-5" />
-                      <h3 className="text-base font-semibold text-[#AFAFAF] 2xl:text-lg">
-                        Text Ads
-                      </h3>
-                    </div>
-                    <div className="flex flex-col gap-2.5">
-                      <label className="text-sm text-[#AFAFAF] 2xl:text-base">
-                        Quantity (Max: 50)
-                      </label>
-                      <div className="input-gradient-border">
-                        <input
-                          type="number"
-                          min="0"
-                          max="50"
-                          value={Number(values.servicesSelected.text) || ''}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value) || 0;
-                            if (val > 50) {
-                              toast.error('Text Ads quantity cannot exceed 50.');
-                              setFieldValue('servicesSelected.text', 50);
-                            } else {
-                              setFieldValue('servicesSelected.text', val);
-                            }
-                          }}
-                          className="h-10.5 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base"
-                          placeholder="Enter quantity"
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                      {errors.servicesSelected?.text && (touched.servicesSelected?.text || values.servicesSelected.text > 50) && (
-                        <div className="text-xs text-red-400">{errors.servicesSelected.text}</div>
-                      )}
-                      <div className="flex items-center justify-between pr-3">
-                        <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
-                          {/* Available credits: {textCreditsLeft}
-                           */}
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
-                          Cost per text : 0 credit
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Image Service */}
-                  <div className="rounded-xl border border-white/10 bg-transparent p-5">
-                    <div className="mb-4 flex items-center gap-1.5 2xl:gap-2">
-                      <ImageIcon className="size-4.5 text-[#AFAFAF] 2xl:size-5" />
-                      <h3 className="text-base font-semibold text-[#AFAFAF] 2xl:text-lg">
-                        Image Ads
-                      </h3>
-                    </div>
-                    <div className="grid grid-cols-1 gap-x-7 gap-y-4 sm:grid-cols-2">
-                      <div className="flex flex-col gap-2.5">
-                        <label className="text-sm text-[#AFAFAF] 2xl:text-base">
-                          Quantity (Max: 50)
-                        </label>
-                        <div className="input-gradient-border">
-                          <input
-                            type="number"
-                            min="0"
-                            max="50"
-                            value={Number(values.servicesSelected.image) || ''}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              if (val > 50) {
-                                toast.error('Image Ads quantity cannot exceed 50.');
-                                setFieldValue('servicesSelected.image', 50);
-                              } else {
-                                setFieldValue('servicesSelected.image', val);
-                              }
-                            }}
-                            className="h-10.5 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base"
-                            placeholder="Enter quantity"
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        {errors.servicesSelected?.image && (touched.servicesSelected?.image || values.servicesSelected.image > 50) && (
-                          <div className="text-xs text-red-400">
-                            {errors.servicesSelected.image}
+                        {/* Text Service */}
+                        <div className="rounded-xl border border-black/10 bg-transparent p-5 dark:border-white/10">
+                          <div className="mb-4 flex items-center gap-1.5 2xl:gap-2">
+                            <FileType className="size-4.5 text-gray-500 2xl:size-5 dark:text-[#AFAFAF]" />
+                            <h3 className="text-base font-semibold text-gray-500 2xl:text-lg dark:text-[#AFAFAF]">
+                              Text Ads
+                            </h3>
                           </div>
-                        )}
-                        <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
-                          {/* Available credits: {creativeCreditsLeft} */}
+                          <div className="flex flex-col gap-2.5">
+                            <label className="text-sm text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                              Quantity (Max: 50)
+                            </label>
+                            <div className="input-gradient-border">
+                              <input
+                                type="number"
+                                min="0"
+                                max="50"
+                                value={Number(values.servicesSelected.text) || ''}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val > 50) {
+                                    toast.error('Text Ads quantity cannot exceed 50.');
+                                    setFieldValue('servicesSelected.text', 50);
+                                  } else {
+                                    setFieldValue('servicesSelected.text', val);
+                                  }
+                                }}
+                                className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                placeholder="Enter quantity"
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                            {errors.servicesSelected?.text &&
+                              (touched.servicesSelected?.text ||
+                                values.servicesSelected.text > 50) && (
+                                <div className="text-xs text-red-400">
+                                  {errors.servicesSelected.text}
+                                </div>
+                              )}
+                            <div className="flex items-center justify-between pr-3">
+                              <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
+                                {/* Available credits: {textCreditsLeft}
+                                 */}
+                              </div>
+                              <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
+                                Cost per text : 0 credit
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex flex-col gap-2.5">
-                        <label className="text-sm text-[#AFAFAF] 2xl:text-base">
-                          Model Provider
-                        </label>
-                        <div className="input-gradient-border">
-                          <InputCommonDropdown
-                            value={values.imageModelProvider}
-                            onChange={(value) => setFieldValue('imageModelProvider', value)}
-                            placeholder="Select model"
-                            options={[
-                              { value: 'google', label: 'Nano Banana Pro (Best for Lifestyle & People)' },
-                              { value: 'openai', label: 'OpenAI 1.5 (Balanced, Fast)' },
-                              // { value: 'openai2', label: 'OpenAI 2.0 (Photorealistic, Best Quality)' },
-                            ]}
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        {errors.imageModelProvider && touched.imageModelProvider && (
-                          <div className="text-xs text-red-400">{errors.imageModelProvider}</div>
-                        )}
-                        {/* <div className="mt-1 pr-4 text-right text-sm text-zinc-400">
+
+                        {/* Image Service */}
+                        <div className="rounded-xl border border-black/10 bg-transparent p-5 dark:border-white/10">
+                          <div className="mb-4 flex items-center gap-1.5 2xl:gap-2">
+                            <ImageIcon className="size-4.5 text-gray-500 2xl:size-5 dark:text-[#AFAFAF]" />
+                            <h3 className="text-base font-semibold text-gray-500 2xl:text-lg dark:text-[#AFAFAF]">
+                              Image Ads
+                            </h3>
+                          </div>
+                          <div className="grid grid-cols-1 gap-x-7 gap-y-4 sm:grid-cols-2">
+                            <div className="flex flex-col gap-2.5">
+                              <label className="text-sm text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                                Quantity (Max: 50)
+                              </label>
+                              <div className="input-gradient-border">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="50"
+                                  value={Number(values.servicesSelected.image) || ''}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    if (val > 50) {
+                                      toast.error('Image Ads quantity cannot exceed 50.');
+                                      setFieldValue('servicesSelected.image', 50);
+                                    } else {
+                                      setFieldValue('servicesSelected.image', val);
+                                    }
+                                  }}
+                                  className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                  placeholder="Enter quantity"
+                                  disabled={isSubmitting}
+                                />
+                              </div>
+                              {errors.servicesSelected?.image &&
+                                (touched.servicesSelected?.image ||
+                                  values.servicesSelected.image > 50) && (
+                                  <div className="text-xs text-red-400">
+                                    {errors.servicesSelected.image}
+                                  </div>
+                                )}
+                              <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
+                                {/* Available credits: {creativeCreditsLeft} */}
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2.5">
+                              <label className="text-sm text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                                Model Provider
+                              </label>
+                              <div className="input-gradient-border">
+                                <InputCommonDropdown
+                                  value={values.imageModelProvider}
+                                  onChange={(value) => setFieldValue('imageModelProvider', value)}
+                                  placeholder="Select model"
+                                  options={[
+                                    {
+                                      value: 'google',
+                                      label: 'Nano Banana Pro (Best for Lifestyle & People)',
+                                    },
+                                    { value: 'openai', label: 'OpenAI 1.5 (Balanced, Fast)' },
+                                    // { value: 'openai2', label: 'OpenAI 2.0 (Photorealistic, Best Quality)' },
+                                  ]}
+                                  disabled={isSubmitting}
+                                />
+                              </div>
+                              {errors.imageModelProvider && touched.imageModelProvider && (
+                                <div className="text-xs text-red-400">
+                                  {errors.imageModelProvider}
+                                </div>
+                              )}
+                              {/* <div className="mt-1 pr-4 text-right text-sm text-zinc-400">
                           Cost per image {values.imageModelProvider === 'auto'&&"A deduction of 1 or 7 credits may be applied per image. Given your selection of auto mode, the precise credit deduction will be displayed post-image generation, with a consistent maximum of 7 credits"}
                           {values.imageModelProvider !== 'auto'&&(values.imageModelProvider === 'google' ? ' : 1 credit' : ': 7 credits')}
                           
                         </div> */}
-                        <div className="mt-1 pr-4 text-xs text-zinc-400 2xl:text-sm">
-                          {/* {values.imageModelProvider === 'auto' ? (
+                              <div className="mt-1 pr-4 text-xs text-zinc-400 2xl:text-sm">
+                                {/* {values.imageModelProvider === 'auto' ? (
                             <div className="text-justify leading-relaxed">
                               A deduction of 1 or 7 credits may be applied per image. Given your
                               selection of auto mode, the precise credit deduction will be displayed
                               post-image generation, with a consistent maximum of 7 credits.
                             </div>
                           ) : ( */}
-                          <div className="text-right">
-                            Cost per image: 7 credits
-                            {/* {values.imageModelProvider === 'google' ? '1 credit' : '7 credits'} */}
-                          </div>
-                          {/* )} */}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Video Service */}
-                  {false && (
-                    <div className="rounded-xl border border-white/10 bg-transparent p-5">
-                      <div className="mb-4 flex items-center gap-1 2xl:gap-2">
-                        <VideoIcon className="size-4.5 text-[#AFAFAF] 2xl:size-5" />
-                        <h3 className="text-base font-semibold text-[#AFAFAF] 2xl:text-lg">
-                          Video Ads
-                        </h3>
-                      </div>
-                      <div className="grid grid-cols-1 gap-x-7 gap-y-4 sm:grid-cols-2">
-                        <div className="flex flex-col gap-2.5">
-                          <label className="text-sm text-[#AFAFAF] 2xl:text-base">
-                            Quantity (Max: 20)
-                          </label>
-                          <div className="input-gradient-border">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={Number(values.servicesSelected.video) || ''}
-                              onChange={(e) =>
-                                setFieldValue(
-                                  'servicesSelected.video',
-                                  parseInt(e.target.value) || 0
-                                )
-                              }
-                              className="h-10.5 w-full rounded-full bg-[#383838]/50 px-5 py-2.5 pl-6 text-sm text-white backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base"
-                              placeholder="Enter quantity"
-                              disabled={isSubmitting}
-                            />
-                          </div>
-                          {errors.servicesSelected?.video && touched.servicesSelected?.video && (
-                            <div className="text-xs text-red-400">
-                              {errors.servicesSelected.video}
+                                <div className="text-right">
+                                  Cost per image: 7 credits
+                                  {/* {values.imageModelProvider === 'google' ? '1 credit' : '7 credits'} */}
+                                </div>
+                                {/* )} */}
+                              </div>
                             </div>
-                          )}
-                          <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
-                            Available credits: {videoCreditsLeft}
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2.5">
-                          <label className="text-base text-[#AFAFAF]">Model Provider</label>
-                          <div className="input-gradient-border">
-                            <InputCommonDropdown
-                              value={values.videoModelProvider}
-                              onChange={(value) => setFieldValue('videoModelProvider', value)}
-                              options={[
-                                { value: 'auto', label: 'Auto' },
-                                { value: 'openai', label: 'OpenAI' },
-                                { value: 'google', label: 'Nano Banana' },
-                              ]}
-                              disabled={isSubmitting}
-                            />
+
+                        {/* Video Service */}
+                        {false && (
+                          <div className="rounded-xl border border-black/10 bg-transparent p-5 dark:border-white/10">
+                            <div className="mb-4 flex items-center gap-1 2xl:gap-2">
+                              <VideoIcon className="size-4.5 text-gray-500 2xl:size-5 dark:text-[#AFAFAF]" />
+                              <h3 className="text-base font-semibold text-gray-500 2xl:text-lg dark:text-[#AFAFAF]">
+                                Video Ads
+                              </h3>
+                            </div>
+                            <div className="grid grid-cols-1 gap-x-7 gap-y-4 sm:grid-cols-2">
+                              <div className="flex flex-col gap-2.5">
+                                <label className="text-sm text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                                  Quantity (Max: 20)
+                                </label>
+                                <div className="input-gradient-border">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={Number(values.servicesSelected.video) || ''}
+                                    onChange={(e) =>
+                                      setFieldValue(
+                                        'servicesSelected.video',
+                                        parseInt(e.target.value) || 0
+                                      )
+                                    }
+                                    className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                    placeholder="Enter quantity"
+                                    disabled={isSubmitting}
+                                  />
+                                </div>
+                                {errors.servicesSelected?.video &&
+                                  touched.servicesSelected?.video && (
+                                    <div className="text-xs text-red-400">
+                                      {errors.servicesSelected.video}
+                                    </div>
+                                  )}
+                                <div className="mt-1 text-xs text-zinc-400 2xl:text-sm">
+                                  Available credits: {videoCreditsLeft}
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-2.5">
+                                <label className="text-base text-gray-500 dark:text-[#AFAFAF]">
+                                  Model Provider
+                                </label>
+                                <div className="input-gradient-border">
+                                  <InputCommonDropdown
+                                    value={values.videoModelProvider}
+                                    onChange={(value) => setFieldValue('videoModelProvider', value)}
+                                    options={[
+                                      { value: 'auto', label: 'Auto' },
+                                      { value: 'openai', label: 'OpenAI' },
+                                      { value: 'google', label: 'Nano Banana' },
+                                    ]}
+                                    disabled={isSubmitting}
+                                  />
+                                </div>
+                                {errors.videoModelProvider && touched.videoModelProvider && (
+                                  <div className="text-xs text-red-400">
+                                    {errors.videoModelProvider}
+                                  </div>
+                                )}
+                                <div className="mt-1 text-sm text-zinc-400">
+                                  Cost per video: 3 credits
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          {errors.videoModelProvider && touched.videoModelProvider && (
-                            <div className="text-xs text-red-400">{errors.videoModelProvider}</div>
-                          )}
-                          <div className="mt-1 text-sm text-zinc-400">
-                            Cost per video: 3 credits
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
 
-                {/* Service Error */}
-                {errors.serviceError && (
-                  <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3">
-                    <div className="flex items-center gap-2 text-red-400">
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <span className="text-sm">{errors.serviceError}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Image Provider Error */}
-                {errors.imageProviderError && (
-                  <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
-                    <div className="flex items-center gap-2 text-amber-400">
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <span className="text-sm">{errors.imageProviderError}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Total Cost Summary */}
-                {(costs.text > 0 || costs.image > 0) && (
-                  <div className="rounded-lg border border-gray-500/30 bg-gray-500/10 p-4">
-                    <h4 className="mb-2 text-sm font-medium text-gray-100 2xl:text-base">
-                      Credit Summary
-                    </h4>
-                    <div className="space-y-1 text-sm">
-                      {costs.text > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-blue-300 2xl:text-base">
-                            Text Ads*Platforms selected({distribution?.platforms?.length}) :
-                          </span>
-                          <span className="text-sm text-white 2xl:text-base">
-                            {/* {costs.text} credits */}0 credits
-                          </span>
+                      {/* Service Error */}
+                      {errors.serviceError && (
+                        <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3">
+                          <div className="flex items-center gap-2 text-red-400">
+                            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            <span className="text-sm">{errors.serviceError}</span>
+                          </div>
                         </div>
                       )}
-                      {costs.image > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-emerald-300 2xl:text-base">
-                            Images ({values.imageModelProvider}):
-                          </span>
-                          <span className="text-sm text-white 2xl:text-base">
-                            {costs.image} credits
-                          </span>
+
+                      {/* Image Provider Error */}
+                      {errors.imageProviderError && (
+                        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
+                          <div className="flex items-center gap-2 text-amber-400">
+                            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            <span className="text-sm">{errors.imageProviderError}</span>
+                          </div>
                         </div>
                       )}
-                      {/* {costs.video > 0 && (
+
+                      {/* Total Cost Summary */}
+                      {(costs.text > 0 || costs.image > 0) && (
+                        <div className="rounded-lg border border-gray-500/30 bg-gray-500/10 p-4">
+                          <h4 className="mb-2 text-sm font-medium text-gray-900 2xl:text-base dark:text-gray-100">
+                            Credit Summary
+                          </h4>
+                          <div className="space-y-1 text-sm">
+                            {costs.text > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-blue-300 2xl:text-base">
+                                  Text Ads*Platforms selected({distribution?.platforms?.length}) :
+                                </span>
+                                <span className="text-sm text-gray-900 2xl:text-base dark:text-white">
+                                  {/* {costs.text} credits */}0 credits
+                                </span>
+                              </div>
+                            )}
+                            {costs.image > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-emerald-300 2xl:text-base">
+                                  Images ({values.imageModelProvider}):
+                                </span>
+                                <span className="text-sm text-gray-900 2xl:text-base dark:text-white">
+                                  {costs.image} credits
+                                </span>
+                              </div>
+                            )}
+                            {/* {costs.video > 0 && (
                         <div className="flex justify-between">
                           <span className="text-purple-300">
                             Videos ({values.videoModelProvider}):
@@ -723,22 +739,23 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                           <span className="text-white">{costs.video} credits</span>
                         </div>
                       )} */}
-                      <div className="flex justify-between border-t border-gray-500/30 pt-2">
-                        <span className="text-sm font-medium text-[#AFAFAF] 2xl:text-base">
-                          Total:
-                        </span>
-                        <span className="text-sm font-bold text-white 2xl:text-base">
-                          {costs.image} credits
-                        </span>
-                      </div>
-                      <div className="mt-2 text-sm text-[#AFAFAF] 2xl:text-base">
-                        {/* Total available credits: {textCreditsLeft + creativeCreditsLeft}
-                         */}
-                        Total available credits: {credits?.totalCredits - credits?.creditsUsed}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                            <div className="flex justify-between border-t border-gray-500/30 pt-2">
+                              <span className="text-sm font-medium text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                                Total:
+                              </span>
+                              <span className="text-sm font-bold text-gray-900 2xl:text-base dark:text-white">
+                                {costs.image} credits
+                              </span>
+                            </div>
+                            <div className="mt-2 text-sm text-gray-500 2xl:text-base dark:text-[#AFAFAF]">
+                              {/* Total available credits: {textCreditsLeft + creativeCreditsLeft}
+                               */}
+                              Total available credits:{' '}
+                              {credits?.totalCredits - credits?.creditsUsed}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -752,7 +769,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                 <button
                   type="button"
                   onClick={() => dispatch(setActiveForm(null))}
-                  className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-2 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
+                  className="rounded-lg border border-gray-300 bg-transparent px-10 py-2 text-sm text-gray-700 transition hover:bg-black/5 disabled:opacity-50 2xl:text-base dark:border-[#E3E3E3] dark:text-[#E3E3E3] dark:hover:bg-zinc-800"
                   disabled={isSubmitting}
                 >
                   Cancel
@@ -783,12 +800,13 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                     type="submit"
                     disabled={
                       isSubmitting ||
-                      (productionAndServices?.status == 'success' && results?.status != 'success') ||
+                      (productionAndServices?.status == 'success' &&
+                        results?.status != 'success') ||
                       (values.servicesSelected.text === 0 &&
                         values.servicesSelected.image === 0 &&
                         values.servicesSelected.video === 0)
                     }
-                    className="min-w-32 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+                    className="min-w-32 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base dark:bg-white dark:text-black"
                   >
                     {isSubmitting ? (
                       <div className="flex items-center gap-2">
@@ -823,7 +841,7 @@ function ModeToggle({ mode, onChange, disabled }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium tracking-wide text-[#AFAFAF] uppercase">
+        <span className="text-xs font-medium tracking-wide text-gray-500 dark:text-[#AFAFAF] uppercase">
           Generation mode
         </span>
         {mode === 'schedule' && (
@@ -839,7 +857,7 @@ function ModeToggle({ mode, onChange, disabled }) {
 
       <div
         role="tablist"
-        className="relative grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-[#0D0D0D]/40 p-1 backdrop-blur-md"
+        className="relative grid grid-cols-2 gap-1 rounded-xl border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0D0D0D]/40 p-1 backdrop-blur-md"
       >
         {options.map((opt) => {
           const isActive = mode === opt.key;
@@ -863,11 +881,17 @@ function ModeToggle({ mode, onChange, disabled }) {
               )}
               <Icon
                 className={`size-4 transition-colors ${
-                  isActive ? 'text-white' : 'text-[#AFAFAF]'
+                  isActive
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 dark:text-[#AFAFAF]'
                 }`}
               />
               <span
-                className={`transition-colors ${isActive ? 'text-white' : 'text-[#AFAFAF]'}`}
+                className={`transition-colors ${
+                  isActive
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 dark:text-[#AFAFAF]'
+                }`}
               >
                 {opt.label}
               </span>

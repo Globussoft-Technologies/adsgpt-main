@@ -13,14 +13,14 @@ import { Sparkles } from 'lucide-react';
 const UpgradeModal = ({ isOpen, onClose, onUpgrade }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[400px] border-none bg-[#1C1C1F] text-white shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:rounded-[32px]">
+      <DialogContent className="max-w-[400px] border-none bg-white text-gray-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:rounded-[32px] dark:bg-[#1C1C1F] dark:text-white">
         <DialogHeader className="flex flex-col items-center gap-4 pt-4">
           <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#49bcdc] to-[#3a4cee] shadow-[0_0_30px_rgba(88,103,235,0.4)]">
             <div className="absolute inset-0.5 rounded-full bg-gradient-to-b from-white/20 to-transparent blur-[1px]" />
             <Sparkles className="relative h-10 w-10 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
           </div>
           <DialogTitle className="text-2xl font-bold tracking-tight">Upgrade Your Plan</DialogTitle>
-          <DialogDescription className="text-center text-sm text-white/50">
+          <DialogDescription className="text-center text-sm text-gray-500 dark:text-white/50">
             Unlock premium features and more advanced AI models to create stunning videos.
           </DialogDescription>
         </DialogHeader>
@@ -36,7 +36,7 @@ const UpgradeModal = ({ isOpen, onClose, onUpgrade }) => {
           <Button
             variant="ghost"
             onClick={onClose}
-            className="h-10 text-white/40 transition-colors hover:bg-transparent hover:text-white"
+            className="h-10 text-gray-500 transition-colors hover:bg-transparent hover:text-black dark:text-white/40 dark:hover:text-white"
           >
             Cancel
           </Button>

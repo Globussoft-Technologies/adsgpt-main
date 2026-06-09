@@ -49,6 +49,29 @@ const filterManualResults = (results) => {
   };
 };
 
+// Re-hydrating from the server strips any `status: null` placeholders the
+// client seeded via `initializeResults`. When the hydration runs mid-
+// generation (e.g. AdsPreviewDialog mount), we need to preserve those
+// pending slots so the dialog keeps showing skeletons and the next socket
+// result lands in a slot instead of getting silently dropped.
+//
+// Strategy: trust the server for completed items, then pad with as many
+// fresh placeholders as the client expected but the server hasn't filled
+// yet. If the server has caught up, padding is 0 — no extra slots.
+const makePendingItem = () => ({
+  status: null,
+  data: '',
+  error: null,
+  timestamp: new Date().toISOString(),
+});
+const mergeWithPending = (prevArr, serverArr) => {
+  const expected = Array.isArray(prevArr) ? prevArr.length : 0;
+  const completed = Array.isArray(serverArr) ? serverArr : [];
+  const needed = Math.max(0, expected - completed.length);
+  if (needed === 0) return completed;
+  return [...completed, ...Array.from({ length: needed }, makePendingItem)];
+};
+
 // Each history snapshot under `state.history` carries its own frozen copy of
 // the campaign's results in `previousData.results`. AdCreativeList's History
 // tab reads from THAT nested array — not from `state.results` — so we have to
@@ -390,7 +413,22 @@ const adFactoryNewSlice = createSlice({
         // `jobId == null`. Automation results have their own view (the Posted
         // Ads modal driven by /autopilot/jobs/:id/activity), so leaking them
         // here would double-show them in the manual Current Images grid.
-        state.results = filterManualResults(data.results);
+        //
+        // Pad with the in-flight placeholders the client had before this
+        // hydration ran. `fetchCampaignById` is dispatched from places other
+        // than ServicesForm (e.g. AdsPreviewDialog mount), where there's no
+        // follow-up `initializeResults` to re-seed slots — without this
+        // merge, navigating to Prepare Creatives mid-generation wipes the
+        // pending `{status: null}` slots and the subsequent socket result
+        // gets dropped by `updateResults` (no `!status` slot to fill).
+        const serverResults = filterManualResults(data.results);
+        const prevResults = state.results || {};
+        state.results = {
+          ...serverResults,
+          text: mergeWithPending(prevResults.text, serverResults.text),
+          image: mergeWithPending(prevResults.image, serverResults.image),
+          video: mergeWithPending(prevResults.video, serverResults.video),
+        };
         state.history = filterManualHistory(data.history);
         state.activeCampaign = data;
         state.loading = false;

@@ -18,7 +18,7 @@ import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 const VARIANTS = {
   manual: {
     Icon: Hammer,
-    borderInactive: 'border-white/10',
+    borderInactive: 'border-black/10 dark:border-white/10',
     borderActive: 'border-emerald-400/60',
     borderExpanded: 'border-emerald-400/40',
     accentColor: '#34D399',
@@ -27,7 +27,7 @@ const VARIANTS = {
   },
   auto: {
     Icon: Zap,
-    borderInactive: 'border-white/10',
+    borderInactive: 'border-black/10 dark:border-white/10',
     borderActive: 'border-[#15DCFF]/60',
     borderExpanded: 'border-[#15DCFF]/40',
     accentColor: '#15DCFF',
@@ -86,17 +86,13 @@ const PipelineGroupNode = ({ data, dragging }) => {
           handleCardClick(e);
         }
       }}
-      className={`group relative rounded-2xl border backdrop-blur-3xl transition-all duration-300 select-none ${
+      className={`group relative rounded-2xl border bg-[linear-gradient(135deg,rgba(255,255,255,0.85),rgba(247,248,250,0.92))] shadow-sm backdrop-blur-3xl transition-all duration-300 select-none dark:bg-[linear-gradient(135deg,rgba(48,48,48,0.3),rgba(40,40,40,0.5))] dark:shadow-none ${
         expanded
           ? 'h-full w-full'
           : isClickable
             ? `cursor-pointer ${cfg.hoverBorder}`
             : 'cursor-not-allowed'
       } ${borderClass} ${dragging ? 'z-50' : ''}`}
-      style={{
-        background:
-          'linear-gradient(135deg, rgba(48, 48, 48, 0.3), rgba(40, 40, 40, 0.5))',
-      }}
     >
       <Handle
         type="target"
@@ -106,12 +102,12 @@ const PipelineGroupNode = ({ data, dragging }) => {
 
       {expanded ? (
         <div className="flex h-full w-full flex-col">
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-black/10 px-5 py-3 dark:border-white/10">
             <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-white/5">
-                <Icon className="size-4 text-white" />
+              <span className="flex size-8 items-center justify-center rounded-lg bg-black/5 dark:bg-white/5">
+                <Icon className="size-4 text-gray-700 dark:text-white" />
               </span>
-              <h3 className="text-18 font-semibold text-white">{title}</h3>
+              <h3 className="text-18 font-semibold text-gray-900 dark:text-white">{title}</h3>
               {infoMessage && (
                 <ShadcnTooltip
                   label={infoMessage}
@@ -126,7 +122,7 @@ const PipelineGroupNode = ({ data, dragging }) => {
               type="button"
               title="Minimize"
               onClick={handleMinimize}
-              className="flex size-7 items-center justify-center rounded border border-white/10 bg-white/3 text-[#AFAFAF] transition hover:border-white/20 hover:bg-white/6 hover:text-white"
+              className="flex size-7 items-center justify-center rounded border border-black/10 bg-black/3 text-gray-500 transition hover:border-black/20 hover:bg-black/6 hover:text-black dark:border-white/10 dark:bg-white/3 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:bg-white/6 dark:hover:text-white"
             >
               <Minimize2 className="size-3.5" />
             </button>
@@ -138,23 +134,23 @@ const PipelineGroupNode = ({ data, dragging }) => {
         // Locked placeholder — node-specific text below a padlock icon.
         <div className="flex w-80 flex-col items-center justify-center gap-2 px-5 py-8">
           <Lock className="size-7 text-gray-400" />
-          <p className="text-center text-sm text-gray-300">{inactiveText}</p>
+          <p className="text-center text-sm text-gray-600 dark:text-gray-300">{inactiveText}</p>
         </div>
       ) : (
         // Active / ready — icon + title + fullscreen arrow, divider, then
         // subtitle and accent-coloured status line.
         <div className="flex w-80 flex-col">
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-black/10 px-5 py-3 dark:border-white/10">
             <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-white/5">
-                <Icon className="size-4 text-white" />
+              <span className="flex size-8 items-center justify-center rounded-lg bg-black/5 dark:bg-white/5">
+                <Icon className="size-4 text-gray-700 dark:text-white" />
               </span>
-              <h3 className="text-18 font-semibold text-white">{title}</h3>
+              <h3 className="text-18 font-semibold text-gray-900 dark:text-white">{title}</h3>
             </div>
-            <Maximize2 className="size-4 text-[#AFAFAF]" />
+            <Maximize2 className="size-4 text-gray-500 dark:text-[#AFAFAF]" />
           </div>
           <div className="flex flex-col gap-1 px-5 py-4">
-            {subtitle && <p className="text-sm text-[#AFAFAF]">{subtitle}</p>}
+            {subtitle && <p className="text-sm text-gray-500 dark:text-[#AFAFAF]">{subtitle}</p>}
           </div>
         </div>
       )}

@@ -117,7 +117,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
             <div className="today">
               <motion.p
                 variants={FRAMER_ITEM_FADE_RIGHT_VARIANTS}
-                className="text-10 mb-1 px-2 font-semibold text-neutral-400 2xl:mb-2 2xl:px-3 2xl:text-sm"
+                className="text-10 mb-1 px-2 font-semibold text-zinc-400 2xl:mb-2 2xl:px-3 2xl:text-sm dark:text-neutral-400"
               >
                 No Chats
               </motion.p>
@@ -127,7 +127,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
             <div className="today">
               <motion.p
                 variants={FRAMER_ITEM_FADE_RIGHT_VARIANTS}
-                className="text-10 mb-1 px-2 font-semibold text-neutral-400 2xl:mb-2 2xl:px-3 2xl:text-sm"
+                className="text-10 mb-1 px-2 font-semibold text-zinc-400 2xl:mb-2 2xl:px-3 2xl:text-sm dark:text-neutral-400"
               >
                 Today
               </motion.p>
@@ -141,13 +141,13 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      className={`flex w-full cursor-pointer items-center rounded-sm p-2 py-[5px] pr-0.5 2xl:rounded-[10px] 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-[#2A2A2A]'} `}
+                      className={`flex w-full cursor-pointer items-center rounded-sm p-2 py-[5px] pr-0.5 2xl:rounded-[10px] 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-zinc-200 dark:bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-zinc-100 dark:hover:bg-[#2A2A2A]'} `}
                       onClick={() => handleHistoryClick(sessionId)}
                       onMouseEnter={() => setHoveredSession(sessionId)}
                       onMouseLeave={() => setHoveredSession(null)}
                     >
                       <div
-                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-white 2xl:text-sm ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
+                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
                       >
                         {title || ''}
                       </div>
@@ -160,7 +160,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       >
                         <PopoverTrigger asChild>
                           <button
-                            className={`icon_container ml-1.5 rounded-lg hover:bg-white/20 ${
+                            className={`icon_container ml-1.5 rounded-lg text-zinc-700 hover:bg-black/10 dark:text-white dark:hover:bg-white/20 ${
                               hoveredSession === sessionId ? 'visible' : 'invisible'
                             }`}
                             onClick={(e) => e.stopPropagation()}
@@ -168,9 +168,9 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                             <EllipsisVertical className="h-4 w-4 flex-1" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="max-w-fit border-white/20 p-2 backdrop-blur-[100px] dark:bg-[#0D0D0D]/50">
+                        <PopoverContent className="max-w-fit border border-black/10 bg-white p-2 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50">
                           <button
-                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs hover:bg-white/10 2xl:text-sm"
+                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs text-zinc-800 hover:bg-zinc-100 2xl:text-sm dark:text-white dark:hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDeleteDialog(sessionId);
@@ -197,7 +197,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
             <div className="yesterday">
               <motion.p
                 variants={FRAMER_ITEM_FADE_RIGHT_VARIANTS}
-                className="text-10 mb-1 px-2 font-semibold text-neutral-400 2xl:mb-2 2xl:px-3 2xl:text-sm"
+                className="text-10 mb-1 px-2 font-semibold text-zinc-400 2xl:mb-2 2xl:px-3 2xl:text-sm dark:text-neutral-400"
               >
                 Yesterday
               </motion.p>
@@ -211,13 +211,13 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-[#2A2A2A]'} `}
+                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-zinc-200 dark:bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-zinc-100 dark:hover:bg-[#2A2A2A]'} `}
                       onClick={() => handleHistoryClick(sessionId)}
                       onMouseEnter={() => setHoveredSession(sessionId)}
                       onMouseLeave={() => setHoveredSession(null)}
                     >
                       <div
-                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-white 2xl:text-sm ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
+                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
                       >
                         {title || ''}
                       </div>
@@ -230,7 +230,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       >
                         <PopoverTrigger asChild>
                           <button
-                            className={`icon_container ml-1.5 rounded-lg hover:bg-white/20 ${
+                            className={`icon_container ml-1.5 rounded-lg text-zinc-700 hover:bg-black/10 dark:text-white dark:hover:bg-white/20 ${
                               hoveredSession === sessionId ? 'visible' : 'invisible'
                             }`}
                             onClick={(e) => e.stopPropagation()}
@@ -238,9 +238,9 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                             <EllipsisVertical className="h-4 w-4 flex-1" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="max-w-fit border-white/20 p-2 backdrop-blur-[100px] dark:bg-[#0D0D0D]/50">
+                        <PopoverContent className="max-w-fit border border-black/10 bg-white p-2 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50">
                           <button
-                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs hover:bg-white/10 2xl:text-sm"
+                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs text-zinc-800 hover:bg-zinc-100 2xl:text-sm dark:text-white dark:hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDeleteDialog(sessionId);
@@ -267,7 +267,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
             <div className="previous_7_days">
               <motion.p
                 variants={FRAMER_ITEM_FADE_RIGHT_VARIANTS}
-                className="text-10 mb-1 px-2 font-semibold text-neutral-400 2xl:mb-2 2xl:px-3 2xl:text-sm"
+                className="text-10 mb-1 px-2 font-semibold text-zinc-400 2xl:mb-2 2xl:px-3 2xl:text-sm dark:text-neutral-400"
               >
                 Previous 7 Days
               </motion.p>
@@ -281,13 +281,13 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-[#2A2A2A]'} `}
+                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-zinc-200 dark:bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-zinc-100 dark:hover:bg-[#2A2A2A]'} `}
                       onClick={() => handleHistoryClick(sessionId)}
                       onMouseEnter={() => setHoveredSession(sessionId)}
                       onMouseLeave={() => setHoveredSession(null)}
                     >
                       <div
-                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-white 2xl:text-sm ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
+                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
                       >
                         {title || ''}
                       </div>
@@ -300,7 +300,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       >
                         <PopoverTrigger asChild>
                           <button
-                            className={`icon_container ml-1.5 rounded-lg hover:bg-white/20 ${
+                            className={`icon_container ml-1.5 rounded-lg text-zinc-700 hover:bg-black/10 dark:text-white dark:hover:bg-white/20 ${
                               hoveredSession === sessionId ? 'visible' : 'invisible'
                             }`}
                             onClick={(e) => e.stopPropagation()}
@@ -308,9 +308,9 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                             <EllipsisVertical className="h-4 w-4 flex-1" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="max-w-fit border-white/20 p-2 backdrop-blur-[100px] dark:bg-[#0D0D0D]/50">
+                        <PopoverContent className="max-w-fit border border-black/10 bg-white p-2 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50">
                           <button
-                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs hover:bg-white/10 2xl:text-sm"
+                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs text-zinc-800 hover:bg-zinc-100 2xl:text-sm dark:text-white dark:hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDeleteDialog(sessionId);
@@ -337,7 +337,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
             <div className="older">
               <motion.p
                 variants={FRAMER_ITEM_FADE_RIGHT_VARIANTS}
-                className="text-10 mb-2 px-4 font-semibold text-neutral-400 2xl:text-sm"
+                className="text-10 mb-2 px-4 font-semibold text-zinc-400 2xl:text-sm dark:text-neutral-400"
               >
                 Older
               </motion.p>
@@ -351,13 +351,13 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-[#2A2A2A]'} `}
+                      className={`flex w-full cursor-pointer items-center rounded-[10px] p-2 py-[5px] pr-0.5 2xl:py-2 2xl:pl-3 ${activeSessionId === sessionId ? 'bg-zinc-200 dark:bg-[#2A2A2A]' : 'hover:overflow-hidden hover:bg-zinc-100 dark:hover:bg-[#2A2A2A]'} `}
                       onClick={() => handleHistoryClick(sessionId)}
                       onMouseEnter={() => setHoveredSession(sessionId)}
                       onMouseLeave={() => setHoveredSession(null)}
                     >
                       <div
-                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-white 2xl:text-sm ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
+                        className={`history_text text-10 w-full truncate overflow-hidden font-medium whitespace-nowrap text-zinc-900 2xl:text-sm dark:text-white ${activeSessionId === sessionId ? 'max-w-[89%]' : ' '} hover:overflow-hidden`}
                       >
                         {title || ''}
                       </div>
@@ -370,7 +370,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                       >
                         <PopoverTrigger asChild>
                           <button
-                            className={`icon_container ml-1.5 rounded-lg hover:bg-white/20 ${
+                            className={`icon_container ml-1.5 rounded-lg text-zinc-700 hover:bg-black/10 dark:text-white dark:hover:bg-white/20 ${
                               hoveredSession === sessionId ? 'visible' : 'invisible'
                             }`}
                             onClick={(e) => e.stopPropagation()}
@@ -378,9 +378,9 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
                             <EllipsisVertical className="h-4 w-4 flex-1" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="max-w-fit border-white/20 p-2 backdrop-blur-[100px] dark:bg-[#0D0D0D]/50">
+                        <PopoverContent className="max-w-fit border border-black/10 bg-white p-2 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50">
                           <button
-                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs hover:bg-white/10 2xl:text-sm"
+                            className="delete_option flex w-full items-center gap-1.5 rounded-sm p-2 text-xs text-zinc-800 hover:bg-zinc-100 2xl:text-sm dark:text-white dark:hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDeleteDialog(sessionId);

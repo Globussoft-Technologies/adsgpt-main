@@ -90,7 +90,7 @@ const MasonryResponsiveLayout = () => {
               </ResponsiveMasonry>
             ) : (
               <div className="no_found_text flex h-full min-h-[55vh] items-center justify-center p-4">
-                <p className="text-center text-xl font-medium text-[#C9C9C9]">
+                <p className="text-center text-xl font-medium text-zinc-600 dark:text-[#C9C9C9]">
                   No results found. Try a different competitor or keyword.
                 </p>
               </div>

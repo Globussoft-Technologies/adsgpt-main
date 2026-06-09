@@ -89,10 +89,11 @@ class AdsFactoryAutoController {
     */
     try {
       const userId = req.user.user_id;
-      const { status, skip = 0, limit = 20 } = req.query;
+      const { status, campaignId, skip = 0, limit = 20 } = req.query;
 
       const filter = { userId };
       if (status) filter.status = status;
+      if (campaignId) filter.campaignId = campaignId;
 
       const skipNum = Number(skip);
       const limitNum = Number(limit);
@@ -106,6 +107,12 @@ class AdsFactoryAutoController {
           .lean(),
         AdsFactoryJob.countDocuments(filter),
       ]);
+
+      jobs.forEach((job) => {
+        if (job.targets && job.targets.meta && typeof job.targets.meta.adSetId === "string") {
+          job.targets.meta.adSetId = job.targets.meta.adSetId ? [job.targets.meta.adSetId] : [];
+        }
+      });
 
       return res.json({ success: true, total, skip: skipNum, limit: limitNum, data: jobs });
     } catch (err) {
@@ -137,6 +144,10 @@ class AdsFactoryAutoController {
           if (nextTime) job.schedule.nextRunAt = nextTime;
         } catch (e) {}
       }
+      if (job.targets && job.targets.meta && typeof job.targets.meta.adSetId === "string") {
+        job.targets.meta.adSetId = job.targets.meta.adSetId ? [job.targets.meta.adSetId] : [];
+      }
+
       return res.json({ success: true, data: job });
     } catch (err) {
       logger.error(`[adsFactoryAuto:getJob] ${err.message}`);
@@ -213,6 +224,21 @@ class AdsFactoryAutoController {
       const job = await AdsFactoryJob.findOneAndDelete({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
       await cancelJob(req.params.id);
+      if (job.campaignId) {
+        const stuckCampaign = await Campaign.findOne(
+          { _id: job.campaignId, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
+          { "results.text": 1, "results.image": 1 }
+        ).lean();
+        if (stuckCampaign) {
+          const hadSuccess =
+            (stuckCampaign.results?.text  || []).some((t) => t.status === 200) ||
+            (stuckCampaign.results?.image || []).some((i) => i.status === 200);
+          await Campaign.updateOne(
+            { _id: job.campaignId },
+            { $set: { status: hadSuccess ? "success" : "draft", "results.status": hadSuccess ? "success" : "draft" } }
+          );
+        }
+      }
       return res.json({ success: true, message: "Job deleted" });
     } catch (err) {
       logger.error(`[adsFactoryAuto:deleteJob] ${err.message}`);
@@ -240,6 +266,21 @@ class AdsFactoryAutoController {
       job.status = "paused";
       await job.save();
       await cancelJob(job._id.toString());
+      if (job.campaignId) {
+        const stuckCampaign = await Campaign.findOne(
+          { _id: job.campaignId, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
+          { "results.text": 1, "results.image": 1 }
+        ).lean();
+        if (stuckCampaign) {
+          const hadSuccess =
+            (stuckCampaign.results?.text  || []).some((t) => t.status === 200) ||
+            (stuckCampaign.results?.image || []).some((i) => i.status === 200);
+          await Campaign.updateOne(
+            { _id: job.campaignId },
+            { $set: { status: hadSuccess ? "success" : "draft", "results.status": hadSuccess ? "success" : "draft" } }
+          );
+        }
+      }
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
       if (nextTime) job.schedule.nextRunAt = nextTime;
 
@@ -561,6 +602,9 @@ class AdsFactoryAutoController {
       const platformDetails = {};
       for (const [platform, config] of Object.entries(job.targets || {})) {
         if (!config || Object.keys(config).length === 0) continue;
+        if (platform === "meta" && typeof config.adSetId === "string") {
+          config.adSetId = config.adSetId ? [config.adSetId] : [];
+        }
         platformDetails[platform] = {
           config // includes adAccountId, campaignId, pageId, adSetId
         };

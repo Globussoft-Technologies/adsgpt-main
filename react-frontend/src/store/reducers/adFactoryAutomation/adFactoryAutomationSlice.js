@@ -13,6 +13,7 @@ import {
   fetchCtaOptions,
   fetchActivity,
   fetchAutomationStats,
+  fetchAutomationSummary,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 
 export { AUTOMATION_STATUS };
@@ -99,6 +100,11 @@ const initialState = {
   ctaOptionsByObjective: {},
   ctaOptionsLoading: false,
   ctaOptionsError: null,
+  // Live summary panel data — POST /jobs/summary response. Keyed by
+  // campaignId so multiple campaign tabs don't stomp each other. Only
+  // populated once the form is valid enough to be Activate-able.
+  //   { [campaignId]: { data, loading, error } }
+  summaryByCampaign: {},
 };
 
 const adFactoryAutomationSlice = createSlice({
@@ -348,6 +354,39 @@ const adFactoryAutomationSlice = createSlice({
       .addCase(fetchCtaOptions.rejected, (state, action) => {
         state.ctaOptionsLoading = false;
         state.ctaOptionsError = action.payload?.message || 'Failed to load CTA options';
+      })
+
+      // -- Summary panel (POST /jobs/summary) --
+      // Per-campaign bucket so switching campaigns doesn't show stale numbers
+      // from another campaign's last fetch.
+      .addCase(fetchAutomationSummary.pending, (state, action) => {
+        const campaignId = action.meta?.arg?.campaignId;
+        if (!campaignId) return;
+        const previous = state.summaryByCampaign[campaignId] || {};
+        state.summaryByCampaign[campaignId] = {
+          data: previous.data || null, // keep previous numbers visible while refetching
+          loading: true,
+          error: null,
+        };
+      })
+      .addCase(fetchAutomationSummary.fulfilled, (state, action) => {
+        const { campaignId, data } = action.payload || {};
+        if (!campaignId) return;
+        state.summaryByCampaign[campaignId] = {
+          data: data || null,
+          loading: false,
+          error: null,
+        };
+      })
+      .addCase(fetchAutomationSummary.rejected, (state, action) => {
+        const campaignId = action.meta?.arg?.campaignId;
+        if (!campaignId) return;
+        const previous = state.summaryByCampaign[campaignId] || {};
+        state.summaryByCampaign[campaignId] = {
+          data: previous.data || null, // keep last good numbers on error
+          loading: false,
+          error: action.payload?.message || 'Failed to load summary',
+        };
       });
   },
 });
@@ -489,6 +528,15 @@ export const selectActivityWithPending = (state, { jobId, campaignId, now }) => 
 //   { status: 'unsupported' }       → 404'd — objective doesn't support CTAs
 export const selectCtaOptionsForObjective = (state, objective) =>
   objective ? state.adFactoryAutomation.ctaOptionsByObjective[objective] : undefined;
+
+// Summary panel — API-driven numbers for the Activate/Update preview box.
+// Returns the per-campaign bucket: { data, loading, error }. The data field
+// is null until the first successful fetch, so SummarySection can fall back
+// to its local helper while the user is still filling the form.
+const emptySummaryBucket = { data: null, loading: false, error: null };
+export const selectAutomationSummary = (state, campaignId) =>
+  (campaignId && state.adFactoryAutomation.summaryByCampaign[campaignId]) ||
+  emptySummaryBucket;
 export const selectCtaOptionsLoading = (state) => state.adFactoryAutomation.ctaOptionsLoading;
 export const selectCtaOptionsError = (state) => state.adFactoryAutomation.ctaOptionsError;
 

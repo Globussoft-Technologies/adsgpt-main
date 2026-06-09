@@ -16,11 +16,11 @@ const ModelCreditValue = ({ credits = [] }) => {
           <img
             src={openaiLogo}
             alt="OpenAI"
-            className="h-5 w-5 object-contain brightness-80 invert 2xl:h-6 2xl:w-6"
+            className="h-5 w-5 object-contain 2xl:h-6 2xl:w-6 dark:brightness-80 dark:invert"
           />
         );
       }
-      return <SiOpenai className="h-5 w-5 text-white 2xl:h-6 2xl:w-6" />;
+      return <SiOpenai className="h-5 w-5 text-zinc-900 2xl:h-6 2xl:w-6 dark:text-white" />;
     }
     if (lowLabel.includes('veo') || lowLabel.includes('gemini') || lowLabel.includes('imagen')) {
       if (lowLabel.includes('veo')) {
@@ -69,20 +69,20 @@ const ModelCreditValue = ({ credits = [] }) => {
         return (
           <div
             key={`${label}-${index}`}
-            className="flex w-[172px] shrink-0 items-center gap-2 rounded-xl border border-white/5 bg-[#333333]/50 p-4 2xl:w-[200px] 2xl:gap-3"
+            className="flex w-[172px] shrink-0 items-center gap-2 rounded-xl border border-black/10 bg-zinc-50 p-4 2xl:w-[200px] 2xl:gap-3 dark:border-white/5 dark:bg-[#333333]/50"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 2xl:h-10 2xl:w-10">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 2xl:h-10 2xl:w-10 dark:bg-white/5">
               {getModelIcon(label)}
             </div>
             <div className="flex min-w-0 flex-col">
-              <p className="text-xs leading-tight font-bold whitespace-nowrap text-white">
+              <p className="text-xs leading-tight font-bold whitespace-nowrap text-zinc-900 dark:text-white">
                 {label}
               </p>
               <div className="mt-1 flex items-center gap-1">
-                <span className="text-[11px] leading-none font-black text-[#7EA7F3] 2xl:text-[13px]">
+                <span className="text-[11px] leading-none font-black text-[#3F51B5] 2xl:text-[13px] dark:text-[#7EA7F3]">
                   {creditValue}
                 </span>
-                <span className="text-[8px] font-bold tracking-tighter whitespace-nowrap text-white/70 uppercase 2xl:text-[9px]">
+                <span className="text-[8px] font-bold tracking-tighter whitespace-nowrap text-zinc-500 uppercase 2xl:text-[9px] dark:text-white/70">
                   {creditUnit}
                 </span>
               </div>

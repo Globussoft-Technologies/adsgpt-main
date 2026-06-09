@@ -89,7 +89,7 @@ const AIAvatarCommonDropdown = ({
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
-        className="prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in hover:bg-slate-100 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5 [&>svg]:text-white"
+        className="prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5"
       >
         <div className="flex items-center gap-1 pr-1 capitalize">
           {Icon ? Icon : <></>}
@@ -109,8 +109,8 @@ const AIAvatarCommonDropdown = ({
             <SelectItem
               key={optionValue}
               value={optionValue}
-              className={`group cursor-pointer text-xs hover:bg-[#DFDFDF] 2xl:text-sm dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
-                value?.value === optionValue ? 'dark:bg-[#0D0D0D]/50' : 'bg-transparent'
+              className={`group cursor-pointer text-xs text-zinc-800 2xl:text-sm hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 data-highlighted:bg-zinc-100 data-highlighted:text-zinc-900 [&_svg]:text-current! dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white dark:focus:bg-[#0D0D0D]/30 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/30 dark:data-highlighted:text-white ${
+                value?.value === optionValue ? 'bg-zinc-100 dark:bg-[#0D0D0D]/50' : 'bg-transparent'
               }`}
             >
               {Icon}
@@ -118,10 +118,10 @@ const AIAvatarCommonDropdown = ({
               <div className="flex w-full items-center justify-between">
                 {credit ? (
                   <ShadcnTooltip label={`${credit} `} side="right" className="z-[1000000]">
-                    <span className="group-hover:text-white">{label}</span>
+                    <span className="text-inherit">{label}</span>
                   </ShadcnTooltip>
                 ) : (
-                  <span className="group-hover:text-white">{label}</span>
+                  <span className="text-inherit">{label}</span>
                 )}
 
                 {tier === 'premium' && (
@@ -140,7 +140,7 @@ const AIAvatarCommonDropdown = ({
                   }`}
                 >
                   {value?.value === optionValue && (
-                    <div className="h-[6px] w-[6px] rounded-full dark:bg-white" />
+                    <div className="h-[6px] w-[6px] rounded-full bg-gray-900 dark:bg-white" />
                   )}
                 </span>
               </div>
@@ -255,7 +255,7 @@ const AvatarItem = React.memo(({ avatar, onSelect }) => {
 
   return (
     <div
-      className="group relative h-70 cursor-pointer overflow-hidden rounded-lg border border-[#3a3a3a] hover:border-blue-500 2xl:h-65"
+      className="group relative h-70 cursor-pointer overflow-hidden rounded-lg border border-black/10 hover:border-blue-500 2xl:h-65 dark:border-[#3a3a3a]"
       style={{
         contentVisibility: 'auto',
         containIntrinsicSize: '0 280px',
@@ -297,21 +297,28 @@ const AvatarItem = React.memo(({ avatar, onSelect }) => {
   );
 });
 
-const AvatarSkeletonGrid = ({ columns = 5, rows = 3 }) => (
-  <div className="flex h-full flex-col gap-2">
-    <SkeletonTheme baseColor="#2A2A2A" highlightColor="#3A3A3A">
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <div key={rowIdx} className="flex gap-2">
-          {Array.from({ length: columns }).map((_, colIdx) => (
-            <div key={colIdx} className="h-70 flex-1 2xl:h-65">
-              <Skeleton height="100%" containerClassName="h-full w-full block" borderRadius={8} />
-            </div>
-          ))}
-        </div>
-      ))}
-    </SkeletonTheme>
-  </div>
-);
+const AvatarSkeletonGrid = ({ columns = 5, rows = 3 }) => {
+  const isDark =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const baseColor = isDark ? '#2A2A2A' : '#e4e4e7';
+  const highlightColor = isDark ? '#3A3A3A' : '#f4f4f5';
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <SkeletonTheme baseColor={baseColor} highlightColor={highlightColor}>
+        {Array.from({ length: rows }).map((_, rowIdx) => (
+          <div key={rowIdx} className="flex gap-2">
+            {Array.from({ length: columns }).map((_, colIdx) => (
+              <div key={colIdx} className="h-70 flex-1 2xl:h-65">
+                <Skeleton height="100%" containerClassName="h-full w-full block" borderRadius={8} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </SkeletonTheme>
+    </div>
+  );
+};
 
 const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars = false }) => {
   const safeAvatars = useMemo(() => (Array.isArray(avatars) ? avatars : []), [avatars]);
@@ -383,7 +390,7 @@ const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars
       style={{ minHeight: 'calc(100svh - 200px)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-white 2xl:text-xl">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">
           <button onClick={onBack}>
             <ChevronLeft className="h-6 w-6" />
           </button>
@@ -410,7 +417,7 @@ const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars
         {isLoadingAvatars || (safeAvatars.length === 0 && containerSize.width === 0) ? (
           <AvatarSkeletonGrid columns={5} rows={3} />
         ) : safeAvatars.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-white/40">
+          <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-white/40">
             No avatars available
           </div>
         ) : containerSize.width > 0 && containerSize.height > 0 ? (
@@ -921,9 +928,9 @@ const AvatarConfigForm = ({
     (productUrl || uploadedImages.length > 0) && videoModel && videoDuration && aspectRatio;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-[#3a3a3a] bg-[#1c1c1c] sm:grid-cols-2">
+    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
       {/* Preview */}
-      <div className="relative h-full min-h-[350px] w-full bg-[#1c1c1c]">
+      <div className="relative h-full min-h-[350px] w-full bg-gray-100 dark:bg-[#1c1c1c]">
         {!recreateData && (
           <button
             onClick={onBack}
@@ -1003,15 +1010,15 @@ const AvatarConfigForm = ({
       <div className="custom-scrollbar flex flex-col gap-6 overflow-y-auto p-6 pb-10 2xl:px-6 2xl:py-8 2xl:pb-15">
         <div className="flex flex-col gap-2">
           
-          <label className="text-sm font-medium text-white 2xl:text-base">
-            <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-white px-2.5 py-0.5 text-10 font-medium text-black 2xl:text-xs">
+          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
+            <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 px-2.5 py-0.5 text-10 font-medium text-white 2xl:text-xs dark:bg-white dark:text-black">
                   🌐 All regional languages supported
                 </span> <br />
             Brand/product URL or upload image
           </label>
 
           <div
-            className={`flex items-center gap-2 rounded-full border bg-[#9092941A] p-1 transition-colors ${
+            className={`flex items-center gap-2 rounded-full border bg-gray-100 p-1 transition-colors dark:bg-[#9092941A] ${
               errors.productUrl ? 'border-red-500/50' : 'border-transparent'
             }`}
           >
@@ -1019,18 +1026,18 @@ const AvatarConfigForm = ({
               value={productUrl}
               onChange={(e) => setProductUrl(e.target.value)}
               onPaste={handlePaste}
-              className="w-full flex-1 bg-transparent px-2 py-1.5 text-xs font-normal text-white placeholder:text-white/40 focus:outline-none 2xl:px-4 2xl:text-sm"
+              className="w-full flex-1 bg-transparent px-2 py-1.5 text-xs font-normal text-gray-900 placeholder:text-gray-500 focus:outline-none 2xl:px-4 2xl:text-sm dark:text-white dark:placeholder:text-white/40"
               placeholder="Paste your product Image"
             />
 
-            <LinkIcon className="size-3.5 rotate-90 text-white/60" />
+            <LinkIcon className="size-3.5 rotate-90 text-gray-500 dark:text-white/60" />
 
             {/* Upload Button */}
             <label
               htmlFor="brand-logo-2"
-              className="flex cursor-pointer items-center gap-1.5 rounded-full bg-[#FFFFFF]/20 px-2 py-1.5 text-[10px] whitespace-nowrap text-white hover:bg-white/10 2xl:text-xs"
+              className="flex cursor-pointer items-center gap-1.5 rounded-full bg-zinc-200 px-2 py-1.5 text-[10px] whitespace-nowrap text-zinc-800 hover:bg-zinc-300 2xl:text-xs dark:bg-[#FFFFFF]/20 dark:text-white dark:hover:bg-white/10"
             >
-              <CloudUpload className="size-3.5 text-white" />
+              <CloudUpload className="size-3.5 text-zinc-800 dark:text-white" />
               Upload Image
             </label>
 
@@ -1054,7 +1061,7 @@ const AvatarConfigForm = ({
                 {uploadedImages.map((img, index) => (
                   <div
                     key={index}
-                    className="group relative h-12 w-12 border border-white/10 2xl:h-16 2xl:w-16"
+                    className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
                   >
                     <img
                       src={img.preview}
@@ -1095,7 +1102,7 @@ const AvatarConfigForm = ({
 
         <div className="flex gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-white 2xl:text-base">Model*</label>
+            <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Model*</label>
             <AIAvatarCommonDropdown
               options={videoChatModels}
               placeholder="Choose Model"
@@ -1119,7 +1126,7 @@ const AvatarConfigForm = ({
             )}
           </div>
           <div className="flex flex-1 flex-col gap-2">
-            <label className="text-sm font-medium text-white 2xl:text-base">Duration*</label>
+            <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
               options={videoTimer}
               value={videoTimer.find((m) => m.value === videoDuration)}
@@ -1140,7 +1147,7 @@ const AvatarConfigForm = ({
         )}
 
         <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium text-white 2xl:text-base">Aspect Ratio*</label>
+          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Aspect Ratio*</label>
           <div className="flex flex-wrap gap-3">
             {availableRatios
               .filter((r) => !r.onlyModels || r.onlyModels.includes(videoModel))
@@ -1168,12 +1175,12 @@ const AvatarConfigForm = ({
                     }}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${
                       isSelected
-                        ? 'border border-blue-500 bg-blue-500/10 text-white'
+                        ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white'
                         : isDisabled
-                          ? 'border border-transparent bg-[#38383840] text-white/20 cursor-not-allowed opacity-40 grayscale'
+                          ? 'border border-transparent bg-gray-100 text-gray-400 cursor-not-allowed opacity-40 grayscale dark:bg-[#38383840] dark:text-white/20'
                           : errors.aspectRatio
-                            ? 'border border-red-500/50 bg-[#38383880] text-white/40 hover:border-white/20'
-                            : 'border border-transparent bg-[#38383880] text-white/40 hover:border-white/20'
+                            ? 'border border-red-500/50 bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
+                            : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
                     }`}
                   >
                     <ratio.icon className="h-4 w-4" />
@@ -1194,7 +1201,7 @@ const AvatarConfigForm = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-white 2xl:text-base">
+          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
             Brand/product Name*
           </label>
           <BrandSearch isAvatarAdsSearch={true} />
@@ -1205,22 +1212,22 @@ const AvatarConfigForm = ({
 
         {videoModel !== 'seedance_v1' && (
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-white 2xl:text-base">Promotional Info</label>
+            <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Promotional Info</label>
             <input
               value={promotion}
               onChange={(e) => setPromotion(e.target.value)}
-              className="w-full rounded-full bg-[#9092941A] p-3 px-4 text-xs text-white placeholder:text-sm placeholder:text-[##AFAFAF] focus:outline-none 2xl:text-base"
+              className="w-full rounded-full bg-gray-100 p-3 px-4 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-base dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF]"
               placeholder="Enter your Promotional Info"
             />
           </div>
         )}
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-white 2xl:text-base">Additional Notes</label>
+          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Additional Notes</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full resize-none rounded-2xl bg-[#9092941A] p-3 text-xs text-white placeholder:text-sm placeholder:text-[##AFAFAF] focus:outline-none 2xl:text-sm"
+            className="w-full resize-none rounded-2xl bg-gray-100 p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-sm dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF]"
             placeholder="e.g. white background, aerial drone shot, etc"
             rows={3}
           />
@@ -1234,7 +1241,7 @@ const AvatarConfigForm = ({
               <>
                 {enough ? (
                   <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white/90">
+                    <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
                       ~{est} credits
                     </span>
                   </ShadcnTooltip>
@@ -1246,10 +1253,10 @@ const AvatarConfigForm = ({
                 <button
                   disabled={isLoading || isUploading || !enough}
                   onClick={handleGenerateClick}
-                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-black hover:opacity-90 2xl:py-3 2xl:text-base ${isLoading || isUploading || !enough ? 'cursor-not-allowed bg-white/30' : 'bg-white'}`}
+                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isUploading || !enough ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
                 >
                   {isLoading || isUploading ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-black" />
+                    <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" />
                   ) : (
                     'Generate'
                   )}
@@ -1425,9 +1432,9 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
   }, [scriptSegments]);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-[#3a3a3a] bg-[#1c1c1c] sm:grid-cols-2">
+    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
       {/* Preview */}
-      <div className="relative h-full min-h-[350px] w-full bg-[#1c1c1c]">
+      <div className="relative h-full min-h-[350px] w-full bg-gray-100 dark:bg-[#1c1c1c]">
         <button
           onClick={onBack}
           disabled={isImageLoading || isScriptLoading || isLoading}
@@ -1437,9 +1444,9 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
         </button>
 
         {isImageLoading && !generationError ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#0F0F0F]">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
-            <span className="text-xs font-medium text-white/60">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 dark:bg-[#0F0F0F]">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
+            <span className="text-xs font-medium text-gray-500 dark:text-white/60">
               Generating your avatar image...
             </span>
           </div>
@@ -1447,13 +1454,13 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
           (generationError &&
             (generatedData?.type === 'error' ||
               generatedData?.error?.toLowerCase().includes('image'))) ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#0F0F0F] p-6 text-center">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 p-6 text-center dark:bg-[#0F0F0F]">
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-white">Failed to generate Avatar</span>
-              <span className="text-xs text-white/40">Please try again</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Failed to generate Avatar</span>
+              <span className="text-xs text-gray-500 dark:text-white/40">Please try again</span>
             </div>
           </div>
         ) : (
@@ -1464,12 +1471,12 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
 
       {/* Script */}
       <div className="flex min-h-0 flex-col gap-2 p-5 2xl:p-6">
-        <h3 className="text-lg font-semibold text-white">Generated Script</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Generated Script</h3>
 
         {isScriptLoading || isRegenerating ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl bg-[#9092941A]">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
-            <span className="text-xs font-medium text-white/60">Crafting your script...</span>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl bg-gray-100 dark:bg-[#9092941A]">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
+            <span className="text-xs font-medium text-gray-500 dark:text-white/60">Crafting your script...</span>
           </div>
         ) : isScriptFailed ||
           regenerationError ||
@@ -1481,17 +1488,17 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
               <X className="h-8 w-8 text-red-500" />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 {regenerationError || 'Failed to Generate Script'}
               </span>
-              <span className="text-xs text-white/40">
+              <span className="text-xs text-gray-500 dark:text-white/40">
                 {regenerationError ? 'Please try again with a different tone' : 'please try again'}
               </span>
             </div>
           </div>
         ) : (
-          <div className="custom-scrollbar flex max-h-[65vh] min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-2xl bg-[#9092941A] p-4">
-            <div className="flex gap-4 px-2 text-[10px] font-bold tracking-wider text-white/40 uppercase">
+          <div className="custom-scrollbar flex max-h-[65vh] min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-2xl bg-gray-100 p-4 dark:bg-[#9092941A]">
+            <div className="flex gap-4 px-2 text-[10px] font-bold tracking-wider text-gray-500 uppercase dark:text-white/40">
               <div className="w-24 shrink-0">Timestamp</div>
               <div className="flex-1">Script</div>
             </div>
@@ -1503,15 +1510,15 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
 
                 return (
                   <div key={item.id} className="group flex items-start gap-4">
-                    <div className="w-24 shrink-0 pt-3 text-xs font-medium text-white/50">
+                    <div className="w-24 shrink-0 pt-3 text-xs font-medium text-gray-500 dark:text-white/50">
                       {item.start} - {item.end}
                     </div>
                     <div className="relative flex-1">
                       <textarea
                         value={item.text}
                         onChange={(e) => handleSegmentChange(item.id, e.target.value)}
-                        className={`custom-scrollbar w-full resize-none rounded-xl border border-transparent bg-[#1C1C1C]/40 p-3 text-sm text-white/80 transition-all focus:border-white/20 focus:outline-none ${
-                          isOverLimit ? 'border-red-500/50 bg-red-500/5' : 'hover:bg-[#1C1C1C]/60'
+                        className={`custom-scrollbar w-full resize-none rounded-xl border border-transparent bg-white p-3 text-sm text-gray-900 transition-all focus:border-black/20 focus:outline-none dark:bg-[#1C1C1C]/40 dark:text-white/80 dark:focus:border-white/20 ${
+                          isOverLimit ? 'border-red-500/50 bg-red-500/5' : 'hover:bg-black/5 dark:hover:bg-[#1C1C1C]/60'
                         }`}
                         rows={2}
                       />
@@ -1545,8 +1552,8 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
           <div className="mt-4 flex items-center justify-end gap-3 2xl:mb-6">
             <div className="">
               <Select value={tone} onValueChange={handleToneChange}>
-                <SelectTrigger className="backdrop-blur-100 ![&>svg]:text-white rounded-full border-none bg-[#9D9B9B80] !px-5 py-[18px] text-sm !text-white hover:bg-[#9D9B9B70]! [&>svg]:size-5">
-                  <SelectValue className="text-white" placeholder="Select Tone" />
+                <SelectTrigger className="backdrop-blur-100 ![&>svg]:text-gray-500 dark:![&>svg]:text-white rounded-full border-none bg-gray-100 !px-5 py-[18px] text-sm !text-gray-900 hover:bg-black/5! dark:bg-[#9D9B9B80] dark:!text-white dark:hover:bg-[#9D9B9B70]! [&>svg]:size-5">
+                  <SelectValue className="text-gray-900 dark:text-white" placeholder="Select Tone" />
                 </SelectTrigger>
 
                 <SelectContent className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
@@ -1595,9 +1602,9 @@ const AvatarScriptResult = ({ avatar, onBack, generatedId, handleGenerate }) => 
                     console.error('Final generation error:', err);
                   }
                 }}
-                className={`rounded-full bg-white px-8 py-2 text-sm font-bold text-black hover:bg-white/90 ${isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`rounded-full bg-gray-900 px-8 py-2 text-sm font-bold text-white hover:opacity-90 dark:bg-white dark:text-black dark:hover:bg-white/90 ${isLoading || isImageLoading || isScriptLoading || isRegenerating || isAnySegmentInvalid ? 'cursor-not-allowed opacity-50' : ''}`}
               >
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-black" /> : 'Generate'}
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" /> : 'Generate'}
               </button>
             )}
           </div>
@@ -1621,16 +1628,16 @@ const UploadAvatarContent = ({ onBack, onUseCamera, onUploadImages }) => {
     <div className="flex h-full flex-col gap-6 p-6">
       <div className="mx-auto flex max-h-[80vh] w-full max-w-4xl flex-1 flex-col items-center justify-center gap-8 rounded-3xl">
         <div className="w-full text-left">
-          <h2 className="flex items-center gap-3 text-lg font-semibold text-white 2xl:text-2xl">
+          <h2 className="flex items-center gap-3 text-lg font-semibold text-gray-900 2xl:text-2xl dark:text-white">
             <button
               onClick={onBack}
-              className="rounded-full p-1 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-full p-1 text-gray-500 transition hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <ChevronLeft className="h-6 w-6" />
             </button>
             Upload Your Face Angles
           </h2>
-          <p className="mt-1 ml-10 text-[11px] font-light text-white/80 2xl:text-sm">
+          <p className="mt-1 ml-10 text-[11px] font-light text-gray-500 2xl:text-sm dark:text-white/80">
             Add three photos: left, center, and right for Avatar Generation
           </p>
         </div>
@@ -1662,7 +1669,7 @@ const UploadAvatarContent = ({ onBack, onUseCamera, onUploadImages }) => {
           {/* Upload Your Own Image Card */}
           <button
             onClick={onUploadImages}
-            className="group relative flex h-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 bg-[#1c1c1c] transition hover:border-blue-500 hover:bg-[#1c1c1c]/80"
+            className="group relative flex h-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 bg-gray-50 transition hover:border-blue-500 hover:bg-gray-100 dark:bg-[#1c1c1c] dark:hover:bg-[#1c1c1c]/80"
           >
             <img
               src={avatarUploadBgImg}
@@ -1715,14 +1722,14 @@ const UploadImagesContent = ({ onBack, onUploadComplete, onUseCamera }) => {
       <div className="relative z-50 mb-4 flex shrink-0 items-center justify-between gap-3">
         <button
           onClick={onBack}
-          className="rounded-full p-1 text-white/70 transition hover:bg-white/10 hover:text-white"
+          className="rounded-full p-1 text-gray-500 transition hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
 
         <div className="flex flex-1 flex-col items-center text-center">
-          <h2 className="text-lg font-semibold text-white 2xl:text-2xl">Upload Your Face Angles</h2>
-          <p className="mt-1 text-[11px] font-light text-white/70 2xl:text-sm">
+          <h2 className="text-lg font-semibold text-gray-900 2xl:text-2xl dark:text-white">Upload Your Face Angles</h2>
+          <p className="mt-1 text-[11px] font-light text-gray-500 2xl:text-sm dark:text-white/70">
             Add three photos: left, center, and right for Avatar Generation
           </p>
         </div>
@@ -1831,7 +1838,7 @@ const UploadImagesContent = ({ onBack, onUploadComplete, onUseCamera }) => {
         {allUploaded && (
           <button
             onClick={() => onUploadComplete(images)}
-            className="absolute -right-3 bottom-3 z-20 rounded-full p-2 text-white transition hover:bg-white/20 2xl:-right-1"
+            className="absolute -right-3 bottom-3 z-20 rounded-full p-2 text-gray-900 transition hover:bg-black/5 2xl:-right-1 dark:text-white dark:hover:bg-white/20"
           >
             <ChevronRight className="h-8 w-8 2xl:h-9 2xl:w-9" />
           </button>
@@ -1839,7 +1846,7 @@ const UploadImagesContent = ({ onBack, onUploadComplete, onUseCamera }) => {
       </div>
 
       {/* Global Bottom Overlay */}
-      <div className="pointer-events-none absolute bottom-0 left-0 z-40 h-10 w-full bg-gradient-to-t from-[#1c1c1c]/80 via-[#1c1c1c]/30 to-transparent 2xl:h-14" />
+      <div className="pointer-events-none absolute bottom-0 left-0 z-40 h-10 w-full bg-gradient-to-t from-white/80 via-white/30 to-transparent 2xl:h-14 dark:from-[#1c1c1c]/80 dark:via-[#1c1c1c]/30" />
     </div>
   );
 };
@@ -1993,18 +2000,18 @@ const AvatarAdsPage = ({ handleGenerate }) => {
         <div className="relative flex h-full max-h-[80vh] min-h-[400px] flex-col gap-6 p-6">
           <div>
             <div className="flex items-start justify-between">
-              <h2 className="text-base font-semibold text-white 2xl:text-xl">
+              <h2 className="text-base font-semibold text-gray-900 2xl:text-xl dark:text-white">
                 Create your AI Avatar video
               </h2>
               <button
                 onClick={() => dispatch(setActivePage('home'))}
-                className="rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
+                className="rounded-full p-2 text-gray-500 transition hover:bg-black/5 hover:text-black dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <X className="h-6 w-6 2xl:h-8 2xl:w-8" />
               </button>
             </div>
 
-            <p className="-mt-4 text-[10px] font-light text-white/70 2xl:text-sm">
+            <p className="-mt-4 text-[10px] font-light text-gray-500 2xl:text-sm dark:text-white/70">
               Choose your preferred method for making your avatar video
             </p>
           </div>
@@ -2016,7 +2023,7 @@ const AvatarAdsPage = ({ handleGenerate }) => {
                 dispatch(getAllAvatars());
                 setAvatarStepLocal('library');
               }}
-              className="group relative h-full overflow-hidden rounded-3xl border-2 border-[#3a3a3a] bg-[#1c1c1c] transition hover:border-blue-500"
+              className="group relative h-full overflow-hidden rounded-3xl border-2 border-black/10 bg-white transition hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]"
             >
               <img src={avatarLibraryImg} className="h-full w-full object-cover" />
 
@@ -2031,7 +2038,7 @@ const AvatarAdsPage = ({ handleGenerate }) => {
             {/* Upload */}
             <button
               onClick={() => setAvatarStepLocal('upload')}
-              className="relative flex h-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border-2 border-[#3a3a3a] bg-[#303030]/50 hover:border-blue-500"
+              className="relative flex h-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border-2 border-black/10 bg-gray-50 hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#303030]/50"
             >
               <img
                 src={avatarUploadBgImg}
@@ -2041,8 +2048,9 @@ const AvatarAdsPage = ({ handleGenerate }) => {
                 src={avatarUploadImg}
                 className="absolute left-1/3 z-20 h-auto w-[250px] max-w-[60%] rounded-2xl object-cover"
               />
-              {/* overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f] via-[#0f0f0f]/0 to-transparent" />
+              {/* overlay — light mode uses a soft zinc fade so the photo stays
+                  visible, dark mode keeps the near-black fade for contrast. */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f]/60 via-zinc-200/30 to-transparent dark:from-[#0f0f0f] dark:via-[#0f0f0f]/0" />
 
               <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white 2xl:bottom-8 2xl:text-xl">
                 Create your Own Avatar
@@ -2140,21 +2148,21 @@ const AvatarAdsPage = ({ handleGenerate }) => {
 
       {showDiscardDialog && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-[320px] rounded-2xl border border-[#3a3a3a] bg-[#1c1c1c] p-6 text-white shadow-xl">
+          <div className="w-[320px] rounded-2xl border border-black/10 bg-white p-6 text-gray-900 shadow-xl dark:border-[#3a3a3a] dark:bg-[#1c1c1c] dark:text-white">
             <h3 className="mb-2 text-base font-semibold">Discard changes?</h3>
-            <p className="mb-6 text-sm text-white/60">
+            <p className="mb-6 text-sm text-gray-500 dark:text-white/60">
               Your generated avatar image and script will be lost.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowDiscardDialog(false)}
-                className="rounded-full border border-[#3a3a3a] px-5 py-2 text-sm text-white/80 hover:bg-white/10"
+                className="rounded-full border border-black/10 px-5 py-2 text-sm text-gray-600 hover:bg-black/5 dark:border-[#3a3a3a] dark:text-white/80 dark:hover:bg-white/10"
               >
                 No
               </button>
               <button
                 onClick={handleConfirmDiscard}
-                className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black hover:opacity-90"
+                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-black"
               >
                 Yes, Discard
               </button>

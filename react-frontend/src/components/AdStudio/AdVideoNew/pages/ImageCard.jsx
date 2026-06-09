@@ -207,6 +207,33 @@ export default function ImageCard({
   const hasPrev = isThisFullscreen && findCompletedIndex(activeNavIndex, -1) !== -1;
   const hasNext = isThisFullscreen && (findCompletedIndex(activeNavIndex, 1) !== -1 || hasMore);
 
+  // Shared recreate flow — used by both the success-state hover bar and the
+  // failed-state hover bar. Tailors inputs to one image at the card's
+  // matched aspect, then either hands off to the AdLibrary RecreateAdModal
+  // (for `recreate_ads`) or routes to the appropriate AdCreativeNew editor.
+  const handleRecreate = (e) => {
+    e.stopPropagation();
+    const type = item?.inputs?.type;
+    const matched = findAspectEntryForCard(item);
+    const aspect = matched?.aspectRatio || item.inputs?.aspectRatio || '1:1';
+    const tailored = {
+      ...item.inputs,
+      aspectRatio: aspect,
+      numberOfImages: 1,
+      aspectRatioPerImage: [{ aspectRatio: aspect, numberOfImages: 1 }],
+    };
+    if (type === 'recreate_ads') {
+      dispatch(setImageRecreateInputs(tailored));
+      onOpenRecreateAdsModal?.(tailored);
+      return;
+    }
+    const targetRoute = IMAGE_TYPE_TO_ROUTE[type];
+    if (!targetRoute) return;
+    dispatch(setImageRecreateInputs(tailored));
+    dispatch(setActiveAdStudioTab('adCreativeNew'));
+    dispatch(setAdCreativeNewActivePage(targetRoute));
+  };
+
   const handleInfoEnter = () => {
     clearTimeout(infoTimeout.current);
     setShowInfo(true);
@@ -222,7 +249,7 @@ export default function ImageCard({
     <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
       <div className="relative" onMouseEnter={handleInfoEnter} onMouseLeave={handleInfoLeave}>
         <button
-          className={`rounded-full p-2 text-white backdrop-blur hover:bg-black/60 ${showInfo ? 'bg-black/60' : ''}`}
+          className={`rounded-full p-2 text-gray-100 dark:text-white backdrop-blur hover:bg-black/60 ${showInfo ? 'bg-black/60' : ''}`}
         >
           <Info size={18} />
         </button>
@@ -230,7 +257,7 @@ export default function ImageCard({
         {showInfo && (
           <>
             <div className="absolute top-full right-0 h-2 w-full" />
-            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg bg-black/90 p-3 text-xs text-white shadow-xl">
+            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
               <p>
                 <span className="text-gray-400">Type:</span>{' '}
                 {item?.creativeType || item?.inputs?.type || '-'}
@@ -292,7 +319,7 @@ export default function ImageCard({
   );
 
   return (
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-[#1f1f1f]">
+    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
 
       {/* Selection Checkbox */}
@@ -310,7 +337,7 @@ export default function ImageCard({
             className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-2 transition-all ${
               isSelected
                 ? 'border-blue-600 bg-blue-600'
-                : 'border-white/40 bg-black/40 hover:border-white'
+                : 'border-gray-400 bg-white hover:border-gray-600 hover:bg-black/5 dark:border-white/40 dark:bg-black/40 dark:hover:border-white dark:hover:bg-black/40'
             }`}
           >
             {isSelected && (
@@ -343,7 +370,7 @@ export default function ImageCard({
         </>
       ) : item?.status === 'completed' ? (
         <div ref={containerRef} className="relative h-full w-full bg-black">
-          {!imageLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-[#1a1a1a]" />}
+          {!imageLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
           <img
             src={resolveImageUrl(activeImageUrl)}
             alt="Generated"
@@ -379,7 +406,8 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {onOpenPostAdModal && (
+            {/* HIDE-MARK — MySpace → Post Ad nav (Megaphone) hidden. */}
+            {false && onOpenPostAdModal && (
               <button
                 title="Post as ad"
                 onClick={(e) => {
@@ -398,33 +426,7 @@ export default function ImageCard({
             )}
             <button
               className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                const type = item?.inputs?.type;
-                // Per-card aspect: matched from aspectRatioPerImage with
-                // numberOfImages forced to 1 — we're recreating one image,
-                // not the whole previous batch.
-                const matched = findAspectEntryForCard(item);
-                const aspect = matched?.aspectRatio || item.inputs?.aspectRatio || '1:1';
-                const tailored = {
-                  ...item.inputs,
-                  aspectRatio: aspect,
-                  numberOfImages: 1,
-                  aspectRatioPerImage: [{ aspectRatio: aspect, numberOfImages: 1 }],
-                };
-                // recreate_ads stays inside AdLibrary's RecreateAdModal —
-                // hand off to MyImagesPage which owns the modal mount.
-                if (type === 'recreate_ads') {
-                  dispatch(setImageRecreateInputs(tailored));
-                  onOpenRecreateAdsModal?.(tailored);
-                  return;
-                }
-                const targetRoute = IMAGE_TYPE_TO_ROUTE[type];
-                if (!targetRoute) return;
-                dispatch(setImageRecreateInputs(tailored));
-                dispatch(setActiveAdStudioTab('adCreativeNew'));
-                dispatch(setAdCreativeNewActivePage(targetRoute));
-              }}
+              onClick={handleRecreate}
               title="Recreate Image"
             >
               <Edit size={18} />
@@ -441,10 +443,22 @@ export default function ImageCard({
           </div>
         </div>
       ) : (
-        // Error / failed state. Recreate is intentionally NOT offered here
-        // — re-running a generation that already failed is a dead-end UX.
+        // Error / failed state. Recreate is offered here too — the original
+        // inputs are still on the record, so we can re-open the editor with
+        // them pre-filled. Mirrors the success-state hover bar but with no
+        // download / post-ad actions (no image to act on).
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
           <p className="mt-2 text-xs text-gray-400">{errorMessage}</p>
+
+          <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-linear-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            <button
+              className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+              onClick={handleRecreate}
+              title="Recreate Image"
+            >
+              <Edit size={18} />
+            </button>
+          </div>
         </div>
       )}
     </div>

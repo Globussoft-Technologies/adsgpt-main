@@ -357,57 +357,17 @@ const handleAdCreativeVideoResponse = async (data, socket) => {
   }
 };
 
-// Function to handle credit deduction for ad factory
-const handleCreditDeduction = async (result, type, userData, campaignId) => {
+// AdFactory per-batch hook: re-reads the user's credit status and pushes
+// it to every socket joined to the campaign room. Runs after every Python
+// result batch so the frontend updates live. Does NOT deduct credits —
+// the actual settle happens once in `settleAdFactoryCampaign` on the final
+// (allCompleted) batch. Kept exported as `handleCreditDeduction` so existing
+// callers don't need rewiring; `emitCampaignCreditStatus` is the truer name.
+const emitCampaignCreditStatus = async (_result, _type, userData, campaignId) => {
   try {
-    if (
-      !result ||
-      !Array.isArray(result) ||
-      result.length === 0 ||
-      !userData?.userId
-    ) {
-      console.log("No results found — skipping credit deduction.");
-      return;
-    }
-    const successfulItems = result?.filter((item) => item.status == 200);
+    if (!userData?.userId || !campaignId) return;
 
-    if (successfulItems.length === 0) {
-      console.log("No successful results — skipping credit deduction.");
-      return;
-    }
-
-    let totalCreditsToDeduct = 0;
-
-    for (const item of successfulItems) {
-      const model = type === "text" ? "ADSGPT-TEXT" : item?.model;
-      let cost = UnifiedCreditController.getModelDeduction(model);
-
-      if (type === "text") {
-        const dataLength = Object.keys(item?.data || {})?.length;
-        cost = cost * dataLength;
-      }
-
-      if (cost > 0) {
-        totalCreditsToDeduct += cost;
-      }
-    }
-
-    if (totalCreditsToDeduct > 0) {
-      await UnifiedCreditController.deductCredits(
-        userData.userId,
-        totalCreditsToDeduct,
-        {
-          service_type: type,
-          campaign_id: campaignId,
-          model:
-            type === "text"
-              ? "ADSGPT-TEXT"
-              : successfulItems[0]?.model || "UNIFIED",
-        },
-      );
-    }
-
-    // FETCH UPDATED VALUES
+    // FETCH UPDATED VALUES (only for the emit — no deduction here)
     const creditStatus = await UnifiedCreditController.getCreditStatus(
       userData.userId,
     );
@@ -446,6 +406,69 @@ const handleCreditDeduction = async (result, type, userData, campaignId) => {
     });
   } catch (error) {
     console.error("Error in deducting the credits", error);
+  }
+};
+
+/**
+ * Settle the AdFactory campaign freeze. Counts every successful item across
+ * all result types on the campaign doc, multiplies by per-model cost, and
+ * calls releasePartial — which charges exactly the actual cost and refunds
+ * the unused portion of the freeze in a single atomic step.
+ *
+ * Idempotent: a second call with the receipt already gone is a NO_RECEIPT
+ * no-op. The duplicate-callback guard in updateGenerationResult should make
+ * that rare in practice.
+ */
+const settleAdFactoryCampaign = async (campaign, campaignId) => {
+  try {
+    let actualCharge = 0;
+    let detailTrace = [];
+    const services = campaign?.services?.servicesSelected || [];
+    const resultsByType = campaign?.results || {};
+
+    for (const srv of services) {
+      const type = srv.serviceName; // "text" | "image" | "video"
+      const arr = resultsByType?.[type];
+      if (!Array.isArray(arr)) continue;
+
+      // The model lives on the SERVICE (serviceParams.model), not on each
+      // result item. Items only carry { status, data, error, prompt, timestamp }.
+      const serviceModel =
+        type === "text" ? "ADSGPT-TEXT" : srv?.serviceParams?.model;
+      const perItem =
+        UnifiedCreditController.getModelDeduction(serviceModel) || 0;
+
+      const successful = arr.filter((it) => it?.status === 200);
+      let typeCharge = 0;
+      for (const item of successful) {
+        let cost = perItem;
+        if (type === "text") {
+          const dataLength = Object.keys(item?.data || {}).length;
+          cost = cost * dataLength;
+        }
+        if (cost > 0) typeCharge += cost;
+      }
+      actualCharge += typeCharge;
+      detailTrace.push(
+        `${type}(model=${serviceModel} success=${successful.length} perItem=${perItem} → ${typeCharge})`,
+      );
+    }
+
+    const result = await UnifiedCreditController.releasePartial(
+      `campaign:${campaignId}`,
+      actualCharge,
+    );
+    console.log(
+      `[credits] AdFactory campaign ${campaignId} settled: ` +
+        `actualCharge=${actualCharge} [${detailTrace.join(", ")}] ` +
+        `releaseResult=${JSON.stringify(result)}`,
+    );
+    return result;
+  } catch (err) {
+    console.error(
+      `[credits] settleAdFactoryCampaign failed for ${campaignId}:`,
+      err,
+    );
   }
 };
 
@@ -786,5 +809,8 @@ module.exports = {
   createChat: chats.createChat,
   createAdsCopyChat: adsCopyChat.createAdsCopyChat,
   handleChatResponse,
-  handleCreditDeduction,
+  // Legacy name kept as an alias so existing callers don't need rewiring.
+  handleCreditDeduction: emitCampaignCreditStatus,
+  emitCampaignCreditStatus,
+  settleAdFactoryCampaign,
 };

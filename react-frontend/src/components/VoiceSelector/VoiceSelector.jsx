@@ -125,11 +125,11 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
   return (
     <div className="w-full">
       <div className="mb-1.5 sm:mb-2">
-        <label className="flex items-center gap-1.5 text-xs font-medium text-[#afafaf] sm:text-sm">
+        <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
           <Mic2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           Narrator Voice <span className="text-red-400">*</span>
         </label>
-        <p className="mt-0.5 text-[10px] text-white/40 sm:text-[11px]">
+        <p className="mt-0.5 text-[10px] text-gray-500 dark:text-white/40 sm:text-[11px]">
           Pick the AI voice for the audio narration in your video
         </p>
       </div>
@@ -150,11 +150,11 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
                 className={`group flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition sm:text-[13px] ${
                   field === 'voice'
                     ? selected
-                      ? 'border-emerald-400/50 bg-emerald-400/10 text-white shadow-[0_0_8px_rgba(52,211,153,0.2)]'
-                      : 'border-emerald-400/25 bg-emerald-400/5 text-emerald-100 shadow-[0_0_4px_rgba(52,211,153,0.12)] hover:border-emerald-400/60 hover:text-white'
+                      ? 'border-emerald-400/50 bg-emerald-400/10 text-gray-900 dark:text-white shadow-[0_0_8px_rgba(52,211,153,0.2)]'
+                      : 'border-emerald-400/25 bg-emerald-400/5 text-emerald-700 dark:text-emerald-100 shadow-[0_0_4px_rgba(52,211,153,0.12)] hover:border-emerald-400/60 hover:text-black dark:hover:text-white'
                     : selected
-                      ? 'border-transparent bg-[#3A3A3A] text-white'
-                      : 'border-white/10 bg-[#909294]/15 text-white/70 hover:text-white'
+                      ? 'border-transparent bg-gray-200 text-gray-900 dark:bg-[#3A3A3A] dark:text-white'
+                      : 'border-black/10 bg-gray-100 text-gray-500 hover:text-black dark:border-white/10 dark:bg-[#909294]/15 dark:text-white/70 dark:hover:text-white'
                 }`}
               >
                 {selected ? (
@@ -165,7 +165,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') clearChip(field, e);
                     }}
-                    className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-white/70 hover:text-white"
+                    className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-gray-500 hover:text-black dark:text-white/70 dark:hover:text-white"
                     aria-label={`Clear ${field}`}
                   >
                     <X className="h-3 w-3" />
@@ -176,7 +176,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
                 <span>
                   {prettify(field === 'voice' ? 'voice' : field)}
                   {selected && label && (
-                    <span className="ml-1 text-white/60">: {label}</span>
+                    <span className="ml-1 text-gray-500 dark:text-white/60">: {label}</span>
                   )}
                 </span>
               </button>

@@ -97,6 +97,24 @@ async function releaseLock(runId) {
 // ─── pure helpers (exported for tests) ─────────────────────────────────────
 
 /**
+ * Resolve a rule's effective lookback window in days. Two cases:
+ *   - `lookbackPreset: 'this_month'` → days since the 1st of the current
+ *     month (1 on the 1st, 26 on the 26th, …). Recomputed every cron tick
+ *     so the window walks the calendar correctly.
+ *   - otherwise → the rule's numeric `lookbackDays` (default 14 if absent).
+ *
+ * Pure-ish: depends on `new Date()` so a test must mock `now` to assert
+ * the calendar branch. Kept here (not in evaluator) because lookback is
+ * a FETCH-time concern, not a per-condition concern.
+ */
+function resolveEffectiveLookback(rule, now = new Date()) {
+  if (rule && rule.lookbackPreset === "this_month") {
+    return Math.max(1, now.getDate()); // 1..31
+  }
+  return Number((rule && rule.lookbackDays) || 14);
+}
+
+/**
  * Group rules by user, then by ad-account derived from rule.attachments.
  * One rule can attach to multiple accounts so it surfaces under each one.
  */
@@ -582,13 +600,21 @@ async function runUserRuleCycle({
           // cost bounded by the number of *distinct* windows in play, not
           // the number of rules. Most users will have all rules at the
           // default (14d), so this is usually one fetch per account.
+          // Resolve each rule's effective lookback. A rule with
+          // `lookbackPreset: 'this_month'` resolves to "days since the 1st
+          // of the current month" (1 on the 1st, growing through the
+          // month) — computed fresh every cron tick so the window walks
+          // calendar-correctly. Numeric `lookbackDays` rules use that
+          // number directly. Group by the resolved value so two rules
+          // landing on the same effective window still share one Meta
+          // fetch.
           const byLookback = new Map();
           for (const r of rulesAtAccount) {
-            const lb = Number(r.lookbackDays) || 14;
+            const lb = resolveEffectiveLookback(r);
             if (!byLookback.has(lb)) byLookback.set(lb, []);
             byLookback.get(lb).push(r);
           }
-
+          console.log(byLookback, 'byLookback');
           // Safety gate, three layers of override (most-conservative wins):
           //   1. Caller-supplied `dryRun` (from cron env or HTTP request).
           //   2. User's saved `settings.dryRunGlobal` — if true, force dry-run
@@ -707,6 +733,7 @@ module.exports = {
     unmarkAttachmentOrphan,
     writeActionLogRow,
     evaluateRuleAtAccount,
+    resolveEffectiveLookback,
     LOCK_KEY,
     LOCK_TTL_SECONDS,
   },

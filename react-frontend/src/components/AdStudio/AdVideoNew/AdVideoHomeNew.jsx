@@ -38,14 +38,13 @@ const cards = [
     type: 'avatar',
     // comingSoon: true,
   },
-  // {
-  //   title: 'CLONE YOURSELF',
-  //   desc: 'Create AI ad videos with your face and voice',
-  //   img: '/static/adVideo/clone-yourself-photo.jpg',
-  //   gif: '/static/adVideo/clone-yourself-gif.gif',
-  //   type: 'clone',
-  //   comingSoon: true,
-  // },
+  {
+    title: 'CLONE YOURSELF',
+    desc: 'Create AI ad videos with your face and voice',
+    img: '/static/adVideo/clone-yourself-photo.jpg',
+    gif: '/static/adVideo/clone-yourself-gif.gif',
+    type: 'clone',
+  },
 ];
 
 const AdVideoHomeNew = () => {
@@ -80,7 +79,7 @@ const AdVideoHomeNew = () => {
             <motion.p
               variants={fadeUpVariants}
               custom={1}
-              className="mb-6 text-center text-sm text-[#BEBEBE] 2xl:mb-8 2xl:text-base"
+              className="mb-6 text-center text-sm text-zinc-600 2xl:mb-8 2xl:text-base dark:text-[#BEBEBE]"
             >
               Create scroll-stopping Video ads with AI <br />
               that understands your business.
@@ -93,7 +92,8 @@ const AdVideoHomeNew = () => {
             >
               <div className="grid h-full w-full max-w-[650px] gap-2 grid-cols-2 lg:max-w-[1000px] lg:grid-cols-3 2xl:max-w-[1240px]">
                 {cards.map((card, index) => (
-                  <div key={card.title} className={`${index === 0 || index === 2 ? 'row-span-2' : ''}`}>
+                  //  <div key={card.title} className={`${index === 0 || index === 2 ? 'row-span-2' : ''}`}>
+                    <div key={card.title} className={`${index === 0 ? 'row-span-2' : ''}`}>
                     <AdVideoCard {...card} />
                   </div>
                 ))}

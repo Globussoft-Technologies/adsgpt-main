@@ -110,7 +110,7 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
   return (
     <AnimatePresence>
       <motion.div
-        className={`fixed inset-0 z-[999] flex items-center justify-center bg-[#0D0D0D]/50 p-3 backdrop-blur-[50px] md:p-0 ${showGenerator ? 'hidden' : 'block'} `}
+        className={`fixed inset-0 z-[999] flex items-center justify-center bg-black/20 p-3 backdrop-blur-[50px] md:p-0 dark:bg-[#0D0D0D]/50 ${showGenerator ? 'hidden' : 'block'} `}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -122,7 +122,7 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
         <AdFactoryBgEffect />
 
         <motion.div
-          className="relative max-h-[95vh] w-[95%] max-w-[600px] scale-100 rounded-[30px] border border-white/10 bg-[#303030]/50 px-3 pt-8 pb-6 sm:px-6 lg:w-full 2xl:max-h-[92vh] 2xl:max-w-[800px] 2xl:p-8 2xl:px-10 2xl:pt-10"
+          className="relative max-h-[95vh] w-[95%] max-w-[600px] scale-100 rounded-[30px] border border-black/10 bg-white px-3 pt-8 pb-6 shadow-xl sm:px-6 lg:w-full 2xl:max-h-[92vh] 2xl:max-w-[800px] 2xl:p-8 2xl:px-10 2xl:pt-10 dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none"
           initial={{ scale: 0.8, opacity: 0, y: 40 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.8, opacity: 0 }}
@@ -164,7 +164,7 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
             </div>
           )} */}
 
-          {forms[nodeId] || <div className="text-white">Form not found.</div>}
+          {forms[nodeId] || <div className="text-gray-900 dark:text-white">Form not found.</div>}
         </motion.div>
       </motion.div>
       {showGeneratingLoader && <GeneratingLoader />}

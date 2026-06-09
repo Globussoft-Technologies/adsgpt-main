@@ -38,6 +38,10 @@ router.get("/search-geo", metaAdController.searchGeoLocations);
 // wizard can auto-pin a chosen city/region on the map. Meta's search API
 // doesn't return coordinates; radius still goes to Meta via cities[].radius.
 router.get("/geocode", metaAdController.geocodeLocation);
+// Reverse-geocode for the map-pin picker — verifies a lat/lng falls on
+// land (Meta's UI rejects ocean pins; we mirror that to avoid silent
+// zero-delivery campaigns).
+router.get("/reverse-geocode", metaAdController.reverseGeocodeLocation);
 // Feeds the App Promotion app picker in the V2 wizard. Returns the
 // user's promotable apps with iOS / Play store URLs normalised so the
 // frontend can filter by store and pre-fill objectStoreUrl.

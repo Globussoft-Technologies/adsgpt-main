@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormik } from 'formik';
 import {
   Dialog,
@@ -41,6 +41,8 @@ import ShowProductImages from '../Cards/ShowProductImages';
 import { useNavigate } from 'react-router-dom';
 import { setBrandIQError, setBrandIQLoading } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { globalToast } from '@/utils/globalToast';
+import { getCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
+import { showCompetitorAdsReadyNotification } from '@/utils/showNotification';
 const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
   const [brandDetailsFormNumber, setBrandDetailsFormNumber] = useState(brandData ? 1 : 0);
   const { loading, updateLoading, error } = useSelector((state) => state.brandIQTabs);
@@ -67,6 +69,64 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
   const [customAudienceInput, setCustomAudienceInput] = useState('');
 
   const navigate = useNavigate();
+  const competitorPollRef = useRef(null);
+
+  // Helper: poll competitor discovery status and notify when ready
+  const startCompetitorDiscoveryPoll = (brandId, brandName) => {
+    if (competitorPollRef.current) {
+      clearInterval(competitorPollRef.current);
+    }
+
+    const poll = async () => {
+      try {
+        const data = await getCompetitorAds(brandId, {
+          userId: userData?.user_id,
+          page: 1,
+          pageSize: 1,
+        });
+
+        if (data.status === 'READY' || data.status === 'EMPTY' || data.status === 'FAILED') {
+          if (competitorPollRef.current) {
+            clearInterval(competitorPollRef.current);
+            competitorPollRef.current = null;
+          }
+          if (data.status === 'READY') {
+            showCompetitorAdsReadyNotification(
+              { id: brandId, name: brandName },
+              dispatch
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Competitor discovery poll error:', err);
+      }
+    };
+
+    // Poll every 10 seconds for up to 5 minutes (30 polls)
+    let pollCount = 0;
+    const MAX_POLLS = 30;
+    competitorPollRef.current = setInterval(() => {
+      pollCount += 1;
+      if (pollCount > MAX_POLLS) {
+        clearInterval(competitorPollRef.current);
+        competitorPollRef.current = null;
+        return;
+      }
+      poll();
+    }, 10000);
+
+    // Run immediately once
+    poll();
+  };
+
+  // Cleanup poll on unmount
+  useEffect(() => {
+    return () => {
+      if (competitorPollRef.current) {
+        clearInterval(competitorPollRef.current);
+      }
+    };
+  }, []);
 
   // Function to load brand data including images
   const loadBrandData = async (brandData) => {
@@ -525,8 +585,14 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           globalToast.success('Brand updated successfully!');
         } else {
           // Create new brand
-          await dispatch(createBrandList(brandPayload)).unwrap();
+          const result = await dispatch(createBrandList(brandPayload)).unwrap();
           globalToast.success('Brand created successfully!');
+          const createdBrandName = result?.data?.brandName || values.brandName.trim();
+          const createdBrandId = result?.data?.id;
+          if (createdBrandId) {
+            globalToast.success(`Finding competitor ads for ${createdBrandName}...`);
+            startCompetitorDiscoveryPoll(createdBrandId, createdBrandName);
+          }
         }
         setBrandDetailsFormNumber(0);
         setBrandLogos([]);
@@ -829,16 +895,16 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
   const renderWelcomeStep = () => (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-base font-medium text-white">
+        <label className="flex items-center gap-2 text-base font-medium text-gray-900 dark:text-white">
           Website Analysis
         </label>
-        <div className="relative flex items-center justify-between rounded-md bg-[#90929430]! px-3 focus-within:ring-3 focus-within:ring-white/20">
+        <div className="relative flex items-center justify-between rounded-md bg-gray-100! dark:bg-[#90929430]! px-3 focus-within:ring-3 focus-within:ring-white/20">
           <Input
             type="url"
             value={analyzeWebsiteUrl}
             onChange={(e) => setAnalyzeWebsiteUrl(e.target.value)}
             autoComplete="off"
-            className="h-10 rounded-xl border-0! bg-transparent! px-0 pr-3 text-sm text-white placeholder:text-[#afafaf] focus-visible:ring-0 focus-visible:ring-offset-0 lg:w-[95%]"
+            className="h-10 rounded-xl border-0! bg-transparent! px-0 pr-3 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-0 focus-visible:ring-offset-0 lg:w-[95%]"
             placeholder="Enter website URL for automatic setup"
           />
           <Link className="h-4 w-4 text-[#909294]" />
@@ -851,7 +917,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           type="button"
           onClick={() => handleOpenChange(false)}
           disabled={isAnalyzing}
-          className="rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-[#90929430] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#20202080] px-4 py-2 text-sm text-gray-600 dark:text-gray-300 transition-colors hover:bg-black/5 dark:hover:bg-[#90929430] hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           Close
         </button>
@@ -860,7 +926,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             type="button"
             onClick={handleSkipToManual}
             disabled={isAnalyzing}
-            className="rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm whitespace-nowrap text-gray-300 transition-colors hover:bg-[#90929430] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#20202080] px-4 py-2 text-sm whitespace-nowrap text-gray-600 dark:text-gray-300 transition-colors hover:bg-black/5 dark:hover:bg-[#90929430] hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Manual Setup
           </button>
@@ -868,7 +934,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             type="button"
             onClick={handleAnalyzeWebsite}
             disabled={!analyzeWebsiteUrl || isAnalyzing}
-            className="flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-bold whitespace-nowrap text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-gray-900 text-white dark:bg-white px-4 py-2 text-sm font-bold whitespace-nowrap dark:text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isAnalyzing ? (
               <>
@@ -888,18 +954,18 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
 
   const renderBrandLogoUpload = () => (
     <div className="flex flex-col gap-2.5">
-      <label className="flex items-center gap-2 text-base font-medium text-gray-200">
+      <label className="flex items-center gap-2 text-base font-medium text-gray-600 dark:text-gray-200">
         Brand Logos*
         <ShadcnTooltip
           label={tooltipDescriptions['Brand Logos*']}
           side="right"
           className="max-w-[350px] text-sm"
         >
-          <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-white" />
+          <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className="flex items-center gap-2 rounded-md border-0! bg-[#90929430]! px-1.5 py-1">
-        <label className="flex cursor-pointer items-center gap-1 rounded-md bg-white/20 px-2.5 py-2 text-xs text-gray-200 transition-colors hover:bg-[#90929440]">
+      <div className="flex items-center gap-2 rounded-md border-0! bg-gray-100! dark:bg-[#90929430]! px-1.5 py-1">
+        <label className="flex cursor-pointer items-center gap-1 rounded-md bg-black/10 dark:bg-white/20 px-2.5 py-2 text-xs text-gray-600 dark:text-gray-200 transition-colors hover:bg-black/5 dark:hover:bg-[#90929440]">
           <input
             type="file"
             accept=".png,.ico,image/png,image/x-icon,image/vnd.microsoft.icon"
@@ -930,7 +996,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 {brandLogos?.map((file, index) => (
                   <div
                     key={index}
-                    className="relative h-12 overflow-hidden rounded-lg border-2 border-white/20 bg-[#90929430] p-0.5 transition-all duration-200 hover:bg-[#90929440]"
+                    className="relative h-12 overflow-hidden rounded-lg border-2 border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#90929430] p-0.5 transition-all duration-200 hover:bg-black/5 dark:hover:bg-[#90929440]"
                   >
                     <img
                       src={URL.createObjectURL(file)}
@@ -960,18 +1026,18 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
 
   const renderProductImageUpload = () => (
     <div className="flex flex-col gap-2.5">
-      <label className="flex items-center gap-2 text-base font-medium text-gray-200">
+      <label className="flex items-center gap-2 text-base font-medium text-gray-600 dark:text-gray-200">
         Product Image
         <ShadcnTooltip
           label={tooltipDescriptions['Product Image*']}
           side="right"
           className="max-w-[350px] text-sm"
         >
-          <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-white" />
+          <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className="flex items-center gap-2 rounded-md border-0! bg-[#90929430]! px-1.5 py-1">
-        <label className="flex cursor-pointer items-center gap-1 rounded-lg bg-white/20 px-2.5 py-2 text-xs text-gray-200 transition-colors hover:bg-[#90929440]">
+      <div className="flex items-center gap-2 rounded-md border-0! bg-gray-100! dark:bg-[#90929430]! px-1.5 py-1">
+        <label className="flex cursor-pointer items-center gap-1 rounded-lg bg-black/10 dark:bg-white/20 px-2.5 py-2 text-xs text-gray-600 dark:text-gray-200 transition-colors hover:bg-black/5 dark:hover:bg-[#90929440]">
           <input
             type="file"
             accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
@@ -1003,7 +1069,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 {productImages.map((file, index) => (
                   <div
                     key={index}
-                    className="relative h-12 overflow-hidden rounded-lg border-2 border-white/20 bg-[#90929430] p-0.5 transition-all duration-200 hover:bg-[#90929440]"
+                    className="relative h-12 overflow-hidden rounded-lg border-2 border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#90929430] p-0.5 transition-all duration-200 hover:bg-black/5 dark:hover:bg-[#90929440]"
                   >
                     <img
                       src={URL.createObjectURL(file)}
@@ -1042,7 +1108,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
   const renderStep1 = () => (
     <>
       <div className="flex flex-col gap-2.5">
-        <label className="text-base font-medium text-gray-200">Brand Identity *</label>
+        <label className="text-base font-medium text-gray-600 dark:text-gray-200">Brand Identity *</label>
         <Input
           type="text"
           name="brandName"
@@ -1050,7 +1116,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
           autoComplete="off"
-          className="h-10 rounded-md border-0! bg-[#90929430]! p-4 text-sm text-white placeholder:text-[#AFAFAF]"
+          className="h-10 rounded-md border-0! bg-gray-100! dark:bg-[#90929430]! p-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF]"
           placeholder="Brand name"
         />
         {formik.touched.brandName && formik.errors.brandName && (
@@ -1059,14 +1125,14 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <label className="text-base font-medium text-gray-200">Brand Description *</label>
+        <label className="text-base font-medium text-gray-600 dark:text-gray-200">Brand Description *</label>
         <Textarea
           name="brandDescription"
           value={formik.values.brandDescription}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
           style={{ overflowWrap: 'anywhere' }}
-          className="h-[80px] max-h-[80px] min-h-[80px] rounded-md border-0! bg-[#90929430]! text-white placeholder:text-[#afafaf]!"
+          className="h-[80px] max-h-[80px] min-h-[80px] rounded-md border-0! bg-gray-100! dark:bg-[#90929430]! text-gray-900 dark:text-white placeholder:text-gray-500! dark:placeholder:text-[#afafaf]!"
           placeholder="Describe your brand for campaign optimization"
         />
         {formik.touched.brandDescription && formik.errors.brandDescription && (
@@ -1086,7 +1152,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
               setBrandDetailsFormNumber(0);
               setAnalysisError('');
             }}
-            className="flex items-center gap-1.5 rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm font-medium text-[#E8E8E8] transition-colors hover:bg-[#90929430] hover:text-white"
+            className="flex items-center gap-1.5 rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#20202080] px-4 py-2 text-sm font-medium text-gray-600 dark:text-[#E8E8E8] transition-colors hover:bg-black/5 dark:hover:bg-[#90929430] hover:text-black dark:hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -1097,7 +1163,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             type="button"
             onClick={() => handleOpenChange(false)}
             disabled={isAnalyzing}
-            className="flex items-center gap-1.5 rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm font-medium text-[#E8E8E8] transition-colors hover:bg-[#90929430] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#20202080] px-4 py-2 text-sm font-medium text-gray-600 dark:text-[#E8E8E8] transition-colors hover:bg-black/5 dark:hover:bg-[#90929430] hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Close
           </button>
@@ -1106,7 +1172,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           type="button"
           onClick={handleNextStep}
           disabled={!isStep1Valid()}
-          className="flex items-center gap-1.5 rounded-md bg-white px-4 py-2 text-sm font-bold text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md bg-gray-900 text-white dark:bg-white px-4 py-2 text-sm font-bold dark:text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Next
           <ArrowRight className="h-4 w-4" />
@@ -1118,10 +1184,10 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
   const renderStep2 = () => (
     <>
       <div className="flex flex-col gap-3">
-        <label className="text-base font-medium text-gray-200">Digital Presence</label>
+        <label className="text-base font-medium text-gray-600 dark:text-gray-200">Digital Presence</label>
 
         <div className="flex flex-col gap-2.5">
-          <label className="flex items-center gap-2 text-gray-300">Website URL *</label>
+          <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">Website URL *</label>
           <Input
             type="text"
             name="websiteUrl"
@@ -1129,7 +1195,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             onChange={formik.handleChange}
             onBlur={formik.handleBlur}
             autoComplete="off"
-            className="h-10 rounded-sm border-0! bg-[#90929430]! text-sm text-white placeholder:text-[#afafaf]"
+            className="h-10 rounded-sm border-0! bg-gray-100! dark:bg-[#90929430]! text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]"
             placeholder="https://example.com"
           />
           {formik.touched.websiteUrl && formik.errors.websiteUrl && (
@@ -1139,7 +1205,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-gray-300">Instagram</label>
+            <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">Instagram</label>
             <Input
               type="url"
               name="instagramUrl"
@@ -1147,7 +1213,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
               onChange={formik.handleChange}
               onBlur={formik.handleBlur}
               autoComplete="off"
-              className="h-10 rounded-sm border-0! bg-[#90929430]! text-sm text-white placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="h-10 rounded-sm border-0! bg-gray-100! dark:bg-[#90929430]! text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               placeholder="https://instagram.com/username"
             />
             {formik.touched.instagramUrl && formik.errors.instagramUrl && (
@@ -1156,7 +1222,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-gray-300">Facebook</label>
+            <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">Facebook</label>
             <Input
               type="url"
               name="facebookUrl"
@@ -1164,7 +1230,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
               onChange={formik.handleChange}
               onBlur={formik.handleBlur}
               autoComplete="off"
-              className="h-10 rounded-sm border-0! bg-[#90929430]! text-sm text-white placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="h-10 rounded-sm border-0! bg-gray-100! dark:bg-[#90929430]! text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               placeholder="https://facebook.com/username"
             />
             {formik.touched.facebookUrl && formik.errors.facebookUrl && (
@@ -1174,7 +1240,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         </div>
 
         <div className="flex flex-col gap-2.5">
-          <label className="flex items-center gap-2 text-gray-300">LinkedIn</label>
+          <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">LinkedIn</label>
           <Input
             type="url"
             name="linkedinUrl"
@@ -1182,7 +1248,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             onChange={formik.handleChange}
             onBlur={formik.handleBlur}
             autoComplete="off"
-            className="h-10 rounded-sm border-0! bg-[#90929430]! text-sm text-white placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="h-10 rounded-sm border-0! bg-gray-100! dark:bg-[#90929430]! text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             placeholder="https://linkedin.com/in/username"
           />
           {formik.touched.linkedinUrl && formik.errors.linkedinUrl && (
@@ -1191,7 +1257,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         </div>
 
         <div className="flex flex-col gap-2.5">
-          <label className="flex items-center gap-2 text-gray-300">Primary Audience Region</label>
+          <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">Primary Audience Region</label>
           <Input
             type="text"
             name="region"
@@ -1199,7 +1265,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             onChange={formik.handleChange}
             onBlur={formik.handleBlur}
             autoComplete="off"
-            className="h-10 rounded-sm border-0! bg-[#90929430]! text-sm text-white placeholder:text-[#afafaf]"
+            className="h-10 rounded-sm border-0! bg-gray-100! dark:bg-[#90929430]! text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]"
             placeholder="e.g. South India"
           />
           <div className="flex flex-wrap gap-2">
@@ -1210,8 +1276,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 onClick={() => formik.setFieldValue('region', chip)}
                 className={`rounded-full border px-3 py-1 text-xs transition-all ${
                   formik.values.region === chip
-                    ? 'border-blue-500 bg-blue-500/20 text-white'
-                    : 'border-white/20 bg-white/5 text-gray-400 hover:border-white/40 hover:text-white'
+                    ? 'border-blue-500 bg-blue-500/20 text-gray-900 dark:text-white'
+                    : 'border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/5 text-gray-400 hover:border-black/20 dark:hover:border-white/40 hover:text-black dark:hover:text-white'
                 }`}
               >
                 {chip}
@@ -1221,8 +1287,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         </div>
 
         <div className="flex flex-col gap-2.5">
-          <label className="flex items-center gap-2 text-gray-300">Target Audiences</label>
-          <div className="flex items-center gap-2 rounded-md bg-[#90929430] px-3 focus-within:ring-2 focus-within:ring-white/20">
+          <label className="flex items-center gap-2 text-gray-600 dark:text-gray-300">Target Audiences</label>
+          <div className="flex items-center gap-2 rounded-md bg-gray-100 dark:bg-[#90929430] px-3 focus-within:ring-2 focus-within:ring-white/20">
             <input
               type="text"
               value={customAudienceInput}
@@ -1238,7 +1304,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 }
               }}
               placeholder="Type an audience and press Enter"
-              className="h-10 flex-1 bg-transparent text-sm text-white placeholder:text-[#afafaf] outline-none"
+              className="h-10 flex-1 bg-transparent text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] outline-none"
             />
             <button
               type="button"
@@ -1250,7 +1316,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 setCustomAudienceInput('');
               }}
               disabled={!customAudienceInput.trim()}
-              className="rounded-md bg-white/20 px-2 py-1 text-xs text-white transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md bg-black/10 dark:bg-white/20 px-2 py-1 text-xs text-gray-900 dark:text-white transition-colors hover:bg-black/5 dark:hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Add
             </button>
@@ -1271,8 +1337,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                     }}
                     className={`rounded-full border px-3 py-1 text-xs transition-all ${
                       isSelected
-                        ? 'border-[#2BB8FC]/60 bg-[#2BB8FC]/20 text-[#7dd9f8]'
-                        : 'border-white/20 bg-white/5 text-gray-400 hover:border-white/40 hover:text-white'
+                        ? 'border-[#2BB8FC]/60 bg-[#2BB8FC]/20 text-[#1593c9] dark:text-[#7dd9f8]'
+                        : 'border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/5 text-gray-400 hover:border-black/20 dark:hover:border-white/40 hover:text-black dark:hover:text-white'
                     }`}
                   >
                     {audience}
@@ -1283,17 +1349,17 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           )}
 
           {selectedAudiences.length > 0 && (
-            <div className="scrollbar-thin flex max-h-[100px] flex-wrap gap-2 overflow-y-auto rounded-md border border-white/10 bg-white/5 p-3">
+            <div className="scrollbar-thin flex max-h-[100px] flex-wrap gap-2 overflow-y-auto rounded-md border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
               {selectedAudiences.map((audience) => (
                 <span
                   key={audience}
-                  className="flex items-center gap-1 rounded-full border border-[#2BB8FC]/40 bg-[#2BB8FC]/10 px-3 py-1 text-xs text-[#7dd9f8]"
+                  className="flex items-center gap-1 rounded-full border border-[#2BB8FC]/40 bg-[#2BB8FC]/10 px-3 py-1 text-xs text-[#1593c9] dark:text-[#7dd9f8]"
                 >
                   {audience}
                   <button
                     type="button"
                     onClick={() => setSelectedAudiences((prev) => prev.filter((a) => a !== audience))}
-                    className="ml-1 text-[#7dd9f8]/60 hover:text-red-400"
+                    className="ml-1 text-[#1593c9]/60 hover:text-red-400 dark:text-[#7dd9f8]/60"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -1312,7 +1378,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             setBrandDetailsFormNumber(1);
             setAnalysisError('');
           }}
-          className="flex items-center gap-1.5 rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm text-[#E8E8E8] transition-colors hover:bg-[#90929430] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md border border-black/10 dark:border-white/20 bg-gray-100 dark:bg-[#20202080] px-4 py-2 text-sm text-gray-600 dark:text-[#E8E8E8] transition-colors hover:bg-black/5 dark:hover:bg-[#90929430] hover:text-black dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft className="h-4 w-4" />
           Previous
@@ -1320,7 +1386,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         <button
           type="submit"
           disabled={!isStep2Valid() || loading || updateLoading}
-          className="rounded-sm bg-white px-6 py-2 text-sm font-bold whitespace-nowrap text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-sm bg-gray-900 text-white dark:bg-white px-6 py-2 text-sm font-bold whitespace-nowrap dark:text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading || updateLoading ? (
             <div className="flex items-center gap-1">
@@ -1343,19 +1409,19 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         {/* Only show the trigger button if no brandData is provided */}
         {!brandData &&
           (fromComponent === 'topheader' ? (
-            <button className="backdrop-blur-100 text-10 group relative flex items-center justify-center rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-5 py-1.5 text-[#AFAFAF] hover:text-white 2xl:py-2 2xl:text-sm">
+            <button className="backdrop-blur-100 text-10 group relative flex items-center justify-center rounded-full border border-black/10 dark:border-white/20 bg-white/70 dark:bg-[#0D0D0D]/50 p-[0.5px] px-5 py-1.5 text-gray-600 dark:text-[#AFAFAF] hover:text-black dark:hover:text-white 2xl:py-2 2xl:text-sm">
               <span className="flex items-center gap-1.5 rounded-full">
-                <Plus className="!h-3.5 !w-3.5 text-[#6b72f8] group-hover:text-white/70 2xl:h-5 2xl:w-5" />
-                <span className="bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text font-medium text-transparent group-hover:text-white/60">
+                <Plus className="!h-3.5 !w-3.5 text-[#6b72f8] group-hover:text-black/70 dark:group-hover:text-white/70 2xl:h-5 2xl:w-5" />
+                <span className="bg-gradient-to-t from-[#0ea5c4] to-[#4f55d4] dark:from-[#15DCFF] dark:to-[#6b72f8] bg-clip-text font-medium text-transparent group-hover:text-black/60 dark:group-hover:text-white/60">
                   Add Brand
                 </span>
               </span>
             </button>
           ) : (
-            <button className="mt-4 rounded-full bg-gradient-to-br from-[#202020]/50 to-[#202020]/50 hover:from-[#222222] hover:to-[#5771F6]/50">
+            <button className="mt-4 rounded-full bg-gradient-to-br from-black/5 to-black/5 hover:from-black/10 hover:to-[#5771F6]/20 dark:from-[#202020]/50 dark:to-[#202020]/50 dark:hover:from-[#222222] dark:hover:to-[#5771F6]/50">
               <div className="prompt_selection_button flex items-center gap-2 rounded-full px-5 py-2 backdrop-blur-[100px] transition-all">
                 <Plus className="h-4 w-4 text-[#6b72f8]" />
-                <span className="bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text font-medium text-transparent">
+                <span className="bg-gradient-to-t from-[#0ea5c4] to-[#4f55d4] dark:from-[#15DCFF] dark:to-[#6b72f8] bg-clip-text font-medium text-transparent">
                   Add Brand
                 </span>
               </div>
@@ -1363,7 +1429,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           ))}
       </DialogTrigger>
       <DialogContent
-        className="glow-box mx-auto max-h-[95vh] w-[95%] max-w-[800px]! scale-100 overflow-x-hidden overflow-y-auto rounded-2xl border border-gray-700 bg-[#13162782] py-7 text-white backdrop-blur-[130px]"
+        className="glow-box mx-auto max-h-[95vh] w-[95%] max-w-[800px]! scale-100 overflow-x-hidden overflow-y-auto rounded-2xl border border-black/10 dark:border-gray-700 bg-white dark:bg-[#13162782] py-7 text-gray-900 dark:text-white backdrop-blur-[130px]"
         onInteractOutside={(e) => {
           if (isAnalyzing) e.preventDefault();
         }}
@@ -1381,13 +1447,13 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                     Welcome to AdsGPT
                   </span>
                 </div>
-                <div className="text-sm font-normal text-[#afafaf]">
+                <div className="text-sm font-normal text-gray-500 dark:text-[#afafaf]">
                   Configure your brand for advertising campaigns
                 </div>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2">
-                <Target className="h-6 w-6 text-white" />
+                <Target className="h-6 w-6 text-gray-900 dark:text-white" />
                 <span className="text-xl font-medium md:text-2xl">
                   {brandData ? 'Edit Brand' : 'Brand Configuration'}
                 </span>
@@ -1403,7 +1469,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                     <div
                       className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-medium ${
                         brandDetailsFormNumber >= step
-                          ? 'border-white bg-blue-500/10 text-white'
+                          ? 'border-gray-900 bg-blue-500/10 text-gray-900 dark:border-white dark:text-white'
                           : 'border-[#676E74] text-[#676E74]'
                       }`}
                     >
@@ -1412,7 +1478,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                     {step < 2 && (
                       <div
                         className={`h-1 w-16 ${
-                          brandDetailsFormNumber > step ? 'bg-white' : 'bg-[#676E74]'
+                          brandDetailsFormNumber > step ? 'bg-gray-900 dark:bg-white' : 'bg-[#676E74]'
                         }`}
                       />
                     )}

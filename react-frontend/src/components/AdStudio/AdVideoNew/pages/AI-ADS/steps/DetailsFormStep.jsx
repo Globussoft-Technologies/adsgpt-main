@@ -36,7 +36,7 @@ const isImageFile = (file) =>
 const CustomInput = ({ label, value, onChange, placeholder, required = false, error, disabled }) => (
   <div className="flex w-full min-w-0 flex-col">
     {label && (
-      <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">
+      <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">
         {label}
         {required && '*'}
       </label>
@@ -47,7 +47,7 @@ const CustomInput = ({ label, value, onChange, placeholder, required = false, er
       onChange={onChange}
       placeholder={placeholder}
       disabled={disabled}
-      className={`w-full min-w-0 rounded-full border bg-[#909294]/15 px-3 py-2.5 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50 ${error ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
+      className={`w-full min-w-0 rounded-full border bg-gray-100 dark:bg-[#909294]/15 px-3 py-2.5 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50 ${error ? 'border-red-500 focus:border-red-500' : 'border-black/10 dark:border-white/5 focus:border-white/20'}`}
     />
     {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
   </div>
@@ -57,15 +57,15 @@ const CustomInput = ({ label, value, onChange, placeholder, required = false, er
 const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, error, disabled }) => (
   <div className="flex w-full min-w-0 flex-col">
     {label && (
-      <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:text-sm">
+      <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
         {label}
         {required && '*'}
       </label>
     )}
-    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''} ${disabled ? 'opacity-50' : ''}`}>
+    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full bg-gray-100 dark:bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''} ${disabled ? 'opacity-50' : ''}`}>
       <label
         htmlFor={disabled ? undefined : id}
-        className={`flex shrink-0 items-center gap-1 rounded-full bg-[#606060] px-3 py-1.5 text-[10px] font-normal text-white transition sm:px-4 sm:py-2 sm:text-[11px] ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:opacity-80'}`}
+        className={`flex shrink-0 items-center gap-1 rounded-full bg-zinc-200 px-3 py-1.5 text-[10px] font-normal text-zinc-800 transition sm:px-4 sm:py-2 sm:text-[11px] dark:bg-[#606060] dark:text-white ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-zinc-300 dark:hover:opacity-80'}`}
       >
         <CloudUpload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         Choose File
@@ -79,10 +79,10 @@ const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, 
           disabled={disabled}
         />
       </label>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-1 px-1 text-[11px] text-[#AFAFAF] sm:px-2 sm:text-xs">
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-1 px-1 text-[11px] text-gray-500 dark:text-[#AFAFAF] sm:px-2 sm:text-xs">
         <span className="min-w-0 flex-1 truncate">{fileName || 'No file chosen'}</span>
         {fileName && (
-          <button onClick={onClear} disabled={disabled} className="shrink-0 text-white/40 hover:text-white disabled:cursor-not-allowed">
+          <button onClick={onClear} disabled={disabled} className="shrink-0 text-gray-500 dark:text-white/40 hover:text-black dark:hover:text-white disabled:cursor-not-allowed">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -485,32 +485,32 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
 
   return (
-    <div className="relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
+    <div className="relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-white dark:bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
       {/* Close button */}
       <button
         onClick={onClose}
-        className="pointer-events-auto absolute top-5 right-4 z-50 cursor-pointer text-white/50 hover:text-white"
+        className="pointer-events-auto absolute top-5 right-4 z-50 cursor-pointer text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white"
       >
         <X className="h-5 w-5" />
       </button>
 
       <div className="relative mb-2 w-full min-w-0 rounded-2xl px-4 pt-1 pb-4 sm:px-6 sm:pt-2 sm:pb-6 xl:px-8 xl:pt-2 xl:pb-4">
         {/* Title */}
-        <h2 className="mb-2 text-center text-lg font-bold text-white sm:mb-3 sm:text-xl xl:mb-2 xl:text-2xl">{title}</h2>
+        <h2 className="mb-2 text-center text-lg font-bold text-gray-900 dark:text-white sm:mb-3 sm:text-xl xl:mb-2 xl:text-2xl">{title}</h2>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-stretch xl:gap-6">
           {/* LEFT: Prompt textarea with Model/Duration pills INSIDE at the bottom */}
           <div className="flex w-full min-w-0 flex-col">
-            <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Prompt*</label>
+            <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">Prompt*</label>
             <div
-              className={`relative flex h-full flex-1 flex-col rounded-2xl border bg-[#909294]/15 focus-within:border-white/20 ${errors.optimizedPrompt ? 'border-red-500' : 'border-white/5'}`}
+              className={`relative flex h-full flex-1 flex-col rounded-2xl border bg-gray-100 dark:bg-[#909294]/15 focus-within:border-white/20 ${errors.optimizedPrompt ? 'border-red-500' : 'border-black/10 dark:border-white/5'}`}
             >
               <textarea
                 value={formData.optimizedPrompt}
                 onChange={(e) => { updateField('optimizedPrompt', e.target.value); setErrors((prev) => ({ ...prev, optimizedPrompt: '' })); }}
                 placeholder="Write your prompt here..."
                 disabled={submitting}
-                className="min-h-[120px] w-full flex-1 resize-none rounded-2xl bg-transparent px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[180px] sm:px-5 sm:py-3.5 sm:text-sm xl:min-h-0"
+                className="min-h-[120px] w-full flex-1 resize-none rounded-2xl bg-transparent px-4 py-3 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[180px] sm:px-5 sm:py-3.5 sm:text-sm xl:min-h-0"
               />
               {/* Inline Model + Duration + Aspect ratio pills at the bottom-right of the prompt box */}
               <div className={`flex flex-wrap items-center justify-end gap-2 px-3 pb-3 sm:px-4 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
@@ -520,7 +520,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label="Model"
                       type="b-roll"
                       side="top"
-                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={modelOptions}
                       value={modelOptions.find((opt) => opt.value === formData.model)}
                       onChange={(val) => { updateField('model', val); setErrors((prev) => ({ ...prev, model: '' })); }}
@@ -534,7 +534,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label="Duration"
                       type="b-roll"
                       side="top"
-                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={durationOptions}
                       value={durationOptions.find((opt) => opt.value === formData.duration)}
                       onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
@@ -548,7 +548,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label="Aspect Ratio"
                       type="b-roll"
                       side="top"
-                      className="h-auto w-auto bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={aspectRatioOptions}
                       value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio)}
                       onChange={(val) => { updateField('aspectRatio', val); setErrors((prev) => ({ ...prev, aspectRatio: '' })); }}
@@ -576,11 +576,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               disabled={submitting}
             />
             <div className="flex w-full flex-col">
-              <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Category</label>
+              <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">Category</label>
               <div className={`${errors.category ? 'rounded-full ring-1 ring-red-500' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
                 <CommonDropdown
                   label="Choose category"
-                  className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                  className="h-auto w-full bg-gray-100 dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
                   type="b-roll"
                   options={categoryOptions}
                   value={categoryOptions.find((opt) => opt.value === formData.category)}
@@ -592,7 +592,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           </div>
 
           <div className="flex w-full min-w-0 flex-col">
-            <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">
+            <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">
               {isBrand ? 'Brand' : 'Product'} Description*
             </label>
             <textarea
@@ -601,7 +601,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               placeholder={`Briefly describe your ${type} including key features.`}
               rows={3}
               disabled={submitting}
-              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-[#909294]/15! px-4 py-3 text-[13px] text-white placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-white/5 focus:border-white/20'}`}
+              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-gray-100 dark:bg-[#909294]/15! px-4 py-3 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-black/10 dark:border-white/5 focus:border-white/20'}`}
             />
             {errors.description && <p className="mt-1 text-xs text-red-400">{errors.description}</p>}
           </div>
@@ -629,7 +629,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   {urlImages.map((img, index) => (
                     <div
                       key={`url-${index}`}
-                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-white/10"
+                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-black/10 dark:border-white/10"
                     >
                       <img
                         src={img.preview}
@@ -650,7 +650,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   {uploadedImages.map((img, index) => (
                     <div
                       key={`file-${index}`}
-                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-white/10"
+                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-black/10 dark:border-white/10"
                     >
                       <img
                         src={img.preview}
@@ -687,7 +687,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               />
               {(uploadedLogo || urlLogo) && (
                 <div className="mt-3">
-                  <div className="group relative h-12 w-12 cursor-pointer border border-white/10">
+                  <div className="group relative h-12 w-12 cursor-pointer border border-black/10 dark:border-white/10">
                     <img
                       src={uploadedLogo?.preview || urlLogo?.preview}
                       alt="logo-preview"
@@ -728,12 +728,12 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               />
             ) : (
               <div className="flex w-full min-w-0 flex-col">
-                <label className="mb-1.5 text-xs font-medium text-[#afafaf] sm:mb-2 sm:text-sm">Product Type</label>
+                <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">Product Type</label>
                 <div className={`${errors.productType ? 'rounded-full ring-1 ring-red-500' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
                   <CommonDropdown
                     label="Choose Product Type"
                     type="b-roll"
-                    className="h-auto w-full bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                    className="h-auto w-full bg-gray-100 dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
                     options={productTypeOptions}
                     value={productTypeOptions.find((opt) => opt.value === formData.productType)}
                     onChange={(val) => { updateField('productType', val); setErrors((prev) => ({ ...prev, productType: '' })); }}
@@ -746,7 +746,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
           {/* Settings Divider */}
           <div>
-            <div className={`mb-4 rounded-2xl border border-white/5 bg-[#909294]/10 p-3 sm:p-4 xl:mb-3 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            <div className={`mb-4 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 xl:mb-3 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               <VoiceSelector
                 value={formData.voice}
                 onChange={(next) => { updateField('voice', next); setErrors((prev) => ({ ...prev, voice: '' })); }}
@@ -763,7 +763,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                     if (!formData.model || !formData.duration) return null;
                     return enough ? (
                       <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                        <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white/90">
+                        <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
                           ~{est} credits
                         </span>
                       </ShadcnTooltip>
@@ -776,7 +776,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   <button
                     onClick={onBack}
                     disabled={submitting}
-                    className="rounded-sm border border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
+                    className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
                   >
                     Back
                   </button>
@@ -852,7 +852,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         setSubmitting(false);
                       }
                     }}
-                    className="rounded-sm bg-white px-4 py-1.5 text-13 font-medium text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
+                    className="rounded-sm bg-gray-900 text-white dark:bg-white px-4 py-1.5 text-13 font-medium dark:text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
                   >
                     {submitting ? 'Generating...' : 'Next'}
                   </button>

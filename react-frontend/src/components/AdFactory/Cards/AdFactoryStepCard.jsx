@@ -95,6 +95,12 @@ const AdFactoryStepCard = ({ data, dragging }) => {
   };
   const nodeState = getNodeState();
 
+  // Card surface — light default, dark gradient gated behind `dark:`.
+  // Disabled cards get a slightly greyer fill in both themes.
+  const bgClass = !isEnabled
+    ? 'bg-[linear-gradient(135deg,rgba(238,238,240,0.9),rgba(226,226,230,0.95))] dark:bg-[linear-gradient(135deg,rgba(45,45,45,0.8),rgba(30,30,30,0.9))]'
+    : 'bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(247,248,250,0.95))] dark:bg-[linear-gradient(135deg,rgba(48,48,48,0.3),rgba(40,40,40,0.5))]';
+
   const handleClick = (e) => {
     e.stopPropagation();
     if (isEnabled && onNodeClick) {
@@ -127,7 +133,7 @@ const AdFactoryStepCard = ({ data, dragging }) => {
   return (
     <div
       id={`tour_${id}`}
-      className={`group relative w-80 rounded-2xl border backdrop-blur-3xl transition-all duration-200 select-none ${
+      className={`group relative w-80 rounded-2xl border ${bgClass} shadow-sm backdrop-blur-3xl transition-all duration-200 select-none dark:shadow-none ${
         dragging
           ? 'z-50 border-blue-500 shadow-blue-500/30'
           : !isEnabled
@@ -137,11 +143,6 @@ const AdFactoryStepCard = ({ data, dragging }) => {
               : `${nodeState.borderColor} cursor-pointer hover:shadow-green-500/20`
       }`}
       onClick={handleClick}
-      style={{
-        background: !isEnabled
-          ? 'linear-gradient(135deg, rgba(45, 45, 45, 0.8), rgba(30, 30, 30, 0.9))'
-          : 'linear-gradient(135deg, rgba(48, 48, 48, 0.3), rgba(40, 40, 40, 0.5))',
-      }}
     >
       {/* Handles */}
       {handle?.target && (
@@ -165,7 +166,7 @@ const AdFactoryStepCard = ({ data, dragging }) => {
 
       {/* Locked Overlay */}
       {!isEnabled && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-gray-900/40 backdrop-blur-[1px]">
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/40 backdrop-blur-[1px] dark:bg-gray-900/40">
           <div className="text-center">
             <div className="mb-2 text-gray-400">
               <svg className="mx-auto h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
@@ -176,7 +177,7 @@ const AdFactoryStepCard = ({ data, dragging }) => {
                 />
               </svg>
             </div>
-            <p className="text-sm text-gray-300">Complete previous steps</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Complete previous steps</p>
           </div>
         </div>
       )}
@@ -188,14 +189,14 @@ const AdFactoryStepCard = ({ data, dragging }) => {
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <img src={icon} className="size-[22px]" />
-            <div className={`text-[18px] font-semibold text-white`}>{title}</div>
+            <div className={`text-[18px] font-semibold text-gray-900 dark:text-white`}>{title}</div>
             {beta && (
               <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-10 font-bold uppercase tracking-wider text-amber-300">
                 Beta
               </span>
             )}
             <ShadcnTooltip label={infoMessage} side="top" className="max-w-[350px] text-sm">
-              <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-white" />
+              <Info className="h-4 w-4 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
             </ShadcnTooltip>
           </div>
 
@@ -207,18 +208,18 @@ const AdFactoryStepCard = ({ data, dragging }) => {
             )}
           </div>
         </div>
-        <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r from-white to-white/50 opacity-20"></div>
+        <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r from-black/30 to-black/10 opacity-40 dark:from-white dark:to-white/50 dark:opacity-20"></div>
       </div>
 
       <div
         className={`footer relative z-0 flex flex-col px-5 py-4 pt-4 ${!isEnabled ? 'invisible' : ''}`}
       >
         {/* Node Content */}
-        {subtitle && <div className={`text-base text-[#AFAFAF]`}>{subtitle}</div>}
+        {subtitle && <div className={`text-base text-gray-500 dark:text-[#AFAFAF]`}>{subtitle}</div>}
 
         {/* Progress Bar */}
         {(id === 'image-generation' || id === 'video-generation' || id === 'text-generation') && (
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#424242]">
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-[#424242]">
             <div
               className="relative h-full overflow-hidden rounded-full transition-all duration-500 ease-out"
               style={{

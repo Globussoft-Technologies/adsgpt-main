@@ -17,24 +17,31 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 
-const GoogleDropdown = ({ label, options = [], value, onChange, disabled = false }) => {
+const GoogleDropdown = ({ label, options = [], value, onChange, disabled = false, loading = false }) => {
   const selected = options.find((o) => o.value === value);
 
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Select value={value} onValueChange={onChange} disabled={disabled || loading}>
       <SelectTrigger
-        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-[#383838]/50 px-4! py-2.5 text-base text-white shadow-none backdrop-blur-md transition duration-200 ease-in outline-none hover:bg-slate-100/10 md:text-[11px] 2xl:h-12.25! 2xl:py-4.5 dark:border-none dark:text-[#AFAFAF] ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-        disabled={disabled}
+        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-gray-100 px-4! py-2.5 text-base text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none hover:bg-black/5 md:text-[11px] 2xl:h-12.25! 2xl:py-4.5 dark:bg-[#383838]/50 dark:border-none dark:text-[#AFAFAF] dark:hover:bg-slate-100/10 ${disabled || loading ? 'cursor-not-allowed opacity-50' : ''}`}
+        disabled={disabled || loading}
       >
-        <span className="text-sm font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
-          {selected?.label || label}
-        </span>
+        {loading ? (
+          <span className="flex items-center gap-2 text-sm font-light dark:text-[#afafaf]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading...
+          </span>
+        ) : (
+          <span className="text-sm font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+            {selected?.label || label}
+          </span>
+        )}
       </SelectTrigger>
 
       <SelectContent className="backdrop-blur-100 z-9999 min-w-[400px] border dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
         <div className="flex flex-col 2xl:gap-1">
           {options.length === 0 ? (
-            <div className="m-3 h-8 w-full text-center text-sm text-gray-300">No options found</div>
+            <div className="m-3 h-8 w-full text-center text-sm text-gray-500 dark:text-gray-300">No options found</div>
           ) : (
             options.map((option) => {
               const isSelected = value === option.value;
@@ -46,7 +53,7 @@ const GoogleDropdown = ({ label, options = [], value, onChange, disabled = false
                 >
                   <div className="flex w-full items-center py-1">
                     <div className="flex flex-col">
-                      <span className={`text-base font-semibold group-hover:text-white ${isSelected ? 'text-white' : 'dark:text-inherit'}`}>
+                      <span className={`text-base font-semibold group-hover:text-white ${isSelected ? 'text-gray-900 dark:text-white' : 'dark:text-inherit'}`}>
                         {option.label}
                       </span>
                       {option.sub && (
@@ -71,9 +78,9 @@ const GoogleDropdown = ({ label, options = [], value, onChange, disabled = false
 
 const SectionContainer = ({ children, title, subtitle }) => (
   <div className="relative w-full">
-    <div className="pointer-events-none absolute -inset-px rounded-2xl border border-white/5 opacity-50" />
+    <div className="pointer-events-none absolute -inset-px rounded-2xl border border-black/10 opacity-50 dark:border-white/5" />
     <div className="mb-6">
-      <h2 className="text-lg font-semibold text-white 2xl:text-xl">{title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">{title}</h2>
       {subtitle && <p className="mt-0.5 text-xs text-gray-400 2xl:mt-1 2xl:text-sm">{subtitle}</p>}
     </div>
     {children}
@@ -90,10 +97,14 @@ const GoogleAccount = ({ onBack }) => {
   const [selectedCampaign, setSelectedCampaign] = useState('');
   const [selectedAdGroup, setSelectedAdGroup] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [loadingAdGroups, setLoadingAdGroups] = useState(false);
 
   useEffect(() => {
     if (googleUser?._id) {
-      dispatch(fetchGoogleAdAccounts(googleUser._id));
+      setLoadingAccounts(true);
+      dispatch(fetchGoogleAdAccounts(googleUser._id)).finally(() => setLoadingAccounts(false));
     }
   }, [dispatch, googleUser]);
 
@@ -120,14 +131,19 @@ const GoogleAccount = ({ onBack }) => {
     setSelectedAccount(accountId);
     setSelectedCampaign('');
     setSelectedAdGroup('');
-    if (accountId) dispatch(fetchGoogleCampaigns({ adAccountId: accountId }));
+    if (accountId) {
+      setLoadingCampaigns(true);
+      dispatch(fetchGoogleCampaigns({ adAccountId: accountId })).finally(() => setLoadingCampaigns(false));
+    }
   };
 
   const handleCampaignChange = (campaignId) => {
     setSelectedCampaign(campaignId);
     setSelectedAdGroup('');
-    if (campaignId && selectedAccount)
-      dispatch(fetchGoogleAdGroups({ adAccountId: selectedAccount, campaignId }));
+    if (campaignId && selectedAccount) {
+      setLoadingAdGroups(true);
+      dispatch(fetchGoogleAdGroups({ adAccountId: selectedAccount, campaignId })).finally(() => setLoadingAdGroups(false));
+    }
   };
 
   const { postnodecreatives: allCreatives } = useSelector((state) => state.adFactoryNew);
@@ -151,6 +167,8 @@ const GoogleAccount = ({ onBack }) => {
           headline: c.headline,
           description: c.message || c.description || '',
           finalUrl: c.linkUrl,
+          imageUrl: c.imageUrl || '',
+          callToAction: c.callToAction || '',
         })),
       };
       await dispatch(launchGoogleAd(payload)).unwrap();
@@ -167,7 +185,7 @@ const GoogleAccount = ({ onBack }) => {
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+          className="mb-4 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-black dark:hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to platforms
@@ -181,7 +199,7 @@ const GoogleAccount = ({ onBack }) => {
         >
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="flex flex-col gap-2">
-              <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+              <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                 Select Ad Account *
               </label>
               <GoogleDropdown
@@ -189,11 +207,12 @@ const GoogleAccount = ({ onBack }) => {
                 options={accountOptions}
                 value={selectedAccount}
                 onChange={handleAccountChange}
+                loading={loadingAccounts}
               />
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+              <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                 Select Campaign *
               </label>
               <GoogleDropdown
@@ -202,11 +221,12 @@ const GoogleAccount = ({ onBack }) => {
                 value={selectedCampaign}
                 onChange={handleCampaignChange}
                 disabled={!selectedAccount}
+                loading={loadingCampaigns}
               />
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+              <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                 Select Ad Group *
               </label>
               <GoogleDropdown
@@ -215,6 +235,7 @@ const GoogleAccount = ({ onBack }) => {
                 value={selectedAdGroup}
                 onChange={setSelectedAdGroup}
                 disabled={!selectedCampaign}
+                loading={loadingAdGroups}
               />
             </div>
           </div>
@@ -230,7 +251,7 @@ const GoogleAccount = ({ onBack }) => {
           disabled={!canLaunch || isLoading}
           className={`flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition 2xl:px-12 2xl:text-base ${
             canLaunch && !isLoading
-              ? 'bg-white text-black hover:opacity-90'
+              ? 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
               : 'cursor-not-allowed bg-gray-400 text-gray-700'
           }`}
         >

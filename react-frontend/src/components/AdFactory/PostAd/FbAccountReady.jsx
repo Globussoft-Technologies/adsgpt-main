@@ -69,7 +69,7 @@ const FbCustomDropdown = ({
       disabled={disabled}
     >
       <SelectTrigger
-        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-[#383838]/50 px-4! py-2.5 text-base text-white shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-[#AFAFAF] hover:bg-slate-100/10 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:text-[#AFAFAF] ${
+        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-gray-100 dark:bg-[#383838]/50 px-4! py-2.5 text-base text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-[#AFAFAF] hover:bg-black/5 dark:hover:bg-slate-100/10 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:text-[#AFAFAF] ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
         disabled={disabled}
@@ -82,16 +82,16 @@ const FbCustomDropdown = ({
               className="h-6 w-6 rounded-full object-cover"
             />
           )}
-          <span className="text-sm font-light 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+          <span className="text-sm font-light text-gray-900 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
             {selectedValue?.name || label}
           </span>
         </div>
       </SelectTrigger>
 
-      <SelectContent className="backdrop-blur-100 z-9999 min-w-[300px] border dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent className="backdrop-blur-100 z-9999 min-w-[300px] border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
         <div className="fb_account_ready flex flex-col 2xl:gap-1">
           {options?.length === 0 ? (
-            <div className="bg-black-500 2xl:text-15 m-3 h-8 w-full text-center text-sm text-gray-300">
+            <div className="bg-black-500 2xl:text-15 m-3 h-8 w-full text-center text-sm text-gray-500 dark:text-gray-300">
               No options found
             </div>
           ) : (
@@ -102,8 +102,8 @@ const FbCustomDropdown = ({
                 <SelectItem
                   key={option.id}
                   value={option.id}
-                  className={`group cursor-pointer pr-4! text-base hover:bg-[#DFDFDF] dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
-                    isSelected ? 'dark:bg-[#0D0D0D]/50' : 'bg-transparent'
+                  className={`group cursor-pointer pr-4! text-base text-gray-900 hover:bg-[#DFDFDF] dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
+                    isSelected ? 'bg-black/5 dark:bg-[#0D0D0D]/50' : 'bg-transparent'
                   } focus:bg-transparent focus:text-inherit`}
                   disabled={disabled}
                 >
@@ -122,7 +122,7 @@ const FbCustomDropdown = ({
 
                       <div className="flex flex-col gap-0">
                         <span
-                          className={`text-base font-semibold group-hover:text-white ${isSelected ? 'text-white' : 'dark:text-inherit'}`}
+                          className={`text-base font-semibold group-hover:text-black dark:group-hover:text-white ${isSelected ? 'text-gray-900 dark:text-white' : 'dark:text-inherit'}`}
                         >
                           {option.name}
                         </span>
@@ -136,7 +136,7 @@ const FbCustomDropdown = ({
                               <span className={option.isActive ? 'text-blue-400' : 'text-gray-400'}>
                                 {option.isActive ? 'Active' : 'Inactive'}
                               </span>
-                              <span className="rounded bg-white/10 px-1.5 py-0.5 text-gray-300">
+                              <span className="rounded bg-black/10 px-1.5 py-0.5 text-gray-500 dark:bg-white/10 dark:text-gray-300">
                                 {option.currency}
                               </span>
                               <div className="text-red-400">Spent: {option.spent}</div>
@@ -159,7 +159,7 @@ const FbCustomDropdown = ({
                         }`}
                       >
                         {isSelected && (
-                          <div className="h-[6px] w-[6px] rounded-full dark:bg-white" />
+                          <div className="h-[6px] w-[6px] rounded-full bg-gray-900 dark:bg-white" />
                         )}
                       </span>
                     </div>
@@ -177,10 +177,10 @@ const FbCustomDropdown = ({
 const SectionContainer = ({ children, title, subtitle }) => (
   <div className="relative w-full">
     {/* Glow effect */}
-    <div className="pointer-events-none absolute -inset-px rounded-2xl border border-white/5 opacity-50" />
+    <div className="pointer-events-none absolute -inset-px rounded-2xl border border-black/10 opacity-50 dark:border-white/5" />
 
     <div className="mb-6">
-      <h2 className="text-lg font-semibold text-white 2xl:text-xl">{title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">{title}</h2>
       {subtitle && <p className="mt-0.5 text-xs text-gray-400 2xl:mt-1 2xl:text-sm">{subtitle}</p>}
     </div>
     {children}
@@ -192,8 +192,8 @@ const TabButton = ({ isActive, onClick, children }) => (
     onClick={onClick}
     className={`flex-1 rounded-md py-2.5 text-base font-medium transition-all ${
       isActive
-        ? 'bg-[#383838]/80 text-white shadow-sm'
-        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+        ? 'bg-gray-100 text-gray-900 shadow-sm dark:bg-[#383838]/80 dark:text-white'
+        : 'text-gray-400 hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'
     }`}
   >
     {children}
@@ -212,16 +212,16 @@ const InputField = ({
 }) => (
   <div className="flex flex-col gap-2">
     {label && (
-      <label className="text-[18px] text-[#AFAFAF]">
+      <label className="text-[18px] text-gray-500 dark:text-[#AFAFAF]">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
     )}
     <div
-      className={`rounded-20 w-full bg-[#383838]/50 p-px backdrop-blur-md ${multiline ? '' : 'rounded-full'}`}
+      className={`rounded-20 w-full bg-gray-100 dark:bg-[#383838]/50 p-px backdrop-blur-md ${multiline ? '' : 'rounded-full'}`}
     >
       {multiline ? (
         <textarea
-          className="w-full resize-none border border-white/10 bg-transparent px-5 py-3 text-base text-white outline-none placeholder:text-[#AFAFAF]"
+          className="w-full resize-none border border-black/10 dark:border-white/10 bg-transparent px-5 py-3 text-base text-gray-900 dark:text-white outline-none placeholder:text-[#AFAFAF]"
           rows={rows}
           placeholder={placeholder}
           value={value}
@@ -231,7 +231,7 @@ const InputField = ({
         <div className="input-gradient-border">
           <input
             type={type}
-            className="h-[49px] w-full bg-transparent px-6 text-base text-white outline-none placeholder:text-[#AFAFAF]"
+            className="h-[49px] w-full bg-transparent px-6 text-base text-gray-900 dark:text-white outline-none placeholder:text-[#AFAFAF]"
             placeholder={placeholder}
             value={value}
             onChange={onChange}
@@ -779,7 +779,7 @@ const FbAccountReady = ({ onBack }) => {
                 <button
                   type="button"
                   onClick={onBack}
-                  className="mb-4 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+                  className="mb-4 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-black dark:hover:text-white"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Back to platforms
@@ -794,7 +794,7 @@ const FbAccountReady = ({ onBack }) => {
                   <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
                     {/* Ad Account */}
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Select Your Ad Account *
                       </label>
 
@@ -837,7 +837,7 @@ const FbAccountReady = ({ onBack }) => {
 
                     {/* Facebook Page */}
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Select Your Facebook Page *
                       </label>
 
@@ -875,7 +875,7 @@ const FbAccountReady = ({ onBack }) => {
                 <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
                   {/* Campaign */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                    <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                       Choose Campaign *
                     </label>
 
@@ -923,7 +923,7 @@ const FbAccountReady = ({ onBack }) => {
 
                   {/* Ad Set */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                    <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                       Choose Ad Set *
                     </label>
 
@@ -977,7 +977,7 @@ const FbAccountReady = ({ onBack }) => {
                 {isLeadsCampaign && LEADS_POSTING_ENABLED && (
                   <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+                      <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
                         Choose Lead Form *
                       </label>
                       <InputCommonDropdown
@@ -1000,7 +1000,7 @@ const FbAccountReady = ({ onBack }) => {
                         }
                       />
                       {!values.selectedLeadForm && (
-                        <p className="text-xs text-[#AFAFAF]">
+                        <p className="text-xs text-gray-500 dark:text-[#AFAFAF]">
                           Required — Leads ads attach an Instant Form to the
                           creative on Meta.
                         </p>
@@ -1020,7 +1020,7 @@ const FbAccountReady = ({ onBack }) => {
                   disabled={!canLaunch || isloading}
                   className={`flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition 2xl:px-12 2xl:text-base ${
                     !isloading && canLaunch
-                      ? 'bg-white text-black hover:opacity-90'
+                      ? 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
                       : 'cursor-not-allowed bg-gray-400 text-gray-700'
                   }`}
                 >

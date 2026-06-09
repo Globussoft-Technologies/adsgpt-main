@@ -34,6 +34,15 @@ function dayOfWeekNumberToName(n) {
   return Number.isInteger(idx) ? DAY_OF_WEEK_NAMES[idx] : null;
 }
 
+// Coerce the form's `target.adSetId` (which may be an array, a single string
+// from a legacy job, or null) into the ordered string[] the backend wants.
+// Backend rotates through the array when one ad set hits the 50-ad limit.
+function toAdSetIdArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string' && value) return [value];
+  return [];
+}
+
 // Builds the POST /jobs request body from the form's values.
 function buildJobPayload(adsgptCampaignId, config) {
   if (!config) return null;
@@ -71,7 +80,8 @@ function buildJobPayload(adsgptCampaignId, config) {
   // keep the payload tidy.
   const meta = {};
   if (target.adAccountId) meta.adAccountId = target.adAccountId;
-  if (target.adSetId) meta.adSetId = target.adSetId;
+  const adSetIds = toAdSetIdArray(target.adSetId);
+  if (adSetIds.length > 0) meta.adSetId = adSetIds;
   if (target.pageId) meta.pageId = target.pageId;
   if (target.campaignId) meta.campaignId = target.campaignId;
   if (target.leadFormId) meta.leadFormId = target.leadFormId;
@@ -128,7 +138,8 @@ function buildJobUpdatePayload(config) {
   // Mirror buildJobPayload — append every meta field that has a value.
   const meta = {};
   if (target.adAccountId) meta.adAccountId = target.adAccountId;
-  if (target.adSetId) meta.adSetId = target.adSetId;
+  const adSetIds = toAdSetIdArray(target.adSetId);
+  if (adSetIds.length > 0) meta.adSetId = adSetIds;
   if (target.pageId) meta.pageId = target.pageId;
   if (target.campaignId) meta.campaignId = target.campaignId;
   if (target.leadFormId) meta.leadFormId = target.leadFormId;
@@ -234,7 +245,10 @@ function mapJobToEntry(job, previous) {
         // cached. AutomationForm has a reactive lookup that fills this in
         // from campaignsDropdown once it loads.
         campaignObjective: previous?.config?.target?.campaignObjective || null,
-        adSetId: meta.adSetId || null,
+        // Backend now returns adSetId as an ordered array. Older jobs in the
+        // DB may still have a string — coerce both shapes into an array so
+        // the multi-select renders consistently in Edit mode.
+        adSetId: toAdSetIdArray(meta.adSetId),
         pageId: meta.pageId || null,
         leadFormId: meta.leadFormId || previous?.config?.target?.leadFormId || null,
       },
@@ -724,6 +738,83 @@ export const fetchCtaOptions = createAsyncThunk(
       return rejectWithValue({
         objective,
         message: err?.response?.data?.error || err?.message || 'Failed to load CTA options',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
+// fetchAutomationSummary — POST /ads-factory/autopilot/jobs/summary
+//
+// Returns the live summary numbers (next run, cycles scheduled, credits per
+// cycle, credits-cover, total/used credits) rendered above the Activate
+// button. We only call it once the form is valid enough to be Activate-able;
+// before that the SummarySection falls back to the local summarizeCycles
+// helper so the panel stays populated as the user fills the form out.
+//
+// Nothing is cached server-side — the spec says re-call on every change to
+// pairsPerCycle, model, frequency, startDate, or endDate. We debounce the
+// dispatch in AutomationForm so a fast typist doesn't fire a request per
+// keystroke.
+// ----------------------------------------------------------------------------
+function buildSummaryPayload(campaignId, config) {
+  if (!config) return null;
+  const { frequency = {}, pairsPerCycle = 1, imageModelProvider } = config;
+
+  const schedule = {
+    frequency: FREQUENCY_FORM_TO_API[frequency.preset] || 'daily',
+    timezone: frequency.timezone || 'UTC',
+  };
+  if (frequency.startDate) schedule.startDate = frequency.startDate;
+  if (frequency.endDate) schedule.endDate = frequency.endDate;
+  if (frequency.preset === 'custom') {
+    const custom = frequency.custom || {};
+    const repeatOnDays = Array.isArray(custom.daysOfWeek)
+      ? custom.daysOfWeek.map(dayOfWeekNumberToName).filter(Boolean)
+      : [];
+    schedule.customFrequency = {
+      repeatEvery: Math.max(1, Number(custom.interval) || 1),
+      repeatUnit: custom.unit === 'day' ? 'day' : 'week',
+      repeatOnDays,
+    };
+  }
+
+  const payload = {
+    campaignId,
+    schedule,
+    pairsPerCycle: Math.max(1, Number(pairsPerCycle) || 1),
+  };
+  if (imageModelProvider) payload.model = imageModelProvider;
+  return payload;
+}
+
+export const fetchAutomationSummary = createAsyncThunk(
+  'adFactoryAutomation/fetchSummary',
+  async ({ campaignId, config }, { rejectWithValue }) => {
+    if (!campaignId) {
+      return rejectWithValue({ message: 'campaignId is required' });
+    }
+    const payload = buildSummaryPayload(campaignId, config);
+    if (!payload) {
+      return rejectWithValue({ message: 'Invalid summary payload' });
+    }
+
+    try {
+      const res = await axios.post(`${AUTOPILOT_BASE}/jobs/summary`, payload, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = res?.data?.data || res?.data || {};
+      return { campaignId, data };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to fetch summary',
       });
     }
   }

@@ -213,7 +213,7 @@ const AutopilotPage = () => {
   if (!userId) {
     return (
       <FullCenter>
-        <p className="text-sm text-white/75 2xl:text-15">Sign in to access Autopilot.</p>
+        <p className="text-sm text-gray-500 dark:text-white/75 2xl:text-15">Sign in to access Autopilot.</p>
       </FullCenter>
     );
   }
@@ -222,10 +222,10 @@ const AutopilotPage = () => {
     return (
       <FullCenter>
         <div className="relative h-10 w-10">
-          <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+          <div className="absolute inset-0 rounded-full border-2 border-gray-200 dark:border-white/10" />
           <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#15DCFF]" />
         </div>
-        <p className="mt-3 text-sm text-white/75 2xl:text-15">Loading ad accounts…</p>
+        <p className="mt-3 text-sm text-gray-500 dark:text-white/75 2xl:text-15">Loading ad accounts…</p>
         <div className="mt-3">
           <ConnectFacebookButton label="Connect Facebook" />
         </div>
@@ -247,7 +247,7 @@ const AutopilotPage = () => {
   if (connectError) {
     return (
       <FullCenter>
-        <p className="text-sm text-red-400">Failed to load ad accounts: {connectError}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">Failed to load ad accounts: {connectError}</p>
         <div className="mt-3">
           <ConnectFacebookButton label="Connect Facebook" />
         </div>
@@ -273,12 +273,12 @@ const AutopilotPage = () => {
       <div className="relative z-50 shrink-0">
         <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6 2xl:py-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 2xl:h-11 2xl:w-11">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10 2xl:h-11 2xl:w-11">
             <Compass className="h-5 w-5 text-[#15DCFF] 2xl:h-5.5 2xl:w-5.5" />
           </div>
           <div>
-            <h1 className="text-[20px] font-bold text-white 2xl:text-[22px]">Autopilot</h1>
-            <p className="text-13 text-white/70 2xl:text-sm">
+            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white 2xl:text-[22px]">Autopilot</h1>
+            <p className="text-13 text-gray-500 dark:text-white/70 2xl:text-sm">
               Set budget. Set objective. Walk away.
             </p>
           </div>
@@ -293,18 +293,18 @@ const AutopilotPage = () => {
               flag, which surfaced "Live mode" even when the user had
               toggled autopilot off on their account — confusing. */}
           {autopilotStatus === 'live' ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-emerald-400 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-emerald-600 dark:border-emerald-500/20 dark:text-emerald-400 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
               Live mode
             </span>
           ) : autopilotStatus === 'dry-run' ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-amber-400 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-amber-600 dark:border-amber-500/20 dark:text-amber-400 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
               Dry-run
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-white/70 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-white/50" />
+            <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-100 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-gray-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/70 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/50" />
               Autopilot off
             </span>
           )}
@@ -320,7 +320,7 @@ const AutopilotPage = () => {
             type="button"
             onClick={() => setShowDisconnectModal(true)}
             disabled={disconnecting}
-            className="flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-400 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 2xl:px-3.5 2xl:py-2 2xl:text-13"
+            className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 dark:border-red-500/20 dark:text-red-400 2xl:px-3.5 2xl:py-2 2xl:text-13"
           >
             {disconnecting ? (
               <Loader2 className="h-3 w-3 animate-spin 2xl:h-3.5 2xl:w-3.5" />
@@ -334,7 +334,7 @@ const AutopilotPage = () => {
       </div>
 
       {/* ── tabs ──────────────────────────────────────────────────────────── */}
-      <div className="relative z-40 shrink-0 border-b border-white/8">
+      <div className="relative z-40 shrink-0 border-b border-gray-200 dark:border-white/8">
         <div className="w-full px-4 sm:px-5 lg:px-6">
           <div
             role="tablist"
@@ -350,8 +350,8 @@ const AutopilotPage = () => {
                 onClick={() => setActiveTab(id)}
                 className={`relative flex shrink-0 snap-start items-center gap-1.5 px-3 py-3 text-sm font-semibold transition-all duration-200 2xl:gap-2 2xl:px-4 2xl:py-3.5 2xl:text-15 ${
                   isActive
-                    ? 'text-white'
-                    : 'text-white/65 hover:text-white/85'
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/65 dark:hover:text-white/85'
                 }`}
               >
                 <TabIcon className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
@@ -361,7 +361,7 @@ const AutopilotPage = () => {
                 {isActive && (
                   <motion.div
                     layoutId="autopilotActiveTab"
-                    className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-white/60"
+                    className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-gray-900 dark:bg-white/60"
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.35 }}
                   />
                 )}
@@ -470,15 +470,15 @@ const AutopilotPage = () => {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-white/8 bg-[#161616] p-6 shadow-2xl"
+              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
-                <LogOut className="h-5 w-5 text-red-400" />
+                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-              <h2 className="mb-1 text-sm font-bold text-white">
+              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">
                 Disconnect Meta Account?
               </h2>
-              <p className="mb-6 text-xs text-[#BEBEBE]">
+              <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
                 Autopilot will stop running for this account and all per-account
                 settings will be hidden. You can reconnect any time from the
                 Ads Manager.
@@ -487,7 +487,7 @@ const AutopilotPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowDisconnectModal(false)}
-                  className="rounded-xl border border-white/8 bg-white/5 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/10"
+                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                 >
                   Cancel
                 </button>

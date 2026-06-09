@@ -82,7 +82,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
 
   if (!userId) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-10 text-center text-sm text-white/60">
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm text-gray-600 dark:border-white/15 dark:bg-white/2 dark:text-white/60">
         Sign in to browse your generated-media library.
       </div>
     );
@@ -91,18 +91,18 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
   return (
     <div className="flex flex-col gap-3">
       {error && (
-        <div className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">
+        <div className="rounded-xl border border-red-300 bg-red-100 px-3 py-2 text-xs text-red-600 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-300">
           {error}
         </div>
       )}
 
       {loading && items.length === 0 ? (
-        <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-10 text-sm text-white/60">
+        <div className="flex items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-sm text-gray-600 dark:border-white/15 dark:bg-white/2 dark:text-white/60">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : !loading && items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-10 text-center text-sm text-white/60">
-          <ImageIcon className="mx-auto mb-2 h-6 w-6 text-white/40" />
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm text-gray-600 dark:border-white/15 dark:bg-white/2 dark:text-white/60">
+          <ImageIcon className="mx-auto mb-2 h-6 w-6 text-gray-400 dark:text-white/40" />
           {type === 'all'
             ? 'No generated media yet. Create some from Ad Studio first.'
             : `No generated ${type}s yet. Create some from Ad Studio first.`}
@@ -127,7 +127,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
                 className={`group relative aspect-square overflow-hidden rounded-xl border transition-all ${
                   isSelected
                     ? 'border-[#15DCFF] ring-2 ring-[#15DCFF]/40'
-                    : 'border-white/10 hover:border-white/30'
+                    : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/30'
                 }`}
               >
                 {itemType === 'video' ? (
@@ -157,7 +157,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-xs text-white/55">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-white/55">
           <span>
             Page {page} of {totalPages} · {total} total
           </span>
@@ -166,7 +166,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
               type="button"
               disabled={!canPrev}
               onClick={goPrev}
-              className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 transition-all hover:border-white/25 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 transition-all hover:border-gray-300 disabled:opacity-40 dark:border-white/10 dark:hover:border-white/25"
             >
               <ChevronLeft className="h-3 w-3" /> Prev
             </button>
@@ -174,7 +174,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
               type="button"
               disabled={!canNext}
               onClick={goNext}
-              className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 transition-all hover:border-white/25 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 transition-all hover:border-gray-300 disabled:opacity-40 dark:border-white/10 dark:hover:border-white/25"
             >
               Next <ChevronRight className="h-3 w-3" />
             </button>

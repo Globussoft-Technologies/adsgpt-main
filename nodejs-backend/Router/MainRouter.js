@@ -47,6 +47,8 @@ const adminApiRoutes = require("./adminApi.route");
 const newsletterTestRoutes = require("./newsletterTestRoutes");
 const adsFactoryAutoPilotRoutes = require("./adsFactoryAuto/adsFactoryAutoPilotRoutes");
 const voiceSelectorRoutes = require("./voiceSelectorRoutes");
+const promptTemplateRoutes = require("./promptTemplate/promptTemplateRoutes");
+const creditsApiRoutes = require("./creditsApiRoutes");
 
 const app = express();
 app.use("/adcopy", authenticateJWT, adCopyRouter);
@@ -97,5 +99,7 @@ app.use("/admin", adminApiRoutes);
 app.use("/newsletter-test", newsletterTestRoutes);
 app.use("/voice-selector", authenticateJWT, voiceSelectorRoutes);
 app.use("/ads-factory/autopilot", adsFactoryAutoPilotRoutes);
+app.use("/prompt-templates", promptTemplateRoutes);
+app.use("/credits", creditsApiRoutes);
 
 module.exports = app;

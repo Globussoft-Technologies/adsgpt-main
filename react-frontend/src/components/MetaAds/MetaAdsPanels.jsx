@@ -82,17 +82,17 @@ export const AdCard = ({ ad }) => {
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#161616] transition-all hover:border-white/10"
+      className="w-full shrink-0 overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:border-gray-200 dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/10"
     >
       {/* ── collapsed row ── */}
       <div className="flex flex-1 gap-3 2xl:gap-4 p-3 2xl:p-4">
         {/* thumbnail */}
-        <div className="relative max-w-[100px] 2xl:max-w-[120px] flex-1 flex-shrink-0 overflow-hidden rounded-lg bg-[#1A1A1A]">
+        <div className="relative max-w-[100px] 2xl:max-w-[120px] flex-1 flex-shrink-0 overflow-hidden rounded-lg bg-gray-50 dark:bg-[#1A1A1A]">
           {creative?.thumbnail_url ? (
             <img src={creative.thumbnail_url} alt={name} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <ImageIcon className="h-5 w-5 text-[#444]" />
+              <ImageIcon className="h-5 w-5 text-gray-400 dark:text-[#444]" />
             </div>
           )}
           {isVideo && (
@@ -107,7 +107,7 @@ export const AdCard = ({ ad }) => {
         {/* main info */}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5 2xl:gap-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="line-clamp-1 text-xs 2xl:text-sm font-bold text-white">{name}</p>
+            <p className="line-clamp-1 text-xs 2xl:text-sm font-bold text-gray-900 dark:text-white">{name}</p>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <StatusBadge status={currentStatus} />
               <button
@@ -123,25 +123,25 @@ export const AdCard = ({ ad }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-1.5 2xl:gap-x-2 gap-y-1 2xl:flex-nowrap">
-            <span className="font-mono text-[10px] 2xl:text-xs text-[#BEBEBE]"> ID:{ad.id}</span>
+            <span className="font-mono text-[10px] 2xl:text-xs text-gray-500 dark:text-[#BEBEBE]"> ID:{ad.id}</span>
             {bid_type && (
-              <span className="text-[10px] 2xl:text-xs whitespace-nowrap text-[#BEBEBE]">
-                Bid Type : <span className="text-[#BEBEBE] text-[10px] 2xl:text-xs">{bid_type.replace(/_/g, ' ')}</span>
+              <span className="text-[10px] 2xl:text-xs whitespace-nowrap text-gray-500 dark:text-[#BEBEBE]">
+                Bid Type : <span className="text-gray-500 dark:text-[#BEBEBE] text-[10px] 2xl:text-xs">{bid_type.replace(/_/g, ' ')}</span>
               </span>
             )}
-            <span className="text-[10px] 2xl:text-xs whitespace-nowrap text-[#BEBEBE]">
+            <span className="text-[10px] 2xl:text-xs whitespace-nowrap text-gray-500 dark:text-[#BEBEBE]">
               {new Date(created_time).toLocaleDateString()}
             </span>
           </div>
 
           <div className="mt-2 flex flex-1 flex-col gap-0.5 rounded-lg">
             {creative?.title && (
-              <p className="line-clamp-1 text-[11px] 2xl:text-sm font-medium text-[#BEBEBE]">{creative.title}</p>
+              <p className="line-clamp-1 text-[11px] 2xl:text-sm font-medium text-gray-500 dark:text-[#BEBEBE]">{creative.title}</p>
             )}
 
             <div className="flex mb-2 flex-wrap items-center rounded-lg">
               {creative?.call_to_action_type && (
-                <span className="mt-1 rounded-md border border-white/20 py-1.5 px-2 2xl:p-2 text-[9px] 2xl:text-xs font-semibold whitespace-nowrap">
+                <span className="mt-1 rounded-md border border-gray-200 py-1.5 px-2 2xl:p-2 text-[9px] 2xl:text-xs font-semibold whitespace-nowrap dark:border-white/20">
                   CTA: <span className="">{creative.call_to_action_type.replace(/_/g, ' ')}</span>
                 </span>
               )}
@@ -188,28 +188,28 @@ export const AdCard = ({ ad }) => {
 
       {/* ── expanded detail ── */}
       {expanded && (
-        <div className="flex flex-col gap-3 border-t border-white/5 px-4 py-3">
+        <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 dark:border-white/5">
               {creative?.body && (
-                <div className="rounded-xl bg-white/[0.02] p-3">
-                  <p className="mb-0.5 2xl:mb-2 text-[10px] 2xl:text-xs font-semibold tracking-widest text-white uppercase">
+                <div className="rounded-xl bg-gray-100 p-3 dark:bg-white/[0.02]">
+                  <p className="mb-0.5 2xl:mb-2 text-[10px] 2xl:text-xs font-semibold tracking-widest text-gray-900 uppercase dark:text-white">
                     Ad Copy
                   </p>
-                  <p className="text-[10px] 2xl:text-xs leading-relaxed text-[#BEBEBE]">{creative.body}</p>
+                  <p className="text-[10px] 2xl:text-xs leading-relaxed text-gray-500 dark:text-[#BEBEBE]">{creative.body}</p>
                 </div>
               )}
 
               {bodyVariants.length > 1 && (
                 <div>
-                  <p className="mb-2 text-[10px] font-semibold tracking-widest text-white uppercase">
-                    Body Variants <span className="text-[#BEBEBE]">({bodyVariants.length})</span>
+                  <p className="mb-2 text-[10px] font-semibold tracking-widest text-gray-900 uppercase dark:text-white">
+                    Body Variants <span className="text-gray-500 dark:text-[#BEBEBE]">({bodyVariants.length})</span>
                   </p>
                   <div className="flex flex-col gap-1.5">
                     {bodyVariants.map((b, i) => (
-                      <div key={i} className="flex gap-2 rounded-xl bg-white/[0.02] px-3 py-2">
+                      <div key={i} className="flex gap-2 rounded-xl bg-gray-100 px-3 py-2 dark:bg-white/[0.02]">
                         <span className="mt-0.5 flex-shrink-0 text-[10px] font-bold text-[#6b72f8]">
                           {i + 1}
                         </span>
-                        <p className="text-xs leading-relaxed text-[#BEBEBE]">{b.text}</p>
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-[#BEBEBE]">{b.text}</p>
                       </div>
                     ))}
                   </div>
@@ -218,15 +218,15 @@ export const AdCard = ({ ad }) => {
 
               {titleVariants.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[10px] font-semibold tracking-widest text-[#BEBEBE] uppercase">
+                  <p className="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase dark:text-[#BEBEBE]">
                     Headline Variants / Titles{' '}
-                    <span className="text-[#BEBEBE]">({titleVariants.length})</span>
+                    <span className="text-gray-500 dark:text-[#BEBEBE]">({titleVariants.length})</span>
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {titleVariants.map((t, i) => (
                       <span
                         key={i}
-                        className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70"
+                        className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[10px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white/70"
                       >
                         {t.text}
                       </span>
@@ -284,20 +284,20 @@ export const AdSetRow = ({ adSet }) => {
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#1c1c1c]">
+    <div className="rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#1c1c1c]">
       <button
         onClick={toggle}
-        className={`flex w-full items-center gap-2 p-3 text-left hover:bg-white/[0.04] ${expanded ? 'bg-white/[0.04]' : ''}`}
+        className={`flex w-full items-center gap-2 p-3 text-left hover:bg-gray-100 dark:hover:bg-white/[0.04] ${expanded ? 'bg-gray-100 dark:bg-white/[0.04]' : ''}`}
       >
         <ChevronRight
-          className={`h-3.5 w-3.5 flex-shrink-0 text-[#BEBEBE] transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          className={`h-3.5 w-3.5 flex-shrink-0 text-gray-500 transition-transform duration-200 dark:text-[#BEBEBE] ${expanded ? 'rotate-90' : ''}`}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-xs 2xl:text-sm font-bold text-white">
+              <span className="truncate text-xs 2xl:text-sm font-bold text-gray-900 dark:text-white">
                 {adSet.name}{' '}
-                <span className="font-mono text-xs text-[#BEBEBE]"> ID:{adSet.id}</span>
+                <span className="font-mono text-xs text-gray-500 dark:text-[#BEBEBE]"> ID:{adSet.id}</span>
               </span>
               <StatusBadge status={currentStatus} />
               <button
@@ -312,7 +312,7 @@ export const AdSetRow = ({ adSet }) => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] 2xl:text-xs text-[#BEBEBE]">
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] 2xl:text-xs text-gray-500 dark:text-[#BEBEBE]">
             {adSet.daily_budget && (
               <span className="flex items-center gap-1">
                 <DollarSign className="h-3 w-3" />
@@ -353,7 +353,7 @@ export const AdSetRow = ({ adSet }) => {
         <div>
           {loading && <Spinner />}
           {!loading && ads.length === 0 && <EmptyState message="No ads in this ad set" />}
-          <div className="max-h-[400px] overflow-y-auto border-t border-white/4 p-3">
+          <div className="max-h-[400px] overflow-y-auto border-t border-gray-200 p-3 dark:border-white/4">
             {/* mobile: single column */}
             <div className="flex flex-col gap-2 2xl:hidden">
               {ads.map((ad) => <AdCard key={ad.id} ad={ad} />)}
@@ -422,7 +422,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
     <motion.div
       // initial={{ opacity: 0, y: 8 }}
       // animate={{ opacity: 1, y: 0 }}
-      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-white/[0.12] bg-[#161616] hover:border-white/20'}`}
+      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/[0.12] dark:bg-[#161616] dark:hover:border-white/20'}`}
     >
       {isActive && (
         <div className="absolute top-0 left-0 h-full w-0.5 bg-gradient-to-b from-[#15DCFF] to-[#6b72f8]" />
@@ -430,13 +430,13 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
       <div className="flex items-center gap-3 px-4 py-3.5">
         <button onClick={toggle} className="flex-shrink-0">
           <ChevronDown
-            className={`h-4 w-4 text-[#BEBEBE] transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`}
+            className={`h-4 w-4 text-gray-500 transition-transform duration-200 dark:text-[#BEBEBE] ${expanded ? '' : '-rotate-90'}`}
           />
         </button>
         <button onClick={toggle} className="flex min-w-0 flex-1 flex-col text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm 2xl:text-base font-semibold text-white">{campaign?.name}</span>
-            <span className="shrink-0 font-mono text-xs text-[#BEBEBE]/60"> ID:{campaign?.id}</span>
+            <span className="truncate text-sm 2xl:text-base font-semibold text-gray-900 dark:text-white">{campaign?.name}</span>
+            <span className="shrink-0 font-mono text-xs text-gray-400 dark:text-[#BEBEBE]/60"> ID:{campaign?.id}</span>
             <StatusBadge status={currentStatus} />
             <button
               onClick={handleToggleStatus}
@@ -448,7 +448,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
               />
             </button>
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] 2xl:text-xs text-[#BEBEBE]">
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] 2xl:text-xs text-gray-500 dark:text-[#BEBEBE]">
             <span className="flex items-center gap-1">
               <Target className="h-3 w-3" />
               {campaign?.objective}
@@ -472,7 +472,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
             isActive
               ? 'border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]'
-              : 'border-white/[0.06] bg-white/[0.02] text-[#BEBEBE] hover:border-white/10 hover:text-white'
+              : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white'
           }`}
         >
           <BarChart2 className="h-3 w-3" />
@@ -480,7 +480,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
         </button>
       </div>
       {expanded && (
-        <div className="flex flex-col gap-2 border-t border-white/10 p-4">
+        <div className="flex flex-col gap-2 border-t border-gray-200 p-4 dark:border-white/10">
           {loading && <Spinner />}
           {!loading && adSets.length === 0 && (
             <EmptyState message="No ad sets in this campaign" />
@@ -502,7 +502,7 @@ const ChangeChip = ({ change }) => {
   const up = n > 0;
   return (
     <span
-      className={`flex items-center gap-0.5 text-[9px] font-semibold ${up ? 'text-emerald-400' : 'text-red-400'}`}
+      className={`flex items-center gap-0.5 text-[9px] font-semibold ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
     >
       {up ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
       {Math.abs(n).toFixed(1)}%
@@ -526,8 +526,8 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
     return (
       <div className="flex w-full flex-col items-center justify-center px-4 py-12 text-center">
         <div className="flex flex-col items-center justify-center">
-          <p className="text-sm font-semibold text-white sm:text-base">No data for this period</p>
-          <p className="mt-2 max-w-[90%] text-xs leading-relaxed text-[#BEBEBE] sm:max-w-md sm:text-sm">
+          <p className="text-sm font-semibold text-gray-900 sm:text-base dark:text-white">No data for this period</p>
+          <p className="mt-2 max-w-[90%] text-xs leading-relaxed text-gray-500 sm:max-w-md sm:text-sm dark:text-[#BEBEBE]">
             There were no impressions, clicks, or spend recorded for the selected date range. Try a
             different date preset or account.
           </p>
@@ -580,19 +580,19 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
           {row.map(({ icon, label, value, change }) => (
             <div
               key={label}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/8 bg-[#161616] p-4 backdrop-blur-xl transition-all duration-300 hover:border-white/15 hover:bg-white/3 2xl:p-5"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-all duration-300 hover:border-gray-300 hover:bg-gray-50 2xl:p-5 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3"
             >
               {/* top row: icon left, label right */}
               <div className="flex items-start justify-between">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/5">
-                  {React.createElement(icon, { className: 'h-4 w-4 text-white/50' })}
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5">
+                  {React.createElement(icon, { className: 'h-4 w-4 text-gray-400 dark:text-white/50' })}
                 </div>
-                <p className="text-xs font-semibold tracking-[0.12em] uppercase text-white/35">{label}</p>
+                <p className="text-xs font-semibold tracking-[0.12em] uppercase text-gray-400 dark:text-white/35">{label}</p>
               </div>
 
               {/* bottom row: value left, change chip right */}
               <div className="mt-4 flex items-end justify-between">
-                <p className="text-xl font-bold leading-none text-white 2xl:text-2xl">{value}</p>
+                <p className="text-xl font-bold leading-none text-gray-900 2xl:text-2xl dark:text-white">{value}</p>
                 <ChangeChip change={change} />
               </div>
             </div>
@@ -604,15 +604,15 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
 
       {/* spend / clicks bar chart */}
-      <div className="flex flex-col rounded-2xl border border-white/10 bg-[#171717] p-5 shadow-none backdrop-blur-xl">
+      <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5">
-              <TrendingUp className="h-5 w-5 text-white/50" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
+              <TrendingUp className="h-5 w-5 text-gray-400 dark:text-white/50" />
             </div>
-            <p className="text-base 2xl:text-lg font-bold text-white">Performance over time</p>
+            <p className="text-base 2xl:text-lg font-bold text-gray-900 dark:text-white">Performance over time</p>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-white/6 bg-[#111]/60 p-1">
+          <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/6 dark:bg-[#111]/60">
             {[
               { v: 'spend', l: 'Spend' },
               { v: 'clicks', l: 'Clicks' },
@@ -620,7 +620,7 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
               <button
                 key={v}
                 onClick={() => setChartMetric(v)}
-                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'}`}
+                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-gray-200 text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70'}`}
               >
                 {l}
               </button>
@@ -667,12 +667,12 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
       <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4">
         {/* action pie */}
-        <div className="rounded-2xl border border-white/10 bg-[#171717] p-4 shadow-none backdrop-blur-xl">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5">
-              <Target className="h-5 w-5 text-white/50" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
+              <Target className="h-5 w-5 text-gray-400 dark:text-white/50" />
             </div>
-            <p className="text-base font-bold text-white">Key Actions</p>
+            <p className="text-base font-bold text-gray-900 dark:text-white">Key Actions</p>
           </div>
           {actionPieData.length > 0 ? (
             <div className="flex items-center gap-3">
@@ -715,8 +715,8 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
                       className="h-2 w-2 shrink-0 rounded-full"
                       style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
                     />
-                    <span className="text-xs whitespace-nowrap text-[#BEBEBE]">{item.name}</span>
-                    <span className="text-xs font-semibold text-white">
+                    <span className="text-xs whitespace-nowrap text-gray-500 dark:text-[#BEBEBE]">{item.name}</span>
+                    <span className="text-xs font-semibold text-gray-900 dark:text-white">
                       {item.value.toLocaleString()}
                     </span>
                   </div>
@@ -729,23 +729,23 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
         </div>
 
         {/* all actions table */}
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171717] shadow-none backdrop-blur-xl">
-          <div className="border-b border-white/4 px-4 py-3">
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+          <div className="border-b border-gray-200 px-4 py-3 dark:border-white/4">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5">
-                <Layers className="h-5 w-5 text-white/50" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
+                <Layers className="h-5 w-5 text-gray-400 dark:text-white/50" />
               </div>
-              <p className="text-base font-bold text-white">All Actions</p>
+              <p className="text-base font-bold text-gray-900 dark:text-white">All Actions</p>
             </div>
           </div>
           <div className="scrollbar-thin max-h-65 p-2 pb-3 overflow-y-auto">
             {sortedActions.map((a, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between border-b border-white/2 px-4 py-2 last:border-b-0 hover:bg-white/2"
+                className="flex items-center justify-between border-b border-gray-200 px-4 py-2 last:border-b-0 hover:bg-gray-100 dark:border-white/2 dark:hover:bg-white/2"
               >
-                <span className="truncate pr-4 text-sm text-[#BEBEBE] capitalize">{a.type}</span>
-                <span className="shrink-0 text-sm font-semibold text-white">
+                <span className="truncate pr-4 text-sm text-gray-500 capitalize dark:text-[#BEBEBE]">{a.type}</span>
+                <span className="shrink-0 text-sm font-semibold text-gray-900 dark:text-white">
                   {a.value.toLocaleString()}
                 </span>
               </div>
@@ -821,8 +821,8 @@ export const AuditTab = ({ adAccountId }) => {
             onClick={() => setFilter(f)}
             className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition-all ${
               filter === f
-                ? 'border-white/20 bg-white/10 text-white'
-                : 'border-white/6 bg-transparent text-[#BEBEBE] hover:text-[#BEBEBE]'
+                ? 'border-gray-300 bg-gray-200 text-gray-900 dark:border-white/20 dark:bg-white/10 dark:text-white'
+                : 'border-gray-200 bg-transparent text-gray-500 hover:text-gray-600 dark:border-white/6 dark:bg-transparent dark:text-[#BEBEBE] dark:hover:text-[#BEBEBE]'
             }`}
           >
             {f === 'all' ? `All (${findings.length})` : `${f} (${summary[f]})`}
@@ -845,7 +845,7 @@ export const AuditTab = ({ adAccountId }) => {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: (gi * 4 + fi) * 0.02 }}
-                  className="relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-white/8 bg-[#161616] p-4 pl-5 transition-all hover:border-white/15"
+                  className="relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 pl-5 transition-all hover:border-gray-300 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15"
                 >
                   {/* left accent bar */}
                   <div className="absolute top-0 left-0 bottom-0 w-0.5 rounded-l-2xl" style={{ background: `linear-gradient(to bottom, transparent 0%, ${cfg.barColor} 40%, ${cfg.barColor} 60%, transparent 100%)` }} />
@@ -858,20 +858,20 @@ export const AuditTab = ({ adAccountId }) => {
                         {cfg.label}
                       </span>
                     </div>
-                    <span className="rounded border border-white/8 bg-white/4 px-2 py-0.5 font-mono text-[11px] text-white/40">
+                    <span className="rounded border border-gray-200 bg-gray-100 px-2 py-0.5 font-mono text-[11px] text-gray-400 dark:border-white/8 dark:bg-white/4 dark:text-white/40">
                       {finding.rule_id}
                     </span>
                   </div>
 
                   {/* message */}
-                  <p className="flex-1 text-sm leading-relaxed text-white/80">{finding.message}</p>
+                  <p className="flex-1 text-sm leading-relaxed text-gray-600 dark:text-white/80">{finding.message}</p>
 
                   {/* entity footer */}
-                  <div className="flex items-center gap-1.5 border-t border-white/8 pt-3">
-                    <span className="rounded border border-white/8 bg-white/4 px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide text-white/40">
+                  <div className="flex items-center gap-1.5 border-t border-gray-200 pt-3 dark:border-white/8">
+                    <span className="rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide text-gray-400 dark:border-white/8 dark:bg-white/4 dark:text-white/40">
                       {ENTITY_LABELS[group.entity_type] ?? group.entity_type}
                     </span>
-                    <span className="truncate text-xs text-white/40">{group.entity_name}</span>
+                    <span className="truncate text-xs text-gray-400 dark:text-white/40">{group.entity_name}</span>
                   </div>
                 </motion.div>
               );

@@ -337,7 +337,7 @@ export default function VideoCard({
 
       <div className="relative" onMouseEnter={handleInfoEnter} onMouseLeave={handleInfoLeave}>
         <button
-          className={`rounded-full p-2 text-white backdrop-blur hover:bg-black/60 ${showInfo ? 'bg-black/60' : ''}`}
+          className={`rounded-full p-2 text-gray-500 backdrop-blur hover:bg-black/10 dark:text-white dark:hover:bg-black/60 ${showInfo ? 'bg-black/10 dark:bg-black/60' : ''}`}
         >
           <Info size={18} />
         </button>
@@ -345,7 +345,7 @@ export default function VideoCard({
         {showInfo && (
           <>
             <div className="absolute top-full right-0 h-2 w-full" />
-            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg bg-black/90 p-3 text-xs text-white shadow-xl">
+            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
               <p>
                 <span className="text-gray-400">Type:</span> {item?.inputs?.type || '-'}
               </p>
@@ -404,7 +404,7 @@ export default function VideoCard({
   );
 
   return (
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-[#1f1f1f]">
+    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
 
       {/* Selection Checkbox */}
@@ -422,7 +422,7 @@ export default function VideoCard({
             className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-2 transition-all ${
               isSelected
                 ? 'border-blue-600 bg-blue-600'
-                : 'border-white/40 bg-black/40 hover:border-white'
+                : 'border-gray-400 bg-white hover:border-gray-600 dark:border-white/40 dark:bg-black/40 dark:hover:border-white'
             }`}
           >
             {isSelected && (
@@ -548,7 +548,7 @@ export default function VideoCard({
         </div>
       ) : item?.status === 'completed' ? (
         <div ref={containerRef} className="relative h-full w-full bg-black">
-          {!videoLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-[#1a1a1a]" />}
+          {!videoLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
           <video
             ref={videoRef}
             src={`${S3_BASE_URL}${activeVideoUrl}`}
@@ -654,7 +654,8 @@ export default function VideoCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {item?.status === 'completed' && onOpenPostAdModal && (
+                {/* HIDE-MARK — MySpace → Post Ad nav (Megaphone) hidden. */}
+                {false && item?.status === 'completed' && onOpenPostAdModal && (
                   <button
                     title="Post as ad"
                     onClick={(e) => {
@@ -759,7 +760,7 @@ export default function VideoCard({
             <p className="mt-2 text-xs text-gray-400">An error occurred during video generation.</p>
           )}
           <button
-            className="absolute right-3 bottom-3 rounded-full p-2 text-white/70 backdrop-blur transition-colors hover:bg-white/10 hover:text-white"
+            className="absolute right-3 bottom-3 rounded-full p-2 text-gray-500 backdrop-blur transition-colors hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
             onClick={(e) => {
               e.stopPropagation();
               const type = item?.inputs?.type || 'broll';

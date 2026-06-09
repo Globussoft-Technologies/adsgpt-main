@@ -37,6 +37,12 @@ router.post(
   videoController.uploadVideo
 );
 router.post(
+  "/upload-voice",
+  authenticateJWT,
+  upload.single("voice"),
+  videoController.uploadVoice
+);
+router.post(
   "/generate-image-and-script",
   authenticateJWT,
   requireBasePlan,
@@ -122,6 +128,30 @@ router.patch(
   "/ai-ads/callback/video-result/:sessionId",
   verifySecretKey,
   videoController.updateAiAdsVideoResult
+);
+
+router.post(
+  "/generate-image-and-script-clone",
+  authenticateJWT,
+  requireBasePlan,
+  videoController.generateImageAndScriptClone
+);
+router.patch(
+  "/update-clone-script",
+  verifySecretKey,
+  videoController.updateImageAndScriptClone
+);
+router.post(
+  "/generate-clone-video/:id",
+  authenticateJWT,
+  requireBasePlan,
+  videoController.generateCloneVideo
+);
+router.post(
+  "/regenerate-script-clone",
+  authenticateJWT,
+  requireBasePlan,
+  videoController.regenerateScriptClone
 );
 
 module.exports = router;

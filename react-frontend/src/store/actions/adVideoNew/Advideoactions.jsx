@@ -16,6 +16,7 @@ import {
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { setSavedCount } from '@/store/reducers/adStudio/adVideoNewSlice';
+// import { trackEvent } from '@/apis/analytics/analyticsApi';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -71,6 +72,8 @@ export const generateVideoAction =
           image: imageUrl || (payload.inputs.image ? `${S3_BASE_URL}${payload.inputs.image}` : ''),
         },
       };
+
+      // trackEvent({ type: 'video_generation', gen_type: finalPayload?.inputs?.type ?? null, model: finalPayload?.inputs?.model ?? null });
 
       const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
         headers: {
@@ -206,6 +209,8 @@ export const generateVideoUGCAction =
           image: imageUrl,
         },
       };
+
+      // trackEvent({ type: 'video_generation', gen_type: finalPayload?.inputs?.type ?? 'ugc', model: finalPayload?.inputs?.model ?? null });
 
       const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
         headers: {
@@ -362,6 +367,7 @@ export const generateImageAndScript = (payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
+    // trackEvent({ type: 'video_generation', gen_type: payload?.inputs?.type ?? 'avatar', model: payload?.inputs?.model ?? null });
     const response = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-image-and-script`,
       payload,
@@ -383,6 +389,24 @@ export const generateImageAndScript = (payload) => async (dispatch) => {
     throw error;
   } finally {
     dispatch(setLoading(false));
+  }
+};
+
+export const regenerateCloneScript = (payload) => async (dispatch) => {
+  try {
+    const response = await axios.post(`${BACKEND_HOST}/adsgpt/video/regenerate-script-clone`, payload, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    const apiError = error.response?.data?.error || error.message;
+    const fullErrorMsg = apiError ? `Failed to regenerate script: ${apiError}` : 'Failed to regenerate script';
+    globalToast.error(fullErrorMsg);
+    dispatch(setError(fullErrorMsg));
+    throw error;
   }
 };
 
@@ -474,6 +498,8 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
   try {
     dispatch(setAiAdsSceneLoading(true));
     dispatch(setError(null));
+    const aiAdsModel = details?.formData?.model || getState()?.adVideoNew?.aiAdsSceneData?.inputs?.model || null;
+    trackEvent({ type: 'video_generation', gen_type: 'ai_ads', model: aiAdsModel });
 
     const { socket } = getState();
     const userId = socket?.userData?.user_id;
@@ -698,6 +724,70 @@ export const copyAiAdsSessionAction = (sessionId) => async (dispatch) => {
 // `overrides` is optional — pass { scenes: [{ segmentNumber, script: [...] }] }
 // when the user edited scripts in the Implementation Plan step. Node persists
 // these to DB and forwards them to Python in place of the originals.
+// ── Clone Yourself ────────────────────────────────────────────────────────────
+
+export const generateCloneImageAndScript = (payload) => async (dispatch) => {
+  try {
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+    const res = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/generate-image-and-script-clone`,
+      payload,
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    dispatch(setImageAndScript(res.data));
+    return res.data;
+  } catch (error) {
+    const msg = error.response?.data?.error || error.message || 'Clone generation failed';
+    dispatch(setError(msg));
+    globalToast.error(msg);
+    throw error;
+  } finally {
+    dispatch(setLoading(false));
+  }
+};
+
+export const generateCloneVideo = (id, payload) => async (dispatch) => {
+  try {
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+    const res = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/generate-clone-video/${id}`,
+      payload || {},
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    globalToast.success('Clone video generation started!');
+    return res.data;
+  } catch (error) {
+    const msg = error.response?.data?.error || error.message || 'Failed to generate clone video';
+    globalToast.error(msg);
+    throw error;
+  } finally {
+    dispatch(setLoading(false));
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const uploadVoice = (file, userId) => async () => {
+  try {
+    const formData = new FormData();
+    formData.append('userId', userId);
+    formData.append('voice', file);
+    const res = await axios.post(`${BACKEND_HOST}/adsgpt/video/upload-voice`, formData, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data?.data || null;
+  } catch (error) {
+    const msg = error.response?.data?.message || 'Voice upload failed';
+    globalToast.error(msg);
+    throw error;
+  }
+};
+
 export const generateAiAdsVideoAction = (sessionId, overrides) => async () => {
   try {
     const response = await axios.post(

@@ -59,6 +59,8 @@ class GoogleAuthController {
       "https://www.googleapis.com/auth/adwords",
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube",
     ].join(" ");
 
     const authUrl =
@@ -137,6 +139,25 @@ class GoogleAuthController {
           tokenExpiresAt,
           userId,
         });
+      }
+
+      // Try to fetch and store accessible customer IDs at login time so
+      // getAdAccountsList can use them with login-customer-id (needed for Basic access).
+      try {
+        const customerResp = await axios.get("https://googleads.googleapis.com/v23/customers:listAccessibleCustomers", {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+          },
+        });
+        const resourceNames = customerResp.data?.resourceNames || [];
+        const ids = resourceNames.map((rn) => rn.replace("customers/", "").replace(/-/g, ""));
+        if (ids.length) {
+          user.customerIds = ids;
+          await user.save();
+        }
+      } catch (_) {
+        // Non-fatal — customerIds will remain empty and getAdAccountsList handles it
       }
 
       // Bust per-user Google caches so the next read hits Google fresh

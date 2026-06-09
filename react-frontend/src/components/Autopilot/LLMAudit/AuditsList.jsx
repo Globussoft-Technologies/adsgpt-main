@@ -39,8 +39,8 @@ function EmptyList({ onRun, running }) {
         <Sparkles className="h-7 w-7 text-[#15DCFF]" />
       </div>
       <div className="max-w-md">
-        <h2 className="text-lg font-bold text-white">No audits yet</h2>
-        <p className="mt-2 text-sm leading-relaxed text-white/50">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">No audits yet</h2>
+        <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-white/50">
           Run your first AI audit on this account. Our model analyzes the last 14 days of activity
           and suggests specific, executable fixes.
         </p>
@@ -49,7 +49,7 @@ function EmptyList({ onRun, running }) {
         {[
           {
             icon: ShieldAlert,
-            iconFg: 'text-red-400',
+            iconFg: 'text-red-600 dark:text-red-400',
             iconBg: 'bg-red-500/10',
             iconRing: 'border-red-500/25',
             title: 'Detect waste',
@@ -57,7 +57,7 @@ function EmptyList({ onRun, running }) {
           },
           {
             icon: AlertTriangle,
-            iconFg: 'text-amber-400',
+            iconFg: 'text-amber-600 dark:text-amber-400',
             iconBg: 'bg-amber-500/10',
             iconRing: 'border-amber-500/25',
             title: 'Catch regressions',
@@ -74,15 +74,15 @@ function EmptyList({ onRun, running }) {
         ].map(({ icon: Icon, iconFg, iconBg, iconRing, title, desc }) => (
           <div
             key={title}
-            className="flex flex-col rounded-2xl border border-white/12 bg-white/4 p-4 text-left transition-all hover:border-white/20 hover:bg-white/6 2xl:p-5"
+            className="flex flex-col rounded-2xl border border-gray-200 bg-gray-100 p-4 text-left transition-all hover:border-gray-300 hover:bg-gray-50 2xl:p-5 dark:border-white/12 dark:bg-white/4 dark:hover:border-white/20 dark:hover:bg-white/6"
           >
             <div
               className={`flex h-9 w-9 items-center justify-center rounded-xl border ${iconRing} ${iconBg} 2xl:h-10 2xl:w-10`}
             >
               <Icon className={`h-4 w-4 2xl:h-4.5 2xl:w-4.5 ${iconFg}`} />
             </div>
-            <p className="mt-2.5 text-sm font-bold text-white 2xl:text-15">{title}</p>
-            <p className="mt-0.75 text-xs text-white/70 2xl:text-13">{desc}</p>
+            <p className="mt-2.5 text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">{title}</p>
+            <p className="mt-0.75 text-xs text-gray-600 2xl:text-13 dark:text-white/70">{desc}</p>
           </div>
         ))}
       </div>
@@ -94,7 +94,7 @@ function EmptyList({ onRun, running }) {
         {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
         {running ? 'Running…' : 'Run AI Audit'}
       </button>
-      <p className="text-xs text-white/70 sm:text-white/70">Takes 5–20 seconds · uses live Meta data</p>
+      <p className="text-xs text-gray-600 dark:text-white/70 sm:text-gray-600 dark:sm:text-white/70">Takes 5–20 seconds · uses live Meta data</p>
     </div>
   );
 }
@@ -108,39 +108,39 @@ function AuditRow({ audit, onSelect }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={() => onSelect(audit)}
-      className="group flex w-full items-center gap-4 rounded-2xl border border-white/12 bg-[#14181D] p-4 text-left transition-all hover:border-white/15 hover:bg-white/[0.02]"
+      className="group flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 text-left transition-all hover:border-gray-300 hover:bg-gray-50 dark:border-white/12 dark:bg-[#14181D] dark:hover:border-white/15 dark:hover:bg-white/[0.02]"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10">
         <Sparkles className="h-5 w-5 text-[#15DCFF]" />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-bold text-white">
+          <span className="text-sm font-bold text-gray-900 dark:text-white">
             Audit · {rel(audit.createdAt)}
           </span>
-          <span className="font-mono text-[10px] text-white/40">
+          <span className="font-mono text-[10px] text-gray-400 dark:text-white/40">
             {audit.auditId?.slice(0, 8)}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/50">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-white/50">
           <span className="flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3 text-red-400" />
-            <span className="font-semibold text-white">{summary.critical || 0}</span> critical
+            <ShieldAlert className="h-3 w-3 text-red-600 dark:text-red-400" />
+            <span className="font-semibold text-gray-900 dark:text-white">{summary.critical || 0}</span> critical
           </span>
           <span className="flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3 text-amber-400" />
-            <span className="font-semibold text-white">{summary.warning || 0}</span> warnings
+            <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+            <span className="font-semibold text-gray-900 dark:text-white">{summary.warning || 0}</span> warnings
           </span>
           <span className="flex items-center gap-1">
             <Lightbulb className="h-3 w-3 text-[#15DCFF]" />
-            <span className="font-semibold text-white">{summary.opportunity || 0}</span> opportunities
+            <span className="font-semibold text-gray-900 dark:text-white">{summary.opportunity || 0}</span> opportunities
           </span>
-          <span className="h-3 w-px bg-white/10" />
+          <span className="h-3 w-px bg-gray-200 dark:bg-white/10" />
           <span className="flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-            <span className="font-semibold text-white">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+            <span className="font-semibold text-gray-900 dark:text-white">
               {statusBreakdown.applied || 0}/{total}
             </span>{' '}
             applied ({appliedFrac}%)
@@ -148,7 +148,7 @@ function AuditRow({ audit, onSelect }) {
         </div>
       </div>
 
-      <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition-all group-hover:text-white/60" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-all group-hover:text-gray-500 dark:text-white/30 dark:group-hover:text-white/60" />
     </motion.button>
   );
 }
@@ -181,7 +181,7 @@ export default function AuditsList({ adAccountId, onSelect, onRunNew, running })
   if (loading && audits.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
-        <Loader2 className="h-5 w-5 animate-spin text-white/40" />
+        <Loader2 className="h-5 w-5 animate-spin text-gray-400 dark:text-white/40" />
       </div>
     );
   }
@@ -198,8 +198,8 @@ export default function AuditsList({ adAccountId, onSelect, onRunNew, running })
             <Sparkles className="h-5 w-5 text-[#15DCFF]" />
           </div>
           <div>
-            <p className="text-base font-bold text-white 2xl:text-lg">AI Audits</p>
-            <p className="text-[11px] text-white/40">
+            <p className="text-base font-bold text-gray-900 2xl:text-lg dark:text-white">AI Audits</p>
+            <p className="text-[11px] text-gray-400 dark:text-white/40">
               {audits.length} audit{audits.length === 1 ? '' : 's'} for this account
             </p>
           </div>
@@ -208,7 +208,7 @@ export default function AuditsList({ adAccountId, onSelect, onRunNew, running })
           <button
             onClick={() => setRefreshToken((t) => t + 1)}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.05] dark:text-white/70 dark:hover:bg-white/10"
           >
             <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
             Refresh

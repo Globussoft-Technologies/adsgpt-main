@@ -4,7 +4,10 @@ const Campaign = require("../Module/adFactory/adFactory");
 const CampaignHistory = require("../Module/adFactory/adFactoryHistory");
 const { default: axios } = require("axios");
 const { adFactoryValidators } = require("../Validations/adfactory.validator");
-const { handleCreditDeduction } = require("../sockets/setupSockets");
+const {
+  emitCampaignCreditStatus,
+  settleAdFactoryCampaign,
+} = require("../sockets/setupSockets");
 const { TokenDecode } = require("../services/authService");
 const { features } = require("../utils/features");
 const AD_FACTORY_API = process.env.AD_FACTORY_PYTHON_API;
@@ -1488,19 +1491,20 @@ exports.updateGenerationResult = async (req, res) => {
       await updatedCampaign.save();
       console.log(`Campaign ${campaignId} generation completed`);
 
-      // Release the upfront campaign freeze. handleCreditDeduction has
-      // already debited per-batch actuals, so this only unwinds the hold.
+      // Settle the upfront freeze: charges exactly for the actually-successful
+      // items across all result types (text/image/video), refunds the rest of
+      // the hold for failed items in a single atomic step.
       try {
-        await UnifiedCreditController.releaseCredits(`campaign:${campaignId}`);
+        await settleAdFactoryCampaign(updatedCampaign, campaignId);
       } catch (err) {
         logger.error(
-          `Failed to release campaign freeze ${campaignId}: ${err.message}`,
+          `Failed to settle campaign freeze ${campaignId}: ${err.message}`,
         );
       }
     }
 
-    handleCreditDeduction(resultArray, type, userData, campaignId)
-    this.emitCampaignResult(campaignId, type, resultArray)
+    emitCampaignCreditStatus(resultArray, type, userData, campaignId);
+    this.emitCampaignResult(campaignId, type, resultArray);
 
     // --- Save successful image results to GeneratedCount (for stats) and
     // GeneratedMedia (for credit accounting parity with Ad Studio). Without

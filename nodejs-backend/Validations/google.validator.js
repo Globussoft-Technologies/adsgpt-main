@@ -2,13 +2,13 @@ const Joi = require("joi");
 
 // UI goal labels (SALES/LEADS/etc.) + raw channel types are both accepted.
 // The controller maps UI labels → advertising_channel_type before calling Google.
-// YOUTUBE_REACH is excluded — it creates a VIDEO campaign which we do not support.
 // APP_PROMOTION maps to MULTI_CHANNEL — supported but only text/image assets, no video.
 const GOOGLE_OBJECTIVES = [
   // Google Ads UI goal labels
   "SALES", "LEADS", "WEBSITE_TRAFFIC", "APP_PROMOTION", "LOCAL_STORE",
+  "YOUTUBE_REACH",
   // Raw channel types (create without guidance)
-  "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX",
+  "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX", "VIDEO",
 ];
 
 const updateGoogleAdStatusSchema = Joi.object({
@@ -122,32 +122,44 @@ const createAdGroupSchema = Joi.object({
   "object.missing": "adAccountId is required",
 });
 
+const adItemSchema = Joi.object({
+  // SEARCH fields
+  headlines: Joi.array()
+    .items(Joi.string().max(30).messages({ "string.max": "Each headline must be 30 characters or fewer" }))
+    .min(3).max(15).optional().messages({
+      "array.min": "at least 3 headlines are required for SEARCH ads",
+      "array.max": "at most 15 headlines are allowed",
+    }),
+  descriptions: Joi.array()
+    .items(Joi.string().max(90).messages({ "string.max": "Each description must be 90 characters or fewer" }))
+    .min(2).max(4).optional().messages({
+      "array.min": "at least 2 descriptions are required for SEARCH ads",
+      "array.max": "at most 4 descriptions are allowed",
+    }),
+  // DISPLAY / VIDEO fields
+  headline: Joi.string().max(30).optional(),
+  description: Joi.string().max(90).optional(),
+  // Common
+  finalUrl: Joi.string().uri().required().messages({
+    "any.required": "finalUrl is required in each ad",
+    "string.uri": "finalUrl must be a valid URL",
+  }),
+  imageUrl: Joi.string().uri().optional(),
+  videoUrl: Joi.string().uri().optional(),
+  callToAction: Joi.string().optional(),
+});
+
 const createAdSchema = Joi.object({
   adAccountId: Joi.string().optional(),
   customerId: Joi.string().optional(),
   adGroupId: Joi.string().required().messages({ "any.required": "adGroupId is required" }),
   campaignId: Joi.string().optional(),
-  headlines: Joi.array()
-    .items(Joi.string().max(30).messages({ "string.max": "Each headline must be 30 characters or fewer" }))
-    .min(3).max(15).required().messages({
-      "any.required": "headlines is required",
-      "array.min": "at least 3 headlines are required",
-      "array.max": "at most 15 headlines are allowed",
-    }),
-  descriptions: Joi.array()
-    .items(Joi.string().max(90).messages({ "string.max": "Each description must be 90 characters or fewer" }))
-    .min(2).max(4).required().messages({
-      "any.required": "descriptions is required",
-      "array.min": "at least 2 descriptions are required",
-      "array.max": "at most 4 descriptions are allowed",
-    }),
-  finalUrl: Joi.string().uri().required().messages({
-    "any.required": "finalUrl is required",
-    "string.uri": "finalUrl must be a valid URL",
+  ads: Joi.array().items(adItemSchema).min(1).required().messages({
+    "any.required": "ads array is required",
+    "array.min": "at least one ad is required",
   }),
-  adType: Joi.string().valid("SEARCH", "DISPLAY", "VIDEO", "PERFORMANCE_MAX").default("SEARCH"),
 }).or("adAccountId", "customerId").messages({
-  "object.missing": "adAccountId is required",
+  "object.missing": "adAccountId or customerId is required",
 });
 
 const deleteGoogleCampaignSchema = Joi.object({

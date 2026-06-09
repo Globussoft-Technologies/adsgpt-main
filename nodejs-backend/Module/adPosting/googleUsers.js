@@ -29,6 +29,15 @@ const googleUserSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    customerIds: {
+      type: [String],
+      default: [],
+    },
+    managerMap: {
+      type: Map,
+      of: String,
+      default: {},
+    },
   },
   {
     timestamps: true,

@@ -230,9 +230,9 @@ export default function ValidateForm({ onComplete }) {
       initial={{ opacity: 0, y: 25, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25 }}
-      className="text-white"
+      className="text-gray-900 dark:text-white"
     >
-      <h2 className="mb-6 text-center text-xl font-semibold text-white 2xl:text-[23px]">
+      <h2 className="mb-6 text-center text-xl font-semibold text-gray-900 dark:text-white 2xl:text-[23px]">
         Platforms & Ratios
       </h2>
 
@@ -295,7 +295,7 @@ export default function ValidateForm({ onComplete }) {
                 {/* Platform Selection */}
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <label className="mb-1 text-sm text-[#AFAFAF] 2xl:mb-1.5 2xl:text-[18px]">
+                    <label className="mb-1 text-sm text-gray-500 dark:text-[#AFAFAF] 2xl:mb-1.5 2xl:text-[18px]">
                       Platform
                     </label>
                     <div className="flex flex-wrap gap-2 2xl:gap-3">
@@ -308,13 +308,13 @@ export default function ValidateForm({ onComplete }) {
                             className={`group rounded-lg bg-gradient-to-r ${
                               isSelected
                                 ? 'from-[#02C8C4] to-[#5867EB]'
-                                : 'from-white/30 to-gray-100/10'
+                                : 'from-black/20 to-black/5 dark:from-white/30 dark:to-gray-100/10'
                             } w-fit p-[1px]`}
                           >
                             <button
                               type="button"
                               onClick={() => handlePlatformToggle(name)}
-                              className={`backdrop-blur-100 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-[#2d2d2d] transition-all 2xl:h-[52px] 2xl:w-[52px] ${
+                              className={`backdrop-blur-100 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-[#2d2d2d] transition-all 2xl:h-[52px] 2xl:w-[52px] ${
                                 isSelected ? '' : ''
                               }`}
                               disabled={submitting}
@@ -336,7 +336,7 @@ export default function ValidateForm({ onComplete }) {
                 {/* Selected Platforms Configuration */}
                 {values.platforms.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-base text-white 2xl:text-[21px]">
+                    <h3 className="text-base text-gray-900 dark:text-white 2xl:text-[21px]">
                       Configure Aspect Ratios
                     </h3>
                     <div className="space-y-6">
@@ -350,19 +350,19 @@ export default function ValidateForm({ onComplete }) {
                         return (
                           <div
                             key={pIdx}
-                            className="rounded-lg border border-zinc-600 bg-zinc-800/30 p-4"
+                            className="rounded-lg border border-black/10 bg-gray-50 dark:border-zinc-600 dark:bg-zinc-800/30 p-4"
                           >
                             {/* Platform Header */}
                             <div className="mb-4 flex items-center justify-between">
                               <div className="flex items-center gap-2 2xl:gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-zinc-700/50 2xl:h-11 2xl:w-11">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 dark:bg-zinc-700/50 2xl:h-11 2xl:w-11">
                                   {platformConfig &&
                                     React.createElement(platformConfig.icon, {
                                       className: platformConfig.iconSize,
                                     })}
                                 </div>
                                 <div className="flex flex-col">
-                                  <h4 className="text-base font-medium text-[#AFAFAF] capitalize 2xl:text-lg">
+                                  <h4 className="text-base font-medium text-gray-500 dark:text-[#AFAFAF] capitalize 2xl:text-lg">
                                     {platform.platformName}
                                   </h4>
 
@@ -398,7 +398,7 @@ export default function ValidateForm({ onComplete }) {
 
                             {/* Aspect Ratio Selection */}
                             <div className="flex flex-col gap-3">
-                              <label className="text-xs text-[#AFAFAF] 2xl:text-sm">
+                              <label className="text-xs text-gray-500 dark:text-[#AFAFAF] 2xl:text-sm">
                                 Select Aspect Ratios *
                               </label>
                               <div className="flex flex-wrap gap-2.5">
@@ -412,16 +412,16 @@ export default function ValidateForm({ onComplete }) {
                                         className={`group rounded-full bg-gradient-to-r ${
                                           isSelected
                                             ? 'from-[#02C8C4] to-[#5867EB]'
-                                            : 'from-[#2d2d2d] to-[#2d2d2d]'
+                                            : 'from-gray-200 to-gray-200 dark:from-[#2d2d2d] dark:to-[#2d2d2d]'
                                         } w-fit p-[1px] hover:bg-gradient-to-tr`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleRatioToggle(pIdx, value)}
-                                          className={`backdrop-blur-100 flex items-center justify-center gap-1.5 rounded-full border bg-[#2d2d2d] px-5 py-1.5 text-xs transition-all ${
+                                          className={`backdrop-blur-100 flex items-center justify-center gap-1.5 rounded-full border bg-gray-100 dark:bg-[#2d2d2d] px-5 py-1.5 text-xs transition-all ${
                                             isSelected
                                               ? ''
-                                              : 'border-white/10 bg-[#383838]/50 text-[#AFAFAF] hover:border-white/10 hover:text-white'
+                                              : 'border-black/10 bg-gray-100 text-gray-500 hover:border-black/10 hover:text-black dark:border-white/10 dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:hover:border-white/10 dark:hover:text-white'
                                           }`}
                                           disabled={submitting}
                                         >
@@ -452,7 +452,7 @@ export default function ValidateForm({ onComplete }) {
                 <button
                   type="button"
                   onClick={() => dispatch(setActiveForm(null))}
-                  className="rounded-lg border border-[#E3E3E3] bg-transparent px-10 py-1.5 text-sm text-[#E3E3E3] transition hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
+                  className="rounded-lg border border-gray-300 bg-transparent px-10 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:border-[#E3E3E3] dark:text-[#E3E3E3] dark:hover:bg-zinc-800 disabled:opacity-50 2xl:text-base"
                   disabled={submitting}
                 >
                   Cancel
@@ -464,11 +464,11 @@ export default function ValidateForm({ onComplete }) {
                     submitting ||
                     (productionAndServices?.status == 'success' && results?.status != 'success')
                   }
-                  className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-base"
                 >
                   {submitting ? (
                     <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white dark:border-black border-t-transparent dark:border-t-transparent"></div>
                       Saving...
                     </div>
                   ) : (

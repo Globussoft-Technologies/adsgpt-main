@@ -27,6 +27,17 @@ const Layout = () => {
   const { userData } = useSelector((state) => state.socket);
   const dispatch = useDispatch();
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
 
   useEffect(() => {
     let sessionId;
@@ -60,7 +71,7 @@ const Layout = () => {
           <AppSidebar />
           <main className="relative flex h-svh w-full flex-col overflow-hidden">
             <TopHeader />
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
+            <div className="flex dark:bg-inherit bg-[#f6f7fb] min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
               <Outlet />
             </div>
             <TourGuide />
@@ -81,13 +92,11 @@ const Layout = () => {
   // );
 
   return (
-    <div className="layout_container relative flex">
+    <div className="layout_container text-foreground relative flex dark:bg-transparent">
       {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
-        <div className="fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-100 blur-[100px] 2xl:blur-[160px]"></div>
+        <div className="fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-70 blur-[100px] 2xl:blur-[160px] dark:opacity-100"></div>
       )}
-      {location.pathname === '/assistant' && (
-        <div className="fixed inset-0 z-[-1] bg-black"></div>
-      )}
+      {location.pathname === '/assistant' && <div className="fixed inset-0 z-[-1] bg-black"></div>}
 
       <Toaster position="top-center" reverseOrder={false} />
       {/* <AdBlockerModal /> */}
@@ -98,7 +107,7 @@ const Layout = () => {
             <AppSidebar />
             <main className="relative flex h-svh w-full flex-col overflow-hidden">
               <TopHeader />
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0! dark:bg-inherit">
                 <Outlet />
               </div>
               <TourGuide />
@@ -122,7 +131,7 @@ const Layout = () => {
         )}
       </SidebarProvider>
       {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
-        <div className="fixed top-[85%] left-1/2 z-[-1] h-[100vw] w-[100vw] -translate-x-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-100 blur-[100px] 2xl:top-[90%] 2xl:h-[130vw] 2xl:w-[130vw] 2xl:blur-[150px]"></div>
+        <div className="fixed top-[85%] left-1/2 z-[-1] h-[100vw] w-[100vw] -translate-x-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-30 blur-[100px] 2xl:top-[90%] 2xl:h-[130vw] 2xl:w-[130vw] 2xl:blur-[150px] dark:opacity-100"></div>
       )}
     </div>
   );

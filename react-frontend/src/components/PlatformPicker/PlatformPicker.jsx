@@ -130,8 +130,8 @@ const PlatformPicker = ({
           transition={{ duration: 0.4 }}
           className="mb-10 text-center"
         >
-          <h1 className="text-3xl font-bold text-white">{title}</h1>
-          <p className="mt-1 text-sm text-[#AFAFAF]">{subtitle}</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{title}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-[#AFAFAF]">{subtitle}</p>
         </motion.div>
 
         {/* Cards Grid */}
@@ -151,9 +151,9 @@ const PlatformPicker = ({
                 onClick={
                   isMetaPlatform && metaConnected ? handleMetaCardClick : undefined
                 }
-                className={`relative overflow-hidden rounded-2xl transition-all duration-300 ${
+                className={`relative overflow-hidden rounded-2xl border border-gray-200 transition-all duration-300 dark:border-transparent ${
                   platform.enabled
-                    ? `${metaConnected ? 'cursor-pointer' : 'cursor-default'} shadow-md hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40`
+                    ? `${metaConnected ? 'cursor-pointer' : 'cursor-default'} shadow-md hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/40`
                     : 'cursor-not-allowed'
                 }`}
               >
@@ -184,9 +184,9 @@ const PlatformPicker = ({
                 </div>
 
                 {/* Dark info area */}
-                <div className="bg-[#1A1A1A] p-4">
+                <div className="bg-gray-50 p-4 dark:bg-[#1A1A1A]">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm 2xl:text-base font-semibold text-white">
+                    <h3 className="text-sm 2xl:text-base font-semibold text-gray-900 dark:text-white">
                       {platform.name}
                     </h3>
                     {!platform.enabled && (
@@ -195,13 +195,13 @@ const PlatformPicker = ({
                       </span>
                     )}
                     {isMetaPlatform && metaConnected && (
-                      <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      <span className="flex items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:border-emerald-500/30 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                         Connected
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-xs 2xl:text-sm leading-relaxed text-[#AFAFAF]">
+                  <p className="mt-2 text-xs 2xl:text-sm leading-relaxed text-gray-500 dark:text-[#AFAFAF]">
                     {platform.description}
                   </p>
                 </div>

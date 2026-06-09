@@ -152,7 +152,7 @@ const AdCreativeChat = () => {
           <Loader className="h-8 w-8 animate-spin text-gray-600" />
         </div>
       ) : (
-        <div className="mb-10 flex w-full max-w-full flex-col gap-10 text-white">
+        <div className="mb-10 flex w-full max-w-full flex-col gap-10 text-zinc-900 dark:text-white">
           {conversations.map((c) => (
             <div key={c?.id} className="space-y-6 px-0 pr-2">
               {/* USER */}
@@ -183,19 +183,19 @@ const AdCreativeChat = () => {
                           initial="initial"
                           whileInView="whileInView"
                           viewport={{ once: false }}
-                          className="rounded-2xl border border-[#2A2A2A] bg-[#111111] shadow-md w-full"
+                          className="rounded-2xl border border-zinc-200 bg-white shadow-md w-full dark:border-[#2A2A2A] dark:bg-[#111111]"
                         >
                           <div className="h-full w-full">
                             {/* Image */}
                             {cr?.image_complete ? (
                               <div className="gen-image relative h-[240px] w-full rounded-2xl">
                                 {cr?.image_ad && cr?.image_ad?.includes('failed') ? (
-                                  <p className="flex h-full w-full items-center justify-center bg-slate-600/20 p-4 text-center text-sm leading-7">
+                                  <p className="flex h-full w-full items-center justify-center rounded-2xl bg-zinc-100 p-4 text-center text-sm leading-7 text-zinc-700 dark:bg-slate-600/20 dark:text-white">
                                     Couldn't generate Ad Creative. However, your credit is not
                                     deducted. Please try again!
                                   </p>
                                 ) : cr?.image_ad && cr?.image_ad == '400' ? (
-                                  <p className="flex h-full w-full items-center justify-center bg-slate-600/20 p-4 text-center text-sm leading-7">
+                                  <p className="flex h-full w-full items-center justify-center rounded-2xl bg-zinc-100 p-4 text-center text-sm leading-7 text-zinc-700 dark:bg-slate-600/20 dark:text-white">
                                     Image request restricted for safety compliance. However, your
                                     credit is not deducted. Please revise your prompt and retry.
                                   </p>
@@ -310,7 +310,7 @@ const AdCreativeChat = () => {
                               </div>
                             ) : (
                               <div className="h-60 w-full">
-                                <div className="relative h-full w-full animate-pulse rounded-2xl bg-[#212121]">
+                                <div className="relative h-full w-full animate-pulse rounded-2xl bg-zinc-200 dark:bg-[#212121]">
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     {/* {timers[`${c?.id}-${index}`] ? (
                                     <div className="h-9 w-9 text-white">

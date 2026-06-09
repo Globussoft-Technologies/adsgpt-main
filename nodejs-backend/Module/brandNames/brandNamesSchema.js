@@ -1,5 +1,37 @@
 const mongoose = require('mongoose');
 
+// ── Sub-schemas for competitor ads feature ──────────────────────────────
+
+const competitorSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  domain: { type: String, default: null },
+  relevanceScore: { type: Number, default: 0 },
+  source: { type: String, default: 'gemini' }, // 'gemini' | 'manual'
+  addedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const keywordSchema = new mongoose.Schema({
+  term: { type: String, required: true },
+  category: { type: String, default: 'general' }, // 'brand' | 'product' | 'general' | 'intent'
+  volume: { type: String, default: null },         // 'high' | 'medium' | 'low'
+  source: { type: String, default: 'gemini' },
+  addedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const discoveryJobSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ['PENDING', 'READY', 'EMPTY', 'FAILED'],
+    default: 'PENDING',
+  },
+  startedAt: { type: Date, default: Date.now },
+  completedAt: { type: Date, default: null },
+  errorMessage: { type: String, default: null },
+  keywordVersion: { type: String, default: 'v1' },
+}, { _id: false });
+
+// ── Main brand schema ───────────────────────────────────────────────────
+
 const brandSchema = new mongoose.Schema({
   id: { type: String, required: true }, // Unique brandId
   brandName: { type: String, required: false },
@@ -7,7 +39,6 @@ const brandSchema = new mongoose.Schema({
   logoUrl: { type: String, required: false }, // S3 URL for logo
   logoUrls: [{ type: String, required: false }],
   iconUrl: { type: String, required: false }, // S3 URL for logo
-  // imageUrl: { type: String, required: false }, // S3 URL for product image
   imageUrls: [{ type: String, required: false }],
   websiteUrl: { type: String, required: false },
   instagramUrl: { type: String, required: false },
@@ -22,6 +53,13 @@ const brandSchema = new mongoose.Schema({
     default: [],
     index: true
   },
+
+  // ── Competitor Ads Feature ───────────────────────────────────────────
+  competitors: { type: [competitorSchema], default: [] },
+  keywords: { type: [keywordSchema], default: [] },
+  discoveryJob: { type: discoveryJobSchema, default: () => ({}) },
+  lastFetchedAt: { type: Date, default: null },
+  // ─────────────────────────────────────────────────────────────────────
 });
 
 const brandListSchema = new mongoose.Schema({

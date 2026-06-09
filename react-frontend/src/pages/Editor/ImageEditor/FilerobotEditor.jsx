@@ -11,12 +11,14 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import { uploadAdFactoryEditedImage } from '@/store/actions/adFactoryNew/adFactoryActions';
 import { setEditorFields } from '@/store/reducers/adStudio/editorSlice';
 import AdsgptFullLogo from '@/assets/layouts/adsgpt-logo.webp';
+import AdsgptLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
 
 export function FilerobotEditor({ source, isImgEditorShown, adIndex, toast }) {
   const { userData } = useSelector((state) => state.socket);
   const { campaignId, historyId, contextType, botId, baseImage } = useSelector(
     (state) => state.editor
   );
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
   const [logos, setLogos] = useState([]);
   const dispatch = useDispatch();
 
@@ -99,7 +101,7 @@ export function FilerobotEditor({ source, isImgEditorShown, adIndex, toast }) {
       const parent = document.querySelector('.sc-21g986-0.FIE_topbar');
       if (parent && !parent.querySelector('.editor_page_logo')) {
         const img = document.createElement('img');
-        img.src = AdsgptFullLogo;
+        img.src = isDarkMode ? AdsgptFullLogo : AdsgptLightModeLogo;
         img.className = 'editor_page_logo';
         img.style.width = '122px';
         img.style.objectFit = 'contain';
@@ -135,6 +137,11 @@ export function FilerobotEditor({ source, isImgEditorShown, adIndex, toast }) {
 
       {isImgEditorShown && (
         <FilerobotImageEditor
+          /* `key` forces a full remount when the theme flips. Filerobot reads
+             its palette only at mount time and ignores prop changes after that
+             — without a key, switching themes after the editor opens leaves it
+             stuck on the original palette (e.g. light tabs on a dark page). */
+          key={isDarkMode ? 'dark' : 'light'}
           source={source}
           onSave={async (editedImageObject, designState) => {
             const toastId = toast.loading('Saving image to gallery...');
@@ -287,30 +294,55 @@ export function FilerobotEditor({ source, isImgEditorShown, adIndex, toast }) {
           defaultSavedImageType="png"
           defaultSavedImageQuality={0.92}
           theme={{
-            palette: {
-              'bg-primary': '#0D0D0D50',
-              'bg-secondary': '#0D0D0D50',
-              'bg-primary-active': '#22222250',
+            palette: isDarkMode
+              ? {
+                  'bg-primary': '#0D0D0D50',
+                  'bg-secondary': '#0D0D0D50',
+                  'bg-primary-active': '#22222250',
 
-              'accent-primary': 'oklch(0.279 0.041 260.031)',
-              'accent-primary-active': 'oklch(0.279 0.041 260.031)',
+                  'accent-primary': 'oklch(0.279 0.041 260.031)',
+                  'accent-primary-active': 'oklch(0.279 0.041 260.031)',
 
-              'icons-primary': '#ffffff',
-              'icons-secondary': '#ffffff',
+                  'icons-primary': '#ffffff',
+                  'icons-secondary': '#ffffff',
 
-              'borders-primary': 'oklch(1 0 0 / 10%)',
-              'borders-secondary': 'oklch(1 0 0 / 10%)',
-              'borders-strong': 'oklch(1 0 0 / 10%)',
+                  'borders-primary': 'oklch(1 0 0 / 10%)',
+                  'borders-secondary': 'oklch(1 0 0 / 10%)',
+                  'borders-strong': 'oklch(1 0 0 / 10%)',
 
-              'light-shadow': '',
+                  'light-shadow': '',
 
-              warning: '#FFB74D',
-              success: '#66BB6A',
-              error: 'oklch(0.704 0.191 22.216)',
+                  warning: '#FFB74D',
+                  success: '#66BB6A',
+                  error: 'oklch(0.704 0.191 22.216)',
 
-              'text-primary': 'oklch(0.984 0.003 247.858)',
-              'text-secondary': 'oklch(0.704 0.04 256.788)',
-            },
+                  'text-primary': 'oklch(0.984 0.003 247.858)',
+                  'text-secondary': 'oklch(0.704 0.04 256.788)',
+                }
+              : {
+                  'bg-primary': '#ffffff',
+                  'bg-secondary': '#f4f4f5',
+                  'bg-primary-active': '#e4e4e7',
+
+                  'accent-primary': '#18181b',
+                  'accent-primary-active': '#27272a',
+
+                  'icons-primary': '#27272a',
+                  'icons-secondary': '#52525b',
+
+                  'borders-primary': 'rgba(0, 0, 0, 0.08)',
+                  'borders-secondary': 'rgba(0, 0, 0, 0.06)',
+                  'borders-strong': 'rgba(0, 0, 0, 0.15)',
+
+                  'light-shadow': 'rgba(0, 0, 0, 0.05)',
+
+                  warning: '#F59E0B',
+                  success: '#10B981',
+                  error: '#EF4444',
+
+                  'text-primary': '#18181b',
+                  'text-secondary': '#52525b',
+                },
             typography: {
               fontFamily: 'Public Sans, Arial, sans-serif',
             },

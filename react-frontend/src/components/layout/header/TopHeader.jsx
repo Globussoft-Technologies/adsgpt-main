@@ -33,7 +33,7 @@ import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlic
 import { useLocation } from 'react-router-dom';
 import { getHeaderName } from '@/utils/getHeaderName';
 import HeaderTabs from './HeaderTabs';
-import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+import { setActiveBrandIQTab, setSelectedCompetitorBrand, setSelectedCompetitorPlatform } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { Button } from '@/components/ui/button';
 import { resetAdCopySlice } from '@/store/reducers/adStudio/adCopySlice';
 import { resetPromptSlice, setField } from '@/store/reducers/adStudio/promptSlice';
@@ -77,10 +77,16 @@ const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
 import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import ThemeToggle from './ThemeToggle';
 import AIAssistantHeaderActions from '@/components/AIAssistant/AIAssistantHeaderActions';
 const adStudioTabs = [
   { id: 'adCopy', label: 'Ad Copy', icon: NotebookPen },
-  { id: 'adCreative', label: 'Ad Creative', icon: Image },
+  // HIDE-MARK — legacy Ad Creative tab. The new generator (id
+  // 'adCreativeNew') now takes this slot under the same "Ad Creative"
+  // label so users land in the new experience by default. Restore by
+  // un-commenting this entry and dropping the renamed entry below.
+  // { id: 'adCreative', label: 'Ad Creative', icon: Image },
+  { id: 'adCreativeNew', label: 'Ad Creative', icon: Images },
 ];
 const adVideoTab = { id: 'adVideo', label: 'Ad Video', icon: Video };
 const adVideoNewTab = {
@@ -88,15 +94,10 @@ const adVideoNewTab = {
   label: 'Ad Video',
   icon: Video,
 };
-const adCreativeNewTab = {
-  id: 'adCreativeNew',
-  label: 'Ad Creative New',
-  icon: Images,
-};
 const brandIQTabs = [
   { id: 'myBrands', label: 'My Brands', icon: Zap },
+  { id: 'competitors', label: 'Competitors', icon: Users },
   { id: 'Gallery', label: 'Gallery', icon: Images },
-  // { id: 'competitors', label: 'Competitors', icon: Users },
   // { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
@@ -117,11 +118,12 @@ const adPlatformOptions = [
   { value: 'google-ads', label: 'Google Ads', icon: Search },
   { value: 'facebook-ads', label: 'Facebook Ads', icon: Facebook },
   { value: 'instagram-ads', label: 'Instagram Ads', icon: Instagram },
-  { value: 'linkedin-ads', label: 'LinkedIn Ads', icon: Linkedin },
+  { value: 'youtube-ads', label: 'YouTube Ads', icon: FaYoutube },
+  // { value: 'linkedin-ads', label: 'LinkedIn Ads', icon: Linkedin },
   // { value: 'twitter-ads', label: 'Twitter Ads', icon: Twitter },
-  { value: 'tiktok-ads', label: 'TikTok Ads', icon: Music },
-  { value: 'snapchat-ads', label: 'Snapchat Ads', icon: Camera },
-  { value: 'pinterest-ads', label: 'Pinterest Ads', icon: Pin },
+  // { value: 'tiktok-ads', label: 'TikTok Ads', icon: Music },
+  // { value: 'snapchat-ads', label: 'Snapchat Ads', icon: Camera },
+  // { value: 'pinterest-ads', label: 'Pinterest Ads', icon: Pin },
 ];
 
 const selectPlateformsOptions = [
@@ -198,10 +200,13 @@ export default function TopHeader() {
   // ) {
   // adStudioTabs[2] = adVideoTab;
   adStudioTabs[2] = adVideoNewTab;
-  adStudioTabs[3] = adCreativeNewTab;
+  // HIDE-MARK — the new Ad Creative tab is now defined inline in the
+  // static adStudioTabs array above (slot 1), so no runtime append is
+  // needed here. Restore alongside the legacy entry if reverting.
+  // adStudioTabs[3] = adCreativeNewTab;
   // }
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
-  const { myBrands, activeBrandIQTabId } = useSelector((state) => state.brandIQTabs);
+  const { myBrands, activeBrandIQTabId, selectedCompetitorBrand, selectedCompetitorPlatform } = useSelector((state) => state.brandIQTabs);
   const dispatch = useDispatch();
   const {
     conversations: creativeConversations,
@@ -217,7 +222,9 @@ export default function TopHeader() {
 
   const hideHeader =
     currentRoute === '/meta-ads' ||
-    (currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideoNew' && activePage !== 'home') ||
+    (currentRoute === '/adstudio' &&
+      activeAdStudioTabId === 'adVideoNew' &&
+      activePage !== 'home') ||
     (currentRoute === '/adstudio' &&
       activeAdStudioTabId === 'adCreativeNew' &&
       adCreativeNewActivePage !== 'home');
@@ -304,11 +311,18 @@ export default function TopHeader() {
     };
   }, [mobileTabsOpenRef]);
 
+  // Initialize selectedCompetitorBrand from myBrands if not set
+  useEffect(() => {
+    if (Array.isArray(myBrands) && myBrands.length > 0 && !selectedCompetitorBrand) {
+      dispatch(setSelectedCompetitorBrand(myBrands[0]));
+    }
+  }, [myBrands, selectedCompetitorBrand, dispatch]);
+
   return (
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className={`sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 bg-[#0D0D0D]/50 px-2 py-3 backdrop-blur-xl md:px-5 lg:bg-transparent lg:backdrop-blur-none 2xl:h-24 2xl:px-8 2xl:py-6 ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
+          className={`sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 px-2 py-3 backdrop-blur-xl md:px-5 2xl:h-24 2xl:px-8 2xl:py-6 dark:bg-[#0D0D0D]/50 dark:lg:bg-transparent! dark:lg:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
         >
           <div className="left_header_container flex items-center">
             <SidebarTrigger>
@@ -319,7 +333,7 @@ export default function TopHeader() {
             {/* Left Title */}
             {currentRoute !== '/adfactory-demo' && (
               <h1
-                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-white md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px]`}
+                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-zinc-900 md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white`}
               >
                 {headerName}
               </h1>
@@ -351,14 +365,14 @@ export default function TopHeader() {
             className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
           >
             {/* AI Assistant — History + New Chat */}
-            {currentRoute === '/assistant' && <AIAssistantHeaderActions />}
+            {/* {currentRoute === '/assistant' && <AIAssistantHeaderActions />} */}
 
             {/* for AdStudio */}
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
               <Button
                 variant="ghost"
                 onClick={handleNewChatClick}
-                className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm"
+                className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
               >
                 <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                 <span>New Chat</span>
@@ -371,7 +385,7 @@ export default function TopHeader() {
                 <Button
                   variant="ghost"
                   onClick={handleNewChatClick}
-                  className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm"
+                  className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
                 >
                   <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   <span>New Chat</span>
@@ -382,8 +396,8 @@ export default function TopHeader() {
               Array.isArray(creativeConversations) &&
               creativeConversations.length === 0) ||
               currentRoute === '/ad-library') && (
-                <>
-                  {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
+              <>
+                {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
               <Input
                 type="text"
                 placeholder={'Search your competitors'}
@@ -409,27 +423,51 @@ export default function TopHeader() {
               />
             </div> */}
 
-                  {/* ! search field */}
-                  <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-1.5 text-[#AFAFAF] transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm">
-                    <div className="flex flex-shrink-0 items-center">
-                      <Search
-                        className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
-                        onClick={() => {
-                          dispatch(setSkip(0));
-                          dispatch(fetchExploreAds());
-                        }}
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Search.."
-                      className="w-full border-none bg-transparent text-sm text-[#D1D1D1] placeholder:text-[#777777] focus:outline-none"
-                      value={exploreCompetitor}
-                      onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
+                {/* ! search field */}
+                <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                  <div className="flex flex-shrink-0 items-center">
+                    <Search
+                      className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
+                      onClick={() => {
+                        dispatch(setSkip(0));
+                        dispatch(fetchExploreAds());
+                      }}
                     />
-                    <div className="ml-2 flex space-x-1">
-                      {!isMobile ? (
-                        <>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search.."
+                    className="w-full border-none bg-transparent text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+                    value={exploreCompetitor}
+                    onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
+                  />
+                  <div className="ml-2 flex space-x-1">
+                    {!isMobile ? (
+                      <>
+                        {['competitor', 'keyword'].map((type) => (
+                          <button
+                            key={type}
+                            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
+                              exploreSearchTerm === type
+                                ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
+                                : 'text-zinc-500 dark:text-[#777777]'
+                            }`}
+                            onClick={() => {
+                              dispatch(setExploreSearchTerm(type));
+                              dispatch(setSkip(0));
+                              dispatch(fetchExploreAds());
+                            }}
+                          >
+                            {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                        </PopoverTrigger>
+                        <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
                           {['competitor', 'keyword'].map((type) => (
                             <button
                               key={type}
@@ -447,45 +485,21 @@ export default function TopHeader() {
                               {type === 'competitor' ? 'Competitor' : 'Keyword'}
                             </button>
                           ))}
-                        </>
-                      ) : (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
-                          </PopoverTrigger>
-                          <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
-                            {['competitor', 'keyword'].map((type) => (
-                              <button
-                                key={type}
-                                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
-                                  exploreSearchTerm === type
-                                    ? 'bg-[#2A2A2A] text-white'
-                                    : 'text-[#777777]'
-                                }`}
-                                onClick={() => {
-                                  dispatch(setExploreSearchTerm(type));
-                                  dispatch(setSkip(0));
-                                  dispatch(fetchExploreAds());
-                                }}
-                              >
-                                {type === 'competitor' ? 'Competitor' : 'Keyword'}
-                              </button>
-                            ))}
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
+                </div>
 
-                  {/* Platform select */}
-                  <CreativeFilterDropdown
-                    options={selectPlateformsOptions}
-                    label="Platform"
-                    value={selectPlateformsOptions.find((p) => p.value === explorePlatform)}
-                    onChange={handlePlatformChange}
-                  />
-                </>
-              )}
+                {/* Platform select */}
+                <CreativeFilterDropdown
+                  options={selectPlateformsOptions}
+                  label="Platform"
+                  value={selectPlateformsOptions.find((p) => p.value === explorePlatform)}
+                  onChange={handlePlatformChange}
+                />
+              </>
+            )}
 
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideo' && (
               <>
@@ -530,33 +544,18 @@ export default function TopHeader() {
               </>
             )}
             {currentRoute === '/brandiq' && activeBrandIQTabId === 'competitors' && (
-              <>
+              <div className="flex items-center gap-2">
                 <BrandsDropdown
-                  options={brandOptions}
-                  value={selectedBrand}
+                  options={Array.isArray(myBrands) ? myBrands.map(b => ({ value: b.id, label: b.name || 'Unnamed' })) : []}
+                  value={selectedCompetitorBrand ? { value: selectedCompetitorBrand.id, label: selectedCompetitorBrand.name || 'Unnamed' } : (Array.isArray(myBrands) && myBrands[0] ? { value: myBrands[0].id, label: myBrands[0].name } : null)}
                   onChange={(val) => {
-                    const brand = brandOptions.find((opt) => opt.value === val);
-                    setSelectedBrand(brand);
+                    const brand = Array.isArray(myBrands) ? myBrands.find((b) => b.id === val) : null;
+                    if (brand) {
+                      dispatch(setSelectedCompetitorBrand(brand));
+                    }
                   }}
                 />
-                <AllPlateformDropdown
-                  options={adPlatformOptions}
-                  value={selectedPlateform}
-                  onChange={(val) => {
-                    const plateform = adPlatformOptions.find((opt) => opt.value === val);
-                    setSelectedPlateform(plateform);
-                  }}
-                />
-                <button
-                  variant="ghost"
-                  className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-4 py-1.5 text-[#AFAFAF] hover:text-white sm:flex 2xl:py-2 2xl:text-sm"
-                >
-                  <span className="flex items-center gap-2 rounded-full">
-                    Refresh
-                    <RefreshCcw className="!h-3.5 !w-3.5 2xl:h-5 2xl:w-5" />
-                  </span>
-                </button>
-              </>
+              </div>
             )}
 
             {(currentRoute === '/brandiq' || currentRoute === '/adstudio') && (
@@ -571,7 +570,22 @@ export default function TopHeader() {
                 </button>
               </div>
             )}
+
+            {/* HIDE-MARK — theme toggle hidden globally (inline header). */}
+            {false && <ThemeToggle />}
           </div>
+        </div>
+      )}
+
+      {/* Floating fallback — only renders when the inline header is hidden so the
+          toggle stays reachable on sub-pages (Meta Ads, AdVideoNew sub-pages,
+          AdCreativeNew sub-pages, /adfactory-demo) without altering header logic. */}
+      {(currentRoute === '/adfactory-demo' || hideHeader) && (
+        <div
+          className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
+        >
+          {/* HIDE-MARK — theme toggle hidden globally (floating fallback). */}
+          {false && <ThemeToggle />}
         </div>
       )}
     </>

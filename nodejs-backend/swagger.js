@@ -91,6 +91,10 @@ const doc = {
       description: "Autopilot job management — schedule, pause, resume, and monitor automated ad generation jobs",
     },
     {
+      name: "Prompt Templates",
+      description: "Store and fetch module prompt templates by type",
+    },
+    {
       name: "default",
       description: "Miscellaneous APIs",
     },

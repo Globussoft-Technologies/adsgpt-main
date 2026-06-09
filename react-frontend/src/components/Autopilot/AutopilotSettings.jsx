@@ -455,7 +455,7 @@ const AutopilotSettings = () => {
       {/* Sticky preference header */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-5 sm:px-5 lg:px-6 2xl:py-6">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-white sm:text-base 2xl:text-[17px]">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white sm:text-base 2xl:text-[17px]">
             Autopilot preferences
           </h3>
           <InfoTip text="Set how Autopilot behaves across your ad accounts. Changes take effect on the next run." />
@@ -468,7 +468,7 @@ const AutopilotSettings = () => {
       </div>
 
       <div className="flex flex-col gap-3 px-4 py-5 sm:px-5 sm:py-6 lg:px-6 2xl:py-8 2xl:pt-0 sm:pt-0 pt-0">
-        {loading && <p className="text-sm text-white/70 2xl:text-15">Loading…</p>}
+        {loading && <p className="text-sm text-gray-500 dark:text-white/70 2xl:text-15">Loading…</p>}
 
         {loadError && (
           <Banner variant="error">Failed to load settings: {loadError}</Banner>
@@ -487,7 +487,7 @@ const AutopilotSettings = () => {
             <CollapsibleCard
               title={
                 <span className="inline-flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/12 bg-white/[0.07] text-white/85 2xl:h-8 2xl:w-8">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
                     <Power className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                   </span>
                   <StatusPill on={isOn} dryRun={isDryRun} />
@@ -512,11 +512,11 @@ const AutopilotSettings = () => {
             <CollapsibleCard
               title={
                 <span className="inline-flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/6 text-white/75">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/6 dark:text-white/75">
                     <Zap className="h-3.5 w-3.5" />
                   </span>
                   <span>Campaign templates</span>
-                  <span className="hidden text-13 font-normal text-white/65 sm:inline 2xl:text-sm">
+                  <span className="hidden text-13 font-normal text-gray-500 dark:text-white/65 sm:inline 2xl:text-sm">
                     · Quick-start by Meta objective
                   </span>
                   <InfoTip text="Pre-configured Autopilot setups for each Meta campaign objective. Open a template to see its defaults, then duplicate it to make it your own." />
@@ -537,11 +537,11 @@ const AutopilotSettings = () => {
             <CollapsibleCard
               title={
                 <span className="inline-flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/12 bg-white/[0.07] text-white/85 2xl:h-8 2xl:w-8">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
                     <Bell className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                   </span>
                   <span>Alerts</span>
-                  <span className="hidden text-13 font-normal text-white/65 sm:inline 2xl:text-sm">
+                  <span className="hidden text-13 font-normal text-gray-500 dark:text-white/65 sm:inline 2xl:text-sm">
                     · Where Autopilot tells you what it did
                   </span>
                   <InfoTip text="Choose where to send cycle summaries — Slack, email, and/or Telegram. The severity chips below control which rule findings actually notify." />
@@ -584,7 +584,7 @@ const AutopilotSettings = () => {
 const SaveStatus = ({ saving, dirty, saveMessage }) => {
   if (saving) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-white/75 2xl:text-13">
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/75 2xl:text-13">
         <Loader2 className="h-3 w-3 animate-spin 2xl:h-3.5 2xl:w-3.5" /> Saving…
       </span>
     );
@@ -592,25 +592,25 @@ const SaveStatus = ({ saving, dirty, saveMessage }) => {
   if (saveMessage && !saveMessage.ok) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 text-xs text-red-400 2xl:text-13"
+        className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 2xl:text-13"
         title={saveMessage.text}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+        <span className="h-1.5 w-1.5 rounded-full bg-red-600 dark:bg-red-400" />
         Save failed
       </span>
     );
   }
   if (saveMessage?.ok) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 2xl:text-13">
+      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 2xl:text-13">
         <Check className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" strokeWidth={3} /> Saved
       </span>
     );
   }
   if (dirty) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-white/75 2xl:text-13">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Unsaved
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/75 2xl:text-13">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" /> Unsaved
         changes
       </span>
     );
@@ -622,10 +622,10 @@ const SaveStatus = ({ saving, dirty, saveMessage }) => {
 const StatusPill = ({ on, dryRun }) => {
   const tone = !on
     ? {
-        fg: 'text-white/60',
-        bg: 'bg-white/8',
-        ring: 'border-white/10',
-        dot: 'bg-white/40',
+        fg: 'text-gray-500 dark:text-white/60',
+        bg: 'bg-gray-100 dark:bg-white/8',
+        ring: 'border-gray-200 dark:border-white/10',
+        dot: 'bg-gray-400 dark:bg-white/40',
         label: 'Autopilot · Off',
       }
     : dryRun
@@ -757,7 +757,7 @@ const TemplateCard = ({ template }) => {
   const Icon = template.icon;
   const accent = TEMPLATE_ACCENTS[template.accent] || TEMPLATE_ACCENTS.cyan;
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/6 bg-white/3 p-3 transition-all hover:border-white/10 hover:bg-white/5">
+    <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-3 transition-all hover:border-gray-300 hover:bg-gray-100 dark:border-white/6 dark:bg-white/3 dark:hover:border-white/10 dark:hover:bg-white/5">
       <span className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${accent.bar}`} />
       <div className="flex items-start gap-3 pl-2">
         <div
@@ -767,20 +767,20 @@ const TemplateCard = ({ template }) => {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-bold text-white">{template.label}</span>
+            <span className="text-sm font-bold text-gray-900 dark:text-white">{template.label}</span>
             {(template.badges || []).map((b) => (
               <TemplateBadge key={b} kind={b} />
             ))}
           </div>
-          <p className="mt-0.5 text-xs text-white/70 2xl:text-13">{template.desc}</p>
-          <div className="mt-2 flex items-center gap-2 text-10 text-white/65 2xl:text-[11px]">
+          <p className="mt-0.5 text-xs text-gray-600 dark:text-white/70 2xl:text-13">{template.desc}</p>
+          <div className="mt-2 flex items-center gap-2 text-10 text-gray-500 dark:text-white/65 2xl:text-[11px]">
             <span>
-              <span className="font-medium text-white/70">
+              <span className="font-medium text-gray-600 dark:text-white/70">
                 {template.active}
               </span>{' '}
               active
             </span>
-            <span className="text-white/20">·</span>
+            <span className="text-gray-300 dark:text-white/20">·</span>
             <span>last used {template.lastUsed}</span>
           </div>
         </div>
@@ -828,7 +828,7 @@ const BasicsPanel = ({ on, setOn, dryRun, setDryRun }) => (
         accent="amber"
         disabled={!on}
       />
-      <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-white/75 2xl:text-13">
+      <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/75 2xl:text-13">
         <Clock className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" /> Runs every 1 hour
       </span>
     </div>
@@ -841,20 +841,20 @@ const ToggleChip = ({ label, info, value, onChange, accent = 'cyan', disabled })
     accent === 'amber'
       ? value
         ? 'border-amber-400/40 bg-amber-500/8'
-        : 'border-white/10 bg-white/2'
+        : 'border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/2'
       : value
         ? 'border-[#15DCFF]/40 bg-[#15DCFF]/6'
-        : 'border-white/10 bg-white/2';
+        : 'border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/2';
   return (
     <button
       type="button"
       onClick={() => !disabled && onChange(!value)}
       disabled={disabled}
       className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-all 2xl:px-3.5 2xl:py-2.5 ${accentRing} ${
-        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-white/4'
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/4'
       }`}
     >
-      <span className="text-xs font-bold text-white 2xl:text-13">{label}</span>
+      <span className="text-xs font-bold text-gray-900 dark:text-white 2xl:text-13">{label}</span>
       {info && <InfoTip text={info} />}
       <Switch checked={value} onChange={onChange} disabled={disabled} size="sm" />
     </button>
@@ -901,7 +901,7 @@ const AlertsPanel = ({
         hint={
           <>
             1. In Slack, open the destination channel and go to{' '}
-            <span className="text-white/60">
+            <span className="text-gray-600 dark:text-white/60">
               Channel name → Integrations → Add an App
             </span>{' '}
             and pick{' '}
@@ -916,7 +916,7 @@ const AlertsPanel = ({
             .
             <br />
             2. Authorize, choose the channel, click{' '}
-            <span className="text-white/60">Add Incoming Webhooks integration</span>.
+            <span className="text-gray-600 dark:text-white/60">Add Incoming Webhooks integration</span>.
             <br />
             3. Copy the{' '}
             <span className="font-mono">https://hooks.slack.com/services/…</span>{' '}
@@ -967,7 +967,7 @@ const AlertsPanel = ({
     {/* Severity routing */}
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
-        <span className="text-10 font-bold uppercase tracking-wider text-white/60 2xl:text-[11px]">
+        <span className="text-10 font-bold uppercase tracking-wider text-gray-500 dark:text-white/60 2xl:text-[11px]">
           Notify me about
         </span>
         <InfoTip text="Pick which rule severities trigger an alert. Per-channel routing follows the channels you've configured above." />
@@ -983,7 +983,7 @@ const AlertsPanel = ({
               className={`group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all 2xl:px-3.5 2xl:py-2 2xl:text-13 ${
                 active
                   ? 'border-[#15DCFF]/40 bg-[#15DCFF]/10 text-[#15DCFF]'
-                  : 'border-white/15 bg-white/[0.04] text-white/75 hover:border-white/25 hover:text-white'
+                  : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/75 dark:hover:border-white/25 dark:hover:text-white'
               }`}
             >
               <span
@@ -996,7 +996,7 @@ const AlertsPanel = ({
           );
         })}
       </div>
-      <p className="text-10 leading-relaxed text-white/60 2xl:text-xs">
+      <p className="text-10 leading-relaxed text-gray-600 dark:text-white/60 2xl:text-xs">
         Severity is set per rule. Toggling these chips controls which severities
         of rule findings actually send to Slack / Email.
       </p>
@@ -1026,28 +1026,28 @@ const ChannelCard = ({
 }) => {
   const Icon = kind === 'slack' ? MessageSquare : Mail;
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-white/15 bg-white/5 p-4 2xl:p-5">
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/15 dark:bg-white/5 2xl:p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5">
           <div
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border 2xl:h-10 2xl:w-10 ${
               connected
                 ? 'border-[#15DCFF]/30 bg-[#15DCFF]/8 text-[#15DCFF]'
-                : 'border-white/15 bg-white/[0.06] text-white/70'
+                : 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/70'
             }`}
           >
             <Icon className="h-4 w-4 2xl:h-4.5 2xl:w-4.5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-13 font-bold text-white 2xl:text-sm">{title}</span>
+              <span className="text-13 font-bold text-gray-900 dark:text-white 2xl:text-sm">{title}</span>
               {connected && (
                 <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-300">
                   Connected
                 </span>
               )}
             </div>
-            <p className="mt-0.5 truncate text-10 text-white/65 2xl:text-[11px]">
+            <p className="mt-0.5 truncate text-10 text-gray-500 dark:text-white/65 2xl:text-[11px]">
               {connectedLabel}
             </p>
           </div>
@@ -1086,7 +1086,7 @@ const ChannelCard = ({
         className="font-mono"
       />
       {hint && (
-        <p className="text-10 leading-relaxed text-white/60 2xl:text-xs">{hint}</p>
+        <p className="text-10 leading-relaxed text-gray-600 dark:text-white/60 2xl:text-xs">{hint}</p>
       )}
       {testResult && (
         <Banner variant={testResult.sent ? 'success' : 'error'}>
@@ -1114,28 +1114,28 @@ const TelegramCard = ({
 }) => {
   const connected = !!chatId;
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-white/15 bg-white/5 p-4 2xl:p-5">
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/15 dark:bg-white/5 2xl:p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5">
           <div
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border 2xl:h-10 2xl:w-10 ${
               connected
                 ? 'border-[#15DCFF]/30 bg-[#15DCFF]/8 text-[#15DCFF]'
-                : 'border-white/15 bg-white/[0.06] text-white/70'
+                : 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/70'
             }`}
           >
             <Send className="h-4 w-4 -rotate-45" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-13 font-bold text-white">Telegram</span>
+              <span className="text-13 font-bold text-gray-900 dark:text-white">Telegram</span>
               {connected && (
                 <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-300">
                   Connected
                 </span>
               )}
             </div>
-            <p className="mt-0.5 truncate text-10 text-white/65 2xl:text-[11px]">
+            <p className="mt-0.5 truncate text-10 text-gray-500 dark:text-white/65 2xl:text-[11px]">
               {connected ? 'Chat configured' : 'Not configured'}
             </p>
           </div>
@@ -1173,7 +1173,7 @@ const TelegramCard = ({
         className="font-mono"
       />
 
-      <p className="text-10 leading-relaxed text-white/60 2xl:text-xs">
+      <p className="text-10 leading-relaxed text-gray-600 dark:text-white/60 2xl:text-xs">
         1. Add{' '}
         <a
           href={`https://t.me/${TELEGRAM_BOT_HANDLE}`}

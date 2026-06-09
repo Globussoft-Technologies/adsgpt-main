@@ -10,8 +10,14 @@ import { getOffsetLabel } from './TimezoneSelect';
 // ----------------------------------------------------------------------------
 // SummarySection — live readout of what the user just configured.
 //
-// Pure derivation: pulls `summarizeCycles` from the helper and renders the
-// numbers. No mutations.
+// Source of truth:
+//   1. `apiSummary` — POST /jobs/summary response. Used once the form is
+//      valid enough for the Activate/Update button to be enabled.
+//   2. Local `summarizeCycles` helper — fallback while the form is still
+//      incomplete (so the panel never appears empty).
+//
+// All derived numbers are normalised into the same shape regardless of source,
+// so the JSX below doesn't have to branch.
 // ----------------------------------------------------------------------------
 
 export default function SummarySection({
@@ -19,19 +25,70 @@ export default function SummarySection({
   pairsPerCycle,
   creditsPerImage,
   availableCredits,
+  apiSummary,
+  apiLoading,
+  disabled,
 }) {
-  const summary = useMemo(
+  const localSummary = useMemo(
     () => summarizeCycles({ frequency, pairsPerCycle, creditsPerImage, availableCredits }),
     [frequency, pairsPerCycle, creditsPerImage, availableCredits]
   );
 
-  const nextRun = useMemo(() => computeNextRunAt(frequency, new Date()), [frequency]);
+  const localNextRun = useMemo(() => computeNextRunAt(frequency, new Date()), [frequency]);
+
+  // Adapt the API response (when present) to the same shape the rest of this
+  // component expects. Falls back to local-derived numbers otherwise.
+  const view = useMemo(() => {
+    if (apiSummary) {
+      const cyclesScheduled = apiSummary.cyclesScheduled; // number | null (open-ended)
+      const affordable = apiSummary.cyclesCredsCover ?? 0;
+      const costPerCycle = Number(apiSummary.creditsPerCycle) || 0;
+      const totalCost = Number(apiSummary.creditsUsedAcrossRunnable) || 0;
+      const total = Number(apiSummary.totalCredits) || availableCredits;
+      const exceedsCredits =
+        cyclesScheduled != null && affordable < cyclesScheduled;
+      const isOpenEnded = cyclesScheduled == null;
+      return {
+        scheduled: cyclesScheduled,
+        affordable,
+        costPerCycle,
+        totalCost,
+        totalCredits: total,
+        exceedsCredits,
+        isOpenEnded,
+        nextRun: apiSummary.nextRunAt ? new Date(apiSummary.nextRunAt) : null,
+        source: 'api',
+      };
+    }
+    return {
+      scheduled: localSummary.scheduled,
+      affordable: localSummary.affordable,
+      costPerCycle: localSummary.costPerCycle,
+      totalCost: localSummary.totalCost,
+      totalCredits: availableCredits,
+      exceedsCredits: localSummary.exceedsCredits,
+      isOpenEnded: localSummary.isOpenEnded,
+      nextRun: localNextRun,
+      source: 'local',
+    };
+  }, [apiSummary, localSummary, localNextRun, availableCredits]);
 
   const isOneTime = frequency?.preset === 'does_not_repeat';
 
   return (
-    <section className="flex flex-col gap-2.5 rounded-xl border border-white/10 bg-linear-to-br from-[#15DCFF]/5 via-[#0D0D0D]/40 to-[#6b72f8]/5 px-4 py-3">
-      <div className="flex items-center justify-between">
+    <section
+      className={`relative flex flex-col gap-2.5 rounded-xl border border-white/10 bg-linear-to-br from-[#15DCFF]/5 via-[#0D0D0D]/40 to-[#6b72f8]/5 px-4 py-3 transition ${
+        disabled ? 'pointer-events-none select-none' : ''
+      }`}
+    >
+      {disabled && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#0D0D0D]/40 backdrop-blur-sm">
+          <span className="rounded-full border border-white/10 bg-[#0D0D0D]/80 px-3 py-1 text-xs text-[#AFAFAF]">
+            Fill all required fields to see the summary
+          </span>
+        </div>
+      )}
+      <div className={`flex items-center justify-between ${disabled ? 'opacity-60' : ''}`}>
         <div className="flex items-center gap-2">
           <Sigma className="size-4 text-[#15DCFF]" />
           <h3 className="text-sm font-semibold text-white 2xl:text-base">Summary</h3>
@@ -47,30 +104,30 @@ export default function SummarySection({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 sm:grid-cols-4 transition ${apiLoading ? 'opacity-70' : ''} ${disabled ? 'opacity-60' : ''}`}>
         <Stat
           label={isOneTime ? 'Run on' : 'Next run'}
-          value={nextRun ? formatNextRun(nextRun) : '—'}
+          value={view.nextRun ? formatNextRun(view.nextRun) : '—'}
         />
         <Stat
           label="Cycles scheduled"
           value={
-            summary.scheduled == null ? (
+            view.scheduled == null ? (
               <span className="inline-flex items-center gap-1">
                 <InfinityIcon className="size-3.5" /> Open-ended
               </span>
             ) : (
-              summary.scheduled
+              view.scheduled
             )
           }
         />
-        <Stat label="Credits / cycle" value={summary.costPerCycle} />
+        <Stat label="Credits / cycle" value={view.costPerCycle} />
         <Stat
           label="Cycles your credits cover"
           value={
-            summary.costPerCycle === 0
+            view.costPerCycle === 0
               ? '—'
-              : summary.affordable.toLocaleString()
+              : (view.affordable ?? 0).toLocaleString()
           }
         />
       </div>
@@ -81,18 +138,18 @@ export default function SummarySection({
           Total credits used across runnable cycles
         </div>
         <span className="text-sm font-semibold text-white">
-          {summary.totalCost.toLocaleString()} / {availableCredits.toLocaleString()}
+          {view.totalCost.toLocaleString()} / {view.totalCredits.toLocaleString()}
         </span>
       </div>
 
-      {summary.exceedsCredits && (
+      {view.exceedsCredits && (
         <Warning>
-          You've scheduled <strong>{summary.scheduled}</strong> cycles but your credits cover{' '}
-          <strong>{summary.affordable}</strong>. Automation will pause when credits run out.
+          You've scheduled <strong>{view.scheduled}</strong> cycles but your credits cover{' '}
+          <strong>{view.affordable}</strong>. Automation will pause when credits run out.
         </Warning>
       )}
 
-      {summary.isOpenEnded && summary.affordable === 0 && (
+      {view.isOpenEnded && view.affordable === 0 && (
         <Warning>
           Your credits don't cover even one cycle at this configuration. Reduce pairs per cycle or
           top up credits.

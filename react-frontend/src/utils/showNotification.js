@@ -9,6 +9,10 @@ import {
 } from '@/store/reducers/adStudio/adHistorySlice';
 import { setActivePage, setMySpaceTab } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
+import {
+  setActiveBrandIQTab,
+  setSelectedCompetitorBrand,
+} from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import router from '@/routes/router';
 
 export const showNotification = (sessionId, type, dispatch) => {
@@ -77,10 +81,10 @@ function createNotification(newsession, type, dispatch) {
       event.preventDefault();
       router.navigate('/adstudio');
       if (type === 'video') {
-        dispatch(setActiveAdStudioTab('adVideo'));
+        // dispatch(setActiveAdStudioTab('adVideo'));
         dispatch(setAdVideoSessionId(newsession));
       } else {
-        dispatch(setActiveAdStudioTab('adCreative'));
+        // dispatch(setActiveAdStudioTab('adCreative'));
         dispatch(setAdCreativeSessionId(newsession));
       }
       window.focus();
@@ -371,6 +375,66 @@ function createNotificationForMyImage(dispatch, requestId) {
     }, 5000);
   } catch (error) {
     console.error('Notification creation failed for My Image:', error);
+  }
+}
+
+let lastCompetitorAdsRequestId = null;
+
+export const showCompetitorAdsReadyNotification = (brand, dispatch) => {
+  if (typeof window.Notification === 'undefined') return;
+
+  const requestId = `competitor-ads-${brand?.id}-${Date.now()}`;
+  lastCompetitorAdsRequestId = requestId;
+
+  Notification.requestPermission()
+    .then((permission) => {
+      if (permission === 'granted') {
+        setTimeout(() => {
+          createCompetitorAdsNotification(brand, dispatch, requestId);
+        }, 100);
+      }
+    })
+    .catch((err) => {
+      console.error('Error requesting notification permission:', err);
+    });
+};
+
+function createCompetitorAdsNotification(brand, dispatch, requestId) {
+  if (lastCompetitorAdsRequestId !== requestId) return;
+
+  try {
+    const uniqueTag = `competitor-ads-${brand?.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const brandName = brand?.name || brand?.brandName || 'your brand';
+
+    const notification = new Notification('Competitor Ads Ready!', {
+      body: `You can check your competitor ads for ${brandName}.`,
+      icon: NotifyLogo,
+      vibrate: [100, 50, 100],
+      requireInteraction: false,
+      tag: uniqueTag,
+      silent: false,
+    });
+
+    notification.onclick = (event) => {
+      event.preventDefault();
+      router.navigate('/brandiq');
+      dispatch(setActiveBrandIQTab('competitors'));
+      dispatch(setSelectedCompetitorBrand(brand));
+      window.focus();
+      notification.close();
+    };
+
+    notification.onerror = (err) => {
+      console.error('Competitor ads notification error:', err);
+    };
+
+    setTimeout(() => {
+      if (lastCompetitorAdsRequestId === requestId) {
+        lastCompetitorAdsRequestId = null;
+      }
+    }, 5000);
+  } catch (error) {
+    console.error('Competitor ads notification creation failed:', error);
   }
 }
 

@@ -285,7 +285,7 @@ const AutopilotOverview = ({
               return (
                 <span className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span className="text-emerald-300">Live</span>
+                  <span className="text-emerald-600 dark:text-emerald-300">Live</span>
                 </span>
               );
             }
@@ -293,15 +293,15 @@ const AutopilotOverview = ({
               return (
                 <span className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  <span className="text-amber-300">Dry-run</span>
+                  <span className="text-amber-600 dark:text-amber-300">Dry-run</span>
                 </span>
               );
             }
             // 'off'
             return (
               <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-white/40" />
-                <span className="text-white/65">Autopilot off</span>
+                <span className="h-2 w-2 rounded-full bg-gray-400 dark:bg-white/40" />
+                <span className="text-gray-500 dark:text-white/65">Autopilot off</span>
               </span>
             );
           })()}
@@ -364,12 +364,12 @@ const AutopilotOverview = ({
 
       {/* Per-account breakdown */}
       <Section className="overflow-hidden p-0!">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-white/10">
           <div>
-            <h3 className="text-sm font-bold text-white 2xl:text-15">
+            <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">
               Per-account breakdown
             </h3>
-            <p className="mt-0.5 text-xs text-white/70 2xl:text-13">
+            <p className="mt-0.5 text-xs text-gray-500 2xl:text-13 dark:text-white/70">
               What Autopilot did, by ad account
             </p>
           </div>
@@ -391,8 +391,8 @@ const AutopilotOverview = ({
       <Section className="p-4!">
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div className="min-w-0">
-            <h3 className="text-sm font-bold text-white 2xl:text-15">Run my rules now</h3>
-            <p className="mt-0.5 text-xs text-white/70 2xl:text-13">
+            <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">Run my rules now</h3>
+            <p className="mt-0.5 text-xs text-gray-500 2xl:text-13 dark:text-white/70">
               Preview what Autopilot would do across every campaign right now.
               Dry-run is safe and changes nothing on Meta.
             </p>
@@ -423,7 +423,7 @@ const AutopilotOverview = ({
           </div>
         </div>
         {runMode === 'live' && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-300">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               Live mode will apply real changes to Meta for every matching
@@ -447,14 +447,14 @@ const SummaryHeader = ({ accountCount, from, to, onDateChange, loading }) => (
   <div className="flex flex-wrap items-end justify-between gap-3">
     <div className="min-w-0">
       <div className="flex items-center gap-2">
-        <h2 className="text-base font-bold text-white 2xl:text-lg">
+        <h2 className="text-base font-bold text-gray-900 2xl:text-lg dark:text-white">
           Activity summary
         </h2>
         {loading && (
-          <Loader2 className="h-3 w-3 animate-spin text-white/40" />
+          <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-white/40" />
         )}
       </div>
-      <p className="mt-1 text-xs text-white/70 2xl:text-13">
+      <p className="mt-1 text-xs text-gray-500 2xl:text-13 dark:text-white/70">
         Across {accountCount} account{accountCount === 1 ? '' : 's'} in the
         selected range
       </p>
@@ -467,16 +467,16 @@ const SummaryHeader = ({ accountCount, from, to, onDateChange, loading }) => (
 const KpiCard = ({ icon: Icon, tone = 'cyan', label, value, sub }) => {
   const toneCls =
     tone === 'emerald'
-      ? 'text-emerald-400 bg-emerald-400/10'
+      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10'
       : tone === 'lime'
         ? 'text-lime-300 bg-lime-400/10'
         : tone === 'indigo'
           ? 'text-indigo-300 bg-indigo-400/10'
           : 'text-[#15DCFF] bg-[#15DCFF]/10';
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#14181D] p-4 backdrop-blur-xl transition-colors hover:border-white/15 2xl:p-5">
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-colors hover:border-gray-300 2xl:p-5 dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15">
       <div className="flex items-start justify-between gap-2">
-        <div className="text-10 font-bold tracking-wider text-white/55 uppercase 2xl:text-[11px]">
+        <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
           {label}
         </div>
         {Icon && (
@@ -485,8 +485,8 @@ const KpiCard = ({ icon: Icon, tone = 'cyan', label, value, sub }) => {
           </div>
         )}
       </div>
-      <div className="mt-0 text-2xl font-bold text-white 2xl:text-[28px]">{value}</div>
-      <div className="mt-1.5 text-10 text-white/70 2xl:text-xs">{sub}</div>
+      <div className="mt-0 text-2xl font-bold text-gray-900 2xl:text-[28px] dark:text-white">{value}</div>
+      <div className="mt-1.5 text-10 text-gray-500 2xl:text-xs dark:text-white/70">{sub}</div>
     </div>
   );
 };
@@ -495,10 +495,10 @@ const DeltaChip = ({ sign, pct }) => {
   const isUp = sign === 'up';
   const isDown = sign === 'down';
   const cls = isUp
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
     : isDown
-      ? 'border-red-500/30 bg-red-500/10 text-red-400'
-      : 'border-white/10 bg-white/5 text-white/55';
+      ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+      : 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55';
   const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -508,19 +508,19 @@ const DeltaChip = ({ sign, pct }) => {
         {Icon && <Icon className="h-3 w-3" />}
         {Math.abs(pct)}%
       </span>
-      <span className="text-white/70 2xl:text-xs">vs prior period</span>
+      <span className="text-gray-500 2xl:text-xs dark:text-white/70">vs prior period</span>
     </span>
   );
 };
 
 // ─── status cards ──────────────────────────────────────────────────────────
 const StatusCard = ({ label, value, sub }) => (
-  <div className="rounded-2xl border border-white/10 bg-[#14181D] p-4 backdrop-blur-xl 2xl:p-5">
-    <div className="text-10 font-bold tracking-wider text-white/55 uppercase 2xl:text-[11px]">
+  <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl 2xl:p-5 dark:border-white/10 dark:bg-[#14181D]">
+    <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
       {label}
     </div>
-    <div className="mt-1.5 text-base font-bold text-white 2xl:text-[17px]">{value}</div>
-    <div className="mt-1.5 truncate text-10 text-white/70 2xl:text-xs">{sub}</div>
+    <div className="mt-1.5 text-base font-bold text-gray-900 2xl:text-[17px] dark:text-white">{value}</div>
+    <div className="mt-1.5 truncate text-10 text-gray-500 2xl:text-xs dark:text-white/70">{sub}</div>
   </div>
 );
 
@@ -575,15 +575,15 @@ const NextRunCard = ({ lastRunAt }) => {
     minute: '2-digit',
   });
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#14181D] p-4 backdrop-blur-xl 2xl:p-5">
-      <div className="text-10 font-bold tracking-wider text-white/55 uppercase 2xl:text-[11px]">
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl 2xl:p-5 dark:border-white/10 dark:bg-[#14181D]">
+      <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
         Next scheduled run
       </div>
-      <div className="mt-1.5 flex items-center gap-2 text-base font-bold text-white 2xl:text-[17px]">
+      <div className="mt-1.5 flex items-center gap-2 text-base font-bold text-gray-900 2xl:text-[17px] dark:text-white">
         <Clock className="h-3.5 w-3.5 text-[#15DCFF] 2xl:h-4 2xl:w-4" />
         {timeLabel}
       </div>
-      <div className="mt-1.5 text-10 text-white/70 2xl:text-xs">
+      <div className="mt-1.5 text-10 text-gray-500 2xl:text-xs dark:text-white/70">
         in {minsUntil} min · every hour
       </div>
     </div>
@@ -594,13 +594,13 @@ const NextRunCard = ({ lastRunAt }) => {
 const ChartHeader = ({ title, subtitle, legend }) => (
   <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
     <div>
-      <h3 className="text-sm font-bold text-white 2xl:text-15">{title}</h3>
-      {subtitle && <p className="mt-0.5 text-xs text-white/70 2xl:text-13">{subtitle}</p>}
+      <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">{title}</h3>
+      {subtitle && <p className="mt-0.5 text-xs text-gray-500 2xl:text-13 dark:text-white/70">{subtitle}</p>}
     </div>
     {legend && (
       <div className="flex flex-wrap gap-3">
         {legend.map((l) => (
-          <div key={l.label} className="flex items-center gap-1.5 text-10 text-white/70 2xl:text-xs">
+          <div key={l.label} className="flex items-center gap-1.5 text-10 text-gray-500 2xl:text-xs dark:text-white/70">
             <span className={`h-2 w-2 rounded-full ${l.color}`} />
             {l.label}
           </div>
@@ -683,7 +683,7 @@ const ActivityChart = ({ byDay, from, to }) => {
               title={`${b.date.toLocaleDateString()}\nPause: ${b.pause}  Alert: ${b.alert}  Budget+: ${b.budget}`}
             >
               <div
-                className={`text-10 font-medium 2xl:text-[11px] ${total ? 'text-white' : 'text-white/25'}`}
+                className={`text-10 font-medium 2xl:text-[11px] ${total ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/25'}`}
               >
                 {total || ''}
               </div>
@@ -723,7 +723,7 @@ const ActivityChart = ({ byDay, from, to }) => {
           return (
             <div
               key={idx}
-              className="flex flex-1 justify-center truncate text-10 text-white/55 2xl:text-[11px]"
+              className="flex flex-1 justify-center truncate text-10 text-gray-500 2xl:text-[11px] dark:text-white/55"
             >
               {showLabel
                 ? b.date.toLocaleDateString(undefined, {
@@ -752,7 +752,7 @@ const RULE_BAR_TONES = [
 const TopRulesList = ({ rules }) => {
   if (!rules.length) {
     return (
-      <div className="flex h-full min-h-45 items-center justify-center rounded-xl border border-white/10 bg-white/3 p-3 text-center text-xs text-white/55 2xl:min-h-50 2xl:text-13">
+      <div className="flex h-full min-h-45 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 p-3 text-center text-xs text-gray-500 2xl:min-h-50 2xl:text-13 dark:border-white/10 dark:bg-white/3 dark:text-white/55">
         No rules have fired in this window.
       </div>
     );
@@ -773,13 +773,13 @@ const TopRulesList = ({ rules }) => {
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${RULE_BAR_TONES[idx % RULE_BAR_TONES.length]}`}
                 />
-                <span className="truncate text-xs text-white 2xl:text-13">{label}</span>
+                <span className="truncate text-xs text-gray-900 2xl:text-13 dark:text-white">{label}</span>
               </div>
-              <span className="shrink-0 text-xs font-bold text-white 2xl:text-13">
+              <span className="shrink-0 text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
                 {r.count}
               </span>
             </div>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-white/5">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/5">
               <div
                 className={`h-full rounded-full ${RULE_BAR_TONES[idx % RULE_BAR_TONES.length]}`}
                 style={{ width: `${pct}%` }}
@@ -821,13 +821,13 @@ const PerAccountTable = ({
   if (loading && !accounts.length) {
     return (
       <div className="p-8 text-center">
-        <Loader2 className="mx-auto h-4 w-4 animate-spin text-white/40" />
+        <Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400 dark:text-white/40" />
       </div>
     );
   }
   if (!accounts.length) {
     return (
-      <div className="p-8 text-center text-xs text-white/70 2xl:text-13">
+      <div className="p-8 text-center text-xs text-gray-500 2xl:text-13 dark:text-white/70">
         No actions in this window. Run a dry-run below to populate.
       </div>
     );
@@ -836,7 +836,7 @@ const PerAccountTable = ({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] text-xs 2xl:text-13">
         <thead>
-          <tr className="border-b border-white/10 bg-white/2 text-left">
+          <tr className="border-b border-gray-200 bg-gray-100 text-left dark:border-white/10 dark:bg-white/2">
             <Th>Account</Th>
             <Th>Total</Th>
             <Th tone="rose">Pause</Th>
@@ -860,13 +860,13 @@ const PerAccountTable = ({
               return (
                 <tr
                   key={a.adAccountId}
-                  className="border-b border-white/10 align-top last:border-b-0 hover:bg-white/3"
+                  className="border-b border-gray-200 align-top last:border-b-0 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/3"
                 >
                 <td className="px-3 py-3">
-                  <div className="text-xs font-bold text-white 2xl:text-13">
+                  <div className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
                     {a.adAccountName || '(unnamed)'}
                   </div>
-                  <div className="font-mono text-10 text-white/55 2xl:text-[11px]">
+                  <div className="font-mono text-10 text-gray-500 2xl:text-[11px] dark:text-white/55">
                     {a.adAccountId}
                   </div>
                 </td>
@@ -878,7 +878,7 @@ const PerAccountTable = ({
                 />
                 <CountCell value={pause} pct={pct(pause)} tone="rose" />
                 <CountCell value={alert} pct={pct(alert)} tone="cyan" />
-                <td className="px-3 py-3 text-xs whitespace-nowrap text-white/85 2xl:text-13">
+                <td className="px-3 py-3 text-xs whitespace-nowrap text-gray-600 2xl:text-13 dark:text-white/85">
                   {enrich.lastAt ? (
                     <>
                       <div className="font-medium">
@@ -889,7 +889,7 @@ const PerAccountTable = ({
                           minute: '2-digit',
                         })}
                       </div>
-                      <div className="text-10 text-white/60 2xl:text-[11px]">
+                      <div className="text-10 text-gray-500 2xl:text-[11px] dark:text-white/60">
                         {timeAgo(enrich.lastAt)}
                       </div>
                     </>
@@ -924,7 +924,7 @@ const Th = ({ children, tone }) => {
         ? 'text-cyan-300'
         : tone === 'emerald'
           ? 'text-emerald-300'
-          : 'text-white/60';
+          : 'text-gray-500 dark:text-white/60';
   return (
     <th
       className={`px-3 py-2.5 text-10 font-bold tracking-wider uppercase 2xl:py-3 2xl:text-[11px] ${toneCls}`}
@@ -942,7 +942,7 @@ const CountCell = ({ value, pct, tone = 'white', hidePct = false }) => {
         ? { fg: 'text-cyan-300', bar: 'bg-cyan-400' }
         : tone === 'emerald'
           ? { fg: 'text-emerald-300', bar: 'bg-emerald-400' }
-          : { fg: 'text-white', bar: 'bg-white/60' };
+          : { fg: 'text-gray-900 dark:text-white', bar: 'bg-gray-400 dark:bg-white/60' };
   const showBar = pct != null && pct > 0;
   return (
     <td className="px-3 py-3">
@@ -951,11 +951,11 @@ const CountCell = ({ value, pct, tone = 'white', hidePct = false }) => {
           {value.toLocaleString()}
         </span>
         {!hidePct && pct != null && pct > 0 && (
-          <span className="text-10 font-medium text-white/70 2xl:text-[11px]">{pct}%</span>
+          <span className="text-10 font-medium text-gray-500 2xl:text-[11px] dark:text-white/70">{pct}%</span>
         )}
       </div>
       {showBar && (
-        <div className="mt-1.5 h-[2px] w-full overflow-hidden rounded-full bg-white/[0.05]">
+        <div className="mt-1.5 h-[2px] w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/[0.05]">
           <div
             className={`h-full ${accent.bar}`}
             style={{ width: `${pct}%` }}
@@ -968,14 +968,14 @@ const CountCell = ({ value, pct, tone = 'white', hidePct = false }) => {
 
 // ─── run-mode toggle ──────────────────────────────────────────────────────
 const RunModeToggle = ({ mode, onChange, liveAllowed }) => (
-  <div className="inline-flex items-center rounded-xl border border-white/10 bg-[#1A2027] p-1 text-xs 2xl:text-13">
+  <div className="inline-flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 text-xs 2xl:text-13 dark:border-white/10 dark:bg-[#1A2027]">
     <button
       type="button"
       onClick={() => onChange('dry')}
       className={`rounded-lg px-3 py-1.5 font-medium transition-all 2xl:px-3.5 2xl:py-2 ${
         mode === 'dry'
           ? 'border border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]'
-          : 'border border-transparent text-white/70 hover:text-white'
+          : 'border border-transparent text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white'
       }`}
     >
       Dry-run
@@ -991,8 +991,8 @@ const RunModeToggle = ({ mode, onChange, liveAllowed }) => (
       }
       className={`rounded-lg px-3 py-1.5 font-medium transition-all 2xl:px-3.5 2xl:py-2 ${
         mode === 'live'
-          ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-          : 'border border-transparent text-white/70 hover:text-white disabled:opacity-40 disabled:hover:text-white/70'
+          ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+          : 'border border-transparent text-gray-500 hover:text-gray-900 disabled:opacity-40 disabled:hover:text-gray-500 dark:text-white/70 dark:hover:text-white dark:disabled:hover:text-white/70'
       }`}
     >
       Live
@@ -1004,11 +1004,11 @@ const RunModeToggle = ({ mode, onChange, liveAllowed }) => (
 const CycleResultTable = ({ result }) => {
   const accounts = result?.accounts || [];
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-white/3 p-3 2xl:p-4">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-10 text-white/65 2xl:text-[11px]">
+    <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 2xl:p-4 dark:border-white/10 dark:bg-white/3">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-10 text-gray-500 2xl:text-[11px] dark:text-white/65">
         <span>
           run id:{' '}
-          <code className="font-mono text-white/85">{result.runId || '—'}</code>
+          <code className="font-mono text-gray-600 dark:text-white/85">{result.runId || '—'}</code>
         </span>
         <span>·</span>
         <span>duration: {result.durationMs ?? '—'} ms</span>
@@ -1016,14 +1016,14 @@ const CycleResultTable = ({ result }) => {
         <span>mode: {result.dryRun ? 'dry-run' : 'live'}</span>
       </div>
       {accounts.length === 0 ? (
-        <div className="py-2 text-center text-xs text-white/70 2xl:text-13">
+        <div className="py-2 text-center text-xs text-gray-500 2xl:text-13 dark:text-white/70">
           No accounts processed.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-white/10">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/10">
           <table className="w-full text-xs 2xl:text-13">
             <thead>
-              <tr className="border-b border-white/10 bg-white/2 text-left">
+              <tr className="border-b border-gray-200 bg-gray-100 text-left dark:border-white/10 dark:bg-white/2">
                 <Th>Account</Th>
                 <Th>Findings</Th>
                 <Th>Would pause</Th>
@@ -1038,27 +1038,27 @@ const CycleResultTable = ({ result }) => {
                 return (
                   <tr
                     key={a.adAccountId}
-                    className="border-b border-white/10 last:border-b-0 hover:bg-white/2"
+                    className="border-b border-gray-200 last:border-b-0 hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/2"
                   >
                     <td className="px-3 py-2">
-                      <div className={`font-medium ${a.ok ? 'text-white' : 'text-red-400'}`}>
+                      <div className={`font-medium ${a.ok ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
                         {a.name || a.adAccountId}
                       </div>
                       {a.error && (
-                        <div className="text-10 text-red-400 2xl:text-[11px]">{a.error}</div>
+                        <div className="text-10 text-red-600 2xl:text-[11px] dark:text-red-400">{a.error}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-white/85">
+                    <td className="px-3 py-2 text-gray-600 dark:text-white/85">
                       {a.pause?.findings_count ?? '–'}
                     </td>
-                    <td className="px-3 py-2 text-white/85">
+                    <td className="px-3 py-2 text-gray-600 dark:text-white/85">
                       {a.pause?.would_pause ?? '–'}
                     </td>
-                    <td className="px-3 py-2 text-white/85">
+                    <td className="px-3 py-2 text-gray-600 dark:text-white/85">
                       {a.resume?.would_resume ?? '–'}
                     </td>
                     <td
-                      className={`px-3 py-2 ${failed ? 'text-red-400' : 'text-white/85'}`}
+                      className={`px-3 py-2 ${failed ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-white/85'}`}
                     >
                       {failed}
                     </td>

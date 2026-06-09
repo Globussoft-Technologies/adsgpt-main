@@ -8,12 +8,14 @@ import {
   saveAutomation,
   updateAutomation,
   fetchCtaOptions,
+  fetchAutomationSummary,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 import {
   selectAutomationEntry,
   selectAutomationSaving,
   selectCtaOptionsForObjective,
   selectCtaOptionsLoading,
+  selectAutomationSummary,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
 import {
   checkFbUser,
@@ -90,7 +92,10 @@ const defaultFormValues = () => {
       adAccountId: null,
       campaignId: null,
       campaignObjective: null,
-      adSetId: null,
+      // Ordered list of Meta ad set IDs. Backend rotates through them when
+      // one hits the 50-ad limit. Stored as array even when only one is
+      // picked so the payload shape is consistent.
+      adSetId: [],
       pageId: null,
       // Optional — only collected when the picked campaign's objective is
       // OUTCOME_LEADS, in which case TargetSection surfaces a Lead Form picker.
@@ -196,10 +201,13 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // Gate the Call-to-Action section until all four "Where to post" fields are
   // picked. The CTA URL only makes sense once a target exists, and a wrongly
   // ordered click can otherwise lead the user to fill the CTA first.
+  // adSetId is an array — at least one selection counts as "picked".
+  const hasAdSet =
+    Array.isArray(values?.target?.adSetId) && values.target.adSetId.length > 0;
   const isTargetComplete =
     !!values?.target?.adAccountId &&
     !!values?.target?.campaignId &&
-    !!values?.target?.adSetId &&
+    hasAdSet &&
     !!values?.target?.pageId;
 
   // Whatever objective the picked campaign carries. AutomationForm watches
@@ -271,7 +279,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     if (pairs < 1) errs.push('Pairs per cycle must be at least 1');
     if (!values.target?.adAccountId) errs.push('Pick an ad account');
     if (!values.target?.campaignId) errs.push('Pick a Meta campaign');
-    if (!values.target?.adSetId) errs.push('Pick an ad set');
+    if (!hasAdSet) errs.push('Pick at least one ad set');
     if (!values.target?.pageId) errs.push('Pick a Facebook page');
     // CTA validation depends on the live options (per objective). When the
     // objective is unsupported, no button choice is valid — bail with a clear
@@ -283,7 +291,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
     if (!isValidCtaUrl(values.callToAction?.url || '')) errs.push('Enter a valid destination URL');
     return errs;
-  }, [isMetaConnected, values, ctaUnsupported, ctaOptions]);
+  }, [isMetaConnected, values, hasAdSet, ctaUnsupported, ctaOptions]);
   const canActivate = validationErrors.length === 0;
 
   // Edit mode = we already have a backend job for this campaign. Drives the
@@ -313,6 +321,36 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     () => Math.max(0, (credits?.totalCredits || 0) - (credits?.creditsUsed || 0)),
     [credits]
   );
+
+  // ----- Live summary fetch ------------------------------------------------
+  // Only call POST /jobs/summary once the form is valid enough to be
+  // Activate-able (matches the spec: "as soon as the Create/Update button is
+  // active"). Re-call on every change to the summary-relevant fields, with a
+  // 300ms debounce so a rapid edit doesn't fire N requests. Before validity,
+  // SummarySection falls back to the local summarizeCycles helper.
+  const summary = useSelector((state) => selectAutomationSummary(state, campaignId));
+  const summaryDeps = useMemo(
+    () => ({
+      pairsPerCycle: values.pairsPerCycle,
+      model: values.imageModelProvider,
+      preset: values.frequency?.preset,
+      startDate: values.frequency?.startDate,
+      endDate: values.frequency?.endDate,
+      timezone: values.frequency?.timezone,
+      custom: values.frequency?.custom,
+    }),
+    [values.pairsPerCycle, values.imageModelProvider, values.frequency]
+  );
+  useEffect(() => {
+    if (!campaignId || !canActivate) return undefined;
+    const handle = setTimeout(() => {
+      dispatch(fetchAutomationSummary({ campaignId, config: values }));
+    }, 300);
+    return () => clearTimeout(handle);
+    // values is intentionally not in deps — only the summary-relevant slice
+    // is. The thunk reads the full `values` snapshot at fire time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, canActivate, summaryDeps, dispatch]);
 
   // Expose form actions + state to the parent (ServicesForm) so it can
   // render the Activate button in its fixed footer.
@@ -376,6 +414,9 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         pairsPerCycle={values.pairsPerCycle}
         creditsPerImage={creditsPerImage}
         availableCredits={availableCredits}
+        apiSummary={summary?.data}
+        apiLoading={summary?.loading}
+        disabled={!canActivate}
       />
     </div>
   );

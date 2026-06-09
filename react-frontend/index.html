@@ -1,11 +1,33 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AdsGPT • Generative AI For Ads</title>
+    <!-- Apply the `.dark` class to <html> BEFORE the React bundle loads. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('isDarkMode');
+          var isDark = stored === null ? true : JSON.parse(stored);
+          if (isDark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+    <!-- Pre-CSS-load body background. Without this the page paints white
+         until Tailwind's `bg-background` on <body> resolves the
+         `--background` variable. Setting it directly on <body> (not
+         <html>) leaves <html> transparent so the fixed `z-[-1]` blob
+         gradients in Layout.jsx still show through. Hex values mirror
+         the `--background` values in index.css. -->
+    <style>
+      html.dark body { background-color: #0f0f0f; }
+      html:not(.dark) body { background-color: #fcfcfc; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

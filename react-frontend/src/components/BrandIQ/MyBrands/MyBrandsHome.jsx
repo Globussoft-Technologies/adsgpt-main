@@ -24,8 +24,8 @@ const MyBrandsHome = () => {
           ) : (
             <div className="brands_new_container flex min-h-[55vh] w-full items-center justify-center 2xl:min-h-[60vh]">
               <div className="flex flex-col items-center justify-center space-y-3 p-6 text-center">
-                <h2 className="text-lg font-medium text-[#AFAFAF]">No brands added yet</h2>
-                <p className="max-w-xs text-sm text-[#AFAFAF]">
+                <h2 className="text-lg font-medium text-gray-700 dark:text-[#AFAFAF]">No brands added yet</h2>
+                <p className="max-w-xs text-sm text-gray-500 dark:text-[#AFAFAF]">
                   Add brands to monitor activity, track key metrics, and streamline brand
                   management.
                 </p>

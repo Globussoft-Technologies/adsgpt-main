@@ -2,10 +2,8 @@ const express = require("express");
 const multer = require("multer");
 const googleAuthController = require("../../controllers/adPosting/googleAuthController");
 const googleAdController = require("../../controllers/adPosting/googleAdController");
-const googleMockMiddleware = require("../../middlewares/googleMockMiddleware");
 
 const router = express.Router();
-router.use(googleMockMiddleware);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,6 +22,9 @@ router.get("/get-ad-groups", googleAdController.getAdGroupsByCampaignId);
 router.get("/get-campaign-ads", googleAdController.getAdsByCampaignId);
 router.get("/get-ad-group-ads", googleAdController.getAdsByAdGroupId);
 
+
+// ─── CTA Options ────────────────────────────────────────────────────────────────
+router.get("/cta-options", googleAdController.getCtaOptions);
 
 // ─── Campaigns create ──────────────────────────────────────────────────────────
 router.post("/create-campaign", googleAdController.createCampaignAPI);
@@ -48,6 +49,7 @@ router.get("/get-insights", googleAdController.getInsights);
 router.get("/audit", googleAdController.runAudit);
 router.get("/check-account", googleAdController.checkGoogleAdsAccount);
 router.patch("/update-status", googleAdController.updateStatus);
+
 
 
 module.exports = router;

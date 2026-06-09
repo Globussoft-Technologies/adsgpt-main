@@ -37,6 +37,7 @@ const availableRatios = [
 ];
 
 const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('4s');
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -369,7 +370,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
   };
 
   const handleGenerate = async () => {
-    if (isLoading) return;
+    if (isLoading || isSubmitting) return;
     if (!validateForm()) return;
 
     const payload = {
@@ -387,6 +388,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
       },
     };
 
+    setIsSubmitting(true);
     try {
       await dispatch(generateVideoAction(payload, uploadedImages));
 
@@ -402,9 +404,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
       setUploadedImages([]);
       setPromotion('');
       setNotes('');
-      if (onGenerate) onGenerate();
+      if (onGenerate) await onGenerate();
     } catch (error) {
       console.log('Error in generating video:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
   return (
@@ -436,22 +440,22 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
       </div>
 
       {/* Form */}
-      <div className="relative flex max-h-[85vh] flex-col gap-5 overflow-y-auto py-8 pr-3 pl-4 2xl:px-5">
+      <div className="relative flex max-h-[85vh] flex-col gap-5 overflow-y-auto py-8 pr-3 pl-4 text-zinc-900 2xl:px-5 dark:text-white">
         <button
           onClick={() => dispatch(setActivePage('home'))}
-          className="absolute top-4 right-4 z-[50] rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
+          className="absolute top-4 right-4 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <X className="h-4 w-4 2xl:h-6 2xl:w-6" />
         </button>
         {/* URL */}
         <div className="flex flex-col gap-2">
-          <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-white px-2.5 py-0.5 text-10 font-medium text-black 2xl:text-xs">
+          <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-zinc-100 px-2.5 py-0.5 text-10 font-medium text-zinc-800 2xl:text-xs dark:bg-white dark:text-black">
                   🌐 All regional languages supported
-                </span> <br /> 
+                </span> <br />
           <label className="text-sm 2xl:text-base">Brand/product URL or upload image*</label>
           <div
             onPaste={handlePaste}
-            className="flex items-center gap-3 rounded-4xl bg-[#909294]/10 px-1 py-1 text-[10px] text-[#afafaf] transition 2xl:py-2 2xl:text-base"
+            className="flex items-center gap-3 rounded-4xl border border-black/10 bg-zinc-50 px-1 py-1 text-[10px] text-zinc-600 transition 2xl:py-2 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
           >
             <div className="flex flex-1 items-center justify-between">
               <input
@@ -461,17 +465,17 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
                   setProductUrl(e.target.value);
                   if (e.target.value) setErrors((prev) => ({ ...prev, productImage: '' }));
                 }}
-                className="w-full rounded-lg px-3 text-xs text-[#afafaf] placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
+                className="w-full rounded-lg bg-transparent px-3 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:text-[#afafaf] dark:placeholder:text-[#afafaf]"
                 placeholder="Paste your product Image"
               />
-              <LinkIcon className="h-3 w-3 text-[#909294] 2xl:h-4 2xl:w-4" />
+              <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
             </div>
 
             <label
               htmlFor="brand-logo"
-              className="flex cursor-pointer items-center gap-1 rounded-4xl bg-[#606060] px-2.5 py-1.5 text-[10px] text-white hover:opacity-70 2xl:gap-2"
+              className="flex cursor-pointer items-center gap-1 rounded-4xl bg-zinc-200 px-2.5 py-1.5 text-[10px] text-zinc-800 hover:bg-zinc-300 2xl:gap-2 dark:bg-[#606060] dark:text-white dark:hover:opacity-70"
             >
-              <CloudUpload className="h-3 w-3 text-white 2xl:h-4 2xl:w-4" />
+              <CloudUpload className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
               <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">Upload Image</span>
             </label>
 
@@ -493,7 +497,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
                 {uploadedImages.map((img, index) => (
                   <div
                     key={index}
-                    className="group relative h-12 w-12 border border-white/10 2xl:h-16 2xl:w-16"
+                    className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
                   >
                     <img
                       src={img.preview}
@@ -523,7 +527,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
         {/* Model + Duration */}
         <div className="flex gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm text-white 2xl:text-base">Model *</label>
+            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Model *</label>
             <CommonDropdown
               options={videoChatModels}
               label="AI Model"
@@ -549,7 +553,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
           </div>
 
           <div className="flex flex-1 flex-col gap-2">
-            <label className="text-sm text-white 2xl:text-base">Duration *</label>
+            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Duration *</label>
             <CommonDropdown
               options={videoTimer}
               label="Durations"
@@ -568,7 +572,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
         </div>
 
         {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
             <span>⚠</span>
             <span>Lower quality model selected. Video output quality may be reduced.</span>
           </div>
@@ -576,7 +580,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
 
         {/* Aspect Ratio */}
         <div>
-          <label className="text-sm text-white 2xl:text-base">Aspect Ratio *</label>
+          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Aspect Ratio *</label>
 
           <div className="mt-2 flex flex-wrap gap-3">
             {availableRatios
@@ -605,18 +609,18 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
                         ? 'from-[#02C8C4] to-[#5867EB]'
                         : isDisabled
                           ? 'from-transparent to-transparent opacity-30 grayscale cursor-not-allowed'
-                          : 'from-[#2d2d2d] to-[#2d2d2d]'
+                          : 'from-zinc-200 to-zinc-200 dark:from-[#2d2d2d] dark:to-[#2d2d2d]'
                     } w-fit p-[1px] hover:bg-gradient-to-tr transition-all`}
                   >
                     <button
                       type="button"
                       disabled={isDisabled}
-                      className={`flex min-w-20 items-center justify-between gap-1.5 rounded-full bg-[#2d2d2d] px-5 py-1.5 text-xs transition-all 2xl:min-w-22 2xl:py-2 ${
+                      className={`flex min-w-20 items-center justify-between gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all 2xl:min-w-22 2xl:py-2 ${
                         isSelected
-                          ? ''
+                          ? 'bg-zinc-100 text-zinc-800 dark:bg-[#2d2d2d] dark:text-white'
                           : isDisabled
-                            ? 'bg-[#383838]/30 text-[#AFAFAF]/50 cursor-not-allowed'
-                            : 'bg-[#383838]/50 text-[#AFAFAF] hover:border-white/10 hover:text-white'
+                            ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-[#383838]/30 dark:text-[#AFAFAF]/50'
+                            : 'bg-white text-zinc-700 hover:border-black/10 hover:text-zinc-900 dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:hover:border-white/10 dark:hover:text-white'
                       }`}
                     >
                       <Icon className="h-4 w-4 2xl:h-5 2xl:w-5" />
@@ -639,7 +643,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
 
         {/* Brand Name */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm text-white 2xl:text-base">Brand/Product Name*</label>
+          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Brand/Product Name*</label>
           <BrandSearch placeholder="Enter your brand/product name" />
           {errors.productName && (
             <span className="text-[12px] text-red-500">{errors.productName}</span>
@@ -649,9 +653,9 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
         {/* Promotional Info */}
         {videoModel !== 'seedance_v1' && (
           <div>
-            <label className="text-sm text-white 2xl:text-base">Promotional Info</label>
+            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Promotional Info</label>
             <input
-              className="mt-2 w-full rounded-4xl bg-[#909294]/10 px-4 py-3 text-sm focus:outline-none 2xl:text-base"
+              className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
               placeholder="Enter promotional info/offers"
               value={promotion}
               onChange={(e) => setPromotion(e.target.value)}
@@ -661,9 +665,9 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
 
         {/* Additional Notes */}
         <div>
-          <label className="text-sm text-white 2xl:text-base">Additional Notes</label>
+          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Additional Notes</label>
           <input
-            className="mt-2 w-full rounded-4xl bg-[#909294]/10 px-4 py-3 text-sm focus:outline-none 2xl:text-base"
+            className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
             placeholder="e.g. white background, aerial drone shot"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -677,8 +681,10 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
             return (
               <div className="flex items-center gap-2">
                 {enough ? (
-                  <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white/90">
+                  <ShadcnTooltip
+                    label={`Will use : ${est} credits, ${availableCredits - est} left after`}
+                  >
+                    <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-500 dark:bg-white/20 dark:text-white/90">
                       ~{est} credits
                     </span>
                   </ShadcnTooltip>
@@ -688,11 +694,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
                   </span>
                 )}
                 <button
-                  disabled={isLoading || !enough}
+                  disabled={isLoading || isSubmitting || !enough}
                   onClick={handleGenerate}
-                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-black hover:opacity-90 2xl:py-3 2xl:text-base ${isLoading || !enough ? 'cursor-not-allowed bg-white/30' : 'bg-white'}`}
+                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isSubmitting || !enough ? 'cursor-not-allowed bg-gray-900/40 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
                 >
-                  {isLoading ? 'Generating...' : 'Generate'}
+                  {isLoading || isSubmitting ? 'Generating...' : 'Generate'}
                 </button>
               </div>
             );

@@ -80,7 +80,14 @@ export default function PinMap({ pins = [], onAdd }) {
   const zoom = pins.length ? 5 : 2;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10">
+    // `relative isolate` creates a NEW stacking context — without this,
+    // Leaflet's internal panes/controls (z-200..z-800 by default) paint
+    // OVER sibling modal chrome (the wizard close button, date-picker
+    // popups, etc.) because Leaflet's `.leaflet-container` uses bare
+    // position:relative without z-index. Isolation contains every
+    // Leaflet z-index inside this div; the div itself stacks relative
+    // to the modal at its parent's natural order.
+    <div className="relative isolate overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
       <MapContainer
         center={center}
         zoom={zoom}

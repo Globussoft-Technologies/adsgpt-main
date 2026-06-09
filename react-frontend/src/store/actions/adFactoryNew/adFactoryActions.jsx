@@ -1,5 +1,6 @@
 import getCookies from '@/utils/getCookies';
 import axios from 'axios';
+// import { trackEvent } from '@/apis/analytics/analyticsApi';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
@@ -36,6 +37,7 @@ export const createCampaign = createAsyncThunk(
       });
       if (res?.data?.campaignId) {
         dispatch(resetNodeStatuses());
+        // trackEvent({ type: 'campaign_created' });
       }
       return res?.data?.campaignId;
     } catch (err) {
@@ -167,8 +169,15 @@ export const AnalyzingsweburlForImages = createAsyncThunk(
       });
       return res;
     } catch (err) {
+      // The getImages backend surfaces its validation/reachability errors
+      // under `detail` (FastAPI default); fall back through `error` /
+      // `message` for older payload shapes.
       return rejectWithValue(
-        err?.response?.data?.error || err?.message || 'Failed to analyze website URL'
+        err?.response?.data?.detail
+          || err?.response?.data?.error
+          || err?.response?.data?.message
+          || err?.message
+          || 'Failed to analyze website URL'
       );
     }
   }
@@ -415,6 +424,24 @@ const updateNodeStatesFromCampaignData = (campaignData, dispatch, getState) => {
     const image = results?.image?.some((item) => item.status === 200);
     const text = results?.text?.some((item) => item.status === 200);
 
+    // The bar is the CURRENT run's progress — it should only peg to 100
+    // when every slot in `results.text/image` has a final status (200 or
+    // 400). A loose `some(status === 200)` check would jump the bar to
+    // 100 mid-run on any re-hydration (e.g. AdsPreviewDialog mount fires
+    // fetchCampaignById, which calls this function), even though the
+    // other slots are still placeholders. The badge / `completedNodes`
+    // stays on the looser "ever-completed" signal so prior runs keep the
+    // green ✓ across navigations.
+    const isFinalStatus = (s) => s === 200 || s === 400;
+    const allTextDone =
+      Array.isArray(results?.text) &&
+      results.text.length > 0 &&
+      results.text.every((item) => isFinalStatus(item?.status));
+    const allImageDone =
+      Array.isArray(results?.image) &&
+      results.image.length > 0 &&
+      results.image.every((item) => isFinalStatus(item?.status));
+
     // Sync selected services to ensure node locking logic is correct
     dispatch(
       setSelectedServices({
@@ -429,7 +456,9 @@ const updateNodeStatesFromCampaignData = (campaignData, dispatch, getState) => {
       if (!currentCompletedNodes.includes('text-generation')) {
         dispatch(setCompletedNodes('text-generation'));
       }
-      dispatch(setFormProgress({ nodeId: 'text-generation', progress: 100 }));
+      if (allTextDone) {
+        dispatch(setFormProgress({ nodeId: 'text-generation', progress: 100 }));
+      }
     }
 
     // Image Generation Completion Check
@@ -437,7 +466,9 @@ const updateNodeStatesFromCampaignData = (campaignData, dispatch, getState) => {
       if (!currentCompletedNodes.includes('image-generation')) {
         dispatch(setCompletedNodes('image-generation'));
       }
-      dispatch(setFormProgress({ nodeId: 'image-generation', progress: 100 }));
+      if (allImageDone) {
+        dispatch(setFormProgress({ nodeId: 'image-generation', progress: 100 }));
+      }
     }
   }
 
@@ -552,6 +583,45 @@ export const deleteAdFactoryCampaign = createAsyncThunk(
 
       if (res.data.success === true) {
         toast.success(res.data.message);
+        await dispatch(fetchCampaigns(payload?.userId));
+        await dispatch(setDeleteDialogOpen(false));
+      }
+      // Return the deleted campaign ID for state update
+      return {
+        campaignId: payload?.campaignId,
+        data: res?.data?.data || {},
+      };
+    } catch (err) {
+      if (err?.response?.status === 403) {
+        window.location.href = REDIRECT_LOGIN;
+      }
+      return rejectWithValue(
+        err?.response?.data?.message || err.message || 'Failed to delete campaign'
+      );
+    }
+  }
+);
+
+ // same function i am using because in some cases we need to delete campaign if autofill failed but we dont want to show toast in that case so created another function without toast
+ 
+export const deleteAdFactoryCampaignn = createAsyncThunk(
+  'adFactory/deleteAdFactoryCampaign',
+  async (payload, { rejectWithValue, dispatch }) => {
+    try {
+      const token = getCookies();
+      const res = await axios.delete(
+        `${BACKEND_HOST}/adsgpt/campaign/delete/${payload?.userId}/${payload?.campaignId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      dispatch(setDeleteCampaignId(payload?.campaignId));
+
+      if (res.data.success === true) {
+        // toast.success(res.data.message);
         await dispatch(fetchCampaigns(payload?.userId));
         await dispatch(setDeleteDialogOpen(false));
       }
@@ -803,6 +873,7 @@ export const launchcampaign = createAsyncThunk(
         },
       );
       toast.success(res?.data?.message);
+      // trackEvent({ type: 'campaign_published' });
       return res;
     } catch (err) {
       console.log('failed to launch campaign', err);

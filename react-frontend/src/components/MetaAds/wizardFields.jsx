@@ -21,6 +21,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSelector } from 'react-redux';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -35,6 +36,60 @@ import {
 import { Calendar } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
+import { globalToast } from '@/utils/globalToast';
+
+// ─── media validation ────────────────────────────────────────────────────────
+// The HTML `accept` attribute is a UX hint — browsers still let the user
+// pick "All files" and submit anything (we've seen .exe / .zip uploads).
+// `validateMediaFile` is the real gate: it runs in onChange and rejects
+// the file (with a toast) before it reaches state. The backend also
+// validates, but UX should fail fast so users don't waste a click.
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;   // 10 MB — Meta's image cap
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;  // 100 MB — practical web-upload cap
+const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png']);
+const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+
+// Image-URL probe — does the URL actually serve a renderable image?
+// Loads it into a hidden `new Image()` and resolves true on `load`, false
+// on `error`. The browser does the MIME sniff for us. Used by the URL-
+// paste path in ImageField to reject arbitrary URLs (an HTML page, a
+// 404, a video) before they end up as the ad creative.
+function probeImageUrl(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(false); return; }
+    const img = new window.Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+function validateMediaFile(file, kind) {
+  if (!file) return false;
+  const allowed = kind === 'video' ? ALLOWED_VIDEO_MIME : ALLOWED_IMAGE_MIME;
+  const maxBytes = kind === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  // Trust the browser's sniffed MIME, not the extension — both can be
+  // forged, but file.type at least uses the magic bytes on most browsers
+  // for common formats. A .exe renamed to .jpg fails here because the
+  // sniffed type is application/octet-stream.
+  if (!allowed.has(file.type)) {
+    globalToast.error(
+      kind === 'video'
+        ? 'Unsupported video format. Use MP4, MOV, or WEBM.'
+        : 'Unsupported image format. Use JPG or PNG.',
+    );
+    return false;
+  }
+  if (file.size > maxBytes) {
+    const maxMB = Math.round(maxBytes / (1024 * 1024));
+    globalToast.error(
+      `File is too large. Max ${maxMB} MB${kind === 'video' ? ' for videos' : ' for images'}.`,
+    );
+    return false;
+  }
+  return true;
+}
 
 // ─── tiny utils ──────────────────────────────────────────────────────────────
 
@@ -59,22 +114,38 @@ export function FieldShell({ label, hint, error, required, children, className =
     <div className={`flex flex-col gap-2 ${className}`}>
       {label && (
         <div className="flex items-center justify-between flex-wrap gap-x-2 gap-y-0.5">
-          <label className="text-sm font-medium text-[#afafaf] 2xl:text-base">
+          <label className="text-sm font-medium text-gray-500 dark:text-[#afafaf] 2xl:text-base">
             {label}
             {required && <span className="text-[#15DCFF] ml-0.5">*</span>}
           </label>
           {hint && (
-            <span className="text-[11px] font-normal text-white/45 2xl:text-xs">{hint}</span>
+            <span className="text-[11px] font-normal text-gray-400 dark:text-white/45 2xl:text-xs">{hint}</span>
           )}
         </div>
       )}
       {children}
-      {error && <p className="text-[11px] text-[#ff7e7e] 2xl:text-xs">{error}</p>}
+      {error && <p className="text-[11px] text-red-600 dark:text-[#ff7e7e] 2xl:text-xs">{error}</p>}
     </div>
   );
 }
 
 // ─── TextField ────────────────────────────────────────────────────────────────
+
+// Live "X/N" character counter, used when a field has a maxLength.
+// Amber at 90%, red at 100% (which is also the typing cap since the
+// underlying input has maxLength set — the red state is informational).
+function CharCounter({ value, max }) {
+  if (!Number.isFinite(max) || max <= 0) return null;
+  const len = (value ?? '').length;
+  const ratio = len / max;
+  const color =
+    ratio >= 1 ? 'text-[#ff7e7e]' : ratio >= 0.9 ? 'text-amber-300' : 'text-white/40';
+  return (
+    <div className={`text-[11px] text-right tabular-nums 2xl:text-xs ${color}`}>
+      {len}/{max}
+    </div>
+  );
+}
 
 export function TextField({
   label,
@@ -97,8 +168,9 @@ export function TextField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
-        className={`w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base 2xl:placeholder:text-15 text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none ${inputClassName}`}
+        className={`w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base 2xl:placeholder:text-15 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20 ${inputClassName}`}
       />
+      <CharCounter value={value} max={maxLength} />
     </FieldShell>
   );
 }
@@ -126,13 +198,34 @@ export function TextAreaField({
         placeholder={placeholder}
         maxLength={maxLength}
         rows={rows}
-        className="w-full resize-none rounded-2xl border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base 2xl:placeholder:text-15 text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+        className="w-full resize-none rounded-2xl border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base 2xl:placeholder:text-15 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
       />
+      <CharCounter value={value} max={maxLength} />
     </FieldShell>
   );
 }
 
 // ─── NumberField ─────────────────────────────────────────────────────────────
+
+// Shared sanitiser for `<input type="number">` onChange. The browser accepts
+// scientific notation (`5e119`) as a valid number — without this, a stray
+// `e` keystroke or a paste turns the budget field into "4.59e+119" and the
+// user has no idea why. We reject any string containing `e/E` and any
+// non-finite parse. Combined with `onKeyDown` below (blocks the keystroke
+// itself), paste-based attacks are also stopped.
+const EXPONENT_RE = /[eE]/;
+function handleNumericInput(raw, onChange) {
+  if (raw === '') { onChange(''); return; }
+  if (EXPONENT_RE.test(raw)) return; // reject scientific notation entirely
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return;
+  onChange(n);
+}
+function blockExponentKey(e) {
+  // `+` is meaningless for our budget/age inputs (min ≥ 0 enforced by Joi);
+  // blocking it removes one more way to slip scientific notation in.
+  if (e.key === 'e' || e.key === 'E' || e.key === '+') e.preventDefault();
+}
 
 export function NumberField({
   label,
@@ -152,12 +245,13 @@ export function NumberField({
       <input
         type="number"
         value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        onChange={(e) => handleNumericInput(e.target.value, onChange)}
+        onKeyDown={blockExponentKey}
         placeholder={placeholder}
         min={min}
         max={max}
         step={step}
-        className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+        className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
       />
     </FieldShell>
   );
@@ -182,17 +276,18 @@ export function CurrencyField({
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
       <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-13 text-[#AFAFAF] pointer-events-none 2xl:text-base">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-13 text-gray-400 dark:text-[#AFAFAF] pointer-events-none 2xl:text-base">
           {symbol}
         </span>
         <input
           type="number"
           value={value ?? ''}
-          onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+          onChange={(e) => handleNumericInput(e.target.value, onChange)}
+          onKeyDown={blockExponentKey}
           placeholder={placeholder}
           min={0}
           step={1}
-          className="w-full rounded-full border border-white/5 bg-[#909294]/15 pl-9 pr-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+          className="w-full rounded-full border border-gray-300 bg-gray-100 pl-9 pr-4 py-2.5 text-13 placeholder:text-13 2xl:py-3 2xl:text-base text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
         />
       </div>
     </FieldShell>
@@ -274,16 +369,16 @@ export function SelectField({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((p) => !p)}
-        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-[#909294]/15 px-4 py-2.5 text-left text-13 font-medium transition-colors hover:border-white/15 focus:outline-none 2xl:py-3 2xl:text-base ${
-          open ? 'border-white/20' : 'border-white/5'
+        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-gray-100 px-4 py-2.5 text-left text-13 font-medium transition-colors hover:border-gray-400 focus:outline-none dark:bg-[#909294]/15 dark:hover:border-white/15 2xl:py-3 2xl:text-base ${
+          open ? 'border-gray-400 dark:border-white/20' : 'border-gray-300 dark:border-white/5'
         } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
       >
-        <span className={`min-w-0 truncate ${selected ? 'text-white' : 'text-[#AFAFAF]'}`}>
+        <span className={`min-w-0 truncate ${selected ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#AFAFAF]'}`}>
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-white/55 transition-transform duration-150 ${
-            open ? 'rotate-180 text-white/85' : ''
+          className={`h-4 w-4 shrink-0 text-gray-400 dark:text-white/55 transition-transform duration-150 ${
+            open ? 'rotate-180 text-gray-600 dark:text-white/85' : ''
           }`}
         />
       </button>
@@ -298,11 +393,11 @@ export function SelectField({
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
               style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
-              className="z-[200] overflow-hidden rounded-xl border border-white/12 bg-[#0F0F0F]/98 shadow-xl backdrop-blur-xl"
+              className="z-[200] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl backdrop-blur-xl dark:border-white/12 dark:bg-[#0F0F0F]/98"
             >
               <div className="scrollbar-thin max-h-60 overflow-y-auto p-1.5">
                 {items.length === 0 && (
-                  <div className="px-3 py-2 text-[11px] text-white/45 2xl:text-xs">
+                  <div className="px-3 py-2 text-[11px] text-gray-400 dark:text-white/45 2xl:text-xs">
                     No options
                   </div>
                 )}
@@ -318,8 +413,8 @@ export function SelectField({
                       }}
                       className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-[7px] text-left text-[12px] font-medium transition-all 2xl:py-2 2xl:text-sm ${
                         isSelected
-                          ? 'bg-white/10 text-white'
-                          : 'text-white/85 hover:bg-white/5 hover:text-white'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-white/10 dark:text-white'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-white/85 dark:hover:bg-white/5 dark:hover:text-white'
                       }`}
                     >
                       <span className="min-w-0 truncate">{o.label}</span>
@@ -371,14 +466,14 @@ export function MultiSelectField({
               className={`rounded-full p-[1px] transition-all ${
                 active
                   ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                  : 'bg-white/8 hover:bg-white/15'
+                  : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
               }`}
             >
               <button
                 type="button"
                 onClick={() => toggle(v)}
-                className={`flex items-center gap-1.5 rounded-full bg-[#1d1d1d] px-3 py-1 text-13 font-medium transition-all 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
-                  active ? 'text-white' : 'text-white/55 hover:text-white/80'
+                className={`flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-13 font-medium transition-all dark:bg-[#1d1d1d] 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
+                  active ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                 }`}
               >
                 {active && <Check className="h-3 w-3" />}
@@ -409,9 +504,9 @@ export function ToggleField({
   return (
     <div className={`flex items-start justify-between gap-4 ${className}`}>
       <div className="flex-1 flex flex-col gap-0.5">
-        <label className="text-sm font-medium text-[#afafaf] 2xl:text-base">{label}</label>
+        <label className="text-sm font-medium text-gray-500 dark:text-[#afafaf] 2xl:text-base">{label}</label>
         {(description || hint) && (
-          <span className="text-[11px] text-white/45 2xl:text-xs">{description || hint}</span>
+          <span className="text-[11px] text-gray-400 dark:text-white/45 2xl:text-xs">{description || hint}</span>
         )}
       </div>
       <button
@@ -419,7 +514,7 @@ export function ToggleField({
         disabled={disabled}
         onClick={() => onChange(!value)}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 2xl:h-6 2xl:w-11 ${
-          value ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]' : 'bg-white/15'
+          value ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]' : 'bg-gray-300 dark:bg-white/15'
         } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
         aria-pressed={value}
       >
@@ -458,7 +553,7 @@ export function RangeField({
           min={min}
           max={max}
           placeholder="Min"
-          className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+          className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-900 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:hover:border-white/15 dark:focus:border-white/20"
         />
         <input
           type="number"
@@ -467,7 +562,7 @@ export function RangeField({
           min={min}
           max={max}
           placeholder="Max"
-          className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+          className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-900 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:hover:border-white/15 dark:focus:border-white/20"
         />
       </div>
     </FieldShell>
@@ -505,11 +600,36 @@ export function ImageField({
     return () => URL.revokeObjectURL(previewSrc);
   }, [previewSrc]);
 
+  // Pending URL buffer — `imageUrl` is only committed once probeImageUrl
+  // confirms the URL actually serves a renderable image. Without this,
+  // the preview area renders a broken-img icon for any non-image URL
+  // (an HTML page, a 404, a video link) and the user proceeds to Launch
+  // unaware. Local state keeps the input controlled while we probe.
+  const [pendingUrl, setPendingUrl] = useState(imageUrl || '');
+  useEffect(() => {
+    setPendingUrl(imageUrl || '');
+  }, [imageUrl]);
+  const commitPendingUrl = async () => {
+    const v = (pendingUrl || '').trim();
+    if (!v) { onChangeUrl?.(null); return; }
+    const ok = await probeImageUrl(v);
+    if (ok) {
+      onChangeUrl?.(v);
+      onChangeFile?.(null);
+    } else {
+      globalToast.error(
+        "That URL doesn't load as an image. Use a direct image link (https://…/photo.jpg).",
+      );
+      setPendingUrl('');
+      onChangeUrl?.(null);
+    }
+  };
+
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
       <div className="flex flex-col gap-3">
         {previewSrc && (
-          <div className="relative w-40 h-40 rounded-xl overflow-hidden border border-white/10 bg-black/30">
+          <div className="relative w-40 h-40 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-black/30">
             <img src={previewSrc} alt="preview" className="w-full h-full object-cover" />
             <button
               type="button"
@@ -526,17 +646,23 @@ export function ImageField({
         {!previewSrc && (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[12px] font-bold text-black transition-all hover:opacity-90 2xl:text-sm">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
                 Upload image
                 <input
                   type="file"
-                  accept="image/*"
+                  // Narrowed from `image/*` to the two formats Meta accepts.
+                  // The validator below is the real gate — accept is a hint.
+                  accept="image/jpeg,image/png"
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null;
-                    if (file) {
+                    if (file && validateMediaFile(file, 'image')) {
                       onChangeFile?.(file);
                       onChangeUrl?.(null);
                     }
+                    // Reset the input so re-selecting the same rejected
+                    // file re-fires onChange (otherwise the second pick is
+                    // silently ignored).
+                    e.target.value = '';
                   }}
                   className="hidden"
                 />
@@ -545,22 +671,23 @@ export function ImageField({
                 <button
                   type="button"
                   onClick={onOpenLibrary}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-[12px] font-semibold text-white/80 transition-all hover:bg-white/10 hover:text-white 2xl:text-sm"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-4 py-1.5 text-[12px] font-semibold text-gray-600 transition-all hover:bg-gray-200 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10 dark:hover:text-white 2xl:text-sm"
                 >
                   Pick from Library
                 </button>
               )}
             </div>
-            <div className="text-[11px] text-white/45">or paste an image URL</div>
+            <div className="text-[11px] text-gray-400 dark:text-white/45">or paste an image URL</div>
             <input
               type="url"
-              value={imageUrl || ''}
-              onChange={(e) => {
-                onChangeUrl?.(e.target.value || null);
-                if (e.target.value) onChangeFile?.(null);
+              value={pendingUrl}
+              onChange={(e) => setPendingUrl(e.target.value)}
+              onBlur={commitPendingUrl}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitPendingUrl(); }
               }}
               placeholder="https://…"
-              className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
             />
           </>
         )}
@@ -613,7 +740,7 @@ export function VideoField({
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
       <div className="flex flex-col gap-3">
         {previewSrc && (
-          <div className="relative w-56 max-w-full rounded-xl overflow-hidden border border-white/10 bg-black/30">
+          <div className="relative w-56 max-w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-black/30">
             {/* Browsers can preview File via blob URL; URL-pasted videos
                 play directly. Either way, a <video> tag is the cheapest
                 preview — no transcoding, no async load. */}
@@ -638,22 +765,25 @@ export function VideoField({
         )}
         {!previewSrc && (
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[12px] font-bold text-black transition-all hover:opacity-90 2xl:text-sm">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
               Upload video
               <input
                 type="file"
                 accept="video/mp4,video/quicktime,video/webm"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
-                  if (file) {
+                  if (file && validateMediaFile(file, 'video')) {
                     onChangeFile?.(file);
                     onChangeUrl?.(null);
                   }
+                  // Reset so re-selecting the same rejected file re-fires
+                  // onChange (otherwise the second pick is silently ignored).
+                  e.target.value = '';
                 }}
                 className="hidden"
               />
             </label>
-            <span className="text-[11px] text-white/45">MP4 / MOV / WEBM up to 100 MB</span>
+            <span className="text-[11px] text-gray-400 dark:text-white/45">MP4 / MOV / WEBM up to 100 MB</span>
           </div>
         )}
         {/* Thumbnail — Meta auto-extracts thumbnails from the uploaded
@@ -662,9 +792,9 @@ export function VideoField({
             want to override with a custom URL. */}
         {previewSrc && (
           <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-medium text-[#afafaf]">
+            <label className="text-[11px] font-medium text-gray-500 dark:text-[#afafaf]">
               Thumbnail URL
-              <span className="ml-2 font-normal text-white/45">
+              <span className="ml-2 font-normal text-gray-400 dark:text-white/45">
                 {videoThumbnailUrl
                   ? 'auto-extracted from your video · override if you want a different frame'
                   : 'leave blank to let Meta pick one for you'}
@@ -675,7 +805,7 @@ export function VideoField({
               value={videoThumbnailUrl || ''}
               onChange={(e) => onChangeThumbnailUrl?.(e.target.value || null)}
               placeholder="https://…/poster.jpg (optional)"
-              className="w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-white placeholder:text-[#AFAFAF] transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 2xl:py-3 2xl:text-base text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
             />
           </div>
         )}
@@ -700,14 +830,14 @@ export function SegButton({ active, onClick, children, className = '' }) {
       className={`flex-1 rounded-2xl p-[1px] transition-all ${
         active
           ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-          : 'bg-white/8 hover:bg-white/15'
+          : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
       } ${className}`}
     >
       <button
         type="button"
         onClick={onClick}
-        className={`w-full whitespace-nowrap rounded-2xl bg-[#1d1d1d] px-3 py-1.5 text-13 font-medium transition-all 2xl:py-2.5 2xl:text-sm ${
-          active ? 'text-white' : 'text-white/55 hover:text-white/80'
+        className={`w-full whitespace-nowrap rounded-2xl bg-gray-100 px-3 py-1.5 text-13 font-medium transition-all dark:bg-[#1d1d1d] 2xl:py-2.5 2xl:text-sm ${
+          active ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
         }`}
       >
         {children}
@@ -751,7 +881,7 @@ export function GradientCheckbox({ checked, onChange, size = 'sm' }) {
   return (
     <span
       className={`relative inline-flex shrink-0 items-center justify-center rounded ${boxDim} ${
-        checked ? 'bg-white' : 'border border-white/50 hover:border-white/70'
+        checked ? 'bg-gray-900 dark:bg-white' : 'border border-gray-300 hover:border-gray-400 dark:border-white/50 dark:hover:border-white/70'
       }`}
     >
       <input
@@ -760,7 +890,7 @@ export function GradientCheckbox({ checked, onChange, size = 'sm' }) {
         onChange={(e) => onChange(e.target.checked)}
         className="absolute inset-0 cursor-pointer opacity-0"
       />
-      {checked && <Check className={`text-black ${iconDim}`} strokeWidth={3} />}
+      {checked && <Check className={`text-white dark:text-black ${iconDim}`} strokeWidth={3} />}
     </span>
   );
 }
@@ -786,13 +916,13 @@ function InlineDropdown({ value, options, onChange, renderLabel }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#464951]"
+        className="flex min-w-[90px] items-center justify-between gap-1 rounded-sm px-3 py-1.5 text-sm font-semibold text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-[#464951]"
       >
         {renderLabel(value)}
         <ChevronDown size={14} className="opacity-70" />
       </button>
       {open && (
-        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-[#3a3c44] bg-[#303030] py-1 shadow-lg">
+        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-[#3a3c44] dark:bg-[#303030]">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -805,10 +935,10 @@ function InlineDropdown({ value, options, onChange, renderLabel }) {
               }}
               className={`mt-1 block w-full px-3 py-1.5 text-left text-sm ${
                 opt.disabled
-                  ? 'cursor-not-allowed text-white/30'
+                  ? 'cursor-not-allowed text-gray-400 dark:text-white/30'
                   : opt.value === value
-                  ? 'bg-[#464951] text-white'
-                  : 'text-white/80 hover:bg-[#464951] hover:text-white'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-[#464951] dark:text-white'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white'
               }`}
             >
               {opt.label}
@@ -828,7 +958,7 @@ function TimeColumn({ values, selected, onChange, label }) {
   }, [selected]);
   return (
     <div className="flex flex-col items-center">
-      <span className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+      <span className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-white/45">
         {label}
       </span>
       <div ref={ref} className="scrollbar-hide h-[200px] w-12 overflow-y-auto pr-0.5">
@@ -841,7 +971,7 @@ function TimeColumn({ values, selected, onChange, label }) {
               data-selected={isSel}
               onClick={() => onChange(v)}
               className={`my-0.5 block w-full rounded py-1.5 text-center text-xs transition-colors ${
-                isSel ? 'bg-[#434343] text-white' : 'text-white/70 hover:bg-[#3a3c44] hover:text-white'
+                isSel ? 'bg-gray-200 text-gray-900 dark:bg-[#434343] dark:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white/70 dark:hover:bg-[#3a3c44] dark:hover:text-white'
               }`}
             >
               {String(v).padStart(2, '0')}
@@ -872,6 +1002,7 @@ export function DateTimePicker({
   const [tempDate, setTempDate] = useState(null);
   const [tempTime, setTempTime] = useState('');
   const ref = useRef(null);
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
 
   useEffect(() => {
     if (!open) return;
@@ -971,16 +1102,16 @@ export function DateTimePicker({
           type="button"
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
-          className={`flex w-full items-center justify-between rounded-full border border-white/5 bg-[#909294]/15 px-4 py-2.5 text-13 transition-colors hover:border-white/15 focus:border-white/20 focus:outline-none 2xl:py-3 2xl:text-base ${
+          className={`flex w-full items-center justify-between rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-13 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:hover:border-white/15 dark:focus:border-white/20 2xl:py-3 2xl:text-base ${
             disabled ? 'cursor-not-allowed opacity-40' : ''
           }`}
         >
-          <span className={value ? 'text-white' : 'text-[#AFAFAF]'}>{display}</span>
-          <CalendarDays className="h-4 w-4 text-white/55" />
+          <span className={value ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#AFAFAF]'}>{display}</span>
+          <CalendarDays className="h-4 w-4 text-gray-400 dark:text-white/55" />
         </button>
         {open && (
           <div
-            className={`wiz-dt-pop absolute top-full z-50 mt-1 rounded-md border border-[#3a3c44] bg-[#303030] shadow-lg ${
+            className={`wiz-dt-pop absolute top-full z-50 mt-1 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3a3c44] dark:bg-[#303030] ${
               align === 'right' ? 'right-0' : 'left-0'
             }`}
           >
@@ -992,7 +1123,7 @@ export function DateTimePicker({
               .wiz-dt-pop .rdrWeekDay { font-size: 11px !important; }
             `}</style>
             {/* Quick presets — one click instead of spinning the calendar. */}
-            <div className="flex flex-wrap gap-1.5 border-b border-[#3a3c44] p-2">
+            <div className="flex flex-wrap gap-1.5 border-b border-gray-200 p-2 dark:border-[#3a3c44]">
               {presets.map((p) => (
                 <button
                   key={p.label}
@@ -1001,7 +1132,7 @@ export function DateTimePicker({
                     setTempDate(p.date);
                     setTempTime(p.time);
                   }}
-                  className="rounded-md bg-[#3a3c44] px-2.5 py-1 text-[11px] font-medium text-white/80 transition-colors hover:bg-[#464951] hover:text-white"
+                  className="rounded-md bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:bg-[#3a3c44] dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white"
                 >
                   {p.label}
                 </button>
@@ -1011,7 +1142,7 @@ export function DateTimePicker({
               <Calendar
                 date={tempDate || new Date()}
                 onChange={setTempDate}
-                color="#434343"
+                color={isDarkMode ? '#434343' : '#e4e4e7'}
                 minDate={minDate}
                 maxDate={undefined}
                 navigatorRenderer={(currentFocusedDate, changeShownDate) => {
@@ -1021,7 +1152,7 @@ export function DateTimePicker({
                     <div className="flex items-center justify-between px-2 pt-3 pb-2">
                       <button
                         type="button"
-                        className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67]"
+                        className="flex size-7 items-center justify-center rounded-md bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67]"
                         onClick={() => {
                           const d = new Date(currentFocusedDate);
                           d.setMonth(d.getMonth() - 1);
@@ -1054,7 +1185,7 @@ export function DateTimePicker({
                       </div>
                       <button
                         type="button"
-                        className="flex size-7 items-center justify-center rounded-md bg-[#464951] text-white hover:bg-[#5b5e67]"
+                        className="flex size-7 items-center justify-center rounded-md bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-[#464951] dark:text-white dark:hover:bg-[#5b5e67]"
                         onClick={() => {
                           const d = new Date(currentFocusedDate);
                           d.setMonth(d.getMonth() + 1);
@@ -1067,7 +1198,7 @@ export function DateTimePicker({
                   );
                 }}
               />
-              <div className="flex items-start gap-1 border-l border-[#3a3c44] px-2 pt-3 pb-2">
+              <div className="flex items-start gap-1 border-l border-gray-200 px-2 pt-3 pb-2 dark:border-[#3a3c44]">
                 <TimeColumn values={HOURS} selected={tempHour} onChange={setHour} label="Hr" />
                 <TimeColumn values={MINUTES} selected={tempMinute} onChange={setMinute} label="Min" />
               </div>
@@ -1076,14 +1207,14 @@ export function DateTimePicker({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-sm border border-[#EFEFEF]/60 bg-transparent px-6 py-1 text-sm font-semibold text-[#E3E3E3] hover:opacity-70"
+                className="rounded-sm border border-gray-300 bg-transparent px-6 py-1 text-sm font-semibold text-gray-600 hover:opacity-70 dark:border-[#EFEFEF]/60 dark:text-[#E3E3E3]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApply}
-                className="rounded-sm bg-white px-8 py-1 text-sm font-bold text-[#151515] shadow-sm hover:bg-white/70"
+                className="rounded-sm bg-gray-900 px-8 py-1 text-sm font-bold text-white shadow-sm hover:bg-gray-800 dark:bg-white dark:text-[#151515] dark:hover:bg-white/70"
               >
                 Apply
               </button>
@@ -1108,30 +1239,30 @@ export function LaunchErrorBanner({ error, onDismiss, className = '' }) {
     : '';
   return (
     <div
-      className={`rounded-2xl border border-red-400/30 bg-red-400/8 p-4 2xl:p-5 ${className}`}
+      className={`rounded-2xl border border-red-300 bg-red-50 p-4 dark:border-red-400/30 dark:bg-red-400/8 2xl:p-5 ${className}`}
     >
       <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300 2xl:h-5 2xl:w-5" />
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-300 2xl:h-5 2xl:w-5" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-bold text-red-100 2xl:text-base">
+            <p className="text-sm font-bold text-red-700 dark:text-red-100 2xl:text-base">
               {error.stage ? `${labelize(error.stage)} step failed` : 'Launch failed'}
             </p>
             {onDismiss && (
               <button
                 type="button"
                 onClick={onDismiss}
-                className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-red-200/60 transition-colors hover:bg-red-400/10 hover:text-red-100"
+                className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-red-500/70 transition-colors hover:bg-red-100 hover:text-red-700 dark:text-red-200/60 dark:hover:bg-red-400/10 dark:hover:text-red-100"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
           {error.title && (
-            <p className="mt-1 text-xs font-semibold text-red-100 2xl:text-sm">{error.title}</p>
+            <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-100 2xl:text-sm">{error.title}</p>
           )}
           {cleanedDetails && cleanedDetails !== error.title && (
-            <p className="mt-1 text-xs leading-relaxed text-red-200/85 2xl:text-sm">
+            <p className="mt-1 text-xs leading-relaxed text-red-600 dark:text-red-200/85 2xl:text-sm">
               {cleanedDetails}
             </p>
           )}
@@ -1141,13 +1272,13 @@ export function LaunchErrorBanner({ error, onDismiss, className = '' }) {
                 href={error.helpUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded border border-red-400/30 bg-red-400/10 px-2 py-0.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-400/20 2xl:text-xs"
+                className="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-200 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100 dark:hover:bg-red-400/20 2xl:text-xs"
               >
                 Open Meta help ↗
               </a>
             )}
             {error.fbtraceId && (
-              <span className="font-mono text-[11px] text-red-200/55 2xl:text-xs">
+              <span className="font-mono text-[11px] text-red-500/70 dark:text-red-200/55 2xl:text-xs">
                 fbtrace {error.fbtraceId}
               </span>
             )}
@@ -1177,20 +1308,20 @@ export function WizardCard({
       className={`rounded-2xl p-[1px] transition-all ${
         selected
           ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-          : 'bg-white/8 hover:bg-white/15'
+          : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
       } ${className}`}
     >
       <button
         type="button"
         onClick={onClick}
-        className="group flex h-full w-full items-start gap-3 rounded-2xl bg-[#181818] p-3 text-left transition-all hover:bg-[#1d1d1d] 2xl:p-4"
+        className="group flex h-full w-full items-start gap-3 rounded-2xl bg-white p-3 text-left transition-all hover:bg-gray-50 dark:bg-[#181818] dark:hover:bg-[#1d1d1d] 2xl:p-4"
       >
         {Icon && (
           <div
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg 2xl:h-10 2xl:w-10 ${
               selected
                 ? 'bg-gradient-to-br from-[#02C8C4] to-[#5867EB] text-white'
-                : 'bg-white/5 text-white/55'
+                : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'
             }`}
           >
             <Icon className="h-4 w-4 2xl:h-5 2xl:w-5" />
@@ -1200,7 +1331,7 @@ export function WizardCard({
           <div className="flex items-center gap-2">
             <p
               className={`text-sm font-semibold 2xl:text-base ${
-                selected ? 'text-white' : 'text-white/85'
+                selected ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white/85'
               }`}
             >
               {title}
@@ -1212,7 +1343,7 @@ export function WizardCard({
             )}
           </div>
           {description && (
-            <p className="mt-0.5 text-xs leading-snug text-white/60 2xl:text-sm">{description}</p>
+            <p className="mt-0.5 text-xs leading-snug text-gray-600 dark:text-white/60 2xl:text-sm">{description}</p>
           )}
         </div>
       </button>

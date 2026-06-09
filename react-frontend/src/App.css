@@ -19,7 +19,33 @@ body {
   overflow-x: hidden;
 }
 
-/* ✅ Prompt Component Styles */
+/* ✅ Prompt Component Styles — light-mode rules scoped to `html:not(.dark)`
+   so they don't leak into dark mode where components manage their own bg
+   via `dark:bg-...` utilities. */
+html:not(.dark) .prompt_selection_button {
+  position: relative;
+  z-index: 0;
+  background: #f4f4f5;
+  color: #27272a;
+  align-items: center;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+html:not(.dark) .prompt_selection_button_no_gradient {
+  position: relative;
+  z-index: 0;
+  background: #f4f4f5;
+  color: #27272a;
+  align-items: center;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .dark .prompt_selection_button {
   position: relative;
   z-index: 0;
@@ -29,6 +55,15 @@ body {
   font-weight: 500;
   cursor: pointer;
   backdrop-filter: blur(6px);
+  border: none;
+}
+
+.dark .prompt_selection_button_no_gradient {
+  /* No background set — components add their own dark bg via Tailwind
+     `dark:bg-...` utilities (e.g. dark:bg-[#202020]/50). Setting a value
+     here would override those utility classes and erase the bg. */
+  color: white;
+  border: none;
 }
 
 .dark .prompt_selection_button::before {
@@ -379,11 +414,24 @@ ul {
 .react-flow__panel.react-flow__attribution.bottom.right {
   display: none;
 }
+/* React Flow zoom/fit controls. Light mode: white buttons with a dark
+   icon + subtle border so they read on the white canvas. Dark mode keeps
+   the original translucent dark treatment. */
 .react-flow__controls-button {
-  background: #30303050 !important;
+  background: #ffffff !important;
   backdrop-filter: blur(100px) !important;
-  border: 1px solid #cccccc40 !important;
+  border: 1px solid #00000015 !important;
   border-radius: 2px;
+}
+.react-flow__controls-button svg {
+  fill: #404040 !important;
+}
+.dark .react-flow__controls-button {
+  background: #30303050 !important;
+  border: 1px solid #cccccc40 !important;
+}
+.dark .react-flow__controls-button svg {
+  fill: #e5e5e5 !important;
 }
 
 .brand_select_from_adfactory div[data-slot='command-input-wrapper'] {
@@ -418,8 +466,153 @@ ul {
   padding: 1px;
 }
 
+/* React-date-range calendar — light-mode */
+html:not(.dark) .rdrCalendarWrapper {
+  background: transparent;
+  color: #18181b;
+  border-radius: 16px;
+  font-family: inherit;
+}
+
+html:not(.dark) .rdrDateDisplayWrapper {
+  background: #f9fafb;
+}
+
+html:not(.dark) .rdrDateDisplayItem {
+  background: #f4f4f5;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* The library marks the currently-focused start/end date input (the two
+   "Early/Continuous"-style pills above the calendar) with this class.
+   Match dark mode's blue accent so the selected one is obvious. */
+html:not(.dark) .rdrDateDisplayItemActive {
+  border-color: #3a91b7 !important;
+  background: #ffffff !important;
+}
+
+html:not(.dark) .rdrDateDisplayItem input::placeholder,
+html:not(.dark) .rdrDateDisplayItem input {
+  color: #27272a;
+  font-weight: 500;
+}
+
+html:not(.dark) .rdrMonthAndYearWrapper select {
+  color: #27272a;
+  font-weight: 500;
+}
+
+html:not(.dark) .rdrDayNumber span {
+  color: #18181b !important;
+}
+
+/* The library's default theme assumes a dark range color and forces light
+   text on in-range / selected days. Our light-mode range bg is a soft zinc,
+   so the white text becomes invisible — keep the day numbers dark.
+   Scoped under `html:not(.dark)` so the dark-mode rules below still win. */
+html:not(.dark) .rdrDay:not(.rdrDayPassive) .rdrInRange ~ .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive) .rdrStartEdge ~ .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive) .rdrEndEdge ~ .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive) .rdrSelected ~ .rdrDayNumber span {
+  color: #18181b !important;
+}
+
+html:not(.dark) .rdrDayPassive .rdrDayNumber span {
+  color: #a1a1aa !important;
+}
+
+html:not(.dark) .rdrDayDisabled {
+  background: transparent;
+}
+
+html:not(.dark) .rdrDayDisabled .rdrDayNumber span {
+  color: #a1a1aa !important;
+  opacity: 0.6;
+}
+
+/* When a disabled day falls inside the existing range selection (or its
+   start/end edge), the library still paints the range bg under it. Strip
+   that so disabled future dates look uniformly faded, matching dark mode. */
+html:not(.dark) .rdrDayDisabled .rdrInRange,
+html:not(.dark) .rdrDayDisabled .rdrStartEdge,
+html:not(.dark) .rdrDayDisabled .rdrEndEdge,
+html:not(.dark) .rdrDayDisabled .rdrSelected {
+  background: transparent !important;
+}
+
+/* Light-mode hover: keep .rdrDay transparent and paint the hover via the
+   .rdrDayNumber:after pseudo. The library only gives that pseudo `content`
+   and positioning when `.rdrDayHovered` is on the cell (which only happens
+   mid-range-selection). For plain mouse hover we have to define `content`
+   and positioning ourselves. Cover both states with one rule.
+   Positioning matches the library's own: top:-2px bottom:-2px left:0 right:0
+   on .rdrDayNumber (which is offset top:5px bottom:5px from the cell), so
+   the painted band lands inside the in-range pill area. */
+html:not(.dark) .rdrDay {
+  background: transparent !important;
+}
+
+/* Hover fill only on dates that are already inside the current selection
+   (in-range / start edge / end edge / selected). The :has() selector picks
+   only those cells; non-selected cells fall through to the preview-range
+   behavior below — same UX as dark mode. */
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrInRange) .rdrDayNumber:after,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrStartEdge) .rdrDayNumber:after,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrEndEdge) .rdrDayNumber:after,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrSelected) .rdrDayNumber:after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 1px !important;
+  background: #d1d1d1 !important;
+  border: none !important;
+  border-radius: 14px !important;
+}
+
+/* Keep date number above the hover fill in light mode. */
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrInRange) .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrStartEdge) .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrEndEdge) .rdrDayNumber span,
+html:not(.dark) .rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled):hover:has(.rdrSelected) .rdrDayNumber span {
+  position: relative;
+  z-index: 2;
+}
+
+/* When hovering over a date OUTSIDE the current selection, the library
+   draws a preview range (.rdrDayStartPreview / .rdrDayInPreview /
+   .rdrDayEndPreview) showing what would be picked. Default border uses
+   currentColor — keep it but with a soft zinc tone that reads on white. */
+html:not(.dark) .rdrDayStartPreview,
+html:not(.dark) .rdrDayInPreview,
+html:not(.dark) .rdrDayEndPreview {
+  border-color: #71717a !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Future / disabled dates must not feel hoverable — match dark mode. */
+html:not(.dark) .rdrDayDisabled {
+  cursor: not-allowed !important;
+}
+html:not(.dark) .rdrDayDisabled:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .rdrDayToday .rdrDayNumber span:after {
+  background: #18181b;
+}
+
+html:not(.dark) .rdrMonthPicker::after,
+html:not(.dark) .rdrYearPicker::after {
+  border-right-color: #71717a;
+  border-bottom-color: #71717a;
+}
+
+/* React-date-range calendar — these are the DARK-mode overrides. In light
+   mode they're skipped so the library's imported default (light) theme
+   applies. Gated under `.dark` so dark mode renders exactly as before. */
 /* Main wrapper */
-.rdrCalendarWrapper {
+.dark .rdrCalendarWrapper {
   background: #30303080 !important;
   color: #b5bec6 !important;
   border-radius: 16px;
@@ -427,137 +620,137 @@ ul {
 }
 
 /* Top selected date inputs */
-.rdrDateDisplayWrapper {
+.dark .rdrDateDisplayWrapper {
   background: #30303080 !important;
   border-bottom: 1px solid #ffffff20 !important;
   padding-bottom: 4px;
 }
 
-.rdrDateDisplayItem {
+.dark .rdrDateDisplayItem {
   background: #464951 !important;
   border-radius: 8px;
   border: 1px solid #3a3c44;
 }
 
-.rdrDateDisplayItem input::placeholder,
-.rdrDateDisplayItem input {
+.dark .rdrDateDisplayItem input::placeholder,
+.dark .rdrDateDisplayItem input {
   color: #ffffffb2 !important;
   font-weight: 500 !important;
 }
 
 /* Month header */
-.rdrMonthAndYearWrapper {
+.dark .rdrMonthAndYearWrapper {
   background: transparent !important;
   color: #b5bec6 !important;
   text-transform: uppercase !important;
 }
 
 /* Weekday labels */
-.rdrWeekDays {
+.dark .rdrWeekDays {
   background: transparent !important;
   color: #b5bec6 !important;
   /* text-transform: uppercase !important; */
 }
 
 /* Individual day */
-.rdrDays {
+.dark .rdrDays {
   background: transparent !important;
 }
-.rdrDay {
+.dark .rdrDay {
   background: transparent !important;
 }
 
-.rdrDayNumber span {
+.dark .rdrDayNumber span {
   color: white !important;
 }
 
 /* Hover */
-.rdrDay:hover {
+.dark .rdrDay:hover {
   background: #2a2c33;
   border-radius: 8px;
 }
 
 /* Disabled day text */
-.rdrDayDisabled .rdrDayNumber span {
+.dark .rdrDayDisabled .rdrDayNumber span {
   color: #989c9f !important;
   background: transparent !important;
   opacity: 0.7;
 }
 
-.rdrDayPassive {
+.dark .rdrDayPassive {
   background: transparent !important;
 }
-.rdrDayPassive .rdrDayNumber span {
+.dark .rdrDayPassive .rdrDayNumber span {
   color: #6b7280 !important;
   opacity: 0.7;
 }
 
 /* Selected range */
-.rdrInRange {
+.dark .rdrInRange {
   background: #434343 !important;
 }
 
-.rdrDayToday .rdrDayNumber span:after {
+.dark .rdrDayToday .rdrDayNumber span:after {
   background: #fff !important;
 }
 
-.rdrNextPrevButton,
-.rdrPprevButton {
+.dark .rdrNextPrevButton,
+.dark .rdrPprevButton {
   background: #464951 !important;
   color: white !important;
   border-color: white !important;
 }
 
-.rdrPprevButton i {
+.dark .rdrPprevButton i {
   border-color: transparent #fff9f9c7 transparent transparent !important;
 }
-.rdrNextButton i {
+.dark .rdrNextButton i {
   border-color: transparent transparent transparent #fff9f9c7 !important;
 }
 
-.rdrPprevButton:hover i {
+.dark .rdrPprevButton:hover i {
   border-color: transparent #fff transparent transparent !important;
 }
 
-.rdrNextButton:hover i {
+.dark .rdrNextButton:hover i {
   border-color: transparent transparent transparent #fff !important;
 }
 
 /* Month + Year text */
-.rdrMonthAndYearWrapper select {
+.dark .rdrMonthAndYearWrapper select {
   color: #ffffffd6 !important;
   background: transparent !important;
   font-weight: 500 !important;
   max-height: 150px !important;
 }
 
-.rdrMonthAndYearWrapper select:hover {
+.dark .rdrMonthAndYearWrapper select:hover {
   color: #fff !important;
   background: #464951 !important;
   font-weight: 500 !important;
 }
 
 /* Dropdown arrow */
-.rdrMonthAndYearWrapper select option {
+.dark .rdrMonthAndYearWrapper select option {
   background: #303030 !important;
   color: white !important;
 }
 
-.rdrDateDisplayItemActive {
+.dark .rdrDateDisplayItemActive {
   border-color: #3a91b7d6 !important;
 }
 
-.rdrDayDisabled .rdrInRange {
+.dark .rdrDayDisabled .rdrInRange {
   background: transparent !important;
 }
 
-.rdrMonthPicker,
-.rdrYearPicker {
+.dark .rdrMonthPicker,
+.dark .rdrYearPicker {
   position: relative;
 }
 
-.rdrMonthPicker::after,
-.rdrYearPicker::after {
+.dark .rdrMonthPicker::after,
+.dark .rdrYearPicker::after {
   content: '';
   position: absolute;
   width: 8px;

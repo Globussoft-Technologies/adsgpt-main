@@ -583,15 +583,15 @@ export const AdCopyList = () => {
           return (
             <>
               {platformData?.headline && (
-                <p className="mb-2 text-sm font-medium text-white">{platformData.headline}</p>
+                <p className="mb-2 text-sm font-medium text-gray-900 dark:text-white">{platformData.headline}</p>
               )}
               {platformData?.primary_text && (
-                <p className="mb-3 text-sm leading-relaxed text-[#D5D5D5]">
+                <p className="mb-3 text-sm leading-relaxed text-gray-500 dark:text-[#D5D5D5]">
                   {platformData.primary_text}
                 </p>
               )}
               {platformData?.description && (
-                <p className="text-sm text-[#B0B0B0] italic">{platformData.description}</p>
+                <p className="text-sm text-gray-500 italic dark:text-[#B0B0B0]">{platformData.description}</p>
               )}
             </>
           );
@@ -600,12 +600,12 @@ export const AdCopyList = () => {
           return (
             <>
               {platformData?.caption && (
-                <p className="mb-3 text-sm leading-relaxed text-[#D5D5D5]">
+                <p className="mb-3 text-sm leading-relaxed text-gray-500 dark:text-[#D5D5D5]">
                   {platformData.caption}
                 </p>
               )}
               {platformData?.short_description && (
-                <p className="text-sm font-medium text-white">{platformData.short_description}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{platformData.short_description}</p>
               )}
             </>
           );
@@ -613,7 +613,7 @@ export const AdCopyList = () => {
           return (
             <>
               {platformData?.message && (
-                <p className="mb-3 text-sm leading-relaxed text-[#D5D5D5]">
+                <p className="mb-3 text-sm leading-relaxed text-gray-500 dark:text-[#D5D5D5]">
                   {platformData.message}
                 </p>
               )}
@@ -623,10 +623,10 @@ export const AdCopyList = () => {
           return (
             <>
               {platformData?.title && (
-                <p className="mb-2 text-sm font-medium text-white">{platformData.title}</p>
+                <p className="mb-2 text-sm font-medium text-gray-900 dark:text-white">{platformData.title}</p>
               )}
               {platformData?.body && (
-                <p className="mb-3 text-sm leading-relaxed text-[#D5D5D5]">{platformData.body}</p>
+                <p className="mb-3 text-sm leading-relaxed text-gray-500 dark:text-[#D5D5D5]">{platformData.body}</p>
               )}
             </>
           );
@@ -634,7 +634,7 @@ export const AdCopyList = () => {
           return (
             <>
               {platformData?.message && (
-                <p className="mb-3 text-sm leading-relaxed whitespace-pre-line text-[#D5D5D5]">
+                <p className="mb-3 text-sm leading-relaxed whitespace-pre-line text-gray-500 dark:text-[#D5D5D5]">
                   {platformData.message}
                 </p>
               )}
@@ -642,7 +642,7 @@ export const AdCopyList = () => {
           );
         default:
           return (
-            <p className="mb-3 text-sm leading-relaxed text-[#D5D5D5]">
+            <p className="mb-3 text-sm leading-relaxed text-gray-500 dark:text-[#D5D5D5]">
               Content format not specified for this platform.
             </p>
           );
@@ -667,10 +667,10 @@ export const AdCopyList = () => {
         const copyKey = `${historyItem?._id}-${index}`;
 
         return (
-          <div key={index} className="relative mb-4 rounded-lg bg-[#1a1a1a] p-3 last:mb-0">
+          <div key={index} className="relative mb-4 rounded-lg bg-gray-100 p-3 last:mb-0 dark:bg-[#1a1a1a]">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-[#B0B0B0]">
+                <span className="text-xs text-gray-500 dark:text-[#B0B0B0]">
                   V {historyIndex + 1} • Ad {index + 1}
                 </span>
               </div>
@@ -680,7 +680,7 @@ export const AdCopyList = () => {
                     e.stopPropagation();
                     copyHistoryText(platformData, platformKey, historyItem._id, index);
                   }}
-                  className="flex items-center gap-1 rounded-full bg-[#363636] px-3 py-1 text-xs text-[#D5D5D5] hover:bg-[#444444]"
+                  className="flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
                 >
                   {copiedHistoryItems[copyKey] ? (
                     <>
@@ -707,7 +707,7 @@ export const AdCopyList = () => {
     <div className="ad_cop_container flex flex-col gap-6">
       {/* Platforms Section with Carousel */}
       <div className="mb-2">
-        <h2 className="mb-4 text-xl font-bold text-white">Text Generation</h2>
+        <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white">Text Generation</h2>
 
         {/* Carousel Container */}
         <div className="relative">
@@ -715,7 +715,7 @@ export const AdCopyList = () => {
           {showLeftArrow && (
             <button
               onClick={scrollLeft}
-              className="absolute top-1/2 left-0 z-10 -translate-y-1/2 rounded-full bg-[#363636] p-2 text-white shadow-lg hover:bg-[#444444]"
+              className="absolute top-1/2 left-0 z-10 -translate-y-1/2 rounded-full bg-gray-200 p-2 text-gray-900 shadow-lg hover:bg-gray-300 dark:bg-[#363636] dark:text-white dark:hover:bg-[#444444]"
             >
               <FaChevronLeft />
             </button>
@@ -725,7 +725,7 @@ export const AdCopyList = () => {
           {showRightArrow && (
             <button
               onClick={scrollRight}
-              className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-full bg-[#363636] p-2 text-white shadow-lg hover:bg-[#444444]"
+              className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-full bg-gray-200 p-2 text-gray-900 shadow-lg hover:bg-gray-300 dark:bg-[#363636] dark:text-white dark:hover:bg-[#444444]"
             >
               <FaChevronRight />
             </button>
@@ -744,7 +744,7 @@ export const AdCopyList = () => {
                 className={`flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 whitespace-nowrap transition-colors ${
                   selectedPlatform === platform?.name
                     ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                    : 'bg-[#363636] text-white hover:bg-[#444444]'
+                    : 'bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-[#363636] dark:text-white dark:hover:bg-[#444444]'
                 }`}
               >
                 <span className="text-lg">{platform?.icon}</span>
@@ -754,30 +754,30 @@ export const AdCopyList = () => {
           </div>
         </div>
 
-        <hr className="mt-6 border-white/10" />
+        <hr className="mt-6 border-black/10 dark:border-white/10" />
       </div>
 
       {/* Current Ad Copies Section */}
       {filteredAdCopies?.length > 0 && (
         <>
-          <h3 className="text-lg font-semibold text-white">Current Version</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Current Version</h3>
           {filteredAdCopies?.map?.((item, index) => (
             <div
               key={`current-${item?.id}-${index}`}
               className={`group rounded-xl bg-gradient-to-r ${
-                selected === item?.id ? 'from-[#02C8C4] to-[#5867EB]' : 'from-white/10 to-white/10'
+                selected === item?.id ? 'from-[#02C8C4] to-[#5867EB]' : 'from-black/5 to-black/5 dark:from-white/10 dark:to-white/10'
               } relative w-full p-[1px] hover:bg-gradient-to-r`}
             >
               <div
                 onClick={() => setSelected(item?.id)}
-                className={`rounded-xl border bg-[#292929] px-6 py-5 transition-all duration-300 ${
+                className={`rounded-xl border bg-gray-50 px-6 py-5 transition-all duration-300 dark:bg-[#292929] ${
                   selected === item?.id
-                    ? 'text-white'
-                    : 'border-white/10 text-[#E7E9E9] hover:border-white/40 hover:text-white'
+                    ? 'text-gray-900 dark:text-white'
+                    : 'border-black/10 text-gray-500 hover:border-black/20 hover:text-black dark:border-white/10 dark:text-[#E7E9E9] dark:hover:border-white/40 dark:hover:text-white'
                 }`}
               >
                 <div className="mb-4 flex items-center gap-3">
-                  <p className="text-base font-semibold text-white">Ad Copy {item?.id + 1}</p>
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">Ad Copy {item?.id + 1}</p>
                   {selectedPlatform !== 'All' && (
                     <span className="ml-auto rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-3 py-1 text-xs font-medium text-white">
                       {selectedPlatform}
@@ -787,19 +787,19 @@ export const AdCopyList = () => {
 
                 {item?.status === null ? (
                   <div className="mt-3 animate-pulse space-y-3">
-                    <div className="h-5 max-w-80 rounded-sm bg-[#ffffff20]"></div>
-                    <div className="h-3 w-full rounded-sm bg-[#ffffff15]"></div>
-                    <div className="h-3 w-3/4 rounded-sm bg-[#ffffff15]"></div>
+                    <div className="h-5 max-w-80 rounded-sm bg-black/10 dark:bg-[#ffffff20]"></div>
+                    <div className="h-3 w-full rounded-sm bg-black/5 dark:bg-[#ffffff15]"></div>
+                    <div className="h-3 w-3/4 rounded-sm bg-black/5 dark:bg-[#ffffff15]"></div>
                   </div>
                 ) : item?.status === 200 ? (
                   <>
                     {selectedPlatform === 'All' ? (
                       <div className="space-y-4">
                         {item?.allPlatformsData?.map?.((platform, platformIndex) => (
-                          <div key={platformIndex} className="rounded-lg bg-[#222222] p-4">
+                          <div key={platformIndex} className="rounded-lg bg-gray-100 p-4 dark:bg-[#222222]">
                             <div className="mb-3 flex items-center gap-2">
                               <span className="text-lg">{platform.platformIcon}</span>
-                              <span className="text-sm font-medium text-white">
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">
                                 {platform.platformName}
                               </span>
                               <span
@@ -858,7 +858,7 @@ export const AdCopyList = () => {
                                   });
                                 });
                               }}
-                              className="mt-3 flex items-center gap-1 rounded-full bg-[#363636] px-3 py-1 text-xs text-[#D5D5D5] hover:bg-[#444444]"
+                              className="mt-3 flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
                             >
                               <FaCopy className="h-3 w-3" />
                               <span>Copy {platform.platformName} Text</span>
@@ -880,7 +880,7 @@ export const AdCopyList = () => {
                                   copyAdCopyText(item, index);
                                 }
                               }}
-                              className="mt-3 flex items-center gap-1 rounded-full bg-[#363636] px-3 py-1 text-xs text-[#D5D5D5] hover:bg-[#444444]"
+                              className="mt-3 flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
                             >
                               {copiedItems[index] ? (
                                 <>
@@ -920,8 +920,8 @@ export const AdCopyList = () => {
       )}
 
       {filteredAdCopies?.length === 0 && (
-        <div className="rounded-xl bg-[#292929] px-6 py-8 text-center">
-          <p className="text-[#D5D5D5]">
+        <div className="rounded-xl bg-gray-50 px-6 py-8 text-center dark:bg-[#292929]">
+          <p className="text-gray-500 dark:text-[#D5D5D5]">
             {selectedPlatform === 'All'
               ? 'No Current ad copies available yet.'
               : `No Current ad copies available for ${selectedPlatform}. Try selecting "All" platforms.`}
@@ -931,21 +931,21 @@ export const AdCopyList = () => {
       {/* History Section */}
       {filteredHistory?.length > 0 && selectedPlatform !== 'All' && (
         <>
-          <h3 className="mt-8 text-lg font-semibold text-white">History</h3>
+          <h3 className="mt-8 text-lg font-semibold text-gray-900 dark:text-white">History</h3>
           {filteredHistory?.map?.((historyItem, historyIndex) => (
             <div
               key={`history-${historyItem?._id}`}
-              className="group w-full rounded-xl bg-gradient-to-r from-white/5 to-white/5 p-[1px] hover:bg-gradient-to-tr"
+              className="group w-full rounded-xl bg-gradient-to-r from-black/5 to-black/5 p-[1px] hover:bg-gradient-to-tr dark:from-white/5 dark:to-white/5"
             >
-              <div className="rounded-xl bg-[#1f1f1f] px-6 py-5">
+              <div className="rounded-xl bg-gray-50 px-6 py-5 dark:bg-[#1f1f1f]">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <p className="text-base font-semibold text-white">V {historyIndex + 1}</p>
-                    <span className="rounded-full bg-[#363636] px-3 py-1 text-xs text-[#D5D5D5]">
+                    <p className="text-base font-semibold text-gray-900 dark:text-white">V {historyIndex + 1}</p>
+                    <span className="rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 dark:bg-[#363636] dark:text-[#D5D5D5]">
                       {new Date(historyItem?.createdAt)?.toLocaleDateString?.()}
                     </span>
                   </div>
-                  <span className="text-sm text-[#888]">
+                  <span className="text-sm text-gray-500 dark:text-[#888]">
                     {historyItem?.previousData?.metadata?.campaignName}
                   </span>
                 </div>

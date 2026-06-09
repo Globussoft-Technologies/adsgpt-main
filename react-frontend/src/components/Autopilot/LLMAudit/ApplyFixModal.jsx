@@ -15,29 +15,29 @@ import {
 
 const LabeledRow = ({ label, children, sub }) => (
   <div className="flex flex-col gap-1.5">
-    <label className="text-[11px] font-semibold tracking-wider uppercase text-white/50">
+    <label className="text-[11px] font-semibold tracking-wider uppercase text-gray-500 dark:text-white/50">
       {label}
     </label>
     {children}
-    {sub && <p className="text-[11px] text-white/40">{sub}</p>}
+    {sub && <p className="text-[11px] text-gray-400 dark:text-white/40">{sub}</p>}
   </div>
 );
 
 const ReadOnlyField = ({ value }) => (
-  <div className="rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 font-mono text-xs text-white/70">
+  <div className="rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 font-mono text-xs text-gray-500 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/70">
     {value}
   </div>
 );
 
 const NumberInput = ({ value, onChange, suffix }) => (
-  <div className="flex items-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 focus-within:border-[#15DCFF]/40">
+  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 focus-within:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/[0.04]">
     <input
       type="number"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-transparent text-sm font-semibold text-white outline-none"
+      className="w-full bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
     />
-    {suffix && <span className="shrink-0 text-xs text-white/40">{suffix}</span>}
+    {suffix && <span className="shrink-0 text-xs text-gray-400 dark:text-white/40">{suffix}</span>}
   </div>
 );
 
@@ -46,7 +46,7 @@ const DateTimeInput = ({ value, onChange }) => (
     type="datetime-local"
     value={value}
     onChange={(e) => onChange(e.target.value)}
-    className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-[#15DCFF]/40"
+    className="w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/[0.04] dark:text-white"
   />
 );
 
@@ -54,10 +54,10 @@ const SelectInput = ({ value, onChange, options }) => (
   <select
     value={value}
     onChange={(e) => onChange(e.target.value)}
-    className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-[#15DCFF]/40"
+    className="w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/[0.04] dark:text-white"
   >
     {options.map((o) => (
-      <option key={o} value={o} className="bg-[#1a1f28]">
+      <option key={o} value={o} className="bg-white dark:bg-[#1a1f28]">
         {o.replace(/_/g, ' ')}
       </option>
     ))}
@@ -66,10 +66,10 @@ const SelectInput = ({ value, onChange, options }) => (
 
 const JsonPreview = ({ obj, note }) => (
   <div className="flex flex-col gap-1.5">
-    <pre className="scrollbar-thin max-h-48 overflow-auto rounded-xl border border-white/12 bg-black/30 p-3 text-[11px] leading-relaxed text-[#BEBEBE]">
+    <pre className="scrollbar-thin max-h-48 overflow-auto rounded-xl border border-gray-200 bg-gray-100 p-3 text-[11px] leading-relaxed text-gray-500 dark:border-white/12 dark:bg-black/30 dark:text-[#BEBEBE]">
       {JSON.stringify(obj ?? {}, null, 2)}
     </pre>
-    {note && <p className="text-[11px] text-white/40">{note}</p>}
+    {note && <p className="text-[11px] text-gray-400 dark:text-white/40">{note}</p>}
   </div>
 );
 
@@ -300,51 +300,51 @@ export default function ApplyFixModal({
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
-            className="scrollbar-thin max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/12 bg-[#14181D] shadow-2xl"
+            className="scrollbar-thin max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/12 dark:bg-[#14181D]"
           >
             {/* header */}
-            <div className="flex items-start justify-between gap-3 border-b border-white/12 p-5">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-5 dark:border-white/12">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10">
                   <MetaIcon className="h-5 w-5 text-[#15DCFF]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">{meta.verb || actionType}</h3>
-                  <p className="mt-0.5 text-xs text-white/50">{meta.description}</p>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">{meta.verb || actionType}</h3>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-white/50">{meta.description}</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/5 hover:text-white"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-900 dark:text-white/40 dark:hover:bg-white/5 dark:hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* meta row */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-white/12 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-white/12">
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${riskCfg?.color}`}
               >
                 · {riskCfg?.label}
               </span>
-              <span className="h-3 w-px bg-white/10" />
-              <span className="text-[10px] font-semibold text-white/40">
+              <span className="h-3 w-px bg-gray-200 dark:bg-white/10" />
+              <span className="text-[10px] font-semibold text-gray-400 dark:text-white/40">
                 {reversible ? 'Reversible for 1 hour' : 'Not reversible'}
               </span>
-              <span className="h-3 w-px bg-white/10" />
-              <span className="text-[10px] font-semibold text-white/40">
+              <span className="h-3 w-px bg-gray-200 dark:bg-white/10" />
+              <span className="text-[10px] font-semibold text-gray-400 dark:text-white/40">
                 {finding.entity_type} · {finding.entity_name}
               </span>
             </div>
 
             {/* body */}
             <div className="p-5">
-              <div className="mb-5 rounded-xl border border-white/12 bg-white/[0.04] p-4">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+              <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/12 dark:bg-white/[0.04]">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">
                   Why
                 </p>
-                <p className="text-xs leading-relaxed text-white/70">{finding.reasoning}</p>
+                <p className="text-xs leading-relaxed text-gray-600 dark:text-white/70">{finding.reasoning}</p>
               </div>
 
               <ParamsEditor
@@ -364,9 +364,9 @@ export default function ApplyFixModal({
                     className="mt-0.5 h-3.5 w-3.5 accent-red-400"
                   />
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                    <p className="text-[11px] leading-relaxed text-white/70">
-                      I understand this is a <span className="font-semibold text-red-400">high-risk</span> change
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                    <p className="text-[11px] leading-relaxed text-gray-600 dark:text-white/70">
+                      I understand this is a <span className="font-semibold text-red-600 dark:text-red-400">high-risk</span> change
                       that may reset the learning phase or materially change delivery.
                     </p>
                   </div>
@@ -375,11 +375,11 @@ export default function ApplyFixModal({
             </div>
 
             {/* footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-white/12 bg-black/20 p-4">
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 p-4 dark:border-white/12 dark:bg-black/20">
               <button
                 onClick={onClose}
                 disabled={submitting}
-                className="rounded-xl border border-white/12 bg-white/[0.05] px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/10 disabled:opacity-50"
+                className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.05] dark:text-white dark:hover:bg-white/10"
               >
                 Cancel
               </button>

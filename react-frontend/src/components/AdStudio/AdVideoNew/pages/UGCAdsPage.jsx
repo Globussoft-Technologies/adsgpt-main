@@ -46,6 +46,7 @@ const availableRatios = [
 
 const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
   const dispatch = useDispatch();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { isLoading, recreateInputs } = useSelector((state) => state.adVideoNew);
   const [localRecreateData, setLocalRecreateData] = useState(recreateInputs);
   const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
@@ -244,7 +245,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
   };
 
   const handleGenerate = async () => {
-    if (isLoading) return;
+    if (isLoading || isSubmitting) return;
     const newErrors = {};
     if (!productName.trim()) newErrors.productName = 'Product name is required';
     if (!description.trim()) newErrors.description = 'Description is required';
@@ -276,14 +277,17 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
       },
     };
 
+    setIsSubmitting(true);
     try {
       const selectedImage = uploadedImages[selectedImageIndex]
         ? [uploadedImages[selectedImageIndex]]
         : [];
       await dispatch(generateVideoUGCAction(payload, selectedImage));
-      if (onGenerate) onGenerate();
+      if (onGenerate) await onGenerate();
     } catch (error) {
       console.log('Error in generating video:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -474,14 +478,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
   if (step === 1) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-[520px] rounded-[32px] border border-white/5 bg-[#18181B]/60 p-10 shadow-2xl backdrop-blur-xl">
+        <div className="w-full max-w-[520px] rounded-[32px] border border-black/10 bg-white dark:border-white/5 dark:bg-[#18181B]/60 p-10 shadow-2xl backdrop-blur-xl">
           {/* Header */}
-          <div className="relative mb-10 flex items-center justify-center gap-3 text-white">
-            <Clapperboard className="h-6 w-6 text-white" />
+          <div className="relative mb-10 flex items-center justify-center gap-3 text-gray-900 dark:text-white">
+            <Clapperboard className="h-6 w-6 text-gray-900 dark:text-white" />
             <h2 className="text-xl font-semibold tracking-tight">Create your UGC ad</h2>
             <button
               onClick={() => dispatch(setActivePage('home'))}
-              className="absolute -top-2 -right-4 rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
+              className="absolute -top-2 -right-4 rounded-full p-2 text-gray-500 dark:text-white/50 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
             >
               <X className="h-6 w-6" />
             </button>
@@ -489,7 +493,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
 
           {/* Input */}
           <div className="flex flex-col gap-4">
-            <label className="text-sm font-medium text-white/90">Brand Website</label>
+            <label className="text-sm font-medium text-gray-500 dark:text-white/90">Brand Website</label>
             <div className="relative">
               <input
                 type="text"
@@ -499,13 +503,13 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleNext();
                 }}
-                className={`w-full rounded-full border bg-white/[0.03] px-6 py-4 text-sm text-white shadow-inner transition-all placeholder:text-white/20 focus:ring-1 focus:outline-none ${
+                className={`w-full rounded-full border bg-black/5 dark:bg-white/[0.03] px-6 py-4 text-sm text-gray-900 dark:text-white shadow-inner transition-all placeholder:text-gray-500 dark:placeholder:text-white/20 focus:ring-1 focus:outline-none ${
                   urlError
                     ? 'border-red-500 focus:ring-red-500/30'
-                    : 'border-white/10 focus:ring-white/20'
+                    : 'border-black/10 dark:border-white/10 focus:ring-white/20'
                 }`}
               />
-              <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-white/20" />
+              <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-white/20" />
             </div>
             {urlError && <p className="mt-1 text-xs text-red-400">{urlError}</p>}
           </div>
@@ -515,7 +519,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
             <button
               onClick={() => setStep(2)}
               disabled={isAnalyzing}
-              className={`rounded-full bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-white/60 transition hover:bg-white/10 hover:text-white ${
+              className={`rounded-full bg-black/5 dark:bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-gray-500 dark:text-white/60 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white ${
                 isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >
@@ -524,7 +528,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
             <button
               onClick={handleNext}
               disabled={!website || isAnalyzing}
-              className={`rounded-full bg-white px-8 py-2.5 text-sm font-bold text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
+              className={`rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-sm font-bold dark:text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
                 !website || isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >
@@ -545,20 +549,20 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div className="relative h-full w-full max-w-[1100px] rounded-[32px] border border-white/5 bg-[#18181B]/60 pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8">
+      <div className="relative h-full w-full max-w-[1100px] rounded-[32px] border border-black/10 bg-white dark:border-white/5 dark:bg-[#18181B]/60 pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8">
         {/* Back Button */}
         {!localRecreateData && (
           <button
             onClick={() => setStep(1)}
-            className="absolute top-5.5 left-1 rounded-full p-2 text-white transition hover:bg-white/10 sm:left-6"
+            className="absolute top-5.5 left-1 rounded-full p-2 text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/10 sm:left-6"
           >
             <ChevronLeft className="h-5 w-5 2xl:h-7 2xl:w-7" />
           </button>
         )}
 
         {/* Header */}
-        <div className="mt-1 mb-6 ml-2 flex items-center justify-center gap-1 text-white sm:mt-0 sm:gap-3">
-          <Clapperboard className="h-5 w-5 text-white" />
+        <div className="mt-1 mb-6 ml-2 flex items-center justify-center gap-1 text-gray-900 dark:text-white sm:mt-0 sm:gap-3">
+          <Clapperboard className="h-5 w-5 text-gray-900 dark:text-white" />
           <h2 className="font-semibold tracking-tight uppercase sm:text-lg 2xl:text-xl">
             Create Your UGC Ad
           </h2>
@@ -570,19 +574,19 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
               {/* Left Column - Scrollable if content overflows */}
               <div className="flex flex-col gap-6 pr-4 sm:gap-[29px] 2xl:gap-6">
                 {/* Language support chip */}
-                <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-white px-2.5 py-0.5 text-10 font-medium text-black 2xl:text-xs">
+                <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 text-white dark:bg-white px-2.5 py-0.5 text-10 font-medium dark:text-black 2xl:text-xs">
                   🌐 All regional languages supported
                 </span>
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Brand/product Name*
                   </label>
                   <input
                     placeholder="Enter your Brand/product name"
                     value={productName}
                     onChange={(e) => setProductName(e.target.value)}
-                    className={`w-full rounded-xl border bg-white/5 px-4 py-2 text-[11px] text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:py-3 2xl:text-sm ${
-                      errors.productName ? 'border-red-500/50' : 'border-white/10'
+                    className={`w-full rounded-xl border bg-black/5 dark:bg-white/5 px-4 py-2 text-[11px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:py-3 2xl:text-sm ${
+                      errors.productName ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   />
                   {errors.productName && (
@@ -592,13 +596,13 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
 
                 {/* URL / Upload */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-white/80">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80">
                     Brand/product URL or upload image*
                   </label>
 
                   <div
-                    className={`flex items-center gap-2 rounded-full border bg-white/5 px-1 py-0.5 ${
-                      errors.productUrl ? 'border-red-500/50' : 'border-white/10'
+                    className={`flex items-center gap-2 rounded-full border bg-black/5 dark:bg-white/5 px-1 py-0.5 ${
+                      errors.productUrl ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   >
                     <div className="flex flex-1 items-center justify-between">
@@ -607,18 +611,18 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                         value={productUrl}
                         onChange={(e) => setProductUrl(e.target.value)}
                         onPaste={handlePaste}
-                        className="w-full bg-transparent px-2 py-1 text-[11px] text-white focus:outline-none 2xl:text-xs"
+                        className="w-full bg-transparent px-2 py-1 text-[11px] text-gray-900 dark:text-white focus:outline-none 2xl:text-xs"
                       />
 
-                      <LinkIcon className="h-3 w-3 text-white/40" />
+                      <LinkIcon className="h-3 w-3 text-gray-500 dark:text-white/40" />
                     </div>
 
                     <label
                       htmlFor="ugc-image-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-white/20 px-3 py-1 transition hover:bg-white/30"
+                      className="flex cursor-pointer items-center gap-1 rounded-full bg-zinc-200 px-3 py-1 transition hover:bg-zinc-300 dark:bg-white/20 dark:hover:bg-white/30"
                     >
-                      <CloudUpload className="h-3 w-3 text-white 2xl:h-3.5 2xl:w-3.5" />
-                      <span className="!text-[8px] font-bold tracking-wider text-white uppercase 2xl:text-[11px]">
+                      <CloudUpload className="h-3 w-3 text-zinc-800 2xl:h-3.5 2xl:w-3.5 dark:text-white" />
+                      <span className="!text-[8px] font-bold tracking-wider text-zinc-800 uppercase 2xl:text-[11px] dark:text-white">
                         Upload
                       </span>
                     </label>
@@ -640,7 +644,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 {/* Model & Duration */}
                 <div className="flex gap-4">
                   <div className="flex flex-1 flex-col gap-2">
-                    <label className="text-xs font-medium text-white/80 2xl:text-sm">Model *</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">Model *</label>
                     <CommonDropdown
                       options={videoChatModels}
                       label="Model"
@@ -667,7 +671,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                     )}
                   </div>
                   <div className="flex flex-1 flex-col gap-2">
-                    <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                       Duration *
                     </label>
                     <CommonDropdown
@@ -692,7 +696,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
 
                 {/* Aspect Ratio */}
                 <div className="flex flex-col gap-3">
-                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Aspect Ratio *
                   </label>
                   <div className="flex gap-4">
@@ -723,16 +727,16 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                             }}
                             className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
                               isSelected
-                                ? 'border-white/30 bg-white/10 text-white shadow-inner'
+                                ? 'border-black/10 dark:border-white/30 bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white shadow-inner'
                                 : isDisabled
-                                  ? 'border-white/5 bg-transparent text-white/20 cursor-not-allowed opacity-40 grayscale'
+                                  ? 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/20 cursor-not-allowed opacity-40 grayscale'
                                   : errors.aspectRatio
-                                    ? 'border-red-500/50 bg-transparent text-white/40 hover:bg-white/5'
-                                    : 'border-white/5 bg-transparent text-white/40 hover:bg-white/5 hover:text-white/60'
+                                    ? 'border-red-500/50 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5'
+                                    : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
                             }`}
                           >
                             <Icon
-                              className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-white/40'}`}
+                              className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`}
                             />
                             {ratio.label}
                           </button>
@@ -753,14 +757,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 {/* Promotional Info */}
                 {videoModel !== 'seedance_v1' && (
                   <div className="mt-0.5 flex flex-col gap-2 2xl:mt-0">
-                    <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                    <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                       Promotional Info
                     </label>
                     <input
                       placeholder="Enter any promotional info/offers"
                       value={promotion}
                       onChange={(e) => setPromotion(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
                     />
                   </div>
                 )}
@@ -770,7 +774,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
               <div className="flex flex-col gap-6 overflow-hidden">
                 {/* Description */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Brand description*
                   </label>
                   <textarea
@@ -778,8 +782,8 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
-                    className={`w-full resize-none rounded-xl border bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
-                      errors.description ? 'border-red-500/50' : 'border-white/10'
+                    className={`w-full resize-none rounded-xl border bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
+                      errors.description ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   />
                   {errors.description && (
@@ -791,16 +795,16 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 {uploadedImages.length > 0 && (
                   <div className="flex min-h-0 flex-1 flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                      <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                         Product Images *
                       </label>
-                      <span className="text-[10px] font-medium text-white/30">
+                      <span className="text-[10px] font-medium text-gray-500 dark:text-white/30">
                         {uploadedImages.length} Images
                       </span>
                     </div>
 
                     <div
-                      className="scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-[#4F46E5]/40 grid grid-cols-3 gap-4 overflow-y-auto rounded-3xl border border-white/5 bg-[#1C1C1F] p-4"
+                      className="scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-[#4F46E5]/40 grid grid-cols-3 gap-4 overflow-y-auto rounded-3xl border border-black/10 dark:border-white/5 bg-gray-50 dark:bg-[#1C1C1F] p-4"
                       style={{ height: '180px', alignContent: 'start' }}
                     >
                       {uploadedImages.map((img, idx) => {
@@ -818,7 +822,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                             className={`group relative flex h-[70px] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border shadow-xl transition-all duration-300 ${
                               isSelected
                                 ? 'border-[#4F46E5] bg-[#4F46E5]/10 ring-1 ring-[#4F46E5]'
-                                : 'border-white/5 bg-white/[0.03] hover:border-white/20'
+                                : 'border-black/10 dark:border-white/5 bg-black/5 dark:bg-white/[0.03] hover:border-black/10 dark:hover:border-white/20'
                             }`}
                           >
                             <div className="relative flex h-full w-full items-center justify-center p-2">
@@ -853,14 +857,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                 )}
 
                 <div className="mt-4.5 flex flex-col gap-2">
-                  <label className="text-xs font-medium text-white/80 2xl:text-sm">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Additional Notes
                   </label>
                   <input
                     placeholder="e.g., white background, aerial drone shot, etc"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
                   />
                 </div>
               </div>
@@ -875,8 +879,10 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
               return (
                 <>
                   {enough ? (
-                    <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                      <span className="rounded-full bg-white/20 px-6 py-2 text-xs font-medium text-white/90 2xl:text-sm">
+                    <ShadcnTooltip
+                      label={`Will use : ${est} credits, ${availableCredits - est} left after`}
+                    >
+                      <span className="rounded-full bg-black/5 px-6 py-2 text-xs font-medium text-gray-500 2xl:text-sm dark:bg-white/20 dark:text-white/90">
                         ~{est} credits
                       </span>
                     </ShadcnTooltip>
@@ -886,15 +892,15 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
                     </span>
                   )}
                   <button
-                    disabled={isLoading || !enough}
+                    disabled={isLoading || isSubmitting || !enough}
                     onClick={handleGenerate}
-                    className={`rounded-full px-10 py-2 text-xs font-bold text-black shadow-2xl transition 2xl:text-sm ${
-                      isLoading || !enough
-                        ? 'cursor-not-allowed bg-white/30'
-                        : 'bg-white hover:scale-[1.02] hover:opacity-90 active:scale-[0.98]'
+                    className={`rounded-full px-10 py-2 text-xs font-bold text-white shadow-2xl transition 2xl:text-sm dark:text-black ${
+                      isLoading || isSubmitting || !enough
+                        ? 'cursor-not-allowed bg-gray-900/40 dark:bg-white/30'
+                        : 'bg-gray-900 hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] dark:bg-white'
                     }`}
                   >
-                    {isLoading ? 'Generating...' : 'Generate'}
+                    {isLoading || isSubmitting ? 'Generating...' : 'Generate'}
                   </button>
                 </>
               );
