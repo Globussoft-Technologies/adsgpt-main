@@ -51,7 +51,7 @@ jobs:
         run: node --check index.js
 
       - name: Run autopilot tests
-        run: npm run test:autopilot
+        run: npm run test
 
   deploy:
     name: Deploy to dev server
