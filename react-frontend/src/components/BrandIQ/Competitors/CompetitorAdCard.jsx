@@ -77,14 +77,14 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       <div className="relative w-full overflow-hidden">
         {/* Loading spinner */}
         {imageUrl && !imageLoaded && !imageError && (
-          <div className="absolute inset-0 z-10 flex min-h-[250px] items-center justify-center bg-[#0d0d0d]">
+          <div className="absolute inset-0 z-10 flex min-h-[250px] items-center justify-center bg-gradient-to-r from-gray-600 via-gray-700 to-gray-600">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>
         )}
 
         {/* No image / Error placeholder */}
         {(!imageUrl || imageError) && (
-          <div className="flex min-h-[250px] items-center justify-center bg-[#0d0d0d] text-white/40">
+          <div className="flex min-h-[250px] items-center justify-center bg-gradient-to-r from-gray-600 via-gray-700 to-gray-600 text-white/40">
             <div className="text-center">
               <div className="mb-2 text-2xl">🖼️</div>
               <p className="text-xs">{imageUrl ? 'Failed to load' : 'No creative'}</p>
@@ -98,7 +98,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
             <video
               src={ad.videoUrl}
               poster={imageUrl}
-              className={`w-full object-cover transition-transform duration-500 ${
+              className={`h-auto w-full object-cover transition-transform duration-500 ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               } ${isHovered ? 'scale-105' : 'scale-100'}`}
               style={{ minHeight: '250px' }}
@@ -128,7 +128,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
             <img
               src={imageUrl}
               alt={ad.adTitle || 'Ad creative'}
-              className={`w-full object-cover transition-transform duration-500 ${
+              className={`h-auto w-full rounded-t-xl object-cover transition-transform duration-500 ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               } ${isHovered ? 'scale-105' : 'scale-100'}`}
               style={{ minHeight: '250px' }}
