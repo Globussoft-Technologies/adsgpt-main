@@ -1,7 +1,12 @@
-name: Deploy react-admin
+name: react-admin CI/CD
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'react-admin/**'
+      - '.github/workflows/deploy-react-admin.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'react-admin/**'
@@ -14,12 +19,38 @@ on:
         default: false
 
 concurrency:
-  group: deploy-react-admin
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('react-admin-pr-{0}', github.ref) || 'react-admin-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  ci:
+    name: CI (install + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: react-admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.20.0'
+          cache: npm
+          cache-dependency-path: react-admin/package-lock.json
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        # CI build runs without the server's .env, so VITE_SOCKET_URL falls
+        # back to the localhost default in src/lib/api.js. That's fine for a
+        # syntax-and-import smoke check.
+        run: npm run build
+
   deploy:
     name: Deploy to dev server
+    needs: ci
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}

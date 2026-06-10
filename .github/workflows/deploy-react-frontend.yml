@@ -1,7 +1,12 @@
-name: Deploy react-frontend
+name: react-frontend CI/CD
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'react-frontend/**'
+      - '.github/workflows/deploy-react-frontend.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'react-frontend/**'
@@ -14,12 +19,44 @@ on:
         default: false
 
 concurrency:
-  group: deploy-react-frontend
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('react-frontend-pr-{0}', github.ref) || 'react-frontend-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  ci:
+    name: CI (install + lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: react-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.20.0'
+        # No `cache: npm` — react-frontend has no package-lock.json yet.
+
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Lint
+        # Soft-fail preserves the prior CI behavior — flip to hard-fail once
+        # pre-existing warnings are cleaned up.
+        run: npm run lint || true
+
+      - name: Build
+        run: npm run build
+
   deploy:
     name: Deploy to dev server
+    needs: ci
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}

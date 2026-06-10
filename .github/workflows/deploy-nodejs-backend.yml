@@ -1,7 +1,12 @@
-name: Deploy nodejs-backend
+name: nodejs-backend CI/CD
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'nodejs-backend/**'
+      - '.github/workflows/deploy-nodejs-backend.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'nodejs-backend/**'
@@ -14,24 +19,26 @@ on:
         default: false
 
 concurrency:
-  # Never overlap two deploys to the same target — queue instead.
-  group: deploy-nodejs-backend
-  cancel-in-progress: false
+  # On PRs: cancel superseded runs (group by PR ref). On main / dispatch:
+  # queue so two deploys never overlap on the same target.
+  group: ${{ github.event_name == 'pull_request' && format('nodejs-backend-pr-{0}', github.ref) || 'nodejs-backend-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: Test before deploy
+  ci:
+    name: CI (install + autopilot tests)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: nodejs-backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20.20.0'
-        # No cache — repo doesn't ship package-lock.json files; setup-node
-        # treats a missing lock file as a hard error when caching is enabled.
+        # No `cache: npm` — repo does not ship package-lock.json files yet.
+
       - name: Install deps
         run: |
           if [ -f package-lock.json ]; then
@@ -39,12 +46,18 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
+
+      - name: Syntax check entry point
+        run: node --check index.js
+
       - name: Run autopilot tests
         run: npm run test:autopilot
 
   deploy:
     name: Deploy to dev server
-    needs: test
+    needs: ci
+    # No deploy on PR runs — only on push to main or manual dispatch.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}

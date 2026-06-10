@@ -1,7 +1,12 @@
-name: Deploy nodejs-ads-backend
+name: nodejs-ads-backend CI/CD
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'nodejs-ads-backend/**'
+      - '.github/workflows/deploy-nodejs-ads-backend.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'nodejs-ads-backend/**'
@@ -14,12 +19,40 @@ on:
         default: false
 
 concurrency:
-  group: deploy-nodejs-ads-backend
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('nodejs-ads-backend-pr-{0}', github.ref) || 'nodejs-ads-backend-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  ci:
+    name: CI (install + syntax check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nodejs-ads-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.20.0'
+
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Syntax check entry point
+        # No test suite exists; this at least catches parse errors in server.js
+        # before letting the deploy push broken code to the dev server.
+        run: node --check server.js
+
   deploy:
     name: Deploy to dev server
+    needs: ci
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
