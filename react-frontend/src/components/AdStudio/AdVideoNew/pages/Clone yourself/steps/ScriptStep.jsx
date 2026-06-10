@@ -63,18 +63,26 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
     [generatedData]
   );
 
+  const imageErrorMessage = useMemo(
+    () => generatedData?.imageError || 'Failed to generate image',
+    [generatedData]
+  );
+
+  const scriptErrorMessage = useMemo(
+    () => generatedData?.scriptError || 'Script generation failed',
+    [generatedData]
+  );
+
   const isImageLoading = useMemo(() => {
-    if (generationError && (generatedData?.type === 'error' || generatedData?.error?.toLowerCase().includes('image'))) return false;
     if (isImageFailed) return false;
     return !(generatedData?.generatedImage || generatedData?.image) || currentDataId !== generatedId;
-  }, [generatedData, currentDataId, generatedId, generationError, isImageFailed]);
+  }, [generatedData, currentDataId, generatedId, isImageFailed]);
 
   const isScriptLoading = useMemo(() => {
-    if (generationError && (generatedData?.type === 'error' || generatedData?.error?.toLowerCase().includes('script'))) return false;
     if (isScriptFailed) return false;
     const hasScript = generatedData?.generatedScript || generatedData?.text || generatedData?.creativeBrief?.script;
     return !hasScript || currentDataId !== generatedId;
-  }, [generatedData, currentDataId, generatedId, generationError, isScriptFailed]);
+  }, [generatedData, currentDataId, generatedId, isScriptFailed]);
 
   const displayImage = useMemo(() => {
     if (currentDataId === generatedId) {
@@ -174,20 +182,20 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
           <ChevronLeft className="h-5 w-5" />
         </button>
 
-        {isImageLoading && !generationError ? (
+        {isImageLoading ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 dark:bg-[#0F0F0F]">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
             <span className="text-xs font-medium text-gray-500 dark:text-white/60">
               Generating your clone image...
             </span>
           </div>
-        ) : isImageFailed || (generationError && generatedData?.error?.toLowerCase().includes('image')) ? (
+        ) : isImageFailed ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 p-6 text-center dark:bg-[#0F0F0F]">
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {generatedData?.error || 'Failed to generate image'}
+              {imageErrorMessage}
             </span>
           </div>
         ) : displayImage ? (
@@ -210,13 +218,13 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
             <span className="text-xs font-medium text-gray-500 dark:text-white/60">Crafting your script...</span>
           </div>
-        ) : isScriptFailed || regenerationError || (generationError && generatedData?.error?.toLowerCase().includes('script')) ? (
+        ) : isScriptFailed || regenerationError ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center">
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {regenerationError || generatedData?.error || 'Failed to Generate Script'}
+              {regenerationError || scriptErrorMessage}
             </span>
           </div>
         ) : (
@@ -262,7 +270,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
           </div>
         )}
 
-        {!(isImageLoading || isScriptLoading || isRegenerating || generationError || isImageFailed || isScriptFailed) && (
+        {!(isImageLoading || isScriptLoading || isRegenerating || isImageFailed || isScriptFailed) && (
           <div className="mt-4 flex items-center justify-end gap-3 2xl:mb-6">
             <Select value={tone} onValueChange={handleToneChange} disabled={isGenerating}>
               <SelectTrigger className={`backdrop-blur-100 dark:![&>svg]:text-white rounded-full border-none bg-gray-100 px-5! py-4.5 text-sm text-gray-900! hover:bg-black/5! dark:bg-[#9D9B9B80] dark:text-white! dark:hover:bg-[#9D9B9B70]! [&>svg]:size-5 ${isGenerating ? 'cursor-not-allowed opacity-50' : ''}`}>

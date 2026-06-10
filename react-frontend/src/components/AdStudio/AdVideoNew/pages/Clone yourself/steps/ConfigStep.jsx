@@ -449,6 +449,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           image: imageUrl,
           productName: brand_name || '',
           promotion: promotion || '',
+          notes: notes || '',
           duration: videoDuration,
           aspectRatio,
           tone: 'Casual',

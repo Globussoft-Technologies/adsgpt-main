@@ -114,14 +114,18 @@ const adVideoNewSlice = createSlice({
       }
     },
     updateGeneratedVideo: (state, action) => {
+      const payload = action.payload;
+      const extra = {};
+      if (payload.generatedImage === 'failed') extra.imageError = payload.error;
+      if (payload.generatedScript === 'failed') extra.scriptError = payload.error;
       if (
         state.imageAndScript &&
         state.imageAndScript.data &&
-        state.imageAndScript.data._id === action.payload._id
+        state.imageAndScript.data._id === payload._id
       ) {
-        state.imageAndScript.data = { ...state.imageAndScript.data, ...action.payload };
-      } else if (state.imageAndScript && state.imageAndScript._id === action.payload._id) {
-        state.imageAndScript = { ...state.imageAndScript, ...action.payload };
+        state.imageAndScript.data = { ...state.imageAndScript.data, ...payload, ...extra };
+      } else if (state.imageAndScript && state.imageAndScript._id === payload._id) {
+        state.imageAndScript = { ...state.imageAndScript, ...payload, ...extra };
       }
     },
     setRecreateInputs: (state, action) => {
