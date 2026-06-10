@@ -136,16 +136,17 @@ const adItemSchema = Joi.object({
       "array.min": "at least 2 descriptions are required for SEARCH ads",
       "array.max": "at most 4 descriptions are allowed",
     }),
-  // DISPLAY / VIDEO fields
-  headline: Joi.string().max(30).optional(),
+  // DISPLAY fields (max 30) / DEMAND_GEN fields (max 90)
+  headline: Joi.string().max(90).optional(),
   description: Joi.string().max(90).optional(),
+  businessName: Joi.string().max(25).optional(),
   // Common
-  finalUrl: Joi.string().uri().required().messages({
+  finalUrl: Joi.string().required().messages({
     "any.required": "finalUrl is required in each ad",
-    "string.uri": "finalUrl must be a valid URL",
   }),
-  imageUrl: Joi.string().uri().optional(),
-  videoUrl: Joi.string().uri().optional(),
+  imageUrl: Joi.string().optional(),
+  videoUrl: Joi.string().optional(),
+  logoUrl: Joi.string().optional(),
   callToAction: Joi.string().optional(),
 });
 

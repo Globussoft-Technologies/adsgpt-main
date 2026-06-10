@@ -2307,16 +2307,16 @@ class GoogleAdController {
       const channelTypeMap = {
         SALES: "SEARCH", LEADS: "SEARCH", WEBSITE_TRAFFIC: "SEARCH", LOCAL_STORE: "SEARCH",
         APP_PROMOTION: "MULTI_CHANNEL",
-        YOUTUBE_REACH: "VIDEO",
+        YOUTUBE_REACH: "DEMAND_GEN",
         SEARCH: "SEARCH", DISPLAY: "DISPLAY", SHOPPING: "SHOPPING",
-        PERFORMANCE_MAX: "PERFORMANCE_MAX", VIDEO: "VIDEO",
+        PERFORMANCE_MAX: "PERFORMANCE_MAX", VIDEO: "DEMAND_GEN", DEMAND_GEN: "DEMAND_GEN",
       };
       const channelType = channelTypeMap[String(objective).toUpperCase().replace(/ /g, "_")] || "SEARCH";
 
       // ── Bidding strategy per channel type (snake_case for REST API) ──────
       const biddingStrategy =
         channelType === "DISPLAY"           ? { target_spend: {} }
-        : channelType === "VIDEO"           ? { target_cpv: {} }
+        : channelType === "DEMAND_GEN"      ? { maximize_conversions: {} }
         : channelType === "PERFORMANCE_MAX" ? { maximize_conversion_value: {} }
         : { manual_cpc: { enhanced_cpc_enabled: false } };
 
@@ -2463,7 +2463,7 @@ class GoogleAdController {
       return res.status(error.response?.status || 500).json({
         status: false,
         error: isMutateNotAllowed
-          ? "YouTube/VIDEO campaign creation requires Google Ads API Standard Access. Your account currently has Basic Access. Please apply for Standard Access at: Google Ads → MCC account → Tools & Settings → API Center → Apply for Standard Access."
+          ? "This campaign type cannot be created via the API. YouTube video ads are created as Demand Gen campaigns (DEMAND_GEN channel type), which is the supported programmatic replacement for VIDEO campaigns."
           : formattedErrors[0]?.message ||
             error.response?.data?.error?.message ||
             error.message ||
@@ -2614,6 +2614,7 @@ class GoogleAdController {
         DISPLAY: "DISPLAY_STANDARD",
         SHOPPING: "SHOPPING_PRODUCT_ADS",
         VIDEO: "VIDEO_TRUE_VIEW_IN_STREAM",
+        DEMAND_GEN: "DEMAND_GEN_VIDEO_RESPONSIVE_AD",
         MULTI_CHANNEL: "SEARCH_STANDARD",
       };
       const adGroupType = adGroupTypeMap[channelType] || "SEARCH_STANDARD";
@@ -3012,83 +3013,127 @@ class GoogleAdController {
       channelType = channelType || "SEARCH";
       logger.info(`createAdAPI: adGroup=${cleanAdGroupId} campaignId=${campaignId} → channelType=${channelType}`);
 
-      // ── VIDEO campaign: YouTube ad creation (channelType derived from campaignId via ad group query) ──
-      if (channelType === "VIDEO") {
+      // ── DEMAND_GEN campaign: YouTube/Demand Gen ad creation ──────────────────
+      if (channelType === "DEMAND_GEN" || channelType === "VIDEO") {
         const missingVideo = adsArray.findIndex((ad) => !ad.videoUrl);
         if (missingVideo !== -1) {
           return res.status(400).json({
             status: false,
-            error: `videoUrl is required for YouTube/VIDEO ads${adsArray.length > 1 ? ` (missing in ad ${missingVideo + 1})` : ""}.`,
+            error: `videoUrl is required for YouTube/Demand Gen ads${adsArray.length > 1 ? ` (missing in ad ${missingVideo + 1})` : ""}.`,
           });
         }
 
         const results = [];
-        for (const ad of adsArray) {
-          let videoId;
+        for (let i = 0; i < adsArray.length; i++) {
+          const ad = adsArray[i];
+          const rawAd = (req.body.ads || [])[i] || {};
+          const logoUrl = rawAd.logoUrl || ad.logoUrl;
+          let videoAssetRN;
 
-          // videoUrl — upload to YouTube first
+          if (!logoUrl) {
+            return res.status(400).json({ status: false, error: "logoUrl is required for Demand Gen video ads" });
+          }
+
+          // Run video upload + logo upload in parallel to save time
+          const ytMatch = ad.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+
+          const uploadVideo = async () => {
+            let youtubeVideoId;
+            if (ytMatch) {
+              youtubeVideoId = ytMatch[1];
+            } else {
+              youtubeVideoId = await this._uploadVideoToYouTube(accessToken, ad.videoUrl, ad.headline || "Ad Video");
+              await this._waitForYouTubeVideo(accessToken, youtubeVideoId);
+            }
+            // Check if asset already exists in Google Ads
+            const existingResp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+              { query: `SELECT asset.resource_name FROM asset WHERE asset.youtube_video_asset.youtube_video_id = '${youtubeVideoId}' LIMIT 1` },
+              { headers }
+            );
+            const existingRN = existingResp.data?.[0]?.results?.[0]?.asset?.resourceName
+              || existingResp.data?.[0]?.results?.[0]?.asset?.resource_name;
+            if (existingRN) return existingRN;
+
+            const assetResp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+              { mutateOperations: [{ assetOperation: { create: { name: `yt_video_${youtubeVideoId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: youtubeVideoId } } } }] },
+              { headers }
+            );
+            const rn = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+            if (!rn) throw new Error("Failed to create YouTube video asset in Google Ads");
+            return rn;
+          };
+
+          const uploadLogo = async () => {
+            const sharp = require("sharp");
+            const downloaded = await axios.get(logoUrl, { responseType: "arraybuffer", timeout: 30000 });
+            const logoBuffer = await sharp(Buffer.from(downloaded.data))
+              .resize({ width: 128, height: 128, fit: "cover", position: "centre" })
+              .jpeg({ quality: 90 })
+              .toBuffer();
+            return this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, logoBuffer, "logo");
+          };
+
+          let logoAssetRN;
           try {
-            videoId = await this._uploadVideoToYouTube(accessToken, ad.videoUrl, ad.headline || "Ad Video");
-          } catch (uploadErr) {
-            return res.status(400).json({ status: false, error: uploadErr.message });
+            [videoAssetRN, logoAssetRN] = await Promise.all([uploadVideo(), uploadLogo()]);
+          } catch (e) {
+            const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+            logger.error(`Demand Gen asset upload failed: ${detail}`);
+            return res.status(400).json({ status: false, error: detail });
           }
 
-          // adType derived from channelType (VIDEO) — client can optionally override with VIDEO_DISCOVERY
-          const adType = ad.adType === "VIDEO_DISCOVERY" ? "VIDEO_DISCOVERY" : "IN_STREAM";
-          let adPayload;
-          if (adType === "VIDEO_DISCOVERY") {
-            adPayload = {
-              videoAd: {
-                video: { resourceName: `customers/${customerId}/videos/${videoId}` },
-                videoDiscovery: {
-                  headline: String(ad.headline || "").slice(0, 100),
-                  description1: String(ad.description1 || ad.description || "").slice(0, 35),
-                  description2: String(ad.description2 || "").slice(0, 35),
-                },
-              },
-              finalUrls: [ad.finalUrl],
-            };
-          } else {
-            adPayload = {
-              videoAd: {
-                video: { resourceName: `customers/${customerId}/videos/${videoId}` },
-                inStream: {
-                  actionButtonLabel: String(ad.callToAction || "LEARN_MORE").toUpperCase().replace(/ /g, "_").slice(0, 15),
-                  actionHeadline: String(ad.headline || "").slice(0, 15),
-                },
-              },
-              finalUrls: [ad.finalUrl],
-            };
-          }
-
-          const mutateResp = await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-            {
-              mutateOperations: [{
-                adGroupAdOperation: {
-                  create: {
-                    adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
-                    status: "PAUSED",
-                    ad: adPayload,
-                  },
-                },
-              }],
+          const adPayload = {
+            name: `DemandGen_${cleanAdGroupId}_${Date.now()}`,
+            demand_gen_video_responsive_ad: {
+              business_name: { text: ad.businessName },
+              headlines: [{ text: ad.headline }],
+              long_headlines: [{ text: ad.headline }],
+              descriptions: [{ text: ad.description }],
+              videos: [{ asset: videoAssetRN }],
+              logo_images: [{ asset: logoAssetRN }],
             },
-            { headers }
-          );
+            final_urls: [ad.finalUrl],
+          };
+
+          logger.info(`Demand Gen ad payload: ${JSON.stringify(adPayload)}`);
+
+          let mutateResp;
+          try {
+            mutateResp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+              {
+                mutateOperations: [{
+                  adGroupAdOperation: {
+                    create: {
+                      adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
+                      status: "PAUSED",
+                      ad: adPayload,
+                    },
+                  },
+                }],
+              },
+              { headers }
+            );
+          } catch (mutateErr) {
+            const detail = mutateErr.response?.data ? JSON.stringify(mutateErr.response.data) : mutateErr.message;
+            logger.error(`Demand Gen ad mutate failed: ${detail}`);
+            return res.status(mutateErr.response?.status || 400).json({ status: false, error: detail });
+          }
 
           const adResource = mutateResp.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName;
           results.push({
             adId: adResource?.split("~").pop(),
             adResourceName: adResource,
-            videoId,
-            adType,
+            videoAssetResourceName: videoAssetRN,
+            adType: "DEMAND_GEN_VIDEO_RESPONSIVE",
           });
         }
 
         return res.status(201).json({
           status: true,
-          message: `${results.length} YouTube ad${results.length > 1 ? "s" : ""} created successfully`,
+          message: `${results.length} Demand Gen video ad${results.length > 1 ? "s" : ""} created successfully`,
           ads: results,
         });
       }
@@ -3430,7 +3475,7 @@ class GoogleAdController {
   async _createCampaign(accessToken, loginCustomerId, customerId, name, objective, dailyBudgetMicros) {
     const channelTypeMap = {
       SALES: "SEARCH", LEADS: "SEARCH", WEBSITE_TRAFFIC: "SEARCH", SEARCH: "SEARCH",
-      DISPLAY: "DISPLAY", VIDEO: "VIDEO", YOUTUBE_REACH: "VIDEO",
+      DISPLAY: "DISPLAY", VIDEO: "DEMAND_GEN", YOUTUBE_REACH: "DEMAND_GEN", DEMAND_GEN: "DEMAND_GEN",
       SHOPPING: "SHOPPING", PERFORMANCE_MAX: "PERFORMANCE_MAX",
     };
     const channelType = channelTypeMap[(objective || "SEARCH").toUpperCase()] || "SEARCH";
@@ -3461,7 +3506,7 @@ class GoogleAdController {
     const budgetResource = budgetResp.data?.mutateOperationResponses?.[0]?.campaignBudgetResult?.resourceName;
 
     const biddingField = channelType === "DISPLAY" ? { targetSpend: {} }
-      : channelType === "VIDEO" ? { maximizeConversions: {} }
+      : channelType === "DEMAND_GEN" ? { maximizeConversions: {} }
       : channelType === "PERFORMANCE_MAX" ? { maximizeConversionValue: {} }
       : { manualCpc: { enhancedCpcEnabled: false } };
 
@@ -3597,7 +3642,9 @@ class GoogleAdController {
       // Step 1: Download video into buffer
       const downloaded = await axios.get(videoUrl, { responseType: "arraybuffer", timeout: 180000 });
       const videoBuffer = Buffer.from(downloaded.data);
-      const contentType = downloaded.headers["content-type"] || "video/mp4";
+      const rawContentType = downloaded.headers["content-type"] || "video/mp4";
+      // Normalize application/mp4 → video/mp4 (YouTube rejects application/mp4)
+      const contentType = rawContentType.replace("application/mp4", "video/mp4").split(";")[0].trim();
       const fileSize = videoBuffer.length;
 
       // Step 2: Initiate YouTube resumable upload session
@@ -3678,6 +3725,27 @@ class GoogleAdController {
   //   landscape → marketingImages     (min 600×314, ratio 1.91:1)
   //   square    → squareMarketingImages (min 300×300, ratio 1:1)
   // Returns { landscape, square } resource names.
+  // Poll YouTube until the video status is not "uploaded" (i.e. processing done or failed)
+  async _waitForYouTubeVideo(accessToken, videoId, maxWaitMs = 120000) {
+    const interval = 3000;
+    const deadline = Date.now() + maxWaitMs;
+    while (Date.now() < deadline) {
+      try {
+        const resp = await axios.get(
+          `https://www.googleapis.com/youtube/v3/videos?part=status&id=${videoId}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const uploadStatus = resp.data?.items?.[0]?.status?.uploadStatus;
+        logger.info(`YouTube video ${videoId} uploadStatus=${uploadStatus}`);
+        if (uploadStatus && uploadStatus !== "uploaded") break;
+      } catch (e) {
+        logger.error(`YouTube status poll failed for ${videoId}: ${e.message}`);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  }
+
   async _uploadImageFromUrl(accessToken, loginCustomerId, customerId, imageUrl) {
     try {
       const sharp = require("sharp");
