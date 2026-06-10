@@ -614,7 +614,7 @@ async function runUserRuleCycle({
             if (!byLookback.has(lb)) byLookback.set(lb, []);
             byLookback.get(lb).push(r);
           }
-          console.log(byLookback, 'byLookback');
+         
           // Safety gate, three layers of override (most-conservative wins):
           //   1. Caller-supplied `dryRun` (from cron env or HTTP request).
           //   2. User's saved `settings.dryRunGlobal` — if true, force dry-run
