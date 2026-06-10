@@ -256,7 +256,21 @@ const CompetitorsHome = () => {
   // Keep ref always pointing to latest fetchAds
   fetchAdsRef.current = fetchAds;
 
-  // Effect 1: When filters/brand change → reset to page 1 + fetch
+  // Effect 1: When selected brand changes → reset state and fetch immediately
+  useEffect(() => {
+    if (selectedBrand?.id) {
+      setStatus(null);
+      setPage(1);
+      setAds([]);
+      setTotalCount(0);
+      setFiltersAvailable({ platforms: [], categories: [] });
+      setHasMore(true);
+      setLoading(true);
+      fetchAdsRef.current(false, false, 1);
+    }
+  }, [selectedBrand?.id]);
+
+  // Effect 2: When filters change on same brand → reset to page 1 + fetch
   useEffect(() => {
     if (selectedBrand?.id && status !== 'PENDING') {
       setPage(1);
@@ -267,7 +281,7 @@ const CompetitorsHome = () => {
       setLoading(true);
       fetchAdsRef.current(false, false, 1);
     }
-  }, [activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo, selectedBrand?.id]);
+  }, [activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo]);
 
   // Polling while PENDING
   useEffect(() => {

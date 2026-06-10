@@ -57,7 +57,7 @@ const brandSchema = new mongoose.Schema({
   // ── Competitor Ads Feature ───────────────────────────────────────────
   competitors: { type: [competitorSchema], default: [] },
   keywords: { type: [keywordSchema], default: [] },
-  discoveryJob: { type: discoveryJobSchema, default: () => ({}) },
+  discoveryJob: { type: discoveryJobSchema, default: null },
   lastFetchedAt: { type: Date, default: null },
   // ─────────────────────────────────────────────────────────────────────
 });

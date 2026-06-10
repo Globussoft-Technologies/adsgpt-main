@@ -5,6 +5,18 @@ const axios = require('axios');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// ── Stale PENDING detection ─────────────────────────────────────────────
+// If a discovery job has been PENDING for longer than this, we consider it
+// stale (e.g. previous process crashed / hung) and re-trigger it.
+const STALE_PENDING_MS = 10 * 60 * 1000; // 10 minutes
+
+function isStalePending(job) {
+  if (!job || job.status !== 'PENDING') return false;
+  if (!job.startedAt) return true; // no startedAt = definitely stale
+  const started = new Date(job.startedAt).getTime();
+  return Date.now() - started > STALE_PENDING_MS;
+}
+
 // ── Structured output schema for Gemini ─────────────────────────────────
 
 const responseSchema = {
@@ -69,6 +81,7 @@ async function runDiscoveryJob(userId, brandId) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
+    user.markModified('brands');
     await user.save();
 
     // console.log(`[runDiscoveryJob] Started for brand ${brandId}`);
@@ -90,7 +103,7 @@ async function runDiscoveryJob(userId, brandId) {
       region: brand.region,
     });
 
-    const llmResult = await model.generateContent(prompt);
+    const llmResult = await model.generateContent(prompt, { timeout: 60000 });
     const rawText = llmResult?.response?.text?.() || '';
 
     let parsed;
@@ -151,6 +164,7 @@ async function runDiscoveryJob(userId, brandId) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
+    user.markModified('brands');
     await user.save();
 
     // console.log(`[runDiscoveryJob] SUCCESS for brand ${brandId}: discovery data ready`);
@@ -168,6 +182,7 @@ async function runDiscoveryJob(userId, brandId) {
             errorMessage: err.message,
             keywordVersion: KEYWORD_VERSION,
           };
+          user.markModified('brands');
           await user.save();
         }
       }
@@ -279,9 +294,39 @@ async function getCompetitorAds(req, res) {
     const brand = user.brands.find(b => b.id === brandId);
     if (!brand) return res.status(404).json({ message: 'Brand not found' });
 
+    // ── Fetch ads on-demand from PAS (ElasticSearch) ───────────────────
+    const keywords = brand.keywords || [];
+    const competitors = brand.competitors || [];
     const job = brand.discoveryJob || {};
+    const stale = isStalePending(job);
 
-    // If still processing, return early
+    // If brand has no discovery data, or the previous PENDING is stale,
+    // trigger (or re-trigger) discovery.
+    const needsDiscovery = keywords.length === 0 && competitors.length === 0;
+    if (needsDiscovery || stale) {
+      if (job.status !== 'PENDING' || stale) {
+        brand.discoveryJob = {
+          status: 'PENDING',
+          startedAt: new Date(),
+          completedAt: null,
+          errorMessage: null,
+          keywordVersion: KEYWORD_VERSION,
+        };
+        user.markModified('brands');
+        await user.save();
+        // Fire-and-forget discovery job
+        runDiscoveryJob(userId, brandId);
+      }
+      return res.status(202).json({
+        brandId,
+        status: 'PENDING',
+        message: stale
+          ? 'Restarting stale competitor discovery...'
+          : 'Competitor discovery is in progress.',
+      });
+    }
+
+    // If discovery is legitimately still running, return early
     if (job.status === 'PENDING') {
       return res.status(202).json({
         brandId,
@@ -297,32 +342,6 @@ async function getCompetitorAds(req, res) {
         status: 'FAILED',
         message: job.errorMessage || 'Discovery failed. Please try again.',
         lastFetchedAt: brand.lastFetchedAt,
-      });
-    }
-
-    // ── Fetch ads on-demand from PAS (ElasticSearch) ───────────────────
-    const keywords = brand.keywords || [];
-    const competitors = brand.competitors || [];
-    // Fetch ads from PAS (ElasticSearch)
-
-    // Auto-trigger discovery if no data exists yet
-    if (keywords.length === 0 && competitors.length === 0) {
-      if (job.status !== 'PENDING') {
-        brand.discoveryJob = {
-          status: 'PENDING',
-          startedAt: new Date(),
-          completedAt: null,
-          errorMessage: null,
-          keywordVersion: KEYWORD_VERSION,
-        };
-        await user.save();
-        // Fire-and-forget discovery job
-        runDiscoveryJob(userId, brandId);
-      }
-      return res.status(202).json({
-        brandId,
-        status: 'PENDING',
-        message: 'Competitor discovery is in progress.',
       });
     }
 
@@ -453,6 +472,7 @@ async function refreshCompetitorAds(req, res) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
+    user.markModified('brands');
     await user.save();
 
     // Fire-and-forget

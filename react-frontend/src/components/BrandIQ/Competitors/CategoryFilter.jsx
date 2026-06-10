@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const AI_CAT_SEARCH_URL = import.meta.env.VITE_AI_CAT_SEARCH_URL;
 
-const CategoryFilter = ({ activeCategoryId, activeSubCategoryId, onChange }) => {
+const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, activeSubCategoryId, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categories, setCategories] = useState([]);
@@ -26,12 +26,12 @@ const CategoryFilter = ({ activeCategoryId, activeSubCategoryId, onChange }) => 
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [staticCategories]);
 
   // Debounced search — hits AI Cat Search API
   const doSearch = useCallback(async (query) => {
     if (!query.trim()) {
-      setCategories([]);
+      setCategories(staticCategories);
       setSearching(false);
       return;
     }
@@ -68,6 +68,14 @@ const CategoryFilter = ({ activeCategoryId, activeSubCategoryId, onChange }) => 
       setSearching(false);
     }
   }, []);
+
+  // Initialize with static categories when opened
+  useEffect(() => {
+    if (isOpen && !searchTerm) {
+      setCategories(staticCategories);
+      setExpandedCats(new Set(staticCategories.map((c) => c.id)));
+    }
+  }, [isOpen, staticCategories, searchTerm]);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -201,15 +209,15 @@ const CategoryFilter = ({ activeCategoryId, activeSubCategoryId, onChange }) => 
               {/* Loading state */}
               {searching && (
                 <div className="flex items-center justify-center gap-2 py-6 text-xs text-white/40">
-                  <Loader className="h-3.5 w-3.5 animate-spin text-[#02C8C4]" />
+                  <Loader className="h-3.5 w-3.5 animate-spin text-[#5867EB]" />
                   <span>Searching...</span>
                 </div>
               )}
 
-              {/* Empty prompt */}
-              {!searching && !searchTerm && (
+              {/* Static tree placeholder — only shown if no static categories */}
+              {!searching && !searchTerm && staticCategories.length === 0 && (
                 <div className="py-4 text-center text-xs text-white/30">
-                  Type to search categories
+                  No categories available
                 </div>
               )}
 

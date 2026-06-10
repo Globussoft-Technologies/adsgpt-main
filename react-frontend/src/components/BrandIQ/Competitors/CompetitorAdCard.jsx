@@ -142,9 +142,9 @@ const CompetitorAdCard = ({ ad, onClick }) => {
           )
         )}
 
-        {/* ── Bottom gradient overlay (AdCreative style) ── */}
+        {/* ── Bottom gradient overlay with ad description (hover pe dikhata hai) ── */}
         <div
-          className={`absolute right-0 bottom-0 left-0 max-h-[45%] bg-gradient-to-b from-black/0 via-black/60 to-black/95 p-3 pt-8 ${textExpanded ? 'overflow-y-auto scrollbar-thin' : 'overflow-hidden'}`}
+          className={`absolute right-0 bottom-0 left-0 max-h-[45%] bg-gradient-to-b from-black/0 via-black/60 to-black/95 p-3 pt-8 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${isHovered ? 'opacity-100' : ''} ${textExpanded ? 'overflow-y-auto scrollbar-thin' : 'overflow-hidden'}`}
         >
           {/* Ad text — truncated with Read more, scrolls inside the same 45% height */}
           <p

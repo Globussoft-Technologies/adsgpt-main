@@ -176,6 +176,10 @@ const getBrandsList = async (req, res) => {
         campaignId: cid,
         campaignName: campaignMap[cid],
       })),
+
+      competitors: brand.competitors || [],
+      keywords: brand.keywords || [],
+      discoveryJob: brand.discoveryJob || null,
     }));
 
     return res.status(200).json(response);
