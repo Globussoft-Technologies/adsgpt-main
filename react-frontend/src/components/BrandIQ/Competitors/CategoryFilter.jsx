@@ -1,21 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Search, X, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChevronDown, Search, X, Check, Loader } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
-const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onChange }) => {
+const AI_CAT_SEARCH_URL = import.meta.env.VITE_AI_CAT_SEARCH_URL;
+
+const CategoryFilter = ({ activeCategoryId, activeSubCategoryId, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [expandedCats, setExpandedCats] = useState(new Set());
+  const [selectedLabel, setSelectedLabel] = useState({ cat: '', sub: '' });
   const containerRef = useRef(null);
+  const debounceRef = useRef(null);
 
-  const selectedCat = categories.find((c) => c.id === activeCategoryId);
-  const selectedSub = selectedCat?.subcategories?.find((s) => s.id === activeSubCategoryId);
-
-  const displayLabel = selectedSub
-    ? selectedSub.name
-    : selectedCat
-      ? selectedCat.name
-      : 'All categories';
+  const displayLabel = selectedLabel.sub || selectedLabel.cat || 'All categories';
 
   // Close on outside click
   useEffect(() => {
@@ -28,22 +28,52 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto-expand categories that match search or have selected subcategory
-  useEffect(() => {
-    const toExpand = new Set();
-    for (const cat of categories) {
-      if (searchTerm) {
-        const matches =
-          cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          cat.subcategories?.some((s) => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
-        if (matches) toExpand.add(cat.id);
-      }
-      if (cat.id === activeCategoryId) {
-        toExpand.add(cat.id);
-      }
+  // Debounced search — hits AI Cat Search API
+  const doSearch = useCallback(async (query) => {
+    if (!query.trim()) {
+      setCategories([]);
+      setSearching(false);
+      return;
     }
-    setExpandedCats(toExpand);
-  }, [categories, searchTerm, activeCategoryId]);
+    setSearching(true);
+    try {
+      const { data } = await axios.post(AI_CAT_SEARCH_URL, { query });
+      // Build a deduped category tree from matches
+      const catMap = new Map();
+      for (const match of data.matches || []) {
+        const catId = String(match.major_category_id);
+        if (!catMap.has(catId)) {
+          catMap.set(catId, {
+            id: catId,
+            name: match.major_category,
+            subcategories: new Map(),
+          });
+        }
+        const cat = catMap.get(catId);
+        const subId = String(match.sub_category_id);
+        if (!cat.subcategories.has(subId)) {
+          cat.subcategories.set(subId, { id: subId, name: match.sub_category });
+        }
+      }
+      const tree = Array.from(catMap.values()).map((c) => ({
+        ...c,
+        subcategories: Array.from(c.subcategories.values()),
+      }));
+      setCategories(tree);
+      // Auto-expand all returned categories
+      setExpandedCats(new Set(tree.map((c) => c.id)));
+    } catch {
+      setCategories([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(searchTerm), 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchTerm, doSearch]);
 
   const toggleExpand = (catId) => {
     setExpandedCats((prev) => {
@@ -54,43 +84,28 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
     });
   };
 
-  const handleSelectCategory = (catId) => {
-    if (typeof onChange !== 'function') {
-      // console.warn('CategoryFilter: onChange prop is not a function');
-      return;
-    }
-    onChange({ categoryId: catId, subCategoryId: '' });
+  const handleSelectCategory = (cat) => {
+    if (typeof onChange !== 'function') return;
+    onChange({ categoryId: cat.id, subCategoryId: '' });
+    setSelectedLabel({ cat: cat.name, sub: '' });
     setIsOpen(false);
     setSearchTerm('');
   };
 
-  const handleSelectSubcategory = (catId, subId) => {
-    if (typeof onChange !== 'function') {
-      // console.warn('CategoryFilter: onChange prop is not a function');
-      return;
-    }
-    onChange({ categoryId: catId, subCategoryId: subId });
+  const handleSelectSubcategory = (cat, sub) => {
+    if (typeof onChange !== 'function') return;
+    onChange({ categoryId: cat.id, subCategoryId: sub.id });
+    setSelectedLabel({ cat: cat.name, sub: sub.name });
     setIsOpen(false);
     setSearchTerm('');
   };
 
   const handleClear = (e) => {
     e.stopPropagation();
-    if (typeof onChange !== 'function') {
-      // console.warn('CategoryFilter: onChange prop is not a function');
-      return;
-    }
+    if (typeof onChange !== 'function') return;
     onChange({ categoryId: '', subCategoryId: '' });
+    setSelectedLabel({ cat: '', sub: '' });
   };
-
-  const filteredCategories = categories.filter((cat) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      cat.name.toLowerCase().includes(term) ||
-      cat.subcategories?.some((s) => s.name.toLowerCase().includes(term))
-    );
-  });
 
   // Radio circle helper
   const Radio = ({ checked }) => (
@@ -169,6 +184,7 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
                 onClick={() => {
                   if (typeof onChange !== 'function') return;
                   onChange({ categoryId: '', subCategoryId: '' });
+                  setSelectedLabel({ cat: '', sub: '' });
                   setIsOpen(false);
                   setSearchTerm('');
                 }}
@@ -182,7 +198,28 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
                 <span>All categories</span>
               </button>
 
-              {filteredCategories.map((cat) => {
+              {/* Loading state */}
+              {searching && (
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-white/40">
+                  <Loader className="h-3.5 w-3.5 animate-spin text-[#02C8C4]" />
+                  <span>Searching...</span>
+                </div>
+              )}
+
+              {/* Empty prompt */}
+              {!searching && !searchTerm && (
+                <div className="py-4 text-center text-xs text-white/30">
+                  Type to search categories
+                </div>
+              )}
+
+              {/* No results */}
+              {!searching && searchTerm && categories.length === 0 && (
+                <div className="py-4 text-center text-xs text-white/30">No categories found</div>
+              )}
+
+              {/* Results tree */}
+              {!searching && categories.map((cat) => {
                 const isExpanded = expandedCats.has(cat.id);
                 const isCatSelected = activeCategoryId === cat.id && !activeSubCategoryId;
                 const hasSubs = cat.subcategories && cat.subcategories.length > 0;
@@ -201,7 +238,7 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
                       )}
                       {!hasSubs && <div className="h-6 w-6 shrink-0" />}
                       <button
-                        onClick={() => handleSelectCategory(cat.id)}
+                        onClick={() => handleSelectCategory(cat)}
                         className={`flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
                           isCatSelected
                             ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
@@ -229,7 +266,7 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
                               return (
                                 <button
                                   key={sub.id}
-                                  onClick={() => handleSelectSubcategory(cat.id, sub.id)}
+                                  onClick={() => handleSelectSubcategory(cat, sub)}
                                   className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
                                     isSubSelected
                                       ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
@@ -248,10 +285,6 @@ const CategoryFilter = ({ categories, activeCategoryId, activeSubCategoryId, onC
                   </div>
                 );
               })}
-
-              {filteredCategories.length === 0 && (
-                <div className="py-4 text-center text-xs text-white/30">No categories found</div>
-              )}
             </div>
           </motion.div>
         )}
