@@ -180,11 +180,33 @@ group("non-placeholder cell consistency", () => {
         );
       });
 
-      test(`${ctx}: imageHash is in requiredFields (image-only creative for now)`, () => {
+      test(`${ctx}: requires either imageHash OR videoId in requiredFields`, () => {
+        // Cells without a mediaKind lock accept either, and require image
+        // by default (image is the common case — the wizard UI tabs to
+        // video on demand). Cells with `mediaKind: 'video'` (e.g.
+        // OUTCOME_ENGAGEMENT/VIDEO_VIEWS) require videoId instead, and
+        // the validator + AdStep enforce that the user can't supply an
+        // image. Either contract is acceptable here; what's not OK is a
+        // cell that requires neither.
+        const req = cell.ad.requiredFields;
+        const hasImageHash = req.includes("imageHash");
+        const hasVideoId = req.includes("videoId");
         assert.ok(
-          cell.ad.requiredFields.includes("imageHash"),
-          "imageHash is required for every cell until video/carousel support lands in Phase 3 of the parity plan",
+          hasImageHash || hasVideoId,
+          "every cell must require either imageHash or videoId",
         );
+        if (cell.ad.mediaKind === "video") {
+          assert.ok(
+            hasVideoId && !hasImageHash,
+            "mediaKind='video' cells must require videoId and NOT imageHash",
+          );
+        }
+        if (cell.ad.mediaKind === "image") {
+          assert.ok(
+            hasImageHash && !hasVideoId,
+            "mediaKind='image' cells must require imageHash and NOT videoId",
+          );
+        }
       });
 
       test(`${ctx}: has ctas block with allowed + default`, () => {
