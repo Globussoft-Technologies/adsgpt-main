@@ -454,12 +454,12 @@ const CompetitorsHome = () => {
       {/* Header Stats */}
       <div className="mb-4 flex items-center justify-between px-1">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-white">
+          {/* <h2 className="text-xl font-semibold text-white">
             {totalCount} <span className="text-white/50">competitor ads</span>
           </h2>
           <span className="text-sm text-white/30">
             across {filtersAvailable.platforms.length} platforms
-          </span>
+          </span> */}
           {status === 'PENDING' && (
             <span className={`flex items-center gap-1.5 rounded-full ${ADSGPT_BG_SOFT} px-3 py-1 text-xs ${ADSGPT_TEXT}`}>
               <Loader className="h-3 w-3 animate-spin" />
