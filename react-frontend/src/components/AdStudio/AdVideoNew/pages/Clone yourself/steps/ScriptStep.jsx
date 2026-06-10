@@ -48,7 +48,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
 
   const generationError = useMemo(() => {
     if (generatedData?._id === generatedId || currentDataId === generatedId) {
-      if (generatedData?.type === 'error' || generatedData?.status >= 400)
+      if (generatedData?.type === 'error' || generatedData?.status >= 400 || generatedData?.status === 'failed')
         return generatedData?.error || 'Generation failed';
     }
     return null;
@@ -186,8 +186,9 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">Failed to generate image</span>
-            <span className="text-xs text-gray-500 dark:text-white/40">Please try again</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+              {generatedData?.error || 'Failed to generate image'}
+            </span>
           </div>
         ) : displayImage ? (
           <img src={displayImage} alt="Clone preview" className="h-full w-full object-cover" />
@@ -215,10 +216,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
               <X className="h-8 w-8 text-red-500" />
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {regenerationError || 'Failed to Generate Script'}
-            </span>
-            <span className="text-xs text-gray-500 dark:text-white/40">
-              {regenerationError ? 'Please try again with a different tone' : 'Please try again'}
+              {regenerationError || generatedData?.error || 'Failed to Generate Script'}
             </span>
           </div>
         ) : (
