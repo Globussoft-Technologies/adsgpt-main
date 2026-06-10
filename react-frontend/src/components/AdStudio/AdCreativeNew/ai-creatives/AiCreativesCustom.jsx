@@ -930,7 +930,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           )}
 
           <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <div className="flex flex-col">
+            <div className="flex h-full flex-col">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[16px] font-medium text-gray-900 dark:text-white">
                   Prompt<span>*</span>
@@ -938,14 +938,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 <TemplatesTrigger controller={templates} />
               </div>
 
-              {/* Shared fixed-height container — panel + textarea-wrapper
-                  trade space inside it. When the panel animates open it
-                  eats height from the wrapper rather than pushing the
-                  whole card taller, so the outer card height stays
-                  constant at ~480 px in both states. The wrapper uses
+              {/* Shared min-height container — panel + textarea-wrapper
+                  trade space inside it. 480 px is the floor so the prompt
+                  card never collapses below its natural minimum, and
+                  `flex-1` lets it stretch to match the References column
+                  when brand chips push that side taller. The wrapper uses
                   `flex-1 min-h-0` so it can actually shrink below its
                   natural content size when the panel takes its share. */}
-              <div className="flex h-[480px] flex-col">
+              <div className="flex min-h-[480px] flex-1 flex-col">
                 <TemplatesPanel controller={templates} />
 
                 <div

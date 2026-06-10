@@ -419,8 +419,7 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {/* HIDE-MARK — MySpace → Post Ad nav (Megaphone) hidden. */}
-            {SHOW_POST_AD_NAV && onOpenPostAdModal && (
+            {onOpenPostAdModal && (
               <button
                 title="Post as ad"
                 onClick={(e) => {

@@ -703,8 +703,7 @@ export default function VideoCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {/* HIDE-MARK — MySpace → Post Ad nav (Megaphone) hidden. */}
-                {SHOW_POST_AD_NAV && item?.status === 'completed' && onOpenPostAdModal && (
+                {item?.status === 'completed' && onOpenPostAdModal && (
                   <button
                     title="Post as ad"
                     onClick={(e) => {
