@@ -50,7 +50,7 @@ jobs:
       - name: Syntax check entry point
         run: node --check index.js
 
-      - name: Run autopilot tests
+      - name: Run tests
         run: npm run test
 
   deploy:
