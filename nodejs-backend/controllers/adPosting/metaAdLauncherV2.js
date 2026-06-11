@@ -34,6 +34,7 @@ const {
 } = require("../../config/wizardSchema");
 const { buildPromotedObject } = require("../../utils/promotedObject");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
+const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
 const { inferCellForMetaCampaign } = require("./cellInference");
 
 // V1 controller exposes initApiForUser + invalidateAfterCreate +
@@ -574,19 +575,12 @@ async function buildAdCreativeOr400(account, cell, value) {
     }
   }
 
-  // Video thumbnail — last-chance auto-fetch (longer clips may not have one
-  // ready immediately after upload). Returns a clean 400 if still missing.
+  // Video thumbnail — last-chance auto-fetch via the shared waiter
+  // (24s ceiling, retries with delays). Longer clips don't always have
+  // thumbnails ready immediately after upload; the waiter gives Meta
+  // time to finish encoding. Returns a clean 400 if still missing.
   if (value.videoId && !value.videoThumbnailUrl) {
-    try {
-      const api = bizSdk.FacebookAdsApi.getDefaultApi();
-      const r = await api.call("GET", [value.videoId, "thumbnails"], {
-        fields: "uri,is_preferred",
-      });
-      const thumbs = r?.data || r?._data?.data || [];
-      const preferred = thumbs.find((t) => t.is_preferred) || thumbs[0];
-      if (preferred?.uri) value.videoThumbnailUrl = preferred.uri;
-    } catch (_) { /* swallow — surface clean 400 below */ }
-
+    value.videoThumbnailUrl = await waitForVideoThumbnail(value.videoId);
     if (!value.videoThumbnailUrl) {
       return {
         ok: false,

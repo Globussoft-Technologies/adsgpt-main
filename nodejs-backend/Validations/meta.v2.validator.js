@@ -570,7 +570,12 @@ function buildAdSchemaV2(objective, conversionLocation) {
     // encoding finishes — without one Meta rejects the creative call.
     imageHash: Joi.string().optional().allow(""),
     videoId: Joi.string().optional().allow(""),
-    videoThumbnailUrl: Joi.string().trim().uri().optional().allow(""),
+    // `null` is allowed in addition to `""` because the wizard frontend
+    // initialises this field to null when no thumbnail has been
+    // explicitly entered (vs an empty string from a cleared input).
+    // The controller treats both as "fetch from Meta" via
+    // waitForVideoThumbnail.
+    videoThumbnailUrl: Joi.string().trim().uri().optional().allow("", null),
 
     // Copy length caps — match Meta's display-without-truncation limits
     // for single-image / single-video ads (the only formats V2 produces

@@ -34,6 +34,7 @@ const CampaignModel = require("../../Module/adFactory/adFactory");
 const { decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
+const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
 const {
   inferCellForMetaCampaign,
   destinationToConversionLocation,
@@ -62,7 +63,9 @@ const adFactoryV2Schema = Joi.object({
         // Exactly one of imageUrl or videoUrl must be provided per ad.
         imageUrl: Joi.string().trim().uri().optional(),
         videoUrl: Joi.string().trim().uri().optional(),
-        videoThumbnailUrl: Joi.string().trim().uri().optional(),
+        // Allow null + empty string — both mean "fetch from Meta" via
+        // waitForVideoThumbnail downstream.
+        videoThumbnailUrl: Joi.string().trim().uri().optional().allow("", null),
         headline: Joi.string().allow("").optional(),
         message: Joi.string().allow("").optional(),
         description: Joi.string().allow("").optional(),
@@ -372,27 +375,15 @@ async function createAdV2(req, res) {
           let resolvedThumbnailUrl =
             adData.videoThumbnailUrl || videoThumbnailUrl || null;
 
-          // Last-chance thumbnail fetch. `uploadVideoFromUrl` polls for
+          // Last-chance thumbnail wait. `uploadVideoFromUrl` polls for
           // ~6s; longer clips don't always have thumbnails ready in that
-          // window, leaving `videoThumbnailUrl` null. Without it, Meta
-          // rejects the creative with "Your ad needs a video thumbnail:
-          // Please specify one of image_hash or image_url". Mirror the
-          // wizard's metaAdLauncherV2.buildAdCreativeOr400 fallback: hit
-          // the `/{video_id}/thumbnails` edge directly. Failure here
-          // falls through to the same Meta error so we still surface
-          // useful info.
+          // window. The shared `waitForVideoThumbnail` retries the
+          // `/{video_id}/thumbnails` edge with delays (24s ceiling) so
+          // Meta has time to finish encoding. Without it, the creative
+          // call fails with subcode 1443226 ("Your ad needs a video
+          // thumbnail").
           if (videoId && !resolvedThumbnailUrl) {
-            try {
-              const api = bizSdk.FacebookAdsApi.getDefaultApi();
-              const r = await api.call("GET", [videoId, "thumbnails"], {
-                fields: "uri,is_preferred",
-              });
-              const thumbs = r?.data || r?._data?.data || [];
-              const preferred = thumbs.find((t) => t.is_preferred) || thumbs[0];
-              if (preferred?.uri) resolvedThumbnailUrl = preferred.uri;
-            } catch (_) {
-              /* swallow — Meta rejection below will carry the real error */
-            }
+            resolvedThumbnailUrl = await waitForVideoThumbnail(videoId);
           }
 
           mediaParams = {
