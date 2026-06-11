@@ -460,8 +460,10 @@ const AvatarConfigForm = ({
   const [aspectRatio, setAspectRatio] = useState('');
   const [promotion, setPromotion] = useState('');
   const [notes, setNotes] = useState('');
+  const [hasProductImage, setHasProductImage] = useState(true);
+  const [promptText, setPromptText] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
-  const [imageOrientation, setImageOrientation] = useState(null); // 'portrait', 'landscape', 'square'
+  const [imageOrientation, setImageOrientation] = useState(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [lightboxImages, setLightboxImages] = useState([]);
@@ -491,14 +493,15 @@ const AvatarConfigForm = ({
   };
 
   useEffect(() => {
-    if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
-      setErrors((prev) => ({ ...prev, productUrl: null }));
     if (videoModel && errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: null }));
     if (videoDuration && errors.videoDuration)
       setErrors((prev) => ({ ...prev, videoDuration: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
     if (brand_name && errors.brandName) setErrors((prev) => ({ ...prev, brandName: null }));
-  }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name, errors]);
+    if (notes.trim() && errors.notes) setErrors((prev) => ({ ...prev, notes: null }));
+    if (!hasProductImage && promptText.trim() && errors.promptText)
+      setErrors((prev) => ({ ...prev, promptText: null }));
+  }, [videoModel, videoDuration, aspectRatio, brand_name, notes, hasProductImage, promptText, errors]);
 
   const videoChatModels = useMemo(
     () => [
@@ -659,12 +662,12 @@ const AvatarConfigForm = ({
   const handleGenerateClick = async () => {
     if (isLoading || isUploading) return;
     const newErrors = {};
-    if (!productUrl.trim() && uploadedImages.length === 0)
-      newErrors.productUrl = 'Product Image is Required';
     if (!videoModel) newErrors.videoModel = 'Model is required';
     if (!videoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
+    if (!notes.trim()) newErrors.notes = 'Additional Notes is required';
+    if (!hasProductImage && !promptText.trim()) newErrors.promptText = 'Prompt is required';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -676,57 +679,51 @@ const AvatarConfigForm = ({
       const userId = userData?.user_id;
       let imageUrl = '';
 
-      const rawUrl = uploadedImages.length > 0 ? uploadedImages[0].preview : productUrl.trim();
-      const rawFile = uploadedImages.length > 0 ? uploadedImages[0].file : null;
+      if (hasProductImage) {
+        const rawUrl = uploadedImages.length > 0 ? uploadedImages[0].preview : productUrl.trim();
+        const rawFile = uploadedImages.length > 0 ? uploadedImages[0].file : null;
 
-      if (rawFile) {
-        // Uploaded file — upload to S3
-        try {
-          const uploadedUrl = await uploadToS3(rawFile, userId, true);
-          globalToast.dismiss();
-          if (uploadedUrl) {
-            imageUrl = `${import.meta.env.VITE_S3_BASE_URL}${uploadedUrl}`;
-          } else {
-            globalToast.error('Image upload failed');
+        if (rawFile) {
+          try {
+            const uploadedUrl = await uploadToS3(rawFile, userId, true);
+            globalToast.dismiss();
+            if (uploadedUrl) {
+              imageUrl = `${import.meta.env.VITE_S3_BASE_URL}${uploadedUrl}`;
+            } else {
+              globalToast.error('Image upload failed');
+              setIsUploading(false);
+              return;
+            }
+          } catch (error) {
+            globalToast.dismiss();
+            console.error('Upload error:', error);
+            globalToast.error('Error uploading image');
             setIsUploading(false);
             return;
           }
-        } catch (error) {
-          globalToast.dismiss();
-          console.error('Upload error:', error);
-          globalToast.error('Error uploading image');
-          setIsUploading(false);
-          return;
-        }
-      } else if (rawUrl && !rawUrl.startsWith('blob:')) {
-        // External URL — fetch and upload to S3
-        try {
-          globalToast.loading('Uploading image...');
-          const res = await fetch(rawUrl);
-          const blob = await res.blob();
-          const urlFile = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
-          const uploadedUrl = await uploadToS3(urlFile, userId, true);
-          globalToast.dismiss();
-          if (uploadedUrl) {
-            imageUrl = `${import.meta.env.VITE_S3_BASE_URL}${uploadedUrl}`;
-          } else {
-            globalToast.error('Image upload failed');
+        } else if (rawUrl && !rawUrl.startsWith('blob:')) {
+          try {
+            globalToast.loading('Uploading image...');
+            const res = await fetch(rawUrl);
+            const blob = await res.blob();
+            const urlFile = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+            const uploadedUrl = await uploadToS3(urlFile, userId, true);
+            globalToast.dismiss();
+            if (uploadedUrl) {
+              imageUrl = `${import.meta.env.VITE_S3_BASE_URL}${uploadedUrl}`;
+            } else {
+              globalToast.error('Image upload failed');
+              setIsUploading(false);
+              return;
+            }
+          } catch (error) {
+            globalToast.dismiss();
+            console.error('Upload error:', error);
+            globalToast.error('Error uploading image');
             setIsUploading(false);
             return;
           }
-        } catch (error) {
-          globalToast.dismiss();
-          console.error('Upload error:', error);
-          globalToast.error('Error uploading image');
-          setIsUploading(false);
-          return;
         }
-      }
-
-      if (!imageUrl) {
-        globalToast.error('Please provide a product image or URL');
-        setIsUploading(false);
-        return;
       }
 
       // Upload custom avatar images to S3 if present
@@ -782,6 +779,7 @@ const AvatarConfigForm = ({
             : { avatarId: avatar?._id || avatar?.id || avatar?.avatar_id }),
           productName: brand_name || '',
           image: imageUrl,
+          text: hasProductImage ? '' : promptText,
           promotion: promotion,
           notes: notes,
         },
@@ -1009,84 +1007,110 @@ const AvatarConfigForm = ({
       {/* Form */}
       <div className="custom-scrollbar flex flex-col gap-6 overflow-y-auto p-6 pb-10 2xl:px-6 2xl:py-8 2xl:pb-15">
         <div className="flex flex-col gap-2">
-          
-          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
-            <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 px-2.5 py-0.5 text-10 font-medium text-white 2xl:text-xs dark:bg-white dark:text-black">
-                  🌐 All regional languages supported
-                </span> <br />
-            Brand/product URL or upload image
-          </label>
+          <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 px-2.5 py-0.5 text-10 font-medium text-white 2xl:text-xs dark:bg-white dark:text-black">
+            🌐 All regional languages supported
+          </span>
 
-          <div
-            className={`flex items-center gap-2 rounded-full border bg-gray-100 p-1 transition-colors dark:bg-[#9092941A] ${
-              errors.productUrl ? 'border-red-500/50' : 'border-transparent'
-            }`}
-          >
-            <input
-              value={productUrl}
-              onChange={(e) => setProductUrl(e.target.value)}
-              onPaste={handlePaste}
-              className="w-full flex-1 bg-transparent px-2 py-1.5 text-xs font-normal text-gray-900 placeholder:text-gray-500 focus:outline-none 2xl:px-4 2xl:text-sm dark:text-white dark:placeholder:text-white/40"
-              placeholder="Paste your product Image"
-            />
-
-            <LinkIcon className="size-3.5 rotate-90 text-gray-500 dark:text-white/60" />
-
-            {/* Upload Button */}
-            <label
-              htmlFor="brand-logo-2"
-              className="flex cursor-pointer items-center gap-1.5 rounded-full bg-zinc-200 px-2 py-1.5 text-[10px] whitespace-nowrap text-zinc-800 hover:bg-zinc-300 2xl:text-xs dark:bg-[#FFFFFF]/20 dark:text-white dark:hover:bg-white/10"
-            >
-              <CloudUpload className="size-3.5 text-zinc-800 dark:text-white" />
-              Upload Image
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
+              {hasProductImage ? 'Do you have a product image?' : 'Prompt*'}
             </label>
-
-            {/* Hidden Input */}
-            <input
-              id="brand-logo-2"
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={handleImageUpload}
-            />
-          </div>
-          {errors.productUrl && (
-            <span className="mt-1 text-[12px] text-red-400">{errors.productUrl}</span>
-          )}
-
-          {/* Image Preview Section */}
-          {uploadedImages.length > 0 && (
-            <div>
-              <div className="mt-2 flex flex-wrap gap-2 2xl:gap-3">
-                {uploadedImages.map((img, index) => (
-                  <div
-                    key={index}
-                    className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
-                  >
-                    <img
-                      src={img.preview}
-                      alt="upload"
-                      className="h-full w-full cursor-pointer rounded-md object-cover"
-                      onClick={() => {
-                        const allImages = uploadedImages.map((i) => i.preview);
-                        setLightboxImages(allImages);
-                        setLightboxImage(img.preview);
-                        setLightboxOpen(true);
-                      }}
-                    />
-
-                    {/* Delete Button */}
-                    <button
-                      type="button"
-                      className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
-                      onClick={() => removeImage(index)}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center gap-1 rounded-full bg-gray-100 p-1 dark:bg-[#9092941A]">
+              <button
+                type="button"
+                onClick={() => { setHasProductImage(true); setPromptText(''); setErrors((prev) => ({ ...prev, promptText: null })); }}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  hasProductImage
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
+                }`}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => { setHasProductImage(false); setProductUrl(''); setUploadedImages([]); setErrors((prev) => ({ ...prev, productUrl: null })); }}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  !hasProductImage
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
+                }`}
+              >
+                No
+              </button>
             </div>
+          </div>
+
+          {hasProductImage ? (
+            <>
+              <div className="flex items-center gap-2 rounded-full border border-transparent bg-gray-100 p-1 dark:bg-[#9092941A]">
+                <input
+                  value={productUrl}
+                  onChange={(e) => setProductUrl(e.target.value)}
+                  onPaste={handlePaste}
+                  className="w-full flex-1 bg-transparent px-2 py-1.5 text-xs font-normal text-gray-900 placeholder:text-gray-500 focus:outline-none 2xl:px-4 2xl:text-sm dark:text-white dark:placeholder:text-white/40"
+                  placeholder="Paste your product Image"
+                />
+                <LinkIcon className="size-3.5 rotate-90 text-gray-500 dark:text-white/60" />
+                <label
+                  htmlFor="brand-logo-2"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full bg-zinc-200 px-2 py-1.5 text-10 whitespace-nowrap text-zinc-800 hover:bg-zinc-300 2xl:text-xs dark:bg-[#FFFFFF]/20 dark:text-white dark:hover:bg-white/10"
+                >
+                  <CloudUpload className="size-3.5 text-zinc-800 dark:text-white" />
+                  Upload Image
+                </label>
+                <input
+                  id="brand-logo-2"
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                />
+              </div>
+
+              {uploadedImages.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2 2xl:gap-3">
+                  {uploadedImages.map((img, index) => (
+                    <div
+                      key={index}
+                      className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
+                    >
+                      <img
+                        src={img.preview}
+                        alt="upload"
+                        className="h-full w-full cursor-pointer rounded-md object-cover"
+                        onClick={() => {
+                          const allImages = uploadedImages.map((i) => i.preview);
+                          setLightboxImages(allImages);
+                          setLightboxImage(img.preview);
+                          setLightboxOpen(true);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
+                        onClick={() => removeImage(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <textarea
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                className={`w-full resize-none rounded-2xl bg-gray-100 p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-sm dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.promptText ? 'border border-red-500/50' : ''}`}
+                placeholder="Describe your product or scene (e.g. a sleek black smartwatch on a white surface)"
+                rows={3}
+              />
+              {errors.promptText && (
+                <span className="mt-1 text-[12px] text-red-400">{errors.promptText}</span>
+              )}
+            </>
           )}
         </div>
 
@@ -1237,23 +1261,26 @@ const AvatarConfigForm = ({
           {(() => {
             const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
             const enough = availableCredits >= est;
+            const showCreditPill = videoModel && videoDuration;
             return (
               <>
-                {enough ? (
-                  <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                    <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
-                      ~{est} credits
+                {showCreditPill && (
+                  enough ? (
+                    <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
+                      <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
+                        ~{est} credits
+                      </span>
+                    </ShadcnTooltip>
+                  ) : (
+                    <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                      Not enough credits — need {est}, you have {availableCredits}
                     </span>
-                  </ShadcnTooltip>
-                ) : (
-                  <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
-                    Not enough credits — need {est}, you have {availableCredits}
-                  </span>
+                  )
                 )}
                 <button
-                  disabled={isLoading || isUploading || !enough}
+                  disabled={isLoading || isUploading || (showCreditPill && !enough)}
                   onClick={handleGenerateClick}
-                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isUploading || !enough ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
+                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isUploading || (showCreditPill && !enough) ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
                 >
                   {isLoading || isUploading ? (
                     <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" />

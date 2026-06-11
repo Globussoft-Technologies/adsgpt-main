@@ -15,6 +15,13 @@ import {
   setActiveAdStudioTab,
   setAdCreativeNewActivePage,
 } from '@/store/reducers/adStudio/adStudioTabsSlice';
+import { checkCanvaAuth } from '@/apis/canva/canvaApi';
+import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
+
+const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
+const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
+const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
+const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
 
 // HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
 // avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
@@ -88,6 +95,36 @@ export default function ImageCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [activeNavIndex, setActiveNavIndex] = useState(imageIndex);
   const [activeImageUrl, setActiveImageUrl] = useState(item?.results?.[0]?.url ?? '');
+  const [canvaLoading, setCanvaLoading] = useState(false);
+
+  const handleEditWithCanva = async (e) => {
+    e.stopPropagation();
+    const imageUrl = item?.results?.[0]?.url;
+    if (!imageUrl) return;
+    setCanvaLoading(true);
+    try {
+      const result = await checkCanvaAuth(imageUrl);
+      if (result.status) {
+        window.location.href = `http://127.0.0.1:7000/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`;
+      } else {
+        const { state, codeChallenge } = result;
+        const params = new URLSearchParams({
+          response_type: 'code',
+          client_id: CANVA_CLIENT_ID,
+          redirect_uri: CANVA_REDIRECT_URI,
+          scope: CANVA_SCOPES,
+          state,
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
+        });
+        window.location.href = `https://www.canva.com/api/oauth/authorize?${params.toString()}`;
+      }
+      // keep loading=true — redirect is in progress, spinner stays until page unloads
+    } catch (err) {
+      console.error('Canva auth error:', err);
+      setCanvaLoading(false);
+    }
+  };
 
   const isThisFullscreen =
     isFullscreen && (fullscreenIndex === imageIndex || fullscreenIndex === activeNavIndex);
@@ -443,6 +480,26 @@ export default function ImageCard({
             >
               <Edit size={18} />
             </button>
+            {CANVA_ENABLED && (
+            <button
+              className="group flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/10 disabled:opacity-50"
+              onClick={handleEditWithCanva}
+              disabled={canvaLoading}
+              title="Edit in Canva"
+            >
+              {canvaLoading ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <img src={canvaIconLogo} alt="" className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
+              <span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 group-hover:max-w-20">
+                Edit in Canva
+              </span>
+            </button>
+            )}
             <button
               className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
               onClick={(e) => {

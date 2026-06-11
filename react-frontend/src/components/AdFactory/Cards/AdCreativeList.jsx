@@ -14,8 +14,15 @@ const EXPIRED_URL = import.meta.env.VITE_EXPIRED_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const VITE_MODE = import.meta.env.VITE_MODE;
 import { downloadaszip } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { checkCanvaAuth } from '@/apis/canva/canvaApi';
+import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+
+const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
+const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
+const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
+const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
 export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => {
   const [selected, setSelected] = useState(null);
   const [selectedHistoryVersion, setSelectedHistoryVersion] = useState('all');
@@ -28,6 +35,36 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
   const [downloadProgress, setDownloadProgress] = useState(0);
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
+  const [canvaLoadingKey, setCanvaLoadingKey] = useState(null);
+  const userId = useSelector((state) => state.socket?.userData?.user_id);
+
+  const handleEditWithCanva = async (e, imageUrl) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    setCanvaLoadingKey(imageUrl);
+    try {
+      const result = await checkCanvaAuth(imageUrl, 'image');
+      if (result.status) {
+        window.location.href = `http://127.0.0.1:7000/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}&type=image`;
+      } else {
+        const { state, codeChallenge } = result;
+        const params = new URLSearchParams({
+          response_type: 'code',
+          client_id: CANVA_CLIENT_ID,
+          redirect_uri: CANVA_REDIRECT_URI,
+          scope: CANVA_SCOPES,
+          state,
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
+        });
+        window.location.href = `https://www.canva.com/api/oauth/authorize?${params.toString()}`;
+      }
+      // keep loading=true — redirect is in progress, spinner stays until page unloads
+    } catch (err) {
+      console.error('Canva auth error:', err);
+      setCanvaLoadingKey(null);
+    }
+  };
   const [loadedImages, setLoadedImages] = useState({});
   const { userData } = useSelector((state) => state?.socket);
   const { results, history, productionAndServices } = useSelector((state) => state?.adFactoryNew);
@@ -491,6 +528,30 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                                 <Pencil className="h-3 w-3 2xl:h-4 2xl:w-4" />
                               </motion.button>
                             </ShadcnTooltip>
+                            {/* Edit in Canva */}
+                            {CANVA_ENABLED && (
+                            <motion.button
+                              onClick={(e) => handleEditWithCanva(e, item?.fullUrl)}
+                              disabled={canvaLoadingKey === item?.fullUrl}
+                              className="group flex items-center gap-1 rounded-full bg-[#3B3B3B] px-2 py-1 text-10 font-medium text-white transition-all duration-300 hover:scale-105 hover:bg-[#4A4A4A] active:scale-95 disabled:opacity-50"
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.9 }}
+                              transition={{ duration: 0.25, ease: 'easeOut' }}
+                            >
+                              {canvaLoadingKey === item?.fullUrl ? (
+                                <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                              ) : (
+                                <img src={canvaIconLogo} alt="" className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              )}
+                              <span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 group-hover:max-w-20">
+                                Edit in Canva
+                              </span>
+                            </motion.button>
+                            )}
                             {renderHeaderDownloadButton(item?.fullUrl)}
                           </>
                         </AnimatePresence>
