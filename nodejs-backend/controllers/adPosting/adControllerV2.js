@@ -369,9 +369,35 @@ async function createAdV2(req, res) {
           logger.info(`createAdV2: ad ${i + 1} — uploading video...`);
           const { videoId, videoThumbnailUrl } = await uploadVideoFromUrl(account, adData.videoUrl);
           logger.info(`createAdV2: ad ${i + 1} — video ready, id: ${videoId}`);
+          let resolvedThumbnailUrl =
+            adData.videoThumbnailUrl || videoThumbnailUrl || null;
+
+          // Last-chance thumbnail fetch. `uploadVideoFromUrl` polls for
+          // ~6s; longer clips don't always have thumbnails ready in that
+          // window, leaving `videoThumbnailUrl` null. Without it, Meta
+          // rejects the creative with "Your ad needs a video thumbnail:
+          // Please specify one of image_hash or image_url". Mirror the
+          // wizard's metaAdLauncherV2.buildAdCreativeOr400 fallback: hit
+          // the `/{video_id}/thumbnails` edge directly. Failure here
+          // falls through to the same Meta error so we still surface
+          // useful info.
+          if (videoId && !resolvedThumbnailUrl) {
+            try {
+              const api = bizSdk.FacebookAdsApi.getDefaultApi();
+              const r = await api.call("GET", [videoId, "thumbnails"], {
+                fields: "uri,is_preferred",
+              });
+              const thumbs = r?.data || r?._data?.data || [];
+              const preferred = thumbs.find((t) => t.is_preferred) || thumbs[0];
+              if (preferred?.uri) resolvedThumbnailUrl = preferred.uri;
+            } catch (_) {
+              /* swallow — Meta rejection below will carry the real error */
+            }
+          }
+
           mediaParams = {
             videoId,
-            videoThumbnailUrl: adData.videoThumbnailUrl || videoThumbnailUrl || undefined,
+            videoThumbnailUrl: resolvedThumbnailUrl || undefined,
           };
         } else {
           const imageHash = await uploadImageFromUrl(account, adData.imageUrl);
