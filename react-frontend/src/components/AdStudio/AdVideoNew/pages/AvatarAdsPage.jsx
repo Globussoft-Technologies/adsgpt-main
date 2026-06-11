@@ -1943,7 +1943,7 @@ const AvatarAdsPage = ({ handleGenerate }) => {
   useEffect(() => {
     if (currentAvatarStep === 'script' && generatedId) {
       setSearchParams({ id: generatedId }, { replace: true });
-    } else {
+    } else if (!generatedId) {
       setSearchParams({}, { replace: true });
     }
   }, [currentAvatarStep, generatedId, setSearchParams]);

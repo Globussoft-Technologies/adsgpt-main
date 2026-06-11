@@ -110,6 +110,7 @@ const videoSchema = new mongoose.Schema(
       productName: String,
       productDescription: String,
       image: String,
+      text: String,
       promotion: String,
       notes: String,
       script: String,
