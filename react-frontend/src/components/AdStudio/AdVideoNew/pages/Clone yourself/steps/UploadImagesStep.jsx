@@ -1,8 +1,16 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, CloudUpload, X } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import axios from 'axios';
+import { ChevronLeft, ChevronRight, CloudUpload, Loader2, X } from 'lucide-react';
 import avatarFront from '@/assets/layouts/adVideoNew/avatar_front.png';
 import avatarLeft from '@/assets/layouts/adVideoNew/avatar_left.png';
 import avatarRight from '@/assets/layouts/adVideoNew/avatar_right.png';
+import { uploadToS3 } from '@/utils/imageUpload';
+import getCookies from '@/utils/getCookies';
+import { globalToast } from '@/utils/globalToast';
+
+const PYTHON_API_CLONE_YOURSELF_FACE_VALIDATE_URL = import.meta.env.VITE_PYTHON_API_CLONE_YOURSELF_FACE_VALIDATE_URL;
+const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL || '';
 
 const FACE_ANGLES = ['Left', 'Center', 'Right'];
 const FACE_ANGLE_IMAGES = [avatarLeft, avatarFront, avatarRight];
@@ -13,7 +21,10 @@ const FACE_ANGLE_TEXTS = [
 ];
 
 const UploadImagesStep = ({ onBack, onComplete }) => {
+  const { userData } = useSelector((state) => state.socket);
   const [images, setImages] = useState([null, null, null]);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationError, setValidationError] = useState(null);
 
   const handleFileChange = (index, e) => {
     const file = e.target.files[0];
@@ -141,12 +152,66 @@ const UploadImagesStep = ({ onBack, onComplete }) => {
         </div>
 
         {allUploaded && (
-          <button
-            onClick={() => onComplete(images)}
-            className="absolute -right-3 bottom-3 z-20 rounded-full p-2 text-gray-900 transition hover:bg-black/5 2xl:-right-1 dark:text-white dark:hover:bg-white/20"
-          >
-            <ChevronRight className="h-8 w-8 2xl:h-9 2xl:w-9" />
-          </button>
+          <div className="absolute -right-3 bottom-3 z-20 flex flex-col items-end gap-1 2xl:-right-1">
+            <button
+              disabled={isValidating}
+              onClick={async () => {
+                setValidationError(null);
+                setIsValidating(true);
+                try {
+                  const userId = userData?.user_id;
+                  // Upload all 3 images to S3 in parallel
+                  const [leftPath, frontPath, rightPath] = await Promise.all(
+                    images.map((img) => uploadToS3(img.file, userId, true))
+                  );
+                  if (!leftPath || !frontPath || !rightPath) {
+                    const errMsg = 'Image upload failed. Please try again.';
+                    globalToast.error(errMsg);
+                    setValidationError(errMsg);
+                    return;
+                  }
+                  const leftUrl = `${S3_BASE_URL}${leftPath}`;
+                  const frontUrl = `${S3_BASE_URL}${frontPath}`;
+                  const rightUrl = `${S3_BASE_URL}${rightPath}`;
+
+                  // Validate faces
+                  const res = await axios.post(
+                    `${PYTHON_API_CLONE_YOURSELF_FACE_VALIDATE_URL}/api/v1/face-validate/validate`,
+                    { front: frontUrl, left: leftUrl, right: rightUrl },
+                    { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+                  );
+
+                  if (res.data?.success === false || res.data?.valid === false) {
+                    const errMsg = res.data?.error || res.data?.message || 'Face validation failed. Please upload clear face photos.';
+                    globalToast.error(errMsg);
+                    setValidationError(errMsg);
+                    return;
+                  }
+
+                  globalToast.success(res.data?.message || 'Validation passed!');
+
+                  // Validation passed — pass images with updated S3 previews
+                  onComplete([
+                    { file: images[0].file, preview: leftUrl },
+                    { file: images[1].file, preview: frontUrl },
+                    { file: images[2].file, preview: rightUrl },
+                  ]);
+                } catch (err) {
+                  const msg = err.response?.data?.error || err.response?.data?.message || 'Validation failed. Please try again.';
+                  globalToast.error(msg);
+                  setValidationError(msg);
+                } finally {
+                  setIsValidating(false);
+                }
+              }}
+              className="rounded-full p-2 text-gray-900 transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white dark:hover:bg-white/20"
+            >
+              {isValidating
+                ? <Loader2 className="h-8 w-8 animate-spin 2xl:h-9 2xl:w-9" />
+                : <ChevronRight className="h-8 w-8 2xl:h-9 2xl:w-9" />
+              }
+            </button>
+          </div>
         )}
       </div>
 
