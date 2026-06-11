@@ -3202,18 +3202,20 @@ exports.regenerateFrameClone = async (req, res) => {
         { $set: { generatedImage: "failed" } },
       );
 
+      const errorMsg = pyData.error || "Frame generation failed. Please try again.";
+
       if (global.io) {
-        global.io.to(userId).emit("CloneImageScriptUpdate", {
+        global.io.to(userId).emit("CloneFrameRegenerate", {
           _id: videoId,
           userId,
           type: "image",
           status: 400,
-          error: pyData.error || "First frame generation failed",
+          error: errorMsg,
           generatedImage: "failed",
         });
       }
 
-      return res.status(200).json({ success: true, message: "Frame regeneration failed" });
+      return res.status(400).json({ success: false, error: errorMsg });
     }
 
     const updatedVideo = await VideoGeneration.findByIdAndUpdate(
@@ -3237,6 +3239,7 @@ exports.regenerateFrameClone = async (req, res) => {
       success: true,
       sessionId: videoId,
       userId,
+      image: pyData.image,
       data: updatedVideo,
     });
   } catch (err) {
