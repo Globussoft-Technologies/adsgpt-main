@@ -499,9 +499,11 @@ const AvatarConfigForm = ({
     if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
     if (brand_name && errors.brandName) setErrors((prev) => ({ ...prev, brandName: null }));
     if (notes.trim() && errors.notes) setErrors((prev) => ({ ...prev, notes: null }));
-    if (!hasProductImage && promptText.trim() && errors.promptText)
+    if ((productUrl.trim() || uploadedImages.length > 0) && errors.productUrl)
+      setErrors((prev) => ({ ...prev, productUrl: null }));
+    if (promptText.trim() && errors.promptText)
       setErrors((prev) => ({ ...prev, promptText: null }));
-  }, [videoModel, videoDuration, aspectRatio, brand_name, notes, hasProductImage, promptText, errors]);
+  }, [videoModel, videoDuration, aspectRatio, brand_name, notes, productUrl, uploadedImages, promptText, errors.videoModel, errors.videoDuration, errors.aspectRatio, errors.brandName, errors.notes, errors.productUrl, errors.promptText]);
 
   const videoChatModels = useMemo(
     () => [
@@ -642,6 +644,8 @@ const AvatarConfigForm = ({
         const isFullUrl = rawImageUrl.startsWith('http');
         const previewUrl = isFullUrl ? rawImageUrl : s3Base + rawImageUrl;
 
+        setHasProductImage(true);
+        setPromptText('');
         setProductUrl('');
         setUploadedImages([
           {
@@ -649,6 +653,11 @@ const AvatarConfigForm = ({
             preview: previewUrl,
           },
         ]);
+      } else if (recreateData.text) {
+        setHasProductImage(false);
+        setPromptText(recreateData.text);
+        setProductUrl('');
+        setUploadedImages([]);
       }
 
       if (recreateData.promotion) setPromotion(recreateData.promotion);
@@ -666,7 +675,8 @@ const AvatarConfigForm = ({
     if (!videoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
-    if (!notes.trim()) newErrors.notes = 'Additional Notes is required';
+    if (hasProductImage && !productUrl.trim() && uploadedImages.length === 0)
+      newErrors.productUrl = 'Product Image is Required';
     if (!hasProductImage && !promptText.trim()) newErrors.promptText = 'Prompt is required';
 
     if (Object.keys(newErrors).length > 0) {
@@ -1043,7 +1053,7 @@ const AvatarConfigForm = ({
 
           {hasProductImage ? (
             <>
-              <div className="flex items-center gap-2 rounded-full border border-transparent bg-gray-100 p-1 dark:bg-[#9092941A]">
+              <div className={`flex items-center gap-2 rounded-full border border-transparent bg-gray-100 p-1 dark:bg-[#9092941A] ${errors.productUrl ? 'border-red-500/50' : ''}`}>
                 <input
                   value={productUrl}
                   onChange={(e) => setProductUrl(e.target.value)}
@@ -1096,6 +1106,10 @@ const AvatarConfigForm = ({
                     </div>
                   ))}
                 </div>
+              )}
+
+              {errors.productUrl && (
+                <span className="text-[12px] text-red-400">{errors.productUrl}</span>
               )}
             </>
           ) : (
