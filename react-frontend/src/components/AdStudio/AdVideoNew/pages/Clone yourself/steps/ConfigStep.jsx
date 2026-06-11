@@ -119,8 +119,12 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('');
   const [aspectRatio, setAspectRatio] = useState('');
-  const [promotion, setPromotion] = useState('');
-  const [notes, setNotes] = useState('');
+  const [promotion, setPromotion] = useState(() =>
+    recreateData?.promotion || ''
+  );
+  const [notes, setNotes] = useState(() =>
+    recreateData?.notes || recreateData?.additionalNotes || recreateData?.additional_notes || ''
+  );
   const [uploadedImages, setUploadedImages] = useState([]);
   const [imageOrientation, setImageOrientation] = useState(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -262,7 +266,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       setUploadedImages([{ file: null, preview: rawImg.startsWith('http') ? rawImg : s3Base + rawImg }]);
     }
     if (recreateData.promotion) setPromotion(recreateData.promotion);
-    if (recreateData.notes) setNotes(recreateData.notes);
+    const notesValue = recreateData.notes || recreateData.additionalNotes || recreateData.additional_notes || '';
+    if (notesValue) setNotes(notesValue);
     if (recreateData.productName) dispatch(setFields({ brand_name: recreateData.productName }));
     if (recreateData.voiceSampleUrl) {
       setUploadFileUrl(recreateData.voiceSampleUrl);

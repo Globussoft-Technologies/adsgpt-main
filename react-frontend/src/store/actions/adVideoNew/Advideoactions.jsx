@@ -4,6 +4,7 @@ import {
   setLoading,
   setError,
   setImageAndScript,
+  setClonePayload,
   setAllVideos,
   setAvatars,
   setAvatarsLoading,
@@ -424,7 +425,7 @@ export const regenerateScript = (payload) => async (dispatch) => {
     console.error('Error fetching regenerated script:', error);
     const apiError = error.response?.data?.error || error.message;
     const fullErrorMsg = apiError
-      ? `Failed to generate script: ${apiError}`
+      ? apiError
       : 'Failed to generate script';
     globalToast.error(fullErrorMsg);
     dispatch(setError(fullErrorMsg));
@@ -730,6 +731,7 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
+    dispatch(setClonePayload(payload));
     const res = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-image-and-script-clone`,
       payload,
@@ -744,6 +746,23 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
     throw error;
   } finally {
     dispatch(setLoading(false));
+  }
+};
+
+export const regenerateCloneFirstFrame = (payload) => async (dispatch) => {
+  try {
+    const { images, ...cleanInputs } = payload?.inputs || {};
+    const cleanPayload = { inputs: cleanInputs };
+    const res = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/regenerate-frame-clone`,
+      cleanPayload,
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    return res.data;
+  } catch (error) {
+    const msg = error.response?.data?.error || error.message || 'Retry failed';
+    globalToast.error(msg);
+    throw error;
   }
 };
 

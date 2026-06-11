@@ -18,6 +18,7 @@ const initialState = {
   isLoading: false,
   error: null,
   imageAndScript: null,
+  clonePayload: null,
   allVideos: [],
   avatars: [],
   avatarsLoading: false,
@@ -69,6 +70,9 @@ const adVideoNewSlice = createSlice({
     },
     setImageAndScript: (state, action) => {
       state.imageAndScript = action.payload;
+    },
+    setClonePayload: (state, action) => {
+      state.clonePayload = action.payload;
     },
     setAllVideos: (state, action) => {
       state.allVideos = action.payload;
@@ -126,6 +130,24 @@ const adVideoNewSlice = createSlice({
         state.imageAndScript.data = { ...state.imageAndScript.data, ...payload, ...extra };
       } else if (state.imageAndScript && state.imageAndScript._id === payload._id) {
         state.imageAndScript = { ...state.imageAndScript, ...payload, ...extra };
+      }
+    },
+    updateCloneImage: (state, action) => {
+      const { sessionId, _id, status, image, error } = action.payload;
+      const id = sessionId || _id;
+      const target =
+        state.imageAndScript?.data?._id === id
+          ? state.imageAndScript.data
+          : state.imageAndScript?._id === id
+            ? state.imageAndScript
+            : null;
+      if (!target) return;
+      if (status === 200 && image) {
+        target.generatedImage = image;
+        target.imageError = null;
+      } else {
+        target.generatedImage = 'failed';
+        target.imageError = error || 'Frame generation failed. Please try again.';
       }
     },
     setRecreateInputs: (state, action) => {
@@ -213,6 +235,8 @@ export const {
   setLoading,
   setError,
   setImageAndScript,
+  setClonePayload,
+  updateCloneImage,
   setAllVideos,
   showSavedFolder,
   updateVideoPromptPercentage,
