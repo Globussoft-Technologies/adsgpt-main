@@ -188,7 +188,12 @@ function validateAdSet(form, cell, ctx, mode) {
       // A per-bid amount above ₹1cr is almost certainly a typo.
       e.bidAmount = `That bid is too high — max we accept is ${formatMoney(MAX_DAILY_BUDGET_MAJOR, ctx.currency)}.`;
     }
-  } else if (!isBlank(form.bidAmount)) {
+  } else if (!isBlank(form.bidAmount) && toNumber(form.bidAmount) > 0) {
+    // Treat bidAmount==0 as "not set" — Meta returns 0 for ad sets that
+    // never had a cap, which `resolveAdSetForEdit` echoes back into the
+    // form. Without this guard the validator fires on every edit-mode
+    // open of an autobid ad set, blocking Save even though the bid
+    // strategy is locked and the user has nothing to fix.
     e.bidAmount = 'Bid amount can’t be set for an automatic bid strategy.';
   }
 
@@ -264,6 +269,16 @@ function validateAdSet(form, cell, ctx, mode) {
         e.locations =
           'Special Ad Categories need at least one country-based location (free-trade areas alone don’t qualify) — add a country, city, or region.';
       }
+    }
+    // Meta rejects gender filters under Special Ad Categories (subcode
+    // 2909040 — "Custom gender selection is unavailable when running ads
+    // in this Special ad category. Your audience must include all
+    // genders"). Empty `genders` array = "all genders" in Meta's data
+    // model; any explicit value (1 = male, 2 = female) is custom and
+    // gets rejected. Surface that pre-launch instead of at Meta's API.
+    if (Array.isArray(form.genders) && form.genders.length > 0) {
+      e.genders =
+        "Special Ad Categories don't allow gender filtering — your audience must include all genders. Clear the gender selection to continue.";
     }
   }
 

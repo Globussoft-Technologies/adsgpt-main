@@ -1690,6 +1690,78 @@ group("buildAdSetSchemaV2 — billing event ↔ goal compatibility", () => {
   });
 });
 
+// ─── buildAdSetSchemaV2 — bid strategy ↔ optimisation goal compatibility ──
+// Meta rejects capped strategies on autobid-only goals with subcode 1885204
+// ("Optimisation goal only supports autobid"). The Joi factory catches this
+// before launch.
+
+group("buildAdSetSchemaV2 — bid strategy ↔ goal compatibility", () => {
+  // QUALITY_CALL (the bug reporter's case) — Engagement / Calls cell.
+  const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "PHONE_CALL");
+  const base = {
+    adAccountId: "act1",
+    campaignId: "c1",
+    pageId: "page_1",
+    name: "Autobid-only goal test",
+    objective: "OUTCOME_ENGAGEMENT",
+    conversionLocation: "PHONE_CALL",
+    optimizationGoal: "QUALITY_CALL",
+    billingEvent: "IMPRESSIONS",
+    dailyBudget: 1000,
+    targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+  };
+
+  test("QUALITY_CALL + LOWEST_COST_WITH_BID_CAP → reject (subcode 1885204)", () => {
+    const { error } = schema.validate({
+      ...base,
+      bidStrategy: "LOWEST_COST_WITH_BID_CAP",
+      bidAmount: 500,
+    });
+    assert.ok(error);
+  });
+
+  test("QUALITY_CALL + COST_CAP → reject (subcode 1885204)", () => {
+    const { error } = schema.validate({
+      ...base,
+      bidStrategy: "COST_CAP",
+      bidAmount: 500,
+    });
+    assert.ok(error);
+  });
+
+  test("QUALITY_CALL + LOWEST_COST_WITHOUT_CAP → accept (the only legal strategy)", () => {
+    const { error } = schema.validate({
+      ...base,
+      bidStrategy: "LOWEST_COST_WITHOUT_CAP",
+    });
+    assert.ok(!error, error && error.message);
+  });
+
+  test("CONVERSATIONS + LOWEST_COST_WITH_BID_CAP → reject (autobid-only)", () => {
+    const whatsappSchema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "WHATSAPP");
+    const { error } = whatsappSchema.validate({
+      ...base,
+      conversionLocation: "WHATSAPP",
+      optimizationGoal: "CONVERSATIONS",
+      bidStrategy: "LOWEST_COST_WITH_BID_CAP",
+      bidAmount: 500,
+    });
+    assert.ok(error);
+  });
+
+  test("Capped strategies still accepted on goals not in the autobid-only set (THRUPLAY)", () => {
+    const videoSchema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
+    const { error } = videoSchema.validate({
+      ...base,
+      conversionLocation: "VIDEO_VIEWS",
+      optimizationGoal: "THRUPLAY",
+      bidStrategy: "LOWEST_COST_WITH_BID_CAP",
+      bidAmount: 500,
+    });
+    assert.ok(!error, error && error.message);
+  });
+});
+
 // ─── buildAdSchemaV2 — Meta copy-length caps ────────────────────────────────
 // Headline 40 / primaryText 125 / description 30 mirror Meta's display-
 // without-truncation thresholds for single-image/video ads. Above these,
@@ -1860,7 +1932,7 @@ group("OUTCOME_ENGAGEMENT — registered in SUPPORTED_OBJECTIVES (backend)", () 
     );
   });
 
-  test("listConversionLocations exposes all 9 engagement cells (Phase 1 + Phase 2)", () => {
+  test("listConversionLocations exposes the live engagement cells (Phase 1 + Phase 2 minus retired)", () => {
     const locs = listConversionLocations("OUTCOME_ENGAGEMENT");
     assert.deepEqual(
       [...locs].sort(),
@@ -1868,7 +1940,9 @@ group("OUTCOME_ENGAGEMENT — registered in SUPPORTED_OBJECTIVES (backend)", () 
         // Phase 1 (MVP — shipped 2026-06-02 first half)
         "MESSENGER", "WHATSAPP", "PHONE_CALL", "VIDEO_VIEWS", "POST_ENGAGEMENT",
         // Phase 2 (shipped 2026-06-02 second half)
-        "INSTAGRAM", "WEBSITE", "APP", "INSTAGRAM_OR_FACEBOOK",
+        "INSTAGRAM", "WEBSITE", "APP",
+        // INSTAGRAM_OR_FACEBOOK was retired — Meta rejected its goals
+        // (subcode 2490408). Deferred to Phase 3.
       ].sort(),
     );
   });
@@ -1884,14 +1958,13 @@ group("OUTCOME_ENGAGEMENT — destination_type mappings", () => {
   test("PHONE_CALL → PHONE_CALL", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "PHONE_CALL"), "PHONE_CALL");
   });
-  test("VIDEO_VIEWS → ON_AD", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS"), "ON_AD");
+  test("VIDEO_VIEWS → null (Meta rejects ON_AD on Engagement — subcode 1815715)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS"), null);
   });
-  test("POST_ENGAGEMENT → ON_AD", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT"), "ON_AD");
+  test("POST_ENGAGEMENT → null (Meta rejects ON_AD on Engagement — subcode 1815715)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT"), null);
   });
-  // Phase 2 mappings — INSTAGRAM/WEBSITE/APP all reuse the generic bare
-  // keys; INSTAGRAM_OR_FACEBOOK uses the documented Traffic-shared key.
+  // Phase 2 mappings — INSTAGRAM/WEBSITE/APP all reuse the generic bare keys.
   test("INSTAGRAM → INSTAGRAM_DIRECT (Phase 2)", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM"), "INSTAGRAM_DIRECT");
   });
@@ -1900,9 +1973,6 @@ group("OUTCOME_ENGAGEMENT — destination_type mappings", () => {
   });
   test("APP → APP (Phase 2)", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "APP"), "APP");
-  });
-  test("INSTAGRAM_OR_FACEBOOK → WEBSITE (Phase 2 — same as Traffic; reverse-resolves via optimization_goal)", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK"), "WEBSITE");
   });
 });
 
@@ -2114,24 +2184,6 @@ group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by op
     assert.equal(out.conversionLocation, "WEBSITE");
   });
 
-  test("WEBSITE + PAGE_LIKES → INSTAGRAM_OR_FACEBOOK cell (profile path)", () => {
-    const out = inferCellForMetaCampaign(campaign, {
-      destination_type: "WEBSITE",
-      optimization_goal: "PAGE_LIKES",
-    });
-    assert.ok(!out.error, out.error);
-    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
-  });
-
-  test("WEBSITE + VISIT_INSTAGRAM_PROFILE → INSTAGRAM_OR_FACEBOOK cell (profile path)", () => {
-    const out = inferCellForMetaCampaign(campaign, {
-      destination_type: "WEBSITE",
-      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
-    });
-    assert.ok(!out.error, out.error);
-    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
-  });
-
   test("APP destination → APP cell", () => {
     const out = inferCellForMetaCampaign(campaign, {
       destination_type: "APP",
@@ -2166,14 +2218,9 @@ group("OUTCOME_ENGAGEMENT — Phase 2 cell shapes", () => {
     assert.ok(cell.adSet.optimizationGoals.includes("LINK_CLICKS"));
   });
 
-  test("INSTAGRAM_OR_FACEBOOK cell uses link_data + profile-visit CTAs", () => {
-    const cell = getCell("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
-    assert.equal(cell.ad.objectStorySpecShape, "link_data");
-    assert.ok(cell.ctas.allowed.includes("LIKE_PAGE"));
-    assert.ok(cell.ctas.allowed.includes("VIEW_INSTAGRAM_PROFILE"));
-    assert.ok(cell.adSet.optimizationGoals.includes("PAGE_LIKES"));
-    assert.ok(cell.adSet.optimizationGoals.includes("VISIT_INSTAGRAM_PROFILE"));
-  });
+  // INSTAGRAM_OR_FACEBOOK cell retired — Meta rejected PAGE_LIKES and
+  // VISIT_INSTAGRAM_PROFILE with subcode 2490408. Re-add when Meta's
+  // profile-visit enum is verified.
 
   test("VIDEO_VIEWS now accepts TWO_SECOND_CONTINUOUS_VIDEO_VIEWS goal", () => {
     const cell = getCell("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS");
@@ -2200,37 +2247,7 @@ group("OUTCOME_ENGAGEMENT — Phase 2 Joi factories accept valid bodies", () => 
     assert.ok(!error, error && error.message);
   });
 
-  test("INSTAGRAM_OR_FACEBOOK accepts a PAGE_LIKES body", () => {
-    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
-    const { error } = schema.validate({
-      adAccountId: "act1",
-      campaignId: "c1",
-      pageId: "page_1",
-      name: "FB Page visits adset",
-      objective: "OUTCOME_ENGAGEMENT",
-      conversionLocation: "INSTAGRAM_OR_FACEBOOK",
-      optimizationGoal: "PAGE_LIKES",
-      dailyBudget: 1000,
-      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
-    });
-    assert.ok(!error, error && error.message);
-  });
-
-  test("INSTAGRAM_OR_FACEBOOK rejects an off-cell goal (LEAD_GENERATION)", () => {
-    const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
-    const { error } = schema.validate({
-      adAccountId: "act1",
-      campaignId: "c1",
-      pageId: "page_1",
-      name: "off-cell goal",
-      objective: "OUTCOME_ENGAGEMENT",
-      conversionLocation: "INSTAGRAM_OR_FACEBOOK",
-      optimizationGoal: "LEAD_GENERATION",
-      dailyBudget: 1000,
-      targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
-    });
-    assert.ok(error);
-  });
+  // INSTAGRAM_OR_FACEBOOK valid-body tests removed along with the cell.
 
   test("Engagement WEBSITE rejects body without pixelId (additionalFields enforced)", () => {
     const schema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "WEBSITE");

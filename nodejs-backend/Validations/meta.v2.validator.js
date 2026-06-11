@@ -18,6 +18,7 @@ const {
   isCellImplemented,
   listObjectives,
   getAllowedBillingEvents,
+  getAllowedBidStrategies,
 } = require("../config/wizardSchema");
 
 // Bid strategies are objective-agnostic in MVP — V2 inherits the V1 list.
@@ -480,6 +481,17 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
       return helpers.error("any.invalid", {
         message:
           `billingEvent '${value.billingEvent}' isn't valid for optimisation goal '${value.optimizationGoal}'. Allowed: ${allowedBillings.join(", ")}.`,
+      });
+    }
+    // Optimisation goal ↔ bid strategy compatibility — some goals (e.g.
+    // QUALITY_CALL, CONVERSATIONS, profile-visit goals) only accept
+    // autobid; pairing them with a capped strategy triggers Meta subcode
+    // 1885204 ("Optimisation goal only supports autobid"). Reject here.
+    const allowedBids = getAllowedBidStrategies(cell, value.optimizationGoal);
+    if (allowedBids.length && !allowedBids.includes(value.bidStrategy)) {
+      return helpers.error("any.invalid", {
+        message:
+          `bidStrategy '${value.bidStrategy}' isn't valid for optimisation goal '${value.optimizationGoal}'. Allowed: ${allowedBids.join(", ")}.`,
       });
     }
     // Bid strategy ↔ bid amount — validated in BOTH directions, so the

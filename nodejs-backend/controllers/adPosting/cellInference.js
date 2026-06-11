@@ -73,33 +73,30 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
     objective,
     destinationType,
   );
-  // Engagement/ON_AD disambiguation — both VIDEO_VIEWS and POST_ENGAGEMENT
-  // ride destination_type=ON_AD, so the helper returns null and we look at
-  // the optimisation goal to pick the cell. THRUPLAY (or 2-sec views) →
-  // VIDEO_VIEWS; POST_ENGAGEMENT → POST_ENGAGEMENT. Default to VIDEO_VIEWS
-  // when neither matches (e.g. a legacy goal) so management flows still
-  // resolve.
+  // Engagement video-views vs post-engagement disambiguation. Meta rejects
+  // destination_type=ON_AD for OUTCOME_ENGAGEMENT (subcode 1815715), so
+  // we OMIT destination_type for these cells — Meta infers from
+  // optimization_goal. That means reverse-inference has nothing on
+  // destination_type to go on either. Use optimization_goal directly:
+  // POST_ENGAGEMENT → POST_ENGAGEMENT cell; THRUPLAY / 2-sec views →
+  // VIDEO_VIEWS cell. (Legacy ad sets that carry destination_type=ON_AD
+  // — created before this fix — still hit this branch via the empty
+  // destinationType fallthrough.)
   if (
     !conversionLocation &&
     objective === "OUTCOME_ENGAGEMENT" &&
-    destinationType === "ON_AD"
+    (destinationType === "ON_AD" || !destinationType) &&
+    (optimizationGoal === "POST_ENGAGEMENT" ||
+      optimizationGoal === "THRUPLAY" ||
+      optimizationGoal === "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS")
   ) {
     conversionLocation =
       optimizationGoal === "POST_ENGAGEMENT" ? "POST_ENGAGEMENT" : "VIDEO_VIEWS";
   }
-  // Engagement/WEBSITE disambiguation — both WEBSITE (pixel-conversions
-  // cell) and INSTAGRAM_OR_FACEBOOK (profile-visit cell) map to
-  // destination_type=WEBSITE. The optimisation goal distinguishes:
-  // profile-visit goals → INSTAGRAM_OR_FACEBOOK; everything else →
-  // WEBSITE. Same disambiguation shape as the ON_AD case above.
-  if (
-    objective === "OUTCOME_ENGAGEMENT" &&
-    destinationType === "WEBSITE" &&
-    (optimizationGoal === "PAGE_LIKES" ||
-      optimizationGoal === "VISIT_INSTAGRAM_PROFILE")
-  ) {
-    conversionLocation = "INSTAGRAM_OR_FACEBOOK";
-  }
+  // (Engagement/INSTAGRAM_OR_FACEBOOK disambiguation was removed along with
+  // the cell — see wizardSchema.js. Profile-visit goals PAGE_LIKES and
+  // VISIT_INSTAGRAM_PROFILE were rejected by Meta with subcode 2490408,
+  // making the cell unusable. Engagement/WEBSITE now resolves directly.)
   // Fall back to the most common cell per objective when destination_type
   // is missing — covers ad sets created without an explicit destination.
   if (!conversionLocation) {
