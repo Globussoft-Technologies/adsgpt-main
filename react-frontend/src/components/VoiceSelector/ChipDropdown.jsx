@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Loader2 } from 'lucide-react';
+import { Play, Pause, Loader2, Search } from 'lucide-react';
 
 const TITLE_MAP = {
   language: 'Language',
@@ -28,6 +28,7 @@ const ChipDropdown = ({
 }) => {
   const ref = useRef(null);
   const [playingId, setPlayingId] = useState(null);
+  const [query, setQuery] = useState('');
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -48,6 +49,11 @@ const ChipDropdown = ({
       audioRef.current = null;
       setPlayingId(null);
     }
+  }, [open]);
+
+  // Reset search query when dropdown opens/closes
+  useEffect(() => {
+    if (!open) setQuery('');
   }, [open]);
 
   const togglePreview = (voice) => {
@@ -153,6 +159,11 @@ const ChipDropdown = ({
     return renderSimpleRow(opt, prettify(opt), isSelected, () => onSelect(opt));
   };
 
+  const filtered =
+    field === 'voice' && query.trim()
+      ? options.filter((opt) => opt.name?.toLowerCase().includes(query.toLowerCase()))
+      : options;
+
   return (
     <AnimatePresence>
       {open && (
@@ -173,10 +184,25 @@ const ChipDropdown = ({
             {!loading && error && (
               <div className="px-3 py-3 text-[12px] text-red-400">{error}</div>
             )}
-            {!loading && !error && options.length === 0 && (
+            {field === 'voice' && (
+              <div className="px-3 py-1.5">
+                <div className="flex items-center gap-2 rounded-md border border-black/10 bg-gray-100 px-2 py-1 dark:border-white/10 dark:bg-white/5">
+                  <Search className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
+                  <input
+                    type="text"
+                    placeholder="Search voices…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="w-full bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            )}
+            {!loading && !error && filtered.length === 0 && (
               <div className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/40">No options</div>
             )}
-            {!loading && !error && options.map(renderOption)}
+            {!loading && !error && filtered.map(renderOption)}
           </div>
         </motion.div>
       )}

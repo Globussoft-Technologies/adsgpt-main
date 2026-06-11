@@ -444,10 +444,12 @@ export function MultiSelectField({
   values,
   onChange,
   options,
+  disabled = false,
   className = '',
 }) {
   const set = new Set(values || []);
   const toggle = (v) => {
+    if (disabled) return;
     const next = new Set(set);
     if (next.has(v)) next.delete(v);
     else next.add(v);
@@ -455,7 +457,7 @@ export function MultiSelectField({
   };
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-2 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
         {options.map((opt) => {
           const v = typeof opt === 'string' ? opt : opt.value;
           const lbl = typeof opt === 'string' ? opt : opt.label;
@@ -472,6 +474,7 @@ export function MultiSelectField({
               <button
                 type="button"
                 onClick={() => toggle(v)}
+                disabled={disabled}
                 className={`flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-13 font-medium transition-all dark:bg-[#1d1d1d] 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
                   active ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
                 }`}

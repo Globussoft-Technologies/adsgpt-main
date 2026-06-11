@@ -53,6 +53,7 @@ import {
   patchAiAdsSceneImage,
   markAiAdsSceneImageFailed,
   setAiAdsSessionStatus,
+  updateCloneImage,
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
@@ -376,6 +377,11 @@ export const initSocket = (url) => (dispatch, getState) => {
     socket.on('CloneImageScriptUpdate', (data) => {
       console.log('Clone image/script update:', data);
       dispatch(updateGeneratedVideo(data));
+    });
+
+    socket.on('CloneFrameRegenerate', (data) => {
+      console.log('Clone frame regenerate:', data);
+      dispatch(updateCloneImage(data));
     });
 
     // AdCreative image generation completion. Mirrors the videoCreated

@@ -153,5 +153,10 @@ router.post(
   requireBasePlan,
   videoController.regenerateScriptClone
 );
-
+router.post(
+  "/regenerate-frame-clone",
+  authenticateJWT,
+  requireBasePlan,
+  videoController.regenerateFrameClone
+);
 module.exports = router;

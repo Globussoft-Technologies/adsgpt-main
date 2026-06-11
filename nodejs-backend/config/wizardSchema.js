@@ -139,6 +139,43 @@ function getAllowedBillingEvents(cell, optimizationGoal) {
   return cellList.filter((b) => goalList.includes(b));
 }
 
+// Optimisation goals that ONLY accept autobid (LOWEST_COST_WITHOUT_CAP).
+// Pairing them with a capped strategy (LOWEST_COST_WITH_BID_CAP / COST_CAP)
+// throws Meta error subcode 1885204: "Optimisation goal only supports
+// autobid".
+//
+// The pattern: outcome-style goals (QUALITY_CALL, CONVERSATIONS) where
+// Meta's algorithm needs full bid freedom to find the right user. Click /
+// view / impression-style goals (LINK_CLICKS, LANDING_PAGE_VIEWS,
+// THRUPLAY, REACH, etc.) accept all three strategies. Profile-visit
+// goals (PAGE_LIKES, VISIT_INSTAGRAM_PROFILE) are autobid-only because
+// the conversion event isn't a clean bid signal — same shape as
+// QUALITY_CALL.
+//
+// Add new goals here when Meta surfaces subcode 1885204 for them. The
+// frontend AdSetStep narrows the bid-strategy dropdown via
+// `getAllowedBidStrategies` below; the backend Joi enforces it in
+// buildAdSetSchemaV2's custom validator.
+const AUTOBID_ONLY_OPTIMIZATION_GOALS = new Set([
+  "QUALITY_CALL",
+  "CONVERSATIONS",
+  "PAGE_LIKES",
+  "VISIT_INSTAGRAM_PROFILE",
+]);
+
+function getAllowedBidStrategies(cell, optimizationGoal) {
+  if (AUTOBID_ONLY_OPTIMIZATION_GOALS.has(optimizationGoal)) {
+    return ["LOWEST_COST_WITHOUT_CAP"];
+  }
+  // All other goals accept the full bid-strategy set. The cell can
+  // override via `cell.adSet.bidStrategies` but no cell currently does.
+  return cell?.adSet?.bidStrategies || [
+    "LOWEST_COST_WITHOUT_CAP",
+    "LOWEST_COST_WITH_BID_CAP",
+    "COST_CAP",
+  ];
+}
+
 // User-facing CTA labels — match Meta Ads Manager's wording. Both
 // BOOK_NOW and BOOK_TRAVEL render as "Book now" in Meta's UI; both
 // enums are kept because different cells expose one or the other.
@@ -233,11 +270,14 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // it objective-qualified only; do NOT add a bare WEBSITE_AND_CALLS key.
   "OUTCOME_TRAFFIC:WEBSITE_AND_CALLS": "WEBSITE",
   "OUTCOME_LEADS:WEBSITE_AND_CALLS": null,
-  // Engagement "On your ad" cells — both VIDEO_VIEWS and POST_ENGAGEMENT
-  // map to destination_type=ON_AD on the Meta side. Reverse-inference
-  // (cellInference.js) disambiguates by reading optimization_goal.
-  VIDEO_VIEWS: "ON_AD",
-  POST_ENGAGEMENT: "ON_AD",
+  // Engagement "On your ad" cells — Meta rejects destination_type=ON_AD
+  // for OUTCOME_ENGAGEMENT with subcode 1815715 ("Valid values are
+  // MESSENGER, UNDEFINED, WEBSITE, APP"). Omit the field (null) so Meta
+  // infers from optimization_goal. VIDEO_VIEWS and POST_ENGAGEMENT are
+  // still disambiguated by optimization_goal in reverse-inference, so
+  // dropping destination_type doesn't break the Edit flow.
+  VIDEO_VIEWS: null,
+  POST_ENGAGEMENT: null,
   // Engagement Phase 2 cells. INSTAGRAM_OR_FACEBOOK reuses the same
   // destination_type=WEBSITE pattern as Traffic/INSTAGRAM_OR_FACEBOOK —
   // the profile-visit signal lives on the CTA enum. Bare WEBSITE / APP
@@ -1019,43 +1059,13 @@ const CELLS = {
       notes: "Drive engagement with your existing app (re-opens / in-app actions). For installs, use the App Promotion objective.",
     },
 
-    INSTAGRAM_OR_FACEBOOK: {
-      adSet: {
-        // Meta's "Instagram or Facebook" location — one cell, the CTA
-        // picks which profile destination Meta routes to. Goals: profile
-        // visit goals (FB Page + IG profile) + reach/impressions.
-        // PAGE_LIKES is Meta's API enum for the FB-Page-visit goal
-        // (the UI shows "Maximise Facebook Page visits" — Meta auto-
-        // translates the legacy enum). VISIT_INSTAGRAM_PROFILE is the
-        // Instagram equivalent. If either is rejected post-launch (Meta
-        // can phase-out enums silently), fall back to REACH.
-        optimizationGoals: [
-          "PAGE_LIKES",
-          "VISIT_INSTAGRAM_PROFILE",
-          "REACH",
-          "IMPRESSIONS",
-        ],
-        defaultOptimizationGoal: "PAGE_LIKES",
-        billingEvents: ["IMPRESSIONS"],
-        defaultBillingEvent: "IMPRESSIONS",
-        promotedObjectShape: "page",
-      },
-      ad: {
-        // Reuse link_data — the link points at the profile / page URL.
-        // Meta auto-renders the click as a profile-visit when the CTA is
-        // VIEW_INSTAGRAM_PROFILE / LIKE_PAGE.
-        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
-        optionalFields: ["description"],
-        objectStorySpecShape: "link_data",
-      },
-      ctas: {
-        allowed: ["LIKE_PAGE", "VIEW_INSTAGRAM_PROFILE", "LEARN_MORE"],
-        default: "LIKE_PAGE",
-      },
-      identity: { required: ["page", "instagram"], optional: [] },
-      additionalSteps: [],
-      notes: "Grow your Facebook Page and/or Instagram profile. The CTA decides which profile Meta routes viewers to.",
-    },
+    // OUTCOME_ENGAGEMENT/INSTAGRAM_OR_FACEBOOK was removed (subcode 2490408
+    // — "Performance goal isn't available"). Meta rejected both PAGE_LIKES
+    // and VISIT_INSTAGRAM_PROFILE on this cell at the API layer (even
+    // outside Special Ad Categories), and the universal fallbacks REACH +
+    // IMPRESSIONS would have made this cell indistinguishable from the
+    // WEBSITE cell in reverse-inference. Profile-visit-style campaigns
+    // are deferred to Phase 3 once the canonical Meta enum is verified.
   },
 
   OUTCOME_APP_PROMOTION: {
@@ -1223,6 +1233,10 @@ function toJSON() {
     // to the frontend so the AdSetStep can narrow the billing dropdown
     // when the goal changes. See subcode 1815117.
     billingEventsByOptimizationGoal: BILLING_EVENTS_BY_OPTIMIZATION_GOAL,
+    // Optimisation goals that only accept autobid (LOWEST_COST_WITHOUT_CAP) —
+    // see subcode 1885204. Frontend uses this to narrow the bid-strategy
+    // dropdown when the goal changes.
+    autobidOnlyOptimizationGoals: [...AUTOBID_ONLY_OPTIMIZATION_GOALS],
   };
 }
 
@@ -1236,6 +1250,7 @@ module.exports = {
   CTA_LABELS,
   CONVERSION_LOCATION_TO_META_DESTINATION,
   BILLING_EVENTS_BY_OPTIMIZATION_GOAL,
+  AUTOBID_ONLY_OPTIMIZATION_GOALS,
 
   // Accessors — the consumer surface.
   listObjectives,
@@ -1246,5 +1261,6 @@ module.exports = {
   getAllowedCtas,
   getAllowedOptimizationGoals,
   getAllowedBillingEvents,
+  getAllowedBidStrategies,
   toJSON,
 };

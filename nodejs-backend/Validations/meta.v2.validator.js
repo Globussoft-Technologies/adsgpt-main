@@ -18,6 +18,7 @@ const {
   isCellImplemented,
   listObjectives,
   getAllowedBillingEvents,
+  getAllowedBidStrategies,
 } = require("../config/wizardSchema");
 
 // Bid strategies are objective-agnostic in MVP — V2 inherits the V1 list.
@@ -482,6 +483,17 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
           `billingEvent '${value.billingEvent}' isn't valid for optimisation goal '${value.optimizationGoal}'. Allowed: ${allowedBillings.join(", ")}.`,
       });
     }
+    // Optimisation goal ↔ bid strategy compatibility — some goals (e.g.
+    // QUALITY_CALL, CONVERSATIONS, profile-visit goals) only accept
+    // autobid; pairing them with a capped strategy triggers Meta subcode
+    // 1885204 ("Optimisation goal only supports autobid"). Reject here.
+    const allowedBids = getAllowedBidStrategies(cell, value.optimizationGoal);
+    if (allowedBids.length && !allowedBids.includes(value.bidStrategy)) {
+      return helpers.error("any.invalid", {
+        message:
+          `bidStrategy '${value.bidStrategy}' isn't valid for optimisation goal '${value.optimizationGoal}'. Allowed: ${allowedBids.join(", ")}.`,
+      });
+    }
     // Bid strategy ↔ bid amount — validated in BOTH directions, so the
     // mistake is caught here regardless of which way the user got it wrong:
     //   • capped strategies (bid cap / cost cap) MUST carry a bidAmount;
@@ -558,7 +570,12 @@ function buildAdSchemaV2(objective, conversionLocation) {
     // encoding finishes — without one Meta rejects the creative call.
     imageHash: Joi.string().optional().allow(""),
     videoId: Joi.string().optional().allow(""),
-    videoThumbnailUrl: Joi.string().trim().uri().optional().allow(""),
+    // `null` is allowed in addition to `""` because the wizard frontend
+    // initialises this field to null when no thumbnail has been
+    // explicitly entered (vs an empty string from a cleared input).
+    // The controller treats both as "fetch from Meta" via
+    // waitForVideoThumbnail.
+    videoThumbnailUrl: Joi.string().trim().uri().optional().allow("", null),
 
     // Copy length caps — match Meta's display-without-truncation limits
     // for single-image / single-video ads (the only formats V2 produces

@@ -34,6 +34,7 @@ const CampaignModel = require("../../Module/adFactory/adFactory");
 const { decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
+const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
 const {
   inferCellForMetaCampaign,
   destinationToConversionLocation,
@@ -62,7 +63,9 @@ const adFactoryV2Schema = Joi.object({
         // Exactly one of imageUrl or videoUrl must be provided per ad.
         imageUrl: Joi.string().trim().uri().optional(),
         videoUrl: Joi.string().trim().uri().optional(),
-        videoThumbnailUrl: Joi.string().trim().uri().optional(),
+        // Allow null + empty string — both mean "fetch from Meta" via
+        // waitForVideoThumbnail downstream.
+        videoThumbnailUrl: Joi.string().trim().uri().optional().allow("", null),
         headline: Joi.string().allow("").optional(),
         message: Joi.string().allow("").optional(),
         description: Joi.string().allow("").optional(),
@@ -369,9 +372,23 @@ async function createAdV2(req, res) {
           logger.info(`createAdV2: ad ${i + 1} — uploading video...`);
           const { videoId, videoThumbnailUrl } = await uploadVideoFromUrl(account, adData.videoUrl);
           logger.info(`createAdV2: ad ${i + 1} — video ready, id: ${videoId}`);
+          let resolvedThumbnailUrl =
+            adData.videoThumbnailUrl || videoThumbnailUrl || null;
+
+          // Last-chance thumbnail wait. `uploadVideoFromUrl` polls for
+          // ~6s; longer clips don't always have thumbnails ready in that
+          // window. The shared `waitForVideoThumbnail` retries the
+          // `/{video_id}/thumbnails` edge with delays (24s ceiling) so
+          // Meta has time to finish encoding. Without it, the creative
+          // call fails with subcode 1443226 ("Your ad needs a video
+          // thumbnail").
+          if (videoId && !resolvedThumbnailUrl) {
+            resolvedThumbnailUrl = await waitForVideoThumbnail(videoId);
+          }
+
           mediaParams = {
             videoId,
-            videoThumbnailUrl: adData.videoThumbnailUrl || videoThumbnailUrl || undefined,
+            videoThumbnailUrl: resolvedThumbnailUrl || undefined,
           };
         } else {
           const imageHash = await uploadImageFromUrl(account, adData.imageUrl);

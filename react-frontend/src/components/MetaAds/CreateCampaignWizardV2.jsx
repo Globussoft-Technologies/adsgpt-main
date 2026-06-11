@@ -1826,7 +1826,14 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
           label="Special ad categories"
           hint="Required for ads about employment, housing, credit, politics or gambling."
           values={form.specialAdCategories}
-          onChange={(v) => update({ specialAdCategories: v })}
+          onChange={(v) => update({
+            specialAdCategories: v,
+            // Special Ad Categories ban gender filtering (Meta subcode
+            // 2909040). Clear any custom gender pick the user already
+            // made when SAC is turned on — they can't fix it later
+            // because the field is locked.
+            ...(v.length > 0 ? { genders: [] } : {}),
+          })}
           options={SPECIAL_AD_CATEGORIES}
         />
       )}
@@ -1879,6 +1886,29 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
       update({ billingEvent: billingOptions[0].value });
     }
   }, [form.optimizationGoal, form.billingEvent, billingOptions, mode, update]);
+  // Bid strategy is also goal-dependent — some goals (QUALITY_CALL,
+  // CONVERSATIONS, profile-visit goals) only accept autobid; pairing them
+  // with a capped strategy triggers Meta subcode 1885204 ("Optimisation
+  // goal only supports autobid"). The schema ships the autobid-only goal
+  // list so we can filter the dropdown and auto-snap on goal change.
+  const autobidOnlyGoals = useMemo(
+    () => new Set(schema?.autobidOnlyOptimizationGoals || []),
+    [schema?.autobidOnlyOptimizationGoals],
+  );
+  const goalIsAutobidOnly = autobidOnlyGoals.has(form.optimizationGoal);
+  const bidStrategyOptions = goalIsAutobidOnly
+    ? BID_STRATEGIES.filter((s) => s.value === 'LOWEST_COST_WITHOUT_CAP')
+    : BID_STRATEGIES;
+  // Auto-snap the bid strategy + clear bid amount when the user changes
+  // to a goal that only accepts autobid. Same pattern as the billing
+  // narrowing above — edit modes are locked, so leave them alone.
+  useEffect(() => {
+    if (isEditMode(mode)) return;
+    if (!goalIsAutobidOnly) return;
+    if (form.bidStrategy !== 'LOWEST_COST_WITHOUT_CAP' || form.bidAmount) {
+      update({ bidStrategy: 'LOWEST_COST_WITHOUT_CAP', bidAmount: '' });
+    }
+  }, [goalIsAutobidOnly, form.bidStrategy, form.bidAmount, mode, update]);
   const additional = cell?.adSet?.additionalFields || [];
 
   // When the user picks a page, auto-fill the IG identity from the
@@ -2017,12 +2047,14 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         <SelectField
           label="Bid strategy"
           value={form.bidStrategy}
-          disabled={lockBidStrategy}
+          disabled={lockBidStrategy || goalIsAutobidOnly}
           hint={
             editing
               ? "Can't be changed after creation"
               : lockBidStrategy
               ? 'Inherited from the campaign (CBO)'
+              : goalIsAutobidOnly
+              ? 'This optimisation goal only supports autobid'
               : undefined
           }
           onChange={(v) =>
@@ -2034,7 +2066,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
               ...(CAPPED_BID_STRATEGIES.has(v) ? {} : { bidAmount: '' }),
             })
           }
-          options={BID_STRATEGIES}
+          options={bidStrategyOptions}
         />
         {CAPPED_BID_STRATEGIES.has(form.bidStrategy) && (
           <CurrencyField
@@ -2179,10 +2211,16 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
             />
             <MultiSelectField
               label="Genders"
-              hint="Leave empty to target all"
+              hint={
+                (form.specialAdCategories || []).length > 0
+                  ? "Locked to all genders by your Special Ad Categories"
+                  : "Leave empty to target all"
+              }
               values={form.genders}
               onChange={(v) => update({ genders: v })}
               options={GENDERS}
+              disabled={(form.specialAdCategories || []).length > 0}
+              error={errors.genders}
             />
             <MultiSelectField
               label="Languages"

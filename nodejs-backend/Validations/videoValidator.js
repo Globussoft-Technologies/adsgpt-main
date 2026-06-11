@@ -56,7 +56,8 @@ const avatarSchema = Joi.object({
   }),
 
   productName: Joi.string().required(),
-  image: Joi.string().required(),
+  image: Joi.string().allow("", null).required(),
+  text: Joi.string().allow("").required(),
   promotion: Joi.string().allow("", null),
   notes: Joi.string().allow("", null),
 });

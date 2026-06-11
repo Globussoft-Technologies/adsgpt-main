@@ -4,6 +4,7 @@ import { Instagram } from 'lucide-react';
 import { FaFacebookF, FaYoutube } from 'react-icons/fa';
 import { SiGoogle } from 'react-icons/si';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 
 const platformIcons = {
   facebook: <FaFacebookF className="h-4 w-4" />,
@@ -26,6 +27,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [textExpanded, setTextExpanded] = useState(false);
+  const [isRecreateModalOpen, setIsRecreateModalOpen] = useState(false);
 
   const MAX_CHARS = 100;
 
@@ -43,15 +45,16 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       : '';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border-none bg-[#1a1a1a] shadow-lg transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-xl"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={onClick}
-    >
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border-none bg-[#1a1a1a] shadow-lg transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-xl"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={onClick}
+      >
       {/* ── Header bar (hover pe dikhata hai, AdCreative style) ── */}
       <div className="absolute top-0 left-0 z-20 flex h-10 w-full items-center justify-between rounded-none px-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:bg-[#0F0F0F]/80">
         <div className="flex items-center gap-2 text-sm font-medium text-white">
@@ -169,8 +172,44 @@ const CompetitorAdCard = ({ ad, onClick }) => {
             {dateRange && ` · ${dateRange}`}
           </p>
         </div>
+
+        {/* Gradient bridge to blend image into the action bar — matches AdLibrary */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style={{
+            background: 'linear-gradient(to bottom, transparent 0%, #2A2A2A 100%)',
+          }}
+        />
       </div>
-    </motion.div>
+
+      {/* Bottom hover-revealed action bar — exact AdLibrary pattern */}
+      <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100">
+        <div
+          className="flex h-14 w-full items-center px-3"
+          style={{ backgroundColor: '#2A2A2A' }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsRecreateModalOpen(true);
+            }}
+            className="w-full rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-[#F2F2F2] active:bg-[#E5E5E5] 2xl:py-2.5 2xl:text-15"
+          >
+            Recreate
+          </button>
+        </div>
+      </div>
+      </motion.div>
+      {/* Recreate Ad Modal — rendered outside motion.div so clicks inside it don't bubble to card onClick */}
+      <RecreateAdModal
+        open={isRecreateModalOpen}
+        onOpenChange={setIsRecreateModalOpen}
+        image={imageUrl}
+        ad={ad}
+      />
+    </>
   );
 };
 

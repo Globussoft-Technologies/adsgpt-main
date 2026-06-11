@@ -3093,3 +3093,165 @@ exports.generateCloneVideo = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+exports.regenerateFrameClone = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Submit request for image and script generation for Avatar type'
+       #swagger.description = 'Accepts inputs for Avatar type, generates an image and script by calling Python APIs, and updates the record accordingly. This is a two-step process where the frontend first calls this endpoint to generate the image and script, and then calls the /generate-avatar-video endpoint to create the final video using those assets.'
+       #swagger.requestBody = {
+            required: true,
+            content: {
+                "application/json": {
+                    schema: {
+                        type: 'object',
+                        required: ['inputs'],
+                        properties: { 
+                            inputs:  { $ref: "#/components/schemas/avatar_Payload" }
+                        }
+                    }
+                }
+            }
+        } 
+      */
+    // * STEP 1: Validate request body using avatarSchema
+    const { error, value } = inputSchemasByType.clone.validate(
+      req.body.inputs,
+      {
+        abortEarly: false,
+      },
+    );
+
+    if (error) {
+      const fieldErrors = error.details.map((d) => d.message).join("; ");
+      return res.status(400).json({ success: false, error: fieldErrors });
+    }
+
+    const inputs = value;
+    const userId = req.user.user_id; // Extracted from authenticateJWT middleware
+
+    // * STEP 2: Model-based credit logic
+    const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
+    const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
+
+    // Calculate how many credits 1 video takes: duration * model_multiplier
+    const videoMinCount =
+      durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+
+    const numberOfVideos = inputs.numberOfVideos;
+    // Calculate total required credits for the entire batch
+    const totalRequiredCredits = numberOfVideos * videoMinCount;
+
+    // NOTE: no freeze here. generateImageAndScript is only the preview step
+    // (generates image + script for user review) — the user hasn't committed
+    // to spending video credits yet. The freeze happens at generateAvatarVideo,
+    // which is the actual commit. This avoids leaked holds when users preview
+    // a script and walk away.
+    const unifiedCheck = await UnifiedCreditController.checkCredits(
+      userId,
+      totalRequiredCredits,
+    );
+
+    const userRemainingCredits = unifiedCheck.remainingCredits || 0;
+
+    if (!unifiedCheck.isAllowed) {
+      if (userRemainingCredits >= videoMinCount) {
+        return res.status(400).json({
+          success: false,
+          error: `You have only ${userRemainingCredits} credits left, which is not enough for ${numberOfVideos} videos which requires ${totalRequiredCredits} credits. Please reduce the number of videos or upgrade your plan.`,
+        });
+      }
+      return res.status(400).json({ success: false, error: "Not enough credits" });
+    }
+
+    const video = await VideoGeneration.create({
+      userId,
+      inputs: value,
+      status: "pending",
+    });
+
+    const videoId = video._id.toString();
+
+    const pythonPayload = {
+      sessionId: videoId,
+      userId,
+      watermark: inputs.watermark ?? false,
+      inputs: {
+        person_images: inputs.uploadedAvatars || [],
+        product_img: inputs.image ? [inputs.image] : [],
+        productName: inputs.productName,
+        promotion: inputs.promotion || "",
+        duration: inputs.duration,
+        aspectRatio: inputs.aspectRatio,
+        tone: inputs.tone,
+        notes: inputs.notes || "",
+        voiceSampleUrl: inputs.voiceSampleUrl || null,
+      },
+    };
+
+    // * Call Python API — result is synchronous, emit socket immediately
+    const pythonResponse = await axios.post(
+      process.env.CLONE_YOURSELF_FRAME_REGENERATE_PYTHON_API,
+      pythonPayload,
+    );
+
+    const pyData = pythonResponse.data;
+
+    if (Number(pyData.status) !== 200 || pyData.error) {
+      await VideoGeneration.findByIdAndUpdate(
+        videoId,
+        { $set: { generatedImage: "failed" } },
+      );
+
+      const errorMsg = pyData.error || "Frame generation failed. Please try again.";
+
+      if (global.io) {
+        global.io.to(userId).emit("CloneFrameRegenerate", {
+          _id: videoId,
+          userId,
+          type: "image",
+          status: 400,
+          error: errorMsg,
+          generatedImage: "failed",
+        });
+      }
+
+      return res.status(400).json({ success: false, error: errorMsg });
+    }
+
+    const updatedVideo = await VideoGeneration.findByIdAndUpdate(
+      videoId,
+      { $set: { generatedImage: pyData.image } },
+      { new: true, lean: true },
+    );
+
+    if (global.io) {
+      global.io.to(userId).emit("CloneFrameRegenerate", {
+        _id: videoId,
+        userId,
+        type: "image",
+        status: 200,
+        image: pyData.image,
+        generatedImage: pyData.image,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      sessionId: videoId,
+      userId,
+      image: pyData.image,
+      data: updatedVideo,
+    });
+  } catch (err) {
+    console.error("Error in regenerateFrameClone:", err);
+
+    if (err.response || err.code === "ECONNREFUSED") {
+      return res.status(500).json({
+        success: false,
+        error: `Python API error: ${err.message}`,
+      });
+    }
+
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};

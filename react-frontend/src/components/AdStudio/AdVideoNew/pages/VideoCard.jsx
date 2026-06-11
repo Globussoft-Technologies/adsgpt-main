@@ -88,6 +88,7 @@ export default function VideoCard({
   const [duration, setDuration] = useState(0);
   const [activeNavIndex, setActiveNavIndex] = useState(videoIndex);
   const [activeVideoUrl, setActiveVideoUrl] = useState(item?.results?.[0]?.url ?? '');
+  const [showControls, setShowControls] = useState(false);
 
   useEffect(() => {
     const url = item?.results?.[0]?.url ?? '';
@@ -131,6 +132,30 @@ export default function VideoCard({
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
   }, [videoIndex, onFullscreenChange]);
+
+  // Show controls on activity in fullscreen; auto-hide after idle.
+  useEffect(() => {
+    if (!isThisFullscreen) {
+      setShowControls(false);
+      return;
+    }
+    let hideTimeout;
+    const handleActivity = () => {
+      setShowControls(true);
+      clearTimeout(hideTimeout);
+      hideTimeout = setTimeout(() => setShowControls(false), 2500);
+    };
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+    handleActivity();
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      clearTimeout(hideTimeout);
+    };
+  }, [isThisFullscreen]);
 
   const showOverlayTemporarily = () => {
     setShowOverlay(true);
@@ -656,7 +681,7 @@ export default function VideoCard({
 
           {/* Controls Bar */}
           <div
-            className={`absolute right-0 bottom-0 left-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
+            className={`absolute right-0 bottom-0 left-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 transition-opacity duration-300 ${isThisFullscreen ? (showControls ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}
           >
             {isThisFullscreen && (
               <div className="flex items-center gap-3 px-2">

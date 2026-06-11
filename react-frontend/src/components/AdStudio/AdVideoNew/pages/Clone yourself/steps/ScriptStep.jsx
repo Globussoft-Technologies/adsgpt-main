@@ -16,6 +16,7 @@ import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import {
   regenerateCloneScript,
   generateCloneVideo,
+  regenerateCloneFirstFrame,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { globalToast } from '@/utils/globalToast';
 
@@ -24,16 +25,26 @@ const getWordCount = (text) => (text?.trim() ? text.trim().split(/\s+/).length :
 const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate }) => {
   const dispatch = useDispatch();
   const [, setSearchParams] = useSearchParams();
-  const { imageAndScript, isLoading } = useSelector((state) => state.adVideoNew);
+  const { imageAndScript, isLoading, clonePayload: reduxClonePayload } = useSelector((state) => state.adVideoNew);
 
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [regenerationError, setRegenerationError] = useState(null);
+  const [isRetryingImage, setIsRetryingImage] = useState(false);
   const [script, setScript] = useState(null);
   const [tone, setTone] = useState('');
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   const generatedData = useMemo(() => imageAndScript?.data || imageAndScript, [imageAndScript]);
+
+  // After a page refresh clonePayload is lost from Redux; reconstruct it from
+  // the inputs field that the backend stores on the document.
+  const clonePayload = useMemo(() => {
+    if (reduxClonePayload) return reduxClonePayload;
+    const inputs = generatedData?.inputs;
+    if (!inputs) return null;
+    return { inputs };
+  }, [reduxClonePayload, generatedData]);
 
   const currentDataId = useMemo(
     () =>
@@ -63,18 +74,27 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
     [generatedData]
   );
 
+  const imageErrorMessage = useMemo(
+    () => generatedData?.imageError || 'Failed to generate image',
+    [generatedData]
+  );
+
+  const scriptErrorMessage = useMemo(
+    () => generatedData?.scriptError || 'Script generation failed',
+    [generatedData]
+  );
+
   const isImageLoading = useMemo(() => {
-    if (generationError && (generatedData?.type === 'error' || generatedData?.error?.toLowerCase().includes('image'))) return false;
+    if (isRetryingImage) return true;
     if (isImageFailed) return false;
     return !(generatedData?.generatedImage || generatedData?.image) || currentDataId !== generatedId;
-  }, [generatedData, currentDataId, generatedId, generationError, isImageFailed]);
+  }, [generatedData, currentDataId, generatedId, isImageFailed, isRetryingImage]);
 
   const isScriptLoading = useMemo(() => {
-    if (generationError && (generatedData?.type === 'error' || generatedData?.error?.toLowerCase().includes('script'))) return false;
     if (isScriptFailed) return false;
     const hasScript = generatedData?.generatedScript || generatedData?.text || generatedData?.creativeBrief?.script;
     return !hasScript || currentDataId !== generatedId;
-  }, [generatedData, currentDataId, generatedId, generationError, isScriptFailed]);
+  }, [generatedData, currentDataId, generatedId, isScriptFailed]);
 
   const displayImage = useMemo(() => {
     if (currentDataId === generatedId) {
@@ -85,6 +105,11 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
     }
     return previewImages[carouselIndex]?.preview || null;
   }, [generatedData, currentDataId, generatedId, previewImages, carouselIndex]);
+
+  // Clear retry spinner once socket CloneFrameRegenerate fires (success or failure)
+  useEffect(() => {
+    if (isRetryingImage) setIsRetryingImage(false);
+  }, [generatedData?.generatedImage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (generatedData?._id === generatedId || currentDataId === generatedId) {
@@ -174,21 +199,38 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
           <ChevronLeft className="h-5 w-5" />
         </button>
 
-        {isImageLoading && !generationError ? (
+        {isImageLoading ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 dark:bg-[#0F0F0F]">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
             <span className="text-xs font-medium text-gray-500 dark:text-white/60">
               Generating your clone image...
             </span>
           </div>
-        ) : isImageFailed || (generationError && generatedData?.error?.toLowerCase().includes('image')) ? (
+        ) : isImageFailed ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gray-100 p-6 text-center dark:bg-[#0F0F0F]">
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {generatedData?.error || 'Failed to generate image'}
+              {imageErrorMessage}
             </span>
+            {clonePayload && (
+              <button
+                onClick={async () => {
+                  setIsRetryingImage(true);
+                  try {
+                    await dispatch(regenerateCloneFirstFrame(clonePayload));
+                    // socket CloneFrameRegenerate will update the state;
+                    // keep spinner until it fires (isImageFailed flips to false)
+                  } catch {
+                    setIsRetryingImage(false);
+                  }
+                }}
+                className="mt-1 flex items-center gap-2 rounded-full bg-gray-900 px-5 py-2 text-xs font-semibold text-white hover:opacity-90 dark:bg-white dark:text-black"
+              >
+                Retry
+              </button>
+            )}
           </div>
         ) : displayImage ? (
           <img src={displayImage} alt="Clone preview" className="h-full w-full object-cover" />
@@ -210,14 +252,20 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
             <span className="text-xs font-medium text-gray-500 dark:text-white/60">Crafting your script...</span>
           </div>
-        ) : isScriptFailed || regenerationError || (generationError && generatedData?.error?.toLowerCase().includes('script')) ? (
+        ) : isScriptFailed || regenerationError ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center">
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {regenerationError || generatedData?.error || 'Failed to Generate Script'}
+              {regenerationError || scriptErrorMessage}
             </span>
+            <button
+              onClick={() => handleToneChange('Casual')}
+              className="mt-1 flex items-center gap-2 rounded-full bg-gray-900 px-5 py-2 text-xs font-semibold text-white hover:opacity-90 dark:bg-white dark:text-black"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <div className="custom-scrollbar flex max-h-[65vh] min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-2xl bg-gray-100 p-4 dark:bg-[#9092941A]">
@@ -262,7 +310,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
           </div>
         )}
 
-        {!(isImageLoading || isScriptLoading || isRegenerating || generationError || isImageFailed || isScriptFailed) && (
+        {!(isImageLoading || isScriptLoading || isRegenerating || isImageFailed || isScriptFailed) && (
           <div className="mt-4 flex items-center justify-end gap-3 2xl:mb-6">
             <Select value={tone} onValueChange={handleToneChange} disabled={isGenerating}>
               <SelectTrigger className={`backdrop-blur-100 dark:![&>svg]:text-white rounded-full border-none bg-gray-100 px-5! py-4.5 text-sm text-gray-900! hover:bg-black/5! dark:bg-[#9D9B9B80] dark:text-white! dark:hover:bg-[#9D9B9B70]! [&>svg]:size-5 ${isGenerating ? 'cursor-not-allowed opacity-50' : ''}`}>
