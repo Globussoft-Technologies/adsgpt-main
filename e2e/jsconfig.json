@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "noImplicitAny": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "target": "es2022",
+    "module": "es2022"
+  },
+  "include": ["**/*.js"],
+  "exclude": ["node_modules", "test-results", "playwright-report", ".auth"]
+}

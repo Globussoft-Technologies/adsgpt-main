@@ -1,0 +1,16 @@
+{
+  "name": "adsgpt-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nightly Playwright end-to-end suite for react-frontend and the nodejs-backend API.",
+  "scripts": {
+    "test": "playwright test",
+    "test:frontend": "playwright test --project=frontend --project=setup-frontend",
+    "test:api": "playwright test --project=api",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
