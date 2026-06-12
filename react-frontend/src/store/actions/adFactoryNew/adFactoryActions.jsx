@@ -931,7 +931,8 @@ export const fetchGoogleCampaigns = createAsyncThunk(
   async ({ adAccountId }, { rejectWithValue }) => {
     try {
       const token = getCookies();
-      const res = await axios.get(`${BACKEND_HOST}/adsgpt/google-ads/get-campaigns?adAccountId=${adAccountId}`, {
+      // AdFactory only generates text and image ads — filter campaigns to SEARCH + DISPLAY
+      const res = await axios.get(`${BACKEND_HOST}/adsgpt/google-ads/get-campaigns?adAccountId=${adAccountId}&adType=text&adType=image`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       return res?.data?.data?.[0]?.campaigns || [];

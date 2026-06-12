@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { setImageRecreateInputs } from '@/store/reducers/image/imageSlice';
 import {
   setActiveAdStudioTab,
@@ -22,6 +22,7 @@ const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
 const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
 const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
 const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
+const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 
 // HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
 // avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
@@ -88,6 +89,7 @@ export default function ImageCard({
   onOpenPostAdModal,
 }) {
   const dispatch = useDispatch();
+  const userId = useSelector((state) => state.socket?.userData?.user_id);
   const containerRef = useRef(null);
   const [showInfo, setShowInfo] = useState(false);
   const infoTimeout = useRef(null);
@@ -105,7 +107,7 @@ export default function ImageCard({
     try {
       const result = await checkCanvaAuth(imageUrl);
       if (result.status) {
-        window.location.href = `http://127.0.0.1:7000/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`;
+        window.location.href = `${BACKEND_URL}/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`;
       } else {
         const { state, codeChallenge } = result;
         const params = new URLSearchParams({

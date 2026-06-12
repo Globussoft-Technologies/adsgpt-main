@@ -376,13 +376,22 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     socket.on('CloneImageScriptUpdate', (data) => {
       console.log('Clone image/script update:', data);
-      dispatch(updateGeneratedVideo(data));
+      if (data?.generatedImage !== undefined) {
+        // Image update — normalize S3 path and update clone image state
+        const S3 = import.meta.env.VITE_S3_BASE_URL || '';
+        const img = data.generatedImage;
+        const normalized = {
+          ...data,
+          generatedImage:
+            img && img !== 'failed' && !img.startsWith('http') ? `${S3}${img}` : img,
+        };
+        dispatch(updateCloneImage(normalized));
+      } else {
+        // Script update — merge into imageAndScript via updateGeneratedVideo
+        dispatch(updateGeneratedVideo(data));
+      }
     });
 
-    socket.on('CloneFrameRegenerate', (data) => {
-      console.log('Clone frame regenerate:', data);
-      dispatch(updateCloneImage(data));
-    });
 
     // AdCreative image generation completion. Mirrors the videoCreated
     // shape — the slice's updateImage reducer normalises the URL and

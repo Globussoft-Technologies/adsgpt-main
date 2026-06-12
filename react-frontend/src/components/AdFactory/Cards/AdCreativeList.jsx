@@ -23,6 +23,7 @@ const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
 const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
 const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
 const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
+const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => {
   const [selected, setSelected] = useState(null);
   const [selectedHistoryVersion, setSelectedHistoryVersion] = useState('all');
@@ -45,7 +46,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
     try {
       const result = await checkCanvaAuth(imageUrl, 'image');
       if (result.status) {
-        window.location.href = `http://127.0.0.1:7000/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}&type=image`;
+        window.location.href = `${BACKEND_URL}/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}&type=image`;
       } else {
         const { state, codeChallenge } = result;
         const params = new URLSearchParams({

@@ -460,7 +460,11 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           tone: 'Casual',
           model: videoModel,
           numberOfVideos: 1,
-          ...(voicePath && { voiceSampleUrl: voicePath.startsWith('http') ? voicePath : `${import.meta.env.VITE_S3_BASE_URL}${voicePath}` }),
+          ...(voicePath
+            ? { voiceSampleUrl: voicePath.startsWith('http') ? voicePath : `${import.meta.env.VITE_S3_BASE_URL}${voicePath}` }
+            : uploadFileUrl
+              ? { voiceSampleUrl: uploadFileUrl }
+              : {}),
         },
       };
 

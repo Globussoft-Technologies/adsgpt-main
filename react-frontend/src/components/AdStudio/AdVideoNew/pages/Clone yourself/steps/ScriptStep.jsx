@@ -75,7 +75,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
   );
 
   const imageErrorMessage = useMemo(
-    () => generatedData?.imageError || 'Failed to generate image',
+    () => generatedData?.imageError || "Failed to generate image",
     [generatedData]
   );
 
@@ -106,7 +106,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
     return previewImages[carouselIndex]?.preview || null;
   }, [generatedData, currentDataId, generatedId, previewImages, carouselIndex]);
 
-  // Clear retry spinner once socket CloneFrameRegenerate fires (success or failure)
+
   useEffect(() => {
     if (isRetryingImage) setIsRetryingImage(false);
   }, [generatedData?.generatedImage]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,17 +211,18 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
             <div className="rounded-full bg-red-500/10 p-3">
               <X className="h-8 w-8 text-red-500" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {imageErrorMessage}
-            </span>
+            {imageErrorMessage && (
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                {imageErrorMessage}
+              </span>
+            )}
             {clonePayload && (
               <button
                 onClick={async () => {
                   setIsRetryingImage(true);
                   try {
                     await dispatch(regenerateCloneFirstFrame(clonePayload));
-                    // socket CloneFrameRegenerate will update the state;
-                    // keep spinner until it fires (isImageFailed flips to false)
+                    // CloneImageScriptUpdate global listener handles the response
                   } catch {
                     setIsRetryingImage(false);
                   }

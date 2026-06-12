@@ -122,32 +122,32 @@ const adVideoNewSlice = createSlice({
       const extra = {};
       if (payload.generatedImage === 'failed') extra.imageError = payload.error;
       if (payload.generatedScript === 'failed') extra.scriptError = payload.error;
-      if (
-        state.imageAndScript &&
-        state.imageAndScript.data &&
-        state.imageAndScript.data._id === payload._id
-      ) {
+      if (state.imageAndScript?.data?._id === payload._id) {
         state.imageAndScript.data = { ...state.imageAndScript.data, ...payload, ...extra };
-      } else if (state.imageAndScript && state.imageAndScript._id === payload._id) {
+      } else if (state.imageAndScript?._id === payload._id) {
+        state.imageAndScript = { ...state.imageAndScript, ...payload, ...extra };
+      } else if (state.imageAndScript?.data) {
+        state.imageAndScript.data = { ...state.imageAndScript.data, ...payload, ...extra };
+      } else if (state.imageAndScript) {
         state.imageAndScript = { ...state.imageAndScript, ...payload, ...extra };
       }
     },
     updateCloneImage: (state, action) => {
-      const { sessionId, _id, status, image, error } = action.payload;
+      const { sessionId, _id, generatedImage, error } = action.payload;
       const id = sessionId || _id;
       const target =
         state.imageAndScript?.data?._id === id
           ? state.imageAndScript.data
           : state.imageAndScript?._id === id
             ? state.imageAndScript
-            : null;
+            : state.imageAndScript?.data ?? state.imageAndScript;
       if (!target) return;
-      if (status === 200 && image) {
-        target.generatedImage = image;
+      if (generatedImage && generatedImage !== 'failed') {
+        target.generatedImage = generatedImage;
         target.imageError = null;
       } else {
         target.generatedImage = 'failed';
-        target.imageError = error || 'Frame generation failed. Please try again.';
+        target.imageError = error || null;
       }
     },
     setRecreateInputs: (state, action) => {
