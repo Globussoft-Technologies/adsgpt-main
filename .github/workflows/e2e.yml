@@ -2,8 +2,9 @@ name: Nightly E2E
 
 on:
   schedule:
-    # 03:00 UTC daily. Cron drift on GitHub-hosted runners is typically <15 min.
-    - cron: '0 3 * * *'
+    # TEMP: every 5 minutes to verify the cron pipeline fires.
+    # Revert to '0 3 * * *' (daily 03:00 UTC) as soon as a scheduled run lands.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       project:
