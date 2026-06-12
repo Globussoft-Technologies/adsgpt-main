@@ -460,7 +460,7 @@ const AvatarConfigForm = ({
   const [aspectRatio, setAspectRatio] = useState('');
   const [promotion, setPromotion] = useState('');
   const [notes, setNotes] = useState('');
-  const [hasProductImage, setHasProductImage] = useState(true);
+  const [hasProductImage, setHasProductImage] = useState(null);
   const [promptText, setPromptText] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
   const [imageOrientation, setImageOrientation] = useState(null);
@@ -671,13 +671,15 @@ const AvatarConfigForm = ({
   const handleGenerateClick = async () => {
     if (isLoading || isUploading) return;
     const newErrors = {};
+    if (hasProductImage === null || hasProductImage === undefined)
+      newErrors.hasProductImage = 'Please select Yes or No';
     if (!videoModel) newErrors.videoModel = 'Model is required';
     if (!videoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
-    if (hasProductImage && !productUrl.trim() && uploadedImages.length === 0)
+    if (hasProductImage === true && !productUrl.trim() && uploadedImages.length === 0)
       newErrors.productUrl = 'Product Image is Required';
-    if (!hasProductImage && !promptText.trim()) newErrors.promptText = 'Prompt is required';
+    if (hasProductImage === false && !promptText.trim()) newErrors.promptText = 'Prompt is required';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -689,7 +691,7 @@ const AvatarConfigForm = ({
       const userId = userData?.user_id;
       let imageUrl = '';
 
-      if (hasProductImage) {
+      if (hasProductImage === true) {
         const rawUrl = uploadedImages.length > 0 ? uploadedImages[0].preview : productUrl.trim();
         const rawFile = uploadedImages.length > 0 ? uploadedImages[0].file : null;
 
@@ -789,7 +791,7 @@ const AvatarConfigForm = ({
             : { avatarId: avatar?._id || avatar?.id || avatar?.avatar_id }),
           productName: brand_name || '',
           image: imageUrl,
-          text: hasProductImage ? '' : promptText,
+          text: hasProductImage === true ? '' : promptText,
           promotion: promotion,
           notes: notes,
         },
@@ -1023,14 +1025,14 @@ const AvatarConfigForm = ({
 
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
-              {hasProductImage ? 'Do you have a product image?' : 'Prompt*'}
+              Do you have a product image?
             </label>
             <div className="flex items-center gap-1 rounded-full bg-gray-100 p-1 dark:bg-[#9092941A]">
               <button
                 type="button"
-                onClick={() => { setHasProductImage(true); setPromptText(''); setErrors((prev) => ({ ...prev, promptText: null })); }}
+                onClick={() => { setHasProductImage(true); setPromptText(''); setErrors((prev) => ({ ...prev, promptText: null, hasProductImage: null })); }}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                  hasProductImage
+                  hasProductImage === true
                     ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
                     : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
                 }`}
@@ -1039,9 +1041,9 @@ const AvatarConfigForm = ({
               </button>
               <button
                 type="button"
-                onClick={() => { setHasProductImage(false); setProductUrl(''); setUploadedImages([]); setErrors((prev) => ({ ...prev, productUrl: null })); }}
+                onClick={() => { setHasProductImage(false); setProductUrl(''); setUploadedImages([]); setErrors((prev) => ({ ...prev, productUrl: null, hasProductImage: null })); }}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                  !hasProductImage
+                  hasProductImage === false
                     ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
                     : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
                 }`}
@@ -1051,7 +1053,11 @@ const AvatarConfigForm = ({
             </div>
           </div>
 
-          {hasProductImage ? (
+          {hasProductImage === null && errors.hasProductImage && (
+            <span className="text-[12px] text-red-400">{errors.hasProductImage}</span>
+          )}
+
+          {hasProductImage === true && (
             <>
               <div className={`flex items-center gap-2 rounded-full border border-transparent bg-gray-100 p-1 dark:bg-[#9092941A] ${errors.productUrl ? 'border-red-500/50' : ''}`}>
                 <input
@@ -1112,7 +1118,9 @@ const AvatarConfigForm = ({
                 <span className="text-[12px] text-red-400">{errors.productUrl}</span>
               )}
             </>
-          ) : (
+          )}
+
+          {hasProductImage === false && (
             <>
               <textarea
                 value={promptText}
