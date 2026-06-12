@@ -77,8 +77,28 @@ function formatChannelType(val) {
     LOCAL_SERVICES: "LOCAL_SERVICES",
     DISCOVERY: "DISCOVERY",
     TRAVEL: "TRAVEL",
+    14: "DEMAND_GEN",
+    DEMAND_GEN: "DEMAND_GEN",
   };
   return map[val] || map[String(val).toUpperCase()] || null;
+}
+
+function formatGoogleDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return s;
+}
+
+function deriveGoogleBillingType(biddingStrategyType, adGroupType) {
+  const strategy = String(biddingStrategyType || "").toUpperCase();
+  const agType = String(adGroupType || "").toUpperCase();
+  if (strategy.includes("CPM") || agType.includes("CPM")) return "CPM";
+  if (strategy.includes("CPV") || agType.includes("CPV")) return "CPV";
+  if (strategy.includes("CPA") || strategy.includes("CONVERSION")) return "Conversions";
+  return "CPC";
 }
 
 function sanitizeId(val) {
@@ -103,4 +123,13 @@ function formatAccountStatus(val) {
   return map[val] || map[String(val).toUpperCase()] || "UNKNOWN";
 }
 
-module.exports = { formatBudget, formatStatus, formatAccountStatus, formatBiddingStrategy, formatChannelType, sanitizeId };
+module.exports = {
+  formatBudget,
+  formatStatus,
+  formatAccountStatus,
+  formatBiddingStrategy,
+  formatChannelType,
+  formatGoogleDate,
+  deriveGoogleBillingType,
+  sanitizeId,
+};

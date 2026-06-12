@@ -9,6 +9,7 @@ import AdInsightsPage from '@/pages/AdInsights/AdInsightsPage';
 import AdLibraryPage from '@/pages/AdLibrary/AdLibraryPage';
 import AdStudioPage from '@/pages/AdStudio/AdStudioPage';
 import MetaAdsPage from '@/pages/MetaAds/MetaAdsPage';
+import GoogleAdsPage from '@/pages/GoogleAds/GoogleAdsPage';
 import AdsManagerPage from '@/pages/AdsManager/AdsManagerPage';
 import AutopilotHomePage from '@/pages/Autopilot/AutopilotHomePage';
 import AutopilotPage from '@/pages/Autopilot/AutopilotPage';
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { path: 'adfactory', element: <AdFactoryPage /> },
       { path: 'ads-manager', element: <AdsManagerPage /> },
       { path: 'meta-ads', element: <MetaAdsPage /> },
+      { path: 'google-ads', element: <GoogleAdsPage /> },
       // Autopilot has the same picker-then-dashboard structure as Ads
       // Manager: `/autopilot` is the platform picker home, `/autopilot/meta`
       // is the actual dashboard for Meta. Google/TikTok land on the picker

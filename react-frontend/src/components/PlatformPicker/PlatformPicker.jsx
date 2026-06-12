@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
+import axios from 'axios';
 import { getAdAccounts, getUserAdPostingInfo } from '@/apis/metaAds/metaAdsApi';
+import getCookies from '@/utils/getCookies';
 import metaIcon from '@/assets/layouts/appsidebar/meta-icon.svg';
 import googleAdsIcon from '@/assets/layouts/google-ads-icon.png';
 import tiktokIcon from '@/assets/layouts/appsidebar/tiktok-icon.jpg';
@@ -31,26 +33,39 @@ const PlatformPicker = ({
   const navigate = useNavigate();
   const [metaConnected, setMetaConnected] = useState(false);
   const [checkingMeta, setCheckingMeta] = useState(true);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(true);
   const [hoveredCard, setHoveredCard] = useState(null);
   const { userData } = useSelector((state) => state.socket);
 
   useEffect(() => {
     const userId = userData?.user_id;
     if (!userId) return;
+
+    // Meta connection check
     (async () => {
       try {
         await getUserAdPostingInfo(userId);
         const res = await getAdAccounts();
         setMetaConnected(!!(res.adAccounts && res.adAccounts.length > 0));
       } catch (err) {
-        // 404 means token expired / user not found — force reconnect
-        if (err?.response?.status === 404) {
-          setMetaConnected(false);
-        } else {
-          setMetaConnected(false);
-        }
+        setMetaConnected(false);
       } finally {
         setCheckingMeta(false);
+      }
+    })();
+
+    // Google connection check
+    (async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/adsgpt/google-ads/check-account`, {
+          headers: { Authorization: `Bearer ${getCookies()}` },
+        });
+        setGoogleConnected(!!(res.data?.isConnected && res.data?.hasAccount));
+      } catch {
+        setGoogleConnected(false);
+      } finally {
+        setCheckingGoogle(false);
       }
     })();
   }, [userData?.user_id]);
@@ -62,9 +77,22 @@ const PlatformPicker = ({
     window.location.href = `${BASE_URL}/api/auth/facebook?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
   };
 
+  const handleGoogleConnect = () => {
+    const userId = userData?.user_id;
+    if (!userId) return;
+    const feUrl = window.location.href;
+    window.location.href = `${BASE_URL}/api/auth/google?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
+  };
+
   const handleMetaCardClick = () => {
     if (metaConnected && metaDestination) {
       navigate(metaDestination);
+    }
+  };
+
+  const handleGoogleCardClick = () => {
+    if (googleConnected) {
+      navigate('/google-ads');
     }
   };
 
@@ -89,7 +117,7 @@ const PlatformPicker = ({
       name: 'Google Ads',
       description:
         'Reach customers across Google Search, YouTube, and the web',
-      enabled: false,
+      enabled: true,
       logo: (
         <div className="flex items-center gap-3">
           <img
@@ -138,7 +166,16 @@ const PlatformPicker = ({
         <div className="mt-10 grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {platforms.map((platform, index) => {
             const isMetaPlatform = platform.id === 'meta';
+            const isGooglePlatform = platform.id === 'google';
             const isHovered = hoveredCard === platform.id;
+            const isConnected = isMetaPlatform ? metaConnected : isGooglePlatform ? googleConnected : false;
+            const isChecking = isMetaPlatform ? checkingMeta : isGooglePlatform ? checkingGoogle : false;
+
+            const handleClick = isMetaPlatform && metaConnected
+              ? handleMetaCardClick
+              : isGooglePlatform && googleConnected
+              ? handleGoogleCardClick
+              : undefined;
 
             return (
               <motion.div
@@ -148,12 +185,10 @@ const PlatformPicker = ({
                 transition={{ duration: 0.35, delay: index * 0.05 }}
                 onMouseEnter={() => setHoveredCard(platform.id)}
                 onMouseLeave={() => setHoveredCard(null)}
-                onClick={
-                  isMetaPlatform && metaConnected ? handleMetaCardClick : undefined
-                }
+                onClick={handleClick}
                 className={`relative overflow-hidden rounded-2xl border border-gray-200 transition-all duration-300 dark:border-transparent ${
                   platform.enabled
-                    ? `${metaConnected ? 'cursor-pointer' : 'cursor-default'} shadow-md hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/40`
+                    ? `${isConnected ? 'cursor-pointer' : 'cursor-default'} shadow-md hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/40`
                     : 'cursor-not-allowed'
                 }`}
               >
@@ -161,8 +196,8 @@ const PlatformPicker = ({
                 <div className="relative flex h-40 items-center justify-center bg-white transition-all duration-300">
                   {platform.logo}
 
-                  {/* Connect overlay on hover — only for Meta when not connected */}
-                  {isMetaPlatform && !metaConnected && !checkingMeta && isHovered && (
+                  {/* Connect overlay on hover — for Meta or Google when not connected */}
+                  {(isMetaPlatform || isGooglePlatform) && !isConnected && !isChecking && isHovered && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -173,7 +208,7 @@ const PlatformPicker = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleMetaConnect();
+                          isMetaPlatform ? handleMetaConnect() : handleGoogleConnect();
                         }}
                         className="rounded-lg bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg transition-transform duration-150 hover:scale-105"
                       >
@@ -194,7 +229,7 @@ const PlatformPicker = ({
                         Coming Soon
                       </span>
                     )}
-                    {isMetaPlatform && metaConnected && (
+                    {isConnected && (
                       <span className="flex items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:border-emerald-500/30 dark:text-emerald-400">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                         Connected

@@ -23,8 +23,32 @@ const {
   formatAccountStatus,
   formatBiddingStrategy,
   formatChannelType,
+  formatGoogleDate,
+  deriveGoogleBillingType,
   sanitizeId,
 } = require("../../utils/googleHelpers");
+const {
+  buildAdImageMapFromAssetResults,
+  buildImageAssetGaql,
+  collectEmbeddedAssetRefs,
+  fetchGoogleAssetUrlMap,
+  fetchStandardAdResults,
+  mapGoogleStandardAdRow,
+} = require("../../utils/googleAdMapping");
+
+function wantsCacheRefresh(req) {
+  const v = String(req.query?.refresh || "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function normalizeCampaignsResponse(parsed, adAccountId) {
+  if (!adAccountId || !parsed) return parsed;
+  if (!parsed.campaigns?.length && Array.isArray(parsed.data)) {
+    parsed.campaigns = parsed.data.flatMap((d) => d.campaigns || []);
+    parsed.count = parsed.campaigns.length;
+  }
+  return parsed;
+}
 
 const normalizeCustomerId = (id) => {
   if (!id) return null;
@@ -57,6 +81,8 @@ const ALL_CACHE_PREFIXES = [
   ...STATUS_CACHE_PREFIXES,
   "googleAdAccounts",
   "googleCampaignsAll",
+  "googleCampaignsAll:v2",
+  "googleCampaignsAll:v3",
   "googleAnalytics",
   "googleInsights",
   "googleAudit",
@@ -86,6 +112,8 @@ function deriveObjective(channelType) {
     SHOPPING: "SHOPPING",
     PERFORMANCE_MAX: "PERFORMANCE_MAX",
     MULTI_CHANNEL: "APP_PROMOTION",
+    DEMAND_GEN: "DEMAND_GEN",
+    VIDEO: "VIDEO",
   };
   return map[ch] || ch || null;
 }
@@ -93,12 +121,14 @@ function deriveObjective(channelType) {
 async function invalidateGoogleCacheByPrefixes(userId, prefixes) {
   const keysToDelete = [];
   for (const prefix of prefixes) {
-    const stream = redisClient.scanStream({
-      match: `${prefix}:${userId}:*`,
-      count: 100,
-    });
-    for await (const keys of stream) {
-      if (keys.length) keysToDelete.push(...keys);
+    for (const pattern of [`${prefix}:${userId}:*`, `${prefix}:v2:${userId}:*`, `${prefix}:v3:${userId}:*`, `${prefix}:*:${userId}:*`]) {
+      const stream = redisClient.scanStream({
+        match: pattern,
+        count: 100,
+      });
+      for await (const keys of stream) {
+        if (keys.length) keysToDelete.push(...keys);
+      }
     }
     keysToDelete.push(`${prefix}:${userId}`);
   }
@@ -114,17 +144,24 @@ async function invalidateAllUserGoogleCache(userId) {
 }
 
 function formatGoogleError(error) {
-  const details = error?.errors?.[0] || {};
-  const errorCode = details?.errorCode
-    ? Object.entries(details.errorCode).find(([, v]) => v != null)
+  // Try the nested Google Ads API error structure first
+  const apiErrors = error?.response?.data?.error?.details?.[0]?.errors || error?.errors || [];
+  const firstApiError = apiErrors[0] || {};
+  const errorCode = firstApiError?.errorCode
+    ? Object.entries(firstApiError.errorCode).find(([, v]) => v != null)
     : null;
+
+  // Google Ads API top-level message
+  const apiMessage =
+    error?.response?.data?.error?.message ||
+    firstApiError?.message ||
+    error?.message ||
+    "Unknown Google Ads API error";
+
   return {
-    message:
-      details?.message ||
-      error?.message ||
-      "Unknown Google Ads API error",
-    reason: errorCode?.[0] || null,
-    details: details?.details || null,
+    message: apiMessage,
+    reason: errorCode?.[0] || error?.response?.data?.error?.status || null,
+    details: firstApiError || error?.response?.data?.error || null,
   };
 }
 
@@ -408,11 +445,13 @@ class GoogleAdController {
     this.updateStatus = this.updateStatus.bind(this);
     this.createCampaignAPI = this.createCampaignAPI.bind(this);
     this.createAdGroupAPI = this.createAdGroupAPI.bind(this);
-    this.createAd = this.createAd.bind(this);
     this.createAdAPI = this.createAdAPI.bind(this);
     this.getAd = this.getAd.bind(this);
+    this.resolveAdForEdit = this.resolveAdForEdit.bind(this);
     this.uploadMediaAPI = this.uploadMediaAPI.bind(this);
     this.deleteCampaignAPI = this.deleteCampaignAPI.bind(this);
+    this.getWizardSchema = this.getWizardSchema.bind(this);
+    this.getCtaOptions = this.getCtaOptions.bind(this);
   }
   // * 1. GET all Google Ads accounts
   async getAdAccountsList(req, res) {
@@ -631,7 +670,13 @@ class GoogleAdController {
           : "No postable Google Ads accounts found for this user."
       };
 
-      await redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL);
+      // Write postable response under the `:postable` key (served to callers)
+      // and write the full account list under the bare key so getBlockedGoogleAccounts
+      // can find PRODUCTION_BLOCKED entries without re-fetching.
+      await Promise.all([
+        redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL),
+        redisClient.set(`googleAdAccounts:${userId}`, JSON.stringify({ adAccounts: accounts }), "EX", REDIS_TTL),
+      ]);
       return res.status(200).json(response);
     } catch (error) {
       const m = formatGoogleError(error);
@@ -645,23 +690,67 @@ class GoogleAdController {
     }
   }
   // * 5. GET campaigns by customer
-// * 5. GET campaigns by customer
-// * 5. GET campaigns by customer
-// * 5. GET campaigns by customer
   async getCampaignsByCustomer(req, res) {
     /* #swagger.tags = ['Google Ads']
        #swagger.summary = 'Get campaigns'
-       #swagger.description = 'Get all campaigns and ad groups for a Google Ads customer account'
+       #swagger.description = 'Get all campaigns and ad groups for a Google Ads customer account. Use adType to filter campaigns by supported ad format.'
        #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['adAccountId'] = { description: 'Google Ads customer ID (required)', type: 'string' }
+       #swagger.parameters['adType'] = {
+         in: 'query',
+         description: 'Filter campaigns by supported ad type(s). Pass one or multiple: ?adType=text&adType=image. text → SEARCH. image → DISPLAY + DEMAND_GEN. video → VIDEO + DEMAND_GEN. Omit for all.',
+         type: 'array',
+         items: { type: 'string', enum: ['text', 'image', 'video'] },
+         collectionFormat: 'multi'
+       }
+       #swagger.parameters['refresh'] = {
+         in: 'query',
+         description: 'Set to true to bypass cache and fetch fresh data',
+         type: 'string',
+         enum: ['true']
+       }
     */
     try {
       const userId = req.user.user_id;
       const adAccountId = sanitizeId(getQueryParam(req.query, ["adAccountId", "customerId"]));
+      // adType can be a single string or array: ?adType=text&adType=image
+      const adTypeRaw = req.query.adType;
+      const adTypes = adTypeRaw
+        ? (Array.isArray(adTypeRaw) ? adTypeRaw : [adTypeRaw]).map(t => t.toLowerCase())
+        : [];
 
-      const cacheKey = `googleCampaignsAll:${userId}:${adAccountId || "all"}`;
-      const cached = await redisClient.get(cacheKey);
-      if (cached) return res.status(200).json(JSON.parse(cached));
+      const AD_TYPE_CHANNEL_MAP = {
+        text:  ["SEARCH"],
+        image: ["DISPLAY"],
+        video: ["VIDEO", "DEMAND_GEN"],
+      };
+      const allowedChannelTypes = adTypes.length
+        ? [...new Set(adTypes.flatMap(t => AD_TYPE_CHANNEL_MAP[t] || []))]
+        : null;
+
+      const adTypeKey = adTypes.length ? `:${adTypes.sort().join(',')}` : '';
+      const cacheKey = `googleCampaignsAll:v3:${userId}:${adAccountId || "all"}${adTypeKey}`;
+      if (!wantsCacheRefresh(req)) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          const parsed = normalizeCampaignsResponse(JSON.parse(cached), adAccountId);
+          const hasError = parsed?.data?.some((d) => d.error);
+          const staleEmpty = adAccountId && !parsed?.campaigns?.length && parsed?.data?.some((d) => d.error);
+          if (!hasError && !staleEmpty) {
+            if (allowedChannelTypes) {
+              parsed.data = (parsed.data || []).map(d => ({
+                ...d,
+                campaigns: (d.campaigns || []).filter(c => allowedChannelTypes.includes(c.channelType)),
+              }));
+              if (parsed.campaigns) parsed.campaigns = parsed.campaigns.filter(c => allowedChannelTypes.includes(c.channelType));
+              parsed.totalCampaigns = (parsed.data || []).reduce((sum, d) => sum + (d.campaigns?.length || 0), 0);
+              parsed.count = parsed.campaigns?.length ?? parsed.totalCampaigns;
+            }
+            return res.status(200).json(parsed);
+          }
+          await redisClient.del(cacheKey);
+        }
+      }
 
       const { accessToken } = await initGoogleApiForUser(userId);
 
@@ -777,38 +866,69 @@ class GoogleAdController {
       // 2. Fetch data in parallel
       const dataResults = await Promise.all(accountsToFetch.map(async (acc) => {
         const fetchCampaigns = async (targetId, loginId) => {
-          const resp = await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${targetId}/googleAds:searchStream`,
-            {
-              query: `
-                SELECT
-                  campaign.id,
-                  campaign.name,
-                  campaign.status,
-                  campaign.primary_status,
-                  campaign.serving_status,
-                  campaign.advertising_channel_type,
-                  campaign.bidding_strategy_type,
-                  campaign_budget.amount_micros,
-                  campaign_budget.period,
-                  customer.test_account
-                FROM campaign
-                WHERE campaign.status != 'REMOVED'
-                  AND customer.test_account = FALSE
-                ORDER BY campaign.id DESC
-              `,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-                "login-customer-id": loginId,
-                "Content-Type": "application/json",
-              },
-            }
-          );
+          const headers = {
+            Authorization: `Bearer ${accessToken}`,
+            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+            "login-customer-id": loginId,
+            "Content-Type": "application/json",
+          };
+          const baseCampaignGaql = `
+            SELECT
+              campaign.id,
+              campaign.name,
+              campaign.status,
+              campaign.primary_status,
+              campaign.serving_status,
+              campaign.advertising_channel_type,
+              campaign.bidding_strategy_type,
+              campaign_budget.amount_micros
+            FROM campaign
+            WHERE campaign.status != 'REMOVED'
+            ORDER BY campaign.id DESC
+          `;
+          const fullCampaignGaql = `
+            SELECT
+              campaign.id,
+              campaign.name,
+              campaign.status,
+              campaign.primary_status,
+              campaign.serving_status,
+              campaign.advertising_channel_type,
+              campaign.bidding_strategy_type,
+              campaign_budget.amount_micros,
+              campaign_budget.period
+            FROM campaign
+            WHERE campaign.status != 'REMOVED'
+            ORDER BY campaign.id DESC
+          `;
 
-          const results = resp.data?.[0]?.results || [];
+          let results = [];
+          let spendByCampaign = {};
+          const campUrl = `https://googleads.googleapis.com/v23/customers/${targetId}/googleAds:searchStream`;
+
+          try {
+            const campResp = await axios.post(campUrl, { query: fullCampaignGaql }, { headers });
+            results = campResp.data?.[0]?.results || [];
+          } catch (campErr) {
+            logger.error(`Campaign full GAQL failed for ${targetId}: ${formatGoogleError(campErr).message}`);
+            const campResp = await axios.post(campUrl, { query: baseCampaignGaql }, { headers });
+            results = campResp.data?.[0]?.results || [];
+          }
+
+          try {
+            const spendResp = await axios.post(campUrl, {
+              query: `
+                SELECT campaign.id, metrics.cost_micros
+                FROM campaign
+                WHERE segments.date DURING TODAY AND campaign.status != 'REMOVED'
+              `,
+            }, { headers });
+            (spendResp.data?.[0]?.results || []).forEach((r) => {
+              const cid = String((r.campaign || {}).id || "");
+              const cost = Number(r.metrics?.costMicros || r.metrics?.cost_micros || 0);
+              if (cid) spendByCampaign[cid] = (spendByCampaign[cid] || 0) + cost;
+            });
+          } catch (_) { /* budget remaining is optional */ }
           return results.map(r => {
             const c = r.campaign;
             const channelType = robustFormatChannelType(c.advertisingChannelType || c.advertising_channel_type);
@@ -816,8 +936,17 @@ class GoogleAdController {
             const servingStatus = c.servingStatus || c.serving_status;
             const biddingStrategyType = c.biddingStrategyType || c.bidding_strategy_type;
             const budget = r.campaignBudget || r.campaign_budget;
+            const cid = String(c.id);
+            const dailyMicros = Number(budget?.amountMicros || budget?.amount_micros || 0);
+            const spentToday = spendByCampaign[cid] || 0;
+            const budgetPeriod = budget?.period || "DAILY";
+            const remainingMicros = budgetPeriod === "DAILY" && dailyMicros
+              ? Math.max(0, dailyMicros - spentToday)
+              : null;
+            const startDate = formatGoogleDate(c.startDate || c.start_date);
             return {
-              id: String(c.id),
+              id: cid,
+              campaignId: cid,
               name: c.name,
               status: robustFormatStatus(c.status),
               primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
@@ -825,9 +954,14 @@ class GoogleAdController {
               channelType: (channelType && channelType !== "UNKNOWN") ? channelType : null,
               objective: deriveObjective(c.advertisingChannelType || c.advertising_channel_type),
               biddingStrategy: robustFormatBiddingStrategy(biddingStrategyType),
-              budgetMicros: budget?.amountMicros || budget?.amount_micros || 0,
-              budget: formatBudget(budget?.amountMicros || budget?.amount_micros),
-              budgetPeriod: budget?.period || "DAILY",
+              dailyBudgetMicros: dailyMicros,
+              budgetMicros: dailyMicros,
+              budget: formatBudget(dailyMicros),
+              budgetPeriod,
+              budgetRemainingMicros: remainingMicros,
+              budget_remaining: remainingMicros != null ? formatBudget(remainingMicros) : null,
+              startDate,
+              start_time: startDate,
             };
           });
         };
@@ -848,7 +982,7 @@ class GoogleAdController {
                     campaign.id,
                     campaign.name
                   FROM ad_group
-                  WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL')
+                  WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL', 'DEMAND_GEN', 'VIDEO')
                 `,
               },
               {
@@ -863,11 +997,14 @@ class GoogleAdController {
             const results = resp.data?.[0]?.results || [];
             return results.map(r => {
               const ag = r.adGroup || r.ad_group;
+              const agid = String(ag.id);
               return {
-                id: String(ag.id),
+                id: agid,
+                adGroupId: agid,
                 name: ag.name,
                 status: robustFormatStatus(ag.status),
                 type: ag.type,
+                cpcBidMicros: ag.cpcBidMicros || ag.cpc_bid_micros || null,
                 targetCpa: (ag.targetCpaMicros || ag.target_cpa_micros) ? (ag.targetCpaMicros || ag.target_cpa_micros) / 1e6 : null,
                 targetRoas: ag.targetRoas || ag.target_roas || null,
                 campaignId: String(r.campaign.id),
@@ -976,12 +1113,13 @@ class GoogleAdController {
           };
         } catch (err) {
           const m = formatGoogleError(err);
-          logger.error(`Campaign fetch failed for ${acc.id}: ${m.message}`);
+          logger.error(`Campaign fetch failed for ${acc.id}: ${m.message} | reason: ${m.reason} | detail: ${JSON.stringify(m.details)} | raw: ${JSON.stringify(err?.response?.data || err?.message)}`);
           return {
             accountId: acc.id,
             campaigns: [],
             campaignCount: 0,
             error: m.message,
+            reason: m.reason,
             isLocked: isGoogleTokenRestrictedMessage(m.message),
           };
         }
@@ -995,8 +1133,18 @@ class GoogleAdController {
         totalAdGroups: dataResults.reduce((sum, d) => sum + (d.campaigns || []).reduce((s, c) => s + (c.adGroups?.length || 0), 0), 0),
       };
 
+      if (allowedChannelTypes) {
+        response.data = response.data.map(d => ({
+          ...d,
+          campaigns: (d.campaigns || []).filter(c => allowedChannelTypes.includes(c.channelType)),
+        }));
+        response.totalCampaigns = response.data.reduce((sum, d) => sum + (d.campaigns?.length || 0), 0);
+      }
+
       if (adAccountId) {
-        response.campaigns = dataResults.flatMap(d => d.campaigns || []);
+        response.campaigns = dataResults.flatMap(d => d.campaigns || []).filter(c =>
+          allowedChannelTypes ? allowedChannelTypes.includes(c.channelType) : true
+        );
         response.count = response.campaigns.length;
       }
 
@@ -1028,9 +1176,11 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleAdGroups:${userId}:${tid}:${campaignId}`;
-      const cached = await redisClient.get(cacheKey);
-      if (cached) return res.status(200).json(JSON.parse(cached));
+      const cacheKey = `googleAdGroups:v3:${userId}:${tid}:${campaignId}`;
+      if (!wantsCacheRefresh(req)) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) return res.status(200).json(JSON.parse(cached));
+      }
 
       const { accessToken } = await initGoogleApiForUser(userId);
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
@@ -1040,19 +1190,22 @@ class GoogleAdController {
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
       // Run both ad_group and asset_group queries in parallel — no pre-detection call needed
+      // Note: ad_group.start_date / end_date are NOT valid Google Ads API fields — removed
       const [adGroupResp, assetGroupResp] = await Promise.all([
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
+          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type, ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
           { headers }
-        ).catch(() => ({ data: [] })),
+        ).catch((err) => { logger.error(`getAdGroups ad_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
           { query: `SELECT asset_group.id, asset_group.name, asset_group.status, asset_group.primary_status, campaign.id, campaign.name FROM asset_group WHERE campaign.id = ${cleanCampaignId} AND asset_group.status != 'REMOVED'` },
           { headers }
-        ).catch(() => ({ data: [] })),
+        ).catch((err) => { logger.error(`getAdGroups asset_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
       ]);
 
-      const agResults = adGroupResp.data?.[0]?.results || [];
-      const assetResults = assetGroupResp.data?.[0]?.results || [];
+      const flatResults = (respData) =>
+        Array.isArray(respData) ? respData.flatMap(batch => batch?.results || []) : [];
+      const agResults    = flatResults(adGroupResp.data);
+      const assetResults = flatResults(assetGroupResp.data);
       const isPmax = assetResults.length > 0 && agResults.length === 0;
 
       const adGroups = isPmax
@@ -1060,8 +1213,10 @@ class GoogleAdController {
             const ag = r.assetGroup || r.asset_group || {};
             const camp = r.campaign || {};
             const primaryStatus = ag.primaryStatus || ag.primary_status;
+            const agid = String(ag.id || "");
             return {
-              id: String(ag.id || ""),
+              id: agid,
+              adGroupId: agid,
               name: ag.name || "",
               status: robustFormatStatus(ag.status),
               primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
@@ -1074,13 +1229,23 @@ class GoogleAdController {
         : agResults.map(r => {
             const ag = r.adGroup || r.ad_group || {};
             const camp = r.campaign || {};
+            const agid = String(ag.id || "");
+            const biddingStrategyType = camp.biddingStrategyType || camp.bidding_strategy_type;
+            const optimizationGoal = robustFormatBiddingStrategy(biddingStrategyType);
+            const billingEvent = deriveGoogleBillingType(biddingStrategyType, ag.type);
             return {
-              id: String(ag.id || ""),
+              id: agid,
+              adGroupId: agid,
               name: ag.name || "",
               status: robustFormatStatus(ag.status),
               type: ag.type || "",
+              cpcBidMicros: ag.cpcBidMicros || ag.cpc_bid_micros || null,
               targetCpa: ag.targetCpaMicros ? ag.targetCpaMicros / 1e6 : (ag.target_cpa_micros ? ag.target_cpa_micros / 1e6 : null),
               targetRoas: ag.targetRoas || ag.target_roas || null,
+              optimizationGoal,
+              optimization_goal: optimizationGoal,
+              billingEvent,
+              billing_event: billingEvent,
               campaignId: String(camp.id || ""),
               campaignName: camp.name || "",
               isPmax: false,
@@ -1129,9 +1294,11 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleCampaignAds:${userId}:${tid}:${campaignId}`;
-      const cached = await redisClient.get(cacheKey);
-      if (cached) return res.status(200).json(JSON.parse(cached));
+      const cacheKey = `googleCampaignAds:v3:${userId}:${tid}:${campaignId}`;
+      if (!wantsCacheRefresh(req)) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) return res.status(200).json(JSON.parse(cached));
+      }
 
       const { accessToken } = await initGoogleApiForUser(userId);
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
@@ -1140,8 +1307,8 @@ class GoogleAdController {
       const cleanCampaignId = sanitizeId(campaignId);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
-      // Run both PMax and standard ad queries in parallel — no pre-detection call
-      const [pmaxResp, standardResp] = await Promise.all([
+      // Run PMax, standard ads, and display image asset queries in parallel
+      const [pmaxResp, standardResp, imageAssetResp] = await Promise.all([
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
           query: `
             SELECT
@@ -1154,31 +1321,32 @@ class GoogleAdController {
             WHERE campaign.id = ${cleanCampaignId} AND asset_group_asset.status != 'REMOVED'
           `,
         }, { headers }).catch(() => ({ data: [] })),
+        fetchStandardAdResults(tid, headers, `campaign.id = ${cleanCampaignId}`, {
+          onError: (msg) => logger.error(`Google getAdsByCampaignId: ${msg}`),
+        }).then((results) => ({ data: [{ results }] })),
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
-          query: `
-            SELECT
-              ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.type,
-              ad_group_ad.ad.final_urls,
-              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_display_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images,
-              ad_group_ad.ad.responsive_display_ad.business_name,
-              ad_group.id, ad_group.name, campaign.id, campaign.name
-            FROM ad_group_ad
-            WHERE campaign.id = ${cleanCampaignId} AND ad_group_ad.status != 'REMOVED'
-          `,
+          query: buildImageAssetGaql(`campaign.id = ${cleanCampaignId}`),
         }, { headers }).catch(() => ({ data: [] })),
       ]);
 
-      const pmaxResults = pmaxResp.data?.[0]?.results || [];
-      const standardResults = standardResp.data?.[0]?.results || [];
+      const flatR = (respData) =>
+        Array.isArray(respData) ? respData.flatMap(batch => batch?.results || []) : [];
+      const pmaxResults      = flatR(pmaxResp.data);
+      const standardResults  = flatR(standardResp.data);
+      const imageAssetResults = flatR(imageAssetResp.data);
       const isPmax = pmaxResults.length > 0;
+
+      const adImageMap = buildAdImageMapFromAssetResults(imageAssetResults);
+      const assetUrlMap = await fetchGoogleAssetUrlMap(
+        tid,
+        headers,
+        collectEmbeddedAssetRefs(standardResults),
+      );
 
       let ads = [];
 
       if (isPmax) {
-        const resp = { data: pmaxResp.data };
-        const results = resp.data?.[0]?.results || [];
+        const results = pmaxResults;
         const byGroup = {};
         results.forEach(r => {
           const ag = r.assetGroup || r.asset_group || {};
@@ -1220,29 +1388,11 @@ class GoogleAdController {
         });
         ads = Object.values(byGroup);
       } else {
-        ads = standardResults.map((r) => {
-          const aga = r.adGroupAd || r.ad_group_ad || {};
-          const ad = aga.ad || {};
-          const ag = r.adGroup || r.ad_group || {};
-          const camp = r.campaign || {};
-          const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
-          const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
-          const adType = ad.type || "";
-          const headlines = adType === "RESPONSIVE_SEARCH_AD"
-            ? (rsa.headlines || []).map(h => h.text)
-            : (rda.headlines || []).map(h => h.text);
-          const descriptions = adType === "RESPONSIVE_SEARCH_AD"
-            ? (rsa.descriptions || []).map(d => d.text)
-            : (rda.descriptions || []).map(d => d.text);
-          const finalUrls = ad.finalUrls || ad.final_urls || [];
-          return {
-            id: String(ad.id || ""),
-            status: robustFormatStatus(aga.status),
-            headline: headlines[0] || "",
-            description: descriptions[0] || "",
-            finalUrl: finalUrls[0] || "",
-          };
-        });
+        ads = standardResults.map((r) => mapGoogleStandardAdRow(r, {
+          adImageMap,
+          assetUrlMap,
+          formatStatus: robustFormatStatus,
+        }));
       }
 
       const response = {
@@ -1288,9 +1438,11 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleAdGroupAds:${userId}:${tid}:${adGroupId}`;
-      const cached = await redisClient.get(cacheKey);
-      if (cached) return res.status(200).json(JSON.parse(cached));
+      const cacheKey = `googleAdGroupAds:v3:${userId}:${tid}:${adGroupId}`;
+      if (!wantsCacheRefresh(req)) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) return res.status(200).json(JSON.parse(cached));
+      }
 
       const { accessToken } = await initGoogleApiForUser(userId);
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
@@ -1299,8 +1451,8 @@ class GoogleAdController {
       const cleanAdGroupId = sanitizeId(adGroupId);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
-      // Run both PMax and standard queries in parallel — no pre-detection call
-      const [pmaxResp, standardResp] = await Promise.all([
+      // Run PMax, standard ads, and display image asset queries in parallel
+      const [pmaxResp, standardResp, imageAssetResp] = await Promise.all([
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
           query: `
             SELECT
@@ -1313,25 +1465,28 @@ class GoogleAdController {
             WHERE asset_group.id = ${cleanAdGroupId} AND asset_group_asset.status != 'REMOVED'
           `,
         }, { headers }).catch(() => ({ data: [] })),
+        fetchStandardAdResults(tid, headers, `ad_group.id = ${cleanAdGroupId}`, {
+          onError: (msg) => logger.error(`Google getAdsByAdGroupId: ${msg}`),
+        }).then((results) => ({ data: [{ results }] })),
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
-          query: `
-            SELECT
-              ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.type,
-              ad_group_ad.ad.final_urls,
-              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_display_ad.descriptions,
-              ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images,
-              ad_group_ad.ad.responsive_display_ad.business_name,
-              ad_group.id, ad_group.name
-            FROM ad_group_ad
-            WHERE ad_group.id = ${cleanAdGroupId} AND ad_group_ad.status != 'REMOVED'
-          `,
+          query: buildImageAssetGaql(`ad_group.id = ${cleanAdGroupId}`),
         }, { headers }).catch(() => ({ data: [] })),
       ]);
 
       const pmaxResults = pmaxResp.data?.[0]?.results || [];
       const standardResults = standardResp.data?.[0]?.results || [];
-      const isPmax = pmaxResults.length > 0;
+      const imageAssetResults = imageAssetResp.data?.[0]?.results || [];
+      // Only treat as PMax if asset group results exist AND no standard ads returned
+      // (prevents misidentifying a regular ad group ID that coincidentally matches an asset group ID)
+      const isPmax = pmaxResults.length > 0 && standardResults.length === 0;
+      logger.info(`Google getAdsByAdGroupId: adGroupId=${cleanAdGroupId} pmaxResults=${pmaxResults.length} standardResults=${standardResults.length} isPmax=${isPmax}`);
+
+      const adImageMap = buildAdImageMapFromAssetResults(imageAssetResults);
+      const assetUrlMap = await fetchGoogleAssetUrlMap(
+        tid,
+        headers,
+        collectEmbeddedAssetRefs(standardResults),
+      );
 
       let ads = [];
 
@@ -1363,28 +1518,11 @@ class GoogleAdController {
         });
         ads = results.length ? [grouped] : [];
       } else {
-        ads = standardResults.map((r) => {
-          const aga = r.adGroupAd || r.ad_group_ad || {};
-          const ad = aga.ad || {};
-          const ag = r.adGroup || r.ad_group || {};
-          const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
-          const rda = ad.responsiveDisplayAd || ad.responsive_display_ad || {};
-          const adType = ad.type || "";
-          const headlines = adType === "RESPONSIVE_SEARCH_AD"
-            ? (rsa.headlines || []).map(h => h.text)
-            : (rda.headlines || []).map(h => h.text);
-          const descriptions = adType === "RESPONSIVE_SEARCH_AD"
-            ? (rsa.descriptions || []).map(d => d.text)
-            : (rda.descriptions || []).map(d => d.text);
-          const finalUrls = ad.finalUrls || ad.final_urls || [];
-          return {
-            id: String(ad.id || ""),
-            status: robustFormatStatus(aga.status),
-            headline: headlines[0] || "",
-            description: descriptions[0] || "",
-            finalUrl: finalUrls[0] || "",
-          };
-        });
+        ads = standardResults.map((r) => mapGoogleStandardAdRow(r, {
+          adImageMap,
+          assetUrlMap,
+          formatStatus: robustFormatStatus,
+        }));
       }
 
       const response = {
@@ -2287,6 +2425,7 @@ class GoogleAdController {
         startTime,
         endTime,
         targeting,
+        objectiveExtras = {},
       } = value;
 
       // ── Init ──────────────────────────────────────────────────────────────
@@ -2313,12 +2452,36 @@ class GoogleAdController {
       };
       const channelType = channelTypeMap[String(objective).toUpperCase().replace(/ /g, "_")] || "SEARCH";
 
+      // Pull extra objective-specific fields from objectiveExtras
+      const {
+        appSubtype,         // APP_INSTALLS | APP_ENGAGEMENT | APP_PRE_REGISTRATION
+        appPlatform,        // ANDROID | IOS
+        appId,              // app package name or store URL
+        videoGoal,          // VIDEO_VIEWS | REACH | YOUTUBE_SUBSCRIPTIONS (YouTube reach objective)
+        videoSubtype,       // VIDEO_VIEWS | EFFICIENT_REACH | NON_SKIPPABLE_REACH | TARGET_FREQUENCY
+        merchantCenterId,   // Shopping campaigns
+        finalUrl,           // Performance Max — where people go after clicking
+        storeAddress,       // LOCAL_STORE proximity targeting
+        locationRadius,     // LOCAL_STORE proximity radius
+        finalUrlSuffix,     // PERFORMANCE_MAX suffix
+      } = objectiveExtras;
+
       // ── Bidding strategy per channel type (snake_case for REST API) ──────
-      const biddingStrategy =
-        channelType === "DISPLAY"           ? { target_spend: {} }
-        : channelType === "DEMAND_GEN"      ? { maximize_conversions: {} }
-        : channelType === "PERFORMANCE_MAX" ? { maximize_conversion_value: {} }
-        : { manual_cpc: { enhanced_cpc_enabled: false } };
+      let biddingStrategy;
+      if (channelType === "DISPLAY") {
+        biddingStrategy = { target_spend: {} };
+      } else if (channelType === "DEMAND_GEN") {
+        biddingStrategy = { maximize_conversions: {} };
+      } else if (channelType === "PERFORMANCE_MAX") {
+        biddingStrategy = { maximize_conversion_value: {} };
+      } else if (channelType === "MULTI_CHANNEL") {
+        // App campaigns use target_cpa or maximize_conversions
+        biddingStrategy = { maximize_conversions: {} };
+      } else if (channelType === "SHOPPING") {
+        biddingStrategy = { target_spend: {} };
+      } else {
+        biddingStrategy = { manual_cpc: { enhanced_cpc_enabled: false } };
+      }
 
       // ── Step 1: Create campaign budget ────────────────────────────────────
       const budgetResp = await axios.post(
@@ -2349,6 +2512,33 @@ class GoogleAdController {
         contains_eu_political_advertising: 2,  // NOT_EU_POLITICAL_ADVERTISING = 2 in v23 proto
         ...biddingStrategy,
       };
+
+      // App campaigns — set advertising_channel_sub_type from appSubtype
+      if (channelType === "MULTI_CHANNEL" && appSubtype) {
+        const appSubtypeMap = {
+          APP_INSTALLS:         "APP_CAMPAIGN",
+          APP_ENGAGEMENT:       "APP_CAMPAIGN_FOR_ENGAGEMENT",
+          APP_PRE_REGISTRATION: "APP_CAMPAIGN_FOR_PRE_REGISTRATION",
+        };
+        const subType = appSubtypeMap[String(appSubtype).toUpperCase()];
+        if (subType) campaignBody.advertising_channel_sub_type = subType;
+      }
+
+      // Shopping campaigns — link Merchant Center account
+      if (channelType === "SHOPPING" && merchantCenterId) {
+        campaignBody.shopping_setting = {
+          merchant_id: String(merchantCenterId),
+          sales_country: (targeting?.countries?.[0] || "US").toUpperCase(),
+          campaign_priority: 0,
+          enable_local: false,
+        };
+      }
+
+      // Performance Max — set final URL expansion if finalUrl provided
+      if (channelType === "PERFORMANCE_MAX" && finalUrl) {
+        campaignBody.url_expansion_opt_out = false;
+        // finalUrl is applied to asset groups, not the campaign itself — stored in objectiveExtras for Step 6
+      }
 
       const campaignResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
@@ -2401,6 +2591,7 @@ class GoogleAdController {
           const COMMON_LOCATIONS = {
             US: 2840, IN: 2356, GB: 2826, CA: 2124, AU: 2036, DE: 2276, FR: 2250,
             BR: 2076, IT: 2380, ES: 2724, JP: 2392, SG: 2702, AE: 2784,
+            ZA: 2710, NG: 2566, KE: 2404, PH: 2608, ID: 2360, MX: 2484, NL: 2528,
           };
           const locOps = targeting.countries
             .map((code) => COMMON_LOCATIONS[code.toUpperCase()])
@@ -2425,6 +2616,85 @@ class GoogleAdController {
         }
       }
 
+      // ── Step 5: LOCAL_STORE — proximity radius targeting ──────────────────
+      if (objective === "LOCAL_STORE" && storeAddress && locationRadius) {
+        try {
+          const radiusOps = [{
+            campaignCriterionOperation: {
+              create: {
+                campaign: campaignResource,
+                proximity: {
+                  address: { street_address: storeAddress },
+                  radius: locationRadius,
+                  radius_units: 2, // KILOMETERS
+                },
+              },
+            },
+          }];
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            { mutateOperations: radiusOps },
+            { headers }
+          );
+        } catch (e) {
+          logger.error(`Proximity targeting failed (non-fatal): ${e.message}`);
+        }
+      }
+
+      // ── Step 6: PERFORMANCE_MAX — final URL suffix and/or landing page ───────
+      if (objective === "PERFORMANCE_MAX" && (finalUrlSuffix || finalUrl)) {
+        try {
+          const updateFields = [];
+          const pmaxUpdate = { resource_name: campaignResource };
+          if (finalUrlSuffix) {
+            pmaxUpdate.final_url_suffix = finalUrlSuffix;
+            updateFields.push("final_url_suffix");
+          }
+          if (updateFields.length) {
+            await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+              {
+                mutateOperations: [{
+                  campaignOperation: {
+                    update: pmaxUpdate,
+                    update_mask: updateFields.join(","),
+                  },
+                }],
+              },
+              { headers }
+            );
+          }
+        } catch (e) {
+          logger.error(`Final URL suffix update failed (non-fatal): ${e.message}`);
+        }
+      }
+
+      // ── Step 7: App campaigns — link app via campaign criterion ──────────────
+      if (channelType === "MULTI_CHANNEL" && appId && appPlatform) {
+        try {
+          const platformEnum = String(appPlatform).toUpperCase() === "IOS" ? "IOS" : "ANDROID";
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            {
+              mutateOperations: [{
+                campaignCriterionOperation: {
+                  create: {
+                    campaign: campaignResource,
+                    mobile_application: {
+                      app_id: String(appId),
+                      operating_system_type: platformEnum,
+                    },
+                  },
+                },
+              }],
+            },
+            { headers }
+          );
+        } catch (e) {
+          logger.error(`App criterion linking failed (non-fatal): ${e.message}`);
+        }
+      }
+
       await invalidateUserGoogleCache(userId);
 
       return res.status(201).json({
@@ -2441,6 +2711,14 @@ class GoogleAdController {
           channelType,
           startTime,
           endTime,
+          ...(appSubtype && { appSubtype }),
+          ...(appPlatform && { appPlatform }),
+          ...(appId && { appId }),
+          ...(videoGoal && { videoGoal }),
+          ...(videoSubtype && { videoSubtype }),
+          ...(merchantCenterId && { merchantCenterId }),
+          ...(finalUrl && { finalUrl }),
+          objectiveExtras,
         },
       });
     } catch (error) {
@@ -2454,6 +2732,21 @@ class GoogleAdController {
         (e) => e.errorCode?.mutateError === "MUTATE_NOT_ALLOWED"
       );
 
+      const isBudgetTooLow = googleErrors.some(
+        (e) => e.errorCode?.campaignBudgetError === "BUDGET_AMOUNT_MUST_EXCEED_MINIMUM_AMOUNT_PER_CLICK"
+          || e.errorCode?.campaignBudgetError === "BUDGET_CANNOT_BE_ZERO"
+          || (e.message || "").toLowerCase().includes("per-day minimum")
+      );
+
+      // Extract the minimum amount from Google's error details if present
+      const budgetMinDetails = googleErrors.find(
+        (e) => (e.message || "").toLowerCase().includes("per-day minimum")
+      );
+      const budgetMinMicros = budgetMinDetails?.details?.budget_per_day_minimum_error_details?.minimum_amount_micros;
+      const budgetMinReadable = budgetMinMicros
+        ? `₹${(Number(budgetMinMicros) / 1_000_000).toFixed(0)}`
+        : null;
+
       const formattedErrors = googleErrors.map((e) => ({
         message: e.message,
         field: e.location?.fieldPathElements?.map((f) => f.fieldName).join(".") || null,
@@ -2464,10 +2757,12 @@ class GoogleAdController {
         status: false,
         error: isMutateNotAllowed
           ? "This campaign type cannot be created via the API. YouTube video ads are created as Demand Gen campaigns (DEMAND_GEN channel type), which is the supported programmatic replacement for VIDEO campaigns."
-          : formattedErrors[0]?.message ||
-            error.response?.data?.error?.message ||
-            error.message ||
-            "Failed to create campaign",
+          : isBudgetTooLow
+            ? `Daily budget is too low for this campaign type.${budgetMinReadable ? ` Minimum required: ${budgetMinReadable}/day.` : " Please increase your daily budget and try again."}`
+            : formattedErrors[0]?.message ||
+              error.response?.data?.error?.message ||
+              error.message ||
+              "Failed to create campaign",
         validations: formattedErrors,
         details: error.response?.data || null,
       });
@@ -2530,6 +2825,12 @@ class GoogleAdController {
         startTime,
         endTime,
         targeting,
+        biddingGoal,
+        targetCpaMicros,
+        targetRoas,
+        keywords = [],
+        videoFormat,
+        frequencyCap,
       } = value;
 
       const actualBid = bidAmount || cpcBidMicros;
@@ -2572,6 +2873,7 @@ class GoogleAdController {
             const COMMON_LOCATIONS = {
               US: 2840, IN: 2356, GB: 2826, CA: 2124, AU: 2036, DE: 2276, FR: 2250,
               BR: 2076, IT: 2380, ES: 2724, JP: 2392, SG: 2702, AE: 2784,
+              ZA: 2710, NG: 2566, KE: 2404, PH: 2608, ID: 2360, MX: 2484, NL: 2528,
             };
 
             const locationCriteria = targeting.countries
@@ -2613,20 +2915,27 @@ class GoogleAdController {
         SEARCH: "SEARCH_STANDARD",
         DISPLAY: "DISPLAY_STANDARD",
         SHOPPING: "SHOPPING_PRODUCT_ADS",
-        VIDEO: "VIDEO_TRUE_VIEW_IN_STREAM",
+        VIDEO: "DEMAND_GEN_VIDEO_RESPONSIVE_AD",
         DEMAND_GEN: "DEMAND_GEN_VIDEO_RESPONSIVE_AD",
         MULTI_CHANNEL: "SEARCH_STANDARD",
       };
       const adGroupType = adGroupTypeMap[channelType] || "SEARCH_STANDARD";
 
       // ── Step 3: Create ad group ───────────────────────────
-      const adGroupResult = await customer.adGroups.create([{
+      const adGroupPayload = {
         name,
         status,
         type: adGroupType,
         cpc_bid_micros: String(actualBid),
         campaign: `customers/${customerId}/campaigns/${cleanCampaignId}`,
-      }]);
+      };
+      // Override bidding strategy at ad group level when specified
+      if (biddingGoal === "TARGET_CPA" && targetCpaMicros) {
+        adGroupPayload.target_cpa_micros = String(targetCpaMicros);
+      } else if (biddingGoal === "TARGET_ROAS" && targetRoas) {
+        adGroupPayload.target_roas = targetRoas / 100; // frontend sends %, API wants fraction
+      }
+      const adGroupResult = await customer.adGroups.create([adGroupPayload]);
 
       const adGroupResource = adGroupResult.results[0]?.resource_name;
       const adGroupId = adGroupResource?.split("/").pop();
@@ -2680,6 +2989,64 @@ class GoogleAdController {
         }
       }
 
+      // ── Step 5: Add keywords (SEARCH campaigns) ─────────────────────────────
+      if (keywords.length > 0 && (channelType === "SEARCH" || channelType === "MULTI_CHANNEL")) {
+        try {
+          const kwMatchTypeMap = { BROAD: 4, PHRASE: 3, EXACT: 2 }; // Google v23 enum ints
+          const kwCriteria = keywords
+            .filter((k) => k.text?.trim())
+            .map((k) => ({
+              ad_group: adGroupResource,
+              keyword: {
+                text: k.text.trim(),
+                match_type: kwMatchTypeMap[k.matchType?.toUpperCase()] || 4,
+              },
+            }));
+          if (kwCriteria.length > 0) {
+            await customer.adGroupCriteria.create(kwCriteria);
+          }
+        } catch (e) {
+          logger.error(`Keyword creation failed (non-fatal): ${e.message}`);
+        }
+      }
+
+      // ── Step 6: Frequency cap (DISPLAY campaigns) ────────────────────────────
+      if (frequencyCap && channelType === "DISPLAY") {
+        try {
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            {
+              mutateOperations: [{
+                campaignOperation: {
+                  update: {
+                    resource_name: `customers/${customerId}/campaigns/${cleanCampaignId}`,
+                    frequency_caps: [{
+                      cap: {
+                        impressions: frequencyCap,
+                        time_unit: 3,   // DAILY = 3 in v23 TimeUnit enum
+                        time_length: 1,
+                      },
+                      level: 2, // AD_GROUP_LEVEL = 2
+                    }],
+                  },
+                  update_mask: "frequency_caps",
+                },
+              }],
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+                "login-customer-id": mccId,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+        } catch (e) {
+          logger.error(`Frequency cap failed (non-fatal): ${e.message}`);
+        }
+      }
+
       await invalidateUserGoogleCache(userId);
 
       return res.status(201).json({
@@ -2697,6 +3064,10 @@ class GoogleAdController {
           startTime,
           endTime,
           targeting,
+          biddingGoal: biddingGoal || null,
+          keywordsAdded: keywords.filter((k) => k.text?.trim()).length,
+          videoFormat: videoFormat || null,
+          frequencyCap: frequencyCap || null,
         },
       });
     } catch (error) {
@@ -2723,181 +3094,6 @@ class GoogleAdController {
           error.message ||
           "Failed to create ad group",
         validations: formattedErrors,
-      });
-    }
-  }
-
-
-  // * 21. POST create ad — one-shot: campaign + adgroup + ads
-  async createAd(req, res) {
-    /* #swagger.tags = ['Google Ads']
-       #swagger.summary = 'Create ad (one-shot)'
-       #swagger.description = 'One-shot AdFactory launch: creates campaign + ad group + ads. MCC resolved automatically.'
-       #swagger.security = [{ "BearerAuth": [] }]
-       #swagger.requestBody = {
-         required: true,
-         content: {
-           "application/json": {
-             schema: {
-               type: "object",
-               required: ["adAccountId", "adFactoryCampaignId", "ads"],
-               properties: {
-                 adAccountId: { type: "string", example: "7984091200" },
-                 adFactoryCampaignId: { type: "string", example: "" },
-                 campaignDetails: { type: "object", example: { campaignName: "My Campaign", campaignObjective: "SEARCH", dailyBudgetMicros: 5000000 } },
-                 adGroupDetails: { type: "object", example: { adGroupName: "Ad Group 1", cpcBidMicros: 1000000 } },
-                 ads: { type: "array", example: [{ headlines: ["Headline 1", "Headline 2", "Headline 3"], descriptions: ["Desc 1", "Desc 2"], finalUrl: "https://example.com", imageUrl: "https://example.com/img.png", callToAction: "SHOP_NOW" }] }
-               }
-             }
-           }
-         }
-       }
-    */
-    try {
-      const userId = req.user.user_id;
-      const adAccountId = getQueryParam(req.body, ["adAccountId", "customerId"]);
-      const {
-        adFactoryCampaignId,
-        campaignDetails = {}, adGroupDetails = {}, ads = [],
-      } = req.body;
-
-      if (!adAccountId || !adFactoryCampaignId || !ads.length) {
-        return res.status(400).json({
-          status: false,
-          error: "adAccountId, adFactoryCampaignId and ads are required",
-        });
-      }
-
-      const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
-      let resolvedLoginCustomerId = null;
-      try {
-        resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      } catch (e) {
-
-      }
-      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
-      const customerId = normalizeCustomerId(adAccountId);
-
-      // --- Campaign ---
-      let campaignId = campaignDetails.campaignId ? sanitizeId(campaignDetails.campaignId) : null;
-      if (!campaignId) {
-        const { campaignId: newCampaignId } = await this._createCampaign(
-          accessToken, loginCustomerId, customerId,
-          campaignDetails.campaignName || `Campaign ${dayjs().format("M/D/YYYY")}`,
-          campaignDetails.campaignObjective || "SEARCH",
-          campaignDetails.dailyBudgetMicros || 5000000,
-        );
-        campaignId = newCampaignId;
-      }
-
-      // --- Ad Group ---
-      let adGroupId = adGroupDetails.adGroupId ? sanitizeId(adGroupDetails.adGroupId) : null;
-      if (!adGroupId) {
-        const { adGroupId: newAdGroupId } = await this._createAdGroup(
-          accessToken, loginCustomerId, customerId, campaignId,
-          adGroupDetails.adGroupName || "Ad Group 1",
-          adGroupDetails.cpcBidMicros || 1000000,
-        );
-        adGroupId = newAdGroupId;
-      }
-
-      // --- Ads ---
-      const objective = (campaignDetails.campaignObjective || "SEARCH").toUpperCase();
-      const createdAds = [];
-      const errors = [];
-
-      for (let i = 0; i < ads.length; i++) {
-        const adData = ads[i];
-        try {
-          if (!adData.finalUrl) throw new Error("finalUrl is required for each ad");
-
-          const headlines = Array.isArray(adData.headlines) ? adData.headlines : [adData.headlines].filter(Boolean);
-          const descriptions = Array.isArray(adData.descriptions) ? adData.descriptions : [adData.descriptions].filter(Boolean);
-          const tooLongHeadline = headlines.find((h) => String(h).length > 30);
-          if (tooLongHeadline) throw new Error(`headline "${tooLongHeadline}" exceeds 30 characters (${String(tooLongHeadline).length})`);
-          const tooLongDesc = descriptions.find((d) => String(d).length > 90);
-          if (tooLongDesc) throw new Error(`description "${tooLongDesc}" exceeds 90 characters (${String(tooLongDesc).length})`);
-
-          const adId = await this._createAdByType(
-            accessToken, loginCustomerId, customerId, adGroupId, adData, objective,
-          );
-
-          const postedAd = await GooglePostedAd.create({
-            userId: req.user.user_id,
-            googleAdId: adId,
-            adAccountId,
-            campaignId: String(campaignId),
-            adGroupId: String(adGroupId),
-            status: "PAUSED",
-            content: {
-              headline: Array.isArray(adData.headlines) ? adData.headlines[0] : adData.headlines,
-              description: Array.isArray(adData.descriptions) ? adData.descriptions[0] : adData.descriptions,
-              finalUrl: adData.finalUrl,
-              imageUrl: adData.imageUrl || null,
-              callToAction: adData.callToAction || null,
-              adType: objective,
-            },
-            metaData: {
-              campaignName: campaignDetails.campaignName,
-              campaignObjective: objective,
-              dailyBudgetMicros: campaignDetails.dailyBudgetMicros,
-              campaignId: String(campaignId),
-              adGroupId: String(adGroupId),
-            },
-            adFactoryCampaignId,
-          });
-
-          createdAds.push({
-            index: i,
-            adId: String(adId),
-            adType: objective,
-            headline: Array.isArray(adData.headlines) ? adData.headlines[0] : adData.headlines,
-          });
-        } catch (adErr) {
-          errors.push({ index: i, error: adErr.message, adData });
-        }
-      }
-
-      // Update AdFactory campaign with Google metadata
-      await Campaign.findByIdAndUpdate(adFactoryCampaignId, {
-        "googleMetaData.adAccountId": adAccountId,
-        "googleMetaData.campaignId": String(campaignId),
-        "googleMetaData.adGroupId": String(adGroupId),
-        "googleMetaData.status": "success",
-        "googleMetaData.launchedAt": new Date(),
-      });
-
-      await invalidateUserGoogleCache(userId);
-
-      return res.status(201).json({
-        status: true,
-        message: `Created ${createdAds.length} out of ${ads.length} ads successfully`,
-        data: {
-          campaignId: String(campaignId),
-          adGroupId: String(adGroupId),
-          createdAds,
-          ...(errors.length && { errors }),
-          status: "PAUSED",
-          note: "Ads are created in PAUSED state. Activate them in Google Ads Manager.",
-        },
-      });
-    } catch (error) {
-      logger.error(`GOOGLE CREATE AD (one-shot) ERROR => ${error.message}`);
-      const m = formatGoogleError(error);
-
-      let friendlyError = "Failed to create ads";
-      if (m.reason === "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE") {
-        friendlyError = "The selected campaign or ad group has been deleted in Google Ads. Please select an active one.";
-      } else if (m.reason === "TOO_LONG") {
-        friendlyError = "One of the generated headlines or descriptions is too long for Google Ads. Try using shorter text.";
-      }
-
-      return res.status(error.response?.status || 500).json({
-        status: false, 
-        error: friendlyError, 
-        details: error.response?.data || m.message,
-        reason: m.reason
       });
     }
   }
@@ -2963,6 +3159,28 @@ class GoogleAdController {
       const { adAccountId, customerId: customerIdAlias, adGroupId, campaignId, ads: adsArray } = schemaValue;
       const resolvedAccountId = adAccountId || customerIdAlias;
 
+      // Pre-flight: verify all finalUrls are reachable — Google rejects with
+      // DESTINATION_NOT_WORKING (PROHIBITED) if the URL returns an error or is unreachable.
+      for (let i = 0; i < adsArray.length; i++) {
+        const url = adsArray[i].finalUrl;
+        try {
+          const urlCheck = await axios.head(url, { timeout: 8000, maxRedirects: 5, validateStatus: (s) => s < 500 });
+          if (urlCheck.status >= 400) {
+            return res.status(400).json({
+              status: false,
+              error: `The destination URL for ad ${i + 1} is not reachable (HTTP ${urlCheck.status}). Please use a live, publicly accessible URL.`,
+              reason: "DESTINATION_NOT_WORKING",
+            });
+          }
+        } catch (urlErr) {
+          return res.status(400).json({
+            status: false,
+            error: `The destination URL for ad ${i + 1} could not be reached: "${url}". Please use a live, publicly accessible URL.`,
+            reason: "DESTINATION_NOT_WORKING",
+          });
+        }
+      }
+
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
       const customerId = normalizeCustomerId(resolvedAccountId);
@@ -3015,37 +3233,53 @@ class GoogleAdController {
 
       // ── DEMAND_GEN campaign: YouTube/Demand Gen ad creation ──────────────────
       if (channelType === "DEMAND_GEN" || channelType === "VIDEO") {
-        const missingVideo = adsArray.findIndex((ad) => !ad.videoUrl);
+        const missingVideo = adsArray.findIndex((ad) => !ad.videoUrl && !ad.youtubeVideoId);
         if (missingVideo !== -1) {
           return res.status(400).json({
             status: false,
-            error: `videoUrl is required for YouTube/Demand Gen ads${adsArray.length > 1 ? ` (missing in ad ${missingVideo + 1})` : ""}.`,
+            error: `Please provide a video URL or YouTube video ID for your video ad${adsArray.length > 1 ? ` (Ad ${missingVideo + 1} is missing a video)` : ""}.`,
           });
+        }
+
+        // Auto-fetch business name from the Google Ads account descriptive_name
+        let accountBusinessName = "Brand";
+        try {
+          const custResp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+            { query: `SELECT customer.descriptive_name FROM customer LIMIT 1` },
+            { headers }
+          );
+          const name = custResp.data?.[0]?.results?.[0]?.customer?.descriptiveName
+            || custResp.data?.[0]?.results?.[0]?.customer?.descriptive_name;
+          if (name) accountBusinessName = String(name).slice(0, 25);
+        } catch (e) {
+          logger.warn(`Could not fetch account name (non-fatal): ${e.message}`);
         }
 
         const results = [];
         for (let i = 0; i < adsArray.length; i++) {
           const ad = adsArray[i];
           const rawAd = (req.body.ads || [])[i] || {};
-          const logoUrl = rawAd.logoUrl || ad.logoUrl;
+          // Logo is always auto-fetched from the YouTube video thumbnail — no user input needed
           let videoAssetRN;
 
-          if (!logoUrl) {
-            return res.status(400).json({ status: false, error: "logoUrl is required for Demand Gen video ads" });
-          }
+          const ytMatch = ad.videoUrl
+            ? ad.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/)
+            : null;
 
-          // Run video upload + logo upload in parallel to save time
-          const ytMatch = ad.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-
-          const uploadVideo = async () => {
-            let youtubeVideoId;
-            if (ytMatch) {
+          // Step 1: upload video (or extract YouTube ID) and get asset resource name
+          let youtubeVideoId;
+          try {
+            if (ad.youtubeVideoId) {
+              youtubeVideoId = ad.youtubeVideoId;
+            } else if (ytMatch) {
               youtubeVideoId = ytMatch[1];
             } else {
               youtubeVideoId = await this._uploadVideoToYouTube(accessToken, ad.videoUrl, ad.headline || "Ad Video");
               await this._waitForYouTubeVideo(accessToken, youtubeVideoId);
             }
-            // Check if asset already exists in Google Ads
+
+            // Check if Google Ads video asset already exists
             const existingResp = await axios.post(
               `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
               { query: `SELECT asset.resource_name FROM asset WHERE asset.youtube_video_asset.youtube_video_id = '${youtubeVideoId}' LIMIT 1` },
@@ -3053,47 +3287,90 @@ class GoogleAdController {
             );
             const existingRN = existingResp.data?.[0]?.results?.[0]?.asset?.resourceName
               || existingResp.data?.[0]?.results?.[0]?.asset?.resource_name;
-            if (existingRN) return existingRN;
 
-            const assetResp = await axios.post(
-              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-              { mutateOperations: [{ assetOperation: { create: { name: `yt_video_${youtubeVideoId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: youtubeVideoId } } } }] },
-              { headers }
-            );
-            const rn = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
-            if (!rn) throw new Error("Failed to create YouTube video asset in Google Ads");
-            return rn;
-          };
-
-          const uploadLogo = async () => {
-            const sharp = require("sharp");
-            const downloaded = await axios.get(logoUrl, { responseType: "arraybuffer", timeout: 30000 });
-            const logoBuffer = await sharp(Buffer.from(downloaded.data))
-              .resize({ width: 128, height: 128, fit: "cover", position: "centre" })
-              .jpeg({ quality: 90 })
-              .toBuffer();
-            return this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, logoBuffer, "logo");
-          };
-
-          let logoAssetRN;
-          try {
-            [videoAssetRN, logoAssetRN] = await Promise.all([uploadVideo(), uploadLogo()]);
+            if (existingRN) {
+              videoAssetRN = existingRN;
+            } else {
+              const assetResp = await axios.post(
+                `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+                { mutateOperations: [{ assetOperation: { create: { name: `yt_video_${youtubeVideoId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: youtubeVideoId } } } }] },
+                { headers }
+              );
+              videoAssetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+              if (!videoAssetRN) throw new Error("Failed to create YouTube video asset in Google Ads");
+            }
           } catch (e) {
             const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-            logger.error(`Demand Gen asset upload failed: ${detail}`);
+            logger.error(`Demand Gen video asset upload failed: ${detail}`);
             return res.status(400).json({ status: false, error: detail });
+          }
+
+          // Step 2: logo — try YouTube thumbnail (all sizes), fallback to generated solid-color image
+          let logoAssetRN;
+          try {
+            const sharp = require("sharp");
+            const thumbnailCandidates = [
+              `https://i.ytimg.com/vi/${youtubeVideoId}/maxresdefault.jpg`,
+              `https://i.ytimg.com/vi/${youtubeVideoId}/sddefault.jpg`,
+              `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
+              `https://i.ytimg.com/vi/${youtubeVideoId}/mqdefault.jpg`,
+              `https://i.ytimg.com/vi/${youtubeVideoId}/default.jpg`,
+            ];
+            let logoBuffer;
+            for (const url of thumbnailCandidates) {
+              try {
+                const resp = await axios.get(url, { responseType: "arraybuffer", timeout: 15000 });
+                if (resp.status === 200 && resp.data?.byteLength > 5000) {
+                  logoBuffer = await sharp(Buffer.from(resp.data))
+                    .resize({ width: 128, height: 128, fit: "cover", position: "centre" })
+                    .jpeg({ quality: 90 })
+                    .toBuffer();
+                  logger.info(`Demand Gen: logo from thumbnail ${url}`);
+                  break;
+                }
+              } catch (_) {}
+            }
+            if (!logoBuffer) {
+              // All thumbnails unavailable — generate a plain dark-blue 128x128 fallback
+              logoBuffer = await sharp({ create: { width: 128, height: 128, channels: 3, background: { r: 15, g: 23, b: 42 } } })
+                .jpeg({ quality: 90 })
+                .toBuffer();
+              logger.info("Demand Gen: using generated fallback logo image");
+            }
+            logoAssetRN = await this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, logoBuffer, "logo");
+          } catch (e) {
+            logger.error(`Demand Gen logo upload failed: ${e.message}`);
+            return res.status(400).json({ status: false, error: `Failed to create logo asset for Demand Gen ad: ${e.message}` });
+          }
+
+          const demandGenAd = {
+            business_name: { text: accountBusinessName },
+            headlines: [{ text: String(ad.headline || "Watch Now").slice(0, 30) }],
+            long_headlines: [{ text: String(ad.longHeadline || ad.headline || "Watch our video").slice(0, 90) }],
+            descriptions: [{ text: String(ad.description || "Check it out").slice(0, 90) }],
+            videos: [{ asset: videoAssetRN }],
+          };
+          if (logoAssetRN) demandGenAd.logo_images = [{ asset: logoAssetRN }];
+          // AdCallToActionAsset.asset must be a resource name of a pre-created CTA asset.
+          // We must first mutate an asset with call_to_action_asset.call_to_action_type, then reference it.
+          if (ad.callToAction) {
+            try {
+              const ctaType = String(ad.callToAction).toUpperCase().replace(/ /g, "_");
+              const ctaAssetResp = await axios.post(
+                `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+                { mutateOperations: [{ assetOperation: { create: { name: `cta_${ctaType}_${Date.now()}`, call_to_action_asset: { call_to_action: ctaType } } } }] },
+                { headers }
+              );
+              const ctaAssetRN = ctaAssetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+              if (ctaAssetRN) demandGenAd.call_to_actions = [{ asset: ctaAssetRN }];
+            } catch (e) {
+              logger.warn(`Demand Gen CTA asset creation failed (non-fatal): ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
+            }
           }
 
           const adPayload = {
             name: `DemandGen_${cleanAdGroupId}_${Date.now()}`,
-            demand_gen_video_responsive_ad: {
-              business_name: { text: ad.businessName },
-              headlines: [{ text: ad.headline }],
-              long_headlines: [{ text: ad.headline }],
-              descriptions: [{ text: ad.description }],
-              videos: [{ asset: videoAssetRN }],
-              logo_images: [{ asset: logoAssetRN }],
-            },
+            demand_gen_video_responsive_ad: demandGenAd,
             final_urls: [ad.finalUrl],
           };
 
@@ -3123,17 +3400,24 @@ class GoogleAdController {
           }
 
           const adResource = mutateResp.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName;
-          results.push({
+          const entry = {
             adId: adResource?.split("~").pop(),
             adResourceName: adResource,
-            videoAssetResourceName: videoAssetRN,
-            adType: "DEMAND_GEN_VIDEO_RESPONSIVE",
-          });
+            youtubeVideoId,
+            headline: ad.headline || null,
+            description: ad.description || null,
+            finalUrl: ad.finalUrl,
+            status: "PAUSED",
+          };
+          if (ad.callToAction) entry.callToAction = ad.callToAction;
+          results.push(entry);
         }
 
         return res.status(201).json({
           status: true,
-          message: `${results.length} Demand Gen video ad${results.length > 1 ? "s" : ""} created successfully`,
+          message: `${results.length} video ad${results.length > 1 ? "s" : ""} created successfully`,
+          customerId,
+          adGroupId: cleanAdGroupId,
           ads: results,
         });
       }
@@ -3171,23 +3455,21 @@ class GoogleAdController {
       };
 
       const businessName = req.body.businessName || "Brand";
-      // Google Ads API v23 responsive_display_ad call_to_action_text valid values
-      // Source: https://developers.google.com/google-ads/api/reference/rpc/v23/ResponsiveDisplayAdInfo
-      const VALID_DISPLAY_CTA = new Set([
-        "LEARN_MORE", "GET_QUOTE", "APPLY_NOW", "BOOK_NOW", "DOWNLOAD",
-        "GET_OFFER", "ORDER_NOW", "VISIT_SITE", "SUBSCRIBE", "CONTACT_US",
-      ]);
+      // responsive_display_ad.call_to_action_text expects a human-readable label string
+      // (e.g. "Learn more"), NOT the enum key ("LEARN_MORE").
+      // Map enum keys → labels using GOOGLE_CTA_LABELS; fall back to null so the field is omitted.
+      const { GOOGLE_CTA_LABELS: CTA_LABELS } = require("../../config/googleCtaConfig");
       const buildAdPayload = (h, d, url, callToAction, assetResourceName, squareAssetResourceName) => {
         if (channelType === "DISPLAY") {
-          const ctaInput = callToAction ? String(callToAction).toUpperCase().replace(/ /g, "_") : null;
-          const cta = ctaInput && VALID_DISPLAY_CTA.has(ctaInput) ? ctaInput : null;
+          const enumKey = callToAction ? String(callToAction).toUpperCase().replace(/ /g, "_") : null;
+          const ctaText = enumKey ? (CTA_LABELS[enumKey] || null) : null;
           return {
             responsiveDisplayAd: {
               headlines: buildHeadlines(h).slice(0, 5),
               descriptions: buildDescriptions(d).slice(0, 5),
               longHeadline: { text: String(h) },
               businessName,
-              ...(cta && { callToActionText: cta }),
+              ...(ctaText && { callToActionText: ctaText }),
               marketingImages: assetResourceName ? [{ asset: assetResourceName }] : [],
               squareMarketingImages: squareAssetResourceName ? [{ asset: squareAssetResourceName }] : [],
             },
@@ -3209,7 +3491,11 @@ class GoogleAdController {
       for (const ad of adsArray) {
         if (channelType === "DISPLAY" && ad.imageUrl) {
           try {
-            const { landscape, square } = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, ad.imageUrl);
+            const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, ad.imageUrl);
+            if (!uploadResult) {
+              return res.status(400).json({ status: false, error: "Image upload failed. Please check the image URL and try again." });
+            }
+            const { landscape, square } = uploadResult;
             assetResourceNames.push(landscape);
             squareAssetResourceNames.push(square);
           } catch (uploadErr) {
@@ -3257,18 +3543,29 @@ class GoogleAdController {
           content: { headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, callToAction: callToAction || null, adType: channelType },
         });
 
-        createdAds.push({ adId: String(adId), headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, status: "PAUSED" });
+        const adEntry = {
+          adId: String(adId),
+          adResourceName: adResource,
+          finalUrl: url,
+          status: "PAUSED",
+        };
+        if (channelType === "DISPLAY") {
+          if (h) adEntry.headline = h;
+          if (d) adEntry.description = d;
+          if (imageUrl) adEntry.imageUrl = imageUrl;
+          if (callToAction) adEntry.callToAction = callToAction;
+        }
+        createdAds.push(adEntry);
       }
 
       await invalidateUserGoogleCache(userId);
 
       return res.status(201).json({
         status: true,
-        message: `${createdAds.length} ad(s) created successfully`,
+        message: `${createdAds.length} ad${createdAds.length > 1 ? "s" : ""} created successfully`,
         customerId,
         loginCustomerId,
         adGroupId,
-        adType: channelType,
         ads: createdAds,
       });
     } catch (error) {
@@ -3303,6 +3600,44 @@ class GoogleAdController {
   }
 
 
+  async _fetchMappedGoogleAd({ userId, adAccountId, adId }) {
+    const tid = normalizeCustomerId(adAccountId);
+    const { accessToken } = await initGoogleApiForUser(userId);
+    const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
+    const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
+    const cleanAdId = sanitizeId(adId);
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+      "login-customer-id": lid,
+      "Content-Type": "application/json",
+    };
+
+    const [standardResults, imageAssetResp] = await Promise.all([
+      fetchStandardAdResults(tid, headers, `ad_group_ad.ad.id = ${cleanAdId}`, {
+        onError: (msg) => logger.error(`Google _fetchMappedGoogleAd: ${msg}`),
+      }),
+      axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`, {
+        query: buildImageAssetGaql(`ad_group_ad.ad.id = ${cleanAdId}`),
+      }, { headers }).catch(() => ({ data: [] })),
+    ]);
+    if (!standardResults.length) return null;
+
+    const imageAssetResults = imageAssetResp.data?.[0]?.results || [];
+    const adImageMap = buildAdImageMapFromAssetResults(imageAssetResults);
+    const assetUrlMap = await fetchGoogleAssetUrlMap(
+      tid,
+      headers,
+      collectEmbeddedAssetRefs(standardResults),
+    );
+
+    return mapGoogleStandardAdRow(standardResults[0], {
+      adImageMap,
+      assetUrlMap,
+      formatStatus: robustFormatStatus,
+    });
+  }
+
   // * 23. GET single ad
   async getAd(req, res) {
     /* #swagger.tags = ['Google Ads']
@@ -3315,73 +3650,51 @@ class GoogleAdController {
     try {
       const userId = req.user.user_id;
       const adAccountId = getQueryParam(req.query, ["adAccountId", "customerId"]);
-
       const adId = sanitizeId(req.params.id);
       if (!adAccountId || !adId) {
         return res.status(400).json({ status: false, error: "adAccountId and ad id are required" });
       }
 
-      const tid = normalizeCustomerId(adAccountId);
-      const { accessToken } = await initGoogleApiForUser(userId);
-      let resolvedLoginCustomerId = null;
-      if (!resolvedLoginCustomerId) {
-        resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      }
-      const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const mapped = await this._fetchMappedGoogleAd({ userId, adAccountId, adId });
+      if (!mapped) return res.status(404).json({ status: false, error: "Ad not found" });
 
-      const resp = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-        {
-          query: `
-            SELECT
-              ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status,
-              ad_group_ad.ad.type, ad_group_ad.ad.final_urls,
-              ad_group_ad.ad.responsive_search_ad.headlines,
-              ad_group_ad.ad.responsive_search_ad.descriptions,
-              ad_group.id, campaign.id
-            FROM ad_group_ad
-            WHERE ad_group_ad.ad.id = ${adId}
-            LIMIT 1
-          `,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-            "login-customer-id": lid,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const results = resp.data?.[0]?.results || [];
-      if (!results.length) return res.status(404).json({ status: false, error: "Ad not found" });
-
-      const row = results[0];
-      const aga = row.adGroupAd || row.ad_group_ad || {};
-      const ad = aga.ad || {};
-      const rsa = ad.responsiveSearchAd || ad.responsive_search_ad || {};
-      const ag = row.adGroup || row.ad_group || {};
-      const camp = row.campaign || {};
       return res.status(200).json({
         status: true,
-        ad: {
-          id: String(ad.id || ""),
-          name: ad.name || "",
-          status: robustFormatStatus(aga.status),
-          type: ad.type || "",
-          finalUrls: ad.finalUrls || ad.final_urls || [],
-          headlines: rsa.headlines || [],
-          descriptions: rsa.descriptions || [],
-          adGroupId: String(ag.id || ""),
-          campaignId: String(camp.id || ""),
-        },
+        ...mapped,
+        ad: mapped,
       });
     } catch (error) {
       const m = formatGoogleError(error);
       logger.error(`Google get ad error: ${m.message}`);
       return res.status(error.statusCode || 500).json({
         status: false, error: "Failed to fetch ad", details: m.message, reason: m.reason,
+      });
+    }
+  }
+
+  // * 23b. GET resolve ad for edit (Meta /v2/resolve-ad parity)
+  async resolveAdForEdit(req, res) {
+    try {
+      const userId = req.user.user_id;
+      const adAccountId = getQueryParam(req.query, ["adAccountId", "customerId"]);
+      const adId = sanitizeId(req.query.adId || req.params.id);
+      if (!adAccountId || !adId) {
+        return res.status(400).json({ status: false, error: "adAccountId and adId are required" });
+      }
+
+      const mapped = await this._fetchMappedGoogleAd({ userId, adAccountId, adId });
+      if (!mapped) return res.status(404).json({ status: false, error: "Ad not found" });
+
+      return res.status(200).json({
+        status: true,
+        ...mapped,
+        mediaType: mapped.videoUrl ? "video" : "image",
+      });
+    } catch (error) {
+      const m = formatGoogleError(error);
+      logger.error(`Google resolve ad error: ${m.message}`);
+      return res.status(error.statusCode || 500).json({
+        status: false, error: "Failed to resolve ad", details: m.message, reason: m.reason,
       });
     }
   }
@@ -3588,13 +3901,16 @@ class GoogleAdController {
 
     let adPayload;
     if (objective === "DISPLAY") {
+      const { GOOGLE_CTA_LABELS: _CTA_LABELS } = require("../../config/googleCtaConfig");
+      const _enumKey = callToAction ? String(callToAction).toUpperCase().replace(/ /g, "_") : null;
+      const _ctaText = _enumKey ? (_CTA_LABELS[_enumKey] || null) : null;
       adPayload = {
         responsiveDisplayAd: {
           headlines: hl.slice(0, 5),
           descriptions: dl.slice(0, 5),
           longHeadline: { text: String(hl[0]?.text || "Discover More") },
           businessName: "Brand",
-          ...(callToAction && { callToActionText: callToAction }),
+          ...(_ctaText && { callToActionText: _ctaText }),
           ...(assetResourceName && { marketingImages: [{ asset: assetResourceName }] }),
         },
         finalUrls: [finalUrl],
@@ -3795,6 +4111,357 @@ class GoogleAdController {
       return null;
     }
   }
+  // * GET /v2/wizard-schema
+  // Returns the full Google Ads wizard schema: objectives list, CTA map per
+  // objective, ad-type mapping. Frontend uses this on mount — nothing is
+  // hardcoded in the wizard component.
+  async getWizardSchema(req, res) {
+    try {
+      const { GOOGLE_OBJECTIVES, GOOGLE_CTA_MAP, GOOGLE_CTA_LABELS } = require("../../config/googleCtaConfig");
+      const {
+        WIZARD_OBJECTIVE_KEYS,
+        OBJECTIVE_DESTINATIONS,
+        getDestinationsForObjective,
+      } = require("../../config/googleWizardDestinations");
+
+      const OBJECTIVE_DESCRIPTIONS = {
+        SALES:           "Drive conversions and purchases",
+        LEADS:           "Collect leads for your business",
+        WEBSITE_TRAFFIC: "Bring more visitors to your site",
+        DISPLAY:         "Visually engaging banner ads",
+        YOUTUBE_REACH:   "Drive awareness and consideration of your product or brand",
+        APP_PROMOTION:   "Get more installs, engagement and pre-registration for your app",
+        LOCAL_STORE:     "Drive visits to local shops, including restaurants and dealerships",
+        PERFORMANCE_MAX: "AI-driven multi-channel campaigns",
+        SEARCH:          "Drive action on Google Search with text ads",
+        DEMAND_GEN:      "Drive demand and conversions on YouTube, Google Display Network and more",
+        SHOPPING:        "Promote your products from Merchant Center on Google Search with Shopping ads",
+        VIDEO:           "Drive action on YouTube with your video ads",
+      };
+
+      const AD_TYPE_MAP = {
+        SALES:           "SEARCH",
+        LEADS:           "SEARCH",
+        WEBSITE_TRAFFIC: "SEARCH",
+        LOCAL_STORE:     "SEARCH",
+        SEARCH:          "SEARCH",
+        PERFORMANCE_MAX: "PERFORMANCE_MAX",
+        DISPLAY:         "DISPLAY",
+        YOUTUBE_REACH:   "DEMAND_GEN",
+        APP_PROMOTION:   "MULTI_CHANNEL",
+        VIDEO:           "DEMAND_GEN",
+        DEMAND_GEN:      "DEMAND_GEN",
+        SHOPPING:        "SHOPPING",
+        MULTI_CHANNEL:   "MULTI_CHANNEL",
+      };
+
+      const objectives = WIZARD_OBJECTIVE_KEYS.map((value) => ({
+        value,
+        label: GOOGLE_OBJECTIVES[value] || value,
+        description: OBJECTIVE_DESCRIPTIONS[value] || "",
+        adType: AD_TYPE_MAP[value] || "SEARCH",
+        destinations: getDestinationsForObjective(value),
+        ctas: (GOOGLE_CTA_MAP[value] || []).map((v) => ({ value: v, label: GOOGLE_CTA_LABELS[v] || v })),
+      }));
+
+      const COUNTRY_OPTIONS = [
+        // Top markets first
+        { code: "US", label: "United States" },
+        { code: "IN", label: "India" },
+        { code: "GB", label: "United Kingdom" },
+        { code: "CA", label: "Canada" },
+        { code: "AU", label: "Australia" },
+        { code: "DE", label: "Germany" },
+        { code: "FR", label: "France" },
+        { code: "JP", label: "Japan" },
+        { code: "BR", label: "Brazil" },
+        { code: "SG", label: "Singapore" },
+        { code: "AE", label: "UAE" },
+        // Rest of world A–Z
+        { code: "AF", label: "Afghanistan" },
+        { code: "AL", label: "Albania" },
+        { code: "DZ", label: "Algeria" },
+        { code: "AD", label: "Andorra" },
+        { code: "AO", label: "Angola" },
+        { code: "AG", label: "Antigua and Barbuda" },
+        { code: "AR", label: "Argentina" },
+        { code: "AM", label: "Armenia" },
+        { code: "AT", label: "Austria" },
+        { code: "AZ", label: "Azerbaijan" },
+        { code: "BS", label: "Bahamas" },
+        { code: "BH", label: "Bahrain" },
+        { code: "BD", label: "Bangladesh" },
+        { code: "BB", label: "Barbados" },
+        { code: "BY", label: "Belarus" },
+        { code: "BE", label: "Belgium" },
+        { code: "BZ", label: "Belize" },
+        { code: "BJ", label: "Benin" },
+        { code: "BT", label: "Bhutan" },
+        { code: "BO", label: "Bolivia" },
+        { code: "BA", label: "Bosnia and Herzegovina" },
+        { code: "BW", label: "Botswana" },
+        { code: "BN", label: "Brunei" },
+        { code: "BG", label: "Bulgaria" },
+        { code: "BF", label: "Burkina Faso" },
+        { code: "BI", label: "Burundi" },
+        { code: "CV", label: "Cabo Verde" },
+        { code: "KH", label: "Cambodia" },
+        { code: "CM", label: "Cameroon" },
+        { code: "CF", label: "Central African Republic" },
+        { code: "TD", label: "Chad" },
+        { code: "CL", label: "Chile" },
+        { code: "CN", label: "China" },
+        { code: "CO", label: "Colombia" },
+        { code: "KM", label: "Comoros" },
+        { code: "CG", label: "Congo" },
+        { code: "CD", label: "Congo (DRC)" },
+        { code: "CR", label: "Costa Rica" },
+        { code: "HR", label: "Croatia" },
+        { code: "CU", label: "Cuba" },
+        { code: "CY", label: "Cyprus" },
+        { code: "CZ", label: "Czech Republic" },
+        { code: "DK", label: "Denmark" },
+        { code: "DJ", label: "Djibouti" },
+        { code: "DM", label: "Dominica" },
+        { code: "DO", label: "Dominican Republic" },
+        { code: "EC", label: "Ecuador" },
+        { code: "EG", label: "Egypt" },
+        { code: "SV", label: "El Salvador" },
+        { code: "GQ", label: "Equatorial Guinea" },
+        { code: "ER", label: "Eritrea" },
+        { code: "EE", label: "Estonia" },
+        { code: "SZ", label: "Eswatini" },
+        { code: "ET", label: "Ethiopia" },
+        { code: "FJ", label: "Fiji" },
+        { code: "FI", label: "Finland" },
+        { code: "GA", label: "Gabon" },
+        { code: "GM", label: "Gambia" },
+        { code: "GE", label: "Georgia" },
+        { code: "GH", label: "Ghana" },
+        { code: "GR", label: "Greece" },
+        { code: "GD", label: "Grenada" },
+        { code: "GT", label: "Guatemala" },
+        { code: "GN", label: "Guinea" },
+        { code: "GW", label: "Guinea-Bissau" },
+        { code: "GY", label: "Guyana" },
+        { code: "HT", label: "Haiti" },
+        { code: "HN", label: "Honduras" },
+        { code: "HU", label: "Hungary" },
+        { code: "IS", label: "Iceland" },
+        { code: "ID", label: "Indonesia" },
+        { code: "IR", label: "Iran" },
+        { code: "IQ", label: "Iraq" },
+        { code: "IE", label: "Ireland" },
+        { code: "IL", label: "Israel" },
+        { code: "IT", label: "Italy" },
+        { code: "JM", label: "Jamaica" },
+        { code: "JO", label: "Jordan" },
+        { code: "KZ", label: "Kazakhstan" },
+        { code: "KE", label: "Kenya" },
+        { code: "KI", label: "Kiribati" },
+        { code: "KW", label: "Kuwait" },
+        { code: "KG", label: "Kyrgyzstan" },
+        { code: "LA", label: "Laos" },
+        { code: "LV", label: "Latvia" },
+        { code: "LB", label: "Lebanon" },
+        { code: "LS", label: "Lesotho" },
+        { code: "LR", label: "Liberia" },
+        { code: "LY", label: "Libya" },
+        { code: "LI", label: "Liechtenstein" },
+        { code: "LT", label: "Lithuania" },
+        { code: "LU", label: "Luxembourg" },
+        { code: "MG", label: "Madagascar" },
+        { code: "MW", label: "Malawi" },
+        { code: "MY", label: "Malaysia" },
+        { code: "MV", label: "Maldives" },
+        { code: "ML", label: "Mali" },
+        { code: "MT", label: "Malta" },
+        { code: "MH", label: "Marshall Islands" },
+        { code: "MR", label: "Mauritania" },
+        { code: "MU", label: "Mauritius" },
+        { code: "MX", label: "Mexico" },
+        { code: "FM", label: "Micronesia" },
+        { code: "MD", label: "Moldova" },
+        { code: "MC", label: "Monaco" },
+        { code: "MN", label: "Mongolia" },
+        { code: "ME", label: "Montenegro" },
+        { code: "MA", label: "Morocco" },
+        { code: "MZ", label: "Mozambique" },
+        { code: "MM", label: "Myanmar" },
+        { code: "NA", label: "Namibia" },
+        { code: "NR", label: "Nauru" },
+        { code: "NP", label: "Nepal" },
+        { code: "NL", label: "Netherlands" },
+        { code: "NZ", label: "New Zealand" },
+        { code: "NI", label: "Nicaragua" },
+        { code: "NE", label: "Niger" },
+        { code: "NG", label: "Nigeria" },
+        { code: "NO", label: "Norway" },
+        { code: "OM", label: "Oman" },
+        { code: "PK", label: "Pakistan" },
+        { code: "PW", label: "Palau" },
+        { code: "PA", label: "Panama" },
+        { code: "PG", label: "Papua New Guinea" },
+        { code: "PY", label: "Paraguay" },
+        { code: "PE", label: "Peru" },
+        { code: "PH", label: "Philippines" },
+        { code: "PL", label: "Poland" },
+        { code: "PT", label: "Portugal" },
+        { code: "QA", label: "Qatar" },
+        { code: "RO", label: "Romania" },
+        { code: "RU", label: "Russia" },
+        { code: "RW", label: "Rwanda" },
+        { code: "KN", label: "Saint Kitts and Nevis" },
+        { code: "LC", label: "Saint Lucia" },
+        { code: "VC", label: "Saint Vincent and the Grenadines" },
+        { code: "WS", label: "Samoa" },
+        { code: "SM", label: "San Marino" },
+        { code: "ST", label: "Sao Tome and Principe" },
+        { code: "SA", label: "Saudi Arabia" },
+        { code: "SN", label: "Senegal" },
+        { code: "RS", label: "Serbia" },
+        { code: "SC", label: "Seychelles" },
+        { code: "SL", label: "Sierra Leone" },
+        { code: "SK", label: "Slovakia" },
+        { code: "SI", label: "Slovenia" },
+        { code: "SB", label: "Solomon Islands" },
+        { code: "SO", label: "Somalia" },
+        { code: "ZA", label: "South Africa" },
+        { code: "SS", label: "South Sudan" },
+        { code: "ES", label: "Spain" },
+        { code: "LK", label: "Sri Lanka" },
+        { code: "SD", label: "Sudan" },
+        { code: "SR", label: "Suriname" },
+        { code: "SE", label: "Sweden" },
+        { code: "CH", label: "Switzerland" },
+        { code: "SY", label: "Syria" },
+        { code: "TW", label: "Taiwan" },
+        { code: "TJ", label: "Tajikistan" },
+        { code: "TZ", label: "Tanzania" },
+        { code: "TH", label: "Thailand" },
+        { code: "TL", label: "Timor-Leste" },
+        { code: "TG", label: "Togo" },
+        { code: "TO", label: "Tonga" },
+        { code: "TT", label: "Trinidad and Tobago" },
+        { code: "TN", label: "Tunisia" },
+        { code: "TR", label: "Turkey" },
+        { code: "TM", label: "Turkmenistan" },
+        { code: "TV", label: "Tuvalu" },
+        { code: "UG", label: "Uganda" },
+        { code: "UA", label: "Ukraine" },
+        { code: "UY", label: "Uruguay" },
+        { code: "UZ", label: "Uzbekistan" },
+        { code: "VU", label: "Vanuatu" },
+        { code: "VE", label: "Venezuela" },
+        { code: "VN", label: "Vietnam" },
+        { code: "YE", label: "Yemen" },
+        { code: "ZM", label: "Zambia" },
+        { code: "ZW", label: "Zimbabwe" },
+      ];
+
+      const GENDER_OPTIONS = [
+        { value: "MALE",        label: "Male" },
+        { value: "FEMALE",      label: "Female" },
+        { value: "UNDETERMINED", label: "Unknown" },
+      ];
+
+      const STATUS_OPTIONS = [
+        { value: "PAUSED",  label: "Paused (recommended)" },
+        { value: "ENABLED", label: "Enabled" },
+      ];
+
+      const BIDDING_GOAL_OPTIONS = [
+        { value: "MAXIMIZE_CLICKS",       label: "Maximize clicks" },
+        { value: "MAXIMIZE_CONVERSIONS",  label: "Maximize conversions" },
+        { value: "TARGET_CPA",            label: "Target CPA (₹ per conversion)" },
+        { value: "TARGET_ROAS",           label: "Target ROAS (% return)" },
+      ];
+
+      const KEYWORD_MATCH_TYPES = [
+        { value: "BROAD",  label: "Broad" },
+        { value: "PHRASE", label: "Phrase" },
+        { value: "EXACT",  label: "Exact" },
+      ];
+
+      const VIDEO_FORMAT_OPTIONS = [
+        { value: "SKIPPABLE_IN_STREAM",     label: "Skippable in-stream",     desc: "Viewers can skip after 5s. Best for reach." },
+        { value: "NON_SKIPPABLE_IN_STREAM", label: "Non-skippable in-stream", desc: "Max 15s. Ensures full message delivery." },
+        { value: "BUMPER",                  label: "Bumper",                  desc: "6-second non-skippable. Best for brand awareness." },
+      ];
+
+      const APP_PLATFORM_OPTIONS = [
+        { value: "ANDROID", label: "Android" },
+        { value: "IOS",     label: "iOS" },
+      ];
+
+      // App campaign subtypes (screenshot 1)
+      const APP_SUBTYPE_OPTIONS = [
+        { value: "APP_INSTALLS",          label: "App installs",          desc: "Get new people to install your app" },
+        { value: "APP_ENGAGEMENT",        label: "App engagement",        desc: "Get existing users to take actions in your app (Minimum 50K installs required)" },
+        { value: "APP_PRE_REGISTRATION",  label: "App pre-registration",  desc: "Get new users to pre-register for your app before launch (Android only)" },
+      ];
+
+      // Video campaign goals (screenshot 2 — YouTube reach objective)
+      const VIDEO_GOAL_OPTIONS = [
+        { value: "VIDEO_VIEWS",               label: "Video views",                  desc: "Get people to watch your video ads" },
+        { value: "REACH",                     label: "Reach",                        desc: "Reach the maximum number of people" },
+        { value: "YOUTUBE_SUBSCRIPTIONS",     label: "YouTube subscriptions and engagements", desc: "Get people to subscribe and engage with your YouTube channel" },
+      ];
+
+      // Video campaign subtypes / formats (screenshot 3 — create without guidance → Video)
+      const VIDEO_SUBTYPE_OPTIONS = [
+        { value: "VIDEO_VIEWS",               label: "Video views",            desc: "Get TrueView views and engagement from people who are more likely to consider your products or brand. You only pay when someone chooses to watch your ad." },
+        { value: "EFFICIENT_REACH",           label: "Efficient reach",        desc: "Get the most reach for your budget using bumper, skippable in-stream, in-feed and Shorts ads." },
+        { value: "NON_SKIPPABLE_REACH",       label: "Non-skippable reach",    desc: "Reach people using bumper, standard non-skippable and 30-second non-skippable in-stream ads." },
+        { value: "TARGET_FREQUENCY",          label: "Target frequency",       desc: "Reach the same people multiple times using skippable in-stream, non-skippable in-stream, in-feed and Shorts ads." },
+      ];
+
+      // Which objectives require extra fields
+      const OBJECTIVE_EXTRAS = {
+        APP_PROMOTION:   { requiresAppSubtype: true, requiresAppPlatform: true, requiresAppId: true },
+        YOUTUBE_REACH:   { requiresVideoGoal: true },
+        VIDEO:           { requiresVideoSubtype: true },
+        DEMAND_GEN:      { requiresVideoSubtype: true },
+        SHOPPING:        { requiresMerchantCenterId: true },
+        PERFORMANCE_MAX: { requiresFinalUrl: true },
+      };
+
+      const destinations = Object.keys(OBJECTIVE_DESTINATIONS)
+        .flatMap((obj) => getDestinationsForObjective(obj))
+        .filter((d, i, arr) => arr.findIndex((x) => x.value === d.value) === i);
+
+      return res.json({
+        status: true,
+        schema: {
+          objectives,
+          destinations,
+          objectiveDestinations: OBJECTIVE_DESTINATIONS,
+          adTypeMap: AD_TYPE_MAP,
+          ctaMap: Object.fromEntries(
+            Object.entries(GOOGLE_CTA_MAP).map(([obj, ctas]) => [
+              obj,
+              ctas.map((v) => ({ value: v, label: GOOGLE_CTA_LABELS[v] || v })),
+            ])
+          ),
+          countryOptions:      COUNTRY_OPTIONS,
+          genderOptions:       GENDER_OPTIONS,
+          statusOptions:       STATUS_OPTIONS,
+          biddingGoalOptions:  BIDDING_GOAL_OPTIONS,
+          keywordMatchTypes:   KEYWORD_MATCH_TYPES,
+          videoFormatOptions:  VIDEO_FORMAT_OPTIONS,
+          appPlatformOptions:  APP_PLATFORM_OPTIONS,
+          appSubtypeOptions:   APP_SUBTYPE_OPTIONS,
+          videoGoalOptions:    VIDEO_GOAL_OPTIONS,
+          videoSubtypeOptions: VIDEO_SUBTYPE_OPTIONS,
+          objectiveExtras:     OBJECTIVE_EXTRAS,
+        },
+      });
+    } catch (error) {
+      logger.error(`Google getWizardSchema error: ${error.message}`);
+      return res.status(500).json({ status: false, error: "Failed to load wizard schema" });
+    }
+  }
+
   // * GET /cta-options?objective=SEARCH
   async getCtaOptions(req, res) {
     /* #swagger.tags = ['Google Ads']

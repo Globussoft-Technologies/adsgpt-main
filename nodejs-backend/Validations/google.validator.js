@@ -8,7 +8,7 @@ const GOOGLE_OBJECTIVES = [
   "SALES", "LEADS", "WEBSITE_TRAFFIC", "APP_PROMOTION", "LOCAL_STORE",
   "YOUTUBE_REACH",
   // Raw channel types (create without guidance)
-  "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX", "VIDEO",
+  "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX", "VIDEO", "DEMAND_GEN", "MULTI_CHANNEL",
 ];
 
 const updateGoogleAdStatusSchema = Joi.object({
@@ -52,8 +52,8 @@ const createCampaignSchema = Joi.object({
     .min(10000)
     .default(5000000)
     .messages({
-      "number.base": "dailyBudgetMicros must be a number",
-      "number.min": "dailyBudgetMicros must be at least 10000",
+      "number.base": "Daily budget must be a valid number.",
+      "number.min": "Daily budget must be at least ₹0.01 per day.",
     }),
 
   status: Joi.string()
@@ -88,11 +88,56 @@ const createCampaignSchema = Joi.object({
       }),
   }).optional(),
 
+  // Objective-specific extras (stored + passed to Google API where supported)
+  objectiveExtras: Joi.object({
+    // SHOPPING
+    merchantCenterId:    Joi.string().optional(),
+    productCategory:     Joi.string().optional(),
+    // APP_PROMOTION
+    appStoreUrl:         Joi.string().uri().optional(),
+    appPlatform:         Joi.string().valid("ANDROID", "IOS").optional(),
+    appId:               Joi.string().optional(),
+    appSubtype:          Joi.string().valid("APP_INSTALLS", "APP_ENGAGEMENT", "APP_PRE_REGISTRATION").optional(),
+    // LOCAL_STORE
+    storeAddress:        Joi.string().optional(),
+    locationRadius:      Joi.number().min(1).optional(),
+    // PERFORMANCE_MAX
+    assetGroupName:      Joi.string().optional(),
+    businessDescription: Joi.string().optional(),
+    finalUrlSuffix:      Joi.string().optional(),
+    finalUrl:            Joi.string().uri().optional(),
+    // VIDEO / YOUTUBE_REACH / DEMAND_GEN
+    videoGoal:           Joi.string().valid("VIDEO_VIEWS", "REACH", "YOUTUBE_SUBSCRIPTIONS").optional(),
+    videoSubtype:        Joi.string().valid("VIDEO_VIEWS", "EFFICIENT_REACH", "NON_SKIPPABLE_REACH", "TARGET_FREQUENCY").optional(),
+  }).optional(),
+
 })
   .or("adAccountId", "customerId")
   .messages({
     "object.missing": "adAccountId or customerId is required",
-  });
+  })
+  .custom((value, helpers) => {
+    const { objective, objectiveExtras } = value;
+    if (objective === "SHOPPING" && !objectiveExtras?.merchantCenterId) {
+      return helpers.error("any.custom", { message: "merchantCenterId is required for SHOPPING campaigns" });
+    }
+    if (objective === "APP_PROMOTION") {
+      if (!objectiveExtras?.appStoreUrl) {
+        return helpers.error("any.custom", { message: "appStoreUrl is required for APP_PROMOTION campaigns" });
+      }
+      try { new URL(objectiveExtras.appStoreUrl); } catch {
+        return helpers.error("any.custom", { message: "appStoreUrl must be a valid URI" });
+      }
+    }
+    if (objective === "LOCAL_STORE" && !objectiveExtras?.storeAddress) {
+      return helpers.error("any.custom", { message: "storeAddress is required for LOCAL_STORE campaigns" });
+    }
+    if (objective === "PERFORMANCE_MAX" && !objectiveExtras?.assetGroupName) {
+      return helpers.error("any.custom", { message: "assetGroupName is required for PERFORMANCE_MAX campaigns" });
+    }
+    return value;
+  })
+  .messages({ "any.custom": "{{#message}}" });
 
 const createAdGroupSchema = Joi.object({
   adAccountId: Joi.string().optional(),
@@ -116,11 +161,43 @@ const createAdGroupSchema = Joi.object({
     countries: Joi.array().items(Joi.string().length(2).uppercase()).optional(),
     ageMin: Joi.number().integer().min(18).max(65).optional(),
     ageMax: Joi.number().integer().min(18).max(65).optional(),
-    genders: Joi.array().items(Joi.string().valid("MALE", "FEMALE")).optional(),
+    genders: Joi.array().items(Joi.string().valid("MALE", "FEMALE", "UNDETERMINED")).optional(),
   }).optional(),
-}).or("adAccountId", "customerId").messages({
-  "object.missing": "adAccountId is required",
-});
+
+  // Bidding goal (SEARCH / LEADS / SALES campaigns)
+  biddingGoal: Joi.string()
+    .valid("MAXIMIZE_CLICKS", "MAXIMIZE_CONVERSIONS", "TARGET_CPA", "TARGET_ROAS")
+    .optional(),
+  targetCpaMicros: Joi.number().integer().min(1).optional(),
+  targetRoas:      Joi.number().min(0).optional(),
+
+  // Keywords (SEARCH type campaigns)
+  keywords: Joi.array().items(
+    Joi.object({
+      text:      Joi.string().min(1).required(),
+      matchType: Joi.string().valid("BROAD", "PHRASE", "EXACT").default("BROAD"),
+    })
+  ).optional(),
+
+  // Video format (DEMAND_GEN / VIDEO campaigns)
+  videoFormat: Joi.string()
+    .valid("SKIPPABLE_IN_STREAM", "NON_SKIPPABLE_IN_STREAM", "BUMPER")
+    .optional(),
+
+  // Frequency cap (DISPLAY campaigns)
+  frequencyCap: Joi.number().integer().min(1).optional(),
+}).or("adAccountId", "customerId")
+  .messages({ "object.missing": "adAccountId is required" })
+  .custom((value, helpers) => {
+    if (value.biddingGoal === "TARGET_CPA" && (value.targetCpaMicros == null)) {
+      return helpers.error("any.custom", { message: "targetCpaMicros is required when biddingGoal is TARGET_CPA" });
+    }
+    if (value.biddingGoal === "TARGET_ROAS" && (value.targetRoas == null)) {
+      return helpers.error("any.custom", { message: "targetRoas is required when biddingGoal is TARGET_ROAS" });
+    }
+    return value;
+  })
+  .messages({ "any.custom": "{{#message}}" });
 
 const adItemSchema = Joi.object({
   // SEARCH fields
@@ -137,17 +214,19 @@ const adItemSchema = Joi.object({
       "array.max": "at most 4 descriptions are allowed",
     }),
   // DISPLAY fields (max 30) / DEMAND_GEN fields (max 90)
-  headline: Joi.string().max(90).optional(),
-  description: Joi.string().max(90).optional(),
-  businessName: Joi.string().max(25).optional(),
+  headline:     Joi.string().max(90).optional().messages({ "string.max": "Headline must be 90 characters or fewer" }),
+  longHeadline: Joi.string().max(90).optional().messages({ "string.max": "Long headline must be 90 characters or fewer" }),
+  description:  Joi.string().max(90).optional().messages({ "string.max": "Description must be 90 characters or fewer. Please shorten your description and try again." }),
+  businessName: Joi.string().max(25).optional().messages({ "string.max": "Business name must be 25 characters or fewer" }),
   // Common
   finalUrl: Joi.string().required().messages({
     "any.required": "finalUrl is required in each ad",
   }),
-  imageUrl: Joi.string().optional(),
-  videoUrl: Joi.string().optional(),
-  logoUrl: Joi.string().optional(),
-  callToAction: Joi.string().optional(),
+  imageUrl:        Joi.string().optional(),
+  videoUrl:        Joi.string().optional(),
+  youtubeVideoId:  Joi.string().max(11).optional(),
+  logoUrl:         Joi.string().optional(),
+  callToAction:    Joi.string().optional(),
 });
 
 const createAdSchema = Joi.object({

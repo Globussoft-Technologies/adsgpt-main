@@ -25,6 +25,8 @@ router.get("/get-ad-group-ads", googleAdController.getAdsByAdGroupId);
 
 // ─── CTA Options ────────────────────────────────────────────────────────────────
 router.get("/cta-options", googleAdController.getCtaOptions);
+router.get("/wizard-schema", googleAdController.getWizardSchema);
+router.get("/resolve-ad", googleAdController.resolveAdForEdit);
 
 // ─── Campaigns create ──────────────────────────────────────────────────────────
 router.post("/create-campaign", googleAdController.createCampaignAPI);
@@ -38,7 +40,6 @@ router.post("/create-ad-group", googleAdController.createAdGroupAPI);
 // ─── Ads Posting ────────────────────────────────────────────────
 router.post("/upload-image", upload.single("image"), googleAdController.uploadMediaAPI);
 router.post("/ads", googleAdController.createAdAPI);
-router.post("/ads/create", upload.single("image"), googleAdController.createAd);
 router.get("/ads/:id", googleAdController.getAd);
 
 

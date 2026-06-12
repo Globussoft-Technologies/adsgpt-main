@@ -3036,28 +3036,29 @@ exports.generateCloneVideo = async (req, res) => {
       });
     }
 
-    // generatedScript is stored as creativeBrief { videoDuration, script: [...] }
-    // Python /generate expects the flat script array, not the wrapper object
-    const scriptArray = Array.isArray(video.generatedScript)
-      ? video.generatedScript
-      : video.generatedScript?.script || [];
+    // generatedScript is stored as { videoDuration, script: [...] } — send the full object
+    const scriptObject = Array.isArray(video.generatedScript)
+      ? { script: video.generatedScript }
+      : video.generatedScript || {};
 
     const pythonPayload = {
       sessionId: id,
       userId,
       watermark: plan == "8",
+      subscription: req.user?.userSubscriptionType || null,
       inputs: {
+        script: scriptObject,
         person_images: inputs.uploadedAvatars || [],
         product_img: inputs.image ? [inputs.image] : [],
         firstFrameUrl: video.generatedImage || null,
         videoPrompt: video.videoPrompt || null,
-        script: scriptArray,
         duration: inputs.duration,
         aspectRatio: inputs.aspectRatio,
         productName: inputs.productName,
         promotion: inputs.promotion || "",
+        model: inputs.model,
         voiceSampleUrl: inputs.voiceSampleUrl || null,
-        existingVoiceId: inputs.existingVoiceId || null,
+        existingVoiceId: inputs.voice || inputs.existingVoiceId || null,
       },
     };
 
@@ -3077,7 +3078,7 @@ exports.generateCloneVideo = async (req, res) => {
         await VideoGeneration.updateOne({ _id: id }, { $set: { status: "processing" } });
         return res.status(200).json({
           success: true,
-          sessionId: id,
+          sessionId: pyData.sessionId || id,
           jobId: pyData.jobId || null,
           status: pyData.status || "processing",
           message: pyData.message || "Clone yourself video generation started",
@@ -3175,6 +3176,7 @@ exports.regenerateFrameClone = async (req, res) => {
       sessionId: videoId,
       userId,
       watermark: inputs.watermark ?? false,
+      subscription: req.user?.userSubscriptionType || null,
       inputs: {
         person_images: inputs.uploadedAvatars || [],
         product_img: inputs.image ? [inputs.image] : [],
@@ -3184,7 +3186,9 @@ exports.regenerateFrameClone = async (req, res) => {
         aspectRatio: inputs.aspectRatio,
         tone: inputs.tone,
         notes: inputs.notes || "",
+        model: inputs.model,
         voiceSampleUrl: inputs.voiceSampleUrl || null,
+        existingVoiceId: inputs.voice || inputs.existingVoiceId || null,
       },
     };
 
@@ -3202,7 +3206,7 @@ exports.regenerateFrameClone = async (req, res) => {
         { $set: { generatedImage: "failed" } },
       );
 
-      const errorMsg = pyData.error || "Frame generation failed. Please try again.";
+      const errorMsg = pyData.error || pyData.message || "Unknown error";
 
       if (global.io) {
         global.io.to(userId).emit("CloneFrameRegenerate", {
