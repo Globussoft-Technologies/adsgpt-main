@@ -3178,8 +3178,10 @@ exports.regenerateFrameClone = async (req, res) => {
       watermark: inputs.watermark ?? false,
       subscription: req.user?.userSubscriptionType || null,
       inputs: {
+        type: "clone_yourself",
         person_images: inputs.uploadedAvatars || [],
         product_img: inputs.image ? [inputs.image] : [],
+        productUrl: inputs.productUrl || null,
         productName: inputs.productName,
         promotion: inputs.promotion || "",
         duration: inputs.duration,
@@ -3188,23 +3190,20 @@ exports.regenerateFrameClone = async (req, res) => {
         notes: inputs.notes || "",
         model: inputs.model,
         voiceSampleUrl: inputs.voiceSampleUrl || null,
-        existingVoiceId: inputs.voice || inputs.existingVoiceId || null,
+        existingVoiceId: inputs.existingVoiceId || null,
       },
     };
 
-    // * Call Python API — result is synchronous, emit socket immediately
     const pythonResponse = await axios.post(
       process.env.CLONE_YOURSELF_FRAME_REGENERATE_PYTHON_API,
       pythonPayload,
     );
 
     const pyData = pythonResponse.data;
-
-    if (Number(pyData.status) !== 200 || pyData.error) {
-      await VideoGeneration.findByIdAndUpdate(
-        videoId,
-        { $set: { generatedImage: "failed" } },
-      );
+    if (!pyData.success) {
+      await VideoGeneration.findByIdAndUpdate(videoId, {
+        $set: { generatedImage: "failed" },
+      });
 
       const errorMsg = pyData.error || pyData.message || "Unknown error";
 
@@ -3222,29 +3221,11 @@ exports.regenerateFrameClone = async (req, res) => {
       return res.status(400).json({ success: false, error: errorMsg });
     }
 
-    const updatedVideo = await VideoGeneration.findByIdAndUpdate(
-      videoId,
-      { $set: { generatedImage: pyData.image } },
-      { new: true, lean: true },
-    );
-
-    if (global.io) {
-      global.io.to(userId).emit("CloneFrameRegenerate", {
-        _id: videoId,
-        userId,
-        type: "image",
-        status: 200,
-        image: pyData.image,
-        generatedImage: pyData.image,
-      });
-    }
-
     return res.status(200).json({
       success: true,
       sessionId: videoId,
       userId,
-      image: pyData.image,
-      data: updatedVideo,
+      message: pyData.message,
     });
   } catch (err) {
     console.error("Error in regenerateFrameClone:", err);
