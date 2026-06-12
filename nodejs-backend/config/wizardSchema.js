@@ -773,18 +773,16 @@ const CELLS = {
     APP: {
       group: "single",
       adSet: {
-        // Meta UI: OFFSITE_CONVERSIONS (default) + LINK_CLICKS + REACH.
-        // OFFSITE_CONVERSIONS optimises against in-app events (tracked
-        // via the app's Meta SDK / app events) rather than form
-        // submissions — that's why Meta relabels it "app events" here.
-        optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "REACH"],
-        defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
-        // Cell-specific label override — Meta swaps the OFFSITE_CONVERSIONS
-        // copy to "app events" because that's what the goal optimises on
-        // for an in-app destination.
-        optimizationGoalLabels: {
-          OFFSITE_CONVERSIONS: "Maximise number of app events",
-        },
+        // OFFSITE_CONVERSIONS was retired from this cell. Meta requires a
+        // Pixel + custom_event_type alongside it for app destinations
+        // (subcode 2446759 — "When setting post conversion for the
+        // Conversions objective, you must specify the pixel_id and
+        // custom_event_type"). Without an MMP integration to forward
+        // in-app events, the cell ships without a pixel and the goal is
+        // unfulfillable. Same constraint we documented on OUTCOME_APP_PROMOTION
+        // — only LINK_CLICKS + REACH are universally accepted.
+        optimizationGoals: ["LINK_CLICKS", "REACH"],
+        defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "app",

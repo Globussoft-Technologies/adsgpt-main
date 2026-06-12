@@ -1642,6 +1642,7 @@ const OBJECTIVE_DESCRIPTIONS = {
   OUTCOME_TRAFFIC: 'Send people to a destination — site, app, Messenger, profile, or calls.',
   OUTCOME_LEADS: 'Collect leads via Instant Forms, Messenger, calls, Instagram, WhatsApp, or your app.',
   OUTCOME_APP_PROMOTION: 'Drive installs to a single store — Apple App Store or Google Play.',
+  OUTCOME_ENGAGEMENT: 'Drive messages, video views, calls, post engagement, or website visits.',
 };
 
 // ─── Step: Conversion Location ──────────────────────────────────────────────
