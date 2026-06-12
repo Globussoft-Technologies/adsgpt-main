@@ -157,7 +157,8 @@ export default function GoogleAdsDashboard() {
   const TABS = [
     { id: 'analytics', label: 'Analytics', icon: TrendingUp },
     { id: 'campaigns', label: 'Campaigns', icon: Layers },
-    { id: 'audit',     label: 'Audit',     icon: ClipboardList },
+    
+    // { id: 'audit',     label: 'Audit',     icon: ClipboardList },
   ];
 
   return (

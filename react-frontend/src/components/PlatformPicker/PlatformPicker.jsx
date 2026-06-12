@@ -29,6 +29,7 @@ const PlatformPicker = ({
   metaDestination,
   title = 'Choose Your Ad Platform',
   subtitle = 'Select where you want to launch your ads',
+  googleComingSoon = false,
 }) => {
   const navigate = useNavigate();
   const [metaConnected, setMetaConnected] = useState(false);
@@ -117,7 +118,7 @@ const PlatformPicker = ({
       name: 'Google Ads',
       description:
         'Reach customers across Google Search, YouTube, and the web',
-      enabled: true,
+      enabled: !googleComingSoon,
       logo: (
         <div className="flex items-center gap-3">
           <img
@@ -166,7 +167,9 @@ const PlatformPicker = ({
         <div className="mt-10 grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {platforms.map((platform, index) => {
             const isMetaPlatform = platform.id === 'meta';
-            const isGooglePlatform = platform.id === 'google';
+            // When Google is "Coming Soon" (Autopilot), treat it like an
+            // inactive card — no connect overlay, no navigation.
+            const isGooglePlatform = platform.id === 'google' && !googleComingSoon;
             const isHovered = hoveredCard === platform.id;
             const isConnected = isMetaPlatform ? metaConnected : isGooglePlatform ? googleConnected : false;
             const isChecking = isMetaPlatform ? checkingMeta : isGooglePlatform ? checkingGoogle : false;

@@ -169,7 +169,8 @@ export default function MetaAdsDashboard() {
 
   const TABS = [
     { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-    { id: 'audit', label: 'Audit', icon: ClipboardList },
+   
+    // { id: 'audit', label: 'Audit', icon: ClipboardList },
     { id: 'campaigns', label: 'Campaigns', icon: Layers },
     // Leads tab ships alongside the V2 wizard's Instant-Form features —
     // gated on the same FEATURE_LEADS_TAB flag so it only appears

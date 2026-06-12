@@ -12,6 +12,7 @@ const AutopilotHomePage = () => (
     metaDestination="/autopilot/meta"
     title="Put your ads on Autopilot"
     subtitle="Pick the platform you want Autopilot to manage"
+    googleComingSoon
   />
 );
 
