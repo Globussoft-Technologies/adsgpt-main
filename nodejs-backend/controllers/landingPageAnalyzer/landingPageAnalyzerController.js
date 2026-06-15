@@ -16,6 +16,23 @@ function normalizeUrl(rawUrl) {
 // Python replies instantly with an acknowledgment (not the result); on success we
 // flip the doc to `processing` and tell FE the scan has started.
 exports.createAnalysis = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer']
+    #swagger.summary = 'Start (or relaunch) a landing-page analysis'
+    #swagger.description = 'Creates or reuses the analysis doc for this URL, triggers the python scan, and returns the sessionId the FE opens the live result view with. Dedupes by (user, url).'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.requestBody = {
+      required: true,
+      content: { "application/json": { schema: {
+        type: 'object',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', example: 'https://adsgpt.io' },
+          forceRefresh: { type: 'boolean', example: false, description: 'Relaunch only — adds X-Force-Refresh so python bypasses its 24h cache.' }
+        }
+      } } }
+    }
+  */
   let analysis;
   let isNew = false;
   try {
@@ -118,6 +135,14 @@ exports.createAnalysis = async (req, res) => {
 // screenshot + headline score from the (otherwise excluded) result blob so the
 // cards can render a thumbnail + score. Use GET :id for the full report.
 exports.getAnalyses = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer']
+    #swagger.summary = 'List the user\'s analyses (paginated)'
+    #swagger.description = 'Newest-first, lean projection (incl. screenshot + headline score) for the cards. Returns { data, page, limit, total, hasMore }.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.parameters['page'] = { in: 'query', schema: { type: 'integer', default: 1 } }
+    #swagger.parameters['limit'] = { in: 'query', description: 'Max 50.', schema: { type: 'integer', default: 12 } }
+  */
   try {
     const userId = req.user.user_id;
     const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
@@ -157,6 +182,13 @@ exports.getAnalyses = async (req, res) => {
 // Returns one full analysis (incl. result + lastEvent). Scoped to the owner so a
 // user can't read someone else's analysis by guessing an id.
 exports.getAnalysisById = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer']
+    #swagger.summary = 'Get one full analysis by id'
+    #swagger.description = 'Returns the full doc (result + lastEvent), owner-scoped.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.parameters['id'] = { in: 'path', required: true, description: 'The analysis _id (sessionId).', schema: { type: 'string' } }
+  */
   try {
     const userId = req.user.user_id;
     const { id } = req.params;
@@ -194,6 +226,31 @@ exports.getAnalysisById = async (req, res) => {
 // Either way we notify the open FE so it can render the report or the error.
 // No JWT — trusted by sessionId.
 exports.saveResult = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer (Webhooks)']
+    #swagger.summary = 'Python webhook — deliver the final report'
+    #swagger.description = 'Called by python when the scan finishes. Stores the report on success; deletes the doc on failure (success:false or a non-empty error). Emits the result to the user socket room. Secured by the x-secret-key header (no JWT).'
+    #swagger.requestBody = {
+      required: true,
+      content: { "application/json": { schema: {
+        type: 'object',
+        required: ['sessionId', 'success'],
+        properties: {
+          sessionId: { type: 'string', example: '6a2bf50327a6eb1005f0fb6f' },
+          success: { type: 'boolean', example: true },
+          error: { type: 'string', example: '' },
+          url: { type: 'string', example: 'https://adsgpt.io' },
+          screenshot_url: { type: 'string' },
+          overall: { type: 'object' },
+          dimensions: { type: 'array', items: { type: 'object' } },
+          sections: { type: 'array', items: { type: 'object' } },
+          technical_seo: { type: 'array', items: { type: 'object' } },
+          performance: { type: 'object' },
+          top_fixes: { type: 'array', items: { type: 'string' } }
+        }
+      } } }
+    }
+  */
   try {
     logger.info(`Request body of Python: ${JSON.stringify(req.body)}`);
     // Pull sessionId out — it's our routing key, not part of the stored report.
@@ -260,6 +317,25 @@ exports.saveResult = async (req, res) => {
 // (→ lastEvent) so a page reload can resume, then push it to the FE viewing this
 // analysis via the socket room keyed by sessionId. No JWT — trusted by sessionId.
 exports.saveLiveEvent = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer (Webhooks)']
+    #swagger.summary = 'Python webhook — stream a live progress event'
+    #swagger.description = 'Called by python during the scan. Persists everything except sessionId into lastEvent and emits it to the user socket room. progress:-1 signals an error event. Secured by the x-secret-key header (no JWT).'
+    #swagger.requestBody = {
+      required: true,
+      content: { "application/json": { schema: {
+        type: 'object',
+        required: ['sessionId'],
+        properties: {
+          sessionId: { type: 'string', example: '6a2bf50327a6eb1005f0fb6f' },
+          event: { type: 'string', example: 'SCRAPING_START' },
+          message: { type: 'string', example: 'Connecting to page...' },
+          progress: { type: 'integer', example: 15 },
+          image: { type: 'string', example: '' }
+        }
+      } } }
+    }
+  */
   try {
     // Pull sessionId out (routing key); everything else is the live event we store.
 
