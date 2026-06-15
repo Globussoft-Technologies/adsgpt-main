@@ -30,7 +30,9 @@ import {
 } from 'lucide-react';
 import {
   createGoogleCampaign,
+  updateGoogleCampaign,
   createGoogleAdGroup,
+  updateGoogleAdGroup,
   createGoogleAd,
   uploadGoogleImage,
   getGoogleWizardSchema,
@@ -115,6 +117,9 @@ function buildSteps(mode, form = {}, schema = null) {
 function seedCreated(mode, context) {
   if (mode === 'create-adgroup') return { campaignId: context?.campaignId };
   if (mode === 'create-ad')      return { campaignId: context?.campaignId, adGroupId: context?.adGroupId };
+  if (mode === 'edit-campaign')  return { campaignId: context?.campaignId };
+  if (mode === 'edit-adgroup')   return { campaignId: context?.campaignId, adGroupId: context?.adGroupId };
+  if (mode === 'edit-ad')        return { campaignId: context?.campaignId, adGroupId: context?.adGroupId };
   return {};
 }
 
@@ -1297,7 +1302,17 @@ export default function CreateCampaignWizard({
       let adGroupId  = created.adGroupId;
 
       // Step 1 — Campaign
-      if (!campaignId && ['create-full', 'edit-campaign'].includes(mode)) {
+      if (mode === 'edit-campaign') {
+        await updateGoogleCampaign({
+          adAccountId,
+          campaignId,
+          name:              form.campaignName,
+          dailyBudgetMicros: toMicros(form.dailyBudget),
+          status:            form.status || undefined,
+          startTime:         form.startDate || undefined,
+          endTime:           form.endDate   || undefined,
+        });
+      } else if (!campaignId && mode === 'create-full') {
         const res = await createGoogleCampaign({
           adAccountId,
           name:              form.campaignName,
@@ -1330,7 +1345,16 @@ export default function CreateCampaignWizard({
 
       // Step 2 — Ad Group
       const isPmax = effectiveChannel(form) === 'PERFORMANCE_MAX';
-      if (!adGroupId && !isPmax && ['create-full', 'create-adgroup', 'edit-adgroup'].includes(mode)) {
+      if (mode === 'edit-adgroup') {
+        await updateGoogleAdGroup({
+          adAccountId,
+          adGroupId,
+          campaignId,
+          name:         form.adGroupName,
+          cpcBidMicros: form.cpcBid ? toMicros(form.cpcBid) : undefined,
+          status:       form.status || undefined,
+        });
+      } else if (!adGroupId && !isPmax && ['create-full', 'create-adgroup'].includes(mode)) {
         const targeting = {};
         if (form.ageMin) targeting.ageMin = Number(form.ageMin);
         if (form.ageMax) targeting.ageMax = Number(form.ageMax);

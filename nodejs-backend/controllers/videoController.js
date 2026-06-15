@@ -3164,13 +3164,21 @@ exports.regenerateFrameClone = async (req, res) => {
       return res.status(400).json({ success: false, error: "Not enough credits" });
     }
 
-    const video = await VideoGeneration.create({
-      userId,
-      inputs: value,
-      status: "pending",
-    });
+    const existingSessionId = req.body.sessionId || req.body.videoId;
+    if (!existingSessionId) {
+      return res.status(400).json({ success: false, error: "sessionId is required" });
+    }
 
-    const videoId = video._id.toString();
+    const existing = await VideoGeneration.findByIdAndUpdate(
+      existingSessionId,
+      { $set: { inputs: value, status: "pending", generatedImage: null } },
+      { new: true }
+    );
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Session not found" });
+    }
+
+    const videoId = existingSessionId;
 
     const pythonPayload = {
       sessionId: videoId,

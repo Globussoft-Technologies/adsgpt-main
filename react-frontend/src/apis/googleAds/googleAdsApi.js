@@ -151,8 +151,22 @@ export const createGoogleCampaign = async (body) => {
   return data;
 };
 
+export const updateGoogleCampaign = async (body) => {
+  const { data } = await axios.patch(`${BASE_URL}/adsgpt/google-ads/update-campaign`, body, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
 export const createGoogleAdGroup = async (body) => {
   const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/create-ad-group`, body, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const updateGoogleAdGroup = async (body) => {
+  const { data } = await axios.patch(`${BASE_URL}/adsgpt/google-ads/update-ad-group`, body, {
     headers: authHeaders(),
   });
   return data;

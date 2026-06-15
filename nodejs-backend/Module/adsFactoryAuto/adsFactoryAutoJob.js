@@ -105,7 +105,8 @@ const MetaTargetSchema = new mongoose.Schema(
 // Root document — one job = one recurring ad-creation + posting task
 const AdsFactoryJobSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true, index: true }, // job owner
+    userId:     { type: String, required: true, index: true }, // job owner
+    campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign", required: true, index: true },
 
     // When and how often to run — maps 1:1 to the UI Schedule modal
     schedule: { type: ScheduleSchema, required: true },

@@ -30,11 +30,13 @@ router.get("/resolve-ad", googleAdController.resolveAdForEdit);
 
 // ─── Campaigns create ──────────────────────────────────────────────────────────
 router.post("/create-campaign", googleAdController.createCampaignAPI);
+router.patch("/update-campaign", googleAdController.updateCampaignAPI);
 router.delete("/delete-campaign", googleAdController.deleteCampaignAPI);
 
 
 // ─── Ad Groups create ──────────────────────────────────────────────────────────
 router.post("/create-ad-group", googleAdController.createAdGroupAPI);
+router.patch("/update-ad-group", googleAdController.updateAdGroupAPI);
 
 
 // ─── Ads Posting ────────────────────────────────────────────────

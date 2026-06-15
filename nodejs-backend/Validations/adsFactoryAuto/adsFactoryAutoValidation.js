@@ -17,7 +17,7 @@ const scheduleSchema = Joi.object({
   customFrequency: Joi.when("frequency", {
     is:        "custom",
     then:      customFrequencySchema.required(),
-    otherwise: Joi.forbidden(),
+    otherwise: customFrequencySchema.optional(),
   }),
 }).custom((value, helpers) => {
   if (value.startDate && value.endDate && new Date(value.endDate) <= new Date(value.startDate)) {

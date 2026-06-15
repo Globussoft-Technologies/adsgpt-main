@@ -2304,7 +2304,141 @@ class GoogleAdController {
     }
   }
 
-  // * 12. GET factory campaigns picker
+  // * 12. PATCH update campaign (name, budget, dates, status)
+  async updateCampaignAPI(req, res) {
+    try {
+      const { adAccountId, campaignId, name, dailyBudgetMicros, status, startTime, endTime } = req.body;
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!campaignId)  return res.status(400).json({ status: false, error: "campaignId is required" });
+
+      const userId = req.user.user_id;
+      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
+      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const mccId = loginCustomerId;
+      const customerId = sanitizeId(adAccountId);
+      const campaignResource = `customers/${customerId}/campaigns/${sanitizeId(campaignId)}`;
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+
+      const updateBody = { resource_name: campaignResource };
+      const updateFields = [];
+
+      if (name) { updateBody.name = name; updateFields.push("name"); }
+      if (status) {
+        const statusMap = { ENABLED: 2, PAUSED: 3, REMOVED: 4 };
+        updateBody.status = statusMap[status] || 3;
+        updateFields.push("status");
+      }
+      if (startTime) {
+        const sd = dayjs(startTime);
+        const today = dayjs();
+        updateBody.start_date = (sd.isBefore(today) ? today : sd).format("YYYYMMDD");
+        updateFields.push("start_date");
+      }
+      if (endTime) {
+        updateBody.end_date = dayjs(endTime).format("YYYYMMDD");
+        updateFields.push("end_date");
+      }
+
+      if (updateFields.length > 0) {
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations: [{ campaignOperation: { update: updateBody, update_mask: updateFields.join(",") } }] },
+          { headers }
+        );
+      }
+
+      // Budget update requires separate campaignBudget mutate
+      if (dailyBudgetMicros) {
+        const customer = getCustomerClient(client, adAccountId, loginCustomerId, refreshToken);
+        // Fetch existing budget resource name
+        const campaignRows = await customer.query(
+          `SELECT campaign_budget.resource_name FROM campaign WHERE campaign.resource_name = '${campaignResource}' LIMIT 1`
+        );
+        const budgetResource = campaignRows?.[0]?.campaign_budget?.resource_name;
+        if (budgetResource) {
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            {
+              mutateOperations: [{
+                campaignBudgetOperation: {
+                  update: { resource_name: budgetResource, amount_micros: String(dailyBudgetMicros) },
+                  update_mask: "amount_micros",
+                },
+              }],
+            },
+            { headers }
+          );
+        }
+      }
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Campaign updated successfully", campaignId });
+    } catch (error) {
+      const m = formatGoogleError(error);
+      logger.error(`Google update campaign error: ${m.message}`);
+      return res.status(error.response?.status || 500).json({ status: false, error: m.message, reason: m.reason });
+    }
+  }
+
+  // * 13. PATCH update ad group (name, cpc bid, status)
+  async updateAdGroupAPI(req, res) {
+    try {
+      const { adAccountId, adGroupId, campaignId, name, cpcBidMicros, status } = req.body;
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!adGroupId)   return res.status(400).json({ status: false, error: "adGroupId is required" });
+
+      const userId = req.user.user_id;
+      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
+      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
+      const mccId = loginCustomerId;
+      const customerId = sanitizeId(adAccountId);
+      const adGroupResource = `customers/${customerId}/adGroups/${sanitizeId(adGroupId)}`;
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+
+      const updateBody = { resource_name: adGroupResource };
+      const updateFields = [];
+
+      if (name) { updateBody.name = name; updateFields.push("name"); }
+      if (cpcBidMicros) { updateBody.cpc_bid_micros = String(cpcBidMicros); updateFields.push("cpc_bid_micros"); }
+      if (status) {
+        const statusMap = { ENABLED: 2, PAUSED: 3, REMOVED: 4 };
+        updateBody.status = statusMap[status] || 3;
+        updateFields.push("status");
+      }
+
+      if (updateFields.length > 0) {
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations: [{ adGroupOperation: { update: updateBody, update_mask: updateFields.join(",") } }] },
+          { headers }
+        );
+      }
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Ad group updated successfully", adGroupId });
+    } catch (error) {
+      const m = formatGoogleError(error);
+      logger.error(`Google update ad group error: ${m.message}`);
+      return res.status(error.response?.status || 500).json({ status: false, error: m.message, reason: m.reason });
+    }
+  }
+
   // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
   // * Delete campaign (sets status to REMOVED)
