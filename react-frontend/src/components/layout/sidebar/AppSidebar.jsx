@@ -8,6 +8,7 @@ import {
   History,
   Image,
   Library,
+  ScanSearch,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
@@ -78,6 +79,13 @@ const navigationItems = [
     activeIcon: brandIQDarkLogoActive,
     label: 'BrandIQ',
     link: '/brandiq',
+  },
+   {
+    id: 'landing-analyzer',
+    label: 'Analyzer',
+    link: '/landing-page-analyzer',
+    lucideIcon: ScanSearch,
+    badge: 'NEW',
   },
   {
     id: 'meta-ads',

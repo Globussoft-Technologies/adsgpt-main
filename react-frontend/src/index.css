@@ -274,6 +274,51 @@ html.theme-changing *::after {
   }
 }
 
+/* Landing Page Analyzer — live monitor animations. */
+@keyframes lpa-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+@keyframes lpa-scan {
+  0% {
+    top: -90px;
+  }
+  100% {
+    top: 100%;
+  }
+}
+@keyframes lpa-shim {
+  0% {
+    background-position: -450px 0;
+  }
+  100% {
+    background-position: 450px 0;
+  }
+}
+.lpa-pulse {
+  animation: lpa-pulse 1.4s ease-in-out infinite;
+}
+.lpa-scan {
+  animation: lpa-scan 2.6s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+.lpa-shim {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 900px 100%;
+  animation: lpa-shim 1.5s linear infinite;
+}
+
 .glow-box {
   border-radius: 16px;
   padding: 2rem;

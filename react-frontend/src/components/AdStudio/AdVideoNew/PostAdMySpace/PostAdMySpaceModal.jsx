@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { fetchAdAccounts } from '@/store/actions/adFactoryNew/adFactoryActions';
+import {
+  fetchAdAccounts,
+  fetchGoogleAdAccounts,
+} from '@/store/actions/adFactoryNew/adFactoryActions';
 import FbConnectStep from '@/components/AdFactory/PostAd/FbConnectStep';
 import MySpaceSelectStep from './MySpaceSelectStep';
 import MySpaceComposeStep from './MySpaceComposeStep';
+import GoogleSelectStep from './GoogleSelectStep';
+import GoogleComposeStep from './GoogleComposeStep';
 import {
   POST_AD_PENDING_KEY,
   savePendingPostAd,
@@ -18,13 +23,18 @@ const resolveMediaUrl = (url) => {
   return url.startsWith('http') ? url : `${S3_BASE_URL}${url}`;
 };
 
-// MySpace → Meta Post Ad modal. Step machine:
+// MySpace → Post Ad modal. Step machine:
 //   connect → select → compose
 //
-// `autoAdvance` (set only when restoring after an FB OAuth round-trip)
-// is honored ONCE — the moment fbUser is known to be connected, we
-// jump to `select`. After that, the user can freely use the Back
-// button to return to `connect` without the auto-advance re-firing.
+// `platform` is set when the user clicks "Post Ad" on either the
+// Facebook or Google card — routes step 2/3 to the right component
+// (MySpaceSelectStep + MySpaceComposeStep for Meta, GoogleSelectStep +
+// GoogleComposeStep for Google).
+//
+// `autoAdvance` (set only when restoring after an OAuth round-trip)
+// is honored ONCE — the moment we can infer which platform just
+// connected we jump to `select`. Manual Back-to-platforms isn't
+// overridden after that.
 export default function PostAdMySpaceModal({
   open,
   onOpenChange,
@@ -33,55 +43,85 @@ export default function PostAdMySpaceModal({
 }) {
   const dispatch = useDispatch();
   const fbUser = useSelector((state) => state.adFactoryNew?.fbUser);
+  const googleUser = useSelector((state) => state.adFactoryNew?.googleUser);
   const isFbConnected = Boolean(fbUser?.facebookId && fbUser?._id);
+  const isGoogleConnected = Boolean(googleUser?._id);
 
   const [step, setStep] = useState('connect');
+  const [platform, setPlatform] = useState(null); // 'facebook' | 'google' | null
   const [selection, setSelection] = useState(null);
-  // One-shot flag: arms when the modal opens via autoAdvance and isn't
-  // yet connected (so we wait for Redux to populate), disarms the
-  // moment we advance — so manual Back-to-platforms isn't overridden.
+  // One-shot flag: arms when the restored flow can't yet infer which
+  // platform just connected (Redux race after page reload). Disarms
+  // the moment we advance.
   const [pendingAutoAdvance, setPendingAutoAdvance] = useState(false);
 
-  // On every open: reset state, prime ad-accounts, persist payload so an
-  // OAuth redirect mid-flow can restore the modal on page reload.
+  // Pick which platform's `select` step the restored flow lands on.
+  // Exactly-one-connected = clear winner; both-connected = ambiguous,
+  // so we stay on connect step and let the user pick.
+  const inferPlatformForAutoAdvance = () => {
+    if (isFbConnected && !isGoogleConnected) return 'facebook';
+    if (isGoogleConnected && !isFbConnected) return 'google';
+    return null;
+  };
+
+  // On every open: reset state, prime whichever ad-account list is
+  // available, persist payload so an OAuth redirect mid-flow can
+  // restore the modal on page reload.
   useEffect(() => {
     if (!open) return;
     setSelection(null);
-    if (autoAdvance && isFbConnected) {
+
+    const inferred = autoAdvance ? inferPlatformForAutoAdvance() : null;
+    if (autoAdvance && inferred) {
+      setPlatform(inferred);
       setStep('select');
       setPendingAutoAdvance(false);
     } else {
+      setPlatform(null);
       setStep('connect');
-      // Only arm if we couldn't advance immediately — i.e. we're in the
-      // restored flow but fbUser hasn't populated yet.
-      setPendingAutoAdvance(autoAdvance && !isFbConnected);
+      // Only arm if we're in the restored flow but neither user
+      // populated yet — the second effect below resolves it.
+      setPendingAutoAdvance(autoAdvance && !inferred);
     }
+
     if (isFbConnected && fbUser?._id) {
       dispatch(fetchAdAccounts(fbUser._id));
     }
+    if (isGoogleConnected && googleUser?._id) {
+      dispatch(fetchGoogleAdAccounts(googleUser._id));
+    }
     if (payload) savePendingPostAd(payload);
-  }, [open, autoAdvance, isFbConnected, fbUser?._id, dispatch, payload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoAdvance, isFbConnected, isGoogleConnected, fbUser?._id, googleUser?._id, dispatch, payload]);
 
-  // Honor a pending auto-advance once Redux populates fbUser.
+  // Honor a pending auto-advance once Redux populates whichever user.
   useEffect(() => {
-    if (open && pendingAutoAdvance && step === 'connect' && isFbConnected) {
+    if (!open || !pendingAutoAdvance || step !== 'connect') return;
+    const inferred = inferPlatformForAutoAdvance();
+    if (inferred) {
+      setPlatform(inferred);
       setStep('select');
       setPendingAutoAdvance(false);
     }
-  }, [open, pendingAutoAdvance, step, isFbConnected]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pendingAutoAdvance, step, isFbConnected, isGoogleConnected]);
 
   const handleSelectPlatform = (platformKey) => {
     if (platformKey === 'facebook' && isFbConnected) {
+      setPlatform('facebook');
+      setStep('select');
+    } else if (platformKey === 'google' && isGoogleConnected) {
+      setPlatform('google');
       setStep('select');
     }
-    // Google is phase 2 — leave the connect step rendered so the user can
-    // still kick the OAuth redirect from FbConnectStep itself.
+    // If not yet connected for that platform, FbConnectStep itself
+    // kicks the OAuth redirect — nothing to do here.
   };
 
   // Wrap onOpenChange so manual dismissal clears the persisted payload.
-  // (We do NOT clear on FB-OAuth redirect — the whole page tears down
-  // before any close handler fires, which is exactly what lets the next
-  // mount restore the modal.)
+  // We do NOT clear on OAuth redirect — the whole page tears down
+  // before any close handler fires, which is exactly what lets the
+  // next mount restore the modal.
   const handleOpenChange = (next) => {
     if (!next) clearPendingPostAd();
     onOpenChange(next);
@@ -100,6 +140,9 @@ export default function PostAdMySpaceModal({
   const showCompose = step === 'compose';
   const showStepperSteps = step !== 'connect';
 
+  const SelectComponent = platform === 'google' ? GoogleSelectStep : MySpaceSelectStep;
+  const ComposeComponent = platform === 'google' ? GoogleComposeStep : MySpaceComposeStep;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -117,8 +160,12 @@ export default function PostAdMySpaceModal({
             {showStepperSteps && (
               <>
                 <div className={showSelect ? 'block' : 'hidden'}>
-                  <MySpaceSelectStep
-                    onBack={() => setStep('connect')}
+                  <SelectComponent
+                    payload={resolvedPayload}
+                    onBack={() => {
+                      setPlatform(null);
+                      setStep('connect');
+                    }}
                     onNext={(sel) => {
                       setSelection(sel);
                       setStep('compose');
@@ -126,7 +173,7 @@ export default function PostAdMySpaceModal({
                   />
                 </div>
                 <div className={showCompose ? 'block' : 'hidden'}>
-                  <MySpaceComposeStep
+                  <ComposeComponent
                     payload={resolvedPayload}
                     selection={selection}
                     onBack={() => setStep('select')}

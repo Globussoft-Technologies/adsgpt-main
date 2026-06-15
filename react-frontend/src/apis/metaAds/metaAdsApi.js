@@ -97,6 +97,21 @@ export const postAdV2 = async (payload) => {
   return data;
 };
 
+// Cell-aware Google ad creation. Backend auto-detects the ad type
+// (SEARCH / DISPLAY / DEMAND_GEN) from the campaign's channelType using
+// the `campaignId` in the body. `adAccountId` rides in the body (NOT
+// the URL). Powers MySpace → Post Ad for Google.
+// For video ads where the body carries `videoUrl` (direct MP4), the
+// backend uploads to YouTube + polls — request can hang up to ~2min.
+export const postGoogleAd = async (payload) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/google-ads/ads`,
+    payload,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 export const updateAdStatus = async (level,id,status) => {
   const { data } = await axios.patch(`${BASE_URL}/adsgpt/meta-ads/update-status`, { level,id, status }, {
     headers: getAuthHeaders(),

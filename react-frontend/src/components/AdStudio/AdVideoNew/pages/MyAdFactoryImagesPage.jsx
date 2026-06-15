@@ -319,18 +319,24 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
       )}
 
       <Masonry breakpointCols={breakpointColumnsObj} className="flex w-full gap-2" columnClassName="flex flex-col gap-2">
-        {items.map((item, index) => (
-          <AdFactoryImageCard
-            key={`${item.campaignId || 'c'}-${item.url || 'noimg'}-${index}`}
-            item={item}
-            isSelected={selectedImages.includes(item.url)}
-            onSelect={() => toggleSelection(item.url)}
-            onFullscreen={setFullscreenUrl}
-          />
-        ))}
+        {items
+          // The backend occasionally returns rows with a null status
+          // (legacy / partial records). They have no meaningful UI state —
+          // skip them entirely instead of rendering the generic error card.
+          // success + generating + error keep rendering exactly as before.
+          .filter((item) => item?.status != null)
+          .map((item, index) => (
+            <AdFactoryImageCard
+              key={`${item.campaignId || 'c'}-${item.url || 'noimg'}-${index}`}
+              item={item}
+              isSelected={selectedImages.includes(item.url)}
+              onSelect={() => toggleSelection(item.url)}
+              onFullscreen={setFullscreenUrl}
+            />
+          ))}
       </Masonry>
 
-      {items.length === 0 && !isLoading && (
+      {items.filter((item) => item?.status != null).length === 0 && !isLoading && (
         <div className="flex h-full w-full items-center justify-center text-gray-400">No images found.</div>
       )}
       {isLoading && (

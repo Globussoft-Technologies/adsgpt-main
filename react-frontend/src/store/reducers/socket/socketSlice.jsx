@@ -65,6 +65,18 @@ import { fetchAutomationStats } from '@/store/actions/adFactoryAutomation/adFact
 import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 let socket = null;
+// Landing Page Analyzer — per-session buffer of live events + result. Filled by
+// the global socket handler below (attached at init), so a result page that
+// mounts AFTER some events already fired can replay them instead of missing them.
+const lpaBuffer = new Map(); // sessionId -> { events: [...], result: object|null }
+export const getLpaSession = (sessionId) =>
+  lpaBuffer.get(sessionId) || { events: [], result: null };
+// Reset a session's buffer — used on Relaunch so the old completed result
+// doesn't get replayed onto the fresh re-scan.
+export const clearLpaSession = (sessionId) => {
+  if (sessionId) lpaBuffer.set(sessionId, { events: [], result: null });
+};
+
 const notifiedVideoIds = new Set();
 const notifiedSessionIds = new Set();
 const notifiedImageIds = new Set();
@@ -163,6 +175,23 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     socket.on('credits', (data) => {
       dispatch(setCredits(data));
+    });
+
+    // Landing Page Analyzer live stream. Buffer per session (timing-safe) and
+    // relay to the open result page via the app emitter. The backend emits this
+    // to the user's room for both progress events (type:'event') and the final
+    // report (type:'result').
+    socket.on('landingPageAnalysisEvent', (data) => {
+      if (data?.sessionId) {
+        const buf = lpaBuffer.get(data.sessionId) || { events: [], result: null };
+        if (data.type === 'event' && data.lastEvent) {
+          buf.events = [...buf.events, { ...data.lastEvent, _t: Date.now() }];
+        } else if (data.type === 'result') {
+          buf.result = data.result;
+        }
+        lpaBuffer.set(data.sessionId, buf);
+      }
+      emitter.emit('lpa:socket', data);
     });
 
     socket.on(`chatResponse`, (data) => {
