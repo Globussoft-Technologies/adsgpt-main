@@ -54,13 +54,25 @@ test.describe('Ad Studio — Ad Copy', () => {
     await page.locator('button#tour_copy_prompt_by_mic').click()
 
     // ============================================================
+    // CONFIRM PROMPT WAS SENT
+    // ============================================================
+    // Once the prompt fires, our text appears as a user bubble. Catching
+    // this gives a clean error if the submit selector silently missed.
+    const userBubble = page.locator('.flex.justify-end.gap-3').first()
+    await expect(
+      userBubble,
+      'user prompt bubble did not appear — submit click may not have fired'
+    ).toBeVisible({ timeout: 10_000 })
+
+    // ============================================================
     // WAIT FOR COMPLETION
     // ============================================================
-    // The Regenerate button is rendered with each bot message ONLY after
-    // `conversation.complete === true`. Waiting for it is the cleanest
-    // "streaming finished" signal.
+    // The `.chat_actions_container` div renders inside the bot message ONLY
+    // when `conversation.complete === true` (see ChatInterface.jsx:177-204).
+    // Those "buttons" are styled <span>s inside ShadcnTooltips, so we can't
+    // target by role — the wrapper class is the stable signal.
     await expect(
-      page.getByRole('button', { name: /regenerate/i }).first()
+      page.locator('.chat_actions_container').first()
     ).toBeVisible({ timeout: 75_000 })
 
     // ============================================================
