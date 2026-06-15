@@ -4,3 +4,6 @@ playwright-report/
 playwright/.cache/
 .auth/
 *.log
+.env
+.env.local
+.env.*.local

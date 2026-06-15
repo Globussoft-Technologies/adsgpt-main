@@ -1,5 +1,10 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test'
+import dotenv from 'dotenv'
+
+// Load .env from the e2e/ folder so local runs don't need shell exports.
+// CI provides these via GitHub secrets, so the file is optional there.
+dotenv.config({ path: '.env' })
 
 // Hard-fail at config-load if a required URL is missing — we never want the
 // suite to silently fall back to localhost when running in CI.

@@ -96,15 +96,52 @@ npm run report             # open the HTML report after a run
 - Open a trace with `npx playwright show-trace path/to/trace.zip` — full
   time-travel debugging including DOM snapshots and network.
 
+## Layout
+
+```
+e2e/
+├── tests/
+│   ├── setup/           one-time login that produces .auth/frontend.json
+│   ├── api/             backend HTTP liveness probes
+│   └── frontend/
+│       ├── smoke.spec.js          shallow page-mount tour
+│       └── journeys/              ← deep user-flow tests live here
+│           └── brandiq-crud.spec.js
+├── fixtures/
+│   ├── api-monitor.js   network listener that fails on 5xx
+│   └── assets/          binary fixtures (test PNGs etc.)
+└── ...
+```
+
+## Journeys
+
+`tests/frontend/journeys/` contains deeper specs that exercise real user
+flows (open a modal, fill a multi-step form, submit, edit, delete) rather
+than just asserting a page mounts.
+
+**Current journeys:**
+
+| Spec | What it does |
+|---|---|
+| `brandiq-crud.spec.js` | Creates a uniquely-named brand on `/brandiq`, asserts it appears, updates its description, deletes it. Self-cleaning. |
+
+**Test data convention.** Every journey names its created records
+`e2e-test-${GITHUB_RUN_ID || 'local-'+Date.now()}`. If a run dies mid-flow,
+any leftover record is easy to spot in the UI and safe to delete manually.
+A future iteration can add an idempotent pre-clean step that purges
+`e2e-test-*` records from prior runs.
+
 ## Expanding the suite
 
-- Add files under `tests/frontend/` or `tests/api/` — they automatically
-  inherit the right project + storage state.
-- To use the API monitor, import from `../../fixtures/api-monitor.js`
-  instead of `@playwright/test`.
-- For new auth modes (e.g. a second user role), add another setup file under
-  `tests/setup/` and a new project entry in `playwright.config.js`.
-- The current frontend specs assert "the page mounts + API healthy." To
-  deepen them, add feature-specific selectors (click a button, fill a form,
-  assert a chart). Prefer `data-testid` attributes over text/role selectors
-  for stability.
+- Add files under `tests/frontend/`, `tests/frontend/journeys/`, or
+  `tests/api/` — they automatically inherit the right project + storage
+  state. No config change needed.
+- To use the API monitor, import from the fixture instead of
+  `@playwright/test`: `import { test, expect } from '../../../fixtures/api-monitor.js'`
+  (depth depends on the spec's location).
+- For new auth modes (e.g. a second user role), add another setup file
+  under `tests/setup/` and a new project entry in `playwright.config.js`.
+- Prefer `data-testid` attributes over placeholder/role selectors when
+  adding new journeys — text copy changes break the latter silently.
+- Binary fixtures (PNGs, sample files for upload) live in
+  `fixtures/assets/`.

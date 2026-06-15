@@ -14,12 +14,29 @@
 //   })
 import { test as base, expect } from '@playwright/test'
 
+/**
+ * @typedef {Object} ApiCallEntry
+ * @property {string} method
+ * @property {string} url
+ * @property {number} status
+ * @property {number} ms
+ * @property {string} from
+ */
+
+/**
+ * @typedef {Object} ApiCallsFixture
+ * @property {() => ApiCallEntry[]} all
+ * @property {() => ApiCallEntry[]} errors
+ * @property {() => {total:number,'2xx':number,'3xx':number,'4xx':number,'5xx':number,fail:number}} summary
+ */
+
 function apiHostFromEnv() {
   const raw = process.env.E2E_API_URL
   if (!raw) throw new Error('E2E_API_URL is not set')
   return new URL(raw).host
 }
 
+/** @type {import('@playwright/test').TestType<import('@playwright/test').PlaywrightTestArgs & import('@playwright/test').PlaywrightTestOptions & { apiCalls: ApiCallsFixture }, import('@playwright/test').PlaywrightWorkerArgs & import('@playwright/test').PlaywrightWorkerOptions>} */
 export const test = base.extend({
   apiCalls: async ({ page }, use, testInfo) => {
     const apiHost = apiHostFromEnv()
