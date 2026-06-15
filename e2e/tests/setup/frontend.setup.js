@@ -1,12 +1,18 @@
 // @ts-check
-// Real-login setup: opens the aMember login page, fills credentials, submits,
-// and follows the cross-domain redirect into the app. Replaces the earlier
-// /dev-auth#t=<JWT> shortcut — slower but exercises the actual auth path.
+// Real-login setup. Walks the full aMember handshake:
 //
-// The login lives on a DIFFERENT host than the app (aMember at
-// adsgpt-dev.poweradspy.com → app at adsgpt-staging.poweradspy.com). The
-// `access-token` cookie bridges them via the shared parent domain
-// (.poweradspy.com).
+//   1. POST credentials to aMember login form.
+//   2. aMember authenticates, sets amember_login / amember_pass cookies on
+//      .poweradspy.com, redirects to the app host.
+//   3. React app loads. RunBackLog reads those aMember cookies, POSTs them
+//      to /adsgpt/check-access/by-login-pass, receives a JWT, sets the
+//      `access-token` cookie client-side.
+//   4. AuthWrapper sees socket userData populate; sidebar renders.
+//
+// Because step 3 is CLIENT-SIDE and async, we cannot assert on the cookie
+// the moment the URL flips to the app host — the handshake hasn't run yet.
+// The reliable "auth completed" signal is the authenticated sidebar being
+// visible. We assert on that, then verify the cookie as a sanity check.
 import { test as setup } from '@playwright/test'
 
 const STATE_PATH = '.auth/frontend.json'
@@ -22,26 +28,28 @@ setup('authenticate via aMember login form', async ({ page }) => {
     )
   }
 
-  // 1) Open the aMember login form directly (NOT via app baseURL — this lives
-  // on a different host).
+  // ---- 1. Open the aMember login form ----
   await page.goto(loginUrl, { waitUntil: 'load' })
 
-  // 2) Fill the form. aMember Pro's defaults are name="amember_login" /
-  // "amember_pass", but we try label-based selectors first so this still
-  // works if the theme renames them.
+  // Wait for the form to actually be in the DOM before trying to fill.
+  // aMember Pro's defaults are name="amember_login" / "amember_pass"; we keep
+  // label/type fallbacks so a themed install still works.
   const userInput = page.locator(
-    'input[name="amember_login"], input[name="login"], input[name="email"], input[type="email"], input[type="text"]'
+    'input[name="amember_login"], input[name="login"], input[name="email"], input[type="email"]:visible, input[type="text"]:visible'
   ).first()
-  await userInput.fill(username)
+  await userInput.waitFor({ state: 'visible', timeout: 15_000 })
 
   const passInput = page.locator(
     'input[name="amember_pass"], input[name="password"], input[type="password"]'
   ).first()
+  await passInput.waitFor({ state: 'visible', timeout: 15_000 })
+
+  // ---- 2. Fill creds + submit ----
+  await userInput.fill(username)
   await passInput.fill(password)
 
-  // 3) Submit. Prefer a real button/input; fall back to pressing Enter.
   const submit = page.locator(
-    'button[type="submit"], input[type="submit"], button:has-text("Log In"), button:has-text("Sign in")'
+    'button[type="submit"], input[type="submit"], form button:has-text("Log In"), form button:has-text("Sign in")'
   ).first()
   if (await submit.count()) {
     await submit.click()
@@ -49,25 +57,42 @@ setup('authenticate via aMember login form', async ({ page }) => {
     await passInput.press('Enter')
   }
 
-  // 4) aMember authenticates and redirects to the app on another host. Wait
-  // for the URL to leave the aMember host and land somewhere on the app's
-  // origin. We can't rely on a specific path (the user's default landing
-  // route varies — /adstudio, /autopilot, etc.).
+  // ---- 3. Wait for landing on the app host ----
   const appHost = new URL(process.env.E2E_FRONTEND_URL).host
-  await page.waitForURL(
-    (url) => url.host === appHost && !url.pathname.startsWith('/dev-auth'),
-    { timeout: 45_000 }
-  )
+  await page.waitForURL((url) => url.host === appHost, { timeout: 45_000 })
 
-  // 5) Confirm the cross-domain cookie actually got written. If aMember
-  // accepted creds but the cookie domain is wrong, this catches it cleanly.
+  // ---- 4. Wait for the React handshake to finish ----
+  // The sidebar's "Ad Studio" link only renders once Redux state.socket.userData
+  // is populated, which only happens after the access-token handshake succeeds.
+  // This is our real "auth completed" gate.
+  try {
+    await page.getByRole('link', { name: /ad studio/i })
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 })
+  } catch (err) {
+    // Dump diagnostic info before bailing so the run log tells us why.
+    const cookies = await page.context().cookies()
+    const cookieNames = cookies.map((c) => `${c.name}@${c.domain}`).sort()
+    console.log('--- auth-failure diagnostics ---')
+    console.log('final URL:', page.url())
+    console.log('cookies:', cookieNames.join(', ') || '(none)')
+    throw new Error(
+      'Authenticated sidebar never appeared. The aMember login likely did ' +
+      'not succeed — check the test user is active and the form selectors ' +
+      'targeted the real input fields. Cookies present: ' +
+      (cookieNames.join(', ') || '(none)') +
+      '. Final URL: ' + page.url()
+    )
+  }
+
+  // ---- 5. Sanity-check the cookie ----
   const cookies = await page.context().cookies()
   const access = cookies.find((c) => c.name === 'access-token')
   if (!access) {
+    const cookieNames = cookies.map((c) => `${c.name}@${c.domain}`).sort()
     throw new Error(
-      'access-token cookie not found after aMember login — check that the ' +
-      'cookie domain (.poweradspy.com) matches the app host, and that the ' +
-      'test user is active.'
+      'Sidebar rendered but access-token cookie is missing — should be ' +
+      'impossible. Cookies present: ' + (cookieNames.join(', ') || '(none)')
     )
   }
 
