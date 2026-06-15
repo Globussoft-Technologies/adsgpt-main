@@ -10,8 +10,19 @@ import {
 } from '@/store/actions/brandIQ/myBrandActions';
 import { createSlice } from '@reduxjs/toolkit';
 
+// Persist the active BrandIQ tab so a page reload keeps the user where they were
+// (e.g. on "Competitors") instead of snapping back to "My Brands".
+const TAB_STORAGE_KEY = 'brandIQActiveTab';
+const getPersistedTab = () => {
+  try {
+    return localStorage.getItem(TAB_STORAGE_KEY) || 'myBrands';
+  } catch {
+    return 'myBrands';
+  }
+};
+
 const initialState = {
-  activeBrandIQTabId: 'myBrands',
+  activeBrandIQTabId: getPersistedTab(),
   myBrands: [],
   myGallery: [],
   getSession: [],
@@ -38,6 +49,11 @@ const brandIQTabsSlice = createSlice({
   reducers: {
     setActiveBrandIQTab: (state, action) => {
       state.activeBrandIQTabId = action.payload; // payload = "myBrands" | "competitors" | "analytics"
+      try {
+        localStorage.setItem(TAB_STORAGE_KEY, action.payload);
+      } catch {
+        /* ignore storage errors */
+      }
     },
     setBrandIQLoading: (state, action) => {
       state.loading = action.payload;

@@ -20,6 +20,7 @@ const PLATFORM_CONFIGS = {
     imageUrl: 'new_nas_image_url',
     fallbackImage: 'facebook_ad_variants.image_url_original',
     imageExistsFields: ['new_nas_image_url', 'facebook_ad_variants.image_url_original'],
+    validImageFields: ['new_nas_image_url'],
     popularity: 'facebook_ad.popularity.current',
     categoryName: 'facebook.category',
     subCategoryName: 'facebook.subCategory',
@@ -42,6 +43,7 @@ const PLATFORM_CONFIGS = {
     fallbackImage: 'image_url_original',
     videoUrl: 'image_url_original',
     imageExistsFields: ['thumbnail', 'instagram_ad_variants.image_url_original'],
+    validImageFields: ['thumbnail'],
     popularity: 'instagram_ad.popularity.current',
     categoryName: 'instagram.category',
     subCategoryName: 'instagram.subCategory',
@@ -64,6 +66,7 @@ const PLATFORM_CONFIGS = {
     fallbackImage: 'ad_image_or_video',
     videoUrl: 'nas_video_url',
     imageExistsFields: ['thumbnail_url', 'ad_image_or_video', 'new_nas_image_url'],
+    validImageFields: ['thumbnail_url', 'new_nas_image_url'],
     popularity: 'popularity.current',
     categoryName: 'category',
     subCategoryName: 'subCategory',
@@ -86,6 +89,7 @@ const PLATFORM_CONFIGS = {
     imageUrl: 'image_url',
     fallbackImage: 'new_nas_image_url',
     imageExistsFields: ['image_url', 'new_nas_image_url'],
+    validImageFields: ['image_url', 'new_nas_image_url'],
     popularity: null,
     categoryName: 'category',
     subCategoryName: 'subCategory',
@@ -207,6 +211,17 @@ function transformMediaUrl(url) {
   }
 
   return url;
+}
+
+// ── ISO date → ES date string ("yyyy-MM-dd HH:mm:ss") ───────────────────
+// ES competitor indices store dates as "2024-01-01 12:30:00" (date type).
+// Frontend sends ISO ("2024-01-01T00:00:00.000Z"); convert to that format.
+function isoToEsDate(value) {
+  if (!value) return null;
+  const s = String(value);
+  const t = s.indexOf('T');
+  if (t === -1) return s.slice(0, 19);
+  return `${s.slice(0, 10)} ${s.slice(t + 1, t + 9)}`;
 }
 
 // ── Flatten raw ES ad to common format ─────────────────────────────────
@@ -344,44 +359,68 @@ exports.searchAdsByKeywords = async (
   competitors = [],
   platform = 'all',
   page = 1,
-  limit = 500,
+  pageSize = 10,
   sortBy = 'date',
-  sortOrder = 'desc'
+  sortOrder = 'desc',
+  filters = {}
 ) => {
   // With Query 3, we need at least one of: keywords OR competitors
   const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
   const hasCompetitors = Array.isArray(competitors) && competitors.length > 0;
   if (!hasKeywords && !hasCompetitors) {
-    return [];
+    return { ads: [], total: 0, hasMore: false };
   }
 
   const platformsToSearch = platform === 'all'
     ? Object.keys(PLATFORM_CONFIGS)
     : [platform];
 
-  // Search all platforms in PARALLEL instead of sequential
+  // Search each platform's index in PARALLEL, each paginated independently
+  // at the ES level (from/size). Works whether the 4 platforms share a cluster
+  // (dev) or live on separate clusters (prod) — we never cross-query indices.
   const searchPromises = platformsToSearch.map((plat) => {
     const config = PLATFORM_CONFIGS[plat];
-    if (!config) return Promise.resolve([]);
+    if (!config) return Promise.resolve({ ads: [], total: 0, rawCount: 0 });
     return searchSinglePlatform(
       keywords,
       competitors,
       config,
       plat,
       page,
-      limit,
+      pageSize,
       sortBy,
-      sortOrder
+      sortOrder,
+      filters
     );
   });
 
   const resultsPerPlatform = await Promise.all(searchPromises);
-  return resultsPerPlatform.flat();
+
+  // Merge this page's results from every platform
+  const merged = resultsPerPlatform.flatMap(r => r.ads);
+
+  // Keep the combined ("All") batch coherent: sort the merged page by last_seen
+  // (most-recently-active) in the user's chosen direction. (Single-platform
+  // results are already ordered by ES; this only matters when platforms mix.)
+  if (sortBy !== 'relevance') {
+    const dir = sortOrder === 'asc' ? 1 : -1;
+    merged.sort((a, b) => {
+      const da = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+      const db = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+      return (da - db) * dir;
+    });
+  }
+
+  // More pages exist if ANY platform still has docs beyond this page
+  const hasMore = resultsPerPlatform.some(r => page * pageSize < (r.total || 0));
+  const total = resultsPerPlatform.reduce((s, r) => s + (r.total || 0), 0);
+
+  return { ads: merged, total, hasMore };
 };
 
 // ── Search a single platform index ──────────────────────────────────────
 
-async function searchSinglePlatform(keywords = [], competitors = [], config, platform, page, limit, sortBy, sortOrder) {
+async function searchSinglePlatform(keywords = [], competitors = [], config, platform, page, limit, sortBy, sortOrder, filters = {}) {
   try {
     const { index } = config;
     const from = (page - 1) * limit;
@@ -406,9 +445,14 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       const competitorMatchClauses = [];
 
       if (isGoogle) {
-        // Google: post_owner is keyword type → exact terms match
-        competitorMatchClauses.push({
-          terms: { [config.postOwner]: competitorNames }
+        // Google: post_owner is a keyword field (exact). Use match_phrase_prefix
+        // per competitor so a brand short-name also catches its official
+        // sub-accounts (e.g. "lenovo" → "lenovo india", "lenovo.com").
+        // Plain `terms` would only match the exact string and miss those.
+        competitorNames.forEach(name => {
+          competitorMatchClauses.push({
+            match_phrase_prefix: { [config.postOwner]: { query: name, boost: 5.0 } }
+          });
         });
       } else {
         // FB / IG / YT: post_owner is text → analyzed match
@@ -443,35 +487,13 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
         });
       }
 
-      // Also search competitor names in ad content (catches comparison ads, resellers)
-      // Use match_phrase for all names in content fields for precision
-      competitorNames.forEach(name => {
-        if (name.includes(' ')) {
-          competitorMatchClauses.push({
-            match_phrase: {
-              [config.adTitle]: { query: name, boost: 3.0 }
-            }
-          });
-          competitorMatchClauses.push({
-            match_phrase: {
-              [config.adText]: { query: name, boost: 3.0 }
-            }
-          });
-        } else {
-          competitorMatchClauses.push({
-            match: {
-              [config.adTitle]: { query: name, operator: 'or', boost: 3.0 }
-            }
-          });
-          competitorMatchClauses.push({
-            match: {
-              [config.adText]: { query: name, operator: 'or', boost: 3.0 }
-            }
-          });
-        }
-      });
+      // NOTE: We intentionally do NOT match competitor names in ad CONTENT
+      // (title/text). Doing so pulled in marketplace/reseller ads that merely
+      // mention a competitor's product (e.g. an Amazon/Croma ad titled
+      // "Dell Vostro Laptop"), which appeared for every brand. A competitor ad
+      // = an ad whose ADVERTISER (post_owner) is the competitor.
 
-      // Competitor must match in post_owner OR content
+      // Competitor must match on the advertiser (post_owner)
       mustClauses.push({
         bool: {
           should: competitorMatchClauses,
@@ -520,18 +542,40 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // ── 4. Filters ────────────────────────────────────────────────────────
     const filterClauses = [];
 
-    // Image exists: check ANY of the known image fields (not just primary)
-    // Note: exists checks field presence, not URL validity — flattenAd does that
-    const imageExistsFields = config.imageExistsFields || [];
-    if (imageExistsFields.length > 1) {
-      filterClauses.push({
-        bool: {
-          should: imageExistsFields.map(field => ({ exists: { field } })),
-          minimum_should_match: 1
-        }
-      });
-    } else if (imageExistsFields.length === 1) {
-      filterClauses.push({ exists: { field: imageExistsFields[0] } });
+    // Require a VALID NAS-hosted image at the ES level.
+    // Valid images are stored as NAS paths in two formats:
+    //   /PowerAdspy/...      → tokenizes to "poweradspy"
+    //   /pas-dev/stream/...  → tokenizes to "stream"
+    // Matching these excludes CDN URLs (fbcdn/cdninstagram), old "pasimages/"
+    // paths, and placeholders — so we stop fetching docs flattenAd would only
+    // drop (e.g. FB: ~18k candidates → ~4.7k valid). flattenAd still runs its
+    // own validation as a safety net.
+    const validImageFields = config.validImageFields || config.imageExistsFields || [];
+    const imageShould = [];
+    for (const field of validImageFields) {
+      imageShould.push({ match: { [field]: 'poweradspy' } });
+      imageShould.push({ match: { [field]: 'stream' } });
+    }
+    if (imageShould.length > 0) {
+      filterClauses.push({ bool: { should: imageShould, minimum_should_match: 1 } });
+    }
+
+    // Category / subcategory filter — category_id is a `text` field, so use
+    // match (single-token numeric IDs match exactly).
+    if (filters.categoryId && config.categoryId) {
+      filterClauses.push({ match: { [config.categoryId]: String(filters.categoryId) } });
+    }
+    if (filters.subCategoryId && config.subCategoryId) {
+      filterClauses.push({ match: { [config.subCategoryId]: String(filters.subCategoryId) } });
+    }
+
+    // Date range filter on the post/first-seen date field (ES `date` type,
+    // stored as "yyyy-MM-dd HH:mm:ss"). Provide `format` so ES parses our value.
+    if ((filters.dateFrom || filters.dateTo) && config.firstSeen) {
+      const range = { format: 'yyyy-MM-dd HH:mm:ss' };
+      if (filters.dateFrom) range.gte = isoToEsDate(filters.dateFrom);
+      if (filters.dateTo) range.lte = isoToEsDate(filters.dateTo);
+      filterClauses.push({ range: { [config.firstSeen]: range } });
     }
 
     // Assemble final query
@@ -547,18 +591,16 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // When competitors are present, relevance is critical — sort by score first
     // so competitor-matched ads (boost 5) rank above keyword-only ads (boost 2).
     // Date becomes a tiebreaker. Without competitors, stick to pure date sort.
+    // Sort by last_seen (most-recently-ACTIVE first) so the user sees ads the
+    // competitor is currently running, not just newly-created ones. This drives
+    // from/size pagination order. All returned ads already match a competitor
+    // (must clause). `relevance` mode (not used by the UI today) keeps score-first.
     const sort = [];
-    const hasCompetitors = competitorNames.length > 0;
-
-    if (hasCompetitors) {
-      // Primary: relevance score (competitor post_owner=5, content=3, keywords=2)
-      sort.push({ _score: { order: 'desc' } });
-      // Secondary: date (respect user's newest/oldest preference)
-      sort.push({ [config.lastSeen]: { order: sortOrder, unmapped_type: 'long' } });
-    } else if (sortBy === 'date') {
-      sort.push({ [config.lastSeen]: { order: sortOrder, unmapped_type: 'long' } });
-    } else if (sortBy === 'relevance') {
+    if (sortBy === 'relevance') {
       sort.push({ _score: { order: sortOrder } });
+      sort.push({ [config.lastSeen]: { order: 'desc' } });
+    } else {
+      sort.push({ [config.lastSeen]: { order: sortOrder } });
     }
 
     // ── _source filter: only fetch fields we actually need ────────────────
@@ -607,13 +649,14 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     try {
       response = await client.search({
         index,
-        size: 5000,
+        from,                      // ← real pagination offset
+        size: limit,               // ← only fetch this page's worth
         body: {
           query,
           sort,
           _source,
         },
-        track_total_hits: false,   // Skip exact count — faster
+        track_total_hits: true,    // Need total to know if more pages exist
         timeout: '15s',            // Kill slow queries
       });
     } catch (esErr) {
@@ -621,12 +664,15 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       if (esErr.meta && esErr.meta.body) {
         console.error(`[searchAdsByKeywords] ES error body: ${JSON.stringify(esErr.meta.body)}`);
       }
-      return [];
+      return { ads: [], total: 0, rawCount: 0 };
     }
 
-    const hits = response?.hits?.hits || response?.body?.hits?.hits || [];
+    const hitsRoot = response?.hits || response?.body?.hits || {};
+    const hits = hitsRoot.hits || [];
+    const totalRaw = hitsRoot.total;
+    const total = typeof totalRaw === 'object' ? (totalRaw?.value || 0) : (totalRaw || 0);
 
-    logger.info(`[searchAdsByKeywords] ${platform}: ${hits.length} hits fetched`);
+    logger.info(`[searchAdsByKeywords] ${platform}: ${hits.length} hits fetched (total=${total}, from=${from})`);
 
     // Flatten + dedupe
     const seen = new Set();
@@ -654,9 +700,9 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       }
     }
 
-    return results;
+    return { ads: results, total, rawCount: hits.length };
   } catch (error) {
     logger.error(`[searchAdsByKeywords] Error on ${platform} (${config.index}): ${error.message}`);
-    return [];
+    return { ads: [], total: 0, rawCount: 0 };
   }
 }

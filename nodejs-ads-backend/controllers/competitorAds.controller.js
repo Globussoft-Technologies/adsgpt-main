@@ -8,7 +8,11 @@ const logger = require('./Loggers/logs');
  */
 exports.searchCompetitorAds = async (req, res) => {
   try {
-    const { keywords = [], competitors = [], platform = 'all', page = 1, limit = 500, sortBy = 'date', sortOrder = 'desc' } = req.body;
+    const {
+      keywords = [], competitors = [], platform = 'all',
+      page = 1, limit = 10, sortBy = 'date', sortOrder = 'desc',
+      categoryId, subCategoryId, dateFrom, dateTo,
+    } = req.body;
 
     const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
     const hasCompetitors = Array.isArray(competitors) && competitors.length > 0;
@@ -16,15 +20,22 @@ exports.searchCompetitorAds = async (req, res) => {
       return sendBadRequestResponse(res, 'At least one of keywords or competitors is required');
     }
 
-    logger.info(`[searchCompetitorAds] Searching keywords: ${keywords.join(', ')}, competitors: ${competitors.join(', ')}, platform: ${platform}`);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.max(1, parseInt(limit, 10) || 10);
 
-    const ads = await searchAdsByKeywords(keywords, competitors, platform, page, limit, sortBy, sortOrder);
+    logger.info(`[searchCompetitorAds] keywords=${keywords.length} competitors=${competitors.length} platform=${platform} page=${pageNum} size=${pageSize}`);
+
+    const { ads, total, hasMore } = await searchAdsByKeywords(
+      keywords, competitors, platform, pageNum, pageSize, sortBy, sortOrder,
+      { categoryId, subCategoryId, dateFrom, dateTo }
+    );
 
     return sendSuccessResponse(res, {
       success: true,
-      total: ads.length,
-      page,
-      limit,
+      total,
+      hasMore,
+      page: pageNum,
+      limit: pageSize,
       data: ads,
     });
   } catch (error) {

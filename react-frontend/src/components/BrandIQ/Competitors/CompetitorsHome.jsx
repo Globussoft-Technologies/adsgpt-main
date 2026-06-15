@@ -99,6 +99,15 @@ const getTodayDisplay = () => {
   return `${d}/${m}/${y}`;
 };
 
+// Today's date as YYYY-MM-DD — used as native <input type="date"> max to block future dates
+const getTodayISO = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const CompetitorsHome = () => {
   const dispatch = useDispatch();
   const [width] = useWindowSize();
@@ -131,6 +140,11 @@ const CompetitorsHome = () => {
   const [dateFrom, setDateFrom] = useState(initialDates.dateFrom);
   const [dateTo, setDateTo] = useState(initialDates.dateTo);
   const [datePreset, setDatePreset] = useState(initialDates.datePreset);
+  // Draft state for the custom From/To inputs. We only commit to dateFrom/dateTo
+  // (which trigger a fetch) once BOTH ends are picked and valid — so selecting
+  // just one date never fires an API call.
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const datePickerRef = useRef(null);
 
@@ -166,6 +180,8 @@ const CompetitorsHome = () => {
     if (preset === 'all') {
       setDateFrom('');
       setDateTo('');
+      setDraftFrom('');
+      setDraftTo('');
       setDatePreset('all');
       return;
     }
@@ -173,8 +189,12 @@ const CompetitorsHome = () => {
     if (preset === 'last7') days = 7;
     if (preset === 'last90') days = 90;
     const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    setDateFrom(from.toISOString().split('T')[0]);
-    setDateTo(now.toISOString().split('T')[0]);
+    const fromISO = from.toISOString().split('T')[0];
+    const toISO = now.toISOString().split('T')[0];
+    setDateFrom(fromISO);
+    setDateTo(toISO);
+    setDraftFrom(fromISO);
+    setDraftTo(toISO);
     setDatePreset(preset);
   }, []);
 
@@ -228,7 +248,12 @@ const CompetitorsHome = () => {
       setStatus(data.status);
       setAds((prev) => {
         const newAds = isAppend ? [...prev, ...(data.ads || [])] : [...(data.ads || [])];
-        setHasMore(newAds.length < (data.totalCount || 0));
+        // Backend now drives pagination — prefer its explicit hasMore flag.
+        setHasMore(
+          typeof data.hasMore === 'boolean'
+            ? data.hasMore
+            : newAds.length < (data.totalCount || 0)
+        );
         return newAds;
       });
       if (isAppend || overridePage !== null) {
@@ -247,7 +272,9 @@ const CompetitorsHome = () => {
     } finally {
       if (isAppend) {
         setLoadingMore(false);
-      } else if (!isPolling) {
+      } else if (!isPolling && requestId === latestRequestRef.current) {
+        // Only the latest request may clear the loading flag — prevents a
+        // stale/superseded response from uncovering the empty state mid-fetch.
         setLoading(false);
       }
     }
@@ -256,32 +283,21 @@ const CompetitorsHome = () => {
   // Keep ref always pointing to latest fetchAds
   fetchAdsRef.current = fetchAds;
 
-  // Effect 1: When selected brand changes → reset state and fetch immediately
+  // Single trigger: reset + fetch whenever the selected brand OR any filter
+  // changes. Replaces the previous two-effect setup whose independent fetches
+  // could race and briefly flash a stale EMPTY state during a fast switch.
   useEffect(() => {
-    if (selectedBrand?.id) {
-      setStatus(null);
-      setPage(1);
-      setAds([]);
-      setTotalCount(0);
-      setFiltersAvailable({ platforms: [], categories: [] });
-      setHasMore(true);
-      setLoading(true);
-      fetchAdsRef.current(false, false, 1);
-    }
-  }, [selectedBrand?.id]);
-
-  // Effect 2: When filters change on same brand → reset to page 1 + fetch
-  useEffect(() => {
-    if (selectedBrand?.id && status !== 'PENDING') {
-      setPage(1);
-      setAds([]);
-      setTotalCount(0);
-      setFiltersAvailable({ platforms: [], categories: [] });
-      setHasMore(true);
-      setLoading(true);
-      fetchAdsRef.current(false, false, 1);
-    }
-  }, [activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo]);
+    if (!selectedBrand?.id) return;
+    setStatus(null);
+    setPage(1);
+    setAds([]);
+    setTotalCount(0);
+    setFiltersAvailable({ platforms: [], categories: [] });
+    setHasMore(true);
+    setLoadingMore(false);
+    setLoading(true);
+    fetchAdsRef.current(false, false, 1);
+  }, [selectedBrand?.id, activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo]);
 
   // Polling while PENDING
   useEffect(() => {
@@ -349,24 +365,33 @@ const CompetitorsHome = () => {
     observerRef.current = observer;
   }, []);
 
-  // Handle refresh
+  // Handle refresh.
+  // Backend decides: if discovery already succeeded it returns READY (no Gemini
+  // re-run) and we just re-fetch ads from ES; if discovery failed / never ran it
+  // returns PENDING and we poll while it re-discovers.
   const handleRefresh = async () => {
     if (!selectedBrand?.id || !userData?.user_id) return;
     setRefreshing(true);
-    setStatus('PENDING');
-    setAds([]);
-    setTotalCount(0);
-    setFiltersAvailable({ platforms: [], categories: [] });
-    setHasMore(true);
-
     try {
-      await refreshCompetitorAds(selectedBrand.id, userData.user_id);
-      toast.success('Refreshing competitor ads...');
-      setPage(1);
-      // Polling will start automatically since status is now PENDING
+      const data = await refreshCompetitorAds(selectedBrand.id, userData.user_id);
+      if (data?.status === 'PENDING') {
+        // Re-discovery started (was FAILED or never discovered)
+        setStatus('PENDING');
+        setAds([]);
+        setTotalCount(0);
+        setFiltersAvailable({ platforms: [], categories: [] });
+        setHasMore(true);
+        setPage(1);
+        toast.success('Re-discovering competitors...');
+        // Polling starts automatically since status is now PENDING
+      } else {
+        // Discovery already done → just re-fetch ads (no Gemini call)
+        toast.success('Refreshing ads...');
+        setPage(1);
+        fetchAdsRef.current(false, false, 1);
+      }
     } catch {
       toast.error('Failed to refresh');
-      setStatus('FAILED');
     } finally {
       setRefreshing(false);
     }
@@ -425,30 +450,9 @@ const CompetitorsHome = () => {
     );
   }
 
-  // ─── FAILED STATE ──────────────────────────────────────────────────────
-  if (status === 'FAILED') {
-    return (
-      <div className="flex h-[60vh] flex-col items-center justify-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
-          <AlertCircle className="h-8 w-8 text-red-400" />
-        </div>
-        <h3 className="mb-2 text-lg font-medium text-white">Discovery failed</h3>
-        <p className="mb-6 max-w-md text-center text-sm text-white/50">
-          We couldn't fetch competitor ads for this brand. This might be due to a temporary issue.
-        </p>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className={`flex items-center gap-2 rounded-full ${ADSGPT_GRADIENT} px-6 py-2.5 text-sm font-medium text-white transition-all ${ADSGPT_GRADIENT_HOVER} disabled:opacity-50`}
-        >
-          <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
   // ─── MAIN VIEW ─────────────────────────────────────────────────────────
+  // Note: FAILED & EMPTY are rendered inline inside the content area (below the
+  // filter bar) so the user can always switch platform / adjust filters.
   return (
     <div className="flex h-full flex-col">
       {/* Header Stats */}
@@ -518,7 +522,15 @@ const CompetitorsHome = () => {
         <div className="relative flex items-center gap-2" ref={datePickerRef}>
           <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">Date</span>
           <button
-            onClick={() => setShowDatePicker(!showDatePicker)}
+            onClick={() => {
+              setShowDatePicker((prev) => {
+                const next = !prev;
+                // On open, seed drafts from the applied range so a previously
+                // abandoned half-selection doesn't linger.
+                if (next) { setDraftFrom(dateFrom); setDraftTo(dateTo); }
+                return next;
+              });
+            }}
             className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition-all hover:bg-white/10"
           >
             <Calendar className="h-3.5 w-3.5 text-white/50" />
@@ -573,15 +585,22 @@ const CompetitorsHome = () => {
                       ref={fromDateRef}
                       type="date"
                       className="sr-only"
-                      max={getInitialDateRange().dateTo}
-                      value={dateFrom}
+                      style={{ colorScheme: 'dark', accentColor: '#02C8C4' }}
+                      max={draftTo || getTodayISO()}
+                      value={draftFrom}
                       onChange={(e) => {
-                        setDateFrom(e.target.value);
+                        const v = e.target.value;
+                        setDraftFrom(v);
                         setDatePreset('custom');
+                        // Commit (→ fetch) only once both ends are set and valid (From ≤ To)
+                        if (v && draftTo && v <= draftTo) {
+                          setDateFrom(v);
+                          setDateTo(draftTo);
+                        }
                       }}
                     />
                     <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-                      {toDisplayDate(dateFrom) || 'DD/MM/YYYY'}
+                      {toDisplayDate(draftFrom) || 'DD/MM/YYYY'}
                     </div>
                   </div>
                 </div>
@@ -602,15 +621,23 @@ const CompetitorsHome = () => {
                       ref={toDateRef}
                       type="date"
                       className="sr-only"
-                      max={getInitialDateRange().dateTo}
-                      value={dateTo}
+                      style={{ colorScheme: 'dark', accentColor: '#02C8C4' }}
+                      min={draftFrom || undefined}
+                      max={getTodayISO()}
+                      value={draftTo}
                       onChange={(e) => {
-                        setDateTo(e.target.value);
+                        const v = e.target.value;
+                        setDraftTo(v);
                         setDatePreset('custom');
+                        // Commit (→ fetch) only once both ends are set and valid (From ≤ To)
+                        if (v && draftFrom && draftFrom <= v) {
+                          setDateFrom(draftFrom);
+                          setDateTo(v);
+                        }
                       }}
                     />
                     <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-                      {toDisplayDate(dateTo) || 'DD/MM/YYYY'}
+                      {toDisplayDate(draftTo) || 'DD/MM/YYYY'}
                     </div>
                   </div>
                 </div>
@@ -680,15 +707,38 @@ const CompetitorsHome = () => {
               </div>
             )}
 
-            {/* Empty state */}
-            {(status === 'EMPTY' || (status === 'READY' && ads.length === 0 && !loading)) && (
+            {/* FAILED state (inline — filter bar stays visible) */}
+            {status === 'FAILED' && !loading && ads.length === 0 && (
+              <div className="flex h-[50vh] flex-col items-center justify-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
+                  <AlertCircle className="h-8 w-8 text-red-400" />
+                </div>
+                <h3 className="mb-2 text-lg font-medium text-white">Discovery failed</h3>
+                <p className="mb-6 max-w-md text-center text-sm text-white/50">
+                  We couldn't fetch competitor ads for this brand. This might be a temporary issue.
+                </p>
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className={`flex items-center gap-2 rounded-full ${ADSGPT_GRADIENT} px-6 py-2.5 text-sm font-medium text-white transition-all ${ADSGPT_GRADIENT_HOVER} disabled:opacity-50`}
+                >
+                  <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  Try Again
+                </button>
+              </div>
+            )}
+
+            {/* Empty state (inline, platform-aware — filter bar stays visible) */}
+            {!loading && status !== 'FAILED' && (status === 'EMPTY' || (status === 'READY' && ads.length === 0)) && (
               <div className="flex h-[50vh] flex-col items-center justify-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
                   <Filter className="h-8 w-8 text-white/30" />
                 </div>
                 <h3 className="mb-2 text-lg font-medium text-white">No competitor ads found</h3>
                 <p className="mb-6 max-w-md text-center text-sm text-white/50">
-                  We couldn't find any ads matching your brand's competitors. Try refreshing or adjusting your filters.
+                  {activePlatform === 'all'
+                    ? "We couldn't find any ads matching your brand's competitors. Try adjusting your filters or refreshing."
+                    : `No ${platformPills.find((p) => p.key === activePlatform)?.label || ''} ads found for this brand's competitors. Try another platform or adjust your filters.`}
                 </p>
                 <div className="flex items-center gap-3">
                   <button
@@ -704,7 +754,7 @@ const CompetitorsHome = () => {
                     className={`flex items-center gap-2 rounded-full ${ADSGPT_GRADIENT} px-6 py-2.5 text-sm font-medium text-white transition-all ${ADSGPT_GRADIENT_HOVER} disabled:opacity-50`}
                   >
                     <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh Discovery
+                    Refresh
                   </button>
                 </div>
               </div>

@@ -194,20 +194,27 @@ async function runDiscoveryJob(userId, brandId) {
 
 // ── PAS / ElasticSearch proxy ───────────────────────────────────────────
 
-async function fetchAdsFromPas(keywords, competitors = [], authHeader = null) {
+async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, opts = {}) {
+  const {
+    page = 1,
+    pageSize = 10,
+    platform = 'all',
+    categoryId,
+    subCategoryId,
+    dateFrom,
+    dateTo,
+    sortOrder = 'desc',
+  } = opts;
+
   const keywordTerms = keywords.map(k => k.term);
   const competitorNames = competitors.map(c => c.name).filter(Boolean);
-  
+
   // Merge competitors + keywords, remove duplicates
   const allSearchTerms = [...new Set([...competitorNames, ...keywordTerms])];
-  
-  if (allSearchTerms.length === 0) return [];
+
+  if (allSearchTerms.length === 0) return { ads: [], total: 0, hasMore: false };
 
   const url = `${process.env.NODE_ADS_BACKEND_URL}/ads/search`;
-
-  // console.log(`[fetchAdsFromPas] Calling: ${url}`);
-  // console.log(`[fetchAdsFromPas] Keywords: ${allSearchTerms.length}, Competitors: ${competitorNames.length}`);
-  // console.log(`[fetchAdsFromPas] API Key present: ${!!process.env.NODE_ADS_API_KEY}`);
 
   try {
     const response = await axios.post(
@@ -215,11 +222,15 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null) {
       {
         keywords: allSearchTerms,
         competitors: competitorNames,  // Send separately for ES boosting
-        platform: 'all',               // Search ALL platforms (fb, insta, yt, google)
-        page: 1,
-        limit: 500,
+        platform,                      // 'all' or a specific platform
+        page,                          // ← real pagination, forwarded to ES
+        limit: pageSize,               // ← per-platform page size
         sortBy: 'date',
-        sortOrder: 'desc',
+        sortOrder,
+        categoryId,                    // filters applied inside ES now
+        subCategoryId,
+        dateFrom,
+        dateTo,
       },
       {
         headers: {
@@ -233,7 +244,7 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null) {
     const data = response.data?.data || [];
 
     // Map PAS response shape to our schema
-    return data.map(ad => ({
+    const ads = data.map(ad => ({
       adId: ad.ad_id || ad.adId,
       platform: ad.platform,
       advertiserName: ad.advertiser_name || ad.advertiserName || null,
@@ -252,6 +263,12 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null) {
       esScore: ad._score || ad.esScore || null,
       fetchedAt: new Date(),
     }));
+
+    return {
+      ads,
+      total: response.data?.total || 0,
+      hasMore: !!response.data?.hasMore,
+    };
   } catch (err) {
     console.error(`[fetchAdsFromPas] ERROR: ${err.message}`);
     if (err.response) {
@@ -260,7 +277,7 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null) {
     } else if (err.request) {
       console.error(`[fetchAdsFromPas] No response received. Request failed. URL: ${url}`);
     }
-    return []; // Return empty on failure so brand doesn't get stuck
+    return { ads: [], total: 0, hasMore: false }; // Return empty on failure so brand doesn't get stuck
   }
 }
 
@@ -345,101 +362,45 @@ async function getCompetitorAds(req, res) {
       });
     }
 
-    let ads = await fetchAdsFromPas(keywords, competitors, req.headers.authorization);
-    // console.log('[getCompetitorAds] brandId:', brandId, 'total fetched ads:', ads.length, 'platform:', platform, 'dateFrom:', dateFrom, 'dateTo:', dateTo);
-
+    // ── Fetch ONE page from ES (pagination + filters happen inside ES now) ──
+    // platform: frontend sends a single platform or omits it for "All".
+    let platformParam = 'all';
     if (platform) {
-      let platforms;
-      if (Array.isArray(platform)) {
-        platforms = platform;
-      } else if (typeof platform === 'string' && platform.includes(',')) {
-        platforms = platform.split(',');
-      } else {
-        platforms = [platform];
+      if (Array.isArray(platform)) platformParam = platform[0];
+      else if (typeof platform === 'string') platformParam = platform.split(',')[0];
+    }
+    const sortOrder = sort === 'oldest' ? 'asc' : 'desc';
+
+    const { ads, total, hasMore } = await fetchAdsFromPas(
+      keywords,
+      competitors,
+      req.headers.authorization,
+      {
+        page,
+        pageSize,
+        platform: platformParam,
+        categoryId: Array.isArray(categoryId) ? categoryId[0] : categoryId,
+        subCategoryId: Array.isArray(subCategoryId) ? subCategoryId[0] : subCategoryId,
+        dateFrom,
+        dateTo,
+        sortOrder,
       }
-      ads = ads.filter(ad => platforms.includes(ad.platform));
-      // console.log('[getCompetitorAds] after platform filter:', ads.length, 'platforms:', platforms);
-    }
-
-    if (category) {
-      const categories = Array.isArray(category) ? category : [category];
-      ads = ads.filter(ad => categories.includes(ad.category));
-    }
-
-    if (categoryId) {
-      const catIds = (Array.isArray(categoryId) ? categoryId : categoryId.split(',')).map(String);
-      ads = ads.filter(ad => catIds.includes(String(ad.categoryId)));
-    }
-
-    if (subCategoryId) {
-      const subIds = (Array.isArray(subCategoryId) ? subCategoryId : subCategoryId.split(',')).map(String);
-      ads = ads.filter(ad => subIds.includes(String(ad.subCategoryId)));
-    }
-
-    if (dateFrom || dateTo) {
-      const from = dateFrom ? new Date(dateFrom) : null;
-      const to = dateTo ? new Date(dateTo) : null;
-      ads = ads.filter(ad => {
-        const d = ad.firstSeen ? new Date(ad.firstSeen) : null;
-        if (!d) return false;
-        if (from && d < from) return false;
-        if (to && d > to) return false;
-        return true;
-      });
-    }
-
-    // Sort
-    if (sort === 'newest') {
-      ads.sort((a, b) => new Date(b.firstSeen || 0) - new Date(a.firstSeen || 0));
-    } else if (sort === 'oldest') {
-      ads.sort((a, b) => new Date(a.firstSeen || 0) - new Date(b.firstSeen || 0));
-    }
-
-    const totalCount = ads.length;
-    const start = (page - 1) * pageSize;
-    const paginated = ads.slice(start, start + pageSize);
-
-    // Build dynamic filter options from the FULL unfiltered set
-    const allPlatforms = [...new Set(ads.map(a => a.platform).filter(Boolean))];
-
-    // Build category tree from ads that have category data
-    const categoryMap = new Map();
-    for (const ad of ads) {
-      if (!ad.categoryId || !ad.category) continue;
-      if (!categoryMap.has(ad.categoryId)) {
-        categoryMap.set(ad.categoryId, {
-          id: ad.categoryId,
-          name: ad.category,
-          subcategories: new Map(),
-        });
-      }
-      const cat = categoryMap.get(ad.categoryId);
-      if (ad.subCategoryId && ad.subCategory && !cat.subcategories.has(ad.subCategoryId)) {
-        cat.subcategories.set(ad.subCategoryId, {
-          id: ad.subCategoryId,
-          name: ad.subCategory,
-        });
-      }
-    }
-    const categoryTree = Array.from(categoryMap.values()).map(c => ({
-      ...c,
-      subcategories: Array.from(c.subcategories.values()),
-    }));
+    );
 
     const responsePayload = {
       brandId,
-      status: totalCount > 0 ? 'READY' : 'EMPTY',
+      // EMPTY only when the FIRST page has nothing; later empty pages just mean
+      // "end of list" and must stay READY so the loaded grid isn't replaced.
+      status: (Number(page) === 1 && ads.length === 0) ? 'EMPTY' : 'READY',
       lastFetchedAt: brand.lastFetchedAt,
       page: Number(page),
       pageSize: Number(pageSize),
-      totalCount,
-      filtersAvailable: {
-        platforms: allPlatforms,
-        categories: categoryTree,
-      },
-      ads: paginated,
+      totalCount: total,
+      hasMore,
+      // filtersAvailable kept for response shape; UI uses static lists.
+      filtersAvailable: { platforms: [], categories: [] },
+      ads,
     };
-    // Response payload ready
     return res.status(200).json(responsePayload);
   } catch (err) {
     // console.error('getCompetitorAds error:', err);
@@ -464,7 +425,24 @@ async function refreshCompetitorAds(req, res) {
     const brand = user.brands.find(b => b.id === brandId);
     if (!brand) return res.status(404).json({ message: 'Brand not found' });
 
-    // Reset and re-trigger
+    // If discovery already succeeded, don't waste a Gemini call. Ads are never
+    // cached in Mongo — they're fetched live from ES on every GET — so a
+    // "refresh" for an already-discovered brand just means re-fetch the ads.
+    const job = brand.discoveryJob || {};
+    const hasDiscovery =
+      (brand.competitors && brand.competitors.length > 0) ||
+      (brand.keywords && brand.keywords.length > 0);
+
+    if (hasDiscovery && job.status === 'READY') {
+      return res.status(200).json({
+        brandId,
+        status: 'READY',
+        message: 'Competitors already discovered; re-fetching ads.',
+        lastFetchedAt: brand.lastFetchedAt,
+      });
+    }
+
+    // Otherwise (FAILED, or never discovered) → reset and re-run discovery
     brand.discoveryJob = {
       status: 'PENDING',
       startedAt: new Date(),
