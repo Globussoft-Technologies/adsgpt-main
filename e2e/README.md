@@ -124,6 +124,7 @@ than just asserting a page mounts.
 | Spec | What it does |
 |---|---|
 | `brandiq-crud.spec.js` | Creates a uniquely-named brand on `/brandiq`, asserts it appears, updates its description, deletes it. Self-cleaning. |
+| `adcopy.spec.js` | Sends one short prompt to the Ad Copy LLM chat on `/adstudio`, waits for the streamed response to complete, asserts no timeout-error and that the bot bubble has non-trivial text. **Note:** uses a websocket (not HTTP), so the api-monitor fixture is not in play here; verification is UI-state-based. Costs ~$0.01/run in LLM tokens. |
 
 **Test data convention.** Every journey names its created records
 `e2e-test-${GITHUB_RUN_ID || 'local-'+Date.now()}`. If a run dies mid-flow,

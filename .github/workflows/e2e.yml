@@ -142,7 +142,47 @@ jobs:
           retention-days: 14
 
   # ----------------------------------------------------------------
-  # Node 4: API liveness (independent of Login — no browser needed)
+  # Node 4: Ad Copy LLM journey (parallel, downstream of Login)
+  # ----------------------------------------------------------------
+  adcopy:
+    name: Ad Copy LLM
+    needs: login
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-e2e
+
+      - name: Restore auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-state
+          path: e2e/.auth/
+
+      - name: Run Ad Copy spec
+        run: npx playwright test --project=frontend tests/frontend/journeys/adcopy.spec.js
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-adcopy-${{ github.run_id }}
+          path: e2e/playwright-report/
+          retention-days: 14
+
+      - name: Upload traces (on fail)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-adcopy-${{ github.run_id }}
+          path: e2e/test-results/
+          retention-days: 14
+
+  # ----------------------------------------------------------------
+  # Node 5: API liveness (independent of Login — no browser needed)
   # ----------------------------------------------------------------
   api:
     name: API liveness
@@ -174,8 +214,8 @@ jobs:
   # ----------------------------------------------------------------
   notify:
     name: Notify on failure
-    needs: [login, pages, brandiq, api]
-    if: always() && (needs.login.result == 'failure' || needs.pages.result == 'failure' || needs.brandiq.result == 'failure' || needs.api.result == 'failure')
+    needs: [login, pages, brandiq, adcopy, api]
+    if: always() && (needs.login.result == 'failure' || needs.pages.result == 'failure' || needs.brandiq.result == 'failure' || needs.adcopy.result == 'failure' || needs.api.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Post to Slack
@@ -192,7 +232,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Nightly E2E failed* — login=${{ needs.login.result }}, pages=${{ needs.pages.result }}, brandiq=${{ needs.brandiq.result }}, api=${{ needs.api.result }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>"
+                  "text": "*Nightly E2E failed* — login=${{ needs.login.result }}, pages=${{ needs.pages.result }}, brandiq=${{ needs.brandiq.result }}, adcopy=${{ needs.adcopy.result }}, api=${{ needs.api.result }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>"
                 }
               }
             ]
