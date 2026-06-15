@@ -41,7 +41,7 @@ function EmptyList({ onRun, running }) {
       <div className="max-w-md">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">No audits yet</h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-white/50">
-          Run your first AI audit on this account. Our model analyzes the last 14 days of activity
+          Run your first AI audit on this account. Our model analyzes the last 30 days of activity
           and suggests specific, executable fixes.
         </p>
       </div>

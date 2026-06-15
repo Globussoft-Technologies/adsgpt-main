@@ -15,7 +15,7 @@ import AuditFindings from './AuditFindings';
 
 const LOADING_STAGES = [
   'Fetching campaigns and insights…',
-  'Crunching 14 days of performance data…',
+  'Crunching 30 days of performance data…',
   'Asking the AI to spot issues and opportunities…',
   'Validating suggested fixes…',
   'Almost ready…',

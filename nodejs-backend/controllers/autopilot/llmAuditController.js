@@ -4,7 +4,7 @@
  * Mounted at /meta-ads/autopilot/llm-audit/* (see Router/autopilot/autopilotRoutes.js).
  * The continuous 37-rule cron audit is in services/autopilot/autopilotcrontor.js;
  * THIS controller is the user-initiated lane: a user clicks "Run AI Audit" and
- * Gemini analyses 14 days of insights, returning findings plus an executable
+ * Gemini analyses 30 days of insights, returning findings plus an executable
  * fix per finding. Fixes go through `applyFix` with the same global
  * `AUTOPILOT_LIVE_ACTIONS_ALLOWED` safety gate that the cron actions honour.
  *
@@ -216,11 +216,15 @@ const normalizeForLLM = ({
     allConversions > 0 ? allSpend / allConversions : 0;
 
   const getBudgetPacing = (insightSpend, campaign) => {
+    // Window-length must match the insights `currentRange` below (30 days).
+    // If the time-range changes, update both this divisor and the
+    // multiplier below so "pacing = actual / expected over the window"
+    // stays accurate.
     const budget =
       parseFloat(campaign?.daily_budget || 0) ||
-      parseFloat(campaign?.lifetime_budget || 0) / 14;
+      parseFloat(campaign?.lifetime_budget || 0) / 30;
     if (!budget) return 0;
-    return insightSpend / (budget * 14);
+    return insightSpend / (budget * 30);
   };
 
   const campaignData = campaignInsights.map((i) => {
@@ -459,13 +463,18 @@ class LLMAuditController {
       const account = new AdAccount(`act_${adAccountId.replace(/^act_/, "")}`);
       const accountInfo = await account.read(["currency", "name"]);
 
+      // 30-day lookback (excluding today, which has partial Meta data).
+      // Previous period is the 30 days immediately before, so Gemini can
+      // reason about month-over-month trends. If you change the window
+      // length, also update the `30` divisor + multiplier in
+      // `getBudgetPacing` above — they must stay in sync.
       const currentRange = {
-        since: dayjs().subtract(14, "day").format("YYYY-MM-DD"),
+        since: dayjs().subtract(30, "day").format("YYYY-MM-DD"),
         until: dayjs().subtract(1, "day").format("YYYY-MM-DD"),
       };
       const prevRange = {
-        since: dayjs().subtract(28, "day").format("YYYY-MM-DD"),
-        until: dayjs().subtract(15, "day").format("YYYY-MM-DD"),
+        since: dayjs().subtract(60, "day").format("YYYY-MM-DD"),
+        until: dayjs().subtract(31, "day").format("YYYY-MM-DD"),
       };
 
       const [
