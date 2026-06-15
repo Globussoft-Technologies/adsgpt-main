@@ -41,151 +41,161 @@ const _runningJobs = new Set();
 //   2. Add one entry here — nothing else changes
 
 const PLATFORM_POSTERS = {
-
   meta: {
     isConfigured: (target) => {
-      const hasAdSet = Array.isArray(target?.adSetId) ? target.adSetId.length > 0 : !!target?.adSetId;
-      return !!(target?.adAccountId && target?.pageId && hasAdSet);
+      const validPage = !!target?.template?.pageId || !!target?.template?.payload?.pageId;
+      const validAdAccount = !!target?.template?.payload?.adAccountId;
+      const hasTemplate = !!target?.template;
+      return !!(validAdAccount && validPage && hasTemplate);
     },
 
     post: async (target, job, creatives, campaign) => {
-      const { adAccountId, pageId, leadFormId, campaignId: metaCampaignId } = target;
+      const { template } = target;
 
-      let adSetIds = target.adSetId || [];
-      if (typeof adSetIds === "string") adSetIds = [adSetIds];
-      if (adSetIds.length === 0) throw new Error("No ad set configured on this job — set targets.meta.adSetId");
+      if (!template || !template.payload) {
+        throw new Error("No template configured on this job — targets.meta.template is required");
+      }
 
-      const creative = creatives.find((c) => c.imageUrl) || creatives[0];
-      if (!creative) throw new Error("No creative available");
-      if (!creative.imageUrl) throw new Error("No image was generated for this cycle — ad cannot be posted without an image");
+      const adAccountId = template.payload.adAccountId;
+      if (!adAccountId) {
+        throw new Error("Template payload is missing adAccountId");
+      }
 
-      // ── FB user + access token ────────────────────────────────────────────
       const fbUser = await FBUsers.findOne({ userId: job.userId });
       if (!fbUser) throw new Error(`No Facebook account linked for user ${job.userId}`);
       const accessToken = decrypt(fbUser.accessToken);
       if (!accessToken) throw new Error("Facebook access token is missing");
 
+      // We still need bizSdk for uploading images since the V2 controller doesn't handle pure image upload natively for us
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
       const account = new AdAccount(`act_${adAccountId}`);
 
-      // ── Fetch Meta campaign + first ad set → infer cell ──────────────────
-      const metaCampaign = await new bizSdk.Campaign(metaCampaignId).get(["id", "objective", "name", "status"]);
-      const firstAdSet   = await new bizSdk.AdSet(adSetIds[0]).get(["id", "destination_type", "promoted_object", "optimization_goal", "name"]);
-      const campaignData = metaCampaign?._data || metaCampaign || {};
-      const firstAdSetData = firstAdSet?._data || firstAdSet || {};
-
-      const cellInfo = inferCellForMetaCampaign(campaignData, firstAdSetData);
-      if (cellInfo.error) throw new Error(cellInfo.error);
-      const { objective, conversionLocation, cell } = cellInfo;
-
-      const promotedObject = firstAdSetData.promoted_object || {};
-      const applicationId  = promotedObject.application_id  || null;
-      const objectStoreUrl = promotedObject.object_store_url || null;
-
-      // ── Upload image ──────────────────────────────────────────────────────
-      logger.info(`[adsFactoryAuto:meta] uploading image — ${(creative.imageUrl || "").slice(0, 120)}`);
-      const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
-      logger.info(`[adsFactoryAuto:meta] image hash: ${imageHash}`);
-
-      const ctaType = (creative.callToAction || "LEARN_MORE").toUpperCase().replace(/\s+/g, "_");
-      const adName  = `Automation Ads — ${new Date().toISOString().slice(0, 10)}`;
-
-      const objectStorySpec = buildObjectStorySpec(cell.ad.objectStorySpecShape, {
-        pageId,
-        imageHash,
-        headline:       creative.headline    || "",
-        primaryText:    creative.message     || "",
-        description:    creative.description || "",
-        callToAction:   ctaType,
-        linkUrl:        creative.linkUrl     || undefined,
-        leadFormId:     leadFormId           || undefined,
-        objectStoreUrl: objectStoreUrl       || undefined,
-        applicationId:  applicationId       || undefined,
-      });
-
-      const adCreative = await account.createAdCreative([], {
-        name: `${adName} — creative`,
-        object_story_spec: objectStorySpec,
-      });
-
-      // ── Try each ad set in order, rotate on 50-ad limit ──────────────────
-      let startIndex = target.activeAdSetIndex || 0;
-      if (startIndex >= adSetIds.length) startIndex = 0;
-
-      let ad = null;
+      let createdAdIds = [];
+      let usedCampaignId = null;
       let usedAdSetId = null;
+      let pageId = null;
+      let leadFormId = null;
 
-      for (let i = startIndex; i < adSetIds.length; i++) {
-        const candidateAdSetId = adSetIds[i];
-        try {
-          ad = await account.createAd([], {
-            name:     adName,
-            adset_id: candidateAdSetId,
-            creative: { creative_id: adCreative.id },
-            status:   "ACTIVE",
-          });
-          usedAdSetId = candidateAdSetId;
-
-          // If we advanced the index, persist it so next run starts here
-          if (i !== startIndex) {
-            target.activeAdSetIndex = i; // update memory
-            await AdsFactoryJob.updateOne(
-              { _id: job._id },
-              { $set: { "targets.meta.activeAdSetIndex": i } }
-            );
-            logger.info(`[adsFactoryAuto:meta] rotated to ad set index ${i} (${candidateAdSetId})`);
-          }
-          break;
-        } catch (err) {
-          const isLimitError = err?.message?.includes("Too many ads") ||
-                               JSON.stringify(err).includes("1487809");
-          if (isLimitError) {
-            logger.warn(`[adsFactoryAuto:meta] ad set ${candidateAdSetId} is full (50 ads limit), trying next`);
-            continue;
-          }
-          throw err; // any other error — surface it
+      // Helper to cleanly mock Express req/res and execute the V2 controllers locally
+      const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
+      const executeController = async (controllerFn, body) => {
+        const req = { body, user: { user_id: job.userId } };
+        let statusCode = 200;
+        let responseData = null;
+        const res = {
+          status: (code) => { statusCode = code; return res; },
+          json: (data) => { responseData = data; return res; }
+        };
+        await controllerFn(req, res);
+        if (statusCode >= 400) {
+          throw new Error(responseData?.error || responseData?.details || JSON.stringify(responseData));
         }
+        return responseData;
+      };
+
+      // ── Create Campaign & AdSet from Template (Runs EVERY cycle) ──────────────
+      logger.info(`[adsFactoryAuto:meta] Template mode — calling V2 create APIs internally`);
+      
+      const tsName = `Auto — ${new Date().toISOString().slice(0, 10)}`;
+      
+      // 1. Call createCampaignV2
+      const campaignPayload = {
+        ...template.payload,
+        name: `${template.payload.name} — ${tsName}`
+      };
+      const campaignRes = await executeController(metaAdControllerV2.createCampaignV2, campaignPayload);
+      usedCampaignId = campaignRes.campaign.id;
+
+      // 2. Call createAdSetV2
+      const adSetPayload = {
+        ...template.payload,
+        name: `${template.payload.name} — ${tsName}`,
+        campaignId: usedCampaignId
+      };
+      const adSetRes = await executeController(metaAdControllerV2.createAdSetV2, adSetPayload);
+      usedAdSetId = adSetRes.adSet.id;
+      pageId = template.payload.pageId;
+      leadFormId = template.payload.leadFormId;
+
+      const { getCell } = require("../../config/wizardSchema");
+      const cellInfo = {
+        objective: template.objective,
+        conversionLocation: template.conversionLocation,
+        cell: getCell(template.objective, template.conversionLocation),
+        applicationId: template.payload.applicationId || null,
+        objectStoreUrl: template.payload.objectStoreUrl || null
+      };
+
+      // We have usedCampaignId, and cellInfo. We now create ads for creatives.
+      // Loop all valid creatives.
+      const creativesToProcess = creatives.filter(c => c.imageUrl);
+      
+      if (creativesToProcess.length === 0) {
+        throw new Error("No valid creatives available (missing images)");
       }
 
-      // All ad sets full — pause the job
-      if (!ad) {
-        job.status = "paused"; // update memory so job.save() doesn't overwrite
-        await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "paused" } });
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(job._id.toString());
-        throw new Error("All ad sets are full (50 ads limit reached on every ad set) — job paused");
-      }
+      for (let i = 0; i < creativesToProcess.length; i++) {
+        const creative = creativesToProcess[i];
+        
+        logger.info(`[adsFactoryAuto:meta] uploading image — ${(creative.imageUrl || "").slice(0, 120)}`);
+        const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
+        logger.info(`[adsFactoryAuto:meta] image hash: ${imageHash}`);
+        const adName = `Automation Ad ${i+1} — ${tsName}`;
+        const adPayload = {
+          ...template.payload,
+          name: adName,
+          adSetId: usedAdSetId,
+          imageHash: imageHash,
+          headline: creative.headline || "",
+          primaryText: creative.message || "",
+          description: creative.description || "",
+          // Use creative's explicit CTA if available, otherwise fall back to the template's CTA
+          callToAction: creative.callToAction || template.payload.callToAction || "LEARN_MORE",
+          // Use creative's linkUrl if available, otherwise fall back to template's linkUrl
+          linkUrl: creative.linkUrl || template.payload.linkUrl,
+          // Clear any explicit media URLs so the V2 controller relies solely on our pre-uploaded imageHash
+          imageUrl: undefined,
+          videoId: undefined,
+          videoThumbnailUrl: undefined,
+        };
 
-      // ── Persist PostedAd + invalidate cache ──────────────────────────────
-      await PostedAd.create({
-        userId:       fbUser._id.toString(),
-        facebookAdId: ad.id,
-        adAccountId,
-        campaignId:   metaCampaignId,
-        adSetId:      usedAdSetId,
-        creativeId:   adCreative.id,
-        pageId,
-        status:       "ACTIVE",
-        content: {
-          headline:     creative.headline,
-          message:      creative.message,
-          linkUrl:      creative.linkUrl,
-          callToAction: ctaType,
-          imageUrl:     creative.imageUrl || null,
-        },
-        metaData: { objective, conversionLocation, campaignId: metaCampaignId, adSetId: usedAdSetId, leadFormId: leadFormId || undefined },
-        adFactoryCampaignId: campaign._id.toString(),
-      });
+        const adRes = await executeController(metaAdControllerV2.createAdV2, adPayload);
+        const adId = adRes.ad.id;
+        const creativeId = adRes.creative.id;
+        
+        createdAdIds.push(adId);
+
+        // Persist PostedAd for this creative
+        await PostedAd.create({
+          userId:       fbUser._id.toString(),
+          facebookAdId: adId,
+          adAccountId,
+          campaignId:   usedCampaignId,
+          adSetId:      usedAdSetId,
+          creativeId:   creativeId,
+          pageId,
+          status:       "ACTIVE",
+          content: {
+            headline:     creative.headline,
+            message:      creative.message,
+            linkUrl:      creative.linkUrl,
+            callToAction: creative.callToAction || template.payload.callToAction || "LEARN_MORE",
+            imageUrl:     creative.imageUrl || null,
+          },
+          metaData: { objective: cellInfo.objective, conversionLocation: cellInfo.conversionLocation, campaignId: usedCampaignId, adSetId: usedAdSetId, leadFormId: leadFormId || undefined },
+          adFactoryCampaignId: campaign._id.toString(),
+        });
+      }
 
       try {
-        await invalidateAfterCreate(fbUser.userId, { adAccountId, campaignId: metaCampaignId, adSetId: usedAdSetId });
+        await invalidateAfterCreate(fbUser.userId, { adAccountId, campaignId: usedCampaignId });
       } catch (e) {
         logger.warn(`[adsFactoryAuto:meta] cache invalidation failed (non-fatal): ${e.message}`);
       }
 
-      logger.info(`[adsFactoryAuto:meta] ad created: ${ad.id} in ad set ${usedAdSetId}`);
-      return { adId: ad.id };
+      logger.info(`[adsFactoryAuto:meta] created ${createdAdIds.length} ad(s).`);
+      return { adId: createdAdIds.join(",") }; // Returns comma separated string for platformAdIds
     },
   },
 
@@ -344,8 +354,6 @@ async function run(jobId) {
     const campaignId     = campaign.metadata?.campaignId;
     const userId         = job.userId;
     const pairsPerCycle  = job.pairsPerCycle  || 1;
-    const callToAction   = job.callToAction   || []; // array
-    const destinationUrl = job.destinationUrl || "";
     const model          = job.model          || null;
 
     // 3. Credit check
@@ -466,7 +474,9 @@ async function run(jobId) {
       throw err;
     }
 
-    newCreatives = buildCreativesFromResults(completedCampaign, callToAction, destinationUrl, pairsPerCycle);
+    const metaPayload = job.targets?.meta?.template?.payload || {};
+    const ctaList = metaPayload.callToAction ? [metaPayload.callToAction] : [];
+    newCreatives = buildCreativesFromResults(completedCampaign, ctaList, metaPayload.linkUrl || "", pairsPerCycle);
     rawTexts  = completedCampaign.results?.text?.slice(-pairsPerCycle)  || [];
     rawImages = completedCampaign.results?.image?.slice(-pairsPerCycle) || [];
 
@@ -503,7 +513,7 @@ async function run(jobId) {
         let errMsg = platformErr.message;
         if (platformName === "meta") {
           try {
-            const { logMetaError } = metaLauncher();
+            const { logMetaError } = require("../../controllers/adPosting/metaAdLauncher");
             const m = logMetaError(`AutoPilot ${platformName} post failed`, platformErr);
             errMsg = m.title || errMsg;
           } catch (_) {}

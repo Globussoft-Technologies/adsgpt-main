@@ -1,12 +1,15 @@
 const { Queue, Worker } = require("bullmq");
 const logger = require("../../utils/logger");
 
-// TEST MODE: all presets fire every 10 minutes. Revert to production values before deploy.
-const FREQUENCY_CRON_MAP = {
-  daily:         "*/10 * * * *",
-  every_weekday: "*/10 * * * *",
-  every_weekend: "*/10 * * * *",
-};
+function resolvePresetCron(frequency, hour = 0) {
+  const h = parseInt(hour, 10) || 0;
+  switch (frequency) {
+    case "daily": return `0 ${h} * * *`;
+    case "every_weekday": return `0 ${h} * * 1-5`;
+    case "every_weekend": return `0 ${h} * * 0,6`;
+    default: return null;
+  }
+}
 
 // BullMQ needs its own dedicated ioredis connection — cannot share pub/sub connections
 const connection = {
@@ -51,11 +54,12 @@ function resolveScheduleForQueue(schedule) {
       repeatUnit:   cf.repeatUnit   || "week",
       repeatOnDays: cf.repeatOnDays || [],
       timezone,
+      hour:         schedule.hour || 0,
     };
   }
 
-  // Preset (daily / every_weekday / every_weekend) → fixed cron
-  return { type: "cron", cronExpression: FREQUENCY_CRON_MAP[frequency], timezone };
+  // Preset (daily / every_weekday / every_weekend) → dynamic cron based on hour
+  return { type: "cron", cronExpression: resolvePresetCron(frequency, schedule.hour), timezone };
 }
 
 /**
@@ -92,9 +96,11 @@ function buildRepeatOpts(schedule) {
     const days   = schedule.repeatOnDays || [];
     const tz     = schedule.timezone || "UTC";
 
+    const hour   = schedule.hour || 0;
+
     if (unit === "day") {
-      // Every N days
-      return { repeat: { pattern: `0 9 */${every} * *`, tz } };
+      // Every N days at specific hour
+      return { repeat: { pattern: `0 ${hour} */${every} * *`, tz } };
     }
 
     // Every N weeks on selected days — build a cron day-of-week list
@@ -105,7 +111,7 @@ function buildRepeatOpts(schedule) {
       : "1";
     // BullMQ does not natively support "every N weeks" cron, so we fire on the
     // correct days every week and let the orchestrator skip based on lastRunAt if needed.
-    return { repeat: { pattern: `0 9 * * ${dowNums}`, tz } };
+    return { repeat: { pattern: `0 ${hour} * * ${dowNums}`, tz } };
   }
 
   // "once" — one-shot with delay, no repeat
@@ -255,4 +261,4 @@ async function reloadActiveJobs() {
   logger.info(`[adsFactoryAuto] reloaded ${count} active autopilot jobs into BullMQ`);
 }
 
-module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, FREQUENCY_CRON_MAP, getNextRunTime };
+module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, resolvePresetCron, getNextRunTime };

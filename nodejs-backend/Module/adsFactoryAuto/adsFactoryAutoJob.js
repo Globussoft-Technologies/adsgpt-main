@@ -19,7 +19,7 @@ const RunHistorySchema = new mongoose.Schema(
     // Ad IDs for any other platform — { tiktok: "id", snapchat: "id", linkedin: "id", … }
     platformAdIds: { type: Map, of: String, default: () => new Map() },
     error: { type: String, default: null }, // error message if status = "failed"
-    
+
     // Storing the creatives generated during this run locally (avoids polluting campaign.creatives)
     automationCreatives: {
       type: [new mongoose.Schema(
@@ -37,11 +37,11 @@ const RunHistorySchema = new mongoose.Schema(
       )],
       default: []
     },
-    
+
     // Storing the exact raw results (so we can show exactly which ones failed and the error messages)
     rawImages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     rawTexts:  { type: [mongoose.Schema.Types.Mixed], default: [] }
-    
+
   },
   { _id: false }
 );
@@ -58,6 +58,9 @@ const ScheduleSchema = new mongoose.Schema(
 
     // UI "End date (optional)" picker
     endDate: { type: Date, default: null },
+
+    // The hour of the day (0-23) to run the automation
+    hour: { type: Number, default: 0, min: 0, max: 23 },
 
     // ── Custom frequency fields (visible when frequency = "custom") ───────────
     customFrequency: {
@@ -85,12 +88,13 @@ const ScheduleSchema = new mongoose.Schema(
 // Facebook / Instagram placement IDs — must exist in the user's Meta Business Manager
 const MetaTargetSchema = new mongoose.Schema(
   {
-    adAccountId:      { type: String,   default: "" },  // bare digits e.g. "123456789" — act_ is added at runtime
-    pageId:           { type: String,   default: "" },  // Facebook Page the ad runs under
-    campaignId:       { type: String,   default: "" },  // existing Meta campaign to attach to
-    adSetId:          { type: [String], default: [] },  // ordered list of ad sets — rotated when one hits 50-ad limit
-    activeAdSetIndex: { type: Number,   default: 0 },   // index into adSetIds currently being used
-    leadFormId:       { type: String,   default: "" },  // required for LEADS campaigns
+    template: {
+      name:               { type: String, required: true, trim: true },
+      objective:          { type: String, default: "" },
+      conversionLocation: { type: String, default: "" },
+      pageId:             { type: String, default: "" }, // Facebook Page the ad runs under
+      payload:            { type: mongoose.Schema.Types.Mixed, required: true },
+    },
   },
   { _id: false }
 );
@@ -103,13 +107,6 @@ const AdsFactoryJobSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, index: true }, // job owner
 
-    // The Ad Factory campaign this job pulls brand / objectives / assets from
-    campaignId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Campaign",
-      required: true,
-    },
-
     // When and how often to run — maps 1:1 to the UI Schedule modal
     schedule: { type: ScheduleSchema, required: true },
 
@@ -118,16 +115,12 @@ const AdsFactoryJobSchema = new mongoose.Schema(
 
     model: { type: String, default: null }, // model selected by user for this auto job
     // CTA button labels — copied from the campaign's own CTA list at job creation time
-    callToAction: { type: [String], default: [] },
 
-    // Landing page URL all ads in this job link to
-    destinationUrl: { type: String, default: "" },
 
-    // Platform-specific placement IDs.
-    // Only populate the platforms you want to post to; leave the rest as empty defaults.
+    // Platform-specific placement IDs — template is stored inside each target
     // To add a new platform: create a new *TargetSchema above and add a key here.
     targets: {
-      meta:     { type: MetaTargetSchema,     default: () => ({}) },
+      meta: { type: MetaTargetSchema, default: () => ({}) },
     },
 
     // Lifecycle state of the job

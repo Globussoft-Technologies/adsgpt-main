@@ -13,6 +13,7 @@ const scheduleSchema = Joi.object({
   startDate:       Joi.date().iso().optional().allow(null),
   endDate:         Joi.date().iso().optional().allow(null),
   timezone:        Joi.string().valid(...Intl.supportedValuesOf("timeZone")).default("UTC"),
+  hour:            Joi.number().integer().min(0).max(23).default(0),
   customFrequency: Joi.when("frequency", {
     is:        "custom",
     then:      customFrequencySchema.required(),
@@ -28,11 +29,13 @@ const scheduleSchema = Joi.object({
 // ─── Platform target schemas ──────────────────────────────────────────────────
 
 const metaTargetSchema = Joi.object({
-  adAccountId: Joi.string().allow("", null).optional(),
-  pageId:      Joi.string().allow("", null).optional(),
-  campaignId:  Joi.string().allow("", null).optional(),
-  adSetId:     Joi.array().items(Joi.string()).min(1).optional(),
-  leadFormId:  Joi.string().allow("", null).optional(),
+  template: Joi.object({
+    name: Joi.string().trim().required(),
+    objective: Joi.string().allow("", null).optional(),
+    conversionLocation: Joi.string().allow("", null).optional(),
+    pageId: Joi.string().allow("", null).optional(),
+    payload: Joi.object().required(),
+  }).optional(),
 });
 
 const targetsSchema = Joi.object({
@@ -53,11 +56,6 @@ const createJobSchema = Joi.object({
 
   model: Joi.string().allow("", null).optional(),
 
-  // Dynamic per-campaign — array of CTA strings copied from campaign.objectives.callToAction
-  callToAction: Joi.array().items(Joi.string().trim()).default([]),
-
-  destinationUrl: Joi.string().uri({ allowRelative: false }).allow("", null).optional(),
-
   targets: targetsSchema.optional(),
 });
 
@@ -68,8 +66,6 @@ const updateJobSchema = Joi.object({
   schedule:       scheduleSchema,
   pairsPerCycle:  Joi.number().integer().min(1).max(200),
   model:          Joi.string().allow("", null),
-  callToAction:   Joi.array().items(Joi.string().trim()),
-  destinationUrl: Joi.string().uri({ allowRelative: false }).allow("", null),
   targets:        targetsSchema,
 }).min(1);
 

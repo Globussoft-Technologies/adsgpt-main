@@ -1,7 +1,7 @@
 const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const Campaign      = require("../../Module/adFactory/adFactory");
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
-const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, FREQUENCY_CRON_MAP, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePresetCron, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
 const {
   createJobSchema,
   updateJobSchema,
@@ -48,7 +48,7 @@ class AdsFactoryAutoController {
       }
 
       // Resolve and store cron for preset frequencies
-      const resolvedCron = FREQUENCY_CRON_MAP[value.schedule.frequency] || null;
+      const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
 
       const job = await AdsFactoryJob.create({
         userId,
@@ -59,8 +59,6 @@ class AdsFactoryAutoController {
         },
         pairsPerCycle: value.pairsPerCycle ?? 1,
         model:         value.model         ?? null,
-        callToAction:  value.callToAction  ?? [],
-        destinationUrl: value.destinationUrl ?? "",
         targets:        value.targets ?? {},
         status:         "active",
       });
@@ -192,7 +190,7 @@ class AdsFactoryAutoController {
       if (value.targets        !== undefined) Object.assign(job.targets, value.targets);
 
       if (value.schedule) {
-        const resolvedCron = FREQUENCY_CRON_MAP[value.schedule.frequency] || null;
+        const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
         Object.assign(job.schedule, { ...value.schedule, cronExpression: resolvedCron });
         await cancelJob(job._id.toString());
         if (job.status === "active") {
@@ -952,7 +950,7 @@ class AdsFactoryAutoController {
         return res.status(404).json({ success: false, error: "Campaign not found" });
       }
 
-      const cronExpr = schedule.cronExpression || FREQUENCY_CRON_MAP[schedule.frequency] || null;
+      const cronExpr = schedule.cronExpression || resolvePresetCron(schedule.frequency, schedule.hour) || null;
       const tz       = schedule.timezone || "UTC";
       const fromDate = schedule.startDate ? new Date(schedule.startDate) : new Date();
 
