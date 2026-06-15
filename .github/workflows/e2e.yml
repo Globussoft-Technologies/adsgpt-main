@@ -38,11 +38,19 @@ jobs:
       - name: Run setup-frontend
         run: npx playwright test --project=setup-frontend
 
+      - name: Inspect .auth/ after login
+        # Surface exactly what landed on disk so we don't silently upload an
+        # empty artifact and have downstream jobs fail with a cryptic "not found".
+        run: |
+          echo "--- contents of e2e/.auth/ ---"
+          ls -la .auth/ || echo "(.auth/ does not exist)"
+
       - name: Upload auth state
         uses: actions/upload-artifact@v4
         with:
           name: auth-state
-          path: e2e/.auth/
+          path: e2e/.auth/frontend.json
+          if-no-files-found: error
           retention-days: 1
 
       - name: Upload report

@@ -111,5 +111,8 @@ setup('authenticate via aMember login form', async ({ page }) => {
     )
   }
 
+  // Make sure the parent dir exists — Playwright's storageState writes a
+  // file but does not always mkdir on every runtime.
+  fs.mkdirSync('.auth', { recursive: true })
   await page.context().storageState({ path: STATE_PATH })
 })
