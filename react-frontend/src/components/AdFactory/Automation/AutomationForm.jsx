@@ -27,7 +27,7 @@ import { getBrowserTimezone } from './TimezoneSelect';
 import PairsPerCycleSection from './PairsPerCycleSection';
 import { MODEL_OPTIONS } from './imageModels';
 import CallToActionSection, { isValidCtaUrl, isValidCtaButton } from './CallToActionSection';
-import TargetSection from './TargetSection';
+import TemplatePicker from './TemplatePicker';
 import SummarySection from './SummarySection';
 import MetaStatusPill from './MetaStatusPill';
 
@@ -80,6 +80,8 @@ const defaultFormValues = () => {
       preset: 'daily',
       startDate: todayISO(timezone),
       endDate: null,
+      // 0–23. Default midnight matches the backend's default behaviour.
+      hour: 0,
       timezone,
       custom: { interval: 1, unit: 'week', daysOfWeek: [] },
     },
@@ -88,18 +90,14 @@ const defaultFormValues = () => {
     // backend can reuse the existing image-generation worker contract.
     imageModelProvider: 'google',
     callToAction: { button: null, url: '' },
-    target: {
-      adAccountId: null,
-      campaignId: null,
-      campaignObjective: null,
-      // Ordered list of Meta ad set IDs. Backend rotates through them when
-      // one hits the 50-ad limit. Stored as array even when only one is
-      // picked so the payload shape is consistent.
-      adSetId: [],
-      pageId: null,
-      // Optional — only collected when the picked campaign's objective is
-      // OUTCOME_LEADS, in which case TargetSection surfaces a Lead Form picker.
-      leadFormId: null,
+    // Meta Ads V2 template the autopilot job will attach to. id = picked,
+    // dailyBudgetOverride = inline edit, objective = mirrored from the
+    // resolved template so CallToActionSection can fetch CTA options without
+    // a second round-trip.
+    template: {
+      id: null,
+      dailyBudgetOverride: null,
+      objective: null,
     },
   };
 };
@@ -115,7 +113,7 @@ function mergeConfig(target, source) {
     ...source,
     frequency: { ...target.frequency, ...(source.frequency || {}) },
     callToAction: { ...target.callToAction, ...(source.callToAction || {}) },
-    target: { ...target.target, ...(source.target || {}) },
+    template: { ...target.template, ...(source.template || {}) },
   };
 }
 
@@ -198,22 +196,16 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
 
   const updateValues = (patch) => setValues((prev) => ({ ...prev, ...patch }));
 
-  // Gate the Call-to-Action section until all four "Where to post" fields are
-  // picked. The CTA URL only makes sense once a target exists, and a wrongly
-  // ordered click can otherwise lead the user to fill the CTA first.
-  // adSetId is an array — at least one selection counts as "picked".
-  const hasAdSet =
-    Array.isArray(values?.target?.adSetId) && values.target.adSetId.length > 0;
-  const isTargetComplete =
-    !!values?.target?.adAccountId &&
-    !!values?.target?.campaignId &&
-    hasAdSet &&
-    !!values?.target?.pageId;
+  // Target reduces to "is a Meta Ads template picked?" — the template carries
+  // adAccountId / pageId / ad set targeting inside its payload. The CTA
+  // section overrides the template's callToAction + linkUrl, so it still
+  // requires a template to be picked first.
+  const isTargetComplete = !!values?.template?.id;
 
-  // Whatever objective the picked campaign carries. AutomationForm watches
+  // Whatever objective the picked template carries. AutomationForm watches
   // this and (a) dispatches fetchCtaOptions, (b) clears the stale CTA button
   // on a real change (not on hydration).
-  const campaignObjective = values?.target?.campaignObjective || null;
+  const campaignObjective = values?.template?.objective || null;
   const ctaCache = useSelector((state) =>
     selectCtaOptionsForObjective(state, campaignObjective)
   );
@@ -249,25 +241,9 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
   }, [campaignObjective, dispatch]);
 
-  // Reactive objective backfill — when the form is hydrated from a fetched
-  // job, target.campaignObjective is null (the API doesn't return the Meta
-  // campaign's objective on the job document). TargetSection's own effect
-  // fires fetchCampaign(adAccountId) which populates campaignsDropdown; once
-  // it lands, we look up the saved campaignId and patch the objective into
-  // the form values so the CTA section can resolve its option set.
-  const campaignsDropdown = useSelector((state) => state.adFactoryNew?.campaignsDropdown);
-  useEffect(() => {
-    const tgt = values?.target;
-    if (!tgt?.campaignId || tgt.campaignObjective) return;
-    if (!Array.isArray(campaignsDropdown) || campaignsDropdown.length === 0) return;
-    const match = campaignsDropdown.find((c) => c.id === tgt.campaignId);
-    if (match?.objective) {
-      setValues((prev) => ({
-        ...prev,
-        target: { ...prev.target, campaignObjective: match.objective },
-      }));
-    }
-  }, [campaignsDropdown, values?.target?.campaignId, values?.target?.campaignObjective]);
+  // Template-resolved objective patches into the form value from inside
+  // TemplatePicker once GET /templates/:id resolves — no longer derived from
+  // the old AdAccount → Campaign → adFactoryNew.campaignsDropdown cascade.
 
   // ----- Activation validation ---------------------------------------------
   const validationErrors = useMemo(() => {
@@ -277,10 +253,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     if (!values.frequency?.startDate) errs.push('Pick a start date');
     const pairs = Number(values.pairsPerCycle) || 0;
     if (pairs < 1) errs.push('Pairs per cycle must be at least 1');
-    if (!values.target?.adAccountId) errs.push('Pick an ad account');
-    if (!values.target?.campaignId) errs.push('Pick a Meta campaign');
-    if (!hasAdSet) errs.push('Pick at least one ad set');
-    if (!values.target?.pageId) errs.push('Pick a Facebook page');
+    if (!values.template?.id) errs.push('Pick an ad template');
     // CTA validation depends on the live options (per objective). When the
     // objective is unsupported, no button choice is valid — bail with a clear
     // message instead of asking the user to "pick" from an empty list.
@@ -291,12 +264,12 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
     if (!isValidCtaUrl(values.callToAction?.url || '')) errs.push('Enter a valid destination URL');
     return errs;
-  }, [isMetaConnected, values, hasAdSet, ctaUnsupported, ctaOptions]);
+  }, [isMetaConnected, values, ctaUnsupported, ctaOptions]);
   const canActivate = validationErrors.length === 0;
 
   // Edit mode = we already have a backend job for this campaign. Drives the
-  // footer button label (Update vs Activate), the dispatched thunk (PATCH vs
-  // POST), and the locked-field set in TargetSection.
+  // footer button label (Update vs Activate) and which thunk gets dispatched
+  // (PATCH vs POST).
   const isEditMode = !!entry?.jobId;
 
   const handleActivateClick = async () => {
@@ -385,9 +358,9 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         disabled={!isMetaConnected}
       />
 
-      <TargetSection
-        value={values.target}
-        onChange={(target) => updateValues({ target })}
+      <TemplatePicker
+        value={values.template}
+        onChange={(template) => updateValues({ template })}
         disabled={!isMetaConnected}
       />
 

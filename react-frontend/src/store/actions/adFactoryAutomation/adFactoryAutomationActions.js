@@ -11,6 +11,10 @@ const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
 // const AUTOPILOT_BASE = `https://h9pxq91j-7000.inc1.devtunnels.ms/adsgpt/ads-factory/autopilot`;
 
+// Meta Ads V2 templates — saved snapshots of the wizard form used as the
+// `targets.meta.template` payload on autopilot job creation.
+const META_TEMPLATES_BASE = `${BACKEND_HOST}/adsgpt/meta-ads/v2/templates`;
+
 // ----------------------------------------------------------------------------
 // Form ↔ API payload mapping
 //
@@ -34,24 +38,47 @@ function dayOfWeekNumberToName(n) {
   return Number.isInteger(idx) ? DAY_OF_WEEK_NAMES[idx] : null;
 }
 
-// Coerce the form's `target.adSetId` (which may be an array, a single string
-// from a legacy job, or null) into the ordered string[] the backend wants.
-// Backend rotates through the array when one ad set hits the 50-ad limit.
-function toAdSetIdArray(value) {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (typeof value === 'string' && value) return [value];
-  return [];
+// Build the autopilot job's targets.meta.template payload from the form's
+// `template` slice and the slice-cached full template document. Applies the
+// daily-budget override + CTA/URL overrides on top of the template's saved
+// payload (everything else passes through verbatim). Returns null when no
+// template is picked or its full payload hasn't been fetched yet.
+function buildMetaTemplateForJob(formTemplate, fullTemplate, callToAction) {
+  if (!formTemplate?.id || !fullTemplate || !fullTemplate.payload) return null;
+  const basePayload = fullTemplate.payload || {};
+
+  // Apply user overrides on top of the saved template payload. Only fields
+  // the form lets the user edit are touched; the rest pass through as-is.
+  const overlay = {};
+  if (
+    formTemplate.dailyBudgetOverride != null &&
+    !Number.isNaN(Number(formTemplate.dailyBudgetOverride))
+  ) {
+    overlay.dailyBudget = Number(formTemplate.dailyBudgetOverride);
+  }
+  if (callToAction?.button) overlay.callToAction = callToAction.button;
+  if (callToAction?.url) overlay.linkUrl = callToAction.url;
+
+  return {
+    name: fullTemplate.name,
+    objective: fullTemplate.objective,
+    conversionLocation: fullTemplate.conversionLocation,
+    pageId: basePayload.pageId || null,
+    payload: { ...basePayload, ...overlay },
+  };
 }
 
-// Builds the POST /jobs request body from the form's values.
-function buildJobPayload(adsgptCampaignId, config) {
+// Builds the POST /jobs request body from the form's values + the slice's
+// cached full template document. `fullTemplate` is looked up by the calling
+// thunk from `metaTemplatesById[template.id].template`.
+function buildJobPayload(adsgptCampaignId, config, fullTemplate) {
   if (!config) return null;
   const {
     frequency = {},
     pairsPerCycle = 1,
     imageModelProvider,
     callToAction = {},
-    target = {},
+    template = {},
   } = config;
 
   const schedule = {
@@ -60,6 +87,8 @@ function buildJobPayload(adsgptCampaignId, config) {
   };
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
+  // 0–23. Backend accepts `0` so we always send it (default if unset).
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
 
   // Custom frequency: only attach the customFrequency block when actually
   // using a custom recurrence; the backend rejects it for other presets.
@@ -75,17 +104,6 @@ function buildJobPayload(adsgptCampaignId, config) {
     };
   }
 
-  // Only attach platform keys when their required fields are present. The
-  // backend silently skips a platform with missing requireds anyway, but we
-  // keep the payload tidy.
-  const meta = {};
-  if (target.adAccountId) meta.adAccountId = target.adAccountId;
-  const adSetIds = toAdSetIdArray(target.adSetId);
-  if (adSetIds.length > 0) meta.adSetId = adSetIds;
-  if (target.pageId) meta.pageId = target.pageId;
-  if (target.campaignId) meta.campaignId = target.campaignId;
-  if (target.leadFormId) meta.leadFormId = target.leadFormId;
-
   const payload = {
     campaignId: adsgptCampaignId,
     schedule,
@@ -95,9 +113,12 @@ function buildJobPayload(adsgptCampaignId, config) {
     // either accepts it or defaults it internally.
   };
   if (imageModelProvider) payload.model = imageModelProvider;
-  if (callToAction.button) payload.callToAction = [callToAction.button];
-  if (callToAction.url) payload.destinationUrl = callToAction.url;
-  if (Object.keys(meta).length > 0) payload.targets = { meta };
+
+  // Attach the Meta Ads V2 template + user overrides. Skip the whole targets
+  // block when no template is picked / its full payload isn't cached yet —
+  // the activation thunk shouldn't have fired anyway (canActivate guards it).
+  const metaTemplate = buildMetaTemplateForJob(template, fullTemplate, callToAction);
+  if (metaTemplate) payload.targets = { meta: { template: metaTemplate } };
 
   return payload;
 }
@@ -107,14 +128,14 @@ function buildJobPayload(adsgptCampaignId, config) {
 // whatever the form has. Backend will accept or reject the diff. Matches
 // buildJobPayload's meta-targets handling for consistency.
 // ----------------------------------------------------------------------------
-function buildJobUpdatePayload(config) {
+function buildJobUpdatePayload(config, fullTemplate) {
   if (!config) return null;
   const {
     frequency = {},
     pairsPerCycle = 1,
     imageModelProvider,
     callToAction = {},
-    target = {},
+    template = {},
   } = config;
 
   const schedule = {
@@ -123,6 +144,7 @@ function buildJobUpdatePayload(config) {
   };
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
   if (frequency.preset === 'custom') {
     const custom = frequency.custom || {};
     const repeatOnDays = Array.isArray(custom.daysOfWeek)
@@ -135,23 +157,17 @@ function buildJobUpdatePayload(config) {
     };
   }
 
-  // Mirror buildJobPayload — append every meta field that has a value.
-  const meta = {};
-  if (target.adAccountId) meta.adAccountId = target.adAccountId;
-  const adSetIds = toAdSetIdArray(target.adSetId);
-  if (adSetIds.length > 0) meta.adSetId = adSetIds;
-  if (target.pageId) meta.pageId = target.pageId;
-  if (target.campaignId) meta.campaignId = target.campaignId;
-  if (target.leadFormId) meta.leadFormId = target.leadFormId;
-
   const payload = {
     schedule,
     pairsPerCycle: Math.max(1, Number(pairsPerCycle) || 1),
   };
   if (imageModelProvider) payload.model = imageModelProvider;
-  if (callToAction.button) payload.callToAction = [callToAction.button];
-  if (callToAction.url) payload.destinationUrl = callToAction.url;
-  if (Object.keys(meta).length > 0) payload.targets = { meta };
+
+  // Same template-attachment as buildJobPayload. Always re-send the template
+  // on update — partial diffs of payload sub-objects don't compose well
+  // server-side, so we ship the full overlay each time.
+  const metaTemplate = buildMetaTemplateForJob(template, fullTemplate, callToAction);
+  if (metaTemplate) payload.targets = { meta: { template: metaTemplate } };
 
   return payload;
 }
@@ -204,11 +220,32 @@ function toDateInputValue(input) {
 function mapJobToEntry(job, previous) {
   if (!job) return null;
   const meta = job?.targets?.meta || {};
+  // New API shape attaches the Meta Ads V2 template inside meta.template.
+  // The job response echoes the template's id back at meta.template.id (or
+  // sometimes templateId — handle both for safety) so Edit mode can re-pick
+  // it from the picker without forcing the user to choose again.
+  const apiTemplate = meta.template || {};
   const schedule = job?.schedule || {};
   const pairsPerCycle = Number(job?.pairsPerCycle) || 1;
   const totalRuns = Number(job?.totalRuns) || 0;
   const failedRuns = Number(job?.failedRuns) || 0;
   const successfulRuns = Math.max(0, totalRuns - failedRuns);
+
+  const templateId =
+    apiTemplate.id ||
+    apiTemplate.templateId ||
+    apiTemplate._id ||
+    previous?.config?.template?.id ||
+    null;
+  const apiObjective =
+    apiTemplate.objective || previous?.config?.template?.objective || null;
+  // The user's daily-budget override (if any) was applied into payload at
+  // POST time. Pull it back so Edit shows the same number — otherwise the
+  // input would look empty when the user re-opens the form.
+  const apiDailyBudget = apiTemplate?.payload?.dailyBudget;
+  const previousOverride = previous?.config?.template?.dailyBudgetOverride;
+  const dailyBudgetOverride =
+    apiDailyBudget != null ? Number(apiDailyBudget) : previousOverride ?? null;
 
   return {
     status: mapApiStatusToLocal(job?.status),
@@ -223,6 +260,12 @@ function mapJobToEntry(job, previous) {
           previous?.config?.frequency?.startDate ||
           null,
         endDate: toDateInputValue(schedule.endDate) || null,
+        // 0–23 — falls back to 0 when the backend hasn't set it yet.
+        hour: Number.isInteger(schedule.hour)
+          ? schedule.hour
+          : Number.isInteger(previous?.config?.frequency?.hour)
+            ? previous.config.frequency.hour
+            : 0,
         timezone: schedule.timezone || previous?.config?.frequency?.timezone || 'UTC',
         custom: {
           interval: Number(schedule.repeatEvery) || 1,
@@ -235,22 +278,18 @@ function mapJobToEntry(job, previous) {
       pairsPerCycle,
       imageModelProvider: job?.model || previous?.config?.imageModelProvider || 'google',
       callToAction: {
-        button: Array.isArray(job?.callToAction) ? job.callToAction[0] || null : null,
-        url: job?.destinationUrl || '',
+        // Backend echoes the override under template.payload.callToAction;
+        // fall back to the top-level callToAction array for backward compat.
+        button:
+          apiTemplate?.payload?.callToAction ||
+          (Array.isArray(job?.callToAction) ? job.callToAction[0] : null) ||
+          null,
+        url: apiTemplate?.payload?.linkUrl || job?.destinationUrl || '',
       },
-      target: {
-        adAccountId: meta.adAccountId || previous?.config?.target?.adAccountId || null,
-        campaignId: meta.campaignId || previous?.config?.target?.campaignId || null,
-        // API doesn't expose Meta campaign's objective — keep whatever's
-        // cached. AutomationForm has a reactive lookup that fills this in
-        // from campaignsDropdown once it loads.
-        campaignObjective: previous?.config?.target?.campaignObjective || null,
-        // Backend now returns adSetId as an ordered array. Older jobs in the
-        // DB may still have a string — coerce both shapes into an array so
-        // the multi-select renders consistently in Edit mode.
-        adSetId: toAdSetIdArray(meta.adSetId),
-        pageId: meta.pageId || null,
-        leadFormId: meta.leadFormId || previous?.config?.target?.leadFormId || null,
+      template: {
+        id: templateId,
+        objective: apiObjective,
+        dailyBudgetOverride,
       },
     },
     stats: {
@@ -299,21 +338,27 @@ export const fetchAutomation = createAsyncThunk(
         'Content-Type': 'application/json',
       },
     });
-    const jobs = Array.isArray(res?.data?.data) ? res.data.data : [];
+    // The backend filters server-side via ?campaignId=. The response shape
+    // is { success, total, data: [...] } in normal cases but we've seen
+    // single-job responses come back as `data: {...}` (object) in some
+    // environments. Coerce both into an array so downstream logic doesn't
+    // silently treat a valid single-result hit as "no jobs" and wipe the
+    // freshly-saved Redux entry.
+    const raw = res?.data?.data;
+    let jobs;
+    if (Array.isArray(raw)) jobs = raw;
+    else if (raw && typeof raw === 'object') jobs = [raw];
+    else jobs = [];
 
-    // The list view populates campaignId as a nested object; the detail view
-    // returns it as a raw id string. Handle both.
-    const matchesCampaign = (j) => {
-      const c = j?.campaignId;
-      if (!c) return false;
-      if (typeof c === 'string') return c === campaignId;
-      return c?._id === campaignId;
-    };
-
-    // Prefer non-terminal states if the backend returned multiple jobs for
-    // this campaign (active > paused > completed > failed > others).
+    // We trust the server-side filter — the ?campaignId= query already
+    // narrows the result set. Client-side re-filtering used to require the
+    // populated campaignId object's _id to match the URL id, which broke
+    // whenever the backend returned campaignId as a string (or omitted it,
+    // as in the slim list view). The flag below differentiates "API
+    // explicitly returned no jobs" from any other zero-result path so the
+    // reducer can decide whether to wipe or preserve the local entry.
     const STATUS_PRIORITY = ['active', 'paused', 'completed', 'failed'];
-    const matching = jobs.filter(matchesCampaign);
+    const matching = [...jobs];
     matching.sort((a, b) => {
       const ai = STATUS_PRIORITY.indexOf(a?.status);
       const bi = STATUS_PRIORITY.indexOf(b?.status);
@@ -323,8 +368,14 @@ export const fetchAutomation = createAsyncThunk(
     const job = matching[0] || null;
     const previous = getState().adFactoryAutomation?.configsByCampaign?.[campaignId];
     const entry = job ? mapJobToEntry(job, previous) : null;
+    // Only true when the backend's response was a recognized "empty list"
+    // (success-shaped wrapper with an empty `data` array). Anything else —
+    // network anomaly, unexpected shape, missing fields — leaves this false
+    // so the reducer keeps the existing Redux entry instead of destroying it.
+    const confirmedEmpty =
+      res?.data?.success === true && Array.isArray(raw) && raw.length === 0;
 
-    return { campaignId, entry };
+    return { campaignId, entry, confirmedEmpty };
   }
 );
 
@@ -338,10 +389,14 @@ export const fetchAutomation = createAsyncThunk(
 // to use via Redux state.
 export const saveAutomation = createAsyncThunk(
   'adFactoryAutomation/save',
-  async ({ campaignId, config }, { getState, rejectWithValue }) => {
+  async ({ campaignId, config }, { getState, dispatch, rejectWithValue }) => {
     if (!campaignId) throw new Error('campaignId is required');
 
-    const payload = buildJobPayload(campaignId, config);
+    const templateId = config?.template?.id;
+    const fullTemplate =
+      (templateId && getState().adFactoryAutomation?.metaTemplatesById?.[templateId]?.template) ||
+      null;
+    const payload = buildJobPayload(campaignId, config, fullTemplate);
     const token = getCookies();
 
     let job = null;
@@ -368,6 +423,9 @@ export const saveAutomation = createAsyncThunk(
     // Fall back to a client-computed next-run if the API didn't return one.
     const fallbackNextRunAt = computeNextRunAt(config?.frequency, now);
 
+    const resolvedNextRunAt =
+      job?.schedule?.nextRunAt ||
+      (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : null);
     const entry = {
       status: AUTOMATION_STATUS.ACTIVE,
       jobId: job?._id || previous?.jobId || null,
@@ -376,14 +434,31 @@ export const saveAutomation = createAsyncThunk(
         generated: previous?.stats?.generated || 0,
         posted: previous?.stats?.posted || 0,
         lastRunAt: job?.schedule?.lastRunAt || previous?.stats?.lastRunAt || null,
-        nextRunAt:
-          job?.schedule?.nextRunAt ||
-          (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : null),
+        nextRunAt: resolvedNextRunAt,
+        // Mirror into the nested schedule object that AutomationActiveNode
+        // reads — without this the canvas card shows "No upcoming" until
+        // fetchAutomationStats' next poll lands. Same fix applied in
+        // updateAutomation; see comment there.
+        schedule: {
+          ...(previous?.stats?.schedule || {}),
+          nextRunAt: resolvedNextRunAt,
+          frequency: job?.schedule?.frequency || previous?.stats?.schedule?.frequency,
+          timezone: job?.schedule?.timezone || previous?.stats?.schedule?.timezone,
+          startDate: job?.schedule?.startDate || previous?.stats?.schedule?.startDate,
+          endDate: job?.schedule?.endDate || previous?.stats?.schedule?.endDate,
+          lastRunAt: job?.schedule?.lastRunAt || previous?.stats?.schedule?.lastRunAt,
+        },
       },
       history: Array.isArray(job?.runHistory) ? job.runHistory : previous?.history || [],
       createdAt: job?.createdAt || previous?.createdAt || now.toISOString(),
       updatedAt: job?.updatedAt || now.toISOString(),
     };
+
+    // Chain into fetchAutomationStats so the backend's authoritative view
+    // (totalRuns, posted, generationHealth) takes over once it lands. Fire-
+    // and-forget; the synchronous schedule mirror above is enough for the
+    // user to see the right time immediately.
+    dispatch(fetchAutomationStats(campaignId));
 
     return { campaignId, entry };
   }
@@ -400,7 +475,7 @@ export const saveAutomation = createAsyncThunk(
 // ----------------------------------------------------------------------------
 export const updateAutomation = createAsyncThunk(
   'adFactoryAutomation/update',
-  async ({ campaignId, config }, { getState, rejectWithValue }) => {
+  async ({ campaignId, config }, { getState, dispatch, rejectWithValue }) => {
     if (!campaignId) throw new Error('campaignId is required');
     const previous = getState().adFactoryAutomation?.configsByCampaign?.[campaignId];
     const jobId = previous?.jobId;
@@ -410,7 +485,11 @@ export const updateAutomation = createAsyncThunk(
       });
     }
 
-    const payload = buildJobUpdatePayload(config);
+    const templateId = config?.template?.id;
+    const fullTemplate =
+      (templateId && getState().adFactoryAutomation?.metaTemplatesById?.[templateId]?.template) ||
+      null;
+    const payload = buildJobUpdatePayload(config, fullTemplate);
 
     let job = null;
     try {
@@ -436,6 +515,9 @@ export const updateAutomation = createAsyncThunk(
     // fields the API doesn't echo on update, like campaignObjective).
     const now = new Date();
     const fallbackNextRunAt = computeNextRunAt(config?.frequency, now);
+    const resolvedNextRunAt =
+      job?.schedule?.nextRunAt ||
+      (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : previous.stats?.nextRunAt || null);
     const entry = {
       ...previous,
       status: mapApiStatusToLocal(job?.status) || previous.status || AUTOMATION_STATUS.ACTIVE,
@@ -443,12 +525,30 @@ export const updateAutomation = createAsyncThunk(
       config,
       stats: {
         ...previous.stats,
-        nextRunAt:
-          job?.schedule?.nextRunAt ||
-          (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : previous.stats?.nextRunAt || null),
+        nextRunAt: resolvedNextRunAt,
+        // AutomationActiveNode reads `stats.schedule.nextRunAt` (the nested
+        // shape that fetchAutomationStats normally populates). On update we
+        // were only writing the flat stats.nextRunAt, so the canvas card
+        // showed "No upcoming" until the next 5-min poll. Mirror the new
+        // schedule values into the nested object so the visual refreshes
+        // immediately after the user clicks Update.
+        schedule: {
+          ...(previous.stats?.schedule || {}),
+          nextRunAt: resolvedNextRunAt,
+          frequency: job?.schedule?.frequency || previous.stats?.schedule?.frequency,
+          timezone: job?.schedule?.timezone || previous.stats?.schedule?.timezone,
+          startDate: job?.schedule?.startDate || previous.stats?.schedule?.startDate,
+          endDate: job?.schedule?.endDate || previous.stats?.schedule?.endDate,
+        },
       },
       updatedAt: job?.updatedAt || now.toISOString(),
     };
+
+    // Chain into fetchAutomationStats so the canvas eventually reflects the
+    // backend's authoritative view (totalRuns/posted/generationHealth) in
+    // addition to the schedule we just synced inline. Fire-and-forget — the
+    // PATCH response already gave us enough to show the user the new time.
+    dispatch(fetchAutomationStats(campaignId));
 
     return { campaignId, entry };
   }
@@ -767,6 +867,7 @@ function buildSummaryPayload(campaignId, config) {
   };
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
   if (frequency.preset === 'custom') {
     const custom = frequency.custom || {};
     const repeatOnDays = Array.isArray(custom.daysOfWeek)
@@ -815,6 +916,77 @@ export const fetchAutomationSummary = createAsyncThunk(
           err?.response?.data?.message ||
           err?.message ||
           'Failed to fetch summary',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
+// fetchMetaAdsTemplates — GET /meta-ads/v2/templates
+//
+// Slim list of saved templates (no payload). Used to populate the
+// TemplatePicker dropdown in AutomationForm. Backend returns newest first.
+// ----------------------------------------------------------------------------
+export const fetchMetaAdsTemplates = createAsyncThunk(
+  'adFactoryAutomation/fetchMetaAdsTemplates',
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(META_TEMPLATES_BASE, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const templates = Array.isArray(res?.data?.templates) ? res.data.templates : [];
+      return { templates };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load templates',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
+// fetchMetaAdsTemplateById — GET /meta-ads/v2/templates/:id
+//
+// Fetches the full template (with payload) so we can attach it to the
+// autopilot job. Cached per-id in the slice so re-picking the same template
+// doesn't re-hit the network.
+// ----------------------------------------------------------------------------
+export const fetchMetaAdsTemplateById = createAsyncThunk(
+  'adFactoryAutomation/fetchMetaAdsTemplateById',
+  async (templateId, { getState, rejectWithValue }) => {
+    if (!templateId) {
+      return rejectWithValue({ message: 'templateId is required' });
+    }
+    const cached = getState().adFactoryAutomation?.metaTemplatesById?.[templateId];
+    if (cached?.template) {
+      return { templateId, template: cached.template, cached: true };
+    }
+    try {
+      const res = await axios.get(`${META_TEMPLATES_BASE}/${templateId}`, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const template = res?.data?.template || null;
+      if (!template) {
+        return rejectWithValue({ message: 'Template not found' });
+      }
+      return { templateId, template, cached: false };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load template',
       });
     }
   }

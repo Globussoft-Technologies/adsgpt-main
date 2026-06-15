@@ -14,6 +14,8 @@ import {
   fetchActivity,
   fetchAutomationStats,
   fetchAutomationSummary,
+  fetchMetaAdsTemplates,
+  fetchMetaAdsTemplateById,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 
 export { AUTOMATION_STATUS };
@@ -105,6 +107,13 @@ const initialState = {
   // populated once the form is valid enough to be Activate-able.
   //   { [campaignId]: { data, loading, error } }
   summaryByCampaign: {},
+  // Meta Ads V2 templates — list of slim picker rows from /meta-ads/v2/templates.
+  metaTemplatesList: [],
+  metaTemplatesLoading: false,
+  metaTemplatesError: null,
+  // Full per-template cache keyed by id, populated when the user picks a row.
+  //   { [id]: { template, loading, error } }
+  metaTemplatesById: {},
 };
 
 const adFactoryAutomationSlice = createSlice({
@@ -215,15 +224,20 @@ const adFactoryAutomationSlice = createSlice({
       })
       .addCase(fetchAutomation.fulfilled, (state, action) => {
         state.loading = false;
-        const { campaignId, entry } = action.payload || {};
+        const { campaignId, entry, confirmedEmpty } = action.payload || {};
         if (!campaignId) return;
         if (entry) {
           state.configsByCampaign[campaignId] = entry;
-        } else {
-          // No server-side job — clear any stale Redux entry so the canvas
-          // doesn't keep showing an automation that's been deleted elsewhere.
+        } else if (confirmedEmpty) {
+          // Backend explicitly returned an empty list — the job was deleted
+          // elsewhere, so clear any stale Redux entry.
           delete state.configsByCampaign[campaignId];
         }
+        // Else: no entry but the response wasn't a confirmed empty list
+        // (anomalous shape, network glitch, missing fields). Preserve the
+        // existing entry. Wiping here would destroy a freshly-saved entry
+        // when the backend's list endpoint returns the new job in a shape
+        // the thunk doesn't recognise.
       })
       .addCase(fetchAutomation.rejected, (state, action) => {
         state.loading = false;
@@ -387,6 +401,56 @@ const adFactoryAutomationSlice = createSlice({
           loading: false,
           error: action.payload?.message || 'Failed to load summary',
         };
+      })
+
+      // -- Meta Ads templates --
+      .addCase(fetchMetaAdsTemplates.pending, (state) => {
+        state.metaTemplatesLoading = true;
+        state.metaTemplatesError = null;
+      })
+      .addCase(fetchMetaAdsTemplates.fulfilled, (state, action) => {
+        state.metaTemplatesLoading = false;
+        state.metaTemplatesList = action.payload?.templates || [];
+      })
+      .addCase(fetchMetaAdsTemplates.rejected, (state, action) => {
+        state.metaTemplatesLoading = false;
+        state.metaTemplatesError = action.payload?.message || 'Failed to load templates';
+      })
+
+      .addCase(fetchMetaAdsTemplateById.pending, (state, action) => {
+        const templateId = action.meta?.arg;
+        if (!templateId) return;
+        const previous = state.metaTemplatesById[templateId] || {};
+        state.metaTemplatesById[templateId] = {
+          template: previous.template || null,
+          loading: true,
+          error: null,
+        };
+      })
+      .addCase(fetchMetaAdsTemplateById.fulfilled, (state, action) => {
+        const { templateId, template, cached } = action.payload || {};
+        if (!templateId) return;
+        if (cached) {
+          // No-op: cache hit, slice already has the right shape.
+          state.metaTemplatesById[templateId].loading = false;
+          state.metaTemplatesById[templateId].error = null;
+          return;
+        }
+        state.metaTemplatesById[templateId] = {
+          template,
+          loading: false,
+          error: null,
+        };
+      })
+      .addCase(fetchMetaAdsTemplateById.rejected, (state, action) => {
+        const templateId = action.meta?.arg;
+        if (!templateId) return;
+        const previous = state.metaTemplatesById[templateId] || {};
+        state.metaTemplatesById[templateId] = {
+          template: previous.template || null,
+          loading: false,
+          error: action.payload?.message || 'Failed to load template',
+        };
       });
   },
 });
@@ -537,6 +601,18 @@ const emptySummaryBucket = { data: null, loading: false, error: null };
 export const selectAutomationSummary = (state, campaignId) =>
   (campaignId && state.adFactoryAutomation.summaryByCampaign[campaignId]) ||
   emptySummaryBucket;
+
+// Meta Ads templates — slim list + per-id full payload cache.
+export const selectMetaAdsTemplates = (state) =>
+  state.adFactoryAutomation.metaTemplatesList || [];
+export const selectMetaAdsTemplatesLoading = (state) =>
+  state.adFactoryAutomation.metaTemplatesLoading;
+export const selectMetaAdsTemplatesError = (state) =>
+  state.adFactoryAutomation.metaTemplatesError;
+const emptyTemplateBucket = { template: null, loading: false, error: null };
+export const selectMetaAdsTemplateById = (state, templateId) =>
+  (templateId && state.adFactoryAutomation.metaTemplatesById[templateId]) ||
+  emptyTemplateBucket;
 export const selectCtaOptionsLoading = (state) => state.adFactoryAutomation.ctaOptionsLoading;
 export const selectCtaOptionsError = (state) => state.adFactoryAutomation.ctaOptionsError;
 

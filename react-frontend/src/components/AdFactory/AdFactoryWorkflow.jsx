@@ -130,6 +130,45 @@ const INNER_AUTO_POSITIONS = {
   [AUTOMATION_RESULT_NODE_ID]: { x: 510, y: 80 },
 };
 
+// Pre-compute the viewport for the flat (no-automation) layout so the
+// canvas paints at the correct zoom on the FIRST render — no fitView
+// race against ReactFlow's per-node ResizeObserver, no setNodes-on-
+// timeout dance, no visible flicker. Produces the same numbers
+// fitView({ padding: 0.2 }) would converge to once measurement is done.
+//
+// Bounds come from FlowCardArray's static positions + the AdFactoryStepCard
+// render size (~340w × ~140h):
+//   x ∈ [-300, 1540]   (Brand Info left edge → Post Ad right edge)
+//   y ∈ [   0,  700]   (Brand Info top      → Platforms bottom)
+const FLAT_BOUNDS = { left: -300, right: 1540, top: 0, bottom: 700 };
+const FLAT_PADDING = 0.2; // matches Reset's fitView padding
+const computeFlatViewport = () => {
+  const W = FLAT_BOUNDS.right - FLAT_BOUNDS.left;
+  const H = FLAT_BOUNDS.bottom - FLAT_BOUNDS.top;
+  // Approximate the ReactFlow container size from the window. Sidebar
+  // (~85px) + page padding (~32px) horizontally; header (~80px) +
+  // padding (~32px) vertically. Falls back to FHD when window dims
+  // aren't available (SSR-safe defaults).
+  const containerW = Math.max(800, (typeof window !== 'undefined' ? window.innerWidth : 1700) - 120);
+  const containerH = Math.max(500, (typeof window !== 'undefined' ? window.innerHeight : 800) - 110);
+  // ReactFlow's actual fitView math (from @xyflow/system):
+  //   zoom = container / (bounds * (1 + padding))
+  // i.e. padding inflates the bounds once, not the container twice. My
+  // earlier 0.6×container formula treated padding as 20% on each side
+  // (40% total), producing a far smaller zoom than Reset does.
+  const zoom = Math.min(
+    containerW / (W * (1 + FLAT_PADDING)),
+    containerH / (H * (1 + FLAT_PADDING)),
+  );
+  const boundsCenterX = (FLAT_BOUNDS.left + FLAT_BOUNDS.right) / 2;
+  const boundsCenterY = (FLAT_BOUNDS.top + FLAT_BOUNDS.bottom) / 2;
+  return {
+    x: containerW / 2 - boundsCenterX * zoom,
+    y: containerH / 2 - boundsCenterY * zoom,
+    zoom,
+  };
+};
+
 const FlowCardArray = [
   {
     id: 'brand-info',
@@ -420,11 +459,21 @@ export default function AdFactoryWorkflowDarkReal() {
   // The selectedServices signal is what flips on submit of the manual
   // ('once' mode) Services form — without it the manual group would stay
   // locked from click → first result, which feels broken to the user.
+  // `selectedServices` is set by ServicesForm.handleSubmit (Generate Once) but
+  // is NOT persisted across reloads, and is never set by AutomationForm. So if
+  // a user activates automation and refreshes, this flag would be false and
+  // the manual group would render locked even though Services is green-
+  // checked. Fall back to the campaign's persisted services config (which
+  // survives reload) so the manual fork stays unlockable post-refresh.
+  const hasConfiguredServices = (productionAndServices?.servicesSelected || []).some(
+    (s) => Number(s?.serviceParams?.quantity) > 0
+  );
   const isManualActive =
     (results?.image?.length || 0) > 0 ||
     (results?.text?.length || 0) > 0 ||
     !!selectedServices?.image ||
-    !!selectedServices?.text;
+    !!selectedServices?.text ||
+    hasConfiguredServices;
   // Force-collapse the entire auto pipeline when the feature flag is off,
   // OR when the automation is dormant (Meta no longer in platforms). Every
   // downstream check (auto-group expansion, AutomationActiveNode isActive,
@@ -586,19 +635,22 @@ export default function AdFactoryWorkflowDarkReal() {
     const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
 
     const stepNodes = FlowCardArray.filter((card) => {
-      // Hide Prepare Creatives and Post Ad when neither Meta nor (Google with posting enabled) is selected.
-      if (card.id === 'preview' || card.id === 'post-ad') {
-        if (hasMeta) return true;
-        if (enableGooglePosting && hasGoogle) return true;
-        return false;
-      }
-
       // Manual sub-pipeline nodes live inside the manual group container.
       // They only render while the manual group is expanded; collapsed =
       // hidden. With the automation flag off, the group container doesn't
       // exist at all — the inner nodes become flat top-level nodes that
       // always render (pre-automation layout).
+      //
+      // Preview and Post Ad additionally require Meta (or Google with
+      // posting enabled) to be selected. Both filters must apply — earlier
+      // code returned early on the Meta check and bypassed the expansion
+      // gate, causing post-ad to leak out as a floating top-level node at
+      // its original FlowCardArray position whenever Meta was picked.
       if (INNER_MANUAL_NODE_IDS.includes(card.id)) {
+        if (card.id === 'preview' || card.id === 'post-ad') {
+          const allowedByPlatform = hasMeta || (enableGooglePosting && hasGoogle);
+          if (!allowedByPlatform) return false;
+        }
         return IS_AUTOMATION_ENABLED ? manualExpanded : true;
       }
       return true;
@@ -872,46 +924,11 @@ export default function AdFactoryWorkflowDarkReal() {
     setNodes(generateNodes());
   }, [generateNodes, setNodes]);
 
-  // When the automation feature is OFF the canvas renders the flat layout —
-  // Brand Info on the far left through Post Ad on the far right — which is
-  // wider than the group-container layout that fitView was tuned for. The
-  // built-in <ReactFlow fitView /> prop measures on first mount when the
-  // nodes array is still empty, so it ends up zoomed wrong and Post Ad gets
-  // cropped on the right edge.
-  //
-  // Just calling fitView after a fixed delay isn't enough on cold reloads:
-  // ReactFlow only includes nodes with measured dimensions in its bounds
-  // calculation, so if even one node hasn't laid out yet (Post Ad in
-  // particular, since it's the last one rendered), the resulting viewport
-  // excludes it. We poll with rAF until every node reports a `measured`
-  // width/height, then run fitView exactly once.
-  const didInitialFlatFit = useRef(false);
-  useEffect(() => {
-    if (IS_AUTOMATION_ENABLED) return undefined;
-    if (didInitialFlatFit.current) return undefined;
-    if (!rfInstance || nodes.length === 0) return undefined;
-
-    let rafId;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 30; // ~500ms upper bound at 60fps; bail rather than spin forever
-    const tryFit = () => {
-      attempts += 1;
-      const rfNodes = rfInstance.getNodes();
-      const allMeasured =
-        rfNodes.length === nodes.length &&
-        rfNodes.every((n) => n.measured?.width && n.measured?.height);
-      if (allMeasured || attempts >= MAX_ATTEMPTS) {
-        didInitialFlatFit.current = true;
-        rfInstance.fitView({ padding: 0.12, duration: 0 });
-        return;
-      }
-      rafId = requestAnimationFrame(tryFit);
-    };
-    rafId = requestAnimationFrame(tryFit);
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, [rfInstance, nodes.length]);
+  // No measurement-based fitting when the automation feature is OFF —
+  // the flat-layout viewport is pre-computed via `computeFlatViewport()`
+  // and passed as `defaultViewport` to ReactFlow below, so the very
+  // first paint is at the Reset state. No effect, no timeouts, no
+  // re-render flicker.
 
   // Hydrate automation state on mount so an active automation shows up on the
   // canvas without the user having to open the form first. Skipped entirely
@@ -1150,16 +1167,23 @@ export default function AdFactoryWorkflowDarkReal() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onInit={setRfInstance}
-          fitView
+          // When the automation feature is OFF, skip ReactFlow's built-in
+          // fitView (which fires before nodes are measured and crops Post
+          // Ad on the right) and hand it a pre-computed viewport instead.
+          // The defaultViewport matches what fitView({ padding: 0.2 })
+          // would converge to — same numbers Reset produces — so the very
+          // first paint lands in the correct state with no flicker.
+          fitView={IS_AUTOMATION_ENABLED}
           fitViewOptions={
-            window.innerWidth < 1380
+            IS_AUTOMATION_ENABLED && window.innerWidth < 1380
               ? {}
-              : {
-                  padding: { top: '40px', right: '100px', bottom: '100px', left: '100px' },
-                  // minZoom: 0.5,
-                  // maxZoom: 1.5,
-                }
+              : IS_AUTOMATION_ENABLED
+                ? {
+                    padding: { top: '40px', right: '100px', bottom: '100px', left: '100px' },
+                  }
+                : undefined
           }
+          defaultViewport={IS_AUTOMATION_ENABLED ? undefined : computeFlatViewport()}
           zoomOnScroll={false}
           zoomOnPinch={false}
           panOnScroll={false}

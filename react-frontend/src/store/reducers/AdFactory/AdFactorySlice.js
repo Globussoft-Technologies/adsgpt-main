@@ -256,12 +256,38 @@ const adFactorySlice = createSlice({
         }
 
         // SPECIAL HANDLING FOR PREVIEW NODE:
-        // Preview should only be enabled if BOTH image and text generations are in completedNodes
-        // This ensures both have been generated and the user can proceed to prepare creatives
+        // Two unlock paths:
+        //   1. Manual generation flow — both image + text generations
+        //      produced results (legacy behaviour, preserved).
+        //   2. Upstream-completed flow — Services has been configured
+        //      (either via Generate Once or via the automation form).
+        //      Without this second path, automation-mode users see a
+        //      permanent lock on Preview even though Services + Platforms
+        //      are green, because the cron worker runs generation
+        //      server-side and never marks 'image-generation' / 'text-
+        //      generation' as completed in local Redux.
         if (node?.id === 'preview') {
           const imageGenCompleted = state?.completedNodes?.includes('image-generation');
           const textGenCompleted = state?.completedNodes?.includes('text-generation');
-          const isEnabled = imageGenCompleted && textGenCompleted;
+          const servicesCompleted = state?.completedNodes?.includes('services');
+          const isEnabled =
+            (imageGenCompleted && textGenCompleted) || servicesCompleted;
+
+          return {
+            ...node,
+            isEnabled,
+          };
+        }
+
+        // SPECIAL HANDLING FOR POST-AD NODE:
+        // Same problem as preview — the default dep check requires
+        // 'preview' to be in completedNodes, which never happens in
+        // automation mode. Unlock when Services has been configured so the
+        // node stops looking broken to automation users.
+        if (node?.id === 'post-ad') {
+          const previewCompleted = state?.completedNodes?.includes('preview');
+          const servicesCompleted = state?.completedNodes?.includes('services');
+          const isEnabled = previewCompleted || servicesCompleted;
 
           return {
             ...node,

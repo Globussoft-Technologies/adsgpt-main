@@ -31,6 +31,20 @@ const UNIT_OPTIONS = [
   { value: 'week', label: 'week' },
 ];
 
+// Hour-of-day options for the autopilot schedule. Backend stores `hour` as
+// 0–23 UTC after timezone conversion; we surface a 12-hour label to the user
+// to match the GMT pill aesthetic. Order matters — value drives the dropdown.
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: h,
+  label: hourLabel(h),
+}));
+
+function hourLabel(h) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:00 ${period}`;
+}
+
 const DOW = [
   { value: 0, short: 'S', full: 'Sunday' },
   { value: 1, short: 'M', full: 'Monday' },
@@ -45,6 +59,9 @@ export default function FrequencySection({ value, onChange, disabled }) {
   const preset = value?.preset || 'daily';
   const startDate = value?.startDate || '';
   const endDate = value?.endDate || '';
+  // Hour-of-day (0–23) for the autopilot schedule. Defaults to 0 (midnight)
+  // to match the backend default. Stored as a number; the dropdown coerces.
+  const hour = Number.isInteger(value?.hour) ? value.hour : 0;
   const custom = value?.custom || { interval: 1, unit: 'week', daysOfWeek: [] };
 
   const patch = (partial) => onChange?.({ ...(value || {}), ...partial });
@@ -154,7 +171,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
       {/* Preset dropdown + dates + timezone packed onto one row when width
           allows. items-end keeps the dropdowns' baselines aligned with the
           date inputs (which sit beneath their labels). */}
-      <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(10rem,11rem)_minmax(0,1fr)_minmax(0,1fr)_minmax(10rem,11rem)] sm:items-end">
+      <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(10rem,11rem)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,8rem)_minmax(9rem,10rem)] sm:items-end">
         <InputCommonDropdown
           label="Frequency"
           options={PRESET_OPTIONS}
@@ -182,6 +199,16 @@ export default function FrequencySection({ value, onChange, disabled }) {
         ) : (
           <div />
         )}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs text-[#AFAFAF]">Run at</label>
+          <InputCommonDropdown
+            label="Hour"
+            options={HOUR_OPTIONS}
+            value={hour}
+            onChange={(v) => patch({ hour: Number(v) })}
+            disabled={disabled}
+          />
+        </div>
         <TimezoneSelect
           value={value?.timezone}
           onChange={(tz) => {
