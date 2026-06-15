@@ -2,98 +2,176 @@ name: Nightly E2E
 
 on:
   schedule:
-    # 03:00 UTC = 08:30 IST every day. Cron drift on GitHub-hosted runners is
-    # typically <15 min.
+    # 03:00 UTC = 08:30 IST every day. Cron drift on GitHub-hosted runners
+    # is typically <15 min.
     - cron: '0 3 * * *'
   workflow_dispatch:
-    inputs:
-      project:
-        description: 'Playwright project filter (frontend | api). Empty = all.'
-        type: string
-        default: ''
 
 concurrency:
   group: e2e-nightly
   cancel-in-progress: false
 
+env:
+  E2E_FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
+  E2E_API_URL: ${{ secrets.E2E_API_URL }}
+  E2E_LOGIN_URL: ${{ secrets.E2E_LOGIN_URL }}
+  E2E_LOGIN_USERNAME: ${{ secrets.E2E_LOGIN_USERNAME }}
+  E2E_LOGIN_PASSWORD: ${{ secrets.E2E_LOGIN_PASSWORD }}
+
 jobs:
-  e2e:
-    name: Playwright suite
+  # ----------------------------------------------------------------
+  # Node 1: Login
+  # Runs the aMember login once, uploads .auth/frontend.json as an
+  # artifact so the downstream jobs don't have to log in again.
+  # ----------------------------------------------------------------
+  login:
+    name: Login
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: e2e
-    env:
-      E2E_FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
-      E2E_API_URL: ${{ secrets.E2E_API_URL }}
-      E2E_LOGIN_URL: ${{ secrets.E2E_LOGIN_URL }}
-      E2E_LOGIN_USERNAME: ${{ secrets.E2E_LOGIN_USERNAME }}
-      E2E_LOGIN_PASSWORD: ${{ secrets.E2E_LOGIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-e2e
 
-      - uses: actions/setup-node@v4
+      - name: Run setup-frontend
+        run: npx playwright test --project=setup-frontend
+
+      - name: Upload auth state
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '20.20.0'
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          name: auth-state
+          path: e2e/.auth/
+          retention-days: 1
 
-      - name: Install JS deps
-        # e2e/ may not ship a lockfile initially — fall back to install.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
-
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          # Bump the suffix to bust the cache if Playwright misbehaves.
-          key: pw-browsers-${{ runner.os }}-${{ hashFiles('e2e/package.json') }}-v1
-
-      - name: Install Playwright browsers
-        # Always install system deps (apt packages aren't cached); skip the
-        # browser binaries if the cache already has them.
-        run: |
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install --with-deps chromium
-          fi
-
-      - name: Run Playwright
-        # Empty input → run everything. Otherwise pass --project=<name>.
-        run: |
-          if [ -n "${{ github.event.inputs.project }}" ]; then
-            npx playwright test --project="${{ github.event.inputs.project }}"
-          else
-            npx playwright test
-          fi
-
-      - name: Upload HTML report
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ github.run_id }}
+          name: report-login-${{ github.run_id }}
           path: e2e/playwright-report/
           retention-days: 14
 
-      - name: Upload traces & screenshots
+  # ----------------------------------------------------------------
+  # Node 2: Pages smoke (parallel to BrandIQ, downstream of Login)
+  # ----------------------------------------------------------------
+  pages:
+    name: Pages smoke
+    needs: login
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-e2e
+
+      - name: Restore auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-state
+          path: e2e/.auth/
+
+      - name: Run smoke spec
+        run: npx playwright test --project=frontend tests/frontend/smoke.spec.js
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-pages-${{ github.run_id }}
+          path: e2e/playwright-report/
+          retention-days: 14
+
+      - name: Upload traces (on fail)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces-${{ github.run_id }}
+          name: traces-pages-${{ github.run_id }}
           path: e2e/test-results/
           retention-days: 14
 
-      - name: Notify Slack on failure
-        # Opt-in: only fires if you set the webhook secret.
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
+  # ----------------------------------------------------------------
+  # Node 3: BrandIQ CRUD journey (parallel to Pages, downstream of Login)
+  # ----------------------------------------------------------------
+  brandiq:
+    name: BrandIQ CRUD
+    needs: login
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-e2e
+
+      - name: Restore auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-state
+          path: e2e/.auth/
+
+      - name: Run BrandIQ CRUD spec
+        run: npx playwright test --project=frontend tests/frontend/journeys/brandiq-crud.spec.js
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-brandiq-${{ github.run_id }}
+          path: e2e/playwright-report/
+          retention-days: 14
+
+      - name: Upload traces (on fail)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-brandiq-${{ github.run_id }}
+          path: e2e/test-results/
+          retention-days: 14
+
+  # ----------------------------------------------------------------
+  # Node 4: API liveness (independent of Login — no browser needed)
+  # ----------------------------------------------------------------
+  api:
+    name: API liveness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-e2e
+        with:
+          install-browsers: 'false'
+
+      - name: Run api project
+        run: npx playwright test --project=api
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-api-${{ github.run_id }}
+          path: e2e/playwright-report/
+          retention-days: 14
+
+  # ----------------------------------------------------------------
+  # Summary: posts a Slack ping if any prior node failed.
+  # Runs even when an upstream job fails (`if: always()`).
+  # ----------------------------------------------------------------
+  notify:
+    name: Notify on failure
+    needs: [login, pages, brandiq, api]
+    if: always() && (needs.login.result == 'failure' || needs.pages.result == 'failure' || needs.brandiq.result == 'failure' || needs.api.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Slack
+        if: env.SLACK_WEBHOOK_URL != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.E2E_SLACK_WEBHOOK }}
         run: |
@@ -106,7 +184,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Nightly E2E failed* — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>"
+                  "text": "*Nightly E2E failed* — login=${{ needs.login.result }}, pages=${{ needs.pages.result }}, brandiq=${{ needs.brandiq.result }}, api=${{ needs.api.result }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>"
                 }
               }
             ]

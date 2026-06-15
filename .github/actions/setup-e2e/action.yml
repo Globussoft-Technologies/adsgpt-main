@@ -1,0 +1,48 @@
+name: Setup E2E
+description: |
+  Installs Node, e2e JS deps, and (optionally) Playwright browsers. Pulled
+  out of e2e.yml so the four jobs in the graph don't repeat 30 lines each.
+
+inputs:
+  install-browsers:
+    description: 'Install Playwright browsers (set false for projects that do not use a browser, e.g. api-only).'
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20.20.0'
+        cache: npm
+        cache-dependency-path: e2e/package-lock.json
+
+    - name: Install JS deps
+      shell: bash
+      working-directory: e2e
+      run: |
+        if [ -f package-lock.json ]; then
+          npm ci --no-audit --no-fund
+        else
+          npm install --no-audit --no-fund
+        fi
+
+    - name: Cache Playwright browsers
+      if: inputs.install-browsers == 'true'
+      id: pw-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        # Bump the suffix to bust the cache if Playwright misbehaves.
+        key: pw-browsers-${{ runner.os }}-${{ hashFiles('e2e/package.json') }}-v1
+
+    - name: Install Playwright browsers
+      if: inputs.install-browsers == 'true'
+      shell: bash
+      working-directory: e2e
+      run: |
+        if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+          npx playwright install-deps chromium
+        else
+          npx playwright install --with-deps chromium
+        fi

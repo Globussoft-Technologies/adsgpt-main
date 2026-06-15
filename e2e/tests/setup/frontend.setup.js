@@ -13,11 +13,23 @@
 // the moment the URL flips to the app host — the handshake hasn't run yet.
 // The reliable "auth completed" signal is the authenticated sidebar being
 // visible. We assert on that, then verify the cookie as a sanity check.
+import fs from 'node:fs'
 import { test as setup } from '@playwright/test'
 
 const STATE_PATH = '.auth/frontend.json'
 
 setup('authenticate via aMember login form', async ({ page }) => {
+  // Short-circuit if a valid session was already produced (e.g. by an upstream
+  // CI job that uploaded .auth/ as an artifact). Saves us from re-logging-in
+  // in every downstream job of a split workflow.
+  if (fs.existsSync(STATE_PATH)) {
+    setup.info().annotations.push({
+      type: 'auth',
+      description: `Reusing existing storage state at ${STATE_PATH}`,
+    })
+    return
+  }
+
   const loginUrl = process.env.E2E_LOGIN_URL
   const username = process.env.E2E_LOGIN_USERNAME
   const password = process.env.E2E_LOGIN_PASSWORD
@@ -58,7 +70,10 @@ setup('authenticate via aMember login form', async ({ page }) => {
   }
 
   // ---- 3. Wait for landing on the app host ----
-  const appHost = new URL(process.env.E2E_FRONTEND_URL).host
+  // playwright.config.js validates E2E_FRONTEND_URL is set before any test
+  // runs, so this is guaranteed defined by the time we get here — the cast
+  // is just to satisfy the type checker.
+  const appHost = new URL(/** @type {string} */ (process.env.E2E_FRONTEND_URL)).host
   await page.waitForURL((url) => url.host === appHost, { timeout: 45_000 })
 
   // ---- 4. Wait for the React handshake to finish ----
