@@ -125,7 +125,15 @@ export default function LandingPageAnalyzerHome() {
           <Loader2 className="h-7 w-7 animate-spin text-gray-400 dark:text-white/40" />
         </div>
       ) : recent.length === 0 ? (
-        <div className="mx-auto flex w-full max-w-375 flex-1 flex-col overflow-y-auto scrollbar-thin px-4 2xl:px-8">
+        // True flex centering — no nested scroll container, no max-w-375
+        // (which on this layout's content area was leaving asymmetric gaps
+        // and reserving scrollbar gutter the empty state never uses).
+        // EmptyHero already does its own internal items-center / justify-
+        // center, so we just give it a full-height/full-width centering host.
+        // Extra `pb-32` shifts the optical center slightly up — heroes feel
+        // better seated a touch above the geometric middle, especially with
+        // a heavy headline on top.
+        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-32 2xl:px-8 2xl:pb-40">
           <EmptyHero
             url={url}
             setUrl={setUrl}
