@@ -32,7 +32,7 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
   const [regenerationError, setRegenerationError] = useState(null);
   const [isRetryingImage, setIsRetryingImage] = useState(false);
   const [script, setScript] = useState(null);
-  const [tone, setTone] = useState('');
+  const [tone, setTone] = useState('Casual');
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   const generatedData = useMemo(() => imageAndScript?.data || imageAndScript, [imageAndScript]);

@@ -4,11 +4,11 @@ const { authenticateJWT } = require("../services/authService");
 
 const router = express.Router();
 
-router.post("/check-auth", authenticateJWT, checkAuth);
-router.get("/status", authenticateJWT, getStatus);
-router.delete("/disconnect", authenticateJWT, disconnect);
-router.get("/oauth/redirect", oauthRedirect);
-router.get("/upload", uploadImage);
-router.get("/create-design", createDesign);
+router.post("/v2/check-auth", authenticateJWT, checkAuth);
+router.get("/v2/status", authenticateJWT, getStatus);
+router.delete("/v2/disconnect", authenticateJWT, disconnect);
+router.get("/v2/oauth/redirect", oauthRedirect);
+router.get("/v2/upload", uploadImage);
+router.get("/v2/create-design", createDesign);
 
 module.exports = router;

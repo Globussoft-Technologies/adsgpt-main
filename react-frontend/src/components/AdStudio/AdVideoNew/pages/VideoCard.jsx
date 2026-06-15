@@ -437,6 +437,19 @@ export default function VideoCard({
     </div>
   );
 
+  // Hide the card entirely while a clone/avatar job is still generating its
+  // script/image (status pending, nothing generated yet, nothing failed).
+  // Once the script + image finish, the RESUME card shows; failures still show
+  // the error state below.
+  const isCloneOrAvatar = item?.inputs?.type === 'clone' || item?.inputs?.type === 'avatar';
+  const isStillGeneratingScriptOrImage =
+    isCloneOrAvatar &&
+    item?.status === 'pending' &&
+    item?.generatedImage !== 'failed' &&
+    item?.generatedScript !== 'failed' &&
+    (!item?.generatedImage || !item?.generatedScript);
+  if (isStillGeneratingScriptOrImage) return null;
+
   return (
     <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
@@ -488,9 +501,7 @@ export default function VideoCard({
         </>
       ) : item?.inputs?.type === 'avatar' &&
         item?.status === 'pending' &&
-        item?.generatedImage &&
         item?.generatedImage !== 'failed' &&
-        item?.generatedScript &&
         item?.generatedScript !== 'failed' ? (
         <div className="relative h-full w-full bg-black">
           <img
@@ -529,9 +540,7 @@ export default function VideoCard({
         </div>
       ) : item?.inputs?.type === 'clone' &&
         item?.status === 'pending' &&
-        item?.generatedImage &&
         item?.generatedImage !== 'failed' &&
-        item?.generatedScript &&
         item?.generatedScript !== 'failed' ? (
         <div className="relative h-full w-full bg-black">
           <img

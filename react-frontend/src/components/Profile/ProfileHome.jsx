@@ -6,14 +6,24 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
+import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import getCookies from '@/utils/getCookies';
 import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
 import { fetchModelCredits } from '@/utils/fetchModelCredits';
+import { getCanvaStatus, disconnectCanva, checkCanvaAuth } from '@/apis/canva/canvaApi';
+import { getUserAdPostingInfo, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
+import { getGoogleUser, googleDisconnect } from '@/apis/googleAds/googleAdsApi';
+
+const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
+const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
+const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
+const BACKEND_HOST_AUTH = import.meta.env.VITE_SOCKET_URL;
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
+const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
 
 function ProfileShimmer() {
   return (
@@ -58,7 +68,140 @@ export default function ProfileHome() {
   const [extraCredits, setExtraCredits] = useState({ imageModels: [], videoModels: [] });
   const [loadingCredits, setLoadingCredits] = useState(true);
   const HideUpgrade = import.meta.env.VITE_MODE == 'dev' ? '12' : '9';
-// console.log(userData)
+
+  const [canvaStatus, setCanvaStatus] = useState(null); // null = loading, { connected, display_name, email, ... }
+  const [canvaActionLoading, setCanvaActionLoading] = useState(false);
+
+  useEffect(() => {
+    getCanvaStatus()
+      .then((data) => setCanvaStatus(data))
+      .catch(() => setCanvaStatus({ connected: false }));
+  }, []);
+
+  const handleConnectCanva = async () => {
+    setCanvaActionLoading(true);
+    try {
+      const result = await checkCanvaAuth(null);
+      if (result.status) {
+        // Already connected — refresh status
+        const fresh = await getCanvaStatus();
+        setCanvaStatus(fresh);
+        setCanvaActionLoading(false);
+        return;
+      }
+
+      const { state, codeChallenge } = result;
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: CANVA_CLIENT_ID,
+        redirect_uri: CANVA_REDIRECT_URI,
+        scope: CANVA_SCOPES,
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+      });
+
+      const popup = window.open(
+        `https://www.canva.com/api/oauth/authorize?${params.toString()}`,
+        'canva-oauth',
+        'width=600,height=700'
+      );
+
+      const onMessage = async (event) => {
+        if (event.data === 'canva-connected') {
+          window.removeEventListener('message', onMessage);
+          if (popup && !popup.closed) popup.close();
+          const fresh = await getCanvaStatus();
+          setCanvaStatus(fresh);
+          setCanvaActionLoading(false);
+        }
+      };
+      window.addEventListener('message', onMessage);
+
+      // Fallback: if popup is closed manually without completing OAuth
+      const pollClosed = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(pollClosed);
+          window.removeEventListener('message', onMessage);
+          setCanvaActionLoading(false);
+        }
+      }, 500);
+    } catch (err) {
+      console.error('Canva connect error:', err);
+      setCanvaActionLoading(false);
+    }
+  };
+
+  const handleDisconnectCanva = async () => {
+    setCanvaActionLoading(true);
+    try {
+      await disconnectCanva();
+      setCanvaStatus({ connected: false });
+    } catch (err) {
+      console.error('Canva disconnect error:', err);
+    } finally {
+      setCanvaActionLoading(false);
+    }
+  };
+
+  // ── Meta ──
+  const [metaUser, setMetaUser] = useState(undefined); // undefined=loading, null=not connected, obj=connected
+  const [metaActionLoading, setMetaActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userData?.user_id) return;
+    getUserAdPostingInfo(userData.user_id)
+      .then((data) => setMetaUser(data || null))
+      .catch(() => setMetaUser(null));
+  }, [userData?.user_id]);
+
+  const handleConnectMeta = () => {
+    setMetaActionLoading(true);
+    const feUrl = window.location.href;
+    window.location.href = `${BACKEND_HOST_AUTH}/api/auth/facebook?userId=${userData?.user_id}&feUrl=${encodeURIComponent(feUrl)}`;
+  };
+
+  const handleDisconnectMeta = async () => {
+    setMetaActionLoading(true);
+    try {
+      await metaDisconnect(userData?.user_id);
+      setMetaUser(null);
+    } catch (err) {
+      console.error('Meta disconnect error:', err);
+    } finally {
+      setMetaActionLoading(false);
+    }
+  };
+
+  // ── Google ──
+  const [googleUser, setGoogleUser] = useState(undefined);
+  const [googleActionLoading, setGoogleActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userData?.user_id) return;
+    getGoogleUser(userData.user_id)
+      .then((data) => setGoogleUser(data || null))
+      .catch(() => setGoogleUser(null));
+  }, [userData?.user_id]);
+
+  const handleConnectGoogle = () => {
+    setGoogleActionLoading(true);
+    const feUrl = window.location.href;
+    window.location.href = `${BACKEND_HOST_AUTH}/api/auth/google?token=${getCookies()}&feUrl=${encodeURIComponent(feUrl)}`;
+  };
+
+  const handleDisconnectGoogle = async () => {
+    setGoogleActionLoading(true);
+    try {
+      await googleDisconnect(userData?.user_id);
+      setGoogleUser(null);
+    } catch (err) {
+      console.error('Google disconnect error:', err);
+    } finally {
+      setGoogleActionLoading(false);
+    }
+  };
+
   useEffect(() => {
     const loadCredits = async () => {
       const data = await fetchModelCredits();
@@ -92,10 +235,12 @@ export default function ProfileHome() {
   };
 
   return (
-    <div className="relative top-0 flex scale-100 items-start justify-center p-0 text-zinc-900 lg:-top-[10vh] lg:scale-[0.8] 2xl:top-0 2xl:scale-100 2xl:p-6 dark:text-white">
-      <div className="mx-auto flex w-full max-w-[43rem] flex-col gap-6 lg:gap-10 2xl:max-w-3xl">
+    <div className="flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
+      <div className="mx-auto flex w-full max-w-[43rem] flex-col gap-6 lg:max-w-6xl lg:gap-8 2xl:max-w-7xl">
+        {/* Two-column area: Profile + Subscription (left), Integrations (right), Credits full width below */}
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
         {/* Profile Section */}
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-6 lg:col-start-1 lg:row-start-1">
           <div className="relative size-[6.75rem] overflow-hidden rounded-full bg-zinc-100 2xl:size-[6.75rem] dark:bg-white/10">
             {userData?.profileImage ? (
               <img
@@ -161,11 +306,11 @@ export default function ProfileHome() {
         </div>
 
         {/* Subscription Section */}
-        <div>
+        <div className="lg:col-start-1 lg:row-start-2">
           <h3 className="mb-[16px] text-lg font-semibold text-zinc-800 2xl:text-2xl dark:text-[#E0E0E0]">
             Subscription
           </h3>
-          <div className="relative flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+          <div className="relative flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] lg:mt-12 dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
             <div className="upper w-full">
               <p className="text-sm font-semibold text-zinc-900 2xl:text-lg dark:text-white">
                 {' '}
@@ -209,7 +354,7 @@ export default function ProfileHome() {
           </div>
         </div>
         {/* Credits Section */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 lg:col-span-2 lg:row-start-3">
           <h3 className="mb-0 text-lg font-semibold text-zinc-800 2xl:text-2xl dark:text-[#E0E0E0]">
             Credits
           </h3>
@@ -265,7 +410,7 @@ export default function ProfileHome() {
                 <Loader2 className="h-6 w-6 animate-spin text-[#7EA7F3]" />
               </div>
             ) : extraCredits.imageModels.length > 0 || extraCredits.videoModels.length > 0 ? (
-              <>
+              <div className="grid grid-cols-1 gap-y-4 lg:grid-cols-2 lg:gap-x-6">
                 {/* Image Models Row */}
                 {extraCredits.imageModels.length > 0 && (
                   <div className="flex flex-col gap-3">
@@ -302,7 +447,7 @@ export default function ProfileHome() {
 
                 {/* Video Models Row */}
                 {extraCredits.videoModels.length > 0 && (
-                  <div className="mt-4 flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/5">
+                  <div className="mt-4 flex flex-col gap-3 border-t border-black/10 pt-4 lg:mt-0 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6 dark:border-white/5">
                     <div
                       onClick={() => setShowVideoModels(!showVideoModels)}
                       className="flex cursor-pointer items-center justify-center gap-2 transition-opacity hover:opacity-80"
@@ -333,10 +478,157 @@ export default function ProfileHome() {
                     </AnimatePresence>
                   </div>
                 )}
-              </>
+              </div>
             ) : null}
           </div>
         </div>
+
+        {/* Integrations Section */}
+        <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2">
+          <h3 className="mb-0 text-lg font-semibold text-zinc-800 2xl:text-2xl dark:text-[#E0E0E0]">Integrations</h3>
+          <div className="rounded-2xl border border-black/5 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+          <div className="flex flex-col divide-y divide-black/5 dark:divide-white/5">
+
+            {/* ── Meta ── */}
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1877F2]/10">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073C24 5.404 18.628 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-white">Meta</p>
+                  {metaUser === undefined ? (
+                    <div className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-zinc-200 dark:bg-white/10" />
+                  ) : metaUser ? (
+                    <p className="text-10 text-zinc-400 dark:text-white/40 truncate max-w-35">{metaUser.name || metaUser.email || 'Connected'}</p>
+                  ) : (
+                    <p className="text-10 text-zinc-400 dark:text-white/40">Not connected</p>
+                  )}
+                </div>
+                {metaUser && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-10 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Connected</span>
+                )}
+              </div>
+              {metaUser === undefined ? null : metaUser ? (
+                <button
+                  onClick={handleDisconnectMeta}
+                  disabled={metaActionLoading}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  {metaActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Disconnect'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleConnectMeta}
+                  disabled={metaActionLoading}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#1877F2] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#1466d8] disabled:opacity-50"
+                >
+                  {metaActionLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M24 12.073C24 5.404 18.628 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+                  )}
+                  Connect Meta
+                </button>
+              )}
+            </div>
+
+            {/* ── Google ── */}
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-[#232323]">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-white">Google</p>
+                  {googleUser === undefined ? (
+                    <div className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-zinc-200 dark:bg-white/10" />
+                  ) : googleUser ? (
+                    <p className="text-10 text-zinc-400 dark:text-white/40 truncate max-w-35">{googleUser.name || googleUser.email || 'Connected'}</p>
+                  ) : (
+                    <p className="text-10 text-zinc-400 dark:text-white/40">Not connected</p>
+                  )}
+                </div>
+                {googleUser && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-10 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Connected</span>
+                )}
+              </div>
+              {googleUser === undefined ? null : googleUser ? (
+                <button
+                  onClick={handleDisconnectGoogle}
+                  disabled={googleActionLoading}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  {googleActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Disconnect'}
+                </button>
+              ) : (
+                <button
+  onClick={handleConnectGoogle}
+  disabled={googleActionLoading}
+  className="flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-white/10 dark:bg-white dark:text-black dark:hover:bg-zinc-50"
+>
+                  {googleActionLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                  )}
+                  Connect Google
+                </button>
+              )}
+            </div>
+
+            {/* ── Canva ── */}
+            {CANVA_ENABLED && (
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-[#232323]">
+                  <img src={canvaIconLogo} alt="Canva" className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-white">Canva</p>
+                  {canvaStatus === null ? (
+                    <div className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-zinc-200 dark:bg-white/10" />
+                  ) : canvaStatus.connected ? (
+                    <p className="text-10 text-zinc-400 dark:text-white/40">
+                      {canvaStatus.canva_user_id ? `ID: ${canvaStatus.canva_user_id.slice(0, 12)}…` : 'Account connected'}
+                    </p>
+                  ) : (
+                    <p className="text-10 text-zinc-400 dark:text-white/40">Not connected</p>
+                  )}
+                </div>
+                {canvaStatus?.connected && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-10 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Connected</span>
+                )}
+              </div>
+              {canvaStatus === null ? null : canvaStatus.connected ? (
+                <button
+                  onClick={handleDisconnectCanva}
+                  disabled={canvaActionLoading}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  {canvaActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Disconnect'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleConnectCanva}
+                  disabled={canvaActionLoading}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#7D2AE8] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#6B21D4] disabled:opacity-50"
+                >
+                  {canvaActionLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <img src={canvaIconLogo} alt="" className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  Connect Canva
+                </button>
+              )}
+            </div>
+            )}
+
+          </div>
+        </div>
+        </div>{/* end Integrations */}
+        </div>{/* end two-column area */}
 
         <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
           <h3 className="mb-4 text-lg font-semibold text-zinc-800 dark:text-[#E0E0E0]">

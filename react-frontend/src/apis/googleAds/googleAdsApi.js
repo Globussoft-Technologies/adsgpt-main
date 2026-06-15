@@ -82,8 +82,19 @@ export const disconnectGoogleAccount = async (userId) => {
   return data;
 };
 
+// Alias used by Profile UI to disconnect the connected Google account.
+export const googleDisconnect = disconnectGoogleAccount;
+
 export const checkGoogleAccount = async () => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/check-account`, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+// Fetch the connected Google user for a given app user id (null when not connected).
+export const getGoogleUser = async (userId) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/users/${userId}`, {
     headers: authHeaders(),
   });
   return data;

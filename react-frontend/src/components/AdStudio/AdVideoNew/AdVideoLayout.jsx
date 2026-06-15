@@ -192,7 +192,7 @@ const AdVideoLayout = () => {
 
       if ((isLoading || isMissingData) && !hasAnyError) {
         toast.dismiss();
-        toast.error('Clone video is generating, please wait');
+        toast.error('Image and script is generating, please wait');
         return;
       }
       if (generatedData?.generatedImage && generatedData?.generatedScript && !hasAnyError) {
