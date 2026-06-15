@@ -27,7 +27,9 @@ jobs:
     env:
       E2E_FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
       E2E_API_URL: ${{ secrets.E2E_API_URL }}
-      E2E_FRONTEND_JWT: ${{ secrets.E2E_FRONTEND_JWT }}
+      E2E_LOGIN_URL: ${{ secrets.E2E_LOGIN_URL }}
+      E2E_LOGIN_USERNAME: ${{ secrets.E2E_LOGIN_USERNAME }}
+      E2E_LOGIN_PASSWORD: ${{ secrets.E2E_LOGIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
