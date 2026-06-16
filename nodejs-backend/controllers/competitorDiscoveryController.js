@@ -199,8 +199,8 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
     page = 1,
     pageSize = 10,
     platform = 'all',
-    categoryId,
-    subCategoryId,
+    categoryIds = [],
+    subCategoryIds = [],
     dateFrom,
     dateTo,
     sortOrder = 'desc',
@@ -227,8 +227,15 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
         limit: pageSize,               // ← per-platform page size
         sortBy: 'date',
         sortOrder,
-        categoryId,                    // filters applied inside ES now
-        subCategoryId,
+        // Multi-select category filters applied inside ES (terms query). Only
+        // sent when something is selected — when empty we omit the keys entirely
+        // so the default "all categories" view behaves exactly as before.
+        ...(categoryIds.length > 0 && { categoryIds }),
+        ...(subCategoryIds.length > 0 && { subCategoryIds }),
+        // Back-compat: keep the scalar keys when exactly one is selected so the
+        // existing single-category ES path keeps working unchanged.
+        ...(categoryIds.length === 1 && { categoryId: categoryIds[0] }),
+        ...(subCategoryIds.length === 1 && { subCategoryId: subCategoryIds[0] }),
         dateFrom,
         dateTo,
       },
@@ -295,6 +302,19 @@ async function getCompetitorAds(req, res) {
       dateTo,
       sort = 'newest',
     } = req.query;
+
+    // Category filters arrive as a comma-joined list ("12,34") or, defensively,
+    // as a repeated query param (array). Normalize either shape into a string[].
+    const toIdArray = (v) => {
+      if (v == null) return [];
+      const parts = Array.isArray(v) ? v : [v];
+      return parts
+        .flatMap((x) => String(x).split(','))
+        .map((s) => s.trim())
+        .filter(Boolean);
+    };
+    const categoryIds = toIdArray(categoryId);
+    const subCategoryIds = toIdArray(subCategoryId);
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const pageSize = Math.max(1, parseInt(req.query.pageSize, 10) || 24);
@@ -379,8 +399,8 @@ async function getCompetitorAds(req, res) {
         page,
         pageSize,
         platform: platformParam,
-        categoryId: Array.isArray(categoryId) ? categoryId[0] : categoryId,
-        subCategoryId: Array.isArray(subCategoryId) ? subCategoryId[0] : subCategoryId,
+        categoryIds,
+        subCategoryIds,
         dateFrom,
         dateTo,
         sortOrder,

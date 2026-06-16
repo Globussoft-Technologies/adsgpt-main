@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronDown, Search, X, Check, Loader } from 'lucide-react';
+import { ChevronDown, Search, X, Check, Minus, Loader } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
@@ -10,17 +10,65 @@ const AI_CAT_SEARCH_URL = import.meta.env.VITE_AI_CAT_SEARCH_URL;
 // If the API's score is similarity (higher = better), flip the comparison below.
 const SCORE_THRESHOLD = 0.59;
 
-const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, activeSubCategoryId, onChange }) => {
+const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds = [], activeSubCategoryIds = [], onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categories, setCategories] = useState([]);
   const [searching, setSearching] = useState(false);
   const [expandedCats, setExpandedCats] = useState(new Set());
-  const [selectedLabel, setSelectedLabel] = useState({ cat: '', sub: '' });
+  // Remembers id → display name as the user toggles, so the chip can show a
+  // single selection's label without re-deriving it from the (search-mutated) tree.
+  const [nameById, setNameById] = useState({});
+  // Local selection state. We deliberately keep these separate:
+  //  - selectedCats: categories the user checked DIRECTLY (independent filter)
+  //  - selectedSubs: subcategories the user checked
+  //  - subParent:    subId → parent categoryId, so a selected subcategory can
+  //                  carry its parent categoryId in the payload (old behavior).
+  const [selectedCats, setSelectedCats] = useState(() => new Set(activeCategoryIds));
+  const [selectedSubs, setSelectedSubs] = useState(() => new Set(activeSubCategoryIds));
+  const [subParent, setSubParent] = useState({});
   const containerRef = useRef(null);
   const debounceRef = useRef(null);
 
-  const displayLabel = selectedLabel.sub || selectedLabel.cat || 'All categories';
+  const hasSelection = selectedCats.size + selectedSubs.size > 0;
+
+  // Chip label: collapse a fully-selected category into ONE unit so picking a
+  // whole category reads as "Alcohol" (or "1 selected") rather than "5 selected".
+  // staticCategories is the full, stable tree (independent of the search view).
+  const selectionUnits = [];
+  for (const c of staticCategories) {
+    const subs = c.subcategories || [];
+    if (subs.length === 0) continue;
+    const sel = subs.filter((s) => selectedSubs.has(s.id));
+    if (sel.length > 0 && sel.length === subs.length) {
+      selectionUnits.push(c.name); // whole category
+    } else {
+      for (const s of sel) selectionUnits.push(nameById[s.id] || s.name);
+    }
+  }
+  for (const id of selectedCats) selectionUnits.push(nameById[id] || 'Category');
+  const displayLabel =
+    selectionUnits.length === 0
+      ? 'All categories'
+      : selectionUnits.length === 1
+        ? selectionUnits[0]
+        : `${selectionUnits.length} selected`;
+
+  const rememberName = (id, name) => setNameById((prev) => (prev[id] ? prev : { ...prev, [id]: name }));
+
+  // Build the onChange payload. A selected subcategory contributes BOTH its own
+  // id AND its parent categoryId, so the backend gets category + subcategory
+  // together — exactly like the previous single-select behavior. Directly
+  // checked categories are added independently.
+  const emitChange = (cats, subs, parents) => {
+    if (typeof onChange !== 'function') return;
+    const categoryIds = new Set(cats);
+    for (const subId of subs) {
+      const parentId = parents[subId];
+      if (parentId) categoryIds.add(parentId);
+    }
+    onChange({ categoryIds: [...categoryIds], subCategoryIds: [...subs] });
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -103,27 +151,62 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
     });
   };
 
+  // Multi-select: toggle the id in/out of the active set; dropdown stays open
+  // so the user can pick several before closing.
+  // Selecting a category selects ALL of its subcategories (and deselecting
+  // clears them). This keeps every subcategory paired with its parent in the
+  // payload, so the backend never has to guess which sub belongs to which cat.
   const handleSelectCategory = (cat) => {
-    if (typeof onChange !== 'function') return;
-    onChange({ categoryId: cat.id, subCategoryId: '' });
-    setSelectedLabel({ cat: cat.name, sub: '' });
-    setIsOpen(false);
-    setSearchTerm('');
+    rememberName(cat.id, cat.name);
+    const subs = cat.subcategories || [];
+
+    // Categories without subcategories are a simple independent toggle.
+    if (subs.length === 0) {
+      const nextCats = new Set(selectedCats);
+      if (nextCats.has(cat.id)) nextCats.delete(cat.id);
+      else nextCats.add(cat.id);
+      setSelectedCats(nextCats);
+      emitChange(nextCats, selectedSubs, subParent);
+      return;
+    }
+
+    const allSelected = subs.every((s) => selectedSubs.has(s.id));
+    const nextSubs = new Set(selectedSubs);
+    const parents = { ...subParent };
+    for (const s of subs) {
+      if (allSelected) {
+        nextSubs.delete(s.id);
+      } else {
+        nextSubs.add(s.id);
+        parents[s.id] = cat.id;
+        rememberName(s.id, s.name);
+      }
+    }
+    setSelectedSubs(nextSubs);
+    setSubParent(parents);
+    emitChange(selectedCats, nextSubs, parents);
   };
 
   const handleSelectSubcategory = (cat, sub) => {
-    if (typeof onChange !== 'function') return;
-    onChange({ categoryId: cat.id, subCategoryId: sub.id });
-    setSelectedLabel({ cat: cat.name, sub: sub.name });
-    setIsOpen(false);
-    setSearchTerm('');
+    rememberName(sub.id, sub.name);
+    const next = new Set(selectedSubs);
+    const parents = { ...subParent, [sub.id]: cat.id };
+    if (next.has(sub.id)) next.delete(sub.id);
+    else next.add(sub.id);
+    setSelectedSubs(next);
+    setSubParent(parents);
+    emitChange(selectedCats, next, parents);
+  };
+
+  const clearAll = () => {
+    setSelectedCats(new Set());
+    setSelectedSubs(new Set());
+    emitChange(new Set(), new Set(), subParent);
   };
 
   const handleClear = (e) => {
     e.stopPropagation();
-    if (typeof onChange !== 'function') return;
-    onChange({ categoryId: '', subCategoryId: '' });
-    setSelectedLabel({ cat: '', sub: '' });
+    clearAll();
   };
 
   // Radio circle helper
@@ -139,16 +222,18 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
     </div>
   );
 
-  // Checkbox helper for subcategories
-  const Checkbox = ({ checked }) => (
+  // Checkbox helper. `indeterminate` renders a dash — used on a parent category
+  // when only some of its subcategories are selected.
+  const Checkbox = ({ checked, indeterminate }) => (
     <div
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
-        checked
+        checked || indeterminate
           ? 'border-[#02C8C4] bg-[#02C8C4]'
           : 'border-white/20 bg-transparent'
       }`}
     >
       {checked && <Check className="h-3 w-3 text-black" strokeWidth={3} />}
+      {!checked && indeterminate && <Minus className="h-3 w-3 text-black" strokeWidth={3} />}
     </div>
   );
 
@@ -161,7 +246,7 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
       >
         <span className="max-w-[120px] truncate">{displayLabel}</span>
         <ChevronDown className={`h-3 w-3 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-        {(activeCategoryId || activeSubCategoryId) && (
+        {hasSelection && (
           <span
             onClick={handleClear}
             className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"
@@ -201,19 +286,15 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
               {/* All categories option */}
               <button
                 onClick={() => {
-                  if (typeof onChange !== 'function') return;
-                  onChange({ categoryId: '', subCategoryId: '' });
-                  setSelectedLabel({ cat: '', sub: '' });
-                  setIsOpen(false);
-                  setSearchTerm('');
+                  // "All categories" = clear every selection. Keep the dropdown
+                  // open so the reset is visible alongside the other options.
+                  clearAll();
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-all ${
-                  !activeCategoryId && !activeSubCategoryId
-                    ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-all hover:bg-white/5 ${
+                  !hasSelection ? 'text-white' : 'text-white/70 hover:text-white'
                 }`}
               >
-                <Radio checked={!activeCategoryId && !activeSubCategoryId} />
+                <Radio checked={!hasSelection} />
                 <span>All categories</span>
               </button>
 
@@ -240,8 +321,17 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
               {/* Results tree */}
               {!searching && categories.map((cat) => {
                 const isExpanded = expandedCats.has(cat.id);
-                const isCatSelected = activeCategoryId === cat.id && !activeSubCategoryId;
                 const hasSubs = cat.subcategories && cat.subcategories.length > 0;
+                const selectedSubCount = hasSubs
+                  ? cat.subcategories.filter((s) => selectedSubs.has(s.id)).length
+                  : 0;
+                // A category is "selected" when every subcategory is selected
+                // (or, for sub-less categories, when picked directly).
+                const isCatSelected = hasSubs
+                  ? selectedSubCount === cat.subcategories.length
+                  : selectedCats.has(cat.id);
+                const isCatIndeterminate =
+                  hasSubs && selectedSubCount > 0 && selectedSubCount < cat.subcategories.length;
 
                 return (
                   <div key={cat.id} className="mt-0.5">
@@ -258,13 +348,11 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
                       {!hasSubs && <div className="h-6 w-6 shrink-0" />}
                       <button
                         onClick={() => handleSelectCategory(cat)}
-                        className={`flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
-                          isCatSelected
-                            ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                            : 'text-white/70 hover:bg-white/5 hover:text-white'
+                        className={`flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-white/5 ${
+                          isCatSelected ? 'text-white' : 'text-white/70 hover:text-white'
                         }`}
                       >
-                        <Radio checked={isCatSelected} />
+                        <Checkbox checked={isCatSelected} indeterminate={isCatIndeterminate} />
                         <span className="truncate text-left font-medium">{cat.name}</span>
                       </button>
                     </div>
@@ -281,15 +369,13 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
                         >
                           <div className="ml-6 border-l border-white/10 pl-2">
                             {cat.subcategories.map((sub) => {
-                              const isSubSelected = activeSubCategoryId === sub.id;
+                              const isSubSelected = selectedSubs.has(sub.id);
                               return (
                                 <button
                                   key={sub.id}
                                   onClick={() => handleSelectSubcategory(cat, sub)}
-                                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
-                                    isSubSelected
-                                      ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                                      : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+                                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-white/5 ${
+                                    isSubSelected ? 'text-white' : 'text-white/50 hover:text-white/80'
                                   }`}
                                 >
                                   <Checkbox checked={isSubSelected} />

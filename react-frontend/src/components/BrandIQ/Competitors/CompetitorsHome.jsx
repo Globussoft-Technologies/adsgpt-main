@@ -121,8 +121,8 @@ const CompetitorsHome = () => {
 
   // Filters
   const [activePlatform, setActivePlatform] = useState('all');
-  const [activeCategoryId, setActiveCategoryId] = useState('');
-  const [activeSubCategoryId, setActiveSubCategoryId] = useState('');
+  const [activeCategoryIds, setActiveCategoryIds] = useState([]);
+  const [activeSubCategoryIds, setActiveSubCategoryIds] = useState([]);
   const [activeSort, setActiveSort] = useState('newest');
 
   // Date range picker states — initialize synchronously to prevent race condition
@@ -235,8 +235,8 @@ const CompetitorsHome = () => {
         pageSize: PAGE_SIZE,
         sort: activeSort,
         ...(platformFilter && platformFilter.length > 0 && { platform: platformFilter.join(',') }),
-        ...(activeCategoryId && { categoryId: activeCategoryId }),
-        ...(activeSubCategoryId && { subCategoryId: activeSubCategoryId }),
+        ...(activeCategoryIds.length > 0 && { categoryId: activeCategoryIds.join(',') }),
+        ...(activeSubCategoryIds.length > 0 && { subCategoryId: activeSubCategoryIds.join(',') }),
         ...(dateFrom && { dateFrom: new Date(dateFrom).toISOString(), dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : new Date().toISOString() }),
       };
 
@@ -278,7 +278,7 @@ const CompetitorsHome = () => {
         setLoading(false);
       }
     }
-  }, [selectedBrand, userData, activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo, page]);
+  }, [selectedBrand, userData, activePlatform, activeCategoryIds, activeSubCategoryIds, activeSort, dateFrom, dateTo, page]);
 
   // Keep ref always pointing to latest fetchAds
   fetchAdsRef.current = fetchAds;
@@ -297,7 +297,7 @@ const CompetitorsHome = () => {
     setLoadingMore(false);
     setLoading(true);
     fetchAdsRef.current(false, false, 1);
-  }, [selectedBrand?.id, activePlatform, activeCategoryId, activeSubCategoryId, activeSort, dateFrom, dateTo]);
+  }, [selectedBrand?.id, activePlatform, activeCategoryIds, activeSubCategoryIds, activeSort, dateFrom, dateTo]);
 
   // Polling while PENDING
   useEffect(() => {
@@ -510,11 +510,11 @@ const CompetitorsHome = () => {
         {/* Category Filter */}
         <CategoryFilter
           categories={allCategories}
-          activeCategoryId={activeCategoryId}
-          activeSubCategoryId={activeSubCategoryId}
-          onChange={({ categoryId, subCategoryId }) => {
-            setActiveCategoryId(categoryId);
-            setActiveSubCategoryId(subCategoryId);
+          activeCategoryIds={activeCategoryIds}
+          activeSubCategoryIds={activeSubCategoryIds}
+          onChange={({ categoryIds, subCategoryIds }) => {
+            setActiveCategoryIds(categoryIds);
+            setActiveSubCategoryIds(subCategoryIds);
           }}
         />
 
