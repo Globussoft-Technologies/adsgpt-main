@@ -752,7 +752,7 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
 export const regenerateCloneFirstFrame = (payload) => async (dispatch) => {
   try {
     const { images, ...cleanInputs } = payload?.inputs || {};
-    const cleanPayload = { inputs: cleanInputs };
+    const cleanPayload = { sessionId: payload?.sessionId, inputs: cleanInputs };
     const res = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/regenerate-frame-clone`,
       cleanPayload,

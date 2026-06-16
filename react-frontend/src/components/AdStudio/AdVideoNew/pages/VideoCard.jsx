@@ -24,6 +24,7 @@ import emitter from '@/utils/eventEmitter';
 import {
   setActivePage,
   setRecreateInputs,
+  setImageAndScript,
   setAvatarStep,
   setCloneStep,
   setAIAdsStep,
@@ -562,6 +563,14 @@ export default function VideoCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                // Clear any stale clone recreate payload first — otherwise the
+                // CloneYourselfPage recreate effect bounces the resume from the
+                // generated script back to the config form.
+                dispatch(setRecreateInputs(null));
+                // Seed the store with the card's already-loaded data so the
+                // script step renders the image + script immediately instead of
+                // showing loading while CloneYourselfPage re-fetches in the bg.
+                dispatch(setImageAndScript(item));
                 setSearchParams({ id: item._id }, { replace: true });
                 dispatch(setActivePage('clone'));
                 dispatch(setCloneStep('script'));

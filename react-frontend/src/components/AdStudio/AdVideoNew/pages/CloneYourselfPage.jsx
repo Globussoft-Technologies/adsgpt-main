@@ -63,7 +63,7 @@ const CloneYourselfPage = ({ handleGenerate }) => {
 
   // ── Deep-link resume via ?id= — runs on mount and on every refresh ──────────
   useEffect(() => {
-    const idFromUrl = searchParams.get('id');
+    const idFromUrl = new URLSearchParams(window.location.search).get('id');
     if (!idFromUrl) return;
     setGeneratedId(idFromUrl);
     setStep('script');

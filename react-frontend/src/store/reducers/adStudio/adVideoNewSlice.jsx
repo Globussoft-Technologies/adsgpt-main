@@ -19,6 +19,10 @@ const initialState = {
   error: null,
   imageAndScript: null,
   clonePayload: null,
+  // Bumped on every socket CloneImageScriptUpdate that carries an image, so the
+  // retry flow has a reliable "socket arrived" signal even when the image value
+  // is unchanged (e.g. failed → failed).
+  cloneImageVersion: 0,
   allVideos: [],
   avatars: [],
   avatarsLoading: false,
@@ -134,6 +138,9 @@ const adVideoNewSlice = createSlice({
     },
     updateCloneImage: (state, action) => {
       const { sessionId, _id, generatedImage, error } = action.payload;
+      // Always bump so the retry spinner can detect the socket response even
+      // when generatedImage stays 'failed' between attempts.
+      state.cloneImageVersion += 1;
       const id = sessionId || _id;
       const target =
         state.imageAndScript?.data?._id === id

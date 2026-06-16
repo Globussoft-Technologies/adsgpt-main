@@ -25,7 +25,7 @@ const getWordCount = (text) => (text?.trim() ? text.trim().split(/\s+/).length :
 const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate }) => {
   const dispatch = useDispatch();
   const [, setSearchParams] = useSearchParams();
-  const { imageAndScript, isLoading, clonePayload: reduxClonePayload } = useSelector((state) => state.adVideoNew);
+  const { imageAndScript, isLoading, clonePayload: reduxClonePayload, cloneImageVersion } = useSelector((state) => state.adVideoNew);
 
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -107,9 +107,11 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
   }, [generatedData, currentDataId, generatedId, previewImages, carouselIndex]);
 
 
+  // Stop the retry spinner only once the socket CloneImageScriptUpdate lands
+  // (cloneImageVersion bumps on every image update — even failed → failed).
   useEffect(() => {
     if (isRetryingImage) setIsRetryingImage(false);
-  }, [generatedData?.generatedImage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cloneImageVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (generatedData?._id === generatedId || currentDataId === generatedId) {
@@ -221,9 +223,15 @@ const ScriptStep = ({ previewImages = [], onBack, generatedId, handleGenerate })
                 onClick={async () => {
                   setIsRetryingImage(true);
                   try {
-                    await dispatch(regenerateCloneFirstFrame(clonePayload));
-                    // CloneImageScriptUpdate global listener handles the response
+                    await dispatch(
+                      regenerateCloneFirstFrame({ ...clonePayload, sessionId: currentDataId })
+                    );
+                    // Keep the spinner up and wait for the socket CloneImageScriptUpdate —
+                    // it carries the real result (image on success, error on failure).
+                    // The cloneImageVersion effect stops the spinner once it lands.
                   } catch {
+                    // request itself failed (no socket will follow) — stop the spinner.
+                    // error toast is handled inside the action.
                     setIsRetryingImage(false);
                   }
                 }}

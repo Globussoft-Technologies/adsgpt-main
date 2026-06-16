@@ -44,6 +44,13 @@ import { toast } from 'react-toastify';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 
+// A "proper image URL" must be http(s) and point at a known image extension.
+const IMAGE_URL_REGEX = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
+const isValidImageUrl = (url) => {
+  const trimmed = (url || '').trim();
+  return /^https?:\/\//i.test(trimmed) && IMAGE_URL_REGEX.test(trimmed);
+};
+
 const AIAvatarCommonDropdown = ({ options = [], placeholder = '', value = '', onChange }) => {
   const Icon = value?.Icon;
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || placeholder;
@@ -350,10 +357,9 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         if (file) { setUploadedImages([{ file, preview: URL.createObjectURL(file) }]); return; }
       }
     }
-    const pastedText = e.clipboardData.getData('text');
+    const pastedText = e.clipboardData.getData('text')?.trim();
     if (pastedText?.startsWith('http')) {
-      const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
-      if (!imageExtensions.test(pastedText)) { toast.error('Please paste a valid image URL'); return; }
+      if (!isValidImageUrl(pastedText)) { toast.error('Please paste a valid image URL'); return; }
       setProductUrl(pastedText);
       setUploadedImages([{ file: null, preview: pastedText }]);
     }
@@ -362,6 +368,13 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // accept="image/*" is only a picker hint — enforce image-only here since the
+    // user can still pick "All files" and select a non-image.
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload a valid image file');
+      e.target.value = ''; // allow re-selecting after an invalid pick
+      return;
+    }
     setUploadedImages([{ file, preview: URL.createObjectURL(file) }]);
   };
 
@@ -371,6 +384,9 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if (isLoading || isUploading) return;
     const newErrors = {};
     if (!productUrl.trim() && uploadedImages.length === 0) newErrors.productUrl = 'Product Image is Required';
+    // A typed URL (no uploaded/pasted image) must be a proper image URL.
+    else if (uploadedImages.length === 0 && !isValidImageUrl(productUrl))
+      newErrors.productUrl = 'Enter a valid image URL (jpg, png, webp, …) or upload an image';
     if (!videoModel) newErrors.videoModel = 'Model is required';
     if (!videoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
@@ -551,7 +567,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               🌐 All regional languages supported
             </span>
             <br />
-            Brand/product URL or upload image
+            Brand/product image URL or upload image*
           </label>
           <div
             className={`flex items-center gap-2 rounded-full border bg-gray-100 p-1 transition-colors dark:bg-[#9092941A] ${
@@ -562,9 +578,13 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               value={productUrl}
               onChange={(e) => setProductUrl(e.target.value)}
               onPaste={handlePaste}
+              onBlur={() => {
+                if (productUrl.trim() && uploadedImages.length === 0 && !isValidImageUrl(productUrl))
+                  setErrors((p) => ({ ...p, productUrl: 'Enter a valid image URL (jpg, png, webp, …) or upload an image' }));
+              }}
               disabled={isUploading || isLoading}
               className="w-full flex-1 bg-transparent px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-500 focus:outline-none disabled:cursor-not-allowed 2xl:px-4 2xl:text-sm dark:text-white dark:placeholder:text-white/40"
-              placeholder="Paste your product image"
+              placeholder="Paste your product image URL"
             />
             <LinkIcon className="size-3.5 rotate-90 text-gray-500 dark:text-white/60" />
             <label
