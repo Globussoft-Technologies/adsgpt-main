@@ -5,6 +5,11 @@ import axios from 'axios';
 
 const AI_CAT_SEARCH_URL = import.meta.env.VITE_AI_CAT_SEARCH_URL;
 
+// Matches weaker than this are treated as irrelevant and dropped.
+// NOTE: assumes a lower score = a closer/better match (distance-style).
+// If the API's score is similarity (higher = better), flip the comparison below.
+const SCORE_THRESHOLD = 0.59;
+
 const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, activeSubCategoryId, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,9 +43,15 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryId, a
     setSearching(true);
     try {
       const { data } = await axios.post(AI_CAT_SEARCH_URL, { query });
+      // Drop weak matches: if score > threshold, treat as irrelevant.
+      // When everything is filtered out, the tree is empty and the UI
+      // falls through to the existing "No categories found" empty state.
+      const relevantMatches = (data.matches || []).filter(
+        (m) => typeof m.score !== 'number' || m.score <= SCORE_THRESHOLD
+      );
       // Build a deduped category tree from matches
       const catMap = new Map();
-      for (const match of data.matches || []) {
+      for (const match of relevantMatches) {
         const catId = String(match.major_category_id);
         if (!catMap.has(catId)) {
           catMap.set(catId, {

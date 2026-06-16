@@ -51,10 +51,12 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
       try {
         let data = [];
         if (field === 'language') {
-          // Temporary: only English is offered. Remove the filter below to
-          // restore the full language list when other locales are supported.
+          // Only English and Hindi are offered for now. Every other locale the
+          // catalog returns stays blocked until we support it. Remove the
+          // filter below to restore the full language list.
+          const ALLOWED_LANGUAGES = ['en', 'hi'];
           const all = await getLanguages();
-          data = all.filter((l) => (l?.code || l) === 'en');
+          data = all.filter((l) => ALLOWED_LANGUAGES.includes(l?.code || l));
           // data = all;
         }
         else if (field === 'gender') data = await getGenders({});
