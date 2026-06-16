@@ -31,7 +31,7 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
         src={gifUrl}
         alt={`${title}-preview`}
         // className={`absolute inset-0 ${type === 'b-roll' ? 'h-[180%]' : 'h-full'} w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
-         className="absolute inset-0 'h-full' w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+         className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
 
       {/* overlay */}
