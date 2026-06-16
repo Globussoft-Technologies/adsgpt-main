@@ -1,6 +1,5 @@
 import getCookies from '@/utils/getCookies';
 import axios from 'axios';
-// import { trackEvent } from '@/apis/analytics/analyticsApi';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
@@ -37,7 +36,6 @@ export const createCampaign = createAsyncThunk(
       });
       if (res?.data?.campaignId) {
         dispatch(resetNodeStatuses());
-        // trackEvent({ type: 'campaign_created' });
       }
       return res?.data?.campaignId;
     } catch (err) {
@@ -603,7 +601,7 @@ export const deleteAdFactoryCampaign = createAsyncThunk(
 );
 
  // same function i am using because in some cases we need to delete campaign if autofill failed but we dont want to show toast in that case so created another function without toast
- 
+
 export const deleteAdFactoryCampaignn = createAsyncThunk(
   'adFactory/deleteAdFactoryCampaign',
   async (payload, { rejectWithValue, dispatch }) => {
@@ -873,7 +871,6 @@ export const launchcampaign = createAsyncThunk(
         },
       );
       toast.success(res?.data?.message);
-      // trackEvent({ type: 'campaign_published' });
       return res;
     } catch (err) {
       console.log('failed to launch campaign', err);
@@ -931,7 +928,6 @@ export const fetchGoogleCampaigns = createAsyncThunk(
   async ({ adAccountId }, { rejectWithValue }) => {
     try {
       const token = getCookies();
-      // AdFactory only generates text and image ads — filter campaigns to SEARCH + DISPLAY
       const res = await axios.get(`${BACKEND_HOST}/adsgpt/google-ads/get-campaigns?adAccountId=${adAccountId}&adType=text&adType=image`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });

@@ -17,7 +17,6 @@ import {
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { setSavedCount } from '@/store/reducers/adStudio/adVideoNewSlice';
-// import { trackEvent } from '@/apis/analytics/analyticsApi';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -73,8 +72,6 @@ export const generateVideoAction =
           image: imageUrl || (payload.inputs.image ? `${S3_BASE_URL}${payload.inputs.image}` : ''),
         },
       };
-
-      // trackEvent({ type: 'video_generation', gen_type: finalPayload?.inputs?.type ?? null, model: finalPayload?.inputs?.model ?? null });
 
       const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
         headers: {
@@ -210,8 +207,6 @@ export const generateVideoUGCAction =
           image: imageUrl,
         },
       };
-
-      // trackEvent({ type: 'video_generation', gen_type: finalPayload?.inputs?.type ?? 'ugc', model: finalPayload?.inputs?.model ?? null });
 
       const response = await axios.post(VIDEO_GENERATE_API, finalPayload, {
         headers: {
@@ -368,7 +363,6 @@ export const generateImageAndScript = (payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
-    // trackEvent({ type: 'video_generation', gen_type: payload?.inputs?.type ?? 'avatar', model: payload?.inputs?.model ?? null });
     const response = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-image-and-script`,
       payload,
@@ -499,8 +493,6 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
   try {
     dispatch(setAiAdsSceneLoading(true));
     dispatch(setError(null));
-    const aiAdsModel = details?.formData?.model || getState()?.adVideoNew?.aiAdsSceneData?.inputs?.model || null;
-    // trackEvent({ type: 'video_generation', gen_type: 'ai_ads', model: aiAdsModel });
 
     const { socket } = getState();
     const userId = socket?.userData?.user_id;
@@ -752,7 +744,7 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
 export const regenerateCloneFirstFrame = (payload) => async (dispatch) => {
   try {
     const { images, ...cleanInputs } = payload?.inputs || {};
-    const cleanPayload = { sessionId: payload?.sessionId, inputs: cleanInputs };
+  const cleanPayload = { sessionId: payload?.sessionId, inputs: cleanInputs };
     const res = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/regenerate-frame-clone`,
       cleanPayload,

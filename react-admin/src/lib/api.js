@@ -37,6 +37,27 @@ export const adminApi = {
   userDetail: (userId, params) => api.get(`/users/${encodeURIComponent(userId)}`, { params }),
 };
 
+// Page-view summaries live under /adsgpt/analytics (a different base than the
+// admin API). The route is public on the backend; we still attach the admin
+// token for parity.
+const analytics = axios.create({
+  baseURL: `${BASE_URL}/adsgpt/analytics`,
+});
+
+analytics.interceptors.request.use((config) => {
+  const token = getAdminToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const analyticsApi = {
+  // GET /analytics/summary/:user_id — page visits & time spent for one user
+  userSummary: (userId) => analytics.get(`/summary/${encodeURIComponent(userId)}`),
+};
+
 export const fetchModelCredits = async () => {
   try {
     const token = getAdminToken();

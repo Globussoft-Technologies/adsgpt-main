@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Mail,
+  MousePointerClick,
   Play,
   Video,
   Wallet,
@@ -16,8 +17,23 @@ import Badge from "@/components/Badge.jsx";
 import Select from "@/components/Select.jsx";
 import StatCard from "@/components/StatCard.jsx";
 import DateRangePicker, { currentMonthRangeISO } from "@/components/DateRangePicker.jsx";
-import { adminApi } from "@/lib/api";
+import { adminApi, analyticsApi } from "@/lib/api";
 import { formatDate, formatNumber, formatUsd } from "@/lib/utils";
+
+function formatPage(page) {
+  if (!page) return "—";
+  return page.replace(/^\/+/, "") || "/";
+}
+
+function formatSeconds(total) {
+  const s = Math.round(Number(total) || 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  if (m < 60) return rem ? `${m}m ${rem}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
 
 const TYPE_OPTIONS = [
   { value: "all", label: "All types" },
@@ -75,6 +91,24 @@ export default function UserDetailPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [engagement, setEngagement] = useState(null);
+
+  // Page-view summary is keyed only on user — no date/type/model filtering.
+  useEffect(() => {
+    let cancel = false;
+    setEngagement(null);
+    analyticsApi
+      .userSummary(userId)
+      .then((res) => {
+        if (!cancel) setEngagement(res.data);
+      })
+      .catch(() => {
+        if (!cancel) setEngagement(null);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     let cancel = false;
@@ -200,6 +234,8 @@ export default function UserDetailPage() {
         </section>
       ) : null}
 
+      <EngagementSection engagement={engagement} />
+
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="text-sm font-semibold text-slate-800">Cost by model</h2>
@@ -323,6 +359,54 @@ export default function UserDetailPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EngagementSection({ engagement }) {
+  if (!engagement) return null;
+  // "/" is just the root redirect route (→ /adstudio) — hide it from the report.
+  const topPages = (engagement.top_pages || []).filter((p) => p.page !== "/");
+  const totalVisits = topPages.reduce((sum, p) => sum + (p.visits || 0), 0);
+  const totalTime = topPages.reduce((sum, p) => sum + (p.total_time_spent || 0), 0);
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-800">Page activity</h2>
+          <p className="text-xs text-slate-500">
+            {formatNumber(totalVisits)} visits · {formatSeconds(totalTime)} total time (all-time)
+          </p>
+        </div>
+        <MousePointerClick className="h-4 w-4 text-indigo-500" />
+      </div>
+      {topPages.length === 0 ? (
+        <div className="px-5 py-10 text-center text-sm text-slate-500">No page activity tracked for this user yet.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Page</th>
+                <th className="px-5 py-3 text-right">Visits</th>
+                <th className="px-5 py-3 text-right">Time spent</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topPages.map((row) => (
+                <tr key={row.page} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <td className="px-5 py-3 font-medium text-slate-800">{formatPage(row.page)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.visits)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                    {formatSeconds(row.total_time_spent)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

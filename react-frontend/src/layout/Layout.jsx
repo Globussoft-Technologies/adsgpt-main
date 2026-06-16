@@ -12,7 +12,8 @@ import TourGuide from '@/components/layout/TourGuide';
 import AdBlockerModal from '@/components/layout/AdBlockerModal';
 import toast, { Toaster } from 'react-hot-toast';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { trackEvent } from '@/apis/analytics/analyticsApi';
 import { setCurrentSeesionId } from '@/store/reducers/userInteraction/userInteraction';
 
 const HOST = import.meta.env.VITE_SOCKET_URL;
@@ -39,6 +40,10 @@ const Layout = () => {
     localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  // Track time spent on each page
+  const pageEnterTime = useRef(Date.now());
+  const prevPage = useRef(location.pathname);
+
   useEffect(() => {
     let sessionId;
 
@@ -56,6 +61,15 @@ const Layout = () => {
       dispatch(setCurrentSeesionId(sessionId));
     }
     startGlobalInteractionTracking(location, null, 'pageRedirect', userData, sessionId);
+
+    // Save time spent on previous page then record new page entry
+    const now = Date.now();
+    const timeSpent = Math.round((now - pageEnterTime.current) / 1000);
+    if (prevPage.current && userData?.user_id) {
+      trackEvent({ type: 'page_view', page: prevPage.current, time_spent: timeSpent });
+    }
+    prevPage.current = location.pathname;
+    pageEnterTime.current = now;
   }, [location, userData, activeAdStudioTabId]);
   const [baseImg, baseImgStatus] = useImage(
     baseImage ? `${HOST}/adsgpt/img/preview?url=${S3_BASE_URL}${baseImage}` : null,
