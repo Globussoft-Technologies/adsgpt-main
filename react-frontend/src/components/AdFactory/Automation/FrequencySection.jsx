@@ -225,68 +225,78 @@ export default function FrequencySection({ value, onChange, disabled }) {
         </div>
       </div>
 
-      {/* Preset dropdown + dates + timezone packed onto one row when width
-          allows. items-end keeps the dropdowns' baselines aligned with the
-          date inputs (which sit beneath their labels). */}
-      <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(9rem,10rem)_minmax(8.5rem,1fr)_minmax(8.5rem,1fr)_minmax(6.5rem,7.5rem)_minmax(8rem,9rem)] sm:items-end">
-        <InputCommonDropdown
-          label="Frequency"
-          options={PRESET_OPTIONS}
-          value={preset}
-          onChange={handlePresetChange}
-          disabled={disabled}
-        />
-        <DateField
-          label={isOneTime ? 'Run on' : 'Start date'}
-          value={startDate}
-          min={todayInputValue(value?.timezone)}
-          onChange={(v) => patch({ startDate: v })}
-          disabled={disabled}
-        />
-        {!isOneTime ? (
-          <DateField
-            label="End date (optional)"
-            value={endDate}
-            min={startDate || todayInputValue(value?.timezone)}
-            onChange={(v) => patch({ endDate: v || null })}
-            disabled={disabled}
-            placeholder="No end — runs until credits exhaust"
-            allowClear
-          />
-        ) : (
-          <div />
-        )}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-[#AFAFAF]">Run at</label>
+      {/* Two-row layout. Earlier we packed Frequency / Start / End / Hour /
+          Timezone onto a single 5-column row, which forced Timezone into a
+          ~140 px column where "(GMT+05:30) · Asia/Kolkata" got cropped to
+          "GMT+…". Splitting into two rows gives every field room to breathe
+          without sacrificing vertical compactness much. */}
+      <div className="flex flex-col gap-2">
+        <div
+          className={`grid grid-cols-1 gap-x-2 gap-y-2 sm:items-end ${
+            isOneTime
+              ? 'sm:grid-cols-[minmax(10rem,12rem)_minmax(0,1fr)]'
+              : 'sm:grid-cols-[minmax(10rem,12rem)_minmax(0,1fr)_minmax(0,1fr)]'
+          }`}
+        >
           <InputCommonDropdown
-            label="Hour"
-            options={hourOptions.length > 0 ? hourOptions : HOUR_OPTIONS}
-            value={hour}
-            onChange={(v) => patch({ hour: Number(v) })}
-            disabled={disabled || (isStartToday && hourOptions.length === 0)}
+            label="Frequency"
+            options={PRESET_OPTIONS}
+            value={preset}
+            onChange={handlePresetChange}
+            disabled={disabled}
           />
-          {isStartToday && hourOptions.length === 0 && (
-            <span className="text-[11px] text-amber-300/90 italic">
-              No hours left today — pick tomorrow as the start date.
-            </span>
+          <DateField
+            label={isOneTime ? 'Run on' : 'Start date'}
+            value={startDate}
+            min={todayInputValue(value?.timezone)}
+            onChange={(v) => patch({ startDate: v })}
+            disabled={disabled}
+          />
+          {!isOneTime && (
+            <DateField
+              label="End date"
+              value={endDate}
+              min={startDate || todayInputValue(value?.timezone)}
+              onChange={(v) => patch({ endDate: v || null })}
+              disabled={disabled}
+              placeholder="Optional"
+              allowClear
+            />
           )}
         </div>
-        <TimezoneSelect
-          value={value?.timezone}
-          onChange={(tz) => {
-            // When the user picks a new zone, recompute "today" in that
-            // zone. If their currently-picked startDate is now in the past
-            // for the new zone, bump it forward so the form stays valid.
-            // Leave a future-dated startDate alone — the user picked it.
-            const newToday = todayInputValue(tz);
-            const patches = { timezone: tz };
-            if (startDate && startDate < newToday) {
-              patches.startDate = newToday;
-            }
-            patch(patches);
-          }}
-          disabled={disabled}
-        />
+        <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(8rem,10rem)_minmax(0,1fr)] sm:items-end">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-[#AFAFAF]">Run at</label>
+            <InputCommonDropdown
+              label="Hour"
+              options={hourOptions.length > 0 ? hourOptions : HOUR_OPTIONS}
+              value={hour}
+              onChange={(v) => patch({ hour: Number(v) })}
+              disabled={disabled || (isStartToday && hourOptions.length === 0)}
+            />
+            {isStartToday && hourOptions.length === 0 && (
+              <span className="text-[11px] text-amber-300/90 italic">
+                No hours left today — pick tomorrow as the start date.
+              </span>
+            )}
+          </div>
+          <TimezoneSelect
+            value={value?.timezone}
+            onChange={(tz) => {
+              // When the user picks a new zone, recompute "today" in that
+              // zone. If their currently-picked startDate is now in the past
+              // for the new zone, bump it forward so the form stays valid.
+              // Leave a future-dated startDate alone — the user picked it.
+              const newToday = todayInputValue(tz);
+              const patches = { timezone: tz };
+              if (startDate && startDate < newToday) {
+                patches.startDate = newToday;
+              }
+              patch(patches);
+            }}
+            disabled={disabled}
+          />
+        </div>
       </div>
 
       {/* Custom recurrence panel — staged. Edits accumulate locally on
