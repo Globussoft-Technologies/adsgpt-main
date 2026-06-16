@@ -33,8 +33,11 @@ const URL_PATTERN =
 // Cheap pre-check: if the string contains ANY non-ASCII codepoint, fail fast.
 // The regex above does this implicitly but explicit catches emoji-in-path
 // cases more reliably across engines (some flag-emoji sequences sneak through
-// charset shortcuts in older runtimes).
-const NON_ASCII_RE = /[^\x00-\x7F]/;
+// charset shortcuts in older runtimes). Uses the Unicode property escape so
+// supplementary-plane codepoints (most emoji) match correctly without
+// needing surrogate-pair handling — and avoids `\x00` which would trip the
+// no-control-regex lint rule.
+const NON_ASCII_RE = /[^\p{ASCII}]/u;
 
 export function isValidCtaUrl(value) {
   if (typeof value !== 'string') return false;
