@@ -49,6 +49,25 @@ function hourLabel(h) {
   return `${hour12}:00 ${period}`;
 }
 
+// Returns the current hour (0–23) in the given IANA timezone. Falls back to
+// the browser's local zone when `timezone` is omitted or invalid. Used to
+// filter out past hours when the user picks today as the start date.
+function currentHourInTimezone(timezone) {
+  try {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: timezone || undefined,
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const h = Number(parts.find((p) => p.type === 'hour')?.value);
+    if (!Number.isInteger(h)) return 0;
+    // Intl can return "24" in some locales when it crosses midnight; clamp.
+    return h % 24;
+  } catch {
+    return new Date().getHours();
+  }
+}
+
 const DOW = [
   { value: 0, short: 'S', full: 'Sunday' },
   { value: 1, short: 'M', full: 'Monday' },
@@ -69,6 +88,40 @@ export default function FrequencySection({ value, onChange, disabled }) {
   const custom = value?.custom || { interval: 1, unit: 'week', daysOfWeek: [] };
 
   const patch = (partial) => onChange?.({ ...(value || {}), ...partial });
+
+  // Hour options narrowed to "now+" when the user picks today as the start
+  // date. Without this guard the form lets you schedule the first cycle in
+  // the past — the backend's cron then rejects (or runs immediately, depending
+  // on shape) and the user is left wondering why their job is firing at the
+  // wrong hour. Refreshes on every minute change so the dropdown stays honest
+  // if the form is left open across an hour boundary.
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const todayStr = todayInputValue(value?.timezone);
+  const isStartToday = startDate && startDate === todayStr;
+  const hourOptions = React.useMemo(() => {
+    if (!isStartToday) return HOUR_OPTIONS;
+    const nowHour = currentHourInTimezone(value?.timezone);
+    return HOUR_OPTIONS.filter((o) => o.value > nowHour);
+    // nowTick is intentionally in the dep array so the list refreshes hourly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStartToday, value?.timezone, nowTick]);
+
+  // If the currently selected hour just became invalid (user switched start
+  // date to today, or the clock crossed the selected hour while the form was
+  // open), nudge the selection to the first allowed hour. Skip when the
+  // available set is empty — that's handled by the visible empty-state below
+  // and bumping to undefined would re-trigger this effect in a loop.
+  useEffect(() => {
+    if (!isStartToday) return;
+    if (hourOptions.length === 0) return;
+    const isValid = hourOptions.some((o) => o.value === hour);
+    if (!isValid) patch({ hour: hourOptions[0].value });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStartToday, hourOptions.length, hour]);
 
   // The Custom recurrence panel stages its edits locally and only propagates
   // to the parent (and therefore the schedule label at top-right) when the
@@ -207,11 +260,16 @@ export default function FrequencySection({ value, onChange, disabled }) {
           <label className="text-xs text-[#AFAFAF]">Run at</label>
           <InputCommonDropdown
             label="Hour"
-            options={HOUR_OPTIONS}
+            options={hourOptions.length > 0 ? hourOptions : HOUR_OPTIONS}
             value={hour}
             onChange={(v) => patch({ hour: Number(v) })}
-            disabled={disabled}
+            disabled={disabled || (isStartToday && hourOptions.length === 0)}
           />
+          {isStartToday && hourOptions.length === 0 && (
+            <span className="text-[11px] text-amber-300/90 italic">
+              No hours left today — pick tomorrow as the start date.
+            </span>
+          )}
         </div>
         <TimezoneSelect
           value={value?.timezone}

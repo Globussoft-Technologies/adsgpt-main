@@ -22,10 +22,26 @@ export const CTA_BUTTON_OPTIONS = [
   { value: 'GET_OFFER', label: 'Get Offer' },
 ];
 
-const URL_PATTERN = /^https?:\/\/[^\s$.?#].[^\s]*$/i;
+// Strict URL pattern: requires http(s)://, then ONLY the ASCII characters
+// allowed in URI syntax (RFC 3986 unreserved + reserved + percent-encoding).
+// Rejects emoji, accented characters, zero-width joiners, and anything else
+// outside printable ASCII URL-safe characters. Meta's ad endpoints choke on
+// these too, so filtering client-side avoids a confusing backend rejection.
+const URL_PATTERN =
+  /^https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/;
+
+// Cheap pre-check: if the string contains ANY non-ASCII codepoint, fail fast.
+// The regex above does this implicitly but explicit catches emoji-in-path
+// cases more reliably across engines (some flag-emoji sequences sneak through
+// charset shortcuts in older runtimes).
+const NON_ASCII_RE = /[^\x00-\x7F]/;
 
 export function isValidCtaUrl(value) {
-  return typeof value === 'string' && URL_PATTERN.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (NON_ASCII_RE.test(trimmed)) return false;
+  return URL_PATTERN.test(trimmed);
 }
 
 // Returns true only when `value` is one of the allowed CTA values for the
@@ -127,7 +143,9 @@ export default function CallToActionSection({
       {!urlValid && (
         <div className="flex items-center gap-1.5 text-[11px] text-red-400">
           <AlertCircle className="size-3" />
-          Enter a full URL starting with http:// or https://
+          {NON_ASCII_RE.test(url)
+            ? 'URL can only contain plain ASCII characters — no emojis or accents.'
+            : 'Enter a full URL starting with http:// or https://'}
         </div>
       )}
     </section>

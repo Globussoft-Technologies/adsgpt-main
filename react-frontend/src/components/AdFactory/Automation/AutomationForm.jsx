@@ -73,6 +73,24 @@ const todayISO = (timezone) => {
   }
 };
 
+// Current hour (0–23) in the given IANA timezone. Same helper used by
+// FrequencySection — duplicated here to keep AutomationForm self-contained
+// for its validation check. Falls back to local zone on Intl errors.
+const currentHourLocal = (timezone) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: timezone || undefined,
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const h = Number(parts.find((p) => p.type === 'hour')?.value);
+    if (!Number.isInteger(h)) return 0;
+    return h % 24;
+  } catch {
+    return new Date().getHours();
+  }
+};
+
 const defaultFormValues = () => {
   const timezone = getBrowserTimezone();
   return {
@@ -263,6 +281,32 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       errs.push('Pick a Call-to-Action button');
     }
     if (!isValidCtaUrl(values.callToAction?.url || '')) errs.push('Enter a valid destination URL');
+    // Daily-budget override bounds — empty (null) means "use template
+    // default" and is fine. Otherwise must be a positive integer in
+    // [100, 1_000_000]. Mirrors the inline bounds in TemplatePicker.
+    const dbo = values.template?.dailyBudgetOverride;
+    if (dbo != null) {
+      if (!Number.isInteger(dbo) || dbo < 100) {
+        errs.push('Minimum daily budget is 100');
+      } else if (dbo > 1_000_000) {
+        errs.push('Maximum daily budget is 10 lakhs');
+      }
+    }
+    // Block activation if the user has picked today as start date but the
+    // hour they last selected has slipped into the past while the form was
+    // open. FrequencySection auto-bumps as long as a future hour exists; if
+    // all 24 hours are exhausted (it's a few minutes before midnight) the
+    // user has to pick tomorrow.
+    const todayStr = todayISO(values.frequency?.timezone);
+    if (
+      values.frequency?.startDate === todayStr &&
+      Number.isInteger(values.frequency?.hour)
+    ) {
+      const nowHour = currentHourLocal(values.frequency?.timezone);
+      if (values.frequency.hour <= nowHour) {
+        errs.push("Pick a future hour — today's selected time has passed");
+      }
+    }
     return errs;
   }, [isMetaConnected, values, ctaUnsupported, ctaOptions]);
   const canActivate = validationErrors.length === 0;

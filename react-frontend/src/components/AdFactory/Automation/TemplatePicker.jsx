@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Target, FileText, ExternalLink, Coins, Loader2, Inbox } from 'lucide-react';
+import { Target, FileText, ExternalLink, Coins, Loader2, Inbox, AlertCircle } from 'lucide-react';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
 import {
   fetchMetaAdsTemplates,
@@ -83,15 +83,41 @@ export default function TemplatePicker({ value, onChange, disabled }) {
     });
   };
 
+  // Budget bounds: Meta itself enforces a minimum (currency-dependent, but
+  // documented as 100 in the template api); 10 lakh (1,000,000) is the upper
+  // cap per the product spec. Positive integers only — no negatives, no
+  // scientific notation, no symbols.
+  const BUDGET_MIN = 100;
+  const BUDGET_MAX = 1_000_000;
+  const DIGITS_RE = /^\d+$/;
+
   const handleBudgetChange = (raw) => {
+    // Empty input clears the override (template default takes over).
     if (raw === '') {
       onChange?.({ ...picked, dailyBudgetOverride: null });
       return;
     }
+    // Reject anything that isn't a digit string. type=number lets the browser
+    // accept '-', '+', '.', 'e' — we discard those characters silently so the
+    // user can't even get the field into an invalid state. The visible error
+    // below covers the range checks (min/max) since those need feedback.
+    if (!DIGITS_RE.test(raw)) return;
     const n = Number(raw);
-    if (Number.isNaN(n) || n < 0) return;
+    if (Number.isNaN(n)) return;
     onChange?.({ ...picked, dailyBudgetOverride: n });
   };
+
+  // Validation state surfaced under the input. We accept null (no override)
+  // as valid; only flag when the user has typed a value that breaks bounds.
+  const budgetOverride = picked.dailyBudgetOverride;
+  const budgetError =
+    budgetOverride == null
+      ? null
+      : budgetOverride < BUDGET_MIN
+        ? `Minimum daily budget is ${BUDGET_MIN.toLocaleString()}.`
+        : budgetOverride > BUDGET_MAX
+          ? `Maximum daily budget is ${BUDGET_MAX.toLocaleString()} (10 lakhs).`
+          : null;
 
   const templatePayload = pickedTemplate?.payload || {};
   const templateDailyBudget = templatePayload.dailyBudget;
@@ -162,9 +188,10 @@ export default function TemplatePicker({ value, onChange, disabled }) {
             <div className="relative">
               <Coins className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#AFAFAF]" />
               <input
-                type="number"
-                min={100}
-                step={100}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={7}
                 placeholder={
                   templateDailyBudget != null
                     ? String(templateDailyBudget)
@@ -172,14 +199,38 @@ export default function TemplatePicker({ value, onChange, disabled }) {
                 }
                 value={
                   picked.dailyBudgetOverride != null
-                    ? picked.dailyBudgetOverride
+                    ? String(picked.dailyBudgetOverride)
                     : ''
                 }
+                // Block non-digit keystrokes at the source so '-', '+', '.',
+                // 'e', emojis, and other symbols never reach state. paste is
+                // still possible — handleBudgetChange filters those too.
+                onKeyDown={(e) => {
+                  if (
+                    e.key === 'Backspace' ||
+                    e.key === 'Delete' ||
+                    e.key === 'Tab' ||
+                    e.key === 'ArrowLeft' ||
+                    e.key === 'ArrowRight' ||
+                    e.key === 'Home' ||
+                    e.key === 'End' ||
+                    (e.ctrlKey || e.metaKey)
+                  ) return;
+                  if (!/^\d$/.test(e.key)) e.preventDefault();
+                }}
                 onChange={(e) => handleBudgetChange(e.target.value)}
                 disabled={disabled || !picked.id || pickedLoading}
-                className="h-10 w-full rounded-full bg-[#383838]/50 pr-5 pl-11 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`h-10 w-full rounded-full bg-[#383838]/50 pr-5 pl-11 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  budgetError ? 'ring-1 ring-red-500/60' : ''
+                }`}
               />
             </div>
+            {budgetError && (
+              <div className="flex items-center gap-1.5 text-[11px] text-red-400">
+                <AlertCircle className="size-3" />
+                {budgetError}
+              </div>
+            )}
           </Field>
 
           {picked.id && pickedTemplate && (
