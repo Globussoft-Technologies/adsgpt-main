@@ -11,7 +11,7 @@ exports.searchCompetitorAds = async (req, res) => {
     const {
       keywords = [], competitors = [], platform = 'all',
       page = 1, limit = 10, sortBy = 'date', sortOrder = 'desc',
-      categoryId, subCategoryId, dateFrom, dateTo,
+      categoryId, subCategoryId, categoryIds, subCategoryIds, dateFrom, dateTo,
     } = req.body;
 
     const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
@@ -27,7 +27,7 @@ exports.searchCompetitorAds = async (req, res) => {
 
     const { ads, total, hasMore } = await searchAdsByKeywords(
       keywords, competitors, platform, pageNum, pageSize, sortBy, sortOrder,
-      { categoryId, subCategoryId, dateFrom, dateTo }
+      { categoryId, subCategoryId, categoryIds, subCategoryIds, dateFrom, dateTo }
     );
 
     return sendSuccessResponse(res, {

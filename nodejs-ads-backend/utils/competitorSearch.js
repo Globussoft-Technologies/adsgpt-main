@@ -561,13 +561,29 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     }
 
     // Category / subcategory filter — category_id is a `text` field, so use
-    // match (single-token numeric IDs match exactly).
-    if (filters.categoryId && config.categoryId) {
-      filterClauses.push({ match: { [config.categoryId]: String(filters.categoryId) } });
-    }
-    if (filters.subCategoryId && config.subCategoryId) {
-      filterClauses.push({ match: { [config.subCategoryId]: String(filters.subCategoryId) } });
-    }
+    // `match` (single-token numeric IDs match exactly). Multi-select: an array
+    // of ids becomes a should-OR of match clauses; a single id stays a plain
+    // match. Scalar + array inputs are merged & de-duped for back-compat.
+    const buildIdFilter = (field, single, multi) => {
+      if (!field) return null;
+      const ids = [];
+      if (Array.isArray(multi)) ids.push(...multi);
+      if (single !== undefined && single !== null && single !== '') ids.push(single);
+      const unique = [...new Set(ids.map((v) => String(v)).filter(Boolean))];
+      if (unique.length === 0) return null;
+      if (unique.length === 1) return { match: { [field]: unique[0] } };
+      return {
+        bool: {
+          should: unique.map((id) => ({ match: { [field]: id } })),
+          minimum_should_match: 1,
+        },
+      };
+    };
+
+    const catFilter = buildIdFilter(config.categoryId, filters.categoryId, filters.categoryIds);
+    if (catFilter) filterClauses.push(catFilter);
+    const subFilter = buildIdFilter(config.subCategoryId, filters.subCategoryId, filters.subCategoryIds);
+    if (subFilter) filterClauses.push(subFilter);
 
     // Date range filter on the post/first-seen date field (ES `date` type,
     // stored as "yyyy-MM-dd HH:mm:ss"). Provide `format` so ES parses our value.
