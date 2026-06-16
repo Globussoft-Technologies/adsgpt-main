@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarDays, Check, Pencil } from 'lucide-react';
+import { CalendarDays, Check, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar } from 'react-date-range';
+import { format } from 'date-fns';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
 import { describeFrequency } from '@/store/reducers/adFactoryAutomation/nextRun';
 import TimezoneSelect from './TimezoneSelect';
@@ -171,7 +175,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
       {/* Preset dropdown + dates + timezone packed onto one row when width
           allows. items-end keeps the dropdowns' baselines aligned with the
           date inputs (which sit beneath their labels). */}
-      <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(10rem,11rem)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,8rem)_minmax(9rem,10rem)] sm:items-end">
+      <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(9rem,10rem)_minmax(8.5rem,1fr)_minmax(8.5rem,1fr)_minmax(6.5rem,7.5rem)_minmax(8rem,9rem)] sm:items-end">
         <InputCommonDropdown
           label="Frequency"
           options={PRESET_OPTIONS}
@@ -336,7 +340,56 @@ export default function FrequencySection({ value, onChange, disabled }) {
 // Inputs — small, styled to match the rest of the dark theme.
 // ----------------------------------------------------------------------------
 
+// Parse a YYYY-MM-DD form-state string into a local Date (midnight in the
+// user's local zone). `new Date("YYYY-MM-DD")` would parse as UTC midnight,
+// which can shift to the previous day in any UTC+N zone — exactly the trap
+// `todayInputValue` avoids on the write path. Mirror it on the read path.
+function parseInputDate(s) {
+  if (!s || typeof s !== 'string') return null;
+  const [y, m, d] = s.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function toInputDate(dt) {
+  if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return '';
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function DateField({ label, value, onChange, min, disabled, placeholder, allowClear }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Close the popover on any click that lands outside the field.
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Close on Escape so keyboard users aren't trapped.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  const dateObj = parseInputDate(value);
+  const minDate = parseInputDate(min);
+  const display = dateObj ? format(dateObj, 'd MMM yyyy') : placeholder || 'Pick a date';
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
@@ -352,16 +405,59 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
           </button>
         )}
       </div>
-      <input
-        type="date"
-        value={value || ''}
-        min={min || undefined}
-        onChange={(e) => onChange?.(e.target.value)}
-        disabled={disabled}
-        placeholder={placeholder}
-        style={{ colorScheme: 'dark' }}
-        className="h-10 w-full rounded-lg border border-white/10 bg-[#0D0D0D]/40 px-3 text-sm text-white outline-none transition placeholder:text-[#666] focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-50"
-      />
+      <div ref={wrapRef} className="relative">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setOpen((v) => !v)}
+          className={`flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#0D0D0D]/40 px-3 text-sm text-white outline-none transition hover:border-white/20 focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-50 ${
+            open ? 'border-[#15DCFF]/60' : ''
+          }`}
+        >
+          <span className={`truncate ${dateObj ? 'text-white' : 'text-[#666]'}`}>
+            {display}
+          </span>
+          <CalendarDays className="size-4 shrink-0 text-[#AFAFAF]" />
+        </button>
+
+        {open && (
+          <div
+            className="adsgpt-cal-pop absolute top-full left-0 z-10000 mt-1 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-2xl"
+          >
+            <style>{`
+              .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }
+              .adsgpt-cal-pop .rdrDateDisplayWrapper { display: none; }
+              .adsgpt-cal-pop .rdrMonthAndYearWrapper { background: #1a1a1a; height: 44px; padding-top: 6px; }
+              .adsgpt-cal-pop .rdrMonthAndYearPickers select { color: #fff; background: #0D0D0D; border-radius: 6px; padding: 2px 6px; }
+              .adsgpt-cal-pop .rdrNextPrevButton { background: #2a2a2a; }
+              .adsgpt-cal-pop .rdrNextPrevButton:hover { background: #3a3a3a; }
+              .adsgpt-cal-pop .rdrPprevButton i { border-color: transparent #fff transparent transparent; }
+              .adsgpt-cal-pop .rdrNextButton i { border-color: transparent transparent transparent #fff; }
+              .adsgpt-cal-pop .rdrMonth { padding: 0 0.6em 0.6em; }
+              .adsgpt-cal-pop .rdrWeekDay { color: #AFAFAF; font-size: 11px; }
+              .adsgpt-cal-pop .rdrDay { color: #E3E3E3; }
+              .adsgpt-cal-pop .rdrDayNumber span { color: #E3E3E3; font-size: 12px; }
+              .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span { color: #555; }
+              .adsgpt-cal-pop .rdrDayDisabled { background: transparent; }
+              .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span { color: #444; }
+              .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after { background: #15DCFF; }
+              .adsgpt-cal-pop .rdrDayHovered .rdrDayNumber span { color: #fff; }
+              .adsgpt-cal-pop .rdrSelected,
+              .adsgpt-cal-pop .rdrDayStartPreview,
+              .adsgpt-cal-pop .rdrDayEndPreview { color: #15DCFF !important; }
+            `}</style>
+            <Calendar
+              date={dateObj || new Date()}
+              onChange={(d) => {
+                onChange?.(toInputDate(d));
+                setOpen(false);
+              }}
+              minDate={minDate || undefined}
+              color="#15DCFF"
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
