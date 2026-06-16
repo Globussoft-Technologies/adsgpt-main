@@ -1,5 +1,5 @@
 import Masonry from 'react-masonry-css';
-import { Download, Info, X } from 'lucide-react';
+import { Download, Info, Megaphone, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -11,6 +11,8 @@ import { emitWhenConnected } from '@/utils/socketEmitter';
 import emitter from '@/utils/eventEmitter';
 import { mergeCampaignImageResults } from './adFactoryImagesMerge';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
+import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
+import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -28,7 +30,7 @@ const resolveImageUrl = (url) => {
 };
 
 // ── Single card ─────────────────────────────────────────────────────────────
-function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen }) {
+function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPostAdModal }) {
   const dispatch = useDispatch();
   const [showInfo, setShowInfo] = useState(false);
   const infoTimeout = useRef(null);
@@ -138,6 +140,23 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen }) {
           />
           {/* Controls bar */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            {onOpenPostAdModal && (
+              <button
+                title="Post as ad"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenPostAdModal({
+                    url: item?.url,
+                    isVideo: false,
+                    prompt: item?.campaignName || '',
+                    item,
+                  });
+                }}
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+              >
+                <Megaphone size={18} />
+              </button>
+            )}
             <button
               className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
               onClick={(e) => {
@@ -169,6 +188,25 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   const [fullscreenUrl, setFullscreenUrl] = useState(null);
   const limit = 20;
   const containerRef = useRef(null);
+
+  // MySpace → Meta Post Ad modal. Opened from each card's Megaphone button;
+  // the payload carries the chosen image URL. `autoAdvance` is set only when
+  // restoring after the Facebook OAuth round-trip — it tells the modal to
+  // skip the connect step the moment fbUser populates.
+  const [postAdState, setPostAdState] = useState({
+    open: false,
+    payload: null,
+    autoAdvance: false,
+  });
+
+  // Re-open the modal after the FB OAuth redirect. The payload was stashed to
+  // sessionStorage by the modal itself before redirect.
+  useEffect(() => {
+    const pending = readPendingPostAd();
+    if (pending) {
+      setPostAdState({ open: true, payload: pending, autoAdvance: true });
+    }
+  }, []);
 
   const load = async (nextSkip, replace) => {
     if (!userId) return;
@@ -332,6 +370,9 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
               isSelected={selectedImages.includes(item.url)}
               onSelect={() => toggleSelection(item.url)}
               onFullscreen={setFullscreenUrl}
+              onOpenPostAdModal={(payload) =>
+                setPostAdState({ open: true, payload, autoAdvance: false })
+              }
             />
           ))}
       </Masonry>
@@ -365,6 +406,13 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
           />
         </div>
       )}
+
+      <PostAdMySpaceModal
+        open={postAdState.open}
+        onOpenChange={(open) => setPostAdState((s) => ({ ...s, open }))}
+        payload={postAdState.payload}
+        autoAdvance={postAdState.autoAdvance}
+      />
     </div>
   );
 }
