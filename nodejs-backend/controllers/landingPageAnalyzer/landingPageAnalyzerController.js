@@ -2,12 +2,28 @@ const mongoose = require("mongoose");
 const axios = require("axios");
 const LandingPageAnalysis = require("../../Module/landingPageAnalyzer/landingPageAnalysis");
 const logger = require("../../utils/logger");
+const s3Storage = require("../../storage/s3");
 
 // Ensure the URL has a protocol so python doesn't choke on bare domains.
 function normalizeUrl(rawUrl) {
   const trimmed = String(rawUrl || "").trim();
   if (!trimmed) return "";
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+// Derive the S3 object key from a screenshot_url, which may be relative
+// ("/creatives/…") or absolute ("https://contents.adsgpt.io/creatives/…").
+function s3KeyFromUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  let path = url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      path = new URL(url).pathname;
+    } catch {
+      return null;
+    }
+  }
+  return path.replace(/^\/+/, "") || null;
 }
 
 // ─── POST url ──────────────────────────────────────────────────────────────────
@@ -212,6 +228,50 @@ exports.getAnalysisById = async (req, res) => {
     return res.status(200).json({ success: true, data: analysis });
   } catch (error) {
     logger.error(`Error in getAnalysisById: ${error.message}`);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal server error" });
+  }
+};
+
+// ─── DELETE :id (FE) ──────────────────────────────────────────────────────────────
+// Removes an analysis the user owns. Deletes the screenshot from S3 first
+// (best-effort), then the doc.
+exports.deleteAnalysis = async (req, res) => {
+  /*
+    #swagger.tags = ['Landing Page Analyzer']
+    #swagger.summary = 'Delete an analysis'
+    #swagger.description = 'Owner-scoped. Removes the screenshot from S3, then deletes the doc.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.parameters['id'] = { in: 'path', required: true, schema: { type: 'string' } }
+  */
+  try {
+    const userId = req.user.user_id;
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Valid id is required" });
+    }
+
+    const analysis = await LandingPageAnalysis.findOne({ _id: id, userId });
+    if (!analysis) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Analysis not found" });
+    }
+
+    // 1. Remove the captured screenshot from S3 (best-effort — never blocks).
+    const key = s3KeyFromUrl(analysis.result?.screenshot_url);
+    if (key) await s3Storage.deleteFromS3(key);
+
+    // 2. Remove the doc.
+    await analysis.deleteOne();
+
+    return res.status(200).json({ success: true, message: "Analysis deleted" });
+  } catch (error) {
+    logger.error(`Error in deleteAnalysis: ${error.message}`);
     return res
       .status(500)
       .json({ success: false, error: "Internal server error" });

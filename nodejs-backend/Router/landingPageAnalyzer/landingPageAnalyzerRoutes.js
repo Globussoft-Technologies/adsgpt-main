@@ -23,5 +23,6 @@ router.post("/event", verifySecretKey, ctrl.saveLiveEvent);
 // `/:id` is declared last so it can't shadow the static routes above.
 router.get("/", authenticateJWT, ctrl.getAnalyses);
 router.get("/:id", authenticateJWT, ctrl.getAnalysisById);
+router.delete("/:id", authenticateJWT, ctrl.deleteAnalysis);
 
 module.exports = router;

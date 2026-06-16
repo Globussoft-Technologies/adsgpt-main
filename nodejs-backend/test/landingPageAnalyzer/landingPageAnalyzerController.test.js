@@ -396,6 +396,56 @@ async function main() {
     assert.deepEqual(res.body.data, doc);
   });
 
+  // ── deleteAnalysis ─────────────────────────────────────────────────────
+  group("deleteAnalysis");
+
+  await test("deletes the S3 screenshot (derived key) then the doc, owner-scoped", async () => {
+    const s3 = require("../../storage/s3");
+    const delSpy = spy(async () => {});
+    s3.deleteFromS3 = delSpy;
+    const doc = makeDoc({
+      result: { screenshot_url: "https://contents.adsgpt.io/creatives/GPT-165/abc.webp" },
+    });
+    Model.findOne = spy(async () => doc);
+    const res = makeRes();
+    await ctrl.deleteAnalysis(
+      { user: { user_id: "GPT-165" }, params: { id: doc._id.toString() } },
+      res,
+    );
+    assert.deepEqual(Model.findOne.calls[0][0], { _id: doc._id.toString(), userId: "GPT-165" });
+    assert.equal(delSpy.calls[0][0], "creatives/GPT-165/abc.webp", "S3 key derived from url");
+    assert.equal(doc.deleteOne.calls.length, 1, "doc deleted");
+    assert.equal(res.statusCode, 200);
+  });
+
+  await test("relative screenshot_url → key without leading slash; no url → no S3 call", async () => {
+    const s3 = require("../../storage/s3");
+    let delSpy = spy(async () => {});
+    s3.deleteFromS3 = delSpy;
+    const doc = makeDoc({ result: { screenshot_url: "/creatives/GPT-165/x.webp" } });
+    Model.findOne = spy(async () => doc);
+    await ctrl.deleteAnalysis({ user: { user_id: "GPT-165" }, params: { id: doc._id.toString() } }, makeRes());
+    assert.equal(delSpy.calls[0][0], "creatives/GPT-165/x.webp");
+
+    delSpy = spy(async () => {});
+    s3.deleteFromS3 = delSpy;
+    const doc2 = makeDoc({ result: null });
+    Model.findOne = spy(async () => doc2);
+    await ctrl.deleteAnalysis({ user: { user_id: "GPT-165" }, params: { id: doc2._id.toString() } }, makeRes());
+    assert.equal(delSpy.calls.length, 0, "no screenshot → S3 untouched");
+    assert.equal(doc2.deleteOne.calls.length, 1);
+  });
+
+  await test("400 invalid id, 404 not found", async () => {
+    let res = makeRes();
+    await ctrl.deleteAnalysis({ user: { user_id: "GPT-165" }, params: { id: "bad" } }, res);
+    assert.equal(res.statusCode, 400);
+    Model.findOne = spy(async () => null);
+    res = makeRes();
+    await ctrl.deleteAnalysis({ user: { user_id: "GPT-165" }, params: { id: oid() } }, res);
+    assert.equal(res.statusCode, 404);
+  });
+
   // ── summary ────────────────────────────────────────────────────────────
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) {

@@ -46,3 +46,14 @@ export const getAnalysisById = async (id) => {
   );
   return data;
 };
+
+// -----------------------------------------------------------------------------
+// Delete an analysis (removes its S3 screenshot + the doc). Owner-scoped.
+// -----------------------------------------------------------------------------
+export const deleteAnalysis = async (id) => {
+  const { data } = await axios.delete(
+    `${BASE_URL}/adsgpt/landing-page-analyzer/${id}`,
+    { headers: headers() },
+  );
+  return data;
+};
