@@ -601,7 +601,7 @@ export const pauseAutomation = createAsyncThunk(
 // "Cannot resume a completed job" if the job has already ended.
 export const resumeAutomation = createAsyncThunk(
   'adFactoryAutomation/resume',
-  async (campaignId, { getState, rejectWithValue }) => {
+  async (campaignId, { getState, dispatch, rejectWithValue }) => {
     if (!campaignId) throw new Error('campaignId is required');
     const previous = getState().adFactoryAutomation?.configsByCampaign?.[campaignId];
     const jobId = previous?.jobId;
@@ -635,17 +635,37 @@ export const resumeAutomation = createAsyncThunk(
     // Prefer the backend's recomputed next-run if returned; otherwise recompute
     // client-side from the saved frequency.
     const fallbackNextRunAt = computeNextRunAt(previous.config?.frequency, now);
+    const resolvedNextRunAt =
+      job?.schedule?.nextRunAt ||
+      (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : previous.stats?.nextRunAt || null);
     const entry = {
       ...previous,
       status: AUTOMATION_STATUS.ACTIVE,
       stats: {
         ...previous.stats,
-        nextRunAt:
-          job?.schedule?.nextRunAt ||
-          (fallbackNextRunAt ? fallbackNextRunAt.toISOString() : previous.stats?.nextRunAt || null),
+        nextRunAt: resolvedNextRunAt,
+        // Mirror into the nested schedule object that AutomationActiveNode
+        // reads — pause may have nulled it via the stats poll. Without this
+        // sync, resume → "No upcoming" until the next 5-min poll. Matches
+        // the same fix in saveAutomation / updateAutomation.
+        schedule: {
+          ...(previous.stats?.schedule || {}),
+          nextRunAt: resolvedNextRunAt,
+          frequency: job?.schedule?.frequency || previous.stats?.schedule?.frequency,
+          timezone: job?.schedule?.timezone || previous.stats?.schedule?.timezone,
+          startDate: job?.schedule?.startDate || previous.stats?.schedule?.startDate,
+          endDate: job?.schedule?.endDate || previous.stats?.schedule?.endDate,
+        },
       },
       updatedAt: now.toISOString(),
     };
+
+    // Chain into fetchAutomationStats so the backend's authoritative view
+    // (totalRuns, posted, etc) takes over once it lands. Fire-and-forget —
+    // the synchronous schedule mirror above is enough for the user to see
+    // the right time immediately.
+    dispatch(fetchAutomationStats(campaignId));
+
     return { campaignId, entry };
   }
 );
