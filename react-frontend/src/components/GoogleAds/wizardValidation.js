@@ -23,8 +23,11 @@ const isPositive = (v) => {
 
 function isHttpUrl(v) {
   try {
-    const u = new URL(String(v).trim());
-    return u.protocol === 'http:' || u.protocol === 'https:';
+    const s = String(v).trim();
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    // Reject "https:foo.com" — must have "//" after protocol
+    return s.slice(u.protocol.length).startsWith('//');
   } catch {
     return false;
   }
@@ -128,7 +131,21 @@ function validateCampaign(form) {
 
   if (channel === 'PERFORMANCE_MAX') {
     if (isBlank(form.assetGroupName))
-      e.assetGroupName = 'Asset group name is required for Performance Max campaigns.';
+      e.assetGroupName = 'Asset group name is required.';
+    if (isBlank(form.pmaxFinalUrl))
+      e.pmaxFinalUrl = 'Landing page URL is required.';
+    else if (!isHttpUrl(form.pmaxFinalUrl))
+      e.pmaxFinalUrl = 'Enter a valid URL (https://…).';
+    if (isBlank(form.pmaxBusinessName))
+      e.pmaxBusinessName = 'Business name is required.';
+    const heads = (form.pmaxHeadlines || []).filter((h) => h && h.trim());
+    if (heads.length < 3)
+      e.pmaxHeadlines = 'At least 3 headlines are required.';
+    else if ([...new Set(heads.map((h) => h.toLowerCase()))].length < heads.length)
+      e.pmaxHeadlines = 'Headlines must be unique.';
+    const descs = (form.pmaxDescriptions || []).filter((d) => d && d.trim());
+    if (descs.length < 2)
+      e.pmaxDescriptions = 'At least 2 descriptions are required.';
   }
 
   return e;
@@ -194,28 +211,30 @@ function validateAd(form, adType) {
   const e = {};
 
   if (adType === 'SEARCH') {
-    const heads = form.headlines || [];
+    const heads = (form.headlines || []).filter((h) => h && h.trim());
+    const uniqueHeads = [...new Set(heads.map((h) => h.trim().toLowerCase()))];
     if (heads.length < 3) {
       e.headlines = 'At least 3 headlines are required.';
     } else if (heads.length > 15) {
       e.headlines = 'At most 15 headlines are allowed.';
+    } else if (uniqueHeads.length < heads.length) {
+      e.headlines = 'Headlines must be unique — remove duplicate entries.';
     } else {
       const long = heads.find((h) => h.length > 30);
       if (long) e.headlines = `Headline "${long.slice(0, 20)}…" exceeds 30 characters.`;
-      const empty = heads.find((h) => !h.trim());
-      if (empty) e.headlines = 'Headlines must not be empty.';
     }
 
-    const descs = form.descriptions || [];
+    const descs = (form.descriptions || []).filter((d) => d && d.trim());
+    const uniqueDescs = [...new Set(descs.map((d) => d.trim().toLowerCase()))];
     if (descs.length < 2) {
       e.descriptions = 'At least 2 descriptions are required.';
     } else if (descs.length > 4) {
       e.descriptions = 'At most 4 descriptions are allowed.';
+    } else if (uniqueDescs.length < descs.length) {
+      e.descriptions = 'Descriptions must be unique — remove duplicate entries.';
     } else {
       const long = descs.find((d) => d.length > 90);
       if (long) e.descriptions = `Description "${long.slice(0, 20)}…" exceeds 90 characters.`;
-      const empty = descs.find((d) => !d.trim());
-      if (empty) e.descriptions = 'Descriptions must not be empty.';
     }
 
     if (isBlank(form.finalUrl)) {
@@ -289,7 +308,7 @@ export function validateStep(stepId, form, adType, schema) {
     case 'destination': return validateDestination(form, schema);
     case 'campaign':   return validateCampaign(form);
     case 'adGroup':    return validateAdGroup(form);
-    case 'ad':         return validateAd(form, adType || deriveAdType(effectiveChannel(form)));
+    case 'ad':         return effectiveChannel(form) === 'SHOPPING' ? {} : validateAd(form, adType || deriveAdType(effectiveChannel(form)));
     case 'review':     return {};
     default:           return {};
   }

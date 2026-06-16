@@ -42,7 +42,9 @@ router.patch("/update-ad-group", googleAdController.updateAdGroupAPI);
 // ─── Ads Posting ────────────────────────────────────────────────
 router.post("/upload-image", upload.single("image"), googleAdController.uploadMediaAPI);
 router.post("/ads", googleAdController.createAdAPI);
+router.patch("/ads", googleAdController.updateAdAPI);
 router.get("/ads/:id", googleAdController.getAd);
+router.delete("/ads/:id", googleAdController.deleteAdAPI);
 
 
 // ─── Analytics, Insights & Audit ──────────────────────────────────────────────

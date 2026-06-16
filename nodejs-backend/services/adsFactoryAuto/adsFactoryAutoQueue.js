@@ -178,17 +178,22 @@ async function getNextRunTime(jobId, schedule = null) {
     }
   }
 
-  // Fallback for paused jobs: calculate theoretical next run
-  if (schedule && schedule.cronExpression) {
-    try {
-      const parser = require("cron-parser");
-      const interval = parser.parseExpression(schedule.cronExpression, { 
-        tz: schedule.timezone || "UTC" 
-      });
-      return interval.next().toDate();
-    } catch (err) {}
+  // Fallback for paused jobs or one-shot jobs not in BullMQ repeatables.
+  if (schedule) {
+    if (schedule.frequency === "does_not_repeat") {
+      return schedule.startDate ? new Date(schedule.startDate) : null;
+    }
+    if (schedule.cronExpression) {
+      try {
+        const parser = require("cron-parser");
+        const interval = parser.parseExpression(schedule.cronExpression, {
+          tz: schedule.timezone || "UTC",
+        });
+        return interval.next().toDate();
+      } catch (err) {}
+    }
   }
-  
+
   return null;
 }
 

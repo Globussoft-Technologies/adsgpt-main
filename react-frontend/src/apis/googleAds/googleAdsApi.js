@@ -18,7 +18,7 @@ export const getGoogleCampaigns = async (adAccountId, { refresh = false, adType 
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-campaigns`, {
     params: {
       adAccountId,
-      ...(refresh ? { refresh: 'true' } : {}),
+      ...(refresh ? { refresh: 'true', _t: Date.now() } : {}),
       ...(adTypes.length ? { adType: adTypes } : {}),
     },
     paramsSerializer: (p) => {
@@ -29,7 +29,7 @@ export const getGoogleCampaigns = async (adAccountId, { refresh = false, adType 
       });
       return parts.join('&');
     },
-    headers: authHeaders(),
+    headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
   });
   return data;
 };
@@ -66,10 +66,10 @@ export const runGoogleAudit = async ({ adAccountId } = {}) => {
   return data;
 };
 
-export const updateGoogleAdStatus = async ({ level, id, adAccountId, status }) => {
+export const updateGoogleAdStatus = async ({ level, id, adAccountId, adGroupId, status, entityType, isPmax }) => {
   const { data } = await axios.patch(
     `${BASE_URL}/adsgpt/google-ads/update-status`,
-    { level, id, adAccountId, status },
+    { level, id, adAccountId, adGroupId, status, entityType, isPmax },
     { headers: authHeaders() },
   );
   return data;
@@ -117,24 +117,24 @@ export const getGoogleCtaOptions = async (objective) => {
 
 export const getGoogleAdGroups = async ({ adAccountId, campaignId, refresh = false }) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-ad-groups`, {
-    params: { adAccountId, campaignId, ...(refresh ? { refresh: 'true' } : {}) },
-    headers: authHeaders(),
+    params: { adAccountId, campaignId, ...(refresh ? { refresh: 'true', _t: Date.now() } : {}) },
+    headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
   });
   return data;
 };
 
 export const getGoogleCampaignAds = async ({ adAccountId, campaignId }) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-campaign-ads`, {
-    params: { adAccountId, campaignId },
-    headers: authHeaders(),
+    params: { adAccountId, campaignId, _t: Date.now() },
+    headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
   });
   return data;
 };
 
 export const getGoogleAdGroupAds = async ({ adAccountId, adGroupId, refresh = false }) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-ad-group-ads`, {
-    params: { adAccountId, adGroupId, ...(refresh ? { refresh: 'true' } : {}) },
-    headers: authHeaders(),
+    params: { adAccountId, adGroupId, ...(refresh ? { refresh: 'true', _t: Date.now() } : {}) },
+    headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
   });
   return data;
 };
@@ -203,6 +203,21 @@ export const uploadGoogleImage = async ({ adAccountId, imageUrl, imageFile }) =>
 
 export const createGoogleAd = async (body) => {
   const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/ads`, body, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const updateGoogleAd = async (body) => {
+  const { data } = await axios.patch(`${BASE_URL}/adsgpt/google-ads/ads`, body, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const deleteGoogleAd = async ({ adAccountId, adGroupId, adId }) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/ads/${adId}`, {
+    data: { adAccountId, adGroupId },
     headers: authHeaders(),
   });
   return data;

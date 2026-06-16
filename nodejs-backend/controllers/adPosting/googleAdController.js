@@ -23,7 +23,6 @@ const {
   formatAccountStatus,
   formatBiddingStrategy,
   formatChannelType,
-  formatGoogleDate,
   deriveGoogleBillingType,
   sanitizeId,
 } = require("../../utils/googleHelpers");
@@ -86,6 +85,8 @@ const ALL_CACHE_PREFIXES = [
   "googleAnalytics",
   "googleInsights",
   "googleAudit",
+  "googleAccessToken",
+  "googleManagerMap",
 ];
 
 const robustFormatStatus = (status) => {
@@ -118,20 +119,30 @@ function deriveObjective(channelType) {
   return map[ch] || ch || null;
 }
 
-async function invalidateGoogleCacheByPrefixes(userId, prefixes) {
-  const keysToDelete = [];
-  for (const prefix of prefixes) {
-    for (const pattern of [`${prefix}:${userId}:*`, `${prefix}:v2:${userId}:*`, `${prefix}:v3:${userId}:*`, `${prefix}:*:${userId}:*`]) {
-      const stream = redisClient.scanStream({
-        match: pattern,
-        count: 100,
-      });
-      for await (const keys of stream) {
-        if (keys.length) keysToDelete.push(...keys);
-      }
-    }
-    keysToDelete.push(`${prefix}:${userId}`);
+async function scanKeys(pattern) {
+  const keys = [];
+  const stream = redisClient.scanStream({ match: pattern, count: 100 });
+  for await (const batch of stream) {
+    if (batch.length) keys.push(...batch);
   }
+  return keys;
+}
+
+async function invalidateGoogleCacheByPrefixes(userId, prefixes) {
+  if (!redisClient) return;
+  const patterns = [];
+  for (const prefix of prefixes) {
+    patterns.push(
+      `${prefix}:${userId}:*`,
+      `${prefix}:v2:${userId}:*`,
+      `${prefix}:v3:${userId}:*`,
+      `${prefix}:v4:${userId}:*`,
+      `${prefix}:*:${userId}:*`,
+    );
+  }
+  const results = await Promise.all(patterns.map(p => scanKeys(p)));
+  const keysToDelete = results.flat();
+  for (const prefix of prefixes) keysToDelete.push(`${prefix}:${userId}`);
   if (keysToDelete.length) await redisClient.del(...keysToDelete);
 }
 
@@ -264,6 +275,28 @@ async function getBlockedGoogleAccounts(userId) {
 // Resolve Google user by JWT userId (e.g. "GPT-123") — mirrors how Meta Ads
 // resolves the FB user, so callers never pass a MongoDB _id in query params.
 async function initGoogleApiForUser(userId) {
+  // Check Redis for a cached valid access token first (avoids DB + refresh roundtrip)
+  const tokenCacheKey = `googleAccessToken:${userId}`;
+  if (redisClient) {
+    try {
+      const cached = await redisClient.get(tokenCacheKey);
+      if (cached) {
+        const { accessToken: cachedToken, client: _c } = JSON.parse(cached);
+        if (cachedToken) {
+          const client = new GoogleAdsApi({
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET,
+            developer_token: process.env.GOOGLE_DEVELOPER_TOKEN,
+          });
+          // Still need refreshToken for getCustomerClient — fetch from DB lean (fast)
+          const googleUser = await GoogleUsers.findOne({ userId }).lean();
+          const refreshToken = googleUser ? decrypt(googleUser.refreshToken) : null;
+          return { client, accessToken: cachedToken, refreshToken, googleUser };
+        }
+      }
+    } catch (_) { /* fall through */ }
+  }
+
   // Sort by updatedAt descending to ensure we pick the most recent connection if duplicates exist
   const googleUser = await GoogleUsers.findOne({ userId }).sort({ updatedAt: -1 });
   if (!googleUser) {
@@ -284,7 +317,6 @@ async function initGoogleApiForUser(userId) {
   const isExpired = !googleUser.tokenExpiresAt || new Date(googleUser.tokenExpiresAt) <= new Date(Date.now() + 5 * 60 * 1000);
   if (isExpired) {
     try {
-
       const refreshResponse = await axios.post("https://oauth2.googleapis.com/token", {
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -292,16 +324,24 @@ async function initGoogleApiForUser(userId) {
         grant_type: "refresh_token",
       });
       accessToken = refreshResponse.data.access_token;
+      const expiresIn = refreshResponse.data.expires_in || 3600;
       googleUser.accessToken = encrypt(accessToken);
-      googleUser.tokenExpiresAt = new Date(Date.now() + (refreshResponse.data.expires_in || 3600) * 1000);
+      googleUser.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
       await googleUser.save();
-
+      // Cache the fresh token in Redis — expire 5 min before actual expiry to be safe
+      if (redisClient) {
+        redisClient.set(tokenCacheKey, JSON.stringify({ accessToken }), "EX", Math.max(expiresIn - 300, 60)).catch(() => {});
+      }
     } catch (refreshErr) {
       logger.error(`Google token refresh failed for userId ${userId}: ${refreshErr.response?.data?.error || refreshErr.message}`);
       const err = new Error("Google access token expired. Please reconnect your Google account.");
       err.statusCode = 401;
       throw err;
     }
+  } else if (redisClient && accessToken) {
+    // Token still valid — cache it for remaining TTL
+    const ttl = Math.max(Math.floor((new Date(googleUser.tokenExpiresAt) - Date.now()) / 1000) - 300, 60);
+    redisClient.set(tokenCacheKey, JSON.stringify({ accessToken }), "EX", ttl).catch(() => {});
   }
 
   if (!accessToken) {
@@ -446,6 +486,8 @@ class GoogleAdController {
     this.createCampaignAPI = this.createCampaignAPI.bind(this);
     this.createAdGroupAPI = this.createAdGroupAPI.bind(this);
     this.createAdAPI = this.createAdAPI.bind(this);
+    this.updateAdAPI = this.updateAdAPI.bind(this);
+    this.deleteAdAPI = this.deleteAdAPI.bind(this);
     this.getAd = this.getAd.bind(this);
     this.resolveAdForEdit = this.resolveAdForEdit.bind(this);
     this.uploadMediaAPI = this.uploadMediaAPI.bind(this);
@@ -729,7 +771,7 @@ class GoogleAdController {
         : null;
 
       const adTypeKey = adTypes.length ? `:${adTypes.sort().join(',')}` : '';
-      const cacheKey = `googleCampaignsAll:v3:${userId}:${adAccountId || "all"}${adTypeKey}`;
+      const cacheKey = `googleCampaignsAll:v4:${userId}:${adAccountId || "all"}${adTypeKey}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
@@ -872,31 +914,32 @@ class GoogleAdController {
             "login-customer-id": loginId,
             "Content-Type": "application/json",
           };
-          const baseCampaignGaql = `
-            SELECT
-              campaign.id,
-              campaign.name,
-              campaign.status,
-              campaign.primary_status,
-              campaign.serving_status,
-              campaign.advertising_channel_type,
-              campaign.bidding_strategy_type,
-              campaign_budget.amount_micros
-            FROM campaign
-            WHERE campaign.status != 'REMOVED'
-            ORDER BY campaign.id DESC
-          `;
+          // Full query — primary_status + serving_status + budget period
           const fullCampaignGaql = `
             SELECT
               campaign.id,
               campaign.name,
               campaign.status,
               campaign.primary_status,
+              campaign.primary_status_reasons,
               campaign.serving_status,
               campaign.advertising_channel_type,
               campaign.bidding_strategy_type,
               campaign_budget.amount_micros,
               campaign_budget.period
+            FROM campaign
+            WHERE campaign.status != 'REMOVED'
+            ORDER BY campaign.id DESC
+          `;
+          // Base fallback — minimal safe fields guaranteed on all v23 accounts
+          const baseCampaignGaql = `
+            SELECT
+              campaign.id,
+              campaign.name,
+              campaign.status,
+              campaign.advertising_channel_type,
+              campaign.bidding_strategy_type,
+              campaign_budget.amount_micros
             FROM campaign
             WHERE campaign.status != 'REMOVED'
             ORDER BY campaign.id DESC
@@ -910,9 +953,13 @@ class GoogleAdController {
             const campResp = await axios.post(campUrl, { query: fullCampaignGaql }, { headers });
             results = campResp.data?.[0]?.results || [];
           } catch (campErr) {
-            logger.error(`Campaign full GAQL failed for ${targetId}: ${formatGoogleError(campErr).message}`);
-            const campResp = await axios.post(campUrl, { query: baseCampaignGaql }, { headers });
-            results = campResp.data?.[0]?.results || [];
+            logger.warn(`Campaign full GAQL failed for ${targetId}, falling back to base: ${formatGoogleError(campErr).message}`);
+            try {
+              const campResp = await axios.post(campUrl, { query: baseCampaignGaql }, { headers });
+              results = campResp.data?.[0]?.results || [];
+            } catch (baseErr) {
+              logger.error(`Campaign base GAQL also failed for ${targetId}: ${formatGoogleError(baseErr).message}`);
+            }
           }
 
           try {
@@ -932,8 +979,8 @@ class GoogleAdController {
           return results.map(r => {
             const c = r.campaign;
             const channelType = robustFormatChannelType(c.advertisingChannelType || c.advertising_channel_type);
-            const primaryStatus = c.primaryStatus || c.primary_status;
-            const servingStatus = c.servingStatus || c.serving_status;
+            const rawPrimaryStatus = c.primaryStatus || c.primary_status;
+            const rawServingStatus = c.servingStatus || c.serving_status;
             const biddingStrategyType = c.biddingStrategyType || c.bidding_strategy_type;
             const budget = r.campaignBudget || r.campaign_budget;
             const cid = String(c.id);
@@ -943,14 +990,31 @@ class GoogleAdController {
             const remainingMicros = budgetPeriod === "DAILY" && dailyMicros
               ? Math.max(0, dailyMicros - spentToday)
               : null;
-            const startDate = formatGoogleDate(c.startDate || c.start_date);
+
+            // Derive serving status from reasons + raw serving_status
+            const campReasons = c.primaryStatusReasons || c.primary_status_reasons || [];
+            const campReasonList = Array.isArray(campReasons) ? campReasons : [campReasons];
+            let derivedServingStatus = (rawServingStatus && rawServingStatus !== "UNKNOWN" && rawServingStatus !== "UNSPECIFIED" && rawServingStatus !== "SERVING") ? rawServingStatus : null;
+            if (!derivedServingStatus) {
+              if (campReasonList.some(r => /DISAPPROVED/i.test(String(r)))) derivedServingStatus = 'ADS_DISAPPROVED';
+              else if (campReasonList.some(r => /POLICY/i.test(String(r)))) derivedServingStatus = 'ADS_LIMITED_BY_POLICY';
+              else if (campReasonList.some(r => /BUDGET/i.test(String(r)))) derivedServingStatus = 'BUDGET_PAUSED';
+            }
+            // Upgrade ELIGIBLE → ELIGIBLE_LIMITED when policy reasons exist
+            let primaryStatus = (rawPrimaryStatus && rawPrimaryStatus !== "UNKNOWN" && rawPrimaryStatus !== "UNSPECIFIED") ? rawPrimaryStatus : null;
+            if (primaryStatus === "ELIGIBLE" && derivedServingStatus === "ADS_LIMITED_BY_POLICY") {
+              primaryStatus = "ELIGIBLE_LIMITED";
+            }
+            if (primaryStatus === "ELIGIBLE" && derivedServingStatus === "ADS_DISAPPROVED") {
+              primaryStatus = "ELIGIBLE_LIMITED";
+            }
             return {
               id: cid,
               campaignId: cid,
               name: c.name,
               status: robustFormatStatus(c.status),
-              primaryStatus: (primaryStatus && primaryStatus !== "UNKNOWN" && primaryStatus !== "UNSPECIFIED") ? primaryStatus : null,
-              servingStatus: (servingStatus && servingStatus !== "UNKNOWN" && servingStatus !== "UNSPECIFIED") ? servingStatus : null,
+              primaryStatus,
+              servingStatus: derivedServingStatus,
               channelType: (channelType && channelType !== "UNKNOWN") ? channelType : null,
               objective: deriveObjective(c.advertisingChannelType || c.advertising_channel_type),
               biddingStrategy: robustFormatBiddingStrategy(biddingStrategyType),
@@ -960,49 +1024,78 @@ class GoogleAdController {
               budgetPeriod,
               budgetRemainingMicros: remainingMicros,
               budget_remaining: remainingMicros != null ? formatBudget(remainingMicros) : null,
-              startDate,
-              start_time: startDate,
             };
           });
         };
 
         const fetchAdGroups = async (targetId, loginId) => {
+          const adGroupUrl = `https://googleads.googleapis.com/v23/customers/${targetId}/googleAds:searchStream`;
+          const adGroupHeaders = {
+            Authorization: `Bearer ${accessToken}`,
+            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+            "login-customer-id": loginId,
+            "Content-Type": "application/json",
+          };
+          const fullAdGroupGaql = `
+            SELECT
+              ad_group.id,
+              ad_group.name,
+              ad_group.status,
+              ad_group.primary_status,
+              ad_group.primary_status_reasons,
+              ad_group.type,
+              ad_group.target_cpa_micros,
+              ad_group.target_roas,
+              campaign.id,
+              campaign.name
+            FROM ad_group
+            WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL', 'DEMAND_GEN', 'VIDEO')
+          `;
+          const baseAdGroupGaql = `
+            SELECT
+              ad_group.id,
+              ad_group.name,
+              ad_group.status,
+              ad_group.type,
+              ad_group.target_cpa_micros,
+              ad_group.target_roas,
+              campaign.id,
+              campaign.name
+            FROM ad_group
+            WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL', 'DEMAND_GEN', 'VIDEO')
+          `;
           try {
-            const resp = await axios.post(
-              `https://googleads.googleapis.com/v23/customers/${targetId}/googleAds:searchStream`,
-              {
-                query: `
-                  SELECT
-                    ad_group.id,
-                    ad_group.name,
-                    ad_group.status,
-                    ad_group.type,
-                    ad_group.target_cpa_micros,
-                    ad_group.target_roas,
-                    campaign.id,
-                    campaign.name
-                  FROM ad_group
-                  WHERE campaign.advertising_channel_type IN ('SEARCH', 'DISPLAY', 'SHOPPING', 'MULTI_CHANNEL', 'DEMAND_GEN', 'VIDEO')
-                `,
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-                  "login-customer-id": loginId,
-                  "Content-Type": "application/json",
-                },
-              }
-            );
-            const results = resp.data?.[0]?.results || [];
-            return results.map(r => {
+            let agResults = [];
+            try {
+              const resp = await axios.post(adGroupUrl, { query: fullAdGroupGaql }, { headers: adGroupHeaders });
+              agResults = resp.data?.[0]?.results || [];
+            } catch (_) {
+              const resp = await axios.post(adGroupUrl, { query: baseAdGroupGaql }, { headers: adGroupHeaders });
+              agResults = resp.data?.[0]?.results || [];
+            }
+            return agResults.map(r => {
               const ag = r.adGroup || r.ad_group;
               const agid = String(ag.id);
+              const rawPrimaryStatus = ag.primaryStatus || ag.primary_status;
+              const reasons = ag.primaryStatusReasons || ag.primary_status_reasons || [];
+              const reasonList = Array.isArray(reasons) ? reasons : [reasons];
+              // Derive serving-status-like string from reasons for UI subtitle
+              let derivedServingStatus = null;
+              if (reasonList.some(r => /DISAPPROVED/i.test(String(r)))) derivedServingStatus = 'ADS_DISAPPROVED';
+              else if (reasonList.some(r => /POLICY_VIOLATION|POLICY/i.test(String(r)))) derivedServingStatus = 'ADS_LIMITED_BY_POLICY';
+              else if (reasonList.some(r => /AD_GROUP_AD.*PAUSED|ALL_ADS_PAUSED/i.test(String(r)))) derivedServingStatus = 'ADS_PAUSED';
+              // Upgrade ELIGIBLE → ELIGIBLE_LIMITED when reasons indicate policy limits
+              let primaryStatus = (rawPrimaryStatus && rawPrimaryStatus !== "UNKNOWN" && rawPrimaryStatus !== "UNSPECIFIED") ? rawPrimaryStatus : null;
+              if (primaryStatus === "ELIGIBLE" && derivedServingStatus === "ADS_LIMITED_BY_POLICY") {
+                primaryStatus = "ELIGIBLE_LIMITED";
+              }
               return {
                 id: agid,
                 adGroupId: agid,
                 name: ag.name,
                 status: robustFormatStatus(ag.status),
+                primaryStatus,
+                servingStatus: derivedServingStatus,
                 type: ag.type,
                 cpcBidMicros: ag.cpcBidMicros || ag.cpc_bid_micros || null,
                 targetCpa: (ag.targetCpaMicros || ag.target_cpa_micros) ? (ag.targetCpaMicros || ag.target_cpa_micros) / 1e6 : null,
@@ -1176,7 +1269,7 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleAdGroups:v3:${userId}:${tid}:${campaignId}`;
+      const cacheKey = `googleAdGroups:v4:${userId}:${tid}:${campaignId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
         if (cached) return res.status(200).json(JSON.parse(cached));
@@ -1193,7 +1286,7 @@ class GoogleAdController {
       // Note: ad_group.start_date / end_date are NOT valid Google Ads API fields — removed
       const [adGroupResp, assetGroupResp] = await Promise.all([
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type, ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
+          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.primary_status, ad_group.primary_status_reasons, ad_group.type, ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
           { headers }
         ).catch((err) => { logger.error(`getAdGroups ad_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
         axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
@@ -1233,11 +1326,26 @@ class GoogleAdController {
             const biddingStrategyType = camp.biddingStrategyType || camp.bidding_strategy_type;
             const optimizationGoal = robustFormatBiddingStrategy(biddingStrategyType);
             const billingEvent = deriveGoogleBillingType(biddingStrategyType, ag.type);
+
+            // primaryStatus + reasons → derive badge key and subtitle
+            const rawPs = ag.primaryStatus || ag.primary_status;
+            const agReasons = ag.primaryStatusReasons || ag.primary_status_reasons || [];
+            const agReasonList = Array.isArray(agReasons) ? agReasons : [agReasons];
+            let agServingStatus = null;
+            if (agReasonList.some(r => /DISAPPROVED/i.test(String(r)))) agServingStatus = 'ADS_DISAPPROVED';
+            else if (agReasonList.some(r => /POLICY/i.test(String(r)))) agServingStatus = 'ADS_LIMITED_BY_POLICY';
+            else if (agReasonList.some(r => /PAUSED/i.test(String(r)))) agServingStatus = 'ADS_PAUSED';
+            let agPrimaryStatus = (rawPs && rawPs !== "UNKNOWN" && rawPs !== "UNSPECIFIED") ? rawPs : null;
+            if (agPrimaryStatus === "ELIGIBLE" && agServingStatus === "ADS_LIMITED_BY_POLICY") agPrimaryStatus = "ELIGIBLE_LIMITED";
+            if (agPrimaryStatus === "ELIGIBLE" && agServingStatus === "ADS_DISAPPROVED") agPrimaryStatus = "ELIGIBLE_LIMITED";
+
             return {
               id: agid,
               adGroupId: agid,
               name: ag.name || "",
               status: robustFormatStatus(ag.status),
+              primaryStatus: agPrimaryStatus,
+              servingStatus: agServingStatus,
               type: ag.type || "",
               cpcBidMicros: ag.cpcBidMicros || ag.cpc_bid_micros || null,
               targetCpa: ag.targetCpaMicros ? ag.targetCpaMicros / 1e6 : (ag.target_cpa_micros ? ag.target_cpa_micros / 1e6 : null),
@@ -1438,7 +1546,7 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleAdGroupAds:v3:${userId}:${tid}:${adGroupId}`;
+      const cacheKey = `googleAdGroupAds:v4:${userId}:${tid}:${adGroupId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
         if (cached) return res.status(200).json(JSON.parse(cached));
@@ -2260,33 +2368,108 @@ class GoogleAdController {
       const customerId = value.adAccountId || value.customerId;
       const userId = req.user.user_id;
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
+      const { accessToken } = await initGoogleApiForUser(userId);
       const tid = normalizeCustomerId(customerId);
-      const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
-      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
-      const customer = getCustomerClient(client, customerId, loginCustomerId, refreshToken);
 
-      const statusEnum = status === "ENABLED" ? 2 : 3;
+      // Fast path: resolve loginCustomerId from Redis only (set by resolveManagerForAccount on first campaign load)
+      let loginCustomerId = tid;
+      try {
+        const cacheKey = `googleManagerMap:${tid}`;
+        const cached = redisClient ? await redisClient.get(cacheKey) : null;
+        if (cached && cached !== "SELF") loginCustomerId = normalizeCustomerId(cached);
+        // If not in Redis yet, fall back to MongoDB and warm Redis
+        if (!cached) {
+          const dbUser = await GoogleUsers.findOne({ userId }, { [`managerMap.${tid}`]: 1 }).lean();
+          const dbVal = dbUser?.managerMap?.[tid] || "SELF";
+          if (redisClient) redisClient.set(cacheKey, dbVal, "EX", 86400).catch(() => {});
+          if (dbVal !== "SELF") loginCustomerId = normalizeCustomerId(dbVal);
+        }
+      } catch (_) { /* fall through — use tid as loginCustomerId */ }
+
       const numericId = sanitizeId(id);
 
       if (level === "campaign") {
-        await customer.campaigns.update([{
-          resource_name: `customers/${sanitizeId(customerId)}/campaigns/${numericId}`,
-          status: statusEnum,
-        }]);
+        const cleanCustomerId = sanitizeId(customerId);
+        const adHeaders = {
+          Authorization: `Bearer ${accessToken}`,
+          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+          "login-customer-id": loginCustomerId,
+          "Content-Type": "application/json",
+        };
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${cleanCustomerId}/campaigns:mutate`,
+          {
+            operations: [{
+              updateMask: "status",
+              update: {
+                resourceName: `customers/${cleanCustomerId}/campaigns/${numericId}`,
+                status: status === "ENABLED" ? "ENABLED" : "PAUSED",
+              },
+            }],
+          },
+          { headers: adHeaders }
+        );
       } else if (level === "adgroup") {
-        await customer.adGroups.update([{
-          resource_name: `customers/${sanitizeId(customerId)}/adGroups/${numericId}`,
-          status: statusEnum,
-        }]);
+        const entityType = value.entityType || req.body.entityType || "";
+        const isAssetGroup = entityType === "ASSET_GROUP" || value.isPmax === true || req.body.isPmax === true;
+        if (isAssetGroup) {
+          // PMax asset groups cannot be paused individually — status is controlled at campaign level
+          return res.status(400).json({
+            status: false,
+            error: "Performance Max asset groups cannot be paused individually. Please pause the campaign instead.",
+            isPmaxRestriction: true,
+          });
+        } else {
+          const cleanCustomerId = sanitizeId(customerId);
+          const adHeaders = {
+            Authorization: `Bearer ${accessToken}`,
+            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+            "login-customer-id": loginCustomerId,
+            "Content-Type": "application/json",
+          };
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${cleanCustomerId}/adGroups:mutate`,
+            {
+              operations: [{
+                updateMask: "status",
+                update: {
+                  resourceName: `customers/${cleanCustomerId}/adGroups/${numericId}`,
+                  status: status === "ENABLED" ? "ENABLED" : "PAUSED",
+                },
+              }],
+            },
+            { headers: adHeaders }
+          );
+        }
       } else if (level === "ad") {
-        return res.status(400).json({
-          status: false,
-          error: "Ad-level status updates are not supported via this endpoint. Use PATCH /ads/:id instead.",
-        });
+        const adGroupId = value.adGroupId || req.body.adGroupId;
+        if (!adGroupId) {
+          return res.status(400).json({ status: false, error: "adGroupId is required for ad-level status updates" });
+        }
+        const cleanCustomerId = sanitizeId(customerId);
+        const cleanAdGroupId  = sanitizeId(adGroupId);
+        const cleanAdId       = sanitizeId(numericId);
+        const resource = `customers/${cleanCustomerId}/adGroupAds/${cleanAdGroupId}~${cleanAdId}`;
+        const adHeaders = {
+          Authorization: `Bearer ${accessToken}`,
+          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+          "login-customer-id": loginCustomerId,
+          "Content-Type": "application/json",
+        };
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${cleanCustomerId}/adGroupAds:mutate`,
+          {
+            operations: [{
+              updateMask: "status",
+              update: { resourceName: resource, status: status === "ENABLED" ? "ENABLED" : "PAUSED" },
+            }],
+          },
+          { headers: adHeaders }
+        );
       }
 
-      await invalidateUserGoogleCache(userId);
+      // Fire-and-forget — don't block response on cache invalidation
+      invalidateUserGoogleCache(userId).catch(() => {});
 
       return res.status(200).json({
         status: true,
@@ -2294,11 +2477,12 @@ class GoogleAdController {
       });
     } catch (error) {
       const m = formatGoogleError(error);
-      logger.error(`Google update status error: ${m.message}`);
-      return res.status(error.statusCode || 500).json({
+      const detail = error?.response?.data ? JSON.stringify(error.response.data) : (error?.message || String(error));
+      logger.error(`Google update status error: ${m.message} | detail: ${detail}`);
+      return res.status(error.statusCode || error?.response?.status || 500).json({
         status: false,
-        error: "Failed to update status",
-        details: m.message,
+        error: m.message || "Failed to update status",
+        details: detail,
         reason: m.reason,
       });
     }
@@ -2598,6 +2782,15 @@ class GoogleAdController {
         storeAddress,       // LOCAL_STORE proximity targeting
         locationRadius,     // LOCAL_STORE proximity radius
         finalUrlSuffix,     // PERFORMANCE_MAX suffix
+        assetGroupName,      // PERFORMANCE_MAX asset group name
+        businessDescription, // PERFORMANCE_MAX asset copy hint
+        pmaxBusinessName,    // PERFORMANCE_MAX business name asset
+        pmaxHeadlines,       // PERFORMANCE_MAX custom headlines array
+        pmaxLongHeadline,    // PERFORMANCE_MAX long headline
+        pmaxDescriptions,    // PERFORMANCE_MAX custom descriptions array
+        pmaxImageUrl,        // PERFORMANCE_MAX landscape image URL
+        pmaxLogoUrl,         // PERFORMANCE_MAX logo URL
+        pmaxVideoUrl,        // PERFORMANCE_MAX YouTube video URL or ID
       } = objectiveExtras;
 
       // ── Bidding strategy per channel type (snake_case for REST API) ──────
@@ -2637,13 +2830,59 @@ class GoogleAdController {
       const budgetResource = budgetResp.data?.mutateOperationResponses?.[0]?.campaignBudgetResult?.resourceName;
       if (!budgetResource) throw new Error("Campaign budget creation failed — no resourceName returned");
 
+      // ── Step 2a: For PMAX — pre-create brand assets needed for Brand Guidelines ─
+      let pmaxBrandNameAssetRN = null;
+      let pmaxBrandLogoAssetRN = null;
+      if (channelType === "PERFORMANCE_MAX") {
+        // Resolve business name
+        let resolvedBusinessName = pmaxBusinessName || name || "Brand";
+        if (!pmaxBusinessName) {
+          try {
+            const custResp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+              { query: `SELECT customer.descriptive_name FROM customer LIMIT 1` },
+              { headers }
+            );
+            const dn = custResp.data?.[0]?.results?.[0]?.customer?.descriptiveName
+              || custResp.data?.[0]?.results?.[0]?.customer?.descriptive_name;
+            if (dn) resolvedBusinessName = String(dn).slice(0, 25);
+          } catch (e) {
+            logger.warn(`PMAX: could not fetch account name (non-fatal): ${e.message}`);
+          }
+        }
+        // Store on objectiveExtras so Step 7 can reuse it
+        objectiveExtras._resolvedBusinessName = String(resolvedBusinessName).slice(0, 25);
+
+        // Create business name asset
+        try {
+          const bnResp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            { mutateOperations: [{ assetOperation: { create: { text_asset: { text: objectiveExtras._resolvedBusinessName } } } }] },
+            { headers }
+          );
+          pmaxBrandNameAssetRN = bnResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+        } catch (e) {
+          logger.warn(`PMAX: business name asset pre-create failed (non-fatal): ${e.message}`);
+        }
+
+        // Create/upload logo asset
+        if (pmaxLogoUrl) {
+          try {
+            const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxLogoUrl);
+            pmaxBrandLogoAssetRN = uploadResult?.square || uploadResult?.landscape || null;
+          } catch (e) {
+            logger.warn(`PMAX: logo upload failed (non-fatal): ${e.message}`);
+          }
+        }
+      }
+
       // ── Step 2: Create campaign ───────────────────────────────────────────
       const campaignBody = {
         name,
         status,
         advertising_channel_type: channelType,
         campaign_budget: budgetResource,
-        contains_eu_political_advertising: 2,  // NOT_EU_POLITICAL_ADVERTISING = 2 in v23 proto
+        contains_eu_political_advertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
         ...biddingStrategy,
       };
 
@@ -2662,30 +2901,59 @@ class GoogleAdController {
       if (channelType === "SHOPPING" && merchantCenterId) {
         campaignBody.shopping_setting = {
           merchant_id: String(merchantCenterId),
-          sales_country: (targeting?.countries?.[0] || "US").toUpperCase(),
+          feed_label: (targeting?.countries?.[0] || "US").toUpperCase(),
           campaign_priority: 0,
           enable_local: false,
         };
       }
 
-      // Performance Max — set final URL expansion if finalUrl provided
-      if (channelType === "PERFORMANCE_MAX" && finalUrl) {
-        campaignBody.url_expansion_opt_out = false;
-        // finalUrl is applied to asset groups, not the campaign itself — stored in objectiveExtras for Step 6
-      }
+      // Build campaign mutate ops — include CampaignAsset links for PMAX Brand Guidelines
+      const campaignMutateOps = [{ campaignOperation: { create: campaignBody } }];
+      // CampaignAsset links must be in the same mutate call as campaign creation for PMAX
+      // We use temp resource name "-1" for the campaign and reference it in campaignAsset ops
+      // BUT since we create campaign first and then link, we do it after — so use temp IDs:
+      // Actually Google requires them at same time. Use resource_name temp ID pattern.
+      // We'll handle this after campaign creation by doing a separate mutate with real campaign RN.
 
       const campaignResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
         {
-          mutateOperations: [{
-            campaignOperation: { create: campaignBody },
-          }],
+          mutateOperations: campaignMutateOps,
         },
         { headers }
       );
       const campaignResource = campaignResp.data?.mutateOperationResponses?.[0]?.campaignResult?.resourceName;
       const campaignId = campaignResource?.split("/").pop();
       if (!campaignId) throw new Error("Campaign creation failed — no resourceName returned");
+
+      // ── Step 2b: PMAX — link brand assets as CampaignAssets (Brand Guidelines) ─
+      if (channelType === "PERFORMANCE_MAX" && (pmaxBrandNameAssetRN || pmaxBrandLogoAssetRN)) {
+        try {
+          const brandOps = [];
+          if (pmaxBrandNameAssetRN) {
+            brandOps.push({
+              campaignAssetOperation: {
+                create: { campaign: campaignResource, asset: pmaxBrandNameAssetRN, field_type: "BUSINESS_NAME" },
+              },
+            });
+          }
+          if (pmaxBrandLogoAssetRN) {
+            brandOps.push({
+              campaignAssetOperation: {
+                create: { campaign: campaignResource, asset: pmaxBrandLogoAssetRN, field_type: "LOGO" },
+              },
+            });
+          }
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            { mutateOperations: brandOps },
+            { headers }
+          );
+          logger.info(`PMAX: brand CampaignAssets linked (${brandOps.length} assets)`);
+        } catch (e) {
+          logger.warn(`PMAX: CampaignAsset brand link failed (non-fatal): ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
+        }
+      }
 
       // ── Step 3: Apply start/end dates via update mutate ───────────────────
       if (startTime || endTime) {
@@ -2803,7 +3071,148 @@ class GoogleAdController {
         }
       }
 
-      // ── Step 7: App campaigns — link app via campaign criterion ──────────────
+      // ── Step 7: PERFORMANCE_MAX — create Asset Group ─────────────────────────
+      if (channelType === "PERFORMANCE_MAX" && assetGroupName) {
+        try {
+          const agName = String(assetGroupName).slice(0, 128);
+          const agFinalUrl = finalUrl;
+          const agResource = `customers/${customerId}/assetGroups/-1`;
+
+          // Business name: reuse resolved name from Step 2a (already fetched from account)
+          const accountBusinessName = objectiveExtras._resolvedBusinessName || String(pmaxBusinessName || name || "Brand").slice(0, 25);
+
+          // Dedup headlines/descriptions case-insensitively
+          const dedup = (arr) => {
+            const seen = new Set();
+            return (arr || []).filter(Boolean).filter((t) => {
+              const k = String(t).trim().toLowerCase();
+              if (seen.has(k)) return false;
+              seen.add(k); return true;
+            });
+          };
+
+          const headlines = dedup(pmaxHeadlines?.length ? pmaxHeadlines : ["Shop Now", "Get Started", "Learn More"]).slice(0, 5);
+          const descriptions = dedup(pmaxDescriptions?.length ? pmaxDescriptions : [
+            businessDescription ? String(businessDescription).slice(0, 90) : "Trusted by thousands. Get started today.",
+            "Shop the best deals online.",
+          ]).slice(0, 4);
+
+          // Upload image assets if URLs provided
+          let imageAssetRN = null;
+          // Reuse logo already uploaded in Step 2a (to avoid duplicate upload)
+          let logoAssetRN = pmaxBrandLogoAssetRN || null;
+          if (pmaxImageUrl) {
+            try {
+              const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxImageUrl);
+              imageAssetRN = uploadResult?.landscape || null;
+            } catch (e) { logger.warn(`PMAX image upload failed (non-fatal): ${e.message}`); }
+          }
+          if (pmaxLogoUrl && !logoAssetRN) {
+            try {
+              const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxLogoUrl);
+              logoAssetRN = uploadResult?.square || uploadResult?.landscape || null;
+            } catch (e) { logger.warn(`PMAX logo upload failed (non-fatal): ${e.message}`); }
+          }
+
+          // Upload / resolve YouTube video
+          let videoAssetRN = null;
+          if (pmaxVideoUrl) {
+            try {
+              const ytMatch = pmaxVideoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+              const youtubeVideoId = ytMatch ? ytMatch[1] : (pmaxVideoUrl.length === 11 ? pmaxVideoUrl : null);
+              if (youtubeVideoId) {
+                const existingResp = await axios.post(
+                  `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+                  { query: `SELECT asset.resource_name FROM asset WHERE asset.youtube_video_asset.youtube_video_id = '${youtubeVideoId}' LIMIT 1` },
+                  { headers }
+                );
+                const existingRN = existingResp.data?.[0]?.results?.[0]?.asset?.resourceName
+                  || existingResp.data?.[0]?.results?.[0]?.asset?.resource_name;
+                if (existingRN) {
+                  videoAssetRN = existingRN;
+                } else {
+                  const assetResp = await axios.post(
+                    `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+                    { mutateOperations: [{ assetOperation: { create: { name: `yt_${youtubeVideoId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: youtubeVideoId } } } }] },
+                    { headers }
+                  );
+                  videoAssetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+                }
+              }
+            } catch (e) { logger.warn(`PMAX video asset failed (non-fatal): ${e.message}`); }
+          }
+
+          const mutateOps = [
+            // Asset group
+            {
+              assetGroupOperation: {
+                create: {
+                  resource_name: agResource,
+                  campaign: campaignResource,
+                  name: agName,
+                  status: "PAUSED",
+                  ...(agFinalUrl ? { final_urls: [agFinalUrl] } : {}),
+                },
+              },
+            },
+            // Headlines
+            ...headlines.map((text) => ({
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: { text_asset: { text: String(text).slice(0, 30) } }, field_type: "HEADLINE" },
+              },
+            })),
+            // Long headline
+            ...(pmaxLongHeadline ? [{
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: { text_asset: { text: String(pmaxLongHeadline).slice(0, 90) } }, field_type: "LONG_HEADLINE" },
+              },
+            }] : []),
+            // Descriptions
+            ...descriptions.map((text) => ({
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: { text_asset: { text: String(text).slice(0, 90) } }, field_type: "DESCRIPTION" },
+              },
+            })),
+            // Business name
+            {
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: { text_asset: { text: String(accountBusinessName).slice(0, 25) } }, field_type: "BUSINESS_NAME" },
+              },
+            },
+            // Image
+            ...(imageAssetRN ? [{
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: imageAssetRN, field_type: "MARKETING_IMAGE" },
+              },
+            }] : []),
+            // Logo
+            ...(logoAssetRN ? [{
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: logoAssetRN, field_type: "LOGO" },
+              },
+            }] : []),
+            // Video
+            ...(videoAssetRN ? [{
+              assetGroupAssetOperation: {
+                create: { asset_group: agResource, asset: videoAssetRN, field_type: "YOUTUBE_VIDEO" },
+              },
+            }] : []),
+          ];
+
+          await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            { mutateOperations: mutateOps },
+            { headers }
+          );
+
+          logger.info(`PMAX asset group created: ${agName}`);
+        } catch (e) {
+          const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+          logger.warn(`PMAX asset group creation failed (non-fatal): ${detail}`);
+        }
+      }
+
+      // ── Step 9: App campaigns — link app via campaign criterion ──────────────
       if (channelType === "MULTI_CHANNEL" && appId && appPlatform) {
         try {
           const platformEnum = String(appPlatform).toUpperCase() === "IOS" ? "IOS" : "ANDROID";
@@ -2866,6 +3275,11 @@ class GoogleAdController {
         (e) => e.errorCode?.mutateError === "MUTATE_NOT_ALLOWED"
       );
 
+      const isMerchantNotFound = googleErrors.some(
+        (e) => e.errorCode?.mutateError === "RESOURCE_NOT_FOUND" &&
+          e.location?.fieldPathElements?.some((f) => f.fieldName === "merchant_id")
+      );
+
       const isBudgetTooLow = googleErrors.some(
         (e) => e.errorCode?.campaignBudgetError === "BUDGET_AMOUNT_MUST_EXCEED_MINIMUM_AMOUNT_PER_CLICK"
           || e.errorCode?.campaignBudgetError === "BUDGET_CANNOT_BE_ZERO"
@@ -2891,6 +3305,8 @@ class GoogleAdController {
         status: false,
         error: isMutateNotAllowed
           ? "This campaign type cannot be created via the API. YouTube video ads are created as Demand Gen campaigns (DEMAND_GEN channel type), which is the supported programmatic replacement for VIDEO campaigns."
+          : isMerchantNotFound
+            ? "Merchant Center account not found or not linked to this Google Ads account. Please check your Merchant Center ID and ensure it is linked at ads.google.com → Tools → Linked accounts."
           : isBudgetTooLow
             ? `Daily budget is too low for this campaign type.${budgetMinReadable ? ` Minimum required: ${budgetMinReadable}/day.` : " Please increase your daily budget and try again."}`
             : formattedErrors[0]?.message ||
@@ -3557,11 +3973,11 @@ class GoogleAdController {
       }
 
       if (channelType === "DISPLAY") {
-        const missingImage = adsArray.findIndex((ad) => !ad.imageUrl);
+        const missingImage = adsArray.findIndex((ad) => !ad.imageUrl && !ad.assetResourceName);
         if (missingImage !== -1) {
           return res.status(400).json({
             status: false,
-            error: `imageUrl is required for Display ads${adsArray.length > 1 ? ` (missing in ad ${missingImage + 1})` : ""}.`,
+            error: `An image is required for Display ads${adsArray.length > 1 ? ` (missing in ad ${missingImage + 1})` : ""}. Upload an image or provide an image URL.`,
           });
         }
       }
@@ -3623,17 +4039,27 @@ class GoogleAdController {
       const assetResourceNames = [];
       const squareAssetResourceNames = [];
       for (const ad of adsArray) {
-        if (channelType === "DISPLAY" && ad.imageUrl) {
-          try {
-            const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, ad.imageUrl);
-            if (!uploadResult) {
-              return res.status(400).json({ status: false, error: "Image upload failed. Please check the image URL and try again." });
+        if (channelType === "DISPLAY") {
+          // If pre-uploaded asset resource name provided, use it directly
+          if (ad.assetResourceName) {
+            assetResourceNames.push(ad.assetResourceName);
+            squareAssetResourceNames.push(ad.assetResourceName); // reuse for square slot
+          } else if (ad.imageUrl && ad.imageUrl.startsWith('http')) {
+            // Only fetch from URL if it's a real HTTP URL (not a blob: URL)
+            try {
+              const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, ad.imageUrl);
+              if (!uploadResult) {
+                return res.status(400).json({ status: false, error: "Image upload failed. Please check the image URL and try again." });
+              }
+              const { landscape, square } = uploadResult;
+              assetResourceNames.push(landscape);
+              squareAssetResourceNames.push(square);
+            } catch (uploadErr) {
+              return res.status(400).json({ status: false, error: uploadErr.message });
             }
-            const { landscape, square } = uploadResult;
-            assetResourceNames.push(landscape);
-            squareAssetResourceNames.push(square);
-          } catch (uploadErr) {
-            return res.status(400).json({ status: false, error: uploadErr.message });
+          } else {
+            assetResourceNames.push(null);
+            squareAssetResourceNames.push(null);
           }
         } else {
           assetResourceNames.push(null);
@@ -3645,8 +4071,34 @@ class GoogleAdController {
       // ── Step 4: One mutate per ad (avoids DUPLICATE_ASSET when same image used) ──
       const createdAds = [];
       for (let i = 0; i < adsArray.length; i++) {
-        const { headline: h, description: d, finalUrl: url, callToAction, imageUrl } = adsArray[i];
-        const adPayload = buildAdPayload(h, d, url, callToAction, assetResourceNames[i], squareAssetResourceNames[i]);
+        const { headline: h, description: d, headlines: headlinesArr, descriptions: descriptionsArr, finalUrl: url, callToAction, imageUrl } = adsArray[i];
+
+        let adPayload;
+        if (channelType === "SEARCH") {
+          // SEARCH: deduplicate case-insensitively — Google rejects DUPLICATE_ASSET
+          const dedup = (arr, maxLen) => {
+            const seen = new Set();
+            return (arr || []).filter(Boolean).filter((t) => {
+              const key = String(t).trim().toLowerCase();
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            }).slice(0, maxLen);
+          };
+          const safeHeadlines = dedup(headlinesArr, 15);
+          const safeDescriptions = dedup(descriptionsArr, 4);
+          if (safeHeadlines.length < 3) return res.status(400).json({ status: false, error: "At least 3 unique headlines are required for Search ads. Remove any duplicate headlines and try again." });
+          if (safeDescriptions.length < 2) return res.status(400).json({ status: false, error: "At least 2 unique descriptions are required for Search ads. Remove any duplicate descriptions and try again." });
+          adPayload = {
+            responsiveSearchAd: {
+              headlines: safeHeadlines.map((t) => ({ text: String(t).slice(0, 30) })),
+              descriptions: safeDescriptions.map((t) => ({ text: String(t).slice(0, 90) })),
+            },
+            finalUrls: [url],
+          };
+        } else {
+          adPayload = buildAdPayload(h, d, url, callToAction, assetResourceNames[i], squareAssetResourceNames[i]);
+        }
 
         const adResponse = await axios.post(
           `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
@@ -3674,7 +4126,9 @@ class GoogleAdController {
           campaignId: campaignId || "",
           adGroupId,
           status: "PAUSED",
-          content: { headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, callToAction: callToAction || null, adType: channelType },
+          content: channelType === "SEARCH"
+            ? { headlines: headlinesArr, descriptions: descriptionsArr, finalUrl: url, adType: channelType }
+            : { headline: h, description: d, finalUrl: url, imageUrl: imageUrl || null, callToAction: callToAction || null, adType: channelType },
         });
 
         const adEntry = {
@@ -3733,6 +4187,194 @@ class GoogleAdController {
     }
   }
 
+
+  // * PATCH update ad — Google Ads does not support in-place RSA/Display ad mutation;
+  // the standard approach is remove the existing adGroupAd then create a replacement.
+  async updateAdAPI(req, res) {
+    try {
+      const { adAccountId, adGroupId, adId, campaignId, headlines, descriptions, finalUrl, headline, description, imageUrl, callToAction } = req.body;
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!adGroupId)   return res.status(400).json({ status: false, error: "adGroupId is required" });
+      if (!adId)        return res.status(400).json({ status: false, error: "adId is required" });
+      if (!finalUrl)    return res.status(400).json({ status: false, error: "finalUrl is required" });
+
+      // Validate finalUrl reachability
+      try {
+        const urlCheck = await axios.head(finalUrl, { timeout: 8000, maxRedirects: 5, validateStatus: (s) => s < 500 });
+        if (urlCheck.status >= 400) {
+          return res.status(400).json({ status: false, error: `The destination URL is not reachable (HTTP ${urlCheck.status}). Please use a live, publicly accessible URL.`, reason: "DESTINATION_NOT_WORKING" });
+        }
+      } catch (urlErr) {
+        return res.status(400).json({ status: false, error: `The destination URL could not be reached: "${finalUrl}". Please use a live, publicly accessible URL.`, reason: "DESTINATION_NOT_WORKING" });
+      }
+
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const customerId = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(customerId, accessToken).catch(() => null);
+      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || customerId);
+      const cleanAdGroupId = sanitizeId(adGroupId);
+      const cleanAdId = sanitizeId(adId);
+      const adGroupAdResource = `customers/${customerId}/adGroupAds/${cleanAdGroupId}~${cleanAdId}`;
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": loginCustomerId,
+        "Content-Type": "application/json",
+      };
+
+      // Detect channel type
+      const searchResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+        { query: `SELECT campaign.advertising_channel_type FROM ad_group WHERE ad_group.id = ${cleanAdGroupId} LIMIT 1` },
+        { headers }
+      );
+      let channelType = searchResp.data?.[0]?.results?.[0]?.campaign?.advertisingChannelType;
+      if (!channelType && campaignId) {
+        const campResp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+          { query: `SELECT campaign.advertising_channel_type FROM campaign WHERE campaign.id = ${sanitizeId(campaignId)} LIMIT 1` },
+          { headers }
+        );
+        channelType = campResp.data?.[0]?.results?.[0]?.campaign?.advertisingChannelType;
+      }
+      channelType = channelType || "SEARCH";
+
+      // Step 1: remove existing adGroupAd
+      await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        { mutateOperations: [{ adGroupAdOperation: { remove: adGroupAdResource } }] },
+        { headers }
+      );
+
+      // Step 2: build new ad payload
+      let newAdPayload;
+      if (channelType === "SEARCH") {
+        const dedup = (arr, maxLen) => {
+          const seen = new Set();
+          return (arr || []).filter(Boolean).filter((t) => {
+            const key = String(t).trim().toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }).slice(0, maxLen);
+        };
+        const safeHeadlines = dedup(headlines, 15);
+        const safeDescriptions = dedup(descriptions, 4);
+        if (safeHeadlines.length < 3) return res.status(400).json({ status: false, error: "At least 3 unique headlines are required for Search ads." });
+        if (safeDescriptions.length < 2) return res.status(400).json({ status: false, error: "At least 2 unique descriptions are required for Search ads." });
+        newAdPayload = {
+          responsiveSearchAd: {
+            headlines: safeHeadlines.map((t) => ({ text: String(t).slice(0, 30) })),
+            descriptions: safeDescriptions.map((t) => ({ text: String(t).slice(0, 90) })),
+          },
+          finalUrls: [finalUrl],
+        };
+      } else if (channelType === "DISPLAY") {
+        let landscapeAsset = null;
+        let squareAsset = null;
+        if (imageUrl) {
+          const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, imageUrl);
+          if (!uploadResult) return res.status(400).json({ status: false, error: "Image upload failed. Please check the image URL and try again." });
+          landscapeAsset = uploadResult.landscape;
+          squareAsset = uploadResult.square;
+        }
+        const { GOOGLE_CTA_LABELS: CTA_LABELS } = require("../../config/googleCtaConfig");
+        const enumKey = callToAction ? String(callToAction).toUpperCase().replace(/ /g, "_") : null;
+        const ctaText = enumKey ? (CTA_LABELS[enumKey] || null) : null;
+        newAdPayload = {
+          responsiveDisplayAd: {
+            headlines: [{ text: String(headline || "").slice(0, 30) }],
+            descriptions: [{ text: String(description || "").slice(0, 90) }],
+            longHeadline: { text: String(headline || "").slice(0, 90) },
+            businessName: "Brand",
+            ...(ctaText && { callToActionText: ctaText }),
+            marketingImages: landscapeAsset ? [{ asset: landscapeAsset }] : [],
+            squareMarketingImages: squareAsset ? [{ asset: squareAsset }] : [],
+          },
+          finalUrls: [finalUrl],
+        };
+      } else {
+        return res.status(400).json({ status: false, error: `In-place ad update is not supported for channel type ${channelType}. Please delete and recreate the ad.` });
+      }
+
+      // Step 3: create replacement ad
+      const createResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        {
+          mutateOperations: [{
+            adGroupAdOperation: {
+              create: {
+                adGroup: `customers/${customerId}/adGroups/${cleanAdGroupId}`,
+                status: "PAUSED",
+                ad: newAdPayload,
+              },
+            },
+          }],
+        },
+        { headers }
+      );
+
+      const newAdResource = createResp.data?.mutateOperationResponses?.[0]?.adGroupAdResult?.resourceName;
+      const newAdId = newAdResource?.split("~").pop();
+
+      // Update DB record if exists
+      await GooglePostedAd.findOneAndUpdate(
+        { googleAdId: String(cleanAdId), adAccountId },
+        { googleAdId: String(newAdId), content: { headline, description, finalUrl, imageUrl: imageUrl || null, callToAction: callToAction || null, adType: channelType } },
+        { new: true }
+      ).catch(() => {});
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Ad updated successfully", adId: newAdId, adResourceName: newAdResource });
+    } catch (error) {
+      logger.error(`Google update ad error: ${error.message}`);
+      const m = formatGoogleError(error);
+      return res.status(error.response?.status || 500).json({ status: false, error: m.message, reason: m.reason });
+    }
+  }
+
+  // * DELETE ad — removes the adGroupAd (sets status to REMOVED)
+  async deleteAdAPI(req, res) {
+    try {
+      const { adAccountId, adGroupId } = req.body;
+      const { id: adId } = req.params;
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!adGroupId)   return res.status(400).json({ status: false, error: "adGroupId is required" });
+      if (!adId)        return res.status(400).json({ status: false, error: "adId is required" });
+
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const customerId = normalizeCustomerId(adAccountId);
+      const resolvedLoginCustomerId = await resolveManagerForAccount(customerId, accessToken).catch(() => null);
+      const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || customerId);
+      const cleanAdGroupId = sanitizeId(adGroupId);
+      const cleanAdId = sanitizeId(adId);
+      const adGroupAdResource = `customers/${customerId}/adGroupAds/${cleanAdGroupId}~${cleanAdId}`;
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": loginCustomerId,
+        "Content-Type": "application/json",
+      };
+
+      await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        { mutateOperations: [{ adGroupAdOperation: { remove: adGroupAdResource } }] },
+        { headers }
+      );
+
+      await GooglePostedAd.findOneAndDelete({ googleAdId: String(cleanAdId), adAccountId }).catch(() => {});
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Ad deleted successfully", adId: cleanAdId });
+    } catch (error) {
+      logger.error(`Google delete ad error: ${error.message}`);
+      const m = formatGoogleError(error);
+      return res.status(error.response?.status || 500).json({ status: false, error: m.message, reason: m.reason });
+    }
+  }
 
   async _fetchMappedGoogleAd({ userId, adAccountId, adId }) {
     const tid = normalizeCustomerId(adAccountId);
@@ -3874,11 +4516,26 @@ class GoogleAdController {
       const customerId = sanitizeId(adAccountId);
 
       let imageData;
-      if (file) {
-        imageData = file.buffer.toString("base64");
-      } else {
-        const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
-        imageData = Buffer.from(downloaded.data).toString("base64");
+      try {
+        const sharp = require("sharp");
+        let rawBuffer;
+        if (file) {
+          rawBuffer = file.buffer;
+        } else {
+          const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
+          rawBuffer = Buffer.from(downloaded.data);
+        }
+        // Convert to JPEG — Google Ads accepts JPEG/PNG/GIF only, rejects WebP/HEIC/SVG etc.
+        const jpegBuffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
+        imageData = jpegBuffer.toString("base64");
+      } catch (sharpErr) {
+        logger.warn(`Image conversion via sharp failed, sending raw buffer: ${sharpErr.message}`);
+        if (file) {
+          imageData = file.buffer.toString("base64");
+        } else {
+          const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
+          imageData = Buffer.from(downloaded.data).toString("base64");
+        }
       }
 
       const assetResp = await axios.post(
@@ -3889,7 +4546,7 @@ class GoogleAdController {
               create: {
                 name: `img_${Date.now()}`,
                 type: "IMAGE",
-                imageAsset: { data: imageData },
+                image_asset: { data: imageData },
               },
             },
           }],
@@ -3966,7 +4623,7 @@ class GoogleAdController {
               name, status: "PAUSED",
               advertisingChannelType: channelType,
               campaignBudget: budgetResource,
-              containsEuPoliticalAdvertising: 2,
+              containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
               ...biddingField,
             },
           },
@@ -4154,7 +4811,7 @@ class GoogleAdController {
             create: {
               name: `${label}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
               type: "IMAGE",
-              imageAsset: { data: imageBuffer.toString("base64") },
+              image_asset: { data: imageBuffer.toString("base64") },
             },
           },
         }],

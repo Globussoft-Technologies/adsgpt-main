@@ -303,7 +303,18 @@ function mapGoogleStandardAdRow(r, { adImageMap = {}, assetUrlMap = {}, formatSt
     name: ad.name || "",
     type: adType,
     status: formatStatus(aga.status),
-    approvalStatus: policySummary.approvalStatus || policySummary.approval_status || null,
+    approvalStatus: (() => {
+      const raw = policySummary.approvalStatus || policySummary.approval_status || null;
+      if (raw && raw !== 'UNKNOWN' && raw !== 'UNSPECIFIED') return raw;
+      // Derive from reviewStatus when approvalStatus is absent
+      const rv = policySummary.reviewStatus || policySummary.review_status || null;
+      if (rv === 'UNDER_REVIEW' || rv === 'REVIEW_IN_PROGRESS') return 'UNDER_REVIEW';
+      // Default: enabled ad with no policy issues = APPROVED
+      const st = String(aga.status || '').toUpperCase();
+      if (st === 'ENABLED') return 'APPROVED';
+      if (st === 'PAUSED') return null; // let status field drive Paused badge
+      return raw;
+    })(),
     reviewStatus: policySummary.reviewStatus || policySummary.review_status || null,
     headline: headlines[0] || "",
     headlines,

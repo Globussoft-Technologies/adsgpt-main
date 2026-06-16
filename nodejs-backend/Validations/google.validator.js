@@ -23,6 +23,9 @@ const updateGoogleAdStatusSchema = Joi.object({
     otherwise: Joi.required().messages({ "any.required": "customerId (or adAccountId) is required" }),
   }),
   adAccountId: Joi.string().optional(),
+  adGroupId: Joi.string().optional(),
+  entityType: Joi.string().optional(),
+  isPmax: Joi.boolean().optional(),
   status: Joi.string().valid("ENABLED", "PAUSED").required().messages({
     "any.only": "status must be ENABLED or PAUSED",
     "any.required": "status is required",
@@ -88,6 +91,9 @@ const createCampaignSchema = Joi.object({
       }),
   }).optional(),
 
+  // EU Political Advertising Transparency Regulation compliance flag
+  euPoliticalAds: Joi.boolean().default(false),
+
   // Objective-specific extras (stored + passed to Google API where supported)
   objectiveExtras: Joi.object({
     // SHOPPING
@@ -106,6 +112,13 @@ const createCampaignSchema = Joi.object({
     businessDescription: Joi.string().optional(),
     finalUrlSuffix:      Joi.string().optional(),
     finalUrl:            Joi.string().uri().optional(),
+    pmaxBusinessName:    Joi.string().optional(),
+    pmaxHeadlines:       Joi.array().items(Joi.string().allow('')).optional(),
+    pmaxLongHeadline:    Joi.string().optional(),
+    pmaxDescriptions:    Joi.array().items(Joi.string().allow('')).optional(),
+    pmaxImageUrl:        Joi.string().optional(),
+    pmaxLogoUrl:         Joi.string().optional(),
+    pmaxVideoUrl:        Joi.string().optional(),
     // VIDEO / YOUTUBE_REACH / DEMAND_GEN
     videoGoal:           Joi.string().valid("VIDEO_VIEWS", "REACH", "YOUTUBE_SUBSCRIPTIONS").optional(),
     videoSubtype:        Joi.string().valid("VIDEO_VIEWS", "EFFICIENT_REACH", "NON_SKIPPABLE_REACH", "TARGET_FREQUENCY").optional(),
@@ -222,11 +235,12 @@ const adItemSchema = Joi.object({
   finalUrl: Joi.string().required().messages({
     "any.required": "finalUrl is required in each ad",
   }),
-  imageUrl:        Joi.string().optional(),
-  videoUrl:        Joi.string().optional(),
-  youtubeVideoId:  Joi.string().max(11).optional(),
-  logoUrl:         Joi.string().optional(),
-  callToAction:    Joi.string().optional(),
+  imageUrl:            Joi.string().optional(),
+  assetResourceName:   Joi.string().optional(),
+  videoUrl:            Joi.string().optional(),
+  youtubeVideoId:      Joi.string().max(11).optional(),
+  logoUrl:             Joi.string().optional(),
+  callToAction:        Joi.string().optional(),
 });
 
 const createAdSchema = Joi.object({

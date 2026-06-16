@@ -34,6 +34,7 @@ import {
   createGoogleAdGroup,
   updateGoogleAdGroup,
   createGoogleAd,
+  updateGoogleAd,
   uploadGoogleImage,
   getGoogleWizardSchema,
 } from '@/apis/googleAds/googleAdsApi';
@@ -107,6 +108,9 @@ function buildSteps(mode, form = {}, schema = null) {
   if (channel === 'PERFORMANCE_MAX') {
     steps = steps.filter((s) => !['adGroup', 'ad'].includes(s.id));
   }
+  if (channel === 'SHOPPING') {
+    steps = steps.filter((s) => s.id !== 'ad');
+  }
   const allowedDests = getDestinationsForObjective(form.objective, schema, schema?.destinations || []);
   if (mode === 'create-full' && allowedDests.length <= 1) {
     steps = steps.filter((s) => s.id !== 'destination');
@@ -178,6 +182,13 @@ function buildInitialForm(context) {
     businessDescription:context?.businessDescription || '',
     finalUrlSuffix:     context?.finalUrlSuffix      || '',
     pmaxFinalUrl:       context?.pmaxFinalUrl        || '',
+    pmaxBusinessName:   context?.pmaxBusinessName    || '',
+    pmaxHeadlines:      context?.pmaxHeadlines       || ['', '', ''],
+    pmaxLongHeadline:   context?.pmaxLongHeadline    || '',
+    pmaxDescriptions:   context?.pmaxDescriptions    || ['', ''],
+    pmaxImageUrl:       context?.pmaxImageUrl        || '',
+    pmaxLogoUrl:        context?.pmaxLogoUrl         || '',
+    pmaxVideoUrl:       context?.pmaxVideoUrl        || '',
     // APP_PROMOTION subtype
     appSubtype:         context?.appSubtype          || 'APP_INSTALLS',
     // VIDEO / YOUTUBE_REACH extras
@@ -265,8 +276,9 @@ function LaunchErrorBanner({ error, onDismiss }) {
 
 // ─── Wizard side rail (Meta-style checklist) ──────────────────────────────────
 
-function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToStep }) {
+function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepErrors, onJumpToStep }) {
   const currentMessages = Object.values(stepErrors || {});
+  const isActuallyComplete = Object.keys(rawStepErrors || {}).length === 0;
   return (
     <aside className="scrollbar-thin hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 bg-gray-50 px-4 py-5 dark:border-white/8 dark:bg-white/2 md:flex">
       <div>
@@ -298,12 +310,16 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
           })}
         </ul>
       </div>
-      {currentMessages.length > 0 ? (
+      {!isActuallyComplete ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-400/20 dark:bg-amber-400/5">
           <div className="flex items-start gap-1.5">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
             <div className="min-w-0 text-11 leading-snug text-amber-700 dark:text-amber-100">
-              {currentMessages.length === 1 ? currentMessages[0] : `${currentMessages.length} things left on this step`}
+              {currentMessages.length === 1
+                ? currentMessages[0]
+                : currentMessages.length > 1
+                  ? `${currentMessages.length} things left on this step`
+                  : 'Fill in the required fields to continue'}
             </div>
           </div>
         </div>
@@ -436,7 +452,7 @@ function KeywordsSection({ form, setField, matchTypes }) {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Keywords</p>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Keywords <span className="text-red-400">*</span></p>
       <div className="flex flex-col gap-1.5">
         {keywords.map((kw, i) => (
           <div key={i} className="flex items-center gap-1.5">
@@ -673,31 +689,131 @@ function CampaignStep({ form, setField, errors, countryOptions, statusOptions, a
 
       {/* ── PERFORMANCE_MAX ── */}
       {channel === 'PERFORMANCE_MAX' && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Performance Max settings</p>
-          <div className="flex flex-col gap-3">
-            <div>
-              <Label>Where should people go after clicking your ads?</Label>
-              <Input value={form.pmaxFinalUrl} onChange={(e) => setField('pmaxFinalUrl', e.target.value)} placeholder="https://example.com" />
-              <p className="mt-1 text-[10px] text-gray-400 dark:text-white/30">Enter the URL you want people to see after clicking your ads — your homepage or a specific landing page.</p>
+        <div className="flex flex-col gap-3">
+          {/* Campaign settings */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Campaign settings</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <Label required>Landing page URL</Label>
+                <Input value={form.pmaxFinalUrl} onChange={(e) => setField('pmaxFinalUrl', e.target.value)} placeholder="https://example.com" />
+                <FieldError msg={errors.pmaxFinalUrl} />
+              </div>
+              <div>
+                <Label>Final URL suffix</Label>
+                <Input value={form.finalUrlSuffix} onChange={(e) => setField('finalUrlSuffix', e.target.value)} placeholder="utm_source=google&utm_medium=pmax" />
+              </div>
             </div>
-            <div>
-              <Label required>Asset group name</Label>
-              <Input value={form.assetGroupName} onChange={(e) => setField('assetGroupName', e.target.value)} placeholder="e.g. Summer Sale Assets" />
+          </div>
+
+          {/* Asset Group */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Asset group</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <Label required>Asset group name</Label>
+                <Input value={form.assetGroupName} onChange={(e) => setField('assetGroupName', e.target.value)} placeholder="e.g. Summer Sale Assets" />
+                <FieldError msg={errors.assetGroupName} />
+              </div>
+              <div>
+                <Label required>Business name</Label>
+                <Input value={form.pmaxBusinessName} onChange={(e) => setField('pmaxBusinessName', e.target.value)} placeholder="Your brand or company name" />
+                <FieldError msg={errors.pmaxBusinessName} />
+              </div>
             </div>
-            <div>
-              <Label>Business description</Label>
-              <textarea
-                value={form.businessDescription}
-                onChange={(e) => setField('businessDescription', e.target.value)}
-                placeholder="Brief description of your business for AI-driven copy generation"
-                rows={3}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-[#4285F4]/60 focus:ring-1 focus:ring-[#4285F4]/20 dark:border-white/8 dark:bg-[#1A1A1A] dark:text-white dark:placeholder:text-white/30 dark:focus:border-[#4285F4]/50 resize-none"
-              />
+          </div>
+
+          {/* Headlines */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Headlines (3–5, max 30 chars each)</p>
+            <div className="flex flex-col gap-1.5">
+              {(form.pmaxHeadlines || ['', '', '']).map((h, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <Input
+                      value={h}
+                      onChange={(e) => {
+                        const n = [...(form.pmaxHeadlines || ['', '', ''])];
+                        n[i] = e.target.value.slice(0, 30);
+                        setField('pmaxHeadlines', n);
+                      }}
+                      placeholder={`Headline ${i + 1}`}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{h.length}/30</span>
+                  </div>
+                  {(form.pmaxHeadlines || []).length > 3 && (
+                    <button onClick={() => setField('pmaxHeadlines', (form.pmaxHeadlines || []).filter((_, j) => j !== i))} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(form.pmaxHeadlines || []).length < 5 && (
+                <button onClick={() => setField('pmaxHeadlines', [...(form.pmaxHeadlines || []), ''])} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
+                  <Plus className="h-3 w-3" /> Add headline
+                </button>
+              )}
+              <FieldError msg={errors.pmaxHeadlines} />
             </div>
-            <div>
-              <Label>Final URL suffix</Label>
-              <Input value={form.finalUrlSuffix} onChange={(e) => setField('finalUrlSuffix', e.target.value)} placeholder="utm_source=google&utm_medium=pmax" />
+            <div className="mt-3">
+              <Label>Long headline (max 90 chars)</Label>
+              <div className="relative">
+                <Input value={form.pmaxLongHeadline} onChange={(e) => setField('pmaxLongHeadline', e.target.value.slice(0, 90))} placeholder="Longer headline shown in some placements" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{(form.pmaxLongHeadline || '').length}/90</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Descriptions */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Descriptions (2–4, max 90 chars each)</p>
+            <div className="flex flex-col gap-1.5">
+              {(form.pmaxDescriptions || ['', '']).map((d, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <Input
+                      value={d}
+                      onChange={(e) => {
+                        const n = [...(form.pmaxDescriptions || ['', ''])];
+                        n[i] = e.target.value.slice(0, 90);
+                        setField('pmaxDescriptions', n);
+                      }}
+                      placeholder={`Description ${i + 1}`}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{d.length}/90</span>
+                  </div>
+                  {(form.pmaxDescriptions || []).length > 2 && (
+                    <button onClick={() => setField('pmaxDescriptions', (form.pmaxDescriptions || []).filter((_, j) => j !== i))} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(form.pmaxDescriptions || []).length < 4 && (
+                <button onClick={() => setField('pmaxDescriptions', [...(form.pmaxDescriptions || []), ''])} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
+                  <Plus className="h-3 w-3" /> Add description
+                </button>
+              )}
+              <FieldError msg={errors.pmaxDescriptions} />
+            </div>
+          </div>
+
+          {/* Media assets */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Media assets</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <Label>Image URL <span className="text-gray-400 dark:text-white/30">(landscape 1200×628)</span></Label>
+                <Input value={form.pmaxImageUrl} onChange={(e) => setField('pmaxImageUrl', e.target.value)} placeholder="https://example.com/image.jpg" />
+              </div>
+              <div>
+                <Label>Logo URL <span className="text-gray-400 dark:text-white/30">(square, min 128×128)</span></Label>
+                <Input value={form.pmaxLogoUrl} onChange={(e) => setField('pmaxLogoUrl', e.target.value)} placeholder="https://example.com/logo.png" />
+              </div>
+              <div>
+                <Label>YouTube video URL or ID</Label>
+                <Input value={form.pmaxVideoUrl} onChange={(e) => setField('pmaxVideoUrl', e.target.value)} placeholder="https://youtube.com/watch?v=... or video ID" />
+              </div>
             </div>
           </div>
         </div>
@@ -772,7 +888,7 @@ function AdGroupStep({ form, setField, errors, genderOptions, biddingGoalOptions
         <>
           <KeywordsSection form={form} setField={setField} matchTypes={keywordMatchTypes} />
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/6 dark:bg-white/2">
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Bidding goal</p>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Bidding goal <span className="text-red-400">*</span></p>
             <Select value={form.biddingGoal} onChange={(e) => setField('biddingGoal', e.target.value)}>
               {biddingGoalOptions.map(({ value, label }) => (
                 <option key={value} value={value}>{label}</option>
@@ -780,13 +896,13 @@ function AdGroupStep({ form, setField, errors, genderOptions, biddingGoalOptions
             </Select>
             {form.biddingGoal === 'TARGET_CPA' && (
               <div className="mt-3">
-                <Label>Target CPA (₹)</Label>
+                <Label required>Target CPA (₹)</Label>
                 <Input type="number" value={form.targetCpa} onChange={(e) => setField('targetCpa', e.target.value)} placeholder="500" />
               </div>
             )}
             {form.biddingGoal === 'TARGET_ROAS' && (
               <div className="mt-3">
-                <Label>Target ROAS (%)</Label>
+                <Label required>Target ROAS (%)</Label>
                 <Input type="number" value={form.targetRoas} onChange={(e) => setField('targetRoas', e.target.value)} placeholder="300" />
                 <p className="mt-1 text-[10px] text-gray-400 dark:text-white/30">300% = ₹3 revenue per ₹1 spent</p>
               </div>
@@ -939,7 +1055,7 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400 dark:text-white/30">or</span>
               <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files[0]) onImageUpload(e.target.files[0]); }} />
+                <input type="file" accept="image/jpeg,image/png,image/gif,.jpg,.jpeg,.png,.gif" className="hidden" onChange={(e) => { if (e.target.files[0]) onImageUpload(e.target.files[0]); }} />
                 {uploadingImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                 {uploadingImage ? 'Uploading…' : 'Upload image'}
               </label>
@@ -949,6 +1065,7 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
                 </span>
               )}
             </div>
+            <p className="text-[10px] text-gray-400 dark:text-white/25">Accepted formats: JPEG, PNG, GIF only. WebP, TIFF, BMP, SVG are not supported.</p>
           </div>
           <FieldError msg={errors.imageUrl} />
         </div>
@@ -1112,7 +1229,7 @@ function ReviewStep({ form, mode, stepErrors, adType, schema, objectives }) {
         </div>
       )}
 
-      {['create-full', 'create-adgroup', 'edit-adgroup'].includes(mode) && (
+      {['create-full', 'create-adgroup', 'edit-adgroup'].includes(mode) && channel !== 'PERFORMANCE_MAX' && channel !== 'SHOPPING' && (
         <div className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/8 dark:bg-[#161616]">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Ad Group</p>
           <ReviewRow label="Name"    value={form.adGroupName} />
@@ -1127,27 +1244,43 @@ function ReviewStep({ form, mode, stepErrors, adType, schema, objectives }) {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/8 dark:bg-[#161616]">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Ad — {adType}</p>
-        {adType === 'SEARCH' && (
-          <>
-            <ReviewRow label="Headlines"    value={`${(form.headlines || []).filter(Boolean).length} added`} />
-            <ReviewRow label="Descriptions" value={`${(form.descriptions || []).filter(Boolean).length} added`} />
-          </>
-        )}
-        {adType === 'DISPLAY' && (
-          <>
-            <ReviewRow label="Headline"    value={form.headline} />
-            <ReviewRow label="Description" value={form.description} />
-            <ReviewRow label="Image"       value={form.assetResourceName ? 'Uploaded ✓' : form.imageUrl || null} />
-          </>
-        )}
-        {adType === 'DEMAND_GEN' && (
-          <ReviewRow label="Video" value={form.youtubeVideoId || form.videoUrl} />
-        )}
-        <ReviewRow label="Landing URL" value={form.finalUrl} />
-        {form.callToAction && <ReviewRow label="CTA" value={form.callToAction} />}
-      </div>
+      {channel === 'PERFORMANCE_MAX' && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/8 dark:bg-[#161616]">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Asset Group</p>
+          <ReviewRow label="Name"          value={form.assetGroupName} />
+          <ReviewRow label="Business Name" value={form.pmaxBusinessName} />
+          <ReviewRow label="Headlines"     value={form.pmaxHeadlines?.filter(Boolean).length ? `${form.pmaxHeadlines.filter(Boolean).length} added` : null} />
+          <ReviewRow label="Descriptions"  value={form.pmaxDescriptions?.filter(Boolean).length ? `${form.pmaxDescriptions.filter(Boolean).length} added` : null} />
+          {form.pmaxLongHeadline && <ReviewRow label="Long Headline" value={form.pmaxLongHeadline} />}
+          {form.pmaxImageUrl && <ReviewRow label="Image" value="URL provided ✓" />}
+          {form.pmaxLogoUrl  && <ReviewRow label="Logo"  value="URL provided ✓" />}
+          {form.pmaxVideoUrl && <ReviewRow label="Video" value={form.pmaxVideoUrl} />}
+        </div>
+      )}
+
+      {channel !== 'PERFORMANCE_MAX' && channel !== 'SHOPPING' && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/8 dark:bg-[#161616]">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">Ad — {adType}</p>
+          {adType === 'SEARCH' && (
+            <>
+              <ReviewRow label="Headlines"    value={`${(form.headlines || []).filter(Boolean).length} added`} />
+              <ReviewRow label="Descriptions" value={`${(form.descriptions || []).filter(Boolean).length} added`} />
+            </>
+          )}
+          {adType === 'DISPLAY' && (
+            <>
+              <ReviewRow label="Headline"    value={form.headline} />
+              <ReviewRow label="Description" value={form.description} />
+              <ReviewRow label="Image"       value={form.assetResourceName ? 'Uploaded ✓' : form.imageUrl || null} />
+            </>
+          )}
+          {adType === 'DEMAND_GEN' && (
+            <ReviewRow label="Video" value={form.youtubeVideoId || form.videoUrl} />
+          )}
+          <ReviewRow label="Landing URL" value={form.finalUrl} />
+          {form.callToAction && <ReviewRow label="CTA" value={form.callToAction} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -1265,13 +1398,35 @@ export default function CreateCampaignWizard({
 
   const stepErrors   = validateAllSteps(steps, form, schema);
   const canLaunch    = Object.keys(stepErrors).length === 0;
+
+  const launchLabel = (() => {
+    if (launched.loading) return null; // handled separately
+    if (['edit-campaign', 'edit-adgroup', 'edit-ad'].includes(mode)) return 'Save Changes';
+    return 'Launch';
+  })();
+
+  const launchIcon = (() => {
+    if (['edit-campaign', 'edit-adgroup', 'edit-ad'].includes(mode)) return Check;
+    return RefreshCw;
+  })();
+  const rawStepErrors = useMemo(() => validateStep(currentStep?.id, form, adType, schema), [currentStep?.id, form, adType, schema]);
   const visibleStepErrors = useMemo(() => {
-    const raw = validateStep(currentStep?.id, form, adType, schema);
     const showAll = attemptedStepIds.has(currentStep?.id);
-    return Object.fromEntries(Object.entries(raw).filter(([k]) => touched[k] || showAll));
-  }, [currentStep?.id, form, adType, schema, touched, attemptedStepIds]);
+    return Object.fromEntries(Object.entries(rawStepErrors).filter(([k]) => touched[k] || showAll));
+  }, [rawStepErrors, touched, attemptedStepIds, currentStep?.id]);
+
+  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+  const ALLOWED_IMAGE_EXTS  = ['.jpg', '.jpeg', '.png', '.gif'];
 
   const handleImageUpload = async (file) => {
+    // Validate format before uploading — Google Ads only accepts JPEG, PNG, GIF
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type) && !ALLOWED_IMAGE_EXTS.includes(ext)) {
+      globalToast.error(
+        `"${file.name}" is not supported. Google Ads only accepts JPEG, PNG, or GIF images. Please convert your file and try again.`
+      );
+      return;
+    }
     setUploadingImage(true);
     try {
       const res = await uploadGoogleImage({ adAccountId, imageFile: file });
@@ -1303,10 +1458,11 @@ export default function CreateCampaignWizard({
 
       // Step 1 — Campaign
       if (mode === 'edit-campaign') {
+        const nameChanged = form.campaignName !== context?.campaignName;
         await updateGoogleCampaign({
           adAccountId,
           campaignId,
-          name:              form.campaignName,
+          name:              nameChanged ? form.campaignName : undefined,
           dailyBudgetMicros: toMicros(form.dailyBudget),
           status:            form.status || undefined,
           startTime:         form.startDate || undefined,
@@ -1335,6 +1491,13 @@ export default function CreateCampaignWizard({
             businessDescription: form.businessDescription || undefined,
             finalUrlSuffix:      form.finalUrlSuffix      || undefined,
             finalUrl:            form.pmaxFinalUrl        || undefined,
+            pmaxBusinessName:    form.pmaxBusinessName    || undefined,
+            pmaxHeadlines:       form.pmaxHeadlines?.filter(Boolean).length ? form.pmaxHeadlines.filter(Boolean) : undefined,
+            pmaxLongHeadline:    form.pmaxLongHeadline    || undefined,
+            pmaxDescriptions:    form.pmaxDescriptions?.filter(Boolean).length ? form.pmaxDescriptions.filter(Boolean) : undefined,
+            pmaxImageUrl:        form.pmaxImageUrl        || undefined,
+            pmaxLogoUrl:         form.pmaxLogoUrl         || undefined,
+            pmaxVideoUrl:        form.pmaxVideoUrl        || undefined,
             videoGoal:           form.videoGoal           || undefined,
             videoSubtype:        form.videoSubtype        || undefined,
           },
@@ -1345,6 +1508,7 @@ export default function CreateCampaignWizard({
 
       // Step 2 — Ad Group
       const isPmax = effectiveChannel(form) === 'PERFORMANCE_MAX';
+      const isShopping = effectiveChannel(form) === 'SHOPPING';
       if (mode === 'edit-adgroup') {
         await updateGoogleAdGroup({
           adAccountId,
@@ -1380,16 +1544,20 @@ export default function CreateCampaignWizard({
       }
 
       // Step 3 — Ad (skipped for Performance Max — asset groups only)
-      if (!isPmax && !['edit-campaign', 'edit-adgroup'].includes(mode)) {
+      if (!isPmax && !isShopping && !['edit-campaign', 'edit-adgroup'].includes(mode)) {
         let adItem;
         if (adType === 'SEARCH') {
           adItem = { headlines: form.headlines.filter(Boolean), descriptions: form.descriptions.filter(Boolean), finalUrl: form.finalUrl };
         } else if (adType === 'DISPLAY') {
-          adItem = { headline: form.headline, description: form.description, imageUrl: form.imageUrl || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
+          adItem = { headline: form.headline, description: form.description, imageUrl: (form.imageUrl && !form.imageUrl.startsWith('blob:')) ? form.imageUrl : undefined, assetResourceName: form.assetResourceName || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
         } else {
           adItem = { videoUrl: form.videoUrl || undefined, youtubeVideoId: form.youtubeVideoId || undefined, headline: form.headline || undefined, longHeadline: form.longHeadline || undefined, description: form.description || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
         }
-        await createGoogleAd({ adAccountId, adGroupId, campaignId, ads: [adItem] });
+        if (mode === 'edit-ad') {
+          await updateGoogleAd({ adAccountId, adGroupId, campaignId, adId: context?.adId, ...adItem });
+        } else {
+          await createGoogleAd({ adAccountId, adGroupId, campaignId, ads: [adItem] });
+        }
       }
 
       globalToast.success(WIZARD_MODE_META[mode]?.toast || 'Done');
@@ -1397,13 +1565,25 @@ export default function CreateCampaignWizard({
       onClose?.();
     } catch (e) {
       const data = e?.response?.data || {};
-      setLaunched({
-        loading: false,
-        error: {
-          title: data.error || e?.message || 'Something went wrong. Please retry.',
-          details: typeof data.details === 'string' ? data.details : data.details?.error?.message || data.details?.message || '',
-        },
-      });
+
+      // Pull the most specific message available from the Google Ads error response
+      const googleValidations = data.validations || [];
+      const googleErrors = data.details?.error?.details || [];
+
+      // fieldViolations come from google.rpc.BadRequest (REST JSON envelope)
+      const fieldViolations = googleErrors
+        .flatMap((d) => d.fieldViolations || d.errors || [])
+        .map((v) => v.description || v.message)
+        .filter(Boolean);
+
+      const firstValidation = googleValidations[0]?.message;
+      const firstViolation  = fieldViolations[0];
+      const apiMessage      = data.details?.error?.message;
+
+      const title   = data.error || e?.message || 'Something went wrong. Please retry.';
+      const details = firstValidation || firstViolation || apiMessage || '';
+
+      setLaunched({ loading: false, error: { title, details } });
     }
   };
 
@@ -1491,6 +1671,7 @@ export default function CreateCampaignWizard({
               steps={steps}
               stepIndex={stepIndex}
               stepErrors={visibleStepErrors}
+              rawStepErrors={rawStepErrors}
               allStepErrors={stepErrors}
               onJumpToStep={setStepIndex}
             />
@@ -1526,7 +1707,10 @@ export default function CreateCampaignWizard({
                 className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-40"
                 style={{ background: GOOGLE_BLUE }}
               >
-                {launched.loading ? <><Loader2 className="h-3 w-3 animate-spin" /> Launching…</> : <><RefreshCw className="h-3 w-3" /> Launch</>}
+                {launched.loading
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> {['edit-campaign','edit-adgroup','edit-ad'].includes(mode) ? 'Saving…' : 'Launching…'}</>
+                  : (() => { const Icon = launchIcon; return <><Icon className="h-3 w-3" /> {launchLabel}</>; })()
+                }
               </button>
             )}
           </div>

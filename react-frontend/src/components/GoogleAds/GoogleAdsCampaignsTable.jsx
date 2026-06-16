@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight,
   Target,
-  Calendar,
   ArrowUpDown,
   Trash2,
   Loader2,
@@ -17,7 +16,7 @@ import {
   Play,
   X,
   ExternalLink,
-  Zap,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getGoogleAdGroups,
@@ -25,15 +24,13 @@ import {
   resolveGoogleAdForEdit,
   updateGoogleAdStatus,
   deleteGoogleCampaign,
+  deleteGoogleAd,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
-import { StatusBadge, Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
+import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
 import {
   adCopyText,
   labelGoogleCTA,
-  labelGoogleBidding,
-  labelGoogleBilling,
-  formatGoogleDateDisplay,
   hasBudget,
   parseBudgetINR,
 } from '@/components/GoogleAds/googleAdsUtils';
@@ -50,6 +47,102 @@ function BudgetBar({ budget, remaining }) {
   return (
     <div className="mt-1.5 h-1 w-full max-w-28 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
       <div className="h-full rounded-full bg-[#4285F4]/70 transition-all" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+// ─── Google-style serving status (campaigns, ad groups, ads) ─────────────────
+
+const STATUS_CFG = {
+  // Campaign / ad-group primary statuses
+  ELIGIBLE:              { label: 'Eligible',            color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50  dark:bg-emerald-400/10', dot: 'bg-emerald-500' },
+  ELIGIBLE_LIMITED:      { label: 'Eligible (limited)',  color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
+  LIMITED:               { label: 'Limited',             color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
+  PAUSED:                { label: 'Paused',              color: 'text-gray-500   dark:text-white/50',    bg: 'bg-gray-100    dark:bg-white/6',         dot: 'bg-gray-400'   },
+  REMOVED:               { label: 'Removed',             color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
+  ENDED:                 { label: 'Ended',               color: 'text-gray-400   dark:text-white/35',    bg: 'bg-gray-100    dark:bg-white/5',         dot: 'bg-gray-300'   },
+  PENDING:               { label: 'Pending',             color: 'text-blue-600   dark:text-blue-400',    bg: 'bg-blue-50     dark:bg-blue-500/10',     dot: 'bg-blue-400'   },
+  MISCONFIGURED:         { label: 'Misconfigured',       color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
+  // Ad-level approval statuses
+  APPROVED:              { label: 'Approved',            color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-400/10',  dot: 'bg-emerald-500' },
+  APPROVED_LIMITED:      { label: 'Approved (limited)',  color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
+  DISAPPROVED:           { label: 'Disapproved',         color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
+  UNDER_REVIEW:          { label: 'Under review',        color: 'text-blue-600   dark:text-blue-400',    bg: 'bg-blue-50     dark:bg-blue-500/10',     dot: 'bg-blue-400'   },
+  AREA_OF_INTEREST_ONLY: { label: 'Limited reach',       color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
+};
+
+// Serving-status values → subtitle text (exact wording from Google Ads UI)
+const SERVING_STATUS_SUBTITLE = {
+  ADS_LIMITED_BY_POLICY: 'All ads limited by policy',
+  ADS_DISAPPROVED:       'Most ads disapproved',
+  ADS_PAUSED:            'All ads paused',
+  NO_ADS:                'No ads running',
+  ADS_ERROR:             'Ads have errors',
+  BUDGET_PAUSED:         'Budget depleted',
+  SUSPENDED:             'Account suspended',
+  ACCOUNT_PAUSED:        'Account paused',
+};
+
+// primaryStatus → subtitle (only non-obvious ones)
+const PRIMARY_STATUS_SUBTITLE = {
+  ELIGIBLE_LIMITED: 'All ads limited by policy',
+  LIMITED:          'Limited by policy',
+  ENDED:            'Campaign has ended',
+  PENDING:          'Not yet started',
+  MISCONFIGURED:    'Check campaign settings',
+};
+
+// approvalStatus → subtitle
+const APPROVAL_STATUS_SUBTITLE = {
+  APPROVED_LIMITED:      'Limited by policy',
+  DISAPPROVED:           'Ad disapproved',
+  UNDER_REVIEW:          'Under review',
+  AREA_OF_INTEREST_ONLY: 'Limited reach',
+};
+
+function robustStatus(s) {
+  if (!s) return 'PAUSED';
+  const v = String(s).toUpperCase();
+  if (v === 'ENABLED' || v === 'ACTIVE') return 'ENABLED';
+  return 'PAUSED';
+}
+
+/**
+ * Unified Google-style status badge.
+ * Priority: approvalStatus (ads) → primaryStatus (campaign/adgroup) → servingStatus fallback → raw status
+ */
+function GoogleServingStatus({ status, primaryStatus, servingStatus, approvalStatus }) {
+  const base = robustStatus(status);
+
+  // ── 1. resolve badge key ──────────────────────────────────────────────────
+  const clean = (v) => v && v !== 'UNKNOWN' && v !== 'UNSPECIFIED' ? String(v).toUpperCase() : null;
+  const approvalKey  = clean(approvalStatus);
+  const primaryKey   = clean(primaryStatus);
+  const servingKey   = clean(servingStatus);
+
+  // Upgrade ELIGIBLE → ELIGIBLE_LIMITED when serving status indicates policy issues
+  const effectivePrimaryKey = (primaryKey === 'ELIGIBLE' && servingKey && SERVING_STATUS_SUBTITLE[servingKey])
+    ? 'ELIGIBLE_LIMITED'
+    : primaryKey;
+
+  const badgeKey = approvalKey || effectivePrimaryKey || (base === 'ENABLED' ? 'ELIGIBLE' : 'PAUSED');
+  const cfg = STATUS_CFG[badgeKey] || STATUS_CFG[base === 'ENABLED' ? 'ELIGIBLE' : 'PAUSED'];
+
+  // ── 2. resolve subtitle ───────────────────────────────────────────────────
+  let subtitle = null;
+  if (approvalKey)         subtitle = APPROVAL_STATUS_SUBTITLE[approvalKey]  ?? null;
+  if (!subtitle && effectivePrimaryKey) subtitle = PRIMARY_STATUS_SUBTITLE[effectivePrimaryKey] ?? null;
+  if (!subtitle && servingKey)          subtitle = SERVING_STATUS_SUBTITLE[servingKey]           ?? null;
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${cfg.bg} ${cfg.color}`}>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cfg.dot}`} />
+        {cfg.label}
+      </span>
+      {subtitle && (
+        <span className="mt-0.5 pl-0.5 text-10 leading-tight text-gray-400 dark:text-white/35">{subtitle}</span>
+      )}
     </div>
   );
 }
@@ -187,10 +280,10 @@ function DeleteModal({ item, onConfirm, onCancel, deleting }) {
         <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
         </div>
-        <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Delete this campaign?</h2>
+        <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Delete this {item._adLabel ? 'ad' : 'campaign'}?</h2>
         <p className="mb-2 text-xs text-gray-500 dark:text-[#BEBEBE]">
           <span className="font-semibold text-gray-900 dark:text-white">{item.name}</span> will be permanently
-          removed from Google Ads along with its ad groups and ads. This cannot be undone.
+          removed from Google Ads{item._adLabel ? '' : ' along with its ad groups and ads'}. This cannot be undone.
         </p>
         <p className="mb-6 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {item.campaignId || item.id}</p>
         <div className="flex items-center justify-end gap-2">
@@ -218,24 +311,26 @@ function DeleteModal({ item, onConfirm, onCancel, deleting }) {
 // ─── campaign table (level 1) ─────────────────────────────────────────────────
 
 function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onLaunchWizard }) {
-  const [statuses, setStatuses]       = useState({});
-  const [toggling, setToggling]       = useState({});
+  const [statuses, setStatuses]           = useState({});
+  const [primaryStatuses, setPrimaryStatuses] = useState({});
+  const [toggling, setToggling]           = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
-  const [deleting, setDeleting]       = useState(false);
+  const [deleting, setDeleting]           = useState(false);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(campaigns, 'name');
 
   const getStatus = (c) => statuses[c.campaignId || c.id] ?? c.status;
+  const getPrimaryStatus = (c) => primaryStatuses[c.campaignId || c.id] ?? c.primaryStatus;
 
-  const handleToggle = async (e, c) => {
-    e.stopPropagation();
+  const handleToggle = async (c) => {
     const id = c.campaignId || c.id;
     const next = getStatus(c) === 'ENABLED' ? 'PAUSED' : 'ENABLED';
     setToggling((p) => ({ ...p, [id]: true }));
     try {
       await updateGoogleAdStatus({ level: 'campaign', id, adAccountId, status: next });
       setStatuses((p) => ({ ...p, [id]: next }));
+      setPrimaryStatuses((p) => ({ ...p, [id]: next === 'ENABLED' ? 'ELIGIBLE' : 'PAUSED' }));
       globalToast.success('Campaign status updated');
-    } catch { globalToast.error('Failed to update campaign status'); }
+    } catch (err) { globalToast.error(err?.response?.data?.error || err?.response?.data?.details || 'Failed to update campaign status'); }
     finally  { setToggling((p) => ({ ...p, [id]: false })); }
   };
 
@@ -261,25 +356,24 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <SortTh label="Campaign"       colKey="name"              sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-5" />
-              <SortTh label="Status"         colKey="status"            sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Objective"      colKey="objective"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Status"           colKey="status"            sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Objective"        colKey="objective"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Daily Budget"     colKey="dailyBudgetMicros" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Budget Remaining" colKey="budget_remaining"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th className="w-20 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={6} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={7} className="py-14"><EmptyState message="No campaigns found for this account" /></td></tr>
+              <tr><td colSpan={6} className="py-14"><EmptyState message="No campaigns found for this account" /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
-              const id     = c.campaignId || c.id;
-              const status = getStatus(c);
-              const budget = fromMicros(c.dailyBudgetMicros);
+              const id        = c.campaignId || c.id;
+              const status    = getStatus(c);
+              const budget    = fromMicros(c.dailyBudgetMicros);
               const remaining = c.budget_remaining || (c.budgetRemainingMicros != null ? `₹${fromMicros(c.budgetRemainingMicros)}` : null);
               return (
                 <motion.tr
@@ -296,16 +390,20 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                       <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-white leading-tight">{c.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {id}</p>
+                        <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
                         {budget && <BudgetBar budget={budget ? `₹${budget}` : null} remaining={remaining} />}
                       </div>
                     </div>
                   </td>
-                  {/* status */}
+                  {/* status — Google-style serving status */}
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2.5">
-                      <StatusBadge status={status === 'ENABLED' ? 'ACTIVE' : 'PAUSED'} />
-                      <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, c)} toggling={!!toggling[id]} />
+                      <GoogleServingStatus
+                        status={status}
+                        primaryStatus={getPrimaryStatus(c)}
+                        servingStatus={c.servingStatus}
+                      />
+                      <ToggleSwitch status={status} onToggle={() => handleToggle(c)} toggling={!!toggling[id]} />
                     </div>
                   </td>
                   {/* objective */}
@@ -323,19 +421,12 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
                     {hasBudget(remaining) ? remaining : <span className="text-gray-400 dark:text-white/40">—</span>}
                   </td>
-                  {/* start date */}
-                  <td className="px-4 py-4">
-                    <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
-                      {formatGoogleDateDisplay(c.start_time || c.startDate)}
-                    </span>
-                  </td>
                   {/* actions */}
                   <td className="pr-5 pl-2 py-4">
                     <div className="flex items-center justify-end gap-1.5">
                       {onLaunchWizard && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-campaign', { campaignId: id, objective: c.objective, destination: c.channelType || c.objective, campaignName: c.name, dailyBudget: budget || '', status: c.status }); }}
+                          onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-campaign', { campaignId: id, objective: c.objective, destination: c.channelType || c.objective, campaignName: c.name, dailyBudget: budget || '', status: c.status, startDate: c.startDate || c.start_time, endDate: c.endDate || c.end_time }); }}
                           title="Edit campaign"
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
                         >
@@ -375,11 +466,16 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 // ─── ad group table (level 2) ─────────────────────────────────────────────────
 
 function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce }) {
-  const [adGroups,  setAdGroups]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [statuses,  setStatuses]  = useState({});
-  const [toggling,  setToggling]  = useState({});
+  const [adGroups,     setAdGroups]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [statuses,        setStatuses]        = useState({});
+  const [primaryStatuses, setPrimaryStatuses] = useState({});
+  const [toggling,        setToggling]        = useState({});
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(adGroups, 'name');
+
+  const handleRefresh = () => { setRefreshing(true); setRefreshNonce((n) => n + 1); };
 
   useEffect(() => {
     let cancelled = false;
@@ -392,22 +488,27 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
           globalToast.error(e?.response?.data?.error || e?.response?.data?.details || 'Failed to load ad groups');
         }
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
     return () => { cancelled = true; };
-  }, [campaign.campaignId, campaign.id, adAccountId, manageNonce]);
+  }, [campaign.campaignId, campaign.id, adAccountId, manageNonce, refreshNonce]);
 
   const getStatus = (g) => statuses[g.adGroupId || g.id] ?? g.status;
+  const getPrimaryStatus = (g) => primaryStatuses[g.adGroupId || g.id] ?? g.primaryStatus;
 
-  const handleToggle = async (e, g) => {
-    e.stopPropagation();
+  const handleToggle = async (g) => {
+    if (g.isPmax || g.type === 'ASSET_GROUP') {
+      globalToast.error('Performance Max asset groups cannot be paused individually. Pause the campaign instead.');
+      return;
+    }
     const id = g.adGroupId || g.id;
     const next = getStatus(g) === 'ENABLED' ? 'PAUSED' : 'ENABLED';
     setToggling((p) => ({ ...p, [id]: true }));
     try {
       await updateGoogleAdStatus({ level: 'adgroup', id, adAccountId, status: next });
       setStatuses((p) => ({ ...p, [id]: next }));
+      setPrimaryStatuses((p) => ({ ...p, [id]: next === 'ENABLED' ? 'ELIGIBLE' : 'PAUSED' }));
       globalToast.success('Ad group status updated');
-    } catch { globalToast.error('Failed to update ad group status'); }
+    } catch (err) { globalToast.error(err?.response?.data?.error || err?.response?.data?.details || 'Failed to update ad group status'); }
     finally  { setToggling((p) => ({ ...p, [id]: false })); }
   };
 
@@ -417,38 +518,68 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ad groups in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
         </p>
-        {onLaunchWizard && (
-          <AddButton
-            label="Add Ad Group"
-            onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {onLaunchWizard && (
+            <AddButton
+              label="Add Ad Group"
+              onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
+            />
+          )}
+        </div>
       </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-150 border-collapse">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
-              <SortTh label="Ad Group"          colKey="name"               sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[30%] pl-5" />
-              <SortTh label="Status"            colKey="status"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Billing Event"     colKey="billing_event"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Optimization Goal" colKey="optimization_goal"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Max CPC"           colKey="cpcBidMicros"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Start Date"        colKey="start_time"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Ad Group"   colKey="name"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[35%] pl-5" />
+              <SortTh label="Status"     colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Type"       colKey="type"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Bidding"    colKey="biddingGoal"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Max CPC"    colKey="cpcBidMicros" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               {onLaunchWizard && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><EmptyState message="No ad groups in this campaign" /></td></tr>
+              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><EmptyState message="No ad groups in this campaign" /></td></tr>
             )}
             {sorted.map((g, idx) => {
               const id     = g.adGroupId || g.id;
               const status = getStatus(g);
               const cpc    = fromMicros(g.cpcBidMicros);
-              const startDate = g.start_time || g.startDate || campaign.start_time || campaign.startDate;
+              const adGroupType = (() => {
+                const raw = String(g.type || '').toUpperCase();
+                const MAP = {
+                  SEARCH_STANDARD:       'Search',
+                  DISPLAY_STANDARD:      'Display',
+                  SHOPPING_SMART_ADS:    'Shopping Smart',
+                  SHOPPING_PRODUCT_ADS:  'Shopping',
+                  VIDEO_BUMPER:          'Video Bumper',
+                  VIDEO_TRUE_VIEW_IN_STREAM: 'In-Stream',
+                  VIDEO_TRUE_VIEW_IN_DISPLAY: 'In-Display',
+                  VIDEO_RESPONSIVE:      'Video',
+                  DEMAND_GEN_MAX_CONVERSIONS: 'Demand Gen',
+                  UNKNOWN:               '—',
+                  UNSPECIFIED:           '—',
+                };
+                return MAP[raw] || raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
+              })();
+              const bidding = g.biddingGoal
+                ? String(g.biddingGoal).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                : g.targetCpa ? `Target CPA: ₹${g.targetCpa}`
+                : g.targetRoas ? `Target ROAS: ${g.targetRoas}%`
+                : 'Maximize Clicks';
               return (
                 <motion.tr
                   key={id}
@@ -458,30 +589,37 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
                   onClick={() => onDrillDown(g)}
                   className="group cursor-pointer border-b border-gray-200 transition-colors hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/3 last:border-b-0"
                 >
+                  {/* name */}
                   <td className="pl-5 pr-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{g.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {id}</p>
+                        <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
                       </div>
                     </div>
                   </td>
+                  {/* status */}
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2.5">
-                      <StatusBadge status={status === 'ENABLED' ? 'ACTIVE' : 'PAUSED'} />
-                      <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, g)} toggling={!!toggling[id]} />
+                      <GoogleServingStatus status={status} primaryStatus={getPrimaryStatus(g)} servingStatus={g.servingStatus} />
+                      {g.isPmax || g.type === 'ASSET_GROUP'
+                        ? <span title="Pause via campaign" className="text-10 text-gray-400 dark:text-white/30 italic">PMax</span>
+                        : <ToggleSwitch status={status} onToggle={() => handleToggle(g)} toggling={!!toggling[id]} />
+                      }
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
-                    <span className="flex items-center gap-1.5">
-                      <Zap className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
-                      {labelGoogleBilling(g.billing_event || g.billingEvent) ?? '—'}
+                  {/* type */}
+                  <td className="px-4 py-4">
+                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-10 font-semibold text-gray-600 dark:border-white/8 dark:bg-white/5 dark:text-white/60">
+                      {adGroupType}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
-                    {labelGoogleBidding(g.optimization_goal || g.optimizationGoal) ?? '—'}
+                  {/* bidding */}
+                  <td className="px-4 py-4 text-xs text-gray-600 dark:text-white/80">
+                    {bidding}
                   </td>
+                  {/* max cpc */}
                   <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
                     {cpc ? (
                       <span className="flex items-center gap-1.5">
@@ -489,12 +627,6 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
                         ₹{cpc}
                       </span>
                     ) : <span className="text-gray-400 dark:text-white/40">—</span>}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
-                      {formatGoogleDateDisplay(startDate)}
-                    </span>
                   </td>
                   {onLaunchWizard && (
                     <td className="pr-5 pl-2 py-4">
@@ -531,11 +663,15 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
   const bodyVariants = (ad.descriptions || []).map(adCopyText).filter(Boolean);
 
   const handleToggle = async () => {
+    if (ad.isPmax || ad.type === 'ASSET_GROUP') {
+      globalToast.error('Performance Max asset groups cannot be paused individually. Pause the campaign instead.');
+      return;
+    }
     const id = ad.adId || ad.id;
     const next = currentStatus === 'ENABLED' ? 'PAUSED' : 'ENABLED';
     setToggling(true);
     try {
-      await updateGoogleAdStatus({ level: 'ad', id, adAccountId, status: next });
+      await updateGoogleAdStatus({ level: 'ad', id, adAccountId, adGroupId: ad.adGroupId, status: next });
       setCurrentStatus(next);
       globalToast.success('Ad status updated');
     } catch {
@@ -570,31 +706,102 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
 
       <div className="scrollbar-thin flex-1 overflow-y-auto">
         <div className="relative w-full bg-gray-50 dark:bg-[#141414]">
-          <div className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-2.5 dark:border-white/5">
-            <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-white/10" />
-            <div>
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">Sponsored</p>
-              <p className="text-10 text-gray-400 dark:text-[#444]">Google · Display</p>
-            </div>
-          </div>
-          {ad.videoUrl ? (
-            <div className="relative aspect-video w-full bg-black">
-              <iframe
-                title="Ad video"
-                src={`https://www.youtube.com/embed/${String(ad.videoUrl).split('v=').pop()}`}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          ) : ad.imageUrl ? (
-            <div className="relative aspect-video w-full">
-              <img src={ad.imageUrl} alt={headline || 'Ad preview'} className="h-full w-full object-cover" />
+          {/* Search ad preview — mimics Google SERP result */}
+          {(ad.type === 'RESPONSIVE_SEARCH_AD' || (!ad.videoUrl && !ad.imageUrl)) && ad.type !== 'RESPONSIVE_DISPLAY_AD' ? (
+            <div className="bg-white p-4 dark:bg-[#202124]">
+              {/* Google search bar mockup */}
+              <div className="mb-4 flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 shadow-sm dark:border-white/15 dark:bg-[#303134]">
+                {/* Multicolour Google G */}
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <span className="flex-1 text-xs text-gray-400 dark:text-white/40">Search preview</span>
+                <svg className="h-4 w-4 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+              </div>
+
+              {/* SERP-style ad card — matches current Google Ads search result layout */}
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#303134]">
+                {/* Row 1: favicon + domain + Ad badge */}
+                <div className="mb-2 flex items-center gap-2">
+                  {/* Favicon placeholder */}
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+                    <span className="text-[8px] font-bold text-gray-500 dark:text-white/50">
+                      {ad.finalUrl
+                        ? (() => { try { return new URL(ad.finalUrl).hostname.replace('www.', '')[0].toUpperCase(); } catch { return 'A'; } })()
+                        : 'A'}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-medium text-gray-800 dark:text-[#e8eaed]">
+                      {ad.finalUrl
+                        ? (() => { try { return new URL(ad.finalUrl).hostname.replace('www.', ''); } catch { return ad.finalUrl; } })()
+                        : 'your-website.com'}
+                    </p>
+                    <p className="truncate text-[11px] text-gray-500 dark:text-[#bdc1c6]">
+                      {ad.finalUrl
+                        ? (() => { try {
+                            const u = new URL(ad.finalUrl);
+                            const parts = [u.hostname.replace('www.', '')];
+                            if (ad.path1) parts.push(ad.path1);
+                            if (ad.path2) parts.push(ad.path2);
+                            return parts.join(' › ');
+                          } catch { return ad.finalUrl; } })()
+                        : ''}
+                    </p>
+                  </div>
+                  {/* Google-style Ad badge: black outlined, small */}
+                  <span className="shrink-0 rounded border border-gray-500 px-1 py-px text-[9px] font-medium text-gray-500 dark:border-[#bdc1c6] dark:text-[#bdc1c6]">
+                    Ad
+                  </span>
+                </div>
+
+                {/* Row 2: Headline (Google blue, 20px, links look) */}
+                <p className="mb-1.5 text-[18px] font-normal leading-snug text-[#1558d6] hover:underline dark:text-[#8ab4f8]">
+                  {headlineVariants.slice(0, 3).join(' | ') || headline || '—'}
+                </p>
+
+                {/* Row 3: Description */}
+                <p className="text-13 leading-relaxed text-gray-600 dark:text-[#bdc1c6]">
+                  {bodyVariants[0] || body || ''}
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="flex aspect-video w-full items-center justify-center">
-              <ImageIcon className="h-10 w-10 text-gray-300 dark:text-white/15" />
-            </div>
+            <>
+              <div className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-2.5 dark:border-white/5">
+                <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-white/10" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Sponsored</p>
+                  <p className="text-10 text-gray-400 dark:text-[#444]">
+                    Google · {ad.type === 'RESPONSIVE_DISPLAY_AD' ? 'Display' : ad.videoUrl ? 'Video' : 'Display'}
+                  </p>
+                </div>
+              </div>
+              {ad.videoUrl ? (
+                <div className="relative aspect-video w-full bg-black">
+                  <iframe
+                    title="Ad video"
+                    src={`https://www.youtube.com/embed/${String(ad.videoUrl).split('v=').pop()}`}
+                    className="h-full w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : ad.imageUrl ? (
+                <div className="relative aspect-video w-full">
+                  <img src={ad.imageUrl} alt={headline || 'Ad preview'} className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <div className="flex aspect-video w-full items-center justify-center">
+                  <ImageIcon className="h-10 w-10 text-gray-300 dark:text-white/15" />
+                </div>
+              )}
+            </>
           )}
           <div className="space-y-2 border-t border-gray-200 p-4 dark:border-white/8">
             {ad.businessName && (
@@ -652,7 +859,11 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 dark:text-white/40">Status</span>
             <div className="flex items-center gap-2">
-              <StatusBadge status={currentStatus === 'ENABLED' ? 'ACTIVE' : 'PAUSED'} />
+              <GoogleServingStatus
+                status={currentStatus}
+                approvalStatus={ad.approvalStatus}
+                reviewStatus={ad.reviewStatus}
+              />
               <ToggleSwitch status={currentStatus} onToggle={handleToggle} toggling={toggling} />
             </div>
           </div>
@@ -677,13 +888,22 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
 // ─── ads table (level 3) ──────────────────────────────────────────────────────
 
 function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce }) {
-  const [ads,     setAds]     = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [statuses, setStatuses] = useState({});
-  const [toggling, setToggling] = useState({});
-  const [selectedAd, setSelectedAd] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  const [ads,          setAds]          = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [statuses,     setStatuses]     = useState({});
+  const [toggling,     setToggling]     = useState({});
+  const [selectedAd,   setSelectedAd]   = useState(null);
+  const [editingId,    setEditingId]    = useState(null);
+  const [pendingDeleteAd, setPendingDeleteAd] = useState(null);
+  const [deletingAd,   setDeletingAd]   = useState(false);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(ads, 'headline');
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setRefreshNonce((n) => n + 1);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -696,22 +916,25 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
           globalToast.error(e?.response?.data?.error || e?.response?.data?.details || 'Failed to load ads');
         }
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
     return () => { cancelled = true; };
-  }, [adGroup.adGroupId, adGroup.id, adAccountId, manageNonce]);
+  }, [adGroup.adGroupId, adGroup.id, adAccountId, manageNonce, refreshNonce]);
 
   const getStatus = (a) => statuses[a.adId || a.id] ?? a.status;
 
-  const handleToggle = async (e, a) => {
-    e.stopPropagation();
+  const handleToggle = async (a) => {
+    if (a.isPmax || a.type === 'ASSET_GROUP') {
+      globalToast.error('Performance Max asset groups cannot be paused individually. Pause the campaign instead.');
+      return;
+    }
     const id = a.adId || a.id;
     const next = getStatus(a) === 'ENABLED' ? 'PAUSED' : 'ENABLED';
     setToggling((p) => ({ ...p, [id]: true }));
     try {
-      await updateGoogleAdStatus({ level: 'ad', id, adAccountId, status: next });
+      await updateGoogleAdStatus({ level: 'ad', id, adAccountId, adGroupId: adGroup.adGroupId || adGroup.id, status: next });
       setStatuses((p) => ({ ...p, [id]: next }));
       globalToast.success('Ad status updated');
-    } catch { globalToast.error('Failed to update ad status'); }
+    } catch (err) { globalToast.error(err?.response?.data?.error || err?.response?.data?.details || 'Failed to update ad status'); }
     finally  { setToggling((p) => ({ ...p, [id]: false })); }
   };
 
@@ -750,6 +973,19 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
     }
   };
 
+  const handleConfirmDeleteAd = async () => {
+    if (!pendingDeleteAd || !adAccountId) return;
+    setDeletingAd(true);
+    try {
+      await deleteGoogleAd({ adAccountId, adGroupId: adGroup.adGroupId || adGroup.id, adId: pendingDeleteAd.adId || pendingDeleteAd.id });
+      setAds((prev) => prev.filter((a) => (a.adId || a.id) !== (pendingDeleteAd.adId || pendingDeleteAd.id)));
+      if ((selectedAd?.adId || selectedAd?.id) === (pendingDeleteAd.adId || pendingDeleteAd.id)) setSelectedAd(null);
+      globalToast.success('Ad deleted');
+      setPendingDeleteAd(null);
+    } catch { globalToast.error('Failed to delete ad'); }
+    finally { setDeletingAd(false); }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 gap-3">
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
@@ -757,31 +993,42 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ads in <span className="text-gray-900 dark:text-white">{adGroup.name}</span>
         </p>
-        {onLaunchWizard && (
-          <AddButton
-            label="Add Ad"
-            onClick={() => onLaunchWizard('create-ad', { campaignId: campaign.campaignId || campaign.id, adGroupId: adGroup.adGroupId || adGroup.id, objective: campaign.objective })}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {onLaunchWizard && (
+            <AddButton
+              label="Add Ad"
+              onClick={() => onLaunchWizard('create-ad', { campaignId: campaign.campaignId || campaign.id, adGroupId: adGroup.adGroupId || adGroup.id, objective: campaign.objective })}
+            />
+          )}
+        </div>
       </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
-        <table className="w-full min-w-140 border-collapse">
+        <table className="w-full min-w-160 border-collapse">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <th className="w-16 py-3 pl-5 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
-              <SortTh label="Ad Name"    colKey="headline"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[36%]" />
-              <SortTh label="Status"     colKey="status"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Final URL"  colKey="finalUrl"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="CTA"        colKey="callToAction" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              {onLaunchWizard && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
+              <SortTh label="Ad Name"   colKey="headline"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[30%]" />
+              <SortTh label="Status"    colKey="status"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Ad Type"   colKey="type"          sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Final URL" colKey="finalUrl"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="CTA"       colKey="callToAction"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              {onLaunchWizard && <th className="w-24 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={onLaunchWizard ? 5 : 4} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={onLaunchWizard ? 5 : 4} className="py-14"><EmptyState message="No ads in this ad group" /></td></tr>
+              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><EmptyState message="No ads in this ad group" /></td></tr>
             )}
             {sorted.map((a, idx) => {
               const id     = a.adId || a.id;
@@ -809,6 +1056,12 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
                             </div>
                           )}
                         </>
+                      ) : a.type === 'RESPONSIVE_SEARCH_AD' ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5">
+                          <div className="h-0.5 w-8 rounded bg-[#4285F4]/60" />
+                          <div className="h-0.5 w-6 rounded bg-gray-300 dark:bg-white/20" />
+                          <div className="h-0.5 w-7 rounded bg-gray-300 dark:bg-white/20" />
+                        </div>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
                           <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
@@ -833,24 +1086,56 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
                   {/* status */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <StatusBadge status={status === 'ENABLED' ? 'ACTIVE' : 'PAUSED'} />
-                      <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, a)} toggling={!!toggling[id]} />
+                      <GoogleServingStatus
+                        status={status}
+                        approvalStatus={a.approvalStatus}
+                        reviewStatus={a.reviewStatus}
+                      />
+                      <ToggleSwitch status={status} onToggle={() => handleToggle(a)} toggling={!!toggling[id]} />
                     </div>
+                  </td>
+                  {/* ad type */}
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const AD_TYPE_LABEL = {
+                        RESPONSIVE_SEARCH_AD:              'Responsive Search',
+                        RESPONSIVE_DISPLAY_AD:             'Responsive Display',
+                        IMAGE_AD:                          'Image',
+                        TEXT_AD:                           'Text',
+                        EXPANDED_TEXT_AD:                  'Expanded Text',
+                        VIDEO_RESPONSIVE_AD:               'Video Responsive',
+                        DEMAND_GEN_VIDEO_RESPONSIVE_AD:    'Demand Gen Video',
+                        DEMAND_GEN_MULTI_ASSET_AD:         'Demand Gen',
+                        DEMAND_GEN_CAROUSEL_AD:            'Demand Gen Carousel',
+                        SHOPPING_PRODUCT_AD:               'Shopping',
+                        SHOPPING_SMART_AD:                 'Smart Shopping',
+                        APP_AD:                            'App',
+                        CALL_AD:                           'Call',
+                        LEGACY_RESPONSIVE_DISPLAY_AD:      'Display (Legacy)',
+                      };
+                      const raw = (a.type || '').toUpperCase();
+                      const label = AD_TYPE_LABEL[raw] || raw.replace(/_AD$/, '').replace(/_/g, ' ') || 'Ad';
+                      return (
+                        <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-10 font-semibold text-gray-500 dark:border-white/8 dark:bg-white/5 dark:text-white/50">
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {/* final url */}
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">
                     {a.finalUrl ? (
-                      <span className="max-w-45 truncate block text-xs text-gray-500 dark:text-white/50">{a.finalUrl}</span>
+                      <span className="max-w-40 truncate block text-xs text-gray-500 dark:text-white/50">{a.finalUrl}</span>
                     ) : <span className="text-gray-400 dark:text-white/40">—</span>}
                   </td>
                   {/* cta */}
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">
+                  <td className="px-4 py-3 text-xs text-gray-600 dark:text-white/80">
                     {labelGoogleCTA(a.callToAction) ?? '—'}
                   </td>
-                  {/* edit */}
+                  {/* actions */}
                   {onLaunchWizard && (
                     <td className="pr-5 pl-2 py-3">
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={(e) => handleEdit(e, a)}
                           disabled={editingId === id}
@@ -862,6 +1147,13 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
                           ) : (
                             <Pencil className="h-3.5 w-3.5" />
                           )}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPendingDeleteAd(a); }}
+                          title="Delete ad"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-400 transition-all hover:border-red-300 hover:bg-red-100 hover:text-red-600 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400/60 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>
@@ -880,6 +1172,17 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
           ad={{ ...selectedAd, status: getStatus(selectedAd) }}
           adAccountId={adAccountId}
           onClose={() => setSelectedAd(null)}
+        />
+      )}
+    </AnimatePresence>
+
+    <AnimatePresence>
+      {pendingDeleteAd && (
+        <DeleteModal
+          item={{ name: pendingDeleteAd.headline || pendingDeleteAd.headlines?.[0] || `Ad ${pendingDeleteAd.adId || pendingDeleteAd.id}`, id: pendingDeleteAd.adId || pendingDeleteAd.id, _adLabel: true }}
+          onConfirm={handleConfirmDeleteAd}
+          onCancel={() => !deletingAd && setPendingDeleteAd(null)}
+          deleting={deletingAd}
         />
       )}
     </AnimatePresence>

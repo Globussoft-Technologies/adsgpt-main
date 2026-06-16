@@ -956,7 +956,10 @@ class AdsFactoryAutoController {
 
       // ── 1. Next run time ────────────────────────────────────────────────────
       let nextRunAt = null;
-      if (cronExpr) {
+      if (schedule.frequency === "does_not_repeat") {
+        // One-shot: runs exactly on startDate (or now if omitted).
+        nextRunAt = schedule.startDate ? new Date(schedule.startDate) : new Date();
+      } else if (cronExpr) {
         try {
           const cronParser = require("cron-parser");
           nextRunAt = cronParser.parseExpression(cronExpr, { currentDate: fromDate, tz })
@@ -968,7 +971,10 @@ class AdsFactoryAutoController {
       // ── 2. Cycles scheduled — cron fires from now until endDate ────────────
       // null = no endDate → job runs indefinitely
       let cyclesScheduled = null;
-      if (cronExpr && schedule.endDate) {
+      if (schedule.frequency === "does_not_repeat") {
+        // Always exactly 1 run — end date is irrelevant for a one-shot.
+        cyclesScheduled = 1;
+      } else if (cronExpr && schedule.endDate) {
         try {
           const cronParser = require("cron-parser");
           const iter = cronParser.parseExpression(cronExpr, {
