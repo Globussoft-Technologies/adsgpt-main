@@ -834,6 +834,14 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 onChange={(e) => {
                   const f = e.target.files[0];
                   if (!f) return;
+                  // accept is only a picker hint — enforce audio-only here so
+                  // images/videos/gifs picked via "All files" are rejected.
+                  const isAudio = f.type.startsWith('audio/') || /\.(mp3|aac|wav|m4a|ogg)$/i.test(f.name);
+                  if (!isAudio) {
+                    toast.error('Please upload a valid audio file');
+                    e.target.value = '';
+                    return;
+                  }
                   if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl);
                   setVoiceFile(f);
                   setUploadFileUrl(URL.createObjectURL(f));

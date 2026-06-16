@@ -29,6 +29,12 @@ const UploadImagesStep = ({ onBack, onComplete }) => {
   const handleFileChange = (index, e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+      globalToast.error('Please upload a valid image file ');
+      e.target.value = ''; 
+      return;
+    }
     setImages((prev) => {
       const updated = [...prev];
       updated[index] = { file, preview: URL.createObjectURL(file) };
@@ -141,7 +147,7 @@ const UploadImagesStep = ({ onBack, onComplete }) => {
                       id={`clone-upload-${index}`}
                       type="file"
                       className="hidden"
-                      accept="image/*"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/bmp,image/avif"
                       onChange={(e) => handleFileChange(index, e)}
                     />
                   </>
