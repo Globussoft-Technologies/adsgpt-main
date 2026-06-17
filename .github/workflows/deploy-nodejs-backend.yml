@@ -32,7 +32,7 @@ jobs:
       run:
         working-directory: nodejs-backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v4
         with:
@@ -67,7 +67,7 @@ jobs:
       PM2_PROCESS: gateway
       DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure SSH
         run: |
