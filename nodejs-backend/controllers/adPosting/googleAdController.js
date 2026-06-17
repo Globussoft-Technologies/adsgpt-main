@@ -2656,19 +2656,28 @@ class GoogleAdController {
       const { adAccountId, campaignId } = value;
       const userId = req.user.user_id;
 
-      const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
+      const { accessToken } = await initGoogleApiForUser(userId);
       const tid = normalizeCustomerId(adAccountId);
-      const resolvedMcc = await resolveManagerForAccount(tid, accessToken);
+      const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
-      const customer = getCustomerClient(client, adAccountId, mccId, refreshToken);
+      const cleanCustomerId = sanitizeId(adAccountId);
+      const adHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+      await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${cleanCustomerId}/campaigns:mutate`,
+        {
+          operations: [{
+            remove: `customers/${cleanCustomerId}/campaigns/${sanitizeId(campaignId)}`,
+          }],
+        },
+        { headers: adHeaders }
+      );
 
-      // Status 4 = REMOVED
-      await customer.campaigns.update([{
-        resource_name: `customers/${sanitizeId(adAccountId)}/campaigns/${sanitizeId(campaignId)}`,
-        status: 4,
-      }]);
-
-      await invalidateUserGoogleCache(userId);
+      invalidateUserGoogleCache(userId).catch(() => {});
 
       return res.status(200).json({
         status: true,
@@ -4040,10 +4049,10 @@ class GoogleAdController {
       const squareAssetResourceNames = [];
       for (const ad of adsArray) {
         if (channelType === "DISPLAY") {
-          // If pre-uploaded asset resource name provided, use it directly
-          if (ad.assetResourceName) {
+          // If both landscape and square assets provided, use them directly
+          if (ad.assetResourceName && ad.squareAssetResourceName) {
             assetResourceNames.push(ad.assetResourceName);
-            squareAssetResourceNames.push(ad.assetResourceName); // reuse for square slot
+            squareAssetResourceNames.push(ad.squareAssetResourceName);
           } else if (ad.imageUrl && ad.imageUrl.startsWith('http')) {
             // Only fetch from URL if it's a real HTTP URL (not a blob: URL)
             try {
@@ -4057,6 +4066,9 @@ class GoogleAdController {
             } catch (uploadErr) {
               return res.status(400).json({ status: false, error: uploadErr.message });
             }
+          } else if (ad.assetResourceName && !ad.squareAssetResourceName) {
+            // Old upload — only landscape asset, no square. Cannot recover without re-upload.
+            return res.status(400).json({ status: false, error: "Please re-upload your image — both landscape and square variants are required for Display ads." });
           } else {
             assetResourceNames.push(null);
             squareAssetResourceNames.push(null);
@@ -4515,56 +4527,56 @@ class GoogleAdController {
       const customer = getCustomerClient(client, adAccountId, mccId, refreshToken);
       const customerId = sanitizeId(adAccountId);
 
-      let imageData;
+      let rawBuffer;
       try {
-        const sharp = require("sharp");
-        let rawBuffer;
         if (file) {
           rawBuffer = file.buffer;
         } else {
           const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
           rawBuffer = Buffer.from(downloaded.data);
         }
-        // Convert to JPEG — Google Ads accepts JPEG/PNG/GIF only, rejects WebP/HEIC/SVG etc.
-        const jpegBuffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
-        imageData = jpegBuffer.toString("base64");
-      } catch (sharpErr) {
-        logger.warn(`Image conversion via sharp failed, sending raw buffer: ${sharpErr.message}`);
-        if (file) {
-          imageData = file.buffer.toString("base64");
-        } else {
-          const downloaded = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 15000 });
-          imageData = Buffer.from(downloaded.data).toString("base64");
-        }
+      } catch (dlErr) {
+        return res.status(400).json({ status: false, error: "Failed to download image: " + dlErr.message });
       }
 
-      const assetResp = await axios.post(
-        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-        {
-          mutateOperations: [{
-            assetOperation: {
-              create: {
-                name: `img_${Date.now()}`,
-                type: "IMAGE",
-                image_asset: { data: imageData },
-              },
-            },
-          }],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-            "login-customer-id": mccId,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      // Upload both landscape (1.91:1 → 1200×628) and square (1:1 → 1200×1200) variants
+      const sharp = require("sharp");
+      const ts = Date.now();
+      const [landscapeBuffer, squareBuffer] = await Promise.all([
+        sharp(rawBuffer).resize({ width: 1200, height: 628, fit: "cover", position: "centre" }).jpeg({ quality: 90 }).toBuffer(),
+        sharp(rawBuffer).resize({ width: 1200, height: 1200, fit: "cover", position: "centre" }).jpeg({ quality: 90 }).toBuffer(),
+      ]);
 
-      const assetResourceName = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+      const uploadAsset = async (buffer, name) => {
+        const resp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          {
+            mutateOperations: [{
+              assetOperation: {
+                create: { name, type: "IMAGE", image_asset: { data: buffer.toString("base64") } },
+              },
+            }],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+              "login-customer-id": mccId,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        return resp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+      };
+
+      const [assetResourceName, squareAssetResourceName] = await Promise.all([
+        uploadAsset(landscapeBuffer, `img_land_${ts}`),
+        uploadAsset(squareBuffer, `img_sq_${ts}`),
+      ]);
+
       if (!assetResourceName) throw new Error("Could not get asset resource name from Google Ads");
 
-      return res.status(201).json({ status: true, assetResourceName });
+      return res.status(201).json({ status: true, assetResourceName, squareAssetResourceName });
     } catch (error) {
       logger.error(`GOOGLE UPLOAD MEDIA ERROR => ${error.message}`);
       const m = formatGoogleError(error);

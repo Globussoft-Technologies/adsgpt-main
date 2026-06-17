@@ -237,6 +237,7 @@ const adItemSchema = Joi.object({
   }),
   imageUrl:            Joi.string().optional(),
   assetResourceName:   Joi.string().optional(),
+  squareAssetResourceName: Joi.string().optional(),
   videoUrl:            Joi.string().optional(),
   youtubeVideoId:      Joi.string().max(11).optional(),
   logoUrl:             Joi.string().optional(),

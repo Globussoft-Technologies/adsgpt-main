@@ -8,6 +8,7 @@ const {
 } = require("../../Validations/adsFactoryAuto/adsFactoryAutoValidation");
 const logger = require("../../utils/logger");
 const UnifiedCreditController = require("../UnifiedCreditController");
+const { getCreditDeduction, imageEntries } = require("../../config/modelRegistry");
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -949,7 +950,6 @@ class AdsFactoryAutoController {
       if (!campaign) {
         return res.status(404).json({ success: false, error: "Campaign not found" });
       }
-
       const cronExpr = schedule.cronExpression || resolvePresetCron(schedule.frequency, schedule.hour) || null;
       const tz       = schedule.timezone || "UTC";
       const fromDate = schedule.startDate ? new Date(schedule.startDate) : new Date();
@@ -957,8 +957,22 @@ class AdsFactoryAutoController {
       // ── 1. Next run time ────────────────────────────────────────────────────
       let nextRunAt = null;
       if (schedule.frequency === "does_not_repeat") {
-        // One-shot: runs exactly on startDate (or now if omitted).
-        nextRunAt = schedule.startDate ? new Date(schedule.startDate) : new Date();
+        // One-shot: runs on startDate at the chosen hour in the job's timezone.
+        if (schedule.startDate) {
+          const hour = Number(schedule.hour) || 0;
+          const cronOnce = `0 ${hour} * * *`;
+          try {
+            const cronParser = require("cron-parser");
+            nextRunAt = cronParser.parseExpression(cronOnce, {
+              currentDate: new Date(schedule.startDate + "T00:00:00"),
+              tz,
+            }).next().toDate();
+          } catch (_) {
+            nextRunAt = new Date(schedule.startDate);
+          }
+        } else {
+          nextRunAt = new Date();
+        }
       } else if (cronExpr) {
         try {
           const cronParser = require("cron-parser");
@@ -991,26 +1005,24 @@ class AdsFactoryAutoController {
       }
 
       // ── 3. Credits per cycle ────────────────────────────────────────────────
-      // text + image scale with pairsPerCycle; video uses its stored quantity.
-      const ppc      = Number(pairsPerCycle) || 1;
-      const services = campaign.services?.servicesSelected || [];
-      let creditsPerCycle = 0;
-      for (const srv of services) {
-        let qty, key;
-        if (srv.serviceName === "text") {
-          qty = ppc;
-          key = "ADSGPT-TEXT";
-        } else if (srv.serviceName === "image") {
-          qty = ppc;
-          key = model || srv.serviceParams?.model || null;
-        } else if (srv.serviceName === "video") {
-          qty = srv.serviceParams?.quantity || 0;
-          key = model || srv.serviceParams?.model || null;
-        } else {
-          continue;
+      // Autopilot jobs store model + pairsPerCycle on the job itself, not on
+      // campaign.services.servicesSelected (that's the manual Ad Factory flow).
+      // Each cycle generates pairsPerCycle images + pairsPerCycle text copies.
+      // If model is missing/unresolvable, fall back to the first active image model.
+      const ppc = Number(pairsPerCycle) || 1;
+
+      const _resolvedImageDeduction = (() => {
+        if (model) {
+          const d = UnifiedCreditController.getModelDeduction(model);
+          if (d > 0) return d;
         }
-        creditsPerCycle += qty * (UnifiedCreditController.getModelDeduction(key) || 0);
-      }
+        // fallback: first active image model
+        const first = imageEntries({ activeOnly: true })[0];
+        return first ? getCreditDeduction(first.canonicalKey) : 0;
+      })();
+
+      const textDeduction  = UnifiedCreditController.getModelDeduction("ADSGPT-TEXT") || 0;
+      const creditsPerCycle = ppc * (_resolvedImageDeduction + textDeduction);
 
       // ── 4. User's credit balance ────────────────────────────────────────────
       let totalCredits = 0, remainingCredits = 0;

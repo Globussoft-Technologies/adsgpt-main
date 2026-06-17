@@ -156,6 +156,7 @@ function buildInitialForm(context) {
     imageUrl:        context?.imageUrl     || '',
     imageFile:       null,
     assetResourceName: context?.assetResourceName || '',
+    squareAssetResourceName: context?.squareAssetResourceName || '',
     videoUrl:        context?.videoUrl     || '',
     youtubeVideoId:  context?.youtubeVideoId || '',
     // SEARCH / LEADS / SALES extras
@@ -1431,6 +1432,7 @@ export default function CreateCampaignWizard({
     try {
       const res = await uploadGoogleImage({ adAccountId, imageFile: file });
       setField('assetResourceName', res.assetResourceName || '');
+      setField('squareAssetResourceName', res.squareAssetResourceName || '');
       setField('imageUrl', form.imageUrl || URL.createObjectURL(file));
     } catch (e) {
       globalToast.error(e?.response?.data?.error || 'Image upload failed');
@@ -1549,7 +1551,7 @@ export default function CreateCampaignWizard({
         if (adType === 'SEARCH') {
           adItem = { headlines: form.headlines.filter(Boolean), descriptions: form.descriptions.filter(Boolean), finalUrl: form.finalUrl };
         } else if (adType === 'DISPLAY') {
-          adItem = { headline: form.headline, description: form.description, imageUrl: (form.imageUrl && !form.imageUrl.startsWith('blob:')) ? form.imageUrl : undefined, assetResourceName: form.assetResourceName || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
+          adItem = { headline: form.headline, description: form.description, imageUrl: (form.imageUrl && !form.imageUrl.startsWith('blob:')) ? form.imageUrl : undefined, assetResourceName: form.assetResourceName || undefined, squareAssetResourceName: form.squareAssetResourceName || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
         } else {
           adItem = { videoUrl: form.videoUrl || undefined, youtubeVideoId: form.youtubeVideoId || undefined, headline: form.headline || undefined, longHeadline: form.longHeadline || undefined, description: form.description || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined };
         }
