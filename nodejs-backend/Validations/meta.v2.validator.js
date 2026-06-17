@@ -443,6 +443,18 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
         // standard events + customer-defined custom conversions.
         baseShape.pixelEventType = Joi.string().min(1).required();
         break;
+      case "catalogId":
+        // Sales/CATALOG — the Meta Product Catalog the ad set draws from.
+        // Picked on the new "Catalog" wizard step (additionalSteps).
+        baseShape.catalogId = Joi.string().required();
+        break;
+      case "productSetId":
+        // Sales/CATALOG — the Product Set within the catalog that scopes
+        // which items are eligible for display. Required by Meta;
+        // omitting it defaults to whole-catalog display which is rarely
+        // what users intend.
+        baseShape.productSetId = Joi.string().required();
+        break;
       default:
         throw new Error(
           `buildAdSetSchemaV2: unknown additionalField "${field}" for ${objective}/${conversionLocation}`,
@@ -582,32 +594,81 @@ function buildAdSchemaV2(objective, conversionLocation) {
     // today). Carousel/Stories variants will need their own shorter caps
     // when those cells land. Mirror these in the wizard's TextField
     // maxLength props (CreateCampaignWizardV2.jsx Ad step).
-    headline: req.has("headline")
-      ? Joi.string().min(1).max(40).required()
-      : Joi.string().allow("").max(40).default(""),
-    primaryText: req.has("primaryText")
-      ? Joi.string().min(1).max(125).required()
-      : Joi.string().allow("").max(125).default(""),
-    description: req.has("description")
-      ? Joi.string().min(1).max(30).required()
-      : Joi.string().allow("").max(30).default(""),
+    //
+    // Sales/CATALOG (template_data shape) is exempt — copy fields hold
+    // {{product.X}} placeholders that Meta resolves per product at
+    // delivery. The pre-render string can be way under 40 chars while
+    // the resolved string is much longer; conversely a literal-only
+    // template might be over 40. Meta handles per-product truncation, so
+    // we just enforce min-1 to avoid empty fields.
+    ...(cell.ad.objectStorySpecShape === "template_data"
+      ? {
+          headline: Joi.string().min(1).required(),
+          primaryText: Joi.string().min(1).required(),
+          description: Joi.string().allow("").default(""),
+        }
+      : {
+          headline: req.has("headline")
+            ? Joi.string().min(1).max(40).required()
+            : Joi.string().allow("").max(40).default(""),
+          primaryText: req.has("primaryText")
+            ? Joi.string().min(1).max(125).required()
+            : Joi.string().allow("").max(125).default(""),
+          description: req.has("description")
+            ? Joi.string().min(1).max(30).required()
+            : Joi.string().allow("").max(30).default(""),
+        }),
 
     // `.trim()` before `.uri()` so a stray space from a paste doesn't
      // sink launch with "must be a valid uri" — Joi rejects on
     // surrounding whitespace by default. Frontend's isHttpUrl already
     // trims; this keeps the two in sync.
-    linkUrl: req.has("linkUrl")
-      ? Joi.string().trim().uri().required()
-      : Joi.string().trim().uri().optional().allow(""),
-    urlTags: Joi.string().allow("").max(2000).default(""),
+    //
+    // Sales/CATALOG (template_data) exempts the URI check — the user can
+    // type a literal URL OR a `{{product.url}}` placeholder that Meta
+    // resolves per product. Keep the trim + required-ness; drop only the
+    // .uri() so placeholders pass through unchanged.
+    linkUrl:
+      cell.ad.objectStorySpecShape === "template_data"
+        ? req.has("linkUrl")
+          ? Joi.string().trim().min(1).required()
+          : Joi.string().trim().optional().allow("")
+        : req.has("linkUrl")
+          ? Joi.string().trim().uri().required()
+          : Joi.string().trim().uri().optional().allow(""),
+    // URL parameters appended to the destination link (Meta `url_tags`).
+    // Format: `utm_source=fb&utm_campaign=spring` — key=value pairs joined
+    // by &. Reject a leading ? or & (Meta adds the separator automatically;
+    // a leading & produces `?...&&utm_source=fb`).
+    urlTags: Joi.string()
+      .allow("")
+      .max(2000)
+      .pattern(/^[A-Za-z0-9_.\-~%+=&]*$/)
+      .messages({
+        "string.pattern.base":
+          "url_tags must be key=value pairs joined by & (no leading ?/&, no spaces)",
+      })
+      .default(""),
 
     // Cell-specific destination fields, present only on cells that
     // include them in requiredFields / optionalFields.
     leadFormId: req.has("leadFormId")
       ? Joi.string().required()
       : Joi.string().optional().allow(""),
+
+    // Deferred deep link uses the app's CUSTOM URL scheme (myapp://path),
+    // not http/https — those are web URLs and would not deep-link into an
+    // installed app.
     deferredDeepLink: cell.ad.optionalFields.includes("deferredDeepLink")
-      ? Joi.string().trim().uri().optional().allow("")
+      ? Joi.string()
+          .trim()
+          .optional()
+          .allow("")
+          .pattern(/^(?!https?:|ftp:|file:)[A-Za-z][A-Za-z0-9+.\-]*:\/\/.+/i)
+          .messages({
+            "string.pattern.base":
+              "deferred_deep_link must use a custom app scheme (e.g. myapp://path), not http/https",
+          })
       : Joi.forbidden(),
     customProductPage: cell.ad.optionalFields.includes("customProductPage")
       ? Joi.string().optional().allow("")
@@ -640,36 +701,48 @@ function buildAdSchemaV2(objective, conversionLocation) {
   }
 
   return Joi.object(baseShape).custom((value, helpers) => {
-    // Media xor — exactly one of imageHash OR videoId must be present.
-    // The wizard surfaces a tabbed picker; we enforce here so direct API
-    // callers can't slip past with both or neither.
-    // `videoThumbnailUrl` is optional at the validator level — the V2
-    // controller fetches Meta's auto-generated thumbnail when missing
-    // (see createAdV2). This way users never have to think about
-    // providing a poster image.
     const hasImage = !!value.imageHash;
     const hasVideo = !!value.videoId;
-    if (hasImage === hasVideo) {
-      return helpers.error("any.invalid", {
-        message: "Provide exactly one of imageHash OR videoId (not both, not neither)",
-      });
-    }
-    // Cell-level media-kind lock. Engagement/VIDEO_VIEWS sets
-    // `cell.ad.mediaKind = 'video'` to force video creatives only — Meta
-    // rejects image creatives on THRUPLAY-optimised ad sets. Tighten the
-    // generic XOR above: image not allowed when the cell is video-only.
-    // (mediaKind defaults to 'any' on cells that don't set it.)
-    if (cell.ad.mediaKind === "video" && hasImage) {
-      return helpers.error("any.invalid", {
-        message:
-          "This cell requires a video creative — pick or upload a video instead of an image.",
-      });
-    }
-    if (cell.ad.mediaKind === "image" && hasVideo) {
-      return helpers.error("any.invalid", {
-        message:
-          "This cell requires an image creative — pick or upload an image instead of a video.",
-      });
+    // Sales/CATALOG (template_data shape) — images come from the catalog
+    // feed per product, not from user upload. Reject ANY media supplied
+    // (caller bug — wizard hides the upload UI for this cell).
+    if (cell.ad.objectStorySpecShape === "template_data") {
+      if (hasImage || hasVideo) {
+        return helpers.error("any.invalid", {
+          message:
+            "This cell uses your catalog for product images — don't supply imageHash or videoId.",
+        });
+      }
+    } else {
+      // Standard cells — exactly one of imageHash OR videoId must be
+      // present. The wizard surfaces a tabbed picker; we enforce here so
+      // direct API callers can't slip past with both or neither.
+      // `videoThumbnailUrl` is optional at the validator level — the V2
+      // controller fetches Meta's auto-generated thumbnail when missing
+      // (see createAdV2). This way users never have to think about
+      // providing a poster image.
+      if (hasImage === hasVideo) {
+        return helpers.error("any.invalid", {
+          message: "Provide exactly one of imageHash OR videoId (not both, not neither)",
+        });
+      }
+      // Cell-level media-kind lock. Engagement/VIDEO_VIEWS sets
+      // `cell.ad.mediaKind = 'video'` to force video creatives only —
+      // Meta rejects image creatives on THRUPLAY-optimised ad sets.
+      // Tighten the generic XOR above: image not allowed when the cell
+      // is video-only. (mediaKind defaults to 'any'.)
+      if (cell.ad.mediaKind === "video" && hasImage) {
+        return helpers.error("any.invalid", {
+          message:
+            "This cell requires a video creative — pick or upload a video instead of an image.",
+        });
+      }
+      if (cell.ad.mediaKind === "image" && hasVideo) {
+        return helpers.error("any.invalid", {
+          message:
+            "This cell requires an image creative — pick or upload an image instead of a video.",
+        });
+      }
     }
     return value;
   });

@@ -12,13 +12,15 @@
  */
 
 /**
- * @param {string|null} shape  one of: null, "page", "app", and (later)
- *   "pixel", "product_set". `null` means the field is omitted on the AdSet
- *   payload (no promoted_object sent to Meta — only used for cells that
- *   explicitly need that, none in the current MVP).
+ * @param {string|null} shape  one of: null, "page", "app", "pixel",
+ *   "product_set". `null` means the field is omitted on the AdSet
+ *   payload (no promoted_object sent to Meta — used for cells where
+ *   Meta infers from other signals, e.g. Engagement video/post-engagement).
  * @param {object} params     shape-specific inputs:
- *   - page: { pageId }
- *   - app:  { applicationId, objectStoreUrl }
+ *   - page:        { pageId }
+ *   - app:         { applicationId, objectStoreUrl }
+ *   - pixel:       { pixelId, pixelEventType }
+ *   - product_set: { pixelId, productSetId }
  * @returns {object|undefined} the promoted_object payload, or undefined to
  *   signal "omit this field". Callers should `if (po) params.promoted_object
  *   = po;`.
@@ -54,8 +56,8 @@ function buildPromotedObject(shape, params) {
 
     case "pixel": {
       // For OFFSITE_CONVERSIONS optimisation: Meta needs to know which
-      // pixel + which event counts as a conversion. Used by all Leads
-      // Website/Multiple cells and (later) Sales-Website cells.
+      // pixel + which event counts as a conversion. Used by Leads/Sales
+      // Website cells and the Leads Multiple cells.
       const { pixelId, pixelEventType } = params || {};
       if (!pixelId || !pixelEventType) {
         throw new Error(
@@ -65,6 +67,25 @@ function buildPromotedObject(shape, params) {
       return {
         pixel_id: pixelId,
         custom_event_type: pixelEventType,
+      };
+    }
+
+    case "product_set": {
+      // Sales/CATALOG (Dynamic Product Ads). Meta pairs the Pixel with a
+      // specific Product Set inside a Catalog — the Pixel identifies the
+      // visitor/conversion stream and the product_set scopes which items
+      // are eligible for display. Both are required by Meta; without
+      // product_set_id the creative falls back to whole-catalog display
+      // which the user didn't intend.
+      const { pixelId, productSetId } = params || {};
+      if (!pixelId || !productSetId) {
+        throw new Error(
+          "buildPromotedObject('product_set'): pixelId + productSetId are both required",
+        );
+      }
+      return {
+        pixel_id: pixelId,
+        product_set_id: productSetId,
       };
     }
 

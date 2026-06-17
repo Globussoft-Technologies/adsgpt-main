@@ -54,6 +54,7 @@ import {
   Target,
   Trash2,
   UserPlus,
+  ShoppingBag,
   X,
 } from 'lucide-react';
 import {
@@ -65,6 +66,8 @@ import {
   getPixels,
   getPixelEvents,
   createPixel,
+  getCatalogs,
+  getProductSets,
   getPromotableApps,
   uploadMetaAdImage,
   uploadMetaAdVideo,
@@ -219,6 +222,7 @@ function buildSteps(cell, mode = 'create-full') {
     if (!cell) return BASE_STEPS;
     const extra = (cell.additionalSteps || []).map((id) => {
       if (id === 'leadForm') return { id: 'leadForm', label: 'Lead Form', icon: UserPlus };
+      if (id === 'catalog') return { id: 'catalog', label: 'Catalog', icon: ShoppingBag };
       return { id, label: id, icon: Layers };
     });
     // Insert extras between adSet (index 3) and ad (index 4).
@@ -228,6 +232,10 @@ function buildSteps(cell, mode = 'create-full') {
     return all.filter((s) => s.id !== 'objective' && s.id !== 'campaign');
   }
   if (mode === 'create-ad') {
+    // leadForm IS picked per ad (one form per ad), so include it.
+    // catalog is locked at AD-SET level (one product set per ad set, every
+    // ad inside inherits), so DON'T include it in create-ad — the catalog
+    // step's validator would block the user with no way to fix.
     return all.filter((s) => s.id === 'leadForm' || s.id === 'ad' || s.id === 'review');
   }
   // Edit modes: a single entity step (no objective/location/review).
@@ -329,6 +337,9 @@ function buildInitialForm(context = null) {
     // Pixel-using cells (Leads/Website, Multiple) — picked at AdSet step
     pixelId: '',
     pixelEventType: '',
+    // Sales/CATALOG — picked on the new Catalog wizard step.
+    catalogId: '',
+    productSetId: '',
     // Step 4 (conditional) — Lead Form
     leadFormId: '',
     leadFormMode: 'pick', // 'pick' (use existing) | 'build' (create new)
@@ -658,6 +669,10 @@ export default function CreateCampaignWizardV2({
         patch.leadFormId = '';
         patch.pixelId = '';
         patch.pixelEventType = '';
+        // Catalog + Product Set ids are scoped to the ad account's
+        // Business Manager — clear on account switch so the user re-picks.
+        patch.catalogId = '';
+        patch.productSetId = '';
       }
       setForm((prev) => ({ ...prev, ...patch }));
       setTouched((prev) => {
@@ -810,12 +825,20 @@ export default function CreateCampaignWizardV2({
         if (cell.adSet.additionalFields?.includes('objectStoreUrl')) {
           adSetPayload.objectStoreUrl = form.objectStoreUrl;
         }
-        // Pixel cells (Leads/Website + Multiple)
+        // Pixel cells (Leads/Website + Multiple, Sales/Website + CATALOG)
         if (cell.adSet.additionalFields?.includes('pixelId')) {
           adSetPayload.pixelId = form.pixelId;
         }
         if (cell.adSet.additionalFields?.includes('pixelEventType')) {
           adSetPayload.pixelEventType = form.pixelEventType;
+        }
+        // Sales/CATALOG — Catalog + Product Set picked on the dedicated
+        // Catalog wizard step (between AdSet and Ad).
+        if (cell.adSet.additionalFields?.includes('catalogId')) {
+          adSetPayload.catalogId = form.catalogId;
+        }
+        if (cell.adSet.additionalFields?.includes('productSetId')) {
+          adSetPayload.productSetId = form.productSetId;
         }
 
         const r = await createMetaAdSetV2(adSetPayload);
@@ -1564,6 +1587,15 @@ function StepBody({
         );
       case 'leadForm':
         return <LeadFormStep form={form} update={update} mode={mode} pages={pages} />;
+      case 'catalog':
+        return (
+          <CatalogStep
+            form={form}
+            update={update}
+            adAccountId={adAccountId}
+            errors={errors}
+          />
+        );
       case 'ad':
         return (
           <AdStep
@@ -1643,6 +1675,7 @@ const OBJECTIVE_DESCRIPTIONS = {
   OUTCOME_LEADS: 'Collect leads via Instant Forms, Messenger, calls, Instagram, WhatsApp, or your app.',
   OUTCOME_APP_PROMOTION: 'Drive installs to a single store — Apple App Store or Google Play.',
   OUTCOME_ENGAGEMENT: 'Drive messages, video views, calls, post engagement, or website visits.',
+  OUTCOME_SALES: 'Drive purchases on your site, app, in chat, on calls, or from your product catalog.',
 };
 
 // ─── Step: Conversion Location ──────────────────────────────────────────────
@@ -2018,6 +2051,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           update={update}
           adAccountId={adAccountId}
           errors={errors}
+          objective={form.objective}
         />
       )}
 
@@ -2318,6 +2352,116 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
   );
 }
 
+// ─── Step: Catalog (Sales/CATALOG — Dynamic Product Ads) ───────────────────
+// Two-stage picker. User selects a Catalog the ad account can access, then
+// a Product Set within it. Stored on form.catalogId + form.productSetId,
+// which the wizard sends as ad-set `additionalFields` (see Joi). Product
+// images come from the catalog feed at delivery, so the Ad step skips
+// the upload UI when this cell is active.
+
+function CatalogStep({ form, update, adAccountId, errors = {} }) {
+  const [catalogs, setCatalogs] = useState([]);
+  const [productSets, setProductSets] = useState([]);
+  const [loadingCatalogs, setLoadingCatalogs] = useState(false);
+  const [loadingSets, setLoadingSets] = useState(false);
+  const [catalogsError, setCatalogsError] = useState(null);
+  const [setsError, setSetsError] = useState(null);
+
+  // Load catalogs whenever the ad account changes.
+  useEffect(() => {
+    if (!adAccountId) {
+      setCatalogs([]);
+      return;
+    }
+    setLoadingCatalogs(true);
+    setCatalogsError(null);
+    getCatalogs(adAccountId)
+      .then((r) => setCatalogs(r?.catalogs || []))
+      .catch((e) => setCatalogsError(e?.response?.data?.error || e.message))
+      .finally(() => setLoadingCatalogs(false));
+  }, [adAccountId]);
+
+  // Load product sets when the catalog changes; reset the set selection
+  // because product_set ids don't carry across catalogs.
+  useEffect(() => {
+    if (!form.catalogId) {
+      setProductSets([]);
+      return;
+    }
+    setLoadingSets(true);
+    setSetsError(null);
+    getProductSets(form.catalogId)
+      .then((r) => setProductSets(r?.productSets || []))
+      .catch((e) => setSetsError(e?.response?.data?.error || e.message))
+      .finally(() => setLoadingSets(false));
+  }, [form.catalogId]);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h3 className="text-15 font-semibold text-gray-900 dark:text-white">Catalog &amp; Product Set</h3>
+        <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1">
+          Pick which Catalog and Product Set drive the Dynamic Product Ad. Meta substitutes product images, names and prices per viewer from the selected set.
+        </p>
+      </div>
+
+      <FieldShell
+        label="Catalog"
+        required
+        hint={
+          loadingCatalogs
+            ? 'Loading catalogs…'
+            : catalogs.length === 0
+            ? 'No catalogs accessible from this ad account — create one in Meta Commerce Manager'
+            : `${catalogs.length} catalog${catalogs.length === 1 ? '' : 's'} available`
+        }
+        error={catalogsError || errors.catalogId}
+      >
+        <SelectField
+          value={form.catalogId}
+          onChange={(v) => update({ catalogId: v, productSetId: '' })}
+          placeholder={loadingCatalogs ? 'Loading…' : catalogs.length === 0 ? 'No catalogs available' : 'Pick a catalog'}
+          options={catalogs.map((c) => ({
+            value: c.id,
+            label: `${c.name}${c.productCount ? ` · ${c.productCount} products` : ''}`,
+          }))}
+        />
+      </FieldShell>
+
+      {form.catalogId && (
+        <FieldShell
+          label="Product Set"
+          required
+          hint={
+            loadingSets
+              ? 'Loading product sets…'
+              : productSets.length === 0
+              ? 'No product sets in this catalog'
+              : `${productSets.length} set${productSets.length === 1 ? '' : 's'} available`
+          }
+          error={setsError || errors.productSetId}
+        >
+          <SelectField
+            value={form.productSetId}
+            onChange={(v) => update({ productSetId: v })}
+            placeholder={loadingSets ? 'Loading…' : 'Pick a product set'}
+            options={productSets.map((s) => ({
+              value: s.id,
+              label: `${s.name}${s.productCount ? ` · ${s.productCount} products` : ''}`,
+            }))}
+          />
+        </FieldShell>
+      )}
+
+      {form.catalogId && form.productSetId && (
+        <div className="text-[11px] text-emerald-600 dark:text-emerald-300/70">
+          ✓ Meta will draw product images and copy from this set when delivering the ad.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Step: Lead Form (pick existing OR build new) ───────────────────────────
 
 const STANDARD_QUESTIONS = [
@@ -2469,7 +2613,45 @@ function AppLinkagePicker({ form, update, adAccountId, iosOnly = false, errors =
   );
 }
 
-function PixelEventPicker({ form, update, adAccountId, errors = {} }) {
+// Meta rejects mismatched (objective, standard_event_type) pairs with
+// subcode 2446814 ("Conversion event unavailable. This conversion event
+// isn't available with the objective that you selected."). e.g. LEAD on
+// OUTCOME_SALES → reject; PURCHASE on OUTCOME_LEADS → reject. We filter
+// the dropdown so the user can't pick an incompatible standard event.
+//
+// Custom events (anything NOT in this map) pass through unfiltered —
+// Meta accepts user-defined events under any objective, and we have no
+// way to know what a custom event represents.
+const STANDARD_EVENT_OBJECTIVE_COMPATIBILITY = {
+  PURCHASE: ['OUTCOME_SALES'],
+  ADD_TO_CART: ['OUTCOME_SALES'],
+  INITIATE_CHECKOUT: ['OUTCOME_SALES'],
+  ADD_PAYMENT_INFO: ['OUTCOME_SALES'],
+  ADD_TO_WISHLIST: ['OUTCOME_SALES'],
+  VIEW_CONTENT: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT'],
+  SEARCH: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC'],
+  SUBSCRIBE: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  START_TRIAL: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  CUSTOMIZE_PRODUCT: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  DONATE: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  LEAD: ['OUTCOME_LEADS'],
+  COMPLETE_REGISTRATION: ['OUTCOME_LEADS'],
+  CONTACT: ['OUTCOME_LEADS'],
+  SCHEDULE: ['OUTCOME_LEADS'],
+  SUBMIT_APPLICATION: ['OUTCOME_LEADS'],
+  FIND_LOCATION: ['OUTCOME_LEADS', 'OUTCOME_TRAFFIC'],
+};
+
+function isEventCompatibleWithObjective(eventType, objective) {
+  // Unknown / custom event → assume compatible (Meta accepts custom
+  // events on any objective). Only filter out STANDARD events we know
+  // Meta will reject.
+  const compatList = STANDARD_EVENT_OBJECTIVE_COMPATIBILITY[eventType];
+  if (!compatList) return true;
+  return compatList.includes(objective);
+}
+
+function PixelEventPicker({ form, update, adAccountId, errors = {}, objective }) {
   const [pixels, setPixels] = useState([]);
   const [pixelsLoading, setPixelsLoading] = useState(false);
   const [pixelsError, setPixelsError] = useState(null);
@@ -2628,26 +2810,54 @@ function PixelEventPicker({ form, update, adAccountId, errors = {} }) {
             }))}
             error={errors.pixelId}
           />
-          {form.pixelId && (
-            <SelectField
-              label="Conversion event"
-              required
-              hint={eventsLoading ? 'Loading events…' : 'Meta optimises for this event'}
-              value={form.pixelEventType}
-              onChange={(v) => update({ pixelEventType: v })}
-              placeholder={eventsLoading ? 'Loading…' : 'Pick an event (e.g. Lead)'}
-              error={errors.pixelEventType}
-              options={events.map((e) => ({
-                value: e.eventType,
-                // Meta's enum is SCREAMING_SNAKE; show a friendly version
-                // ("COMPLETE_REGISTRATION" → "Complete Registration") but
-                // send the raw enum value to the API.
-                label: e.lastFiredTime
-                  ? `${prettifyEventType(e.eventType)} · last fired ${new Date(e.lastFiredTime * 1000 || e.lastFiredTime).toLocaleDateString()}`
-                  : `${prettifyEventType(e.eventType)} · not yet fired`,
-              }))}
-            />
-          )}
+          {form.pixelId && (() => {
+            // Filter by objective so the user can't pick a standard event
+            // Meta will reject (subcode 2446814). Custom events pass
+            // through (Meta accepts them on any objective). Auto-clear
+            // form.pixelEventType if it was already set to something
+            // now-incompatible (e.g. user changed objective post-pick).
+            const compatibleEvents = events.filter((e) =>
+              isEventCompatibleWithObjective(e.eventType, objective),
+            );
+            const hiddenCount = events.length - compatibleEvents.length;
+            if (
+              form.pixelEventType &&
+              !compatibleEvents.some((e) => e.eventType === form.pixelEventType)
+            ) {
+              // Defer to next microtask — calling update() during render
+              // schedules a state change for after commit, mirroring how
+              // the cell-defaults effect handles auto-clears elsewhere.
+              setTimeout(() => update({ pixelEventType: '' }), 0);
+            }
+            return (
+              <SelectField
+                label="Conversion event"
+                required
+                hint={
+                  eventsLoading
+                    ? 'Loading events…'
+                    : compatibleEvents.length === 0
+                    ? `No compatible events on this Pixel for ${objective} — configure one in Meta Events Manager`
+                    : hiddenCount > 0
+                    ? `Showing ${compatibleEvents.length} event${compatibleEvents.length === 1 ? '' : 's'} compatible with ${objective} · ${hiddenCount} hidden (incompatible standard event${hiddenCount === 1 ? '' : 's'})`
+                    : 'Meta optimises for this event'
+                }
+                value={form.pixelEventType}
+                onChange={(v) => update({ pixelEventType: v })}
+                placeholder={eventsLoading ? 'Loading…' : 'Pick an event'}
+                error={errors.pixelEventType}
+                options={compatibleEvents.map((e) => ({
+                  value: e.eventType,
+                  // Meta's enum is SCREAMING_SNAKE; show a friendly version
+                  // ("COMPLETE_REGISTRATION" → "Complete Registration") but
+                  // send the raw enum value to the API.
+                  label: e.lastFiredTime
+                    ? `${prettifyEventType(e.eventType)} · last fired ${new Date(e.lastFiredTime * 1000 || e.lastFiredTime).toLocaleDateString()}`
+                    : `${prettifyEventType(e.eventType)} · not yet fired`,
+                }))}
+              />
+            );
+          })()}
         </>
       )}
     </div>
@@ -2944,6 +3154,29 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
 
 // ─── Step: Ad ───────────────────────────────────────────────────────────────
 
+// Insert-chip toolbar shown above each placeholder-friendly copy field on
+// Sales/CATALOG ads. Click a chip to append `{{product.X}}` to the
+// associated field. Cheap UX nudge so users don't have to remember the
+// exact placeholder syntax Meta documents for Dynamic Product Ads.
+function PlaceholderToolbar({ onInsert, placeholders }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-600 dark:text-white/60">
+      <span className="text-gray-400 dark:text-white/40">Insert:</span>
+      {placeholders.map((p) => (
+        <button
+          key={p.token}
+          type="button"
+          onClick={() => onInsert(p.token)}
+          className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-100 dark:border-white/15 dark:bg-white/5 dark:text-white/75 dark:hover:bg-white/10"
+          title={p.token}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full', pages = [] }) {
   const requiredFields = new Set(cell?.ad?.requiredFields || []);
   const optionalFields = new Set(cell?.ad?.optionalFields || []);
@@ -2965,6 +3198,24 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
   const isLeadGen =
     cell?.ad?.objectStorySpecShape === 'lead_gen_form' ||
     cell?.ad?.objectStorySpecShape === 'lead_gen_form_with_pixel';
+  // Sales/CATALOG (Dynamic Product Ads). Media comes from the catalog
+  // feed per product, so the upload UI is hidden. Copy fields accept
+  // {{product.X}} placeholders that Meta resolves per product at
+  // delivery; the standard 40/125/30 char caps don't apply (backend Joi
+  // also skips them for template_data). An insert-chip toolbar above
+  // each copy field nudges users toward the right placeholder syntax.
+  const isCatalog = cell?.ad?.objectStorySpecShape === 'template_data';
+  const PRODUCT_PLACEHOLDERS = [
+    { token: '{{product.name}}', label: 'Name' },
+    { token: '{{product.price}}', label: 'Price' },
+    { token: '{{product.current_price}}', label: 'Current price' },
+    { token: '{{product.brand}}', label: 'Brand' },
+    { token: '{{product.description}}', label: 'Description' },
+    { token: '{{product.url}}', label: 'URL' },
+  ];
+  const insertPlaceholder = (fieldKey, token) => {
+    update({ [fieldKey]: `${form[fieldKey] || ''}${token}` });
+  };
 
   // Media source — default to the generated-media library (the primary
   // AdsGPT path). ON shows the combined image+video picker; OFF shows the
@@ -3014,9 +3265,20 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
         error={errors.adName}
       />
 
-      {/* Edit-ad: media is reused as-is (v1 doesn't swap it) — read-only
-          preview instead of the upload picker. */}
-      {editingAd ? (
+      {/* Sales/CATALOG — product images come from the catalog feed. No
+          upload UI; explain why so users don't go looking for it. */}
+      {isCatalog ? (
+        <FieldShell label="Media" hint="Meta picks one product image per delivery from your selected Product Set.">
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/3">
+            <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
+              <ShoppingBag className="h-5 w-5 text-gray-400 dark:text-white/40" />
+            </div>
+            <div className="text-12 text-gray-600 dark:text-white/55">
+              Product images come from your Catalog · no upload needed
+            </div>
+          </div>
+        </FieldShell>
+      ) : editingAd ? (
         <FieldShell
           label="Media"
           hint="Media can't be changed here — create a new ad to use different media."
@@ -3153,17 +3415,27 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           Ads Manager's own counters and prevents copy that nobody will
           read in full. Carousel variants (Phase 3) will need their own
           shorter caps (~18-char headline). Mirrors the .max() values in
-          buildAdSchemaV2 (meta.v2.validator.js). */}
+          buildAdSchemaV2 (meta.v2.validator.js).
+
+          Sales/CATALOG (isCatalog) — placeholder syntax ({{product.X}})
+          expands per product at delivery, so the static caps don't
+          apply. Skip maxLength + show insert-chip toolbar instead. */}
       {requiredFields.has('headline') && (
-        <TextField
-          label="Headline"
-          required
-          value={form.headline}
-          onChange={(v) => update({ headline: v })}
-          maxLength={40}
-          placeholder="Short, punchy"
-          error={errors.headline}
-        />
+        <div className="flex flex-col gap-1.5">
+          {isCatalog && <PlaceholderToolbar onInsert={(t) => insertPlaceholder('headline', t)} placeholders={PRODUCT_PLACEHOLDERS} />}
+          <TextField
+            label="Headline"
+            required
+            value={form.headline}
+            onChange={(v) => update({ headline: v })}
+            maxLength={isCatalog ? undefined : 40}
+            placeholder={isCatalog ? 'e.g. Shop {{product.name}}' : 'Short, punchy'}
+            error={errors.headline}
+          />
+        </div>
+      )}
+      {isCatalog && requiredFields.has('primaryText') && (
+        <PlaceholderToolbar onInsert={(t) => insertPlaceholder('primaryText', t)} placeholders={PRODUCT_PLACEHOLDERS} />
       )}
       {requiredFields.has('primaryText') && (
         <TextAreaField
@@ -3171,32 +3443,37 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           required
           value={form.primaryText}
           onChange={(v) => update({ primaryText: v })}
-          maxLength={125}
+          maxLength={isCatalog ? undefined : 125}
           rows={3}
-          placeholder="The main body copy"
+          placeholder={isCatalog ? 'e.g. Buy {{product.name}} from {{product.brand}} starting at {{product.current_price}}' : 'The main body copy'}
           error={errors.primaryText}
         />
+      )}
+      {isCatalog && (
+        <PlaceholderToolbar onInsert={(t) => insertPlaceholder('description', t)} placeholders={PRODUCT_PLACEHOLDERS} />
       )}
       <TextField
         label="Description"
         value={form.description}
         onChange={(v) => update({ description: v })}
-        maxLength={30}
-        placeholder="Optional secondary copy"
+        maxLength={isCatalog ? undefined : 30}
+        placeholder={isCatalog ? 'Optional · placeholders allowed' : 'Optional secondary copy'}
       />
       {showLinkUrl && (
         <TextField
-          label={isLeadGen ? 'Website URL (fallback)' : 'Destination URL'}
+          label={isLeadGen ? 'Website URL (fallback)' : isCatalog ? 'Destination URL (placeholder OK)' : 'Destination URL'}
           hint={
             isLeadGen
               ? 'Meta requires a real website URL on lead ads, but the ad opens your form — this link is only a fallback, not where the button goes.'
+              : isCatalog
+              ? 'Use {{product.url}} to send viewers to each product page; or a literal URL to send everyone to one landing page.'
               : undefined
           }
           required={requiredFields.has('linkUrl')}
-          type="url"
+          type={isCatalog ? 'text' : 'url'}
           value={form.linkUrl}
           onChange={(v) => update({ linkUrl: v })}
-          placeholder="https://example.com/landing"
+          placeholder={isCatalog ? '{{product.url}}' : 'https://example.com/landing'}
           error={errors.linkUrl}
         />
       )}

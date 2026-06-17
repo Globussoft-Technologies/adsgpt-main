@@ -322,6 +322,27 @@ export const createPixel = async ({ adAccountId, name }) => {
   return data;
 };
 
+// Product Catalogs the ad account can advertise from — feeds the Catalog
+// picker in the V2 wizard's Sales/CATALOG cell (Dynamic Product Ads).
+// Returns `{ catalogs: [{ id, name, productCount }], count }`.
+export const getCatalogs = async (adAccountId) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/get-catalogs`,
+    { params: { adAccountId }, headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Product Sets inside a Catalog — feeds the Product Set picker beside the
+// Catalog picker. Returns `{ productSets: [{ id, name, productCount }], count }`.
+export const getProductSets = async (catalogId) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/get-product-sets`,
+    { params: { catalogId }, headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 export const createMetaCampaign = async (payload) => {
   const { data } = await axios.post(
     `${BASE_URL}/adsgpt/meta-ads/create-campaign`,

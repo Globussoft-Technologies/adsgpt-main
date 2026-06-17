@@ -180,7 +180,7 @@ group("non-placeholder cell consistency", () => {
         );
       });
 
-      test(`${ctx}: requires either imageHash OR videoId in requiredFields`, () => {
+      test(`${ctx}: media-source contract is consistent with objectStorySpecShape`, () => {
         // Cells without a mediaKind lock accept either, and require image
         // by default (image is the common case — the wizard UI tabs to
         // video on demand). Cells with `mediaKind: 'video'` (e.g.
@@ -188,9 +188,22 @@ group("non-placeholder cell consistency", () => {
         // the validator + AdStep enforce that the user can't supply an
         // image. Either contract is acceptable here; what's not OK is a
         // cell that requires neither.
+        //
+        // Sales/CATALOG (template_data shape) is the exception — images
+        // come from the catalog feed per product, so neither imageHash
+        // nor videoId is in requiredFields. The Joi factory rejects
+        // EITHER field if supplied. Skip the image-or-video assertion;
+        // the alternative contract is "catalog provides media".
         const req = cell.ad.requiredFields;
         const hasImageHash = req.includes("imageHash");
         const hasVideoId = req.includes("videoId");
+        if (cell.ad.objectStorySpecShape === "template_data") {
+          assert.ok(
+            !hasImageHash && !hasVideoId,
+            "template_data cells must NOT require imageHash or videoId (catalog provides images)",
+          );
+          return;
+        }
         assert.ok(
           hasImageHash || hasVideoId,
           "every cell must require either imageHash or videoId",

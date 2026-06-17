@@ -364,16 +364,23 @@ function validateAd(form, cell, mode) {
     e.pageId = 'Select a Facebook Page.';
   }
 
+  // Sales/CATALOG (template_data shape) — images come from the catalog
+  // feed per product, and linkUrl can be a {{product.url}} placeholder
+  // instead of a literal URL. Skip the media check + relax the linkUrl
+  // URI check below. (Joi enforces the same on the backend.)
+  const isCatalog = cell?.ad?.objectStorySpecShape === 'template_data';
+
   // Media — exactly one of image / video must be provided. Skipped in
   // edit-ad: the existing media is reused (v1 doesn't re-upload), so there's
-  // no upload field to satisfy.
+  // no upload field to satisfy. Skipped on Sales/CATALOG (template_data):
+  // images come from the catalog feed.
   //
   // mediaKind on the cell can lock the kind: 'video' forces video-only
   // (e.g. Engagement/VIDEO_VIEWS — Meta rejects image creatives on
   // THRUPLAY-optimised ad sets); 'image' forces image-only. When unset
   // the cell accepts either kind.
   const mediaKind = cell?.ad?.mediaKind || 'any';
-  if (mode !== 'edit-ad') {
+  if (mode !== 'edit-ad' && !isCatalog) {
     if (mediaKind === 'video' || form.mediaType === 'video') {
       if (!form.videoFile && isBlank(form.videoUrl)) {
         e.media = 'Upload a video or pick one from the library.';
@@ -394,7 +401,10 @@ function validateAd(form, cell, mode) {
     if (field === 'linkUrl') {
       if (isBlank(form.linkUrl)) {
         e.linkUrl = 'Destination URL is required.';
-      } else if (!isHttpUrl(form.linkUrl)) {
+      } else if (!isCatalog && !isHttpUrl(form.linkUrl)) {
+        // Sales/CATALOG accepts {{product.url}} placeholders alongside
+        // literal URLs — skip the URL syntax check there. Backend Joi
+        // does the same.
         e.linkUrl = 'Enter a valid URL (https://…).';
       }
     } else if (field === 'leadFormId') {
@@ -408,6 +418,26 @@ function validateAd(form, cell, mode) {
   }
   if (cell?.ctas?.allowed?.length && isBlank(form.callToAction)) {
     e.callToAction = 'Pick a call-to-action button.';
+  }
+
+  // Optional fields with format constraints — only validated when the
+  // user typed something (empty is OK, both are optional).
+  if (!isBlank(form.urlTags)) {
+    const tags = String(form.urlTags).trim();
+    if (/^[?&]/.test(tags)) {
+      e.urlTags = 'Don’t include the leading ? or & — Meta adds it automatically.';
+    } else if (!/^[A-Za-z0-9_.\-~%+=&]+$/.test(tags)) {
+      e.urlTags = 'URL parameters must be key=value pairs joined by & (e.g. utm_source=fb&utm_campaign=spring).';
+    }
+  }
+  if (!isBlank(form.deferredDeepLink)) {
+    const dl = String(form.deferredDeepLink).trim();
+    const m = dl.match(/^([A-Za-z][A-Za-z0-9+.\-]*):\/\//);
+    if (!m) {
+      e.deferredDeepLink = 'Use your app’s custom URL scheme, e.g. myapp://path.';
+    } else if (/^(https?|ftp|file)$/i.test(m[1])) {
+      e.deferredDeepLink = 'Deferred deep links use a custom app scheme (myapp://…), not http/https.';
+    }
   }
   return e;
 }
@@ -431,6 +461,16 @@ export function validateStep(stepId, form, cell, ctx = {}, mode = 'create-full')
       return validateCampaign(form, ctx);
     case 'adSet':
       return validateAdSet(form, cell, ctx, mode);
+    case 'catalog': {
+      // Sales/CATALOG — both Catalog and Product Set must be picked
+      // before launch. Mirrors the Joi factory's required-when-additional
+      // contract; surfaced here so the inline validator catches it
+      // before submit.
+      const errs = {};
+      if (isBlank(form.catalogId)) errs.catalogId = 'Pick a catalog.';
+      if (isBlank(form.productSetId)) errs.productSetId = 'Pick a product set inside the catalog.';
+      return errs;
+    }
     case 'leadForm':
       if (form.leadFormId) return {};
       // Mode-aware error so users know exactly where to look. In `build`

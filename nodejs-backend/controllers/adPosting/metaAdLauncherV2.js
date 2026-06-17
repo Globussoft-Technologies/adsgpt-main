@@ -1095,6 +1095,11 @@ async function resolveAdSetForEdit(req, res) {
       startTime: adSetData.start_time || "",
       endTime: adSetData.end_time || "",
       pageId: adSetData.promoted_object?.page_id || null,
+      pixelId: adSetData.promoted_object?.pixel_id || null,
+      pixelEventType: adSetData.promoted_object?.custom_event_type || null,
+      applicationId: adSetData.promoted_object?.application_id || null,
+      objectStoreUrl: adSetData.promoted_object?.object_store_url || null,
+      productSetId: adSetData.promoted_object?.product_set_id || null,
       targeting: {
         worldwide,
         locations,

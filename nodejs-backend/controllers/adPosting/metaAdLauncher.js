@@ -80,6 +80,11 @@ const ALL_CACHE_PREFIXES = [
   "metaInsights",
   "metaAudit",
   "metaAdAccounts",
+  // Sales/CATALOG pickers — 30-min TTL keys for catalog + product-set
+  // lists. Clear on FB disconnect so a reconnected account doesn't see
+  // the previous user's catalogues.
+  "metaCatalogs",
+  "metaProductSets",
 ];
 
 async function invalidateMetaCacheByPrefixes(userId, prefixes) {
@@ -1572,6 +1577,169 @@ class MetaAdLauncher {
           subcode: m.subcode,
           fbtraceId: m.fbtraceId,
         },
+      });
+    }
+  }
+
+  // * 7e2. GET Meta Product Catalogs the ad account can advertise from.
+  // Powers the Catalog picker in the V2 wizard's Sales/CATALOG cell
+  // (Dynamic Product Ads). Catalogs are owned by a Business Manager and
+  // shared with ad accounts via "owned_product_catalogs" + assigned via
+  // "client_product_catalogs". We surface both — the user sees every
+  // catalog they can pick from, and the response is de-duped by id.
+  //
+  // Returns:
+  //   [{ id, name, productCount }]
+  async getCatalogs(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'List Meta Product Catalogs accessible from an ad account'
+    */
+    try {
+      const { adAccountId } = req.query;
+      if (!adAccountId) {
+        return res.status(400).json({ status: false, error: "adAccountId is required" });
+      }
+      const userId = req.user.user_id;
+      await initApiForUser(userId);
+
+      // 30-min cache — catalog list rarely changes vs the volatile
+      // metrics on `VOLATILE_TTL`. Standard `metaCatalogs:` prefix so a
+      // disconnect-from-FB clears it.
+      const cacheKey = `metaCatalogs:${userId}:${adAccountId}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.status(200).json(JSON.parse(cached));
+
+      const rawCatalogs = [];
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      // Catalog edges (owned_product_catalogs / client_product_catalogs)
+      // live on the Business node, NOT on AdAccount. Traverse through
+      // the ad account's business in one nested field expansion.
+      // Ad accounts not tied to a Business Manager (personal accounts)
+      // return business = null → empty catalog list.
+      let businessId = null;
+      try {
+        const acctRes = await api.call("GET", [`act_${adAccountId}`], {
+          fields: "business",
+        });
+        businessId = acctRes?.business?.id
+          || acctRes?._data?.business?.id
+          || null;
+      } catch (e) {
+        logger.warn(`getCatalogs: ad account business read failed: ${e.message}`);
+      }
+
+      if (businessId) {
+        try {
+          const ownedRes = await api.call("GET", [businessId], {
+            fields: "owned_product_catalogs{id,name,product_count}",
+          });
+          const owned = ownedRes?.owned_product_catalogs?.data
+            || ownedRes?._data?.owned_product_catalogs?.data
+            || [];
+          rawCatalogs.push(...owned);
+        } catch (e) {
+          logger.warn(`getCatalogs: owned_product_catalogs read failed: ${e.message}`);
+        }
+
+        // Catalogs shared TO this Business from another Business — the
+        // "client" relationship. Same fields.
+        try {
+          const clientRes = await api.call("GET", [businessId], {
+            fields: "client_product_catalogs{id,name,product_count}",
+          });
+          const client = clientRes?.client_product_catalogs?.data
+            || clientRes?._data?.client_product_catalogs?.data
+            || [];
+          rawCatalogs.push(...client);
+        } catch (e) {
+          logger.warn(`getCatalogs: client_product_catalogs read failed: ${e.message}`);
+        }
+      } else {
+        logger.info(`getCatalogs: ad account ${adAccountId} has no business — no catalogs`);
+      }
+
+      // Dedupe by id — a catalog can appear in both lists for accounts
+      // where the same Business owns + shares.
+      const seen = new Set();
+      const normalised = rawCatalogs
+        .filter((c) => {
+          if (!c?.id || seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        })
+        .map((c) => ({
+          id: c.id,
+          name: c.name || c.id,
+          productCount: Number(c.product_count) || 0,
+        }));
+
+      const response = { status: true, catalogs: normalised, count: normalised.length };
+      await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("getCatalogs error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to load catalogs",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // * 7e3. GET Product Sets inside a Meta Product Catalog.
+  // After the user picks a catalog, the wizard loads its product sets so
+  // the Sales/CATALOG cell can scope the Dynamic Product Ad to a subset
+  // of products. The default "All products" set is always present;
+  // customers create additional sets via filters in Commerce Manager.
+  //
+  // Returns:
+  //   [{ id, name, productCount }]
+  async getProductSets(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'List Product Sets within a Meta Product Catalog'
+    */
+    try {
+      const { catalogId } = req.query;
+      if (!catalogId) {
+        return res.status(400).json({ status: false, error: "catalogId is required" });
+      }
+      const userId = req.user.user_id;
+      await initApiForUser(userId);
+
+      const cacheKey = `metaProductSets:${userId}:${catalogId}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.status(200).json(JSON.parse(cached));
+
+      // Page size 100 + walk pagination — catalogs CAN have hundreds of
+      // product sets on larger merchants. Same `fetchAllPaged` helper
+      // used for campaigns/adsets.
+      const catalog = new bizSdk.ProductCatalog(catalogId);
+      const sets = await fetchAllPaged(
+        catalog.getProductSets(["id", "name", "product_count"], { limit: 100 }),
+        `product sets (catalog ${catalogId})`,
+      );
+
+      const normalised = sets.map((s) => {
+        const data = s?._data || s || {};
+        return {
+          id: data.id,
+          name: data.name || data.id,
+          productCount: Number(data.product_count) || 0,
+        };
+      });
+
+      const response = { status: true, productSets: normalised, count: normalised.length };
+      await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("getProductSets error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to load product sets",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
       });
     }
   }

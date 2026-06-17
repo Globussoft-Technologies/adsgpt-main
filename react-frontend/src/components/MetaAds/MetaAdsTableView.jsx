@@ -48,6 +48,7 @@ const V2_SUPPORTED_OBJECTIVES = new Set([
   'OUTCOME_LEADS',
   'OUTCOME_APP_PROMOTION',
   'OUTCOME_ENGAGEMENT',
+  'OUTCOME_SALES',
 ]);
 
 // Small toolbar button used above the Ad Set / Ads tables to launch the

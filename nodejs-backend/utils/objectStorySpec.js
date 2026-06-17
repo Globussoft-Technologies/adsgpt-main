@@ -47,10 +47,19 @@ function buildObjectStorySpec(shape, params) {
   }
   // Exactly one media source must be set. This rule is enforced here
   // (the cheapest check) rather than per-builder, since every shape
-  // needs the same constraint.
+  // needs the same constraint — except `template_data` (Sales/CATALOG /
+  // Dynamic Product Ads), where Meta sources images per-product from the
+  // catalog feed. For template_data the builder rejects imageHash /
+  // videoId explicitly (caller bug: shouldn't have set them).
   const hasImage = !!params.imageHash;
   const hasVideo = !!params.videoId;
-  if (hasImage === hasVideo) {
+  if (shape === "template_data") {
+    if (hasImage || hasVideo) {
+      throw new Error(
+        "buildObjectStorySpec('template_data'): images come from the catalog feed — do not supply imageHash or videoId",
+      );
+    }
+  } else if (hasImage === hasVideo) {
     throw new Error(
       "buildObjectStorySpec: provide exactly one of imageHash or videoId",
     );
@@ -68,15 +77,26 @@ function buildObjectStorySpec(shape, params) {
   // version uses instagram_user_id. See gotchas.md.
   if (params.instagramUserId) base.instagram_user_id = params.instagramUserId;
 
-  // Each branch returns the *data* block; the outer key (link_data vs
-  // video_data) is decided once per call based on which media type the
-  // caller supplied.
-  const dataKey = hasVideo ? "video_data" : "link_data";
+  // Each branch returns the *data* block; the outer key (link_data,
+  // video_data, or template_data) is decided once per call based on
+  // shape + media kind. template_data is its own top-level key Meta
+  // recognises for Dynamic Product Ads — same level as link_data /
+  // video_data, NOT nested.
+  const dataKey =
+    shape === "template_data" ? "template_data" : hasVideo ? "video_data" : "link_data";
   const buildPair = (data) => ({ ...base, [dataKey]: data });
 
   switch (shape) {
     case "link_data":
       return buildPair(buildLinkData(params));
+
+    case "template_data":
+      // Sales/CATALOG — Meta resolves {{product.X}} placeholders per
+      // product at delivery. The link_data-style block holds the
+      // placeholder strings; Meta substitutes per-product images, prices,
+      // names. The outer key is `template_data` (not `link_data`) but
+      // the inner fields mirror link_data semantics.
+      return buildPair(buildTemplateData(params));
 
     case "lead_gen_form":
       // Single Instant Form cell — destination_type=ON_AD. The CTA's
@@ -388,6 +408,42 @@ function buildClickToCallLinkData(p) {
   return data;
 }
 
+// ─── template_data — Sales/CATALOG (Dynamic Product Ads) ────────────────────
+// Meta resolves {{product.X}} placeholders per product at delivery. Copy
+// fields look like link_data (message / title / description / call_to_action)
+// but the outer key is `template_data` (set by the dispatcher above) — Meta
+// uses that key to know to substitute per product from the bound
+// product_set. No image_hash / video_id (catalog provides images).
+//
+// Supported placeholders (Meta-documented):
+//   {{product.name}}, {{product.price}}, {{product.current_price}},
+//   {{product.brand}}, {{product.description}}, {{product.url}}
+//
+// The wizard's AdStep surfaces an insert-chip toolbar for these; the
+// builder treats them as opaque strings — Meta does the substitution.
+function buildTemplateData(p) {
+  if (!p.linkUrl) throw new Error("template_data: linkUrl is required");
+  const data = {};
+  // Meta DPA convention: `message` = primary text above the carousel of
+  // products; `name` = headline on each product card; `description` =
+  // subline under the price on each card. Same field names as link_data;
+  // Meta interprets them differently inside template_data because
+  // placeholders are resolved per product.
+  if (p.primaryText) data.message = p.primaryText;
+  if (p.headline) data.name = p.headline;
+  if (p.description) data.description = p.description;
+  // Link can be a literal URL OR `{{product.url}}` — Meta substitutes.
+  data.link = p.linkUrl;
+  if (p.callToAction && p.callToAction !== "NO_BUTTON") {
+    data.call_to_action = {
+      type: p.callToAction,
+      // value.link supports the same placeholder substitution as data.link.
+      value: { link: p.linkUrl },
+    };
+  }
+  return data;
+}
+
 module.exports = {
   buildObjectStorySpec,
   _internals: {
@@ -398,5 +454,6 @@ module.exports = {
     buildMessengerLinkData,
     buildWhatsappLinkData,
     buildClickToCallLinkData,
+    buildTemplateData,
   },
 };

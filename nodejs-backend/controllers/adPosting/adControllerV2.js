@@ -323,6 +323,19 @@ async function createAdV2(req, res) {
       });
     }
 
+    // Catalog (DPA) ads use template_data placeholders + a product_set
+    // promoted_object — the Ad Factory's batch flow has no UI for either.
+    // Reject upfront with a readable message rather than letting Joi fail
+    // mid-batch with the generic XOR error.
+    if (cell.ad?.objectStorySpecShape === "template_data") {
+      return res.status(400).json({
+        success: false,
+        error: "Catalog ads aren't supported in Ad Factory",
+        details:
+          "Sales / Catalog (Dynamic Product Ads) campaigns use product placeholders that the Ad Factory can't fill. Launch these from the Meta Ads Manager wizard instead.",
+      });
+    }
+
     logger.info(
       `createAdV2: ${ads.length} ad(s) under ${objective}/${conversionLocation} ` +
         `(account ${adAccountId}, page ${pageId}, adset ${adSetId})`,

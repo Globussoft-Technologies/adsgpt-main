@@ -23,6 +23,7 @@ const SUPPORTED_OBJECTIVES = new Set([
   "OUTCOME_LEADS",
   "OUTCOME_APP_PROMOTION",
   "OUTCOME_ENGAGEMENT",
+  "OUTCOME_SALES",
 ]);
 
 // destination_type → conversionLocation. Some destinations resolve
@@ -64,7 +65,7 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
   const objective = String(metaCampaign?.objective || "").toUpperCase();
   if (!SUPPORTED_OBJECTIVES.has(objective)) {
     return {
-      error: `Unsupported campaign objective "${objective || "(none)"}". V2 currently supports Traffic, Leads, App Promotion, and Engagement campaigns.`,
+      error: `Unsupported campaign objective "${objective || "(none)"}". V2 currently supports Traffic, Leads, App Promotion, Engagement, and Sales campaigns.`,
     };
   }
   const destinationType = metaAdSet?.destination_type || null;
@@ -97,6 +98,32 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
   // the cell — see wizardSchema.js. Profile-visit goals PAGE_LIKES and
   // VISIT_INSTAGRAM_PROFILE were rejected by Meta with subcode 2490408,
   // making the cell unusable. Engagement/WEBSITE now resolves directly.)
+  // Sales/CATALOG disambiguation — the catalog cell shares the WEBSITE
+  // destination_type's "no value sent" pattern (we omit destination_type
+  // and let Meta infer from `promoted_object.product_set_id`). For
+  // reverse-inference, `product_set_id` presence in the ad set's
+  // promoted_object is the cleanest signal that the cell is CATALOG;
+  // checked BEFORE the destination-based fall-through.
+  if (
+    !conversionLocation &&
+    objective === "OUTCOME_SALES" &&
+    metaAdSet?.promoted_object?.product_set_id
+  ) {
+    conversionLocation = "CATALOG";
+  }
+  // Sales messaging consolidation — Meta Ads Manager surfaces Messenger /
+  // IG Direct / WhatsApp as ONE "Message destinations" location for Sales
+  // (same as Traffic), not as 3 separate cells (the Engagement pattern).
+  // Reverse-inference: any messaging destination_type on a Sales ad set
+  // collapses to the single MESSAGE_DESTINATIONS cell.
+  if (
+    objective === "OUTCOME_SALES" &&
+    (destinationType === "MESSENGER" ||
+      destinationType === "WHATSAPP" ||
+      destinationType === "INSTAGRAM_DIRECT")
+  ) {
+    conversionLocation = "MESSAGE_DESTINATIONS";
+  }
   // Fall back to the most common cell per objective when destination_type
   // is missing — covers ad sets created without an explicit destination.
   if (!conversionLocation) {
@@ -104,6 +131,7 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
     else if (objective === "OUTCOME_APP_PROMOTION") conversionLocation = "APP";
     else if (objective === "OUTCOME_LEADS") conversionLocation = "INSTANT_FORM";
     else if (objective === "OUTCOME_ENGAGEMENT") conversionLocation = "VIDEO_VIEWS";
+    else if (objective === "OUTCOME_SALES") conversionLocation = "WEBSITE";
   }
   if (!isCellImplemented(objective, conversionLocation)) {
     return {

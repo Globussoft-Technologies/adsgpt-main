@@ -60,6 +60,12 @@ router.get("/export-form-leads", metaAdController.exportFormLeads);
 router.get("/get-pixels", metaAdController.getPixels);
 router.get("/get-pixel-events", metaAdController.getPixelEvents);
 router.post("/create-pixel", metaAdController.createPixel);
+// Sales/CATALOG — Catalog + Product Set pickers for Dynamic Product Ads.
+// `get-catalogs` lists catalogs the ad account can advertise from
+// (owned + client relationships, deduped). `get-product-sets` lists the
+// product sets within a chosen catalog.
+router.get("/get-catalogs", metaAdController.getCatalogs);
+router.get("/get-product-sets", metaAdController.getProductSets);
 
 // V1 creation flow — campaign → adset → image → ad. Each step is its own
 // endpoint so the wizard can recover from a failure mid-flow without redoing

@@ -528,7 +528,10 @@ group("createCampaignSchemaV2", () => {
     const { error } = createCampaignSchemaV2.validate({
       adAccountId: "act_123",
       name: "Test",
-      objective: "OUTCOME_SALES",
+      // OUTCOME_AWARENESS is the last unmigrated objective — Sales
+      // landed in this push, so it's no longer the canonical "not in
+      // V2 schema" example.
+      objective: "OUTCOME_AWARENESS",
     });
     assert.ok(error);
     // We override Joi's default "must be one of" with a user-facing
@@ -1298,6 +1301,8 @@ function adSetBody(objective, conversionLocation, cell) {
       body.objectStoreUrl = "https://play.google.com/store/apps/details?id=com.x";
     } else if (field === "pixelId") body.pixelId = "pixel_1";
     else if (field === "pixelEventType") body.pixelEventType = "LEAD";
+    else if (field === "catalogId") body.catalogId = "cat_1";
+    else if (field === "productSetId") body.productSetId = "ps_1";
   }
   return body;
 }
@@ -1305,8 +1310,11 @@ function adSetBody(objective, conversionLocation, cell) {
 // A valid create-ad body for a cell — base + required copy/destination
 // fields + app fields when the shape needs them. mediaKind drives the
 // media field (Engagement/VIDEO_VIEWS is video-only; rest accept either).
+// Sales/CATALOG (template_data shape) is the catalog exception — no
+// media, placeholder-safe linkUrl.
 function adBody(objective, conversionLocation, cell) {
   const req = new Set(cell.ad.requiredFields);
+  const isCatalog = cell.ad.objectStorySpecShape === "template_data";
   const body = {
     adAccountId: "act1",
     adSetId: "adset1",
@@ -1319,14 +1327,16 @@ function adBody(objective, conversionLocation, cell) {
     description: "Test description",
     callToAction: cell.ctas.default,
   };
-  if (cell.ad.mediaKind === "video") {
-    body.videoId = "vid_1";
-    body.videoThumbnailUrl = "https://example.com/poster.jpg";
-  } else {
-    body.imageHash = "hash_abc";
+  if (!isCatalog) {
+    if (cell.ad.mediaKind === "video") {
+      body.videoId = "vid_1";
+      body.videoThumbnailUrl = "https://example.com/poster.jpg";
+    } else {
+      body.imageHash = "hash_abc";
+    }
   }
   if (req.has("linkUrl") || cell.ad.optionalFields.includes("linkUrl")) {
-    body.linkUrl = "https://example.com/landing";
+    body.linkUrl = isCatalog ? "{{product.url}}" : "https://example.com/landing";
   }
   if (req.has("leadFormId")) body.leadFormId = "form_1";
   if (cell.ad.objectStorySpecShape === "app_link") {
@@ -1341,6 +1351,11 @@ group("every cell — object_story_spec builds for image AND video", () => {
     for (const conversionLocation of listConversionLocations(objective)) {
       const cell = getCell(objective, conversionLocation);
       const label = `${objective}/${conversionLocation}`;
+      // template_data cells (Sales/CATALOG) don't accept user-supplied
+      // media — images come from the catalog feed. The image/video
+      // auto-sweep doesn't apply; cell-specific tests below cover the
+      // template_data builder shape directly.
+      if (cell.ad.objectStorySpecShape === "template_data") continue;
 
       test(`${label}: object_story_spec builds with an image`, () => {
         const oss = buildObjectStorySpec(
@@ -1386,9 +1401,12 @@ group("every cell — promoted_object builds", () => {
           objectStoreUrl: "https://play.google.com/store/apps/details?id=com.x",
           pixelId: "pixel_1",
           pixelEventType: "LEAD",
+          // Sales/CATALOG product_set shape needs productSetId; kitchen-
+          // sink params cover all shapes' requirements.
+          productSetId: "ps_1",
         });
-        // `page` / `app` / `pixel` shapes return an object; `null` shape
-        // returns undefined (field omitted on the AdSet). Both are valid.
+        // `page` / `app` / `pixel` / `product_set` shapes return an
+        // object; `null` shape returns undefined. Both are valid.
         assert.ok(
           po === undefined || (typeof po === "object" && po !== null),
           `promoted_object must be an object or undefined, got ${JSON.stringify(po)}`,
@@ -2262,6 +2280,285 @@ group("OUTCOME_ENGAGEMENT — Phase 2 Joi factories accept valid bodies", () => 
       targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
     });
     assert.ok(error, "pixelId must be required");
+  });
+});
+
+// ─── OUTCOME_SALES — cell-specific tests ────────────────────────────────────
+// The auto-sweep covers Joi happy paths + promoted_object + object_story_spec
+// builds for every Sales cell. These tests pin down the Sales-specific
+// edges the auto-sweep can't infer: CATALOG's new shapes, the no-media
+// contract, the placeholder-friendly copy/linkUrl, and reverse-inference
+// via product_set_id presence.
+
+group("OUTCOME_SALES — registered + cells live", () => {
+  test("listObjectives includes OUTCOME_SALES", () => {
+    assert.ok(listObjectives().includes("OUTCOME_SALES"));
+  });
+  test("listConversionLocations exposes 7 Sales cells (matches Meta UI's 4 Single + 2 of 4 Multiple + CATALOG; in-store Multiples deferred)", () => {
+    const locs = listConversionLocations("OUTCOME_SALES");
+    assert.deepEqual(
+      [...locs].sort(),
+      [
+        // Multiple (Meta auto-routes per viewer): 2 of 4 shipped;
+        // WEBSITE_AND_IN_STORE + WEBSITE_APP_IN_STORE deferred — need
+        // Offline Conversions API integration.
+        "WEBSITE_AND_CALLS", "WEBSITE_AND_APP",
+        // Single (4 of 4 from Meta UI)
+        "WEBSITE", "APP", "MESSAGE_DESTINATIONS", "PHONE_CALL",
+        // Catalog — separate Advantage+ flow, not in the dropdown
+        "CATALOG",
+      ].sort(),
+    );
+  });
+  test("OUTCOME_SALES is in cellInference.SUPPORTED_OBJECTIVES", () => {
+    assert.ok(SUPPORTED_OBJECTIVES.has("OUTCOME_SALES"));
+  });
+});
+
+group("OUTCOME_SALES — destination_type mappings", () => {
+  test("WEBSITE → WEBSITE", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_SALES", "WEBSITE"), "WEBSITE");
+  });
+  test("APP → APP", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_SALES", "APP"), "APP");
+  });
+  test("MESSAGE_DESTINATIONS → MESSENGER (Meta auto-routes per Page connections + CTA)", () => {
+    assert.equal(
+      getMetaDestinationType("OUTCOME_SALES", "MESSAGE_DESTINATIONS"),
+      "MESSENGER",
+    );
+  });
+  test("PHONE_CALL → PHONE_CALL", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_SALES", "PHONE_CALL"), "PHONE_CALL");
+  });
+  test("CATALOG → null (omit; reverse-inference uses product_set_id)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_SALES", "CATALOG"), null);
+  });
+});
+
+group("OUTCOME_SALES/CATALOG — cell shape", () => {
+  const cell = getCell("OUTCOME_SALES", "CATALOG");
+
+  test("uses new objectStorySpecShape 'template_data'", () => {
+    assert.equal(cell.ad.objectStorySpecShape, "template_data");
+  });
+  test("uses new promotedObjectShape 'product_set'", () => {
+    assert.equal(cell.adSet.promotedObjectShape, "product_set");
+  });
+  test("additionalFields include pixel + catalog + product set", () => {
+    assert.deepEqual(
+      [...cell.adSet.additionalFields].sort(),
+      ["catalogId", "pixelEventType", "pixelId", "productSetId"],
+    );
+  });
+  test("requiredFields contain NO imageHash or videoId (catalog provides media)", () => {
+    assert.ok(!cell.ad.requiredFields.includes("imageHash"));
+    assert.ok(!cell.ad.requiredFields.includes("videoId"));
+  });
+  test("additionalSteps inserts the Catalog wizard step", () => {
+    assert.deepEqual(cell.additionalSteps, ["catalog"]);
+  });
+  test("optimizationGoal locked to OFFSITE_CONVERSIONS", () => {
+    assert.deepEqual(cell.adSet.optimizationGoals, ["OFFSITE_CONVERSIONS"]);
+  });
+});
+
+group("OUTCOME_SALES/CATALOG — product_set promoted_object builder", () => {
+  test("returns { pixel_id, product_set_id }", () => {
+    const po = buildPromotedObject("product_set", {
+      pixelId: "px_123",
+      productSetId: "ps_456",
+    });
+    assert.deepEqual(po, { pixel_id: "px_123", product_set_id: "ps_456" });
+  });
+  test("throws without pixelId", () => {
+    assert.throws(
+      () => buildPromotedObject("product_set", { productSetId: "ps_456" }),
+      /pixelId \+ productSetId/,
+    );
+  });
+  test("throws without productSetId", () => {
+    assert.throws(
+      () => buildPromotedObject("product_set", { pixelId: "px_123" }),
+      /pixelId \+ productSetId/,
+    );
+  });
+});
+
+group("OUTCOME_SALES/CATALOG — template_data object_story_spec builder", () => {
+  const params = {
+    pageId: "page_1",
+    headline: "Shop {{product.name}}",
+    primaryText: "Best price on {{product.brand}}",
+    description: "{{product.price}}",
+    linkUrl: "{{product.url}}",
+    callToAction: "SHOP_NOW",
+  };
+
+  test("produces a top-level template_data block (not link_data)", () => {
+    const oss = buildObjectStorySpec("template_data", params);
+    assert.ok(oss.template_data, "template_data must be the outer key");
+    assert.ok(!oss.link_data, "no link_data on template_data shape");
+    assert.ok(!oss.video_data, "no video_data on template_data shape");
+  });
+  test("preserves placeholders unchanged", () => {
+    const oss = buildObjectStorySpec("template_data", params);
+    assert.equal(oss.template_data.name, "Shop {{product.name}}");
+    assert.equal(oss.template_data.message, "Best price on {{product.brand}}");
+    assert.equal(oss.template_data.description, "{{product.price}}");
+    assert.equal(oss.template_data.link, "{{product.url}}");
+    assert.equal(oss.template_data.call_to_action.value.link, "{{product.url}}");
+  });
+  test("rejects imageHash (catalog feed provides media)", () => {
+    assert.throws(
+      () => buildObjectStorySpec("template_data", { ...params, imageHash: "h_x" }),
+      /catalog feed/,
+    );
+  });
+  test("rejects videoId (catalog feed provides media)", () => {
+    assert.throws(
+      () =>
+        buildObjectStorySpec("template_data", {
+          ...params,
+          videoId: "v_x",
+          videoThumbnailUrl: "https://x.com/p.jpg",
+        }),
+      /catalog feed/,
+    );
+  });
+  test("throws without linkUrl", () => {
+    const incomplete = { ...params };
+    delete incomplete.linkUrl;
+    assert.throws(
+      () => buildObjectStorySpec("template_data", incomplete),
+      /linkUrl/,
+    );
+  });
+});
+
+group("OUTCOME_SALES/CATALOG — Joi factories", () => {
+  const adSetSchema = buildAdSetSchemaV2("OUTCOME_SALES", "CATALOG");
+  const validAdSetBody = {
+    adAccountId: "act1",
+    campaignId: "c1",
+    pageId: "page_1",
+    name: "Catalog adset",
+    objective: "OUTCOME_SALES",
+    conversionLocation: "CATALOG",
+    pixelId: "px_1",
+    pixelEventType: "Purchase",
+    catalogId: "cat_1",
+    productSetId: "ps_1",
+    dailyBudget: 1000,
+    targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+  };
+
+  test("CATALOG adset accepts a valid body with pixel + catalog + product set", () => {
+    const { error } = adSetSchema.validate(validAdSetBody);
+    assert.ok(!error, error && error.message);
+  });
+  test("CATALOG adset rejects without catalogId", () => {
+    const body = { ...validAdSetBody, catalogId: undefined };
+    const { error } = adSetSchema.validate(body);
+    assert.ok(error);
+  });
+  test("CATALOG adset rejects without productSetId", () => {
+    const body = { ...validAdSetBody, productSetId: undefined };
+    const { error } = adSetSchema.validate(body);
+    assert.ok(error);
+  });
+  test("CATALOG adset still requires pixelId + pixelEventType alongside catalog", () => {
+    const { error } = adSetSchema.validate({ ...validAdSetBody, pixelId: undefined });
+    assert.ok(error);
+  });
+
+  const adSchema = buildAdSchemaV2("OUTCOME_SALES", "CATALOG");
+  const validAdBody = {
+    adAccountId: "act1",
+    adSetId: "as1",
+    pageId: "page_1",
+    name: "Catalog ad",
+    objective: "OUTCOME_SALES",
+    conversionLocation: "CATALOG",
+    headline: "Shop {{product.name}}",
+    primaryText: "Best deals on {{product.brand}} — starting at {{product.current_price}}",
+    linkUrl: "{{product.url}}",
+    callToAction: "SHOP_NOW",
+  };
+
+  test("CATALOG ad accepts placeholder copy longer than the standard 40-char cap", () => {
+    const longHeadline = "Free shipping on {{product.name}} from {{product.brand}} — limited stock!";
+    const { error } = adSchema.validate({ ...validAdBody, headline: longHeadline });
+    assert.ok(!error, error && error.message);
+  });
+  test("CATALOG ad accepts {{product.url}} as linkUrl (no URI check)", () => {
+    const { error } = adSchema.validate(validAdBody);
+    assert.ok(!error, error && error.message);
+  });
+  test("CATALOG ad rejects imageHash (catalog provides images)", () => {
+    const { error } = adSchema.validate({ ...validAdBody, imageHash: "h_x" });
+    assert.ok(error);
+  });
+  test("CATALOG ad rejects videoId (catalog provides images)", () => {
+    const { error } = adSchema.validate({
+      ...validAdBody,
+      videoId: "v_x",
+      videoThumbnailUrl: "https://x.com/p.jpg",
+    });
+    assert.ok(error);
+  });
+});
+
+group("OUTCOME_SALES — reverse-inference", () => {
+  const campaign = { objective: "OUTCOME_SALES" };
+  test("ad set with product_set_id → CATALOG cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      promoted_object: { pixel_id: "px_1", product_set_id: "ps_1" },
+      optimization_goal: "OFFSITE_CONVERSIONS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "CATALOG");
+  });
+  test("ad set without product_set_id + WEBSITE destination → WEBSITE cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "WEBSITE",
+      optimization_goal: "OFFSITE_CONVERSIONS",
+      promoted_object: { pixel_id: "px_1", custom_event_type: "Purchase" },
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "WEBSITE");
+  });
+  test("messaging destinations all collapse to MESSAGE_DESTINATIONS (Meta UI shows them as one option for Sales)", () => {
+    for (const dest of ["MESSENGER", "WHATSAPP", "INSTAGRAM_DIRECT"]) {
+      const out = inferCellForMetaCampaign(campaign, {
+        destination_type: dest,
+        optimization_goal: "CONVERSATIONS",
+      });
+      assert.ok(!out.error, `${dest} unexpectedly errored: ${out.error}`);
+      assert.equal(
+        out.conversionLocation,
+        "MESSAGE_DESTINATIONS",
+        `${dest} should resolve to MESSAGE_DESTINATIONS`,
+      );
+    }
+  });
+  test("non-messaging destinations route to their own cells", () => {
+    for (const [dest, og, expected] of [
+      ["PHONE_CALL", "QUALITY_CALL", "PHONE_CALL"],
+      ["APP", "LINK_CLICKS", "APP"],
+    ]) {
+      const out = inferCellForMetaCampaign(campaign, {
+        destination_type: dest,
+        optimization_goal: og,
+      });
+      assert.ok(!out.error, `${dest} unexpectedly errored: ${out.error}`);
+      assert.equal(out.conversionLocation, expected);
+    }
+  });
+  test("no destination + no product_set_id falls back to WEBSITE", () => {
+    const out = inferCellForMetaCampaign(campaign, {});
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "WEBSITE");
   });
 });
 

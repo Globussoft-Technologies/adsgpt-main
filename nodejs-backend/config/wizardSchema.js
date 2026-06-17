@@ -52,6 +52,7 @@ const OBJECTIVE_LABELS = {
   OUTCOME_LEADS: "Leads",
   OUTCOME_APP_PROMOTION: "App Promotion",
   OUTCOME_ENGAGEMENT: "Engagement",
+  OUTCOME_SALES: "Sales",
 };
 
 const CONVERSION_LOCATION_LABELS = {
@@ -70,11 +71,18 @@ const CONVERSION_LOCATION_LABELS = {
   WEBSITE_AND_INSTANT_FORMS: "Website and instant forms",
   WEBSITE_AND_CALLS: "Website and calls",
   INSTANT_FORMS_AND_MESSENGER: "Instant forms and Messenger",
+  // Sales-specific Multiple options (Website-and-X). In-store variants
+  // deferred — see wizardSchema.js Sales section for the rationale.
+  WEBSITE_AND_APP: "Website and app",
   // Engagement-specific "On your ad" sub-options. Both map to
   // destination_type=ON_AD; the optimisation goal disambiguates the cell
   // in reverse-inference (see cellInference.js).
   VIDEO_VIEWS: "Video views",
   POST_ENGAGEMENT: "Post engagement",
+  // Sales-specific catalogue cell — Meta's "Catalog sales" destination
+  // (Dynamic Product Ads). promoted_object = product_set (NEW shape),
+  // object_story_spec = template_data (NEW shape with placeholders).
+  CATALOG: "Catalog sales",
 };
 
 // User-facing labels — match Meta Ads Manager's "Performance goal"
@@ -216,6 +224,9 @@ const CTA_LABELS = {
   // defaults the Leads/App cell to it. We give it a clean label.
   USE_MOBILE_APP: "Use app",
   NO_BUTTON: "No button",
+  // Sales/CATALOG — Dynamic Product Ads. Meta's DPA-specific CTA that
+  // takes viewers from the carousel to a fuller product list.
+  SEE_MORE: "See more",
 };
 
 // Mapping from our user-facing conversion-location key to Meta's
@@ -270,6 +281,11 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // it objective-qualified only; do NOT add a bare WEBSITE_AND_CALLS key.
   "OUTCOME_TRAFFIC:WEBSITE_AND_CALLS": "WEBSITE",
   "OUTCOME_LEADS:WEBSITE_AND_CALLS": null,
+  // Sales/WEBSITE_AND_CALLS — Multiple cell; omit destination_type so
+  // Meta auto-routes between website (Pixel) and calls (Page phone).
+  "OUTCOME_SALES:WEBSITE_AND_CALLS": null,
+  // Sales/WEBSITE_AND_APP — Multiple cell; same Meta-auto-route pattern.
+  WEBSITE_AND_APP: null,
   // Engagement "On your ad" cells — Meta rejects destination_type=ON_AD
   // for OUTCOME_ENGAGEMENT with subcode 1815715 ("Valid values are
   // MESSENGER, UNDEFINED, WEBSITE, APP"). Omit the field (null) so Meta
@@ -285,6 +301,12 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // layer (different objective + same conversionLocation), so the
   // generic bare keys (WEBSITE → WEBSITE, APP → APP) already cover
   // Engagement too. No new bare keys needed.
+  //
+  // Sales/CATALOG — destination_type omitted (null) so Meta infers from
+  // the product_set promoted_object. Reverse-inference (cellInference.js)
+  // identifies CATALOG by `promoted_object.product_set_id` presence
+  // rather than destination_type.
+  CATALOG: null,
 };
 
 // ─── The matrix ──────────────────────────────────────────────────────────────
@@ -1136,6 +1158,256 @@ const CELLS = {
       additionalSteps: [],
       notes:
         "Drive app installs to a single store (Apple App Store or Google Play). The mobile-app-store + app pickers live on the ad set; the ad inherits both. Optional creative-level deep link and Apple custom product page ID supported. iOS 14+ delivery (SKAdNetwork-aware campaigns) is a separate Meta campaign type, deferred — campaigns currently deliver to Android + pre-14.5 iOS.",
+    },
+  },
+
+  // Sales — 7 cells. Six are mechanical clones of existing Leads /
+  // Engagement cells (the API contracts overlap; only the objective
+  // differs). The 7th — CATALOG — is the first cell with both a NEW
+  // promoted_object shape (`product_set`) AND a NEW objectStorySpec
+  // shape (`template_data` for Dynamic Product Ads).
+  //
+  // Full spec: docs/SALES_CELLS_SPEC.md. Deferred items (Multiple cells,
+  // In-store, VALUE optimisation, Advantage+ Sales auto-mode, Carousel)
+  // are listed there with re-open triggers.
+  OUTCOME_SALES: {
+    // ─── Multiple (Meta auto-routes per viewer) ───────────────────────────
+    // Meta's UI shows these as "Website and X" — viewers are routed to
+    // whichever destination they're most likely to convert through.
+    // destination_type omitted; Meta uses the cell's promoted_object + CTA
+    // shape to infer routing. Pixel tracking remains the primary signal.
+    //
+    // Deferred (NOT shipping in this round): WEBSITE_AND_IN_STORE +
+    // WEBSITE_APP_IN_STORE. Both require an Offline Conversions API
+    // integration (uploading in-store purchase events back to Meta) which
+    // isn't plumbed in this stack. Adding them without offline events
+    // means the in-store leg delivers nothing — worse than not offering
+    // the cell. Re-open when offline events land.
+    WEBSITE_AND_CALLS: {
+      group: "multiple",
+      adSet: {
+        // Same shape as Leads/WEBSITE_AND_CALLS — Pixel-tracked website
+        // conversions + click-to-call from the same creative. Meta
+        // optimises per viewer based on their predicted conversion path.
+        optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "QUALITY_CALL"],
+        defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "pixel",
+        additionalFields: ["pixelId", "pixelEventType"],
+      },
+      ad: {
+        // Standard link_data — website link as the primary URL; CALL_NOW
+        // CTA layered on top for the call leg. Meta auto-routes.
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: ["LEARN_MORE", "CALL_NOW", "SHOP_NOW", "GET_QUOTE", "CONTACT_US"],
+        default: "LEARN_MORE",
+      },
+      identity: { required: ["page", "pixel", "pagePhoneNumber"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive on-site purchases AND phone calls. Meta auto-routes per viewer based on predicted conversion path. Same Pixel + Page phone constraints as the single-cell versions.",
+    },
+
+    WEBSITE_AND_APP: {
+      group: "multiple",
+      adSet: {
+        // No OFFSITE_CONVERSIONS at the cell level — same MMP constraint
+        // as Sales/APP. The website leg uses Pixel + LINK_CLICKS; the app
+        // leg uses store URL. With an MMP integration, this could expand
+        // to OFFSITE_CONVERSIONS spanning both. Without one, ship the
+        // delivery-only goals so the cell is at least usable.
+        optimizationGoals: ["LINK_CLICKS", "REACH", "IMPRESSIONS"],
+        defaultOptimizationGoal: "LINK_CLICKS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "pixel",
+        // Pixel scopes the website leg; mobileAppStore/applicationId/
+        // objectStoreUrl scope the app leg. All four required so Meta can
+        // route per viewer.
+        additionalFields: [
+          "pixelId",
+          "pixelEventType",
+          "mobileAppStore",
+          "applicationId",
+          "objectStoreUrl",
+        ],
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: ["SHOP_NOW", "LEARN_MORE", "USE_APP", "DOWNLOAD", "SIGN_UP"],
+        default: "SHOP_NOW",
+      },
+      identity: { required: ["page", "pixel", "linkedApp"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive purchases on both your website and your app. Meta auto-routes per viewer. OFFSITE_CONVERSIONS deferred — needs an MMP to forward in-app events (same constraint as Sales/APP).",
+    },
+
+    // ─── Single (one destination) ─────────────────────────────────────────
+    WEBSITE: {
+      adSet: {
+        // Mirror of Leads/Website goal list — Meta surfaces the same
+        // 5 goals for Sales/Website. OFFSITE_CONVERSIONS is the
+        // recommended default (Pixel + conversion event).
+        // VALUE optimisation deferred (needs value-rules UI).
+        optimizationGoals: [
+          "OFFSITE_CONVERSIONS",
+          "LANDING_PAGE_VIEWS",
+          "LINK_CLICKS",
+          "REACH",
+          "IMPRESSIONS",
+        ],
+        defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "pixel",
+        additionalFields: ["pixelId", "pixelEventType"],
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description", "urlTags"],
+        objectStorySpecShape: "pixel_website",
+      },
+      ctas: {
+        allowed: [
+          "LEARN_MORE", "SHOP_NOW", "SIGN_UP", "SUBSCRIBE", "CONTACT_US",
+          "DOWNLOAD", "BOOK_NOW", "GET_QUOTE", "APPLY_NOW", "GET_OFFER",
+          "ORDER_NOW", "WATCH_MORE", "NO_BUTTON",
+        ],
+        default: "SHOP_NOW",
+      },
+      identity: { required: ["page", "pixel"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive purchases on your website. Requires a Meta Pixel + conversion event in Events Manager.",
+    },
+
+    // Meta Ads Manager surfaces messaging as ONE option for Sales —
+    // "Message destinations" — and routes per viewer across Messenger /
+    // IG Direct / WhatsApp based on the Page's connected surfaces and
+    // the CTA. Same pattern as Traffic/MESSAGE_DESTINATIONS (NOT the
+    // Engagement triplet of split MESSENGER/WHATSAPP/INSTAGRAM cells).
+    // The CTA enum decides the primary platform; Meta layers the others
+    // automatically.
+    MESSAGE_DESTINATIONS: {
+      adSet: {
+        optimizationGoals: ["CONVERSATIONS", "IMPRESSIONS", "REACH"],
+        defaultOptimizationGoal: "CONVERSATIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // linkUrl required as bypass-fallback (Meta enforces it on every
+        // creative even when the CTA opens Messenger).
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "messenger_click_to_message",
+      },
+      ctas: {
+        allowed: ["MESSAGE_PAGE", "WHATSAPP_MESSAGE", "INSTAGRAM_MESSAGE", "LEARN_MORE"],
+        default: "MESSAGE_PAGE",
+      },
+      identity: { required: ["page", "messengerEnabled"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive messaging conversations that lead to purchase. Meta routes per viewer to Messenger, Instagram DM or WhatsApp based on Page connections + CTA.",
+    },
+
+    PHONE_CALL: {
+      adSet: {
+        optimizationGoals: ["QUALITY_CALL"],
+        defaultOptimizationGoal: "QUALITY_CALL",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "click_to_call",
+      },
+      ctas: {
+        allowed: ["CALL_NOW", "LEARN_MORE"],
+        default: "CALL_NOW",
+      },
+      identity: { required: ["page", "pagePhoneNumber"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive inbound sales calls to the Page's phone number.",
+    },
+
+    APP: {
+      adSet: {
+        // No OFFSITE_CONVERSIONS — same MMP constraint as Engagement/App
+        // and Leads/App. In-app conversion optimisation needs an MMP
+        // (AppsFlyer / Adjust) forwarding events to Meta; stack
+        // doesn't integrate one. LINK_CLICKS + REACH work without MMP.
+        optimizationGoals: ["LINK_CLICKS", "REACH"],
+        defaultOptimizationGoal: "LINK_CLICKS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "app",
+        additionalFields: ["mobileAppStore", "applicationId", "objectStoreUrl"],
+      },
+      ad: {
+        requiredFields: ["imageHash", "headline", "primaryText"],
+        optionalFields: ["description", "deferredDeepLink"],
+        objectStorySpecShape: "app_link",
+      },
+      ctas: {
+        allowed: ["USE_APP", "USE_MOBILE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
+        default: "USE_APP",
+      },
+      identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive purchases inside your app. For installs, use OUTCOME_APP_PROMOTION. OFFSITE_CONVERSIONS deferred — needs an MMP.",
+    },
+
+    CATALOG: {
+      adSet: {
+        // OFFSITE_CONVERSIONS is the only goal Meta accepts on the
+        // catalog cell — Dynamic Product Ads optimise against Pixel-
+        // tracked purchase events scoped to products in the bound
+        // product_set. VALUE optimisation is the documented alternative
+        // (revenue rather than conversion count) but deferred — needs
+        // value-rules setup which isn't built yet.
+        optimizationGoals: ["OFFSITE_CONVERSIONS"],
+        defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "product_set",
+        // catalogId + productSetId picked on the new Catalog wizard step
+        // (additionalSteps: ["catalog"] below). pixelId + pixelEventType
+        // still required — Meta needs the Pixel for visitor tracking AND
+        // the product_set for ad-content scoping.
+        additionalFields: ["pixelId", "pixelEventType", "catalogId", "productSetId"],
+      },
+      ad: {
+        // No media field required — Meta sources images per product from
+        // the catalog feed. Headline / primaryText / description / linkUrl
+        // accept placeholder syntax ({{product.name}}, {{product.price}},
+        // etc.); the AdStep surfaces an insert-chip toolbar and the
+        // validator skips the standard 40/125/30 char caps for this cell
+        // (templates expand per product at delivery; Meta truncates).
+        requiredFields: ["headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "template_data",
+      },
+      ctas: {
+        allowed: ["SHOP_NOW", "LEARN_MORE", "ORDER_NOW", "BOOK_NOW", "SEE_MORE"],
+        default: "SHOP_NOW",
+      },
+      identity: { required: ["page", "pixel", "catalog"], optional: ["instagram"] },
+      // New wizard step inserted between AdSet and Ad — Catalog picker +
+      // Product Set picker. Same pattern as Leads/Instant Form's
+      // additionalSteps: ['leadForm'].
+      additionalSteps: ["catalog"],
+      notes: "Dynamic Product Ads. Meta substitutes product images / names / prices per viewer from the bound product set. Requires Pixel + Catalog + Product Set.",
     },
   },
 };
