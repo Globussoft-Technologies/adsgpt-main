@@ -46,7 +46,7 @@ jobs:
           ls -la .auth/ || echo "(.auth/ does not exist)"
 
       - name: Upload auth state
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: auth-state
           path: e2e/.auth/frontend.json
@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-login-${{ github.run_id }}
           path: e2e/playwright-report/
@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-pages-${{ github.run_id }}
           path: e2e/playwright-report/
@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload traces (on fail)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-pages-${{ github.run_id }}
           path: e2e/test-results/
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-brandiq-${{ github.run_id }}
           path: e2e/playwright-report/
@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload traces (on fail)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-brandiq-${{ github.run_id }}
           path: e2e/test-results/
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-adcopy-${{ github.run_id }}
           path: e2e/playwright-report/
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload traces (on fail)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-adcopy-${{ github.run_id }}
           path: e2e/test-results/
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-api-${{ github.run_id }}
           path: e2e/playwright-report/
