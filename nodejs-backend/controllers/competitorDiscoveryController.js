@@ -115,7 +115,6 @@ async function runDiscoveryJob(userId, brandId) {
 
     const competitors = (parsed?.competitors || [])
       .filter(c => c.name && typeof c.name === 'string')
-      .slice(0, 25)
       .map(c => ({
         name: c.name.trim(),
         domain: c.domain || null,
@@ -126,7 +125,7 @@ async function runDiscoveryJob(userId, brandId) {
 
     let keywords = (parsed?.keywords || [])
       .filter(k => k.term && typeof k.term === 'string')
-      .slice(0,25)
+      .slice(0, 15) // safety cap — prompt asks for 10-15
       .map(k => ({
         term: k.term.trim(),
         category: ['brand', 'product', 'general', 'intent'].includes(k.category) ? k.category : 'general',
@@ -207,7 +206,14 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
   } = opts;
 
   const keywordTerms = keywords.map(k => k.term);
-  const competitorNames = competitors.map(c => c.name).filter(Boolean);
+  // Advertiser variants are stored as their OWN competitor entries (e.g. "Sony"
+  // and "Sony Electronics" are two competitors), so the names list already covers
+  // every advertiser we want to match. De-duped for safety.
+  const competitorNames = [...new Set(
+    competitors
+      .map(c => (typeof c?.name === 'string' ? c.name.trim() : ''))
+      .filter(Boolean)
+  )];
 
   // Merge competitors + keywords, remove duplicates
   const allSearchTerms = [...new Set([...competitorNames, ...keywordTerms])];

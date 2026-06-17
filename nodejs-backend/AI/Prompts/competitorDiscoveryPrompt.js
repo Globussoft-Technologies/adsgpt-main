@@ -1,4 +1,4 @@
-const KEYWORD_VERSION = 'v2';
+const KEYWORD_VERSION = 'v3';
 
 function buildCompetitorDiscoveryPrompt({ brandName, brandDescription, websiteUrl, region }) {
   return `You are a competitive intelligence analyst for digital advertising.
@@ -28,6 +28,14 @@ STRICT RULES — follow exactly:
    - The brand itself, its own sub-brands, or its parent company.
    - Generic or unrelated brands.
 4. If unsure whether something is a true competitor or just a seller/channel, LEAVE IT OUT.
+5. ADVERTISER VARIANTS (rare): a few competitors advertise under MORE than one
+   industry-relevant name. For those, add EACH variant as its OWN separate
+   competitor object (reuse the same domain & a similar relevanceScore). Example:
+   for an audio/electronics brand, include BOTH { "name": "Sony" } and
+   { "name": "Sony Electronics" } as two entries — but NOT "Sony LIV" (different
+   industry). Do this ONLY in the rare cases where the brand genuinely advertises
+   under a different name; MOST competitors need just ONE entry. Never duplicate
+   the same name.
 
 Each competitor: { "name", "domain" (best guess, e.g. "dell.com"), "relevanceScore" (0-100) }
 
@@ -39,10 +47,13 @@ Each keyword: { "term", "category": one of ["brand","product","general","intent"
 "volume": one of ["high","medium","low"] or null }
 
 ═══════════ OUTPUT ═══════════
-Return ONLY valid JSON in this exact shape (no markdown, no commentary):
+Return ONLY valid JSON in this exact shape (no markdown, no commentary). Most
+competitors are a single entry; only special cases like "Sony" get a 2nd variant entry:
 {
   "competitors": [
-    { "name": "Dell", "domain": "dell.com", "relevanceScore": 95 }
+    { "name": "Dell", "domain": "dell.com", "relevanceScore": 95 },
+    { "name": "Sony", "domain": "sony.com", "relevanceScore": 80 },
+    { "name": "Sony Electronics", "domain": "sony.com", "relevanceScore": 80 }
   ],
   "keywords": [
     { "term": "business laptops", "category": "product", "volume": "high" }

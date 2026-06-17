@@ -352,6 +352,37 @@ function flattenAd(ad, platform, config) {
   }
 }
 
+// ── Strict advertiser → competitor gate ────────────────────────────────
+// ES matches the advertiser (post_owner) loosely (prefix / token `match`), so a
+// competitor "Sony" also pulls in "Sony LIV". This gate keeps an ad only when its
+// advertiser EXACTLY equals a competitor name — or that name followed solely by
+// pure legal/corporate suffixes ("Sony India Pvt Ltd" still matches "Sony India").
+// ONLY legal forms are tolerated: geography (India/USA) and division words
+// (Electronics/LIV) CHANGE the entity, so those arrive from discovery as their
+// OWN competitor entries — never auto-allowed here.
+const NAME_NOISE_QUALIFIERS = new Set([
+  'inc', 'llc', 'ltd', 'limited', 'plc', 'corp', 'corporation',
+  'co', 'company', 'pvt', 'private', 'group', 'holdings',
+]);
+
+const normalizeName = (s) =>
+  String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function advertiserIsCompetitor(advertiser, competitorNormSet, competitorNames) {
+  const a = normalizeName(advertiser);
+  if (!a) return false;
+  if (competitorNormSet.has(a)) return true; // exact competitor name
+  // competitor name + only pure legal noise (e.g. "Sony India Pvt Ltd")
+  for (const name of competitorNames) {
+    const n = normalizeName(name);
+    if (n && a.startsWith(n + ' ')) {
+      const rest = a.slice(n.length + 1).split(' ').filter(Boolean);
+      if (rest.length > 0 && rest.every((w) => NAME_NOISE_QUALIFIERS.has(w))) return true;
+    }
+  }
+  return false;
+}
+
 // ── Main search function ────────────────────────────────────────────────
 
 exports.searchAdsByKeywords = async (
@@ -693,11 +724,22 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // Flatten + dedupe
     const seen = new Set();
     const results = [];
+    // Pre-normalize competitor names once for an O(1) exact-match gate below.
+    const competitorNormSet = new Set(competitorNames.map(normalizeName));
     for (const hit of hits) {
       const flatAd = flattenAd(hit._source, platform, config);
       if (flatAd && flatAd.adId && !seen.has(flatAd.adId)) {
         seen.add(flatAd.adId);
         flatAd.esScore = hit._score;
+
+        // Strict gate: drop ads whose advertiser isn't EXACTLY a competitor
+        // name (loose ES match otherwise leaks "Sony" → "Sony LIV").
+        if (
+          competitorNames.length > 0 &&
+          !advertiserIsCompetitor(flatAd.postOwner, competitorNormSet, competitorNames)
+        ) {
+          continue;
+        }
 
         const sourceText = [
           getNested(hit._source, config.adTitle),
