@@ -24,7 +24,7 @@
     "nodemon": "^3.1.4",
     "onscroll_backend": "file:",
     "path": "^0.12.7",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.1",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.13.0",
