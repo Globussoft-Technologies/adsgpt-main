@@ -77,7 +77,7 @@ jobs:
       - uses: ./.github/actions/setup-e2e
 
       - name: Restore auth state
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: auth-state
           path: e2e/.auth/
@@ -117,7 +117,7 @@ jobs:
       - uses: ./.github/actions/setup-e2e
 
       - name: Restore auth state
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: auth-state
           path: e2e/.auth/
@@ -157,7 +157,7 @@ jobs:
       - uses: ./.github/actions/setup-e2e
 
       - name: Restore auth state
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: auth-state
           path: e2e/.auth/
