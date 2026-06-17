@@ -34,7 +34,7 @@
     "colord": "^2.9.3",
     "date-fns": "^4.1.0",
     "face-api.js": "^0.22.2",
-    "filerobot-image-editor": "^4.8.1",
+    "filerobot-image-editor": "^5.0.0",
     "formik": "^2.4.6",
     "framer-motion": "^12.23.12",
     "html-to-image": "^1.11.13",
