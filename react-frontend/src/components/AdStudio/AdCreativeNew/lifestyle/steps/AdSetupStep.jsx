@@ -49,7 +49,8 @@ const MODEL_OPTIONS = [
   { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
   { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
   { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
-  { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
+  // { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
+  { name: 'Imagen', available: true, iconSrc: geminiIcon },
 ];
 
 function ModelIcon({ option }) {
@@ -97,7 +98,8 @@ const API_MODEL_TO_UI = {
   'gemini-3-pro-image-preview': 'Nano Banana Pro',
   'gpt-image-1.5': 'OpenAI 1.5',
   'gpt-image-2': 'OpenAI 2.0',
-  'seedream-5.0-lite': 'Seedream 5.0 lite',
+  // 'seedream-5.0-lite': 'Seedream 5.0 lite',
+  'ADSGPT-1.0': 'Imagen',
 };
 
 // Variant route key → backend `inputs.type`. Mirrors VARIANT_TO_API_TYPE

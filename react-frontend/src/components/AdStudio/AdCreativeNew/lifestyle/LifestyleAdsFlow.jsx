@@ -65,7 +65,8 @@ const MODEL_TO_API = {
   'Nano Banana Pro': 'gemini-3-pro-image-preview',
   'OpenAI 1.5': 'gpt-image-1.5',
   'OpenAI 2.0': 'gpt-image-2',
-  'Seedream 5.0 lite': 'seedream-5.0-lite',
+  // 'Seedream 5.0 lite': 'seedream-5.0-lite',
+  'Imagen': 'ADSGPT-1.0',
 };
 
 // Translates a *resolved* AdSetup payload (where every image array has been

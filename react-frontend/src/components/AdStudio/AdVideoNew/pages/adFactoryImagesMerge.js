@@ -62,6 +62,7 @@ export function mergeCampaignImageResults(items, campaignId, entries, now = Date
       url,
       prompt: e?.prompt || null,
       model: template.model || null,
+      modelLabel: template.modelLabel || template.model || null,
       status,
       error: e?.error || null,
       aspectRatio: extractAspect(e?.data),

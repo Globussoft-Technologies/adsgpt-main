@@ -65,7 +65,8 @@ const MODEL_OPTIONS = [
   { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
   { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
   { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
-  { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
+  // { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
+  { name: 'Imagen', available: true, iconSrc: geminiIcon },
 ];
 
 // Translates the UI model label into the backend model id at dispatch time.
@@ -75,7 +76,8 @@ const MODEL_TO_API = {
   'Nano Banana Pro': 'gemini-3-pro-image-preview',
   'OpenAI 1.5': 'gpt-image-1.5',
   'OpenAI 2.0': 'gpt-image-2',
-  'Seedream 5.0 lite': 'seedream-5.0-lite',
+  // 'Seedream 5.0 lite': 'seedream-5.0-lite',
+  'Imagen': 'ADSGPT-1.0',
 };
 
 // Renders either the ReactNode icon or the iconSrc image at a fixed 14px slot.

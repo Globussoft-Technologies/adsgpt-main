@@ -31,8 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import genieMinimize, { captureModal } from '@/utils/ui/genieMinimize';
 import MyVideosPage from './pages/MyVideosPage';
 import MyImagesPage from './pages/MyImagesPage';
-// HIDE-MARK — AdFactory images source hidden from MySpace (AdCreative-only).
-// import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
+import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 
@@ -98,18 +97,16 @@ const selectImageType = [
   { value: 'brand_awareness', label: 'Brand Awareness' },
 ];
 
-// HIDE-MARK — AdFactory image source picker hidden; MySpace shows AdCreative only.
 // MySpace → Images tab → which image source to browse.
-// const selectImageSource = [
-//   { value: 'adCreative', label: 'AdCreative' },
-//   { value: 'adFactory', label: 'adFactory' },
-// ];
+const selectImageSource = [
+  { value: 'adCreative', label: 'AdCreative' },
+  { value: 'adFactory', label: 'AdFactory' },
+];
 
 const AdVideoLayout = () => {
   const [videoType, setVideoType] = useState('');
   const [imageType, setImageType] = useState('');
-  // HIDE-MARK — imageSource state unused while AdFactory source is hidden.
-  // const [imageSource, setImageSource] = useState('adCreative');
+  const [imageSource, setImageSource] = useState('adCreative');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -368,16 +365,16 @@ const AdVideoLayout = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* HIDE-MARK — AdFactory/AdCreative Source dropdown hidden; MySpace
-                  Images shows the AdCreative gallery only (original behaviour). */}
-              {/* {mySpaceTab === 'images' && (
+              {/* Images tab: choose between the existing AdCreative gallery and
+                  the AdFactory images API. Shown only on the Images tab. */}
+              {mySpaceTab === 'images' && (
                 <CreativeFilterDropdown
                   options={selectImageSource}
                   label="Source"
                   value={selectImageSource.find((p) => p.value === imageSource)}
                   onChange={(value) => setImageSource(value)}
                 />
-              )} */}
+              )}
               <DateRangeFilter onDateChange={handleDateChange} onClear={handleClearDates} />
               {mySpaceTab === 'videos' ? (
                 <CreativeFilterDropdown
@@ -387,7 +384,9 @@ const AdVideoLayout = () => {
                   onChange={(value) => setVideoType(value)}
                   onClear={() => setVideoType('')}
                 />
-              ) : (
+              ) : imageSource === 'adCreative' ? (
+                // The image-type filter only applies to the AdCreative gallery;
+                // the AdFactory API doesn't support it, so it's hidden there.
                 <CreativeFilterDropdown
                   options={selectImageType}
                   label="Filter"
@@ -395,14 +394,16 @@ const AdVideoLayout = () => {
                   onChange={(value) => setImageType(value)}
                   onClear={() => setImageType('')}
                 />
-              )}
+              ) : null}
             </div>
           </div>
 
-          {/* HIDE-MARK — AdFactory images branch hidden; Images tab always
-              renders the AdCreative gallery (MyImagesPage). */}
           {mySpaceTab === 'images' ? (
-            <MyImagesPage imageType={imageType} startDate={startDate} endDate={endDate} />
+            imageSource === 'adFactory' ? (
+              <MyAdFactoryImagesPage startDate={startDate} endDate={endDate} />
+            ) : (
+              <MyImagesPage imageType={imageType} startDate={startDate} endDate={endDate} />
+            )
           ) : (
             <MyVideosPage videoType={videoType} startDate={startDate} endDate={endDate} />
           )}
