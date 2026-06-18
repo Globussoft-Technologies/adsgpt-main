@@ -300,6 +300,19 @@ const updateAdSetSchemaV2 = Joi.object({
   bidStrategy: Joi.any().forbidden().messages({
     "any.unknown": "The bid strategy can't be changed here.",
   }),
+  // Awareness/STANDARD — frequency cap. Same shape + range as the create
+  // path; null sentinel means "remove any existing cap" (Meta accepts
+  // `frequency_control_specs: []` to clear). Sending undefined / omitting
+  // leaves Meta's current cap untouched.
+  frequencyControl: Joi.alternatives()
+    .try(
+      Joi.object({
+        capFrequency: Joi.number().integer().min(1).max(90).required(),
+        capPeriodDays: Joi.number().integer().min(1).max(90).required(),
+      }),
+      Joi.valid(null),
+    )
+    .optional(),
 }).custom((value, helpers) => {
   if (value.dailyBudget && value.lifetimeBudget) {
     return helpers.error("any.invalid", {
@@ -454,6 +467,20 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
         // omitting it defaults to whole-catalog display which is rarely
         // what users intend.
         baseShape.productSetId = Joi.string().required();
+        break;
+      case "frequencyControl":
+        // Awareness/STANDARD — Meta's `frequency_control_specs` shape.
+        // Optional at the schema level: the wizard only surfaces it when
+        // the picked goal is REACH, but Joi accepts absence even on REACH
+        // so users who want Meta's default (no cap) can omit it. When
+        // present, both numbers must be 1–90 (Meta's documented range).
+        // Single-spec model — the wizard exposes one cap; multiple
+        // frequency_control_specs entries are deferred (see §6b in
+        // AWARENESS_CELLS_SPEC.md).
+        baseShape.frequencyControl = Joi.object({
+          capFrequency: Joi.number().integer().min(1).max(90).required(),
+          capPeriodDays: Joi.number().integer().min(1).max(90).required(),
+        }).optional();
         break;
       default:
         throw new Error(

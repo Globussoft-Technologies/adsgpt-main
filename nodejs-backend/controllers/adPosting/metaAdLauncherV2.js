@@ -469,6 +469,21 @@ async function createAdSetV2(req, res) {
     if (value.lifetimeBudget) adSetParams.lifetime_budget = value.lifetimeBudget;
     if (value.bidAmount) adSetParams.bid_amount = value.bidAmount;
     if (value.dynamicCreative) adSetParams.is_dynamic_creative = true;
+
+    // frequency_control_specs — Awareness/STANDARD (REACH goal only). Meta's
+    // shape is an array of {event, interval_days, max_frequency}; the wizard
+    // exposes ONE cap (single-spec model). Event is hard-coded to IMPRESSIONS
+    // (the only event Awareness frequency caps run against). Multi-spec
+    // entries deferred per AWARENESS_CELLS_SPEC.md §6b.
+    if (value.frequencyControl) {
+      adSetParams.frequency_control_specs = [
+        {
+          event: "IMPRESSIONS",
+          interval_days: value.frequencyControl.capPeriodDays,
+          max_frequency: value.frequencyControl.capFrequency,
+        },
+      ];
+    }
     // attribution_spec — Meta expects an array of {event_type, window_days}.
     // The wizard's compact enum maps to the full array here.
     //
@@ -1042,6 +1057,7 @@ async function resolveAdSetForEdit(req, res) {
         "destination_type",
         "promoted_object",
         "targeting",
+        "frequency_control_specs",
       ]);
       adSetData = adSet?._data || adSet || {};
       const campaign = await new bizSdk.Campaign(adSetData.campaign_id).get([
@@ -1100,6 +1116,17 @@ async function resolveAdSetForEdit(req, res) {
       applicationId: adSetData.promoted_object?.application_id || null,
       objectStoreUrl: adSetData.promoted_object?.object_store_url || null,
       productSetId: adSetData.promoted_object?.product_set_id || null,
+      // Awareness frequency cap — Meta returns frequency_control_specs as
+      // an array; the wizard exposes ONE spec, so read entry [0]. null when
+      // the ad set has no cap configured (Meta default = no cap).
+      frequencyControl: (() => {
+        const spec = adSetData.frequency_control_specs?.[0];
+        if (!spec) return null;
+        return {
+          capFrequency: Number(spec.max_frequency) || 0,
+          capPeriodDays: Number(spec.interval_days) || 0,
+        };
+      })(),
       targeting: {
         worldwide,
         locations,
@@ -1195,6 +1222,22 @@ async function updateAdSetV2(req, res) {
       const existingUserOs = existing.targeting?.user_os;
       if (existingUserOs) spec.user_os = existingUserOs;
       params.targeting = spec;
+    }
+    // Awareness/STANDARD frequency cap. Three states:
+    //   undefined → don't touch the existing cap (no-op for any cell type)
+    //   null      → clear the cap (Meta accepts `[]` to remove)
+    //   { ... }   → set/update
+    if (value.frequencyControl !== undefined) {
+      params.frequency_control_specs =
+        value.frequencyControl === null
+          ? []
+          : [
+              {
+                event: "IMPRESSIONS",
+                interval_days: value.frequencyControl.capPeriodDays,
+                max_frequency: value.frequencyControl.capFrequency,
+              },
+            ];
     }
     if (Object.keys(params).length === 0) {
       return res

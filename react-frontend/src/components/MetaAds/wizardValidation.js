@@ -349,6 +349,28 @@ function validateAdSet(form, cell, ctx, mode) {
   if (extra.includes('pixelEventType') && isBlank(form.pixelEventType)) {
     e.pixelEventType = 'Select a conversion event.';
   }
+  // Awareness/STANDARD — frequency cap. Optional at the schema level (Meta
+  // accepts an Awareness/Reach ad set with no cap), so only validate when
+  // the user actually filled it in. Gated on REACH goal — Meta's UI only
+  // surfaces the cap on Reach, and the launch payload skips emission off-
+  // goal, so off-goal stale values would just block launch with nothing the
+  // user can fix without switching back to REACH.
+  if (
+    extra.includes('frequencyControl') &&
+    form.optimizationGoal === 'REACH' &&
+    form.frequencyControl
+  ) {
+    const { capFrequency, capPeriodDays } = form.frequencyControl;
+    const hasAny = capFrequency || capPeriodDays;
+    if (hasAny) {
+      const inRange = (n) => Number.isInteger(n) && n >= 1 && n <= 90;
+      if (!inRange(capFrequency)) {
+        e.frequencyControl = 'Max impressions must be a whole number from 1 to 90.';
+      } else if (!inRange(capPeriodDays)) {
+        e.frequencyControl = 'Period must be a whole number from 1 to 90 days.';
+      }
+    }
+  }
   return e;
 }
 
@@ -418,6 +440,22 @@ function validateAd(form, cell, mode) {
   }
   if (cell?.ctas?.allowed?.length && isBlank(form.callToAction)) {
     e.callToAction = 'Pick a call-to-action button.';
+  }
+
+  // Conditional linkUrl rule for cells that mark it optional (Awareness/
+  // STANDARD + VIDEO_VIEWS). Meta accepts pure-brand ads with no
+  // destination ONLY when the CTA is NO_BUTTON; any other CTA needs a
+  // URL for the button to target. Format-check whatever the user typed
+  // either way.
+  const optional = cell?.ad?.optionalFields || [];
+  if (optional.includes('linkUrl') && !req.includes('linkUrl')) {
+    const linkBlank = isBlank(form.linkUrl);
+    const needsUrl = form.callToAction && form.callToAction !== 'NO_BUTTON';
+    if (linkBlank && needsUrl) {
+      e.linkUrl = 'Destination URL is required for this call-to-action (or pick "No button").';
+    } else if (!linkBlank && !isHttpUrl(form.linkUrl)) {
+      e.linkUrl = 'Enter a valid URL (https://…).';
+    }
   }
 
   // Optional fields with format constraints — only validated when the

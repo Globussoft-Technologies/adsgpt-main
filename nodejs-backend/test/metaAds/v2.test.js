@@ -528,10 +528,10 @@ group("createCampaignSchemaV2", () => {
     const { error } = createCampaignSchemaV2.validate({
       adAccountId: "act_123",
       name: "Test",
-      // OUTCOME_AWARENESS is the last unmigrated objective — Sales
-      // landed in this push, so it's no longer the canonical "not in
-      // V2 schema" example.
-      objective: "OUTCOME_AWARENESS",
+      // All 6 ODAX objectives are in V2 now. Use a pre-ODAX legacy name
+      // (Meta still accepts these on its API for backwards compat but the
+      // wizard doesn't know about them) to exercise the rejection path.
+      objective: "BRAND_AWARENESS",
     });
     assert.ok(error);
     // We override Joi's default "must be one of" with a user-facing
@@ -1303,6 +1303,12 @@ function adSetBody(objective, conversionLocation, cell) {
     else if (field === "pixelEventType") body.pixelEventType = "LEAD";
     else if (field === "catalogId") body.catalogId = "cat_1";
     else if (field === "productSetId") body.productSetId = "ps_1";
+    else if (field === "frequencyControl") {
+      // Awareness/STANDARD — Meta's frequency cap. Optional at the Joi
+      // level (no UI surfaces it off REACH goal) but the auto-sweep
+      // provides a valid one so the field block gets exercised.
+      body.frequencyControl = { capFrequency: 2, capPeriodDays: 7 };
+    }
   }
   return body;
 }
@@ -1505,7 +1511,10 @@ group("inferCellForMetaCampaign", () => {
   });
 
   test("unsupported objective returns an error", () => {
-    const r = inferCellForMetaCampaign({ objective: "OUTCOME_AWARENESS" }, {});
+    // Pre-ODAX legacy objective (Meta still accepts on API but V2 doesn't
+    // map it). All 6 ODAX objectives are now supported, so this is the
+    // canonical "out of scope" test case.
+    const r = inferCellForMetaCampaign({ objective: "BRAND_AWARENESS" }, {});
     assert.ok(r.error);
     assert.equal(r.cell, undefined);
   });
@@ -2559,6 +2568,186 @@ group("OUTCOME_SALES — reverse-inference", () => {
     const out = inferCellForMetaCampaign(campaign, {});
     assert.ok(!out.error, out.error);
     assert.equal(out.conversionLocation, "WEBSITE");
+  });
+});
+
+// ─── OUTCOME_AWARENESS — registered + cells live ────────────────────────────
+// All 6 ODAX objectives are now in V2 after this migration. The auto-sweep
+// covers the Joi happy paths + builder shapes; these tests pin down the
+// Awareness-specific edges: optional linkUrl, video-only lock, frequency
+// cap field handling, and goal-based reverse-inference.
+
+group("OUTCOME_AWARENESS — registered + cells live", () => {
+  test("listObjectives includes OUTCOME_AWARENESS", () => {
+    assert.ok(listObjectives().includes("OUTCOME_AWARENESS"));
+  });
+  test("listConversionLocations exposes 2 Awareness cells (STANDARD + VIDEO_VIEWS)", () => {
+    const locs = listConversionLocations("OUTCOME_AWARENESS");
+    assert.deepEqual([...locs].sort(), ["STANDARD", "VIDEO_VIEWS"].sort());
+  });
+  test("OUTCOME_AWARENESS is in cellInference.SUPPORTED_OBJECTIVES", () => {
+    assert.ok(SUPPORTED_OBJECTIVES.has("OUTCOME_AWARENESS"));
+  });
+  test("Awareness destination_type is null for both cells", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_AWARENESS", "STANDARD"), null);
+    assert.equal(getMetaDestinationType("OUTCOME_AWARENESS", "VIDEO_VIEWS"), null);
+  });
+});
+
+group("OUTCOME_AWARENESS/STANDARD — Joi adset", () => {
+  const schema = buildAdSetSchemaV2("OUTCOME_AWARENESS", "STANDARD");
+  const validBody = {
+    adAccountId: "act1",
+    campaignId: "c1",
+    pageId: "page_1",
+    name: "Awareness adset",
+    objective: "OUTCOME_AWARENESS",
+    conversionLocation: "STANDARD",
+    dailyBudget: 1000,
+    targeting: { locations: [{ type: "country", key: "IN", mode: "include" }] },
+  };
+
+  test("accepts REACH goal with frequencyControl", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "REACH",
+      frequencyControl: { capFrequency: 2, capPeriodDays: 7 },
+    });
+    assert.ok(!error, error && error.message);
+  });
+  test("accepts AD_RECALL_LIFT goal", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "AD_RECALL_LIFT",
+    });
+    assert.ok(!error, error && error.message);
+  });
+  test("accepts REACH goal WITHOUT frequencyControl (Meta default = no cap)", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "REACH",
+    });
+    assert.ok(!error, error && error.message);
+  });
+  test("rejects frequencyControl with capFrequency = 0", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "REACH",
+      frequencyControl: { capFrequency: 0, capPeriodDays: 7 },
+    });
+    assert.ok(error);
+  });
+  test("rejects frequencyControl with capPeriodDays = 91", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "REACH",
+      frequencyControl: { capFrequency: 2, capPeriodDays: 91 },
+    });
+    assert.ok(error);
+  });
+  test("rejects an unsupported optimization goal", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      optimizationGoal: "OFFSITE_CONVERSIONS",
+    });
+    assert.ok(error);
+  });
+});
+
+group("OUTCOME_AWARENESS/STANDARD — Joi ad (linkUrl optional)", () => {
+  const schema = buildAdSchemaV2("OUTCOME_AWARENESS", "STANDARD");
+  const baseBody = {
+    adAccountId: "act1",
+    adSetId: "as1",
+    pageId: "page_1",
+    name: "Awareness ad",
+    objective: "OUTCOME_AWARENESS",
+    conversionLocation: "STANDARD",
+    headline: "Brand recall",
+    primaryText: "Remember our brand.",
+    imageHash: "hash1",
+    callToAction: "LEARN_MORE",
+  };
+
+  test("accepts a body WITHOUT linkUrl (pure brand campaign)", () => {
+    const { error } = schema.validate(baseBody);
+    assert.ok(!error, error && error.message);
+  });
+  test("accepts a body WITH a valid linkUrl", () => {
+    const { error } = schema.validate({
+      ...baseBody,
+      linkUrl: "https://example.com/landing",
+    });
+    assert.ok(!error, error && error.message);
+  });
+  test("rejects a malformed linkUrl when provided", () => {
+    const { error } = schema.validate({ ...baseBody, linkUrl: "not a url" });
+    assert.ok(error);
+  });
+});
+
+group("OUTCOME_AWARENESS/VIDEO_VIEWS — Joi ad (video-only lock)", () => {
+  const schema = buildAdSchemaV2("OUTCOME_AWARENESS", "VIDEO_VIEWS");
+  const validBody = {
+    adAccountId: "act1",
+    adSetId: "as1",
+    pageId: "page_1",
+    name: "Video views ad",
+    objective: "OUTCOME_AWARENESS",
+    conversionLocation: "VIDEO_VIEWS",
+    headline: "Watch",
+    primaryText: "Our story.",
+    videoId: "video_1",
+    callToAction: "WATCH_MORE",
+  };
+
+  test("accepts a video body", () => {
+    const { error } = schema.validate(validBody);
+    assert.ok(!error, error && error.message);
+  });
+  test("rejects an image-only body (mediaKind: video lock)", () => {
+    const imageBody = { ...validBody };
+    delete imageBody.videoId;
+    imageBody.imageHash = "hash1";
+    const { error } = schema.validate(imageBody);
+    assert.ok(error);
+  });
+});
+
+group("OUTCOME_AWARENESS — reverse-inference via optimization_goal", () => {
+  const campaign = { objective: "OUTCOME_AWARENESS" };
+
+  test("REACH goal resolves to STANDARD cell", () => {
+    const out = inferCellForMetaCampaign(campaign, { optimization_goal: "REACH" });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "STANDARD");
+  });
+  test("IMPRESSIONS goal resolves to STANDARD cell", () => {
+    const out = inferCellForMetaCampaign(campaign, { optimization_goal: "IMPRESSIONS" });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "STANDARD");
+  });
+  test("AD_RECALL_LIFT goal resolves to STANDARD cell", () => {
+    const out = inferCellForMetaCampaign(campaign, { optimization_goal: "AD_RECALL_LIFT" });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "STANDARD");
+  });
+  test("THRUPLAY goal resolves to VIDEO_VIEWS cell", () => {
+    const out = inferCellForMetaCampaign(campaign, { optimization_goal: "THRUPLAY" });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "VIDEO_VIEWS");
+  });
+  test("TWO_SECOND_CONTINUOUS_VIDEO_VIEWS goal resolves to VIDEO_VIEWS cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      optimization_goal: "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "VIDEO_VIEWS");
+  });
+  test("ad set with no destination_type and no optimization_goal falls back to STANDARD", () => {
+    const out = inferCellForMetaCampaign(campaign, {});
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "STANDARD");
   });
 });
 

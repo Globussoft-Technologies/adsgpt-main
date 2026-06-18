@@ -40,8 +40,8 @@ import {
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 // Objectives migrated to the V2 cell engine. Add Ad Set / Add Ad are only
-// offered for these — legacy-objective campaigns (Awareness / Engagement /
-// Sales) stay read-only + status-toggle until they migrate. Mirrors
+// offered for these. V2 now covers all 6 ODAX objectives; this set is the
+// guardrail in case anyone re-introduces a V1-only objective. Mirrors
 // SUPPORTED_OBJECTIVES in nodejs-backend/controllers/adPosting/cellInference.js.
 const V2_SUPPORTED_OBJECTIVES = new Set([
   'OUTCOME_TRAFFIC',
@@ -49,6 +49,7 @@ const V2_SUPPORTED_OBJECTIVES = new Set([
   'OUTCOME_APP_PROMOTION',
   'OUTCOME_ENGAGEMENT',
   'OUTCOME_SALES',
+  'OUTCOME_AWARENESS',
 ]);
 
 // Small toolbar button used above the Ad Set / Ads tables to launch the
@@ -600,6 +601,11 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
           publisherPlatforms: r.targeting?.publisherPlatforms || [],
           devicePlatforms: r.targeting?.devicePlatforms || [],
           useSavedAudience: false,
+          // Awareness/STANDARD — pass-through frequency cap from the
+          // backend's resolve handler. null when Meta has no cap set (so
+          // launch-payload check skips emission and existing behavior is
+          // preserved); object when a cap exists (UI prefills it).
+          frequencyControl: r.frequencyControl || null,
         },
       });
     } catch (err) {

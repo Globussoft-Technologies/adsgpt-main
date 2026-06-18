@@ -48,6 +48,7 @@
 // pull from the same map.
 
 const OBJECTIVE_LABELS = {
+  OUTCOME_AWARENESS: "Awareness",
   OUTCOME_TRAFFIC: "Traffic",
   OUTCOME_LEADS: "Leads",
   OUTCOME_APP_PROMOTION: "App Promotion",
@@ -83,6 +84,13 @@ const CONVERSION_LOCATION_LABELS = {
   // (Dynamic Product Ads). promoted_object = product_set (NEW shape),
   // object_story_spec = template_data (NEW shape with placeholders).
   CATALOG: "Catalog sales",
+  // Awareness-specific. Meta UI has no destination dropdown for Awareness —
+  // the cell split mirrors Meta's Performance Goal groups: STANDARD covers
+  // the 3 "Awareness goals" (REACH/IMPRESSIONS/AD_RECALL_LIFT), VIDEO_VIEWS
+  // (label already declared above for Engagement) covers the 2 "Video view
+  // goals" (THRUPLAY/2-second). Reverse-inference disambiguates via the
+  // optimization_goal.
+  STANDARD: "Brand awareness",
 };
 
 // User-facing labels — match Meta Ads Manager's "Performance goal"
@@ -116,6 +124,10 @@ const OPTIMIZATION_GOAL_LABELS = {
   // Facebook Page visits" — the API still accepts the PAGE_LIKES enum).
   PAGE_LIKES: "Maximise Facebook Page visits",
   VISIT_INSTAGRAM_PROFILE: "Maximise Instagram profile visits",
+  // Awareness-only. Meta optimises delivery toward people who are most
+  // likely to remember seeing the ad. Brand-lift signal is measured via
+  // post-impression surveys; not all accounts surface the goal.
+  AD_RECALL_LIFT: "Maximise ad recall lift",
 };
 
 const BILLING_EVENT_LABELS = {
@@ -307,6 +319,11 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // identifies CATALOG by `promoted_object.product_set_id` presence
   // rather than destination_type.
   CATALOG: null,
+  // Awareness/STANDARD — no destination_type. Awareness ad sets have no
+  // conversion location in Meta's UI; the goal alone drives delivery.
+  // Reverse-inference disambiguates STANDARD vs VIDEO_VIEWS via the
+  // optimization_goal (see cellInference.js).
+  STANDARD: null,
 };
 
 // ─── The matrix ──────────────────────────────────────────────────────────────
@@ -1408,6 +1425,106 @@ const CELLS = {
       // additionalSteps: ['leadForm'].
       additionalSteps: ["catalog"],
       notes: "Dynamic Product Ads. Meta substitutes product images / names / prices per viewer from the bound product set. Requires Pixel + Catalog + Product Set.",
+    },
+  },
+
+  // ─── OUTCOME_AWARENESS ────────────────────────────────────────────────────
+  // Brand-recall objective. Meta UI has NO conversion-location dropdown
+  // for Awareness — the goal alone differentiates the two cells. Cell
+  // split mirrors Meta's Performance Goal groupings exactly:
+  //   STANDARD     → "Awareness goals" (REACH / IMPRESSIONS / AD_RECALL_LIFT)
+  //   VIDEO_VIEWS  → "Video view goals" (THRUPLAY / 2-second)
+  // Reverse-inference uses the optimization_goal alone (cellInference.js).
+  // No new builder shapes — link_data + video_data already exist. The only
+  // net-new infrastructure is frequency_control_specs on the AdSet, exposed
+  // only when the picked goal is REACH (see Joi + AdSet step UI).
+  OUTCOME_AWARENESS: {
+    STANDARD: {
+      group: "single",
+      adSet: {
+        // 3 "Awareness goals" from Meta's Performance Goal dropdown.
+        // REACH is Meta's recommended default and the only goal that
+        // surfaces frequency control. AD_RECALL_LIFT is documented as a
+        // valid value across recent Marketing API versions; not all
+        // accounts surface it but Meta accepts the enum.
+        optimizationGoals: ["REACH", "IMPRESSIONS", "AD_RECALL_LIFT"],
+        defaultOptimizationGoal: "REACH",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        // promoted_object: { page_id } — mirrors Engagement cells (Meta
+        // accepts it as the "Page being promoted" context). Awareness
+        // doesn't strictly need it but including it matches the existing
+        // pattern and avoids a no-promoted-object branch in the launcher.
+        promotedObjectShape: "page",
+        // frequencyControl is the only net-new field — surfaces only when
+        // goal === REACH (frontend conditional; Joi accepts it on any
+        // goal). Meta's UI shape: "max N impressions every M days".
+        additionalFields: ["frequencyControl"],
+      },
+      ad: {
+        // linkUrl is OPTIONAL for Awareness — the objective is brand
+        // recall, not click-through. Pure brand campaigns with CTA =
+        // NO_BUTTON omit the destination entirely. Conditional rule
+        // lives in wizardValidation: linkUrl required only when
+        // callToAction != NO_BUTTON.
+        //
+        // imageHash sits in requiredFields as the "media required"
+        // signal (mediaKind='any' means video is an accepted substitute;
+        // validators + the media check in AdStep enforce image-XOR-video
+        // generically). Matches Sales/WEBSITE's mediaKind='any' pattern.
+        requiredFields: ["imageHash", "headline", "primaryText"],
+        optionalFields: ["description", "linkUrl"],
+        objectStorySpecShape: "link_data",
+        // mediaKind: 'any' — image OR video both valid for STANDARD.
+        mediaKind: "any",
+      },
+      ctas: {
+        allowed: [
+          "LEARN_MORE", "SHOP_NOW", "SIGN_UP", "SUBSCRIBE", "CONTACT_US",
+          "DOWNLOAD", "BOOK_NOW", "GET_QUOTE", "APPLY_NOW", "GET_OFFER",
+          "WATCH_MORE", "NO_BUTTON",
+        ],
+        default: "LEARN_MORE",
+      },
+      identity: { required: ["page"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Brand awareness — reach, impressions, or ad recall lift. linkUrl is optional (pure brand campaigns use NO_BUTTON CTA + no destination). Frequency cap appears on the AdSet step when the picked goal is REACH.",
+    },
+
+    VIDEO_VIEWS: {
+      group: "single",
+      adSet: {
+        // 2 "Video view goals" from Meta's Performance Goal dropdown.
+        // THRUPLAY counts 15s OR full play; TWO_SECOND is the lower-
+        // threshold alternative. Both billed against IMPRESSIONS (Meta
+        // accepts THRUPLAY billing as an alternative but it's less
+        // common; default safe).
+        optimizationGoals: ["THRUPLAY", "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"],
+        defaultOptimizationGoal: "THRUPLAY",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+        // No frequency control on video goals — Meta's UI doesn't surface
+        // it on ThruPlay/2s-optimised ad sets.
+      },
+      ad: {
+        // mediaKind=video forces the AdStep into video-only mode (the
+        // image segmented button is hidden). Meta rejects image
+        // creatives on ThruPlay/2s-optimised ad sets (subcode 1815869).
+        // videoId in requiredFields so validateAd reads the contract
+        // generically — same pattern as Engagement/VIDEO_VIEWS.
+        mediaKind: "video",
+        requiredFields: ["videoId", "headline", "primaryText"],
+        optionalFields: ["description", "linkUrl"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        allowed: ["WATCH_MORE", "LEARN_MORE", "SHOP_NOW", "SIGN_UP", "NO_BUTTON"],
+        default: "WATCH_MORE",
+      },
+      identity: { required: ["page"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Video views — ThruPlay (15s or full play) or 2-second continuous. Video-only cell (Meta rejects image creatives on these ad sets, subcode 1815869). linkUrl optional — videos that drive plays without a click destination are common.",
     },
   },
 };

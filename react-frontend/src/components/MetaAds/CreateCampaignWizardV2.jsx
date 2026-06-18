@@ -340,6 +340,10 @@ function buildInitialForm(context = null) {
     // Sales/CATALOG — picked on the new Catalog wizard step.
     catalogId: '',
     productSetId: '',
+    // Awareness/STANDARD — Meta frequency cap. Surfaces on AdSet step
+    // only when goal === REACH. Default "2 impressions every 7 days"
+    // matches Meta UI's own placeholder.
+    frequencyControl: { capFrequency: 2, capPeriodDays: 7 },
     // Step 4 (conditional) — Lead Form
     leadFormId: '',
     leadFormMode: 'pick', // 'pick' (use existing) | 'build' (create new)
@@ -840,6 +844,16 @@ export default function CreateCampaignWizardV2({
         if (cell.adSet.additionalFields?.includes('productSetId')) {
           adSetPayload.productSetId = form.productSetId;
         }
+        // Awareness/STANDARD — frequency cap. Emitted only when the picked
+        // goal is REACH (Meta's UI only surfaces the cap on Reach; sending
+        // it on other goals is wasted payload but Meta accepts it).
+        if (
+          cell.adSet.additionalFields?.includes('frequencyControl') &&
+          form.optimizationGoal === 'REACH' &&
+          form.frequencyControl
+        ) {
+          adSetPayload.frequencyControl = form.frequencyControl;
+        }
 
         const r = await createMetaAdSetV2(adSetPayload);
         adSetId = r.adSet.id;
@@ -1033,6 +1047,19 @@ export default function CreateCampaignWizardV2({
         }
         if (form.hasEndTime && form.endTime) {
           payload.endTime = new Date(form.endTime).toISOString();
+        }
+        // Awareness/STANDARD — frequency cap edit. Only send on REACH-goal
+        // ad sets (off-goal cells don't surface the UI block, so any stale
+        // form value would just confuse the backend). Send `null` when the
+        // user cleared the values to remove the cap; the object when set.
+        if (
+          cell.adSet.additionalFields?.includes('frequencyControl') &&
+          form.optimizationGoal === 'REACH'
+        ) {
+          const fc = form.frequencyControl;
+          const hasValid =
+            fc && Number(fc.capFrequency) > 0 && Number(fc.capPeriodDays) > 0;
+          payload.frequencyControl = hasValid ? fc : null;
         }
         await updateMetaAdSetV2(payload);
       } else if (mode === 'edit-ad') {
@@ -1671,6 +1698,7 @@ function ObjectiveStep({ form, update, schema, applyTemplate }) {
 }
 
 const OBJECTIVE_DESCRIPTIONS = {
+  OUTCOME_AWARENESS: 'Show your ads to people who are most likely to remember them.',
   OUTCOME_TRAFFIC: 'Send people to a destination — site, app, Messenger, profile, or calls.',
   OUTCOME_LEADS: 'Collect leads via Instant Forms, Messenger, calls, Instagram, WhatsApp, or your app.',
   OUTCOME_APP_PROMOTION: 'Drive installs to a single store — Apple App Store or Google Play.',
@@ -2114,6 +2142,58 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           />
         )}
       </div>
+
+      {/* Awareness/STANDARD — frequency cap. Surfaces ONLY when the picked
+          goal is REACH (Meta UI's own behaviour). The cap is "max N
+          impressions every M days"; Meta accepts 1–90 for both numbers. */}
+      {cell?.adSet?.additionalFields?.includes('frequencyControl') &&
+        form.optimizationGoal === 'REACH' && (
+          <FieldShell
+            label="Frequency cap"
+            hint="At most N impressions every M days"
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <span>At most</span>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={form.frequencyControl?.capFrequency ?? ''}
+                onChange={(e) =>
+                  update({
+                    frequencyControl: {
+                      ...form.frequencyControl,
+                      capFrequency: Number(e.target.value) || 0,
+                    },
+                  })
+                }
+                className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
+              />
+              <span>impressions every</span>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={form.frequencyControl?.capPeriodDays ?? ''}
+                onChange={(e) =>
+                  update({
+                    frequencyControl: {
+                      ...form.frequencyControl,
+                      capPeriodDays: Number(e.target.value) || 0,
+                    },
+                  })
+                }
+                className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
+              />
+              <span>days</span>
+            </div>
+            {errors.frequencyControl && (
+              <div className="mt-1 text-xs text-red-400">
+                {errors.frequencyControl}
+              </div>
+            )}
+          </FieldShell>
+        )}
 
       {!form.cbo && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

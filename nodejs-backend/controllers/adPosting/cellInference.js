@@ -24,6 +24,7 @@ const SUPPORTED_OBJECTIVES = new Set([
   "OUTCOME_APP_PROMOTION",
   "OUTCOME_ENGAGEMENT",
   "OUTCOME_SALES",
+  "OUTCOME_AWARENESS",
 ]);
 
 // destination_type → conversionLocation. Some destinations resolve
@@ -65,7 +66,7 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
   const objective = String(metaCampaign?.objective || "").toUpperCase();
   if (!SUPPORTED_OBJECTIVES.has(objective)) {
     return {
-      error: `Unsupported campaign objective "${objective || "(none)"}". V2 currently supports Traffic, Leads, App Promotion, Engagement, and Sales campaigns.`,
+      error: `Unsupported campaign objective "${objective || "(none)"}". V2 currently supports Awareness, Traffic, Leads, App Promotion, Engagement, and Sales campaigns.`,
     };
   }
   const destinationType = metaAdSet?.destination_type || null;
@@ -111,6 +112,17 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
   ) {
     conversionLocation = "CATALOG";
   }
+  // Awareness disambiguation — Meta has no destination_type for Awareness
+  // (we omit it on launch; Meta infers from optimization_goal). Reverse-
+  // inference reads optimization_goal directly: video goals → VIDEO_VIEWS
+  // cell; everything else (REACH / IMPRESSIONS / AD_RECALL_LIFT) → STANDARD.
+  if (objective === "OUTCOME_AWARENESS") {
+    conversionLocation =
+      optimizationGoal === "THRUPLAY" ||
+      optimizationGoal === "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+        ? "VIDEO_VIEWS"
+        : "STANDARD";
+  }
   // Sales messaging consolidation — Meta Ads Manager surfaces Messenger /
   // IG Direct / WhatsApp as ONE "Message destinations" location for Sales
   // (same as Traffic), not as 3 separate cells (the Engagement pattern).
@@ -132,6 +144,7 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
     else if (objective === "OUTCOME_LEADS") conversionLocation = "INSTANT_FORM";
     else if (objective === "OUTCOME_ENGAGEMENT") conversionLocation = "VIDEO_VIEWS";
     else if (objective === "OUTCOME_SALES") conversionLocation = "WEBSITE";
+    else if (objective === "OUTCOME_AWARENESS") conversionLocation = "STANDARD";
   }
   if (!isCellImplemented(objective, conversionLocation)) {
     return {

@@ -1612,6 +1612,13 @@ class MetaAdLauncher {
       const rawCatalogs = [];
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
+      // Track failure modes so we can avoid caching an empty result that's
+      // due to a transient API/permission error — otherwise users would
+      // get stuck with an empty list for 30 min after any blip.
+      let businessReadFailed = false;
+      let ownedReadFailed = false;
+      let clientReadFailed = false;
+
       // Catalog edges (owned_product_catalogs / client_product_catalogs)
       // live on the Business node, NOT on AdAccount. Traverse through
       // the ad account's business in one nested field expansion.
@@ -1626,6 +1633,7 @@ class MetaAdLauncher {
           || acctRes?._data?.business?.id
           || null;
       } catch (e) {
+        businessReadFailed = true;
         logger.warn(`getCatalogs: ad account business read failed: ${e.message}`);
       }
 
@@ -1639,6 +1647,7 @@ class MetaAdLauncher {
             || [];
           rawCatalogs.push(...owned);
         } catch (e) {
+          ownedReadFailed = true;
           logger.warn(`getCatalogs: owned_product_catalogs read failed: ${e.message}`);
         }
 
@@ -1653,9 +1662,10 @@ class MetaAdLauncher {
             || [];
           rawCatalogs.push(...client);
         } catch (e) {
+          clientReadFailed = true;
           logger.warn(`getCatalogs: client_product_catalogs read failed: ${e.message}`);
         }
-      } else {
+      } else if (!businessReadFailed) {
         logger.info(`getCatalogs: ad account ${adAccountId} has no business — no catalogs`);
       }
 
@@ -1675,7 +1685,25 @@ class MetaAdLauncher {
         }));
 
       const response = { status: true, catalogs: normalised, count: normalised.length };
-      await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+
+      // Skip the cache write when the empty result is the product of a
+      // transient failure rather than a real "no catalogs" state. Otherwise
+      // a single API hiccup would lock the user out of catalogs for 30 min.
+      // Conditions to skip:
+      //   - Business read threw (couldn't even look up the BM)
+      //   - Business present but BOTH catalog edge calls threw
+      // A legitimately empty Business (no catalogs at all) WILL still be
+      // cached — that's a stable answer worth holding.
+      const transientFailure =
+        businessReadFailed
+        || (businessId && ownedReadFailed && clientReadFailed);
+      if (!transientFailure) {
+        await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      } else {
+        logger.info(
+          `getCatalogs: skipping cache write for ${adAccountId} — transient failure (business=${businessReadFailed}, owned=${ownedReadFailed}, client=${clientReadFailed})`,
+        );
+      }
       return res.status(200).json(response);
     } catch (error) {
       const m = logMetaError("getCatalogs error", error);

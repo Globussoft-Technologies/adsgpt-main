@@ -75,6 +75,15 @@ class AuthController {
       "business_management",
       "public_profile",
       "pages_manage_ads",
+      // Required for the Sales/CATALOG (Dynamic Product Ads) cell — lists
+      // product catalogs accessible to the user's Business Manager + lists
+      // product sets within a catalog. Without it, getCatalogs returns
+      // empty even with the Business-node traversal fix. Admin/Developer/
+      // Tester roles on the Facebook App get this under standard access;
+      // production users (the public) need Meta App Review. Submission:
+      // App Review → Permissions and Features → catalog_management,
+      // include a screencast of the wizard's catalog-picker flow.
+      "catalog_management",
       // DORMANT — required to read captured Lead Form submissions (the
       // dashboard's Leads tab: /get-form-leads + /export-form-leads).
       // Kept commented out because the Facebook App does not yet have
