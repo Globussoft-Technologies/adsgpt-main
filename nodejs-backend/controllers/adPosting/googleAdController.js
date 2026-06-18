@@ -182,9 +182,11 @@ function mapGoogleAccountErrorStatus(err) {
   const errorStatus = errorPayload.status || errorPayload.code || "";
   const errorCode = getGoogleAdsErrorReason(err);
 
+  // Account is deactivated/not yet enabled — not a token problem
+  if (errorCode === "CUSTOMER_NOT_ENABLED") return "DISABLED";
+
   const isRestricted =
-    statusCode === 403 ||
-    errorStatus === "PERMISSION_DENIED" ||
+    (statusCode === 403 && errorCode !== "CUSTOMER_NOT_ENABLED") ||
     errorStatus === "DEVELOPER_TOKEN_NOT_APPROVED" ||
     errorStatus === "ACCESS_DENIED" ||
     errorCode === "DEVELOPER_TOKEN_PROBATION_ORDER_ERROR" ||
@@ -220,7 +222,6 @@ function isGoogleAdsPermissionRestricted(err) {
 }
 
 function isPostableGoogleAccount(account) {
-  const hasName = account?.name && account.name !== String(account?.id);
   return (
     account?.status === "ENABLED" &&
     formatAccountStatus(account?.rawStatus) === "ENABLED" &&
@@ -228,8 +229,7 @@ function isPostableGoogleAccount(account) {
     account?.isTestAccount !== true &&
     account?.status !== "PRODUCTION_BLOCKED" &&
     account?.errorReason == null &&
-    account?.hierarchyLocked !== true &&
-    hasName
+    account?.hierarchyLocked !== true
   );
 }
 
@@ -525,12 +525,10 @@ class GoogleAdController {
         const detail = JSON.stringify(axiosErr.response?.data || axiosErr.message);
         logger.error(`Google listAccessibleCustomers failed [${status}]: ${detail}`);
         if (isGoogleAdsPermissionRestricted(axiosErr)) {
-          // Basic access requires login-customer-id. Retry using stored customerIds.
           const storedIds = googleUser.customerIds || [];
           if (storedIds.length > 0) {
             tokenResp = { data: { resourceNames: storedIds.map((id) => `customers/${id}`) } };
           } else {
-            // No stored IDs and PERMISSION_DENIED — truly locked, can't list accounts
             const response = {
               status: true,
               adAccounts: [],
@@ -569,37 +567,58 @@ class GoogleAdController {
       const accounts = [];
       const seen = new Set();
 
+      // All candidate customer IDs — used as fallback login-customer-id for Basic access
+      const allCandidateIds = resourceNames.map((rn) => normalizeCustomerId(rn.replace("customers/", "")));
+
+      const customerQuery = `
+        SELECT
+          customer.id,
+          customer.descriptive_name,
+          customer.currency_code,
+          customer.time_zone,
+          customer.status,
+          customer.manager,
+          customer.test_account
+        FROM customer
+        LIMIT 1
+      `;
+
+      // Helper: query a customer's own details, retrying with each MCC candidate as login-customer-id
+      const queryCustomerDetails = async (customerId) => {
+        const loginIds = [customerId, ...allCandidateIds.filter((id) => id !== customerId)];
+        let lastErr = null;
+        for (const loginId of loginIds) {
+          try {
+            const resp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+              { query: customerQuery },
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+                  "login-customer-id": loginId,
+                  "Content-Type": "application/json",
+                },
+                timeout: 10000,
+              }
+            );
+            return resp;
+          } catch (err) {
+            lastErr = err;
+            // Always continue to next candidate on 4xx — only bail on network/timeout errors
+            if (status && status >= 400 && status < 500) continue;
+            throw err;
+          }
+        }
+        throw lastErr;
+      };
+
       // Use searchStream REST for all queries in parallel
       const accountTasks = resourceNames.map(async (rn) => {
         const customerId = normalizeCustomerId(rn.replace("customers/", ""));
         try {
           // Query this account's own details + whether it's a manager
-          const selfResp = await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
-            {
-              query: `
-                SELECT
-                  customer.id,
-                  customer.descriptive_name,
-                  customer.currency_code,
-                  customer.time_zone,
-                  customer.status,
-                  customer.manager,
-                  customer.test_account
-                FROM customer
-                LIMIT 1
-              `,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-                "login-customer-id": customerId,
-                "Content-Type": "application/json",
-              },
-              timeout: 10000,
-            }
-          );
+          const selfResp = await queryCustomerDetails(customerId);
 
           const rows = selfResp.data?.[0]?.results || [];
           if (!rows.length) return [];
@@ -610,7 +629,7 @@ class GoogleAdController {
 
           results.push({
             id: cid,
-            name: c.descriptiveName || cid,
+            name: c.descriptiveName || `Google Ads Account ${cid}`,
             status: formatAccountStatus(c.status),
             rawStatus: c.status,
             currency: c.currencyCode,
@@ -684,7 +703,7 @@ class GoogleAdController {
             timezone: "Unknown",
             isManager: false,
             loginCustomerId: customerId,
-            errorReason: err.response?.data?.error?.status || (err.response?.status === 403 ? "DEVELOPER_TOKEN_NOT_APPROVED" : "API_ERROR"),
+            errorReason: getGoogleAdsErrorReason(err) || err.response?.data?.error?.status || "API_ERROR",
           }];
         }
       });

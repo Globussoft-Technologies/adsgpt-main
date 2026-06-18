@@ -62,6 +62,8 @@ export default function GoogleAdsDashboard() {
   const openWizard  = (mode, context = null) => setWizard({ open: true, mode, context });
   const closeWizard = () => setWizard((w) => ({ ...w, open: false }));
 
+  const [noAccountReason, setNoAccountReason] = useState(null);
+
   // ── load accounts on mount ────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -69,8 +71,12 @@ export default function GoogleAdsDashboard() {
         const res = await getGoogleAdAccounts();
         const accounts = res.adAccounts || [];
         setAdAccounts(accounts);
-        if (accounts.length) setSelectedAccount(accounts[0]);
-        else navigate('/ads-manager');
+        if (accounts.length) {
+          setSelectedAccount(accounts[0]);
+        } else {
+          // Stay on this page — show a "no accounts" state with disconnect option
+          setNoAccountReason(res.noAccountReason || 'no_google_ads_account');
+        }
       } catch {
         navigate('/ads-manager');
       } finally {
@@ -160,6 +166,81 @@ export default function GoogleAdsDashboard() {
     
     // { id: 'audit',     label: 'Audit',     icon: ClipboardList },
   ];
+
+  // ── no accounts state ─────────────────────────────────────────────────────
+  if (!loadingAccounts && noAccountReason) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-6 p-8">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#171717]">
+          <SiGoogleads className="h-7 w-7" style={{ color: GOOGLE_BLUE }} />
+        </div>
+        <div className="text-center">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">No Google Ads Accounts Found</h2>
+          <p className="mt-1.5 max-w-sm text-sm text-gray-500 dark:text-[#BEBEBE]">
+            {noAccountReason === 'google_ads_developer_token_restricted'
+              ? 'Google Ads is connected but your developer token is restricted. Please contact support.'
+              : 'Your connected Google account is not linked to any active Google Ads account. Create one at ads.google.com or connect a different Google account.'}
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-3 sm:flex-row">
+          <a
+            href="https://ads.google.com/home/"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition-all hover:border-gray-300 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white dark:hover:border-white/20"
+          >
+            <Plus className="h-4 w-4" />
+            Create Ads Account
+          </a>
+          <button
+            onClick={() => setShowDisconnectModal(true)}
+            disabled={disconnecting}
+            className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2 text-sm font-semibold text-red-600 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+          >
+            {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+            {disconnecting ? 'Disconnecting…' : 'Disconnect Google'}
+          </button>
+        </div>
+
+        {/* Disconnect confirm modal */}
+        <AnimatePresence>
+          {showDisconnectModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+              onClick={() => setShowDisconnectModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-[#1a1a1a]"
+              >
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">Disconnect Google Ads?</h3>
+                <p className="mt-2 text-sm text-gray-500 dark:text-[#BEBEBE]">
+                  Your Google account will be disconnected. You can reconnect anytime from Profile settings.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowDisconnectModal(false)}
+                    className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-[#BEBEBE] dark:hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => { setShowDisconnectModal(false); await handleDisconnect(); }}
+                    disabled={disconnecting}
+                    className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                  >
+                    {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
