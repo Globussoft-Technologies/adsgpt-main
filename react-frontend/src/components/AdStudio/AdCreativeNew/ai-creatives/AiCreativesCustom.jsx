@@ -96,6 +96,10 @@ const QUALITY_OPTIONS = [
   { value: 'high', label: 'High' },
 ];
 
+// HIDE-MARK — Quality picker hidden. Named flag avoids a literal `false &&`
+// (no-constant-binary-expression); flip to true to re-enable the picker.
+const SHOW_QUALITY_PICKER = false;
+
 const ASPECT_LABELS = [
   { key: '1:1', label: '1:1 (square)' },
   { key: '2:3', label: '2:3 (portrait)' },
@@ -1052,8 +1056,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     )}
                   </button>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* Quality picker — sits between the improve-prompt (magic)
-                      button and the model picker. Wires to userInputs.quality. */}
+                  {/* HIDE-MARK — Quality picker hidden. `quality` state stays at
+                      its default ('medium') so the payload still sends a valid
+                      value; backend treats quality as optional. Unhide: drop the
+                      `false &&` guard and this comment. */}
+                  {SHOW_QUALITY_PICKER && (
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <PillButton
                       label={QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
@@ -1091,6 +1098,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       </div>
                     )}
                   </div>
+                  )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
                       icon={<ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />}

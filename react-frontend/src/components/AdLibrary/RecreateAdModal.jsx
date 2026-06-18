@@ -91,6 +91,11 @@ const QUALITY_OPTIONS = [
   { value: 'high', label: 'High' },
 ];
 
+// HIDE-MARK — Quality picker hidden in the Recreate Ad modal. Named flag avoids
+// a literal `false &&`; flip to re-enable. `quality` state stays 'medium' so the
+// payload is unchanged (backend treats quality as optional).
+const SHOW_QUALITY_PICKER = false;
+
 // Combined 5-image cap across uploads + chip picks. Matches AiCreativesCustom.
 // The source ad on the left is the implicit competitor reference and lives
 // outside this count — only user-added images contribute.
@@ -908,8 +913,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     )}
                   </button>
 
-                  {/* Quality picker — sits between the improve-prompt (magic)
-                      button and the model picker. Wires to userInputs.quality. */}
+                  {/* HIDE-MARK — Quality picker hidden via SHOW_QUALITY_PICKER.
+                      Sits between the improve-prompt (magic) button and the model
+                      picker. Wires to userInputs.quality. */}
+                  {SHOW_QUALITY_PICKER && (
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <button
                       type="button"
@@ -949,6 +956,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       </div>
                     )}
                   </div>
+                  )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <button
                       type="button"

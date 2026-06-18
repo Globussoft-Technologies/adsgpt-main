@@ -8,8 +8,9 @@ import AdFactoryPage from '@/pages/AdFactory/AdFactoryPage';
 import AdInsightsPage from '@/pages/AdInsights/AdInsightsPage';
 import AdLibraryPage from '@/pages/AdLibrary/AdLibraryPage';
 import AdStudioPage from '@/pages/AdStudio/AdStudioPage';
-import LandingPageAnalyzerHome from '@/pages/LandingPageAnalyzer/LandingPageAnalyzerHome';
-import LandingPageAnalyzerResultPage from '@/pages/LandingPageAnalyzer/LandingPageAnalyzerResultPage';
+// HIDE-MARK — Landing Page Analyzer hidden (routes + imports).
+// import LandingPageAnalyzerHome from '@/pages/LandingPageAnalyzer/LandingPageAnalyzerHome';
+// import LandingPageAnalyzerResultPage from '@/pages/LandingPageAnalyzer/LandingPageAnalyzerResultPage';
 import MetaAdsPage from '@/pages/MetaAds/MetaAdsPage';
 import GoogleAdsPage from '@/pages/GoogleAds/GoogleAdsPage';
 import AdsManagerPage from '@/pages/AdsManager/AdsManagerPage';
@@ -47,9 +48,10 @@ const router = createBrowserRouter([
       { path: 'ads-manager', element: <AdsManagerPage /> },
       { path: 'meta-ads', element: <MetaAdsPage /> },
       { path: 'google-ads', element: <GoogleAdsPage /> },
+      // HIDE-MARK — Landing Page Analyzer routes hidden.
       // Landing Page Analyzer — URL-input home, then the result view by sessionId.
-      { path: 'landing-page-analyzer', element: <LandingPageAnalyzerHome /> },
-      { path: 'landing-page-analyzer/:id', element: <LandingPageAnalyzerResultPage /> },
+      // { path: 'landing-page-analyzer', element: <LandingPageAnalyzerHome /> },
+      // { path: 'landing-page-analyzer/:id', element: <LandingPageAnalyzerResultPage /> },
       // Autopilot has the same picker-then-dashboard structure as Ads
       // Manager: `/autopilot` is the platform picker home, `/autopilot/meta`
       // is the actual dashboard for Meta. Google/TikTok land on the picker

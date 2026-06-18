@@ -309,7 +309,8 @@ export default function ImageCard({
                 <span className="text-gray-400">Model:</span>{' '}
                 {item?.inputs?.modelLabel || item?.inputs?.model || '-'}
               </p>
-              <p>
+              {/* //Hidden quality mark from tooltip here */}
+              {/* <p>
                 <span className="text-gray-400">Quality:</span>{' '}
                 {(() => {
                   // Records created before the quality field existed won't
@@ -317,7 +318,7 @@ export default function ImageCard({
                   const q = item?.inputs?.quality || 'medium';
                   return q.charAt(0).toUpperCase() + q.slice(1);
                 })()}
-              </p>
+              </p> */}
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-400">Brand:</span> {item.inputs.brandName}
@@ -458,7 +459,8 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {onOpenPostAdModal && (
+            {/* HIDE-MARK — Post as ad (Megaphone) hidden via SHOW_POST_AD_NAV. */}
+            {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"
                 onClick={(e) => {

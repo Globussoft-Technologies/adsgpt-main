@@ -85,6 +85,11 @@ const QUALITY_OPTIONS = [
   { value: 'high', label: 'High' },
 ];
 
+// HIDE-MARK — Quality picker hidden (lifestyle/product-shot/apps-saas/brand
+// share this step). Named flag avoids a literal `false &&`; flip to re-enable.
+// `quality` state stays 'medium' so the payload is unchanged (backend optional).
+const SHOW_QUALITY_PICKER = false;
+
 // Reverse of LifestyleAdsFlow.MODEL_TO_API — used to map a stored API model
 // id back to the UI label for the recreate-from-history flow.
 const API_MODEL_TO_UI = {
@@ -890,7 +895,8 @@ export function AdSetupStep({
                     />
                   )}
                 </button>
-                <QualityPickerPill value={quality} onChange={setQuality} />
+                {/* HIDE-MARK — Quality picker hidden via SHOW_QUALITY_PICKER. */}
+                {SHOW_QUALITY_PICKER && <QualityPickerPill value={quality} onChange={setQuality} />}
                 <ModelPickerPill value={model} onChange={setModel} />
                 <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} />
               </div>

@@ -746,7 +746,8 @@ export default function VideoCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {item?.status === 'completed' && onOpenPostAdModal && (
+                {/* HIDE-MARK — Post as ad (Megaphone) hidden via SHOW_POST_AD_NAV. */}
+                {SHOW_POST_AD_NAV && item?.status === 'completed' && onOpenPostAdModal && (
                   <button
                     title="Post as ad"
                     onClick={(e) => {

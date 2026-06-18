@@ -110,13 +110,16 @@ exports.createAnalysis = async (req, res) => {
       },
     );
 
-    // 3. Python rejected the scan. Delete only docs we just created — never wipe
-    //    an existing one (it may still hold a prior good result).
+    // 3. Python rejected the scan but still replied 2xx (success:false in body).
+    //    Delete only docs we just created — never wipe an existing one (it may
+    //    still hold a prior good result). Forward python's own message/errorCode
+    //    so the FE can show the real reason.
     if (!data?.success) {
       if (isNew) await analysis.deleteOne();
       return res.status(502).json({
         success: false,
         error: data?.message || "Scan could not be started",
+        errorCode: data?.errorCode,
       });
     }
 
@@ -133,13 +136,28 @@ exports.createAnalysis = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error(`Error in createAnalysis: ${error.message}`);
+    // axios throws on any non-2xx from python (e.g. 422 ADULT_CONTENT). The real
+    // reason lives on error.response.data — surface it so the FE shows python's
+    // message instead of a generic 500.
+    const py = error.response?.data;
+    logger.error(
+      `Error in createAnalysis: ${error.message} ${py ? JSON.stringify(py) : ""}`,
+    );
     // Best-effort: only delete a doc WE created this request — never an existing one.
     if (isNew && analysis?._id) {
       try {
         await analysis.deleteOne();
       } catch (_) {}
     }
+    // Python replied with a structured rejection (4xx/5xx) → forward its message.
+    if (py) {
+      return res.status(502).json({
+        success: false,
+        error: py.message || "Scan could not be started",
+        errorCode: py.errorCode,
+      });
+    }
+    // No response (timeout / unreachable / misconfigured URL) → true server error.
     return res
       .status(500)
       .json({ success: false, error: "Internal server error" });
