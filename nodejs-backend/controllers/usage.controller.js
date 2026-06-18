@@ -2,7 +2,8 @@ const Usage = require("../Module/usage/usage.model");
 const GeneratedMedia = require("../Module/generatedMedia/generated.media");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
-const { imageEntries, videoEntries } = require("../config/modelRegistry");
+const { imageEntries, videoEntries, findModel } = require("../config/modelRegistry");
+const { SURFACE_CATALOG, SURFACE_SLUGS } = require("../config/surfaceCatalog");
 
 const createUsage = async (req, res) => {
   try {
@@ -213,23 +214,142 @@ const getUserGenerationStats = async (req, res) => {
 // hardcoded array — image entries default to 0 credits if env unset, video
 // entries fall back to whatever the registry says (matches the old
 // `parseFloat(... || N)` defaults that were already aligned with the registry).
-function rowFor(entry, unitLabel) {
+function creditsFor(entry) {
   const raw = parseFloat(process.env[entry.creditEnvVar]);
-  const credits = Number.isFinite(raw) ? raw : entry.creditDefault;
-  return { label: entry.label, credits, value: `${credits} ${unitLabel}` };
+  return Number.isFinite(raw) ? raw : entry.creditDefault;
 }
 
-const getModelCreditDeduction = async (_req, res) => {
-  try {
-    const imageModels = imageEntries({ activeOnly: true })
-      .map((e) => rowFor(e, "CREDITS/IMAGE"))
-      .sort((a, b) => a.credits - b.credits)
-      .map(({ label, value }) => ({ label, value }));
+function unitLabelFor(type) {
+  return type === "video" ? "CREDITS/SECOND" : "CREDITS/IMAGE";
+}
 
-    const videoModels = videoEntries({ activeOnly: true })
-      .map((e) => rowFor(e, "CREDITS/SECOND"))
-      .sort((a, b) => a.credits - b.credits)
-      .map(({ label, value }) => ({ label, value }));
+// Flat catalog row (no-media / full-catalog response). Byte-compatible with the
+// historical { label, value } shape — `credits` is internal, used only to sort.
+function rowFor(entry) {
+  const credits = creditsFor(entry);
+  return { label: entry.label, credits, value: `${credits} ${unitLabelFor(entry.type)}` };
+}
+
+// Surface-aware row — adds canonical, numeric credits/sec and the surface's
+// allowed durations + aspect ratios so the frontend can build its pickers.
+function surfaceRowFor(entry, caps) {
+  const credits = creditsFor(entry);
+  const creditField = entry.type === "video" ? "creditsPerSecond" : "creditsPerImage";
+  return {
+    canonical: entry.canonicalKey,
+    label: entry.label,
+    type: entry.type,
+    value: `${credits} ${unitLabelFor(entry.type)}`,
+    [creditField]: credits,
+    credits, // internal sort key, stripped before sending
+    durations: caps.durations || [],
+    aspectRatios: caps.aspectRatios || [],
+  };
+}
+
+const sortByCredits = (a, b) => a.credits - b.credits;
+
+/**
+ * GET /usage/model-credit-value?type=&media=
+ *
+ *  type   "all" (default) | "image" | "video" — which model groups to populate.
+ *  media  optional surface slug (ai_ads | ugc | broll | avatar | clone).
+ *         When present, only that surface's models are returned, each enriched
+ *         with durations[] + aspectRatios[]. When absent, the full catalog is
+ *         returned exactly as before (back-compat).
+ */
+const getModelCreditDeduction = async (req, res) => {
+  /* #swagger.auto = false
+     #swagger.tags = ['Usage']
+     #swagger.summary = 'Model credit values (catalog + per-surface)'
+     #swagger.path = '/usage/model-credit-value'
+     #swagger.method = 'get'
+     #swagger.description = 'Returns the per-unit credit cost of each enabled generation model. <br/><br/>**No params** → full catalog, back-compatible shape: `{ imageModels:[{label,value}], videoModels:[{label,value}] }` (value is a string like "7 CREDITS/IMAGE" / "4 CREDITS/SECOND"), sorted cheapest-first. <br/><br/>**`media` set** → only the models offered on that AdStudio video surface, each row enriched with `canonical`, numeric `creditsPerSecond`, and the surface-specific `durations[]` + `aspectRatios[]` so the frontend can build its pickers. Per-unit credits read from env (creditEnvVar) with a registry fallback. <br/><br/>**`type`** narrows which group is populated. All current surfaces are video, so `type=image` together with a `media` slug yields an empty list.'
+     #swagger.parameters['type'] = { in: 'query', required: false, type: 'string', enum: ['all','image','video'], description: 'Which model groups to populate. Defaults to all.' }
+     #swagger.parameters['media'] = { in: 'query', required: false, type: 'string', enum: ['ai_ads','ugc','broll','avatar','clone'], description: 'Optional AdStudio video surface. When set, returns only the models for that surface, enriched with durations and aspectRatios.' }
+     #swagger.responses[200] = {
+       description: 'Model credit configuration. Example shows a per-surface response (media=ugc&type=video). The no-media response instead returns flat { label, value } rows under imageModels/videoModels.',
+       content: { "application/json": { example: {
+         success: true,
+         message: "Model credit configuration fetched successfully",
+         data: {
+           media: "ugc",
+           imageModels: [],
+           videoModels: [
+             { canonical: "seedance_fast", label: "Seedance 2.0 Fast", type: "video", value: "3 CREDITS/SECOND", creditsPerSecond: 3, durations: [8,12], aspectRatios: ["9:16","16:9"] },
+             { canonical: "veo-3.1-fast", label: "Veo 3.1 fast", type: "video", value: "4 CREDITS/SECOND", creditsPerSecond: 4, durations: [8], aspectRatios: ["9:16","16:9"] },
+             { canonical: "kling_3.0", label: "Kling 3.0", type: "video", value: "4 CREDITS/SECOND", creditsPerSecond: 4, durations: [8,12], aspectRatios: ["9:16","16:9","1:1"] }
+           ]
+         }
+       } } }
+     }
+     #swagger.responses[400] = {
+       description: 'Unknown media slug.',
+       content: { "application/json": { example: { success: false, message: 'Unknown media surface "foo". Valid surfaces: ai_ads, ugc, broll, avatar, clone' } } }
+     }
+     #swagger.responses[401] = { description: 'Missing token' }
+     #swagger.responses[403] = { description: 'Invalid or expired token' }
+     #swagger.responses[500] = {
+       description: 'Server error',
+       content: { "application/json": { example: { success: false, message: "Internal server error" } } }
+     }
+  */
+  try {
+    const { type = "all", media } = req.query;
+    const wantImage = type === "all" || type === "image";
+    const wantVideo = type === "all" || type === "video";
+
+    // ─── Surface-filtered catalog ──────────────────────────────────────────
+    if (media) {
+      const surface = SURFACE_CATALOG[media];
+      if (!surface) {
+        return res.status(400).json({
+          success: false,
+          message: `Unknown media surface "${media}". Valid surfaces: ${SURFACE_SLUGS.join(", ")}`,
+        });
+      }
+
+      const imageModels = [];
+      const videoModels = [];
+
+      for (const [canonical, caps] of Object.entries(surface)) {
+        const entry = findModel(canonical);
+        // Skip unknown or disabled models — keeps the surface in lockstep with
+        // the registry's enabled flag (no dead pickers).
+        if (!entry || entry.enabled === false) continue;
+        const isVideo = entry.type === "video";
+        if (isVideo ? !wantVideo : !wantImage) continue;
+        (isVideo ? videoModels : imageModels).push(surfaceRowFor(entry, caps));
+      }
+
+      imageModels.sort(sortByCredits);
+      videoModels.sort(sortByCredits);
+
+      return res.status(200).json({
+        success: true,
+        message: "Model credit configuration fetched successfully",
+        data: {
+          media,
+          imageModels: imageModels.map(({ credits, ...row }) => row),
+          videoModels: videoModels.map(({ credits, ...row }) => row),
+        },
+      });
+    }
+
+    // ─── Full catalog (no media) — back-compatible { label, value } shape ──
+    const imageModels = wantImage
+      ? imageEntries({ activeOnly: true })
+          .map(rowFor)
+          .sort(sortByCredits)
+          .map(({ label, value }) => ({ label, value }))
+      : [];
+
+    const videoModels = wantVideo
+      ? videoEntries({ activeOnly: true })
+          .map(rowFor)
+          .sort(sortByCredits)
+          .map(({ label, value }) => ({ label, value }))
+      : [];
 
     return res.status(200).json({
       success: true,

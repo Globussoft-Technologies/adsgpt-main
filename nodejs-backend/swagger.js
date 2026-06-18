@@ -95,6 +95,10 @@ const doc = {
       description: "Store and fetch module prompt templates by type",
     },
     {
+      name: "Usage",
+      description: "Usage logging, generation stats, and model credit values",
+    },
+    {
       name: "default",
       description: "Miscellaneous APIs",
     },
