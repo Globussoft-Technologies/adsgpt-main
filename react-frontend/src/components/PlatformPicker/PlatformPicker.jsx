@@ -29,7 +29,8 @@ const PlatformPicker = ({
   metaDestination,
   title = 'Choose Your Ad Platform',
   subtitle = 'Select where you want to launch your ads',
-  googleComingSoon = false,
+  // googleComingSoon = false,
+  googleComingSoon = true,
 }) => {
   const navigate = useNavigate();
   const [metaConnected, setMetaConnected] = useState(false);

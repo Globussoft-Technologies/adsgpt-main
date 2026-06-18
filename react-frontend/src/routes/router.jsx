@@ -58,7 +58,7 @@ const router = createBrowserRouter([
       // home once those integrations exist.
       { path: 'autopilot', element: <AutopilotHomePage /> },
       { path: 'autopilot/meta', element: <AutopilotPage /> },
-      { path: 'assistant', element: <AIAssistantPage /> },
+      // { path: 'assistant', element: <AIAssistantPage /> },
       { path: '/profile', element: <UserProfilePage /> },
       { path: 'onboarding', element: <UserOnBoardPage /> },
       // { path: 'adfactory-demo', element: <AdFactoryWorkflowDarkReal2 /> },
