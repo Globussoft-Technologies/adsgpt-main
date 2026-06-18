@@ -76,6 +76,20 @@ export const getVoices = async (filters = {}) => {
   return Array.isArray(data) ? data : [];
 };
 
+// Free-text search across the whole catalog. Escape hatch for languages we
+// don't surface in /languages (Telugu, Kannada, Malayalam, …) whose voices are
+// cataloged under English/Hindi — the target language only shows in the name.
+// → [{ voice_id, name, language, accent, gender, preview_url }, ...]
+export const searchVoices = async (q) => {
+  const term = (q || '').trim();
+  if (!term) return [];
+  const { data } = await axios.get(`${ROOT}/search`, {
+    params: { q: term },
+    headers: getAuthHeaders(),
+  });
+  return Array.isArray(data) ? data : [];
+};
+
 // Code → name map for the language dropdown. The catalog returns ISO codes
 // like "en" / "hi"; the UI shows English names. Anything not in the map
 // falls back to the raw code so a new ElevenLabs language never breaks the

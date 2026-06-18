@@ -6,6 +6,7 @@ const {
   accents,
   ages,
   voices,
+  search,
 } = require("../controllers/voiceSelectorController");
 
 const router = express.Router();
@@ -16,5 +17,6 @@ router.get("/genders", genders);
 router.get("/accents", accents);
 router.get("/ages", ages);
 router.get("/voices", voices);
+router.get("/search", search);
 
 module.exports = router;

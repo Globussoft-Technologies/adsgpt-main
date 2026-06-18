@@ -1,15 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, X, Mic2 } from 'lucide-react';
+import { Plus, X, Mic2, Search, Play, Pause, Loader2 } from 'lucide-react';
 import {
   getLanguages,
   getGenders,
   getAccents,
   getAges,
   getVoices,
+  searchVoices,
 } from '@/apis/voiceSelector/voiceSelectorApi';
 import ChipDropdown from './ChipDropdown';
 
 const FIELDS = ['language', 'gender', 'accent', 'age', 'voice'];
+
+// Sentinel language code for the "Other" option. Picking it swaps the cascade
+// for a free-text search box (→ /search) so users can find voices for
+// languages we don't surface in the language list (Telugu, Kannada, …).
+const OTHER_LANG = '__other__';
 
 const prettify = (s) =>
   String(s)
@@ -32,6 +38,22 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
 
+  // Free-text search ("Other") state. Tracked explicitly via `searchMode` so
+  // that `value.language` can hold the picked voice's REAL ISO code (hi/en)
+  // instead of the OTHER_LANG sentinel — the sentinel only seeds initial mode
+  // for older saved data.
+  const [searchMode, setSearchMode] = useState(value.language === OTHER_LANG);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchPlayingId, setSearchPlayingId] = useState(null);
+  const searchAudioRef = useRef(null);
+  const searchRef = useRef(null);
+
+  const isOtherLanguage = searchMode;
+
   const anchors = {
     language: useRef(null),
     gender:   useRef(null),
@@ -51,6 +73,8 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
       setErrors((s) => ({ ...s, [field]: '' }));
       try {
         // Pass only the filters that sit upstream of the field being loaded.
+        // value.language now holds a real ISO code (or '' in search mode before a
+        // voice is picked), so it can be forwarded directly.
         const upstream = {
           language: value.language || '',
           gender: value.gender || '',
@@ -59,13 +83,15 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         };
         let data = [];
         if (field === 'language') {
-          // Only English and Hindi are offered for now. Every other locale the
-          // catalog returns stays blocked until we support it. Remove the
-          // filter below to restore the full language list.
+          // Only English and Hindi are offered as direct picks for now. Every
+          // other locale the catalog returns stays blocked until we support it
+          // — but "Other" (appended below) opens free-text search to reach them.
           const ALLOWED_LANGUAGES = ['en', 'hi'];
           const all = await getLanguages();
           data = all.filter((l) => ALLOWED_LANGUAGES.includes(l?.code || l));
           // data = all;
+          // Append the "Other" escape hatch after Hindi.
+          data = [...data, { code: OTHER_LANG, label: 'Other' }];
         }
         else if (field === 'gender') data = await getGenders({ language: upstream.language });
         else if (field === 'accent') data = await getAccents({ language: upstream.language, gender: upstream.gender });
@@ -88,8 +114,28 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
   }, [openChip, load]);
 
   const handleSelect = (field, val, meta) => {
+    // Picking "Other" swaps the cascade for the search box: clear every
+    // downstream filter + voice and reset cached options so nothing stale shows.
+    if (field === 'language' && val === OTHER_LANG) {
+      const next = {
+        ...value,
+        language: '',           // real code gets filled when a search voice is picked
+        languageLabel: 'Other',
+        gender: '', accent: '', age: '',
+        voiceId: '', voiceName: '',
+      };
+      setOptions((s) => ({ ...s, gender: [], accent: [], age: [], voice: [] }));
+      setSearchMode(true);
+      onChange?.(next);
+      setOpenChip(null);
+      setSearchOpen(true);
+      return;
+    }
+
     const next = { ...value };
     if (field === 'language') {
+      // Picking a real language (or clearing) exits search mode.
+      setSearchMode(false);
       next.language = val;
       next.languageLabel = meta?.label || (val ? val.toUpperCase() : '');
     } else if (field === 'voice') {
@@ -122,15 +168,118 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
     handleSelect(field, '');
   };
 
+  // ── Free-text search (Other language) ──────────────────────────────────
+  const stopSearchPreview = useCallback(() => {
+    if (searchAudioRef.current) {
+      searchAudioRef.current.pause();
+      searchAudioRef.current = null;
+    }
+    setSearchPlayingId(null);
+  }, []);
+
+  // Reset all search state whenever we leave "Other" mode.
+  useEffect(() => {
+    if (!isOtherLanguage) {
+      setSearchOpen(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchError('');
+      stopSearchPreview();
+    }
+  }, [isOtherLanguage, stopSearchPreview]);
+
+  // Close the search popover on outside click — but ignore clicks on the Voice
+  // chip itself, which toggles the popover (see its onClick below).
+  useEffect(() => {
+    if (!(isOtherLanguage && searchOpen)) return undefined;
+    const onClick = (e) => {
+      if (searchRef.current?.contains(e.target)) return;
+      if (anchors.voice.current?.contains(e.target)) return;
+      setSearchOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [isOtherLanguage, searchOpen, anchors.voice]);
+
+  // Auto-search as the user types — debounced 400ms so we don't fire a request
+  // per keystroke. `ignore` guards against a slow response landing after a newer
+  // query has already started.
+  useEffect(() => {
+    if (!isOtherLanguage) return undefined;
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchError('');
+      setSearchLoading(false);
+      return undefined;
+    }
+    let ignore = false;
+    setSearchLoading(true);
+    setSearchError('');
+    const handle = setTimeout(() => {
+      searchVoices(q)
+        .then((data) => { if (!ignore) setSearchResults(data); })
+        .catch(() => { if (!ignore) setSearchError('Search failed. Try again.'); })
+        .finally(() => { if (!ignore) setSearchLoading(false); });
+    }, 400);
+    return () => { ignore = true; clearTimeout(handle); };
+  }, [searchQuery, isOtherLanguage]);
+
+  // Selecting a search result sets the voice and back-fills the gender / accent
+  // chips from the voice's own metadata (the /search payload carries both), so
+  // the picker reflects what was actually chosen. Language stays "Other" so the
+  // search box remains available, but languageLabel becomes the term the user
+  // searched (e.g. "Punjabi") instead of a hardcoded "Other" — that's what they
+  // actually intended. Closes the popover (re-open via the Voice chip).
+  const selectSearchVoice = (v) => {
+    const term = searchQuery.trim();
+    onChange?.({
+      ...value,
+      language: v.language || '',                 // real ISO code the voice is cataloged under (hi/en)
+      languageLabel: term ? prettify(term) : value.languageLabel || 'Other',
+      voiceId: v.voice_id,
+      voiceName: v.name,
+      gender: v.gender || '',
+      accent: v.accent || '',
+    });
+    stopSearchPreview();
+    setSearchOpen(false);
+  };
+
+  const toggleSearchPreview = (v) => {
+    const id = v.voice_id;
+    if (searchAudioRef.current && searchPlayingId === id) {
+      stopSearchPreview();
+      return;
+    }
+    stopSearchPreview();
+    if (!v.preview_url) return;
+    const a = new Audio(v.preview_url);
+    a.onended = () => stopSearchPreview();
+    a.onerror = () => stopSearchPreview();
+    searchAudioRef.current = a;
+    setSearchPlayingId(id);
+    a.play().catch(() => stopSearchPreview());
+  };
+
   const chipLabel = (field) => {
-    if (field === 'language' && value.language) return value.languageLabel || value.language.toUpperCase();
+    if (field === 'language') {
+      // In search mode show the searched term (e.g. "Punjabi"), falling back to
+      // "Other" before a voice is picked; otherwise the normal language label.
+      if (searchMode) return value.languageLabel || 'Other';
+      if (value.language) return value.languageLabel || value.language.toUpperCase();
+      return null;
+    }
     if (field === 'voice' && value.voiceId) return value.voiceName || 'Voice selected';
     if (value[field]) return prettify(value[field]);
     return null;
   };
 
-  const isSelected = (field) =>
-    field === 'voice' ? !!value.voiceId : !!value[field];
+  const isSelected = (field) => {
+    if (field === 'voice') return !!value.voiceId;
+    if (field === 'language') return searchMode || !!value.language;
+    return !!value[field];
+  };
 
   return (
     <div className="w-full">
@@ -144,7 +293,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         </p>
       </div>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
         {FIELDS.map((field) => {
           const selected = isSelected(field);
@@ -154,9 +303,16 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
               <button
                 ref={anchors[field]}
                 type="button"
-                onClick={() =>
-                  setOpenChip((cur) => (cur === field ? null : field))
-                }
+                onClick={() => {
+                  // In "Other" mode the Voice chip toggles the search popover
+                  // instead of the cascade dropdown.
+                  if (field === 'voice' && isOtherLanguage) {
+                    setOpenChip(null);
+                    setSearchOpen((o) => !o);
+                    return;
+                  }
+                  setOpenChip((cur) => (cur === field ? null : field));
+                }}
                 className={`group flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition sm:text-[13px] ${
                   field === 'voice'
                     ? selected
@@ -198,7 +354,13 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
                 loading={!!loading[field]}
                 error={errors[field]}
                 options={options[field] || []}
-                value={field === 'voice' ? value.voiceId : value[field]}
+                value={
+                  field === 'voice'
+                    ? value.voiceId
+                    : field === 'language' && searchMode
+                      ? OTHER_LANG
+                      : value[field]
+                }
                 onSelect={(val, meta) => handleSelect(field, val, meta)}
                 onClose={() => setOpenChip(null)}
               />
@@ -207,6 +369,91 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         })}
         </div>
         {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+
+        {/* Free-text search — a floating dropdown sized like the chip dropdowns
+            and absolutely positioned, so it overlays instead of growing the form
+            (no extra scroll). Auto-searches /search as you type; picking a result
+            sets the voice exactly like the Voice chip does. */}
+        {isOtherLanguage && searchOpen && (
+          <div
+            ref={searchRef}
+            className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]"
+          >
+            {/* Single capped scroll container — same max height as the other
+                chip dropdowns. Search box sticks to the top while results scroll
+                underneath, so the popover never grows taller than a chip dropdown
+                and can't push the form into scrolling. */}
+            <div className="max-h-[120px] overflow-y-auto py-1">
+              <div className="sticky top-0 z-10 bg-white px-3 py-1.5 dark:bg-[#1A1A1A]">
+                <div className="flex items-center gap-2 rounded-md border border-black/10 bg-gray-100 px-2 py-1 dark:border-white/10 dark:bg-white/5">
+                  <Search className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
+                  <input
+                    type="text"
+                    placeholder="Search language…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              {searchLoading && (
+                <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-gray-500 dark:text-white/50">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+                </div>
+              )}
+              {!searchLoading && searchError && (
+                <div className="px-3 py-3 text-[12px] text-red-400">{searchError}</div>
+              )}
+              {!searchLoading && !searchError && searchResults.length === 0 && searchQuery.trim() && (
+                <div className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/40">No voices found</div>
+              )}
+              {!searchLoading && !searchError &&
+                searchResults.map((v) => {
+                  const selected = value.voiceId === v.voice_id;
+                  const isPlaying = searchPlayingId === v.voice_id;
+                  return (
+                    <div
+                      key={v.voice_id}
+                      className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-[13px] transition ${selected ? 'bg-black/5 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => selectSearchVoice(v)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <span
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-emerald-400' : 'border-gray-300 dark:border-white/30'}`}
+                        >
+                          {selected && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                        </span>
+                        <span className="min-w-0 truncate text-gray-700 dark:text-white/90">
+                          {v.name}
+                        </span>
+                      </button>
+                      {v.preview_url ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSearchPreview(v);
+                          }}
+                          className="shrink-0 rounded-full bg-black/5 p-1.5 text-gray-500 hover:bg-black/10 hover:text-black dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/20 dark:hover:text-white"
+                          title={isPlaying ? 'Pause preview' : 'Play preview'}
+                        >
+                          {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                        </button>
+                      ) : (
+                        <span className="shrink-0 text-[10px] text-gray-400 dark:text-white/30">
+                          no preview
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}

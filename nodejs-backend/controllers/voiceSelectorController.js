@@ -5,8 +5,10 @@ const axios = require("axios");
 // pipes the response back to the browser. Frontend talks only to Node,
 // which sidesteps the CORS / direct-from-browser issues entirely.
 
-const BASE = process.env.VOICE_PYTHON_BASE_URL 
-
+// Must point at the `/api` base, e.g. https://voice-selection-11labs.adsgpt.io/api
+// The catalog endpoints (/api/*) are open; the bare-domain paths serve the
+// Basic-Auth-guarded docs UI, so a missing `/api` shows up as a 401.
+const BASE = process.env.VOICE_PYTHON_BASE_URL
 
 function pickParams(query = {}) {
   const out = {};
@@ -16,10 +18,17 @@ function pickParams(query = {}) {
   return out;
 }
 
-async function proxyGet(path, req, res) {
+// /search takes a single free-text `q` (catalog caps it at 100 chars).
+function pickSearchParams(query = {}) {
+  const out = {};
+  if (typeof query.q === "string" && query.q.length > 0) out.q = query.q.slice(0, 100);
+  return out;
+}
+
+async function proxyGet(path, req, res, params) {
   try {
     const { data } = await axios.get(`${BASE}${path}`, {
-      params: pickParams(req.query),
+      params: params ?? pickParams(req.query),
       timeout: 30000,
     });
     return res.status(200).json(data);
@@ -42,3 +51,5 @@ exports.genders = (req, res) => proxyGet("/genders", req, res);
 exports.accents = (req, res) => proxyGet("/accents", req, res);
 exports.ages = (req, res) => proxyGet("/ages", req, res);
 exports.voices = (req, res) => proxyGet("/voices", req, res);
+exports.search = (req, res) =>
+  proxyGet("/search", req, res, pickSearchParams(req.query));
