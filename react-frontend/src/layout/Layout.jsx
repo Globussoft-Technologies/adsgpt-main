@@ -68,7 +68,8 @@ const Layout = () => {
     if (prevPage.current && userData?.user_id) {
       trackEvent({ type: 'page_view', page: prevPage.current, time_spent: timeSpent });
     }
-    prevPage.current = location.pathname;
+    const normalizedPath = location.pathname.replace(/^\/landing-page-analyzer\/[^/]+/, '/landing-page-analyzer');
+    prevPage.current = normalizedPath;
     pageEnterTime.current = now;
   }, [location, userData, activeAdStudioTabId]);
   const [baseImg, baseImgStatus] = useImage(
