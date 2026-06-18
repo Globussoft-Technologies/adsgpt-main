@@ -40,15 +40,23 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
     voice:    useRef(null),
   };
 
-  // No cascade filtering: every dropdown always shows the full list. If the
-  // user's combination of filters becomes invalid (no matching voices), the
-  // Voice list will simply come back empty — and changing any upstream filter
-  // already auto-clears downstream selections via handleSelect.
+  // Cascade filtering: each chip fetches options scoped to the upstream picks
+  // already made (language → gender → accent → age → voice). The backend reads
+  // these as query params (see voiceSelectorController.js / voiceSelectorApi.js).
+  // Changing any upstream filter auto-clears downstream selections + cached
+  // options via handleSelect, so the next open refetches with the new params.
   const load = useCallback(
     async (field) => {
       setLoading((s) => ({ ...s, [field]: true }));
       setErrors((s) => ({ ...s, [field]: '' }));
       try {
+        // Pass only the filters that sit upstream of the field being loaded.
+        const upstream = {
+          language: value.language || '',
+          gender: value.gender || '',
+          accent: value.accent || '',
+          age: value.age || '',
+        };
         let data = [];
         if (field === 'language') {
           // Only English and Hindi are offered for now. Every other locale the
@@ -59,10 +67,10 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
           data = all.filter((l) => ALLOWED_LANGUAGES.includes(l?.code || l));
           // data = all;
         }
-        else if (field === 'gender') data = await getGenders({});
-        else if (field === 'accent') data = await getAccents({});
-        else if (field === 'age') data = await getAges({});
-        else if (field === 'voice') data = await getVoices({});
+        else if (field === 'gender') data = await getGenders({ language: upstream.language });
+        else if (field === 'accent') data = await getAccents({ language: upstream.language, gender: upstream.gender });
+        else if (field === 'age') data = await getAges({ language: upstream.language, gender: upstream.gender, accent: upstream.accent });
+        else if (field === 'voice') data = await getVoices(upstream);
         setOptions((s) => ({ ...s, [field]: data }));
       } catch (e) {
         setErrors((s) => ({ ...s, [field]: 'Failed to load. Try again.' }));
@@ -70,7 +78,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         setLoading((s) => ({ ...s, [field]: false }));
       }
     },
-    []
+    [value.language, value.gender, value.accent, value.age]
   );
 
   // Lazy-load each chip's options the first time it opens.
