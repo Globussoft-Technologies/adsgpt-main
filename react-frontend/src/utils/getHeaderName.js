@@ -11,10 +11,9 @@ const PREFIX_MAP = [
   ['/ad-library', 'Ad Library'],
   ['/adinsights', 'Ad Insights'],
   ['/adfactory', 'Ad Factory'],
-  // HIDE-MARK — Landing Page Analyzer header title hidden.
-  // ['/landing-page-analyzer', 'Landing Page Analyzer'],
+  ['/landing-page-analyzer', 'Landing Page Analyzer'],
   ['/profile', 'Account'],
-  // ['/assistant', 'AI Assistant'],
+  ['/assistant', 'AI Assistant'],
   // `/meta-ads` is the post-connect Ads Manager dashboard, `/ads-manager`
   // is the platform picker. Both should read "Ads Manager".
   ['/meta-ads', 'Ads Manager'],

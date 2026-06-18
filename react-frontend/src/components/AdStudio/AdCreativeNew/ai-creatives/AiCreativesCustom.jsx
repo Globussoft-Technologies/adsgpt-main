@@ -77,7 +77,7 @@ const MODEL_TO_API = {
   'OpenAI 1.5': 'gpt-image-1.5',
   'OpenAI 2.0': 'gpt-image-2',
   // 'Seedream 5.0 lite': 'seedream-5.0-lite',
-  'Imagen': 'ADSGPT-1.0',
+  'Imagen': 'seedream-5.0-lite',
 };
 
 // Renders either the ReactNode icon or the iconSrc image at a fixed 14px slot.
@@ -97,10 +97,6 @@ const QUALITY_OPTIONS = [
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
 ];
-
-// HIDE-MARK — Quality picker hidden. Named flag avoids a literal `false &&`
-// (no-constant-binary-expression); flip to true to re-enable the picker.
-const SHOW_QUALITY_PICKER = false;
 
 const ASPECT_LABELS = [
   { key: '1:1', label: '1:1 (square)' },
@@ -1058,11 +1054,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     )}
                   </button>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* HIDE-MARK — Quality picker hidden. `quality` state stays at
-                      its default ('medium') so the payload still sends a valid
-                      value; backend treats quality as optional. Unhide: drop the
-                      `false &&` guard and this comment. */}
-                  {SHOW_QUALITY_PICKER && (
+                  {/* Quality picker — sits between the improve-prompt (magic)
+                      button and the model picker. Wires to userInputs.quality. */}
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <PillButton
                       label={QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
@@ -1100,7 +1093,6 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       </div>
                     )}
                   </div>
-                  )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
                       icon={<ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />}

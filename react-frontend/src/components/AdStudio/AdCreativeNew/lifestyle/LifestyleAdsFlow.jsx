@@ -66,7 +66,7 @@ const MODEL_TO_API = {
   'OpenAI 1.5': 'gpt-image-1.5',
   'OpenAI 2.0': 'gpt-image-2',
   // 'Seedream 5.0 lite': 'seedream-5.0-lite',
-  'Imagen': 'ADSGPT-1.0',
+  'Imagen': 'seedream-5.0-lite',
 };
 
 // Translates a *resolved* AdSetup payload (where every image array has been

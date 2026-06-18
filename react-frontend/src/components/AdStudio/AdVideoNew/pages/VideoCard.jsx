@@ -36,9 +36,9 @@ import {
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 
-// HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
-// avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
-const SHOW_POST_AD_NAV = false;
+// Post Ad nav (Megaphone) visibility. Flip to false to hide the
+// "Post as ad" trigger on MySpace cards.
+const SHOW_POST_AD_NAV = true;
 
 export default function VideoCard({
   item,
@@ -746,7 +746,6 @@ export default function VideoCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {/* HIDE-MARK — Post as ad (Megaphone) hidden via SHOW_POST_AD_NAV. */}
                 {SHOW_POST_AD_NAV && item?.status === 'completed' && onOpenPostAdModal && (
                   <button
                     title="Post as ad"

@@ -8,8 +8,7 @@ import {
   History,
   Image,
   Library,
-  // HIDE-MARK — ScanSearch only used by the hidden Landing Page Analyzer tile.
-  // ScanSearch,
+  ScanSearch,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
@@ -53,12 +52,12 @@ const navigationItems = [
     label: 'Ad Factory',
     link: '/adfactory',
   },
-  // {
-  //   id: 'ai',
-  //   label: 'AI',
-  //   link: '/assistant',
-  //   lucideIcon: Bot,
-  // },
+  {
+    id: 'ai',
+    label: 'AI',
+    link: '/assistant',
+    lucideIcon: Bot,
+  },
   {
     id: 'adstudio',
     icon: adStudioDarkLogo,
@@ -81,14 +80,13 @@ const navigationItems = [
     label: 'BrandIQ',
     link: '/brandiq',
   },
-  // HIDE-MARK — Landing Page Analyzer sidebar tile hidden.
-  // {
-  //   id: 'landing-analyzer',
-  //   label: 'Analyzer',
-  //   link: '/landing-page-analyzer',
-  //   lucideIcon: ScanSearch,
-  //   badge: 'NEW',
-  // },
+  {
+    id: 'landing-analyzer',
+    label: 'Analyzer',
+    link: '/landing-page-analyzer',
+    lucideIcon: ScanSearch,
+    badge: 'NEW',
+  },
   {
     id: 'meta-ads',
     icon: metaAdsDarkLogo,

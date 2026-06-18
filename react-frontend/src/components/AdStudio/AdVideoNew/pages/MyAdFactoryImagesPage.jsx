@@ -22,9 +22,9 @@ const breakpointColumnsObj = {
   340: 1,
 };
 
-// HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
-// avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
-const SHOW_POST_AD_NAV = false;
+// Post Ad nav (Megaphone) visibility. Flip to false to hide the
+// "Post as ad" trigger on MySpace cards.
+const SHOW_POST_AD_NAV = true;
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -154,7 +154,6 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPo
           />
           {/* Controls bar */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {/* HIDE-MARK — Post as ad (Megaphone) hidden via SHOW_POST_AD_NAV. */}
             {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"

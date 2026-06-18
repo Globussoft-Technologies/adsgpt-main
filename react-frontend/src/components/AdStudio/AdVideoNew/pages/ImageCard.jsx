@@ -24,9 +24,9 @@ const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
 const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
 const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 
-// HIDE-MARK — Post Ad nav (Megaphone) is intentionally hidden. Named flag
-// avoids a literal `false &&` (no-constant-binary-expression); flip to re-enable.
-const SHOW_POST_AD_NAV = false;
+// Post Ad nav (Megaphone) visibility. Flip to false to hide the
+// "Post as ad" trigger on MySpace cards.
+const SHOW_POST_AD_NAV = true;
 
 // Backend `inputs.type` → AdCreativeNewLayout route key. NOTE:
 // `recreate_ads` is intentionally NOT in this map — recreating one of
@@ -310,7 +310,7 @@ export default function ImageCard({
                 {item?.inputs?.modelLabel || item?.inputs?.model || '-'}
               </p>
               {/* //Hidden quality mark from tooltip here */}
-              {/* <p>
+              <p>
                 <span className="text-gray-400">Quality:</span>{' '}
                 {(() => {
                   // Records created before the quality field existed won't
@@ -318,7 +318,7 @@ export default function ImageCard({
                   const q = item?.inputs?.quality || 'medium';
                   return q.charAt(0).toUpperCase() + q.slice(1);
                 })()}
-              </p> */}
+              </p>
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-400">Brand:</span> {item.inputs.brandName}
@@ -459,7 +459,6 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {/* HIDE-MARK — Post as ad (Megaphone) hidden via SHOW_POST_AD_NAV. */}
             {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"
