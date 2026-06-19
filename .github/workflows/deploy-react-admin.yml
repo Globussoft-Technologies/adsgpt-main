@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Server-side webhook listener (e.g. adnanh/webhook) pulls + rebuilds.
-      WEBHOOK_PATH: /hooks/redeploy-admin
+      WEBHOOK_PATH: /hooks/redeploy-app
       DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
     steps:
       - name: Dispatch secure webhook request
