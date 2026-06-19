@@ -69,6 +69,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Show Runner IP
+        run: |
+          curl -4 https://api.ipify.org
+          echo
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
