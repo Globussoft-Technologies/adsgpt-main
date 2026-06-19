@@ -75,7 +75,7 @@ export default function LoginPage() {
           className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60"
         >
           <div className="mb-6">
-            {/* <h1 className="text-xl font-semibold tracking-tight text-slate-900">Welcome back</h1> */}
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Welcome back</h1>
             <p className="mt-1 text-sm text-slate-500">Sign in with your admin credentials.</p>
           </div>
 
