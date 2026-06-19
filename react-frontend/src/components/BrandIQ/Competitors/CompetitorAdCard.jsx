@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Instagram } from 'lucide-react';
-import { FaFacebookF, FaYoutube } from 'react-icons/fa';
-import { SiGoogle } from 'react-icons/si';
+import { FaFacebookF, FaYoutube, FaLinkedinIn } from 'react-icons/fa';
+import { SiGoogle, SiGoogleads } from 'react-icons/si';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 
@@ -11,6 +11,8 @@ const platformIcons = {
   instagram: <Instagram className="h-4 w-4" />,
   google: <SiGoogle className="h-4 w-4" />,
   youtube: <FaYoutube className="h-4 w-4" />,
+  linkedin: <FaLinkedinIn className="h-4 w-4" />,
+  gdn: <SiGoogleads className="h-4 w-4" />,
 };
 
 const platformLabels = {
@@ -18,6 +20,8 @@ const platformLabels = {
   instagram: 'Instagram',
   google: 'Google',
   youtube: 'YouTube',
+  linkedin: 'LinkedIn',
+  gdn: 'Google Display Network',
 };
 
 
