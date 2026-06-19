@@ -222,7 +222,7 @@ const GenerationUsageGraph = ({ userId }) => {
   return (
     <div className="w-full">
       {/* ---------- FILTER BAR ---------- */}
-      <div className="mb-3 flex items-center gap-2" ref={pickerRef}>
+      <div className="relative mb-3 flex items-center gap-2" ref={pickerRef}>
         <button
           onClick={() => setIsOpen((v) => !v)}
           className="flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
@@ -267,7 +267,7 @@ const GenerationUsageGraph = ({ userId }) => {
         </div>
 
         {isOpen && (
-          <div className="absolute z-50 mt-2 rounded-md border border-black/10 bg-white shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50">
+          <div className="absolute top-full left-0 z-50 mt-2 rounded-md border border-black/10 bg-white shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50">
             <DateRange
               ranges={tempRange}
               onChange={(r) => setTempRange([r.selection])}
