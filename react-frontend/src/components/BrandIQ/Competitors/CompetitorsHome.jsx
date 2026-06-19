@@ -41,6 +41,8 @@ const platformPills = [
   { key: 'instagram', label: 'Instagram', platforms: ['instagram'] },
   { key: 'google', label: 'Google', platforms: ['google'] },
   { key: 'youtube', label: 'YouTube', platforms: ['youtube'] },
+  { key: 'linkedin', label: 'LinkedIn', platforms: ['linkedin'] },
+  { key: 'gdn', label: 'GDN', platforms: ['gdn'] },
 ];
 
 // AdsGPT brand gradient classes

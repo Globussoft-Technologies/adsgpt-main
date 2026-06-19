@@ -41,6 +41,16 @@ const clients = {
     'COMPETITOR_ELASTIC_USERNAME_GG',
     'COMPETITOR_ELASTIC_PASSWORD_GG'
   ),
+  linkedin: createClient(
+    'COMPETITOR_ELASTIC_NODE_LD',
+    'COMPETITOR_ELASTIC_USERNAME_LD',
+    'COMPETITOR_ELASTIC_PASSWORD_LD'
+  ),
+  gdn: createClient(
+    'COMPETITOR_ELASTIC_NODE_GDN',
+    'COMPETITOR_ELASTIC_USERNAME_GDN',
+    'COMPETITOR_ELASTIC_PASSWORD_GDN'
+  ),
 };
 
 module.exports = clients;

@@ -2,7 +2,7 @@
  * ES Connection Health Check
  * Run: node scripts/checkEsConnections.js
  *
- * Verifies all 4 platform-specific ES clients are reachable
+ * Verifies all platform-specific ES clients are reachable
  * and indices exist.
  */
 
@@ -14,6 +14,8 @@ const INDEX_MAP = {
   instagram: process.env.COMPETITOR_INDEX_IG || 'instagram_search_mix',
   youtube: process.env.COMPETITOR_INDEX_YT || 'youtube_ads_data',
   google: process.env.COMPETITOR_INDEX_GG || 'google_ads_data',
+  linkedin: process.env.COMPETITOR_INDEX_LD || 'linkedin_ads_data',
+  gdn: process.env.COMPETITOR_INDEX_GDN || 'gdn_search_mix',
 };
 
 async function checkPlatform(platform, client, index) {

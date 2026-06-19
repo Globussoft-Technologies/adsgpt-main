@@ -95,6 +95,64 @@ const PLATFORM_CONFIGS = {
     subCategoryName: 'subCategory',
     categoryId: 'category_id',
     subCategoryId: 'subCategory_id',
+  },
+  // LinkedIn — flat fields (like youtube/google), index `linkedin_ads_data`.
+  // Renderable images live only in `new_nas_image_url` (/PowerAdspy/n2/linkedin/...
+  // → served from the NAS). The legacy `ad_image_or_video` (pasimages/linkedin/...)
+  // paths 404 on the media server, so — like the old Google pasimages — they are
+  // not used. Ad id is in `ad_id`; a few docs only have the ES _id, so flattenAd
+  // falls back to the doc _id. first_seen/last_seen are epoch seconds.
+  linkedin: {
+    index: process.env.COMPETITOR_INDEX_LD || 'linkedin_ads_data',
+    adIdField: 'ad_id',
+    postOwner: 'post_owner',
+    postOwnerImage: 'post_owner_image',
+    adTitle: 'ad_title',
+    adText: 'ad_text',
+    newsfeedDescription: 'newsfeed_description',
+    firstSeen: 'first_seen',
+    lastSeen: 'last_seen',
+    adType: 'ad_type',
+    adUrl: 'destination_url',
+    imageUrl: 'new_nas_image_url',
+    fallbackImage: null,
+    imageExistsFields: ['new_nas_image_url'],
+    validImageFields: ['new_nas_image_url'],
+    popularity: 'popularity',
+    categoryName: null,
+    subCategoryName: null,
+    categoryId: 'category_id',
+    subCategoryId: 'subCategory_id',
+    // image_url_original holds the original (now-expired, 403) media.licdn.com
+    // CDN URL — never a usable thumbnail, so keep it out of the fallback scan.
+    skipSourceFields: ['image_url_original'],
+  },
+  // GDN (Google Display Network) — nested dot-notation (like facebook/instagram),
+  // index `gdn_search_mix`. `image_url`/`new_nas_image_url` are clean
+  // /pas-dev/stream/gdn/... paths. `image_url_original` is a base64 blob and is
+  // excluded from _source via skipSourceFields. No post-owner image / categories.
+  gdn: {
+    index: process.env.COMPETITOR_INDEX_GDN || 'gdn_search_mix',
+    adIdField: 'gdn_ad.id',
+    postOwner: 'gdn_ad_post_owners.post_owner_name',
+    postOwnerImage: null,
+    adTitle: 'gdn_ad_variants.title',
+    adText: 'gdn_ad_variants.text',
+    newsfeedDescription: 'gdn_ad_variants.newsfeed_description',
+    firstSeen: 'gdn_ad.post_date',
+    lastSeen: 'gdn_ad.last_seen',
+    adType: 'gdn_ad.type',
+    adUrl: 'gdn_ad_meta_data.destination_url',
+    imageUrl: 'image_url',
+    fallbackImage: 'new_nas_image_url',
+    imageExistsFields: ['image_url', 'new_nas_image_url'],
+    validImageFields: ['image_url', 'new_nas_image_url'],
+    popularity: null,
+    categoryName: null,
+    subCategoryName: null,
+    categoryId: 'category_id',
+    subCategoryId: 'subCategory_id',
+    skipSourceFields: ['image_url_original'], // base64 blob — never fetch
   }
 };
 
@@ -163,12 +221,18 @@ function isPlaceholderImage(url) {
   if (!url || typeof url !== 'string') return true;
   const lower = url.toLowerCase();
   const basename = lower.split('/').pop().split('?')[0];
+  // "404" only counts as a placeholder when it stands alone as a token
+  // (404.jpg, error-404.png) — NOT when those digits appear inside a long
+  // numeric/hex id. LinkedIn ad images are named with 19-digit ids that often
+  // contain "404" (e.g. 7240482456078835712.webp) and GDN uses hex hashes;
+  // a bare substring match wrongly nulled those valid images.
+  if (/(^|[^a-z0-9])404([^a-z0-9]|$)/.test(basename)) return true;
   // Known placeholder/default image filenames
   const placeholders = [
     'defaultimage', 'default-image', 'default_img', 'default.jpg', 'default.png',
     'placeholder', 'placeholder-image', 'placeholder.jpg', 'placeholder.png',
     'no-image', 'noimage', 'no_image', 'noimg',
-    'missing', 'missing-image', 'notfound', '404',
+    'missing', 'missing-image', 'notfound',
     'blank', 'empty', 'none', 'null',
     'dummy', 'sample', 'test',
     'bydefault', 'by_default', 'defaultads', 'default_ads',
@@ -226,9 +290,14 @@ function isoToEsDate(value) {
 
 // ── Flatten raw ES ad to common format ─────────────────────────────────
 
-function flattenAd(ad, platform, config) {
+function flattenAd(ad, platform, config, docId = null) {
   try {
-    const rawId = getNested(ad, config.adIdField);
+    // Most platforms store the id in _source; a few LinkedIn docs only have the
+    // ES doc _id, so fall back to it when the configured field is absent.
+    let rawId = getNested(ad, config.adIdField);
+    if ((rawId === null || rawId === undefined) && docId !== null && docId !== undefined) {
+      rawId = docId;
+    }
     const adId = rawId !== null && rawId !== undefined ? String(rawId) : null;
     if (!adId) return null;
 
@@ -682,7 +751,9 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       'views',
       'likes',
       'reactions.likes',
-    ].filter(Boolean);
+    ].filter(Boolean)
+     // Drop fields a platform must never fetch (e.g. GDN's base64 image_url_original).
+     .filter((f) => !(config.skipSourceFields || []).includes(f));
 
     logger.info(`[searchAdsByKeywords] Searching ${platform} (${index}): keywords="${keywordQuery}" competitors=${competitorNames.length}`);
 
@@ -727,7 +798,7 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // Pre-normalize competitor names once for an O(1) exact-match gate below.
     const competitorNormSet = new Set(competitorNames.map(normalizeName));
     for (const hit of hits) {
-      const flatAd = flattenAd(hit._source, platform, config);
+      const flatAd = flattenAd(hit._source, platform, config, hit._id);
       if (flatAd && flatAd.adId && !seen.has(flatAd.adId)) {
         seen.add(flatAd.adId);
         flatAd.esScore = hit._score;
