@@ -1,0 +1,19 @@
+name: Test Self-Hosted Runner
+ 
+on:
+  push:
+    branches:
+      - main
+ 
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - name: Check Runner
+        run: echo "✅ Runner is working!"
+ 
+      - name: Check OS
+        run: uname -a
+ 
+      - name: Check Directory
+        run: pwd
