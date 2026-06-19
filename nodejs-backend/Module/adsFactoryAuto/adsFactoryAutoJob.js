@@ -25,11 +25,11 @@ const RunHistorySchema = new mongoose.Schema(
       type: [new mongoose.Schema(
         {
           creativeId:   { type: String, required: true },
-          imageUrl:     { type: String, required: true, trim: true },
-          headline:     { type: String, required: true, trim: true },
-          message:      { type: String, required: true, trim: true },
-          linkUrl:      { type: String, required: true, trim: true },
-          callToAction: { type: String, required: true, trim: true },
+          imageUrl:     { type: String, default: "", trim: true },
+          headline:     { type: String, default: "", trim: true },
+          message:      { type: String, default: "", trim: true },
+          linkUrl:      { type: String, default: "", trim: true },
+          callToAction: { type: String, default: "", trim: true },
           description:  { type: String, default: "", trim: true },
           platform:     { type: String, default: "", trim: true },
         },

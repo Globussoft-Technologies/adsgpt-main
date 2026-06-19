@@ -98,31 +98,150 @@ const PLATFORM_POSTERS = {
       logger.info(`[adsFactoryAuto:meta] Template mode — calling V2 create APIs internally`);
       
       const tsName = `Auto — ${new Date().toISOString().slice(0, 10)}`;
-      
+
       // 1. Call createCampaignV2
-      const campaignPayload = {
-        ...template.payload,
-        name: `${template.payload.name} — ${tsName}`
+      // Strip fields that belong to the template/wizard context but are not
+      // accepted by the campaign Joi schema (conversionLocation, objective live
+      // on template root, not payload; adSetId/adId are ad-level only).
+      const p = template.payload || {};
+
+      // Save ad-level / adset-level fields for later steps
+      const _cl          = p.conversionLocation;
+      const _pg          = p.pageId;
+      const _lf          = p.leadFormId;
+      const _cta         = p.callToAction;
+      const _lu          = p.linkUrl;
+
+      // Campaign schema whitelist — only these fields are accepted by createCampaignV2
+      const CAMPAIGN_FIELDS = [
+        "adAccountId", "name", "objective", "specialAdCategories",
+        "specialAdCategoryCountries", "dailyBudget", "lifetimeBudget",
+        "bidStrategy", "spendCap", "iosOptimised", "applicationId",
+        "objectStoreUrl", "mobileAppStore", "status",
+      ];
+      const cleanPayload = Object.fromEntries(
+        CAMPAIGN_FIELDS.filter((k) => p[k] !== undefined).map((k) => [k, p[k]])
+      );
+
+      // Reconstruct targeting from flat payload if necessary
+      const extractedTargeting = p.targeting || {
+        worldwide: p.worldwide ?? true,
+        locations: p.locations || [],
+        ageMin: p.ageMin,
+        ageMax: p.ageMax,
+        genders: p.genders,
+        locales: p.locales,
+        advantageAudience: p.advantageAudience,
+        publisherPlatforms: p.publisherPlatforms,
+        devicePlatforms: p.devicePlatforms,
       };
+      // Clean up undefined fields
+      Object.keys(extractedTargeting).forEach(k => extractedTargeting[k] === undefined && delete extractedTargeting[k]);
+
+      let derivedSpecialAdCategoryCountries = cleanPayload.specialAdCategoryCountries || p.specialAdCategoryCountries || [];
+      const hasRealSpecialCategory = cleanPayload.specialAdCategories?.length && !cleanPayload.specialAdCategories.includes("NONE");
+
+      if (hasRealSpecialCategory && derivedSpecialAdCategoryCountries.length === 0) {
+        // Infer from targeting locations
+        const locs = extractedTargeting.locations || [];
+        derivedSpecialAdCategoryCountries = locs.filter(l => l.type === "country" && l.key).map(l => l.key);
+      }
+
+      const campaignPayload = {
+        ...cleanPayload,
+        name: `${p.name || p.campaignName || "Auto"} — ${tsName}`,
+        // If specialAdCategories is empty or not set, ensure specialAdCategoryCountries is also cleared
+        // to avoid Meta rejecting the adSet for location/country mismatch
+        specialAdCategories: cleanPayload.specialAdCategories?.length ? cleanPayload.specialAdCategories : ["NONE"],
+        specialAdCategoryCountries: cleanPayload.specialAdCategories?.length ? derivedSpecialAdCategoryCountries : [],
+      };
+
+      if (p.cbo && p.campaignBudget) {
+        if (p.campaignBudgetType === "daily") campaignPayload.dailyBudget = Number(p.campaignBudget) * 100;
+        else if (p.campaignBudgetType === "lifetime") campaignPayload.lifetimeBudget = Number(p.campaignBudget) * 100;
+      }
+
+      if (p.spendCap != null && p.spendCap !== "") {
+        campaignPayload.spendCap = Number(p.spendCap) * 100;
+      } else {
+        delete campaignPayload.spendCap;
+      }
       const campaignRes = await executeController(metaAdControllerV2.createCampaignV2, campaignPayload);
       usedCampaignId = campaignRes.campaign.id;
 
-      // 2. Call createAdSetV2
+      // 2. Call createAdSetV2 — whitelist only the fields accepted by buildAdSetSchemaV2
+      // Base fields always accepted by buildAdSetSchemaV2 regardless of cell
+      const ADSET_FIELDS = [
+        "adAccountId", "instagramUserId", "dailyBudget", "lifetimeBudget",
+        "dynamicCreative", "attributionWindow", "optimizationGoal", "billingEvent",
+        "bidStrategy", "bidAmount", "startTime", "endTime",
+        "dsaBeneficiary", "dsaPayor", "savedAudienceId", "targeting", "status",
+      ];
+      // Cell-specific fields — only include if the cell's additionalFields allows them
+      const { getCell } = require("../../config/wizardSchema");
+      const _cell = getCell(template.objective, template.conversionLocation);
+      const cellExtraFields = (_cell?.adSet?.additionalFields || []).map((f) => f.name || f);
+      const ALL_ADSET_FIELDS = [...ADSET_FIELDS, ...cellExtraFields];
+      const adSetBase = Object.fromEntries(ALL_ADSET_FIELDS.filter((k) => p[k] !== undefined).map((k) => [k, p[k]]));
+      // Coerce numeric fields that may be stored as strings in the template
+      if (adSetBase.bidAmount != null)      adSetBase.bidAmount      = Math.round(Number(adSetBase.bidAmount) * 100) || undefined;
+      
+      // If we are NOT using CBO, grab the ad set budget from the template fields
+      if (!p.cbo && p.adSetBudget) {
+        if (p.adSetBudgetType === "daily") adSetBase.dailyBudget = Number(p.adSetBudget) * 100;
+        else if (p.adSetBudgetType === "lifetime") adSetBase.lifetimeBudget = Number(p.adSetBudget) * 100;
+      } else if (p.cbo) {
+        delete adSetBase.dailyBudget;
+        delete adSetBase.lifetimeBudget;
+      } else {
+        if (adSetBase.dailyBudget != null)    adSetBase.dailyBudget    = Number(adSetBase.dailyBudget) * 100    || undefined;
+        if (adSetBase.lifetimeBudget != null) adSetBase.lifetimeBudget = Number(adSetBase.lifetimeBudget) * 100 || undefined;
+      }
+
+      if (adSetBase.spendCap != null)       adSetBase.spendCap       = Number(adSetBase.spendCap)       || undefined;
+      
+      // Remove empty strings for enum fields that don't support them
+      ["bidStrategy", "billingEvent", "optimizationGoal"].forEach(k => {
+        if (adSetBase[k] === "") delete adSetBase[k];
+      });
+      if (campaignPayload.bidStrategy === "") delete campaignPayload.bidStrategy;
+
+      // Coerce date fields — ensure ISO 8601 format or drop them
+      for (const dateField of ["startTime", "endTime"]) {
+        if (adSetBase[dateField] != null) {
+          const d = new Date(adSetBase[dateField]);
+          adSetBase[dateField] = isNaN(d.getTime()) ? undefined : d.toISOString();
+        }
+      }
+
+      // If specialAdCategoryCountries is present, we cannot use worldwide targeting.
+      let finalTargeting = adSetBase.targeting || extractedTargeting;
+      if (finalTargeting.worldwide && derivedSpecialAdCategoryCountries && derivedSpecialAdCategoryCountries.length > 0) {
+        finalTargeting = { locations: derivedSpecialAdCategoryCountries.map(c => ({ type: "country", key: c, mode: "include" })) };
+      }
+
       const adSetPayload = {
-        ...template.payload,
-        name: `${template.payload.name} — ${tsName}`,
-        campaignId: usedCampaignId
+        ...adSetBase,
+        adAccountId: p.adAccountId,
+        name: `${p.name || p.adSetName || p.campaignName || "Auto"} — ${tsName}`,
+        campaignId: usedCampaignId,
+        // objective + conversionLocation live on template root, not payload — required by adSet Joi schema
+        objective:          template.objective          || p.objective          || undefined,
+        conversionLocation: template.conversionLocation || p.conversionLocation || undefined,
+        // pageId required by adSet schema
+        pageId: _pg || p.pageId || undefined,
+        // targeting is required by adSet Joi schema
+        targeting: finalTargeting,
       };
       const adSetRes = await executeController(metaAdControllerV2.createAdSetV2, adSetPayload);
       usedAdSetId = adSetRes.adSet.id;
-      pageId = template.payload.pageId;
-      leadFormId = template.payload.leadFormId;
+      pageId = _pg;
+      leadFormId = _lf;
 
-      const { getCell } = require("../../config/wizardSchema");
       const cellInfo = {
         objective: template.objective,
         conversionLocation: template.conversionLocation,
-        cell: getCell(template.objective, template.conversionLocation),
+        cell: _cell,
         applicationId: template.payload.applicationId || null,
         objectStoreUrl: template.payload.objectStoreUrl || null
       };
@@ -143,21 +262,22 @@ const PLATFORM_POSTERS = {
         logger.info(`[adsFactoryAuto:meta] image hash: ${imageHash}`);
         const adName = `Automation Ad ${i+1} — ${tsName}`;
         const adPayload = {
-          ...template.payload,
+          adAccountId: p.adAccountId,
           name: adName,
           adSetId: usedAdSetId,
+          objective: template.objective || p.objective || undefined,
+          conversionLocation: template.conversionLocation || p.conversionLocation || undefined,
+          pageId: _pg,
+          ...(p.instagramUserId ? { instagramUserId: p.instagramUserId } : {}),
           imageHash: imageHash,
-          headline: creative.headline || "",
-          primaryText: creative.message || "",
-          description: creative.description || "",
-          // Use creative's explicit CTA if available, otherwise fall back to the template's CTA
-          callToAction: creative.callToAction || template.payload.callToAction || "LEARN_MORE",
-          // Use creative's linkUrl if available, otherwise fall back to template's linkUrl
-          linkUrl: creative.linkUrl || template.payload.linkUrl,
-          // Clear any explicit media URLs so the V2 controller relies solely on our pre-uploaded imageHash
-          imageUrl: undefined,
-          videoId: undefined,
-          videoThumbnailUrl: undefined,
+          headline: (creative.headline || "").slice(0, 40),
+          primaryText: (creative.message || "").slice(0, 125),
+          description: (creative.description || "").slice(0, 30),
+          callToAction: creative.callToAction || _cta || "LEARN_MORE",
+          linkUrl: creative.linkUrl || _lu || "",
+          ...((_lf) ? { leadFormId: _lf } : {}),
+          ...(p.applicationId ? { applicationId: p.applicationId } : {}),
+          ...(p.objectStoreUrl ? { objectStoreUrl: p.objectStoreUrl } : {}),
         };
 
         const adRes = await executeController(metaAdControllerV2.createAdV2, adPayload);
@@ -206,23 +326,33 @@ const PLATFORM_POSTERS = {
 async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
   const POLL_INTERVAL = 5_000;
   const start = Date.now();
+  let tick = 0;
+
 
   while (Date.now() - start < timeoutMs) {
+    tick++;
     const campaign = await Campaign.findOne({ "metadata.campaignId": campaignId }).lean();
     if (!campaign) {
       throw new Error(`Campaign ${campaignId} disappeared while polling`);
     }
 
-    const allDone = (campaign.services?.servicesSelected || []).every(
-      (srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0)
-    );
-    if (allDone) return campaign;
+    const services = campaign.services?.servicesSelected || [];
+    const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
+    const elapsedSec = Math.round((Date.now() - start) / 1000);
+
+    const allDone = services.every((srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0));
+    if (allDone) {
+      logger.info(`[adsFactoryAuto][poll] generation complete after ${tick} ticks (${elapsedSec}s)  progress=[${progress}]`);
+      return campaign;
+    }
     if (campaign.results?.status === "error" || campaign.status === "error") {
+      logger.error(`[adsFactoryAuto][poll] campaign status=error after tick=${tick}  progress=[${progress}]`);
       throw new Error("Campaign generation failed (status updated to error)");
     }
 
     await new Promise((r) => setTimeout(r, POLL_INTERVAL));
   }
+  logger.error(`[adsFactoryAuto][poll] TIMEOUT after ${tick} ticks (${Math.round(timeoutMs / 1000)}s)  campaignId=${campaignId}`);
   throw new Error("Timeout: generation did not complete within 10 minutes");
 }
 
@@ -299,12 +429,21 @@ async function run(jobId) {
   }
   _runningJobs.add(jobId);
 
+  logger.info(`[adsFactoryAuto] ▶ run START  jobId=${jobId}  runId=${runId}`);
+
   try {
-    // 1. Load job
+    // ── Step 1: Load job ──────────────────────────────────────────────────────
     job = await AdsFactoryJob.findById(jobId);
     if (!job) throw new Error(`AdsFactoryJob ${jobId} not found`);
+
+    logger.info(
+      `[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  ` +
+      `campaignId=${job.campaignId}  pairsPerCycle=${job.pairsPerCycle}  ` +
+      `schedule.frequency=${job.schedule?.frequency}  targets=${Object.keys(job.targets || {}).join(",") || "none"}`
+    );
+
     if (job.status !== "active") {
-      logger.info(`[adsFactoryAuto] job ${jobId} is ${job.status}, skipping`);
+      logger.info(`[adsFactoryAuto][1] job ${jobId} is ${job.status}, skipping`);
       _runningJobs.delete(jobId);
       return;
     }
@@ -321,7 +460,10 @@ async function run(jobId) {
       const weekMs = (sched.customFrequency.repeatEvery || 1) * 7 * 24 * 60 * 60 * 1000;
       const elapsed = Date.now() - new Date(sched.lastRunAt).getTime();
       if (elapsed < weekMs) {
-        logger.info(`[adsFactoryAuto] job ${jobId} skipping — only ${Math.round(elapsed / 86400000)}d elapsed of required ${sched.customFrequency.repeatEvery * 7}d`);
+        logger.info(
+          `[adsFactoryAuto][1] job ${jobId} skipping — only ${Math.round(elapsed / 86400000)}d elapsed ` +
+          `of required ${sched.customFrequency.repeatEvery * 7}d (lastRunAt=${sched.lastRunAt})`
+        );
         _runningJobs.delete(jobId);
         return;
       }
@@ -329,24 +471,52 @@ async function run(jobId) {
 
     // Auto-complete if endDate passed
     if (job.schedule.endDate && new Date() > new Date(job.schedule.endDate)) {
+      logger.info(`[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate}, marking completed`);
       job.status = "completed";
       await job.save();
       const { cancelJob } = require("./adsFactoryAutoQueue");
       await cancelJob(job._id.toString());
-      logger.info(`[adsFactoryAuto] job ${jobId} reached endDate, completed`);
       _runningJobs.delete(jobId);
       return;
     }
 
-    // 2. Load campaign
+    // ── Step 2: Load campaign ─────────────────────────────────────────────────
     campaign = await Campaign.findById(job.campaignId).lean();
-    if (!campaign) throw new Error(`Campaign ${job.campaignId} not found`);
+    if (!campaign) {
+      logger.warn(`[adsFactoryAuto][2] campaign ${job.campaignId} not found — pausing job ${jobId}`);
+      const { cancelJob } = require("./adsFactoryAutoQueue");
+      await cancelJob(job._id.toString()).catch(() => {});
+      if (job.campaignId) {
+        job.status = "paused";
+        await job.save().catch((e) => logger.warn(`[adsFactoryAuto][2] could not save paused status: ${e.message}`));
+      } else {
+        logger.warn(`[adsFactoryAuto][2] job ${jobId} has no campaignId — skipping save, cancelling queue only`);
+      }
+      _runningJobs.delete(jobId);
+      return;
+    }
+
+    if (!(campaign.services?.servicesSelected?.length)) {
+      logger.warn(
+        `[adsFactoryAuto][2] campaign ${campaign.metadata?.campaignId} has NO servicesSelected — ` +
+        `generation will complete immediately with 0 results. Check campaign setup.`
+      );
+    }
+
+    logger.info(
+      `[adsFactoryAuto][2] campaign loaded  campaignId=${campaign.metadata?.campaignId}  ` +
+      `name="${campaign.metadata?.campaignName}"  status=${campaign.status}  ` +
+      `results.status=${campaign.results?.status}  ` +
+      `services=${(campaign.services?.servicesSelected || []).map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(",")}`
+    );
 
     // Guard: skip if a previous tick's generation is still in-progress — avoids
     // overlapping Python runs on the same campaign when the schedule fires faster
     // than generation completes (e.g. during testing with 1-min cron).
     if (campaign.results?.status === "in-progress" || campaign.status === "in-progress") {
-      logger.warn(`[adsFactoryAuto] job ${jobId} campaign ${campaign.metadata?.campaignId} still generating — skipping tick`);
+      logger.warn(
+        `[adsFactoryAuto][2] campaign ${campaign.metadata?.campaignId} still in-progress — skipping tick to avoid overlap`
+      );
       _runningJobs.delete(jobId);
       return;
     }
@@ -356,7 +526,8 @@ async function run(jobId) {
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
 
-    // 3. Credit check
+
+    // ── Step 3: Credit check ──────────────────────────────────────────────────
     let created_from = "GPT";
     let rawUserId = userId;
     if (userId && userId.includes("-")) {
@@ -371,12 +542,19 @@ async function run(jobId) {
       "autopilot",
       campaign.services
     );
+    logger.info(
+      `[adsFactoryAuto][3] credit check  success=${creditResult.success}  ` +
+      `code=${creditResult.code}  totalRequired=${creditResult.totalRequired}  ` +
+      `available=${creditResult.available ?? "n/a"}  message="${creditResult.message || ""}"`
+    );
     if (!creditResult.success && creditResult.code === 400) {
+      logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
       job.status = "paused";
       await job.save();
       throw new Error(`Insufficient credits: ${creditResult.message}`);
     }
 
+    // ── Step 4: Freeze credits ────────────────────────────────────────────────
     // Atomic freeze for the autopilot-driven generation. Receipt key is the
     // campaignId; updateGenerationResult / deleteCampaign release the hold
     // after per-batch deducts settle the actual cost.
@@ -390,7 +568,12 @@ async function run(jobId) {
           campaignId: campaign.metadata.campaignId,
         },
       });
+      logger.info(
+        `[adsFactoryAuto][4] freeze result  ok=${freeze.ok}  reason=${freeze.reason || "none"}  ` +
+        `idempotent=${freeze.idempotent}  remaining=${freeze.remaining ?? "n/a"}`
+      );
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
+        logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
         job.status = "paused";
         await job.save();
         throw new Error(
@@ -401,7 +584,7 @@ async function run(jobId) {
         // CONTENDED is transient; other reasons (NO_USER, RECEIPT_WRITE_FAILED,
         // etc.) are fatal — pause and surface for retry/manual recovery.
         logger.error(
-          `[autopilot] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId}`,
+          `[autopilot][4] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId} — pausing job`,
         );
         job.status = "paused";
         await job.save();
@@ -409,9 +592,20 @@ async function run(jobId) {
       }
     }
 
-    // 4. Update the ORIGINAL CAMPAIGN to avoid duplicate campaigns
-    // We update the services parameters and append new slots to the results array.
-    const updatedServices = (campaign.services?.servicesSelected || []).map((srv) => ({
+    // ── Step 5: Update campaign services ─────────────────────────────────────
+
+    // If the campaign has no services configured, default to text + image.
+    // This happens when the campaign was created outside the full wizard flow.
+    const existingServices = campaign.services?.servicesSelected || [];
+    const baseServices = existingServices.length > 0 ? existingServices : [
+      { serviceName: "text",  serviceParams: { quantity: pairsPerCycle, ...(model ? { model } : {}) }, generated: 0 },
+      { serviceName: "image", serviceParams: { quantity: pairsPerCycle, ...(model ? { model } : {}) }, generated: 0 },
+    ];
+    if (!existingServices.length) {
+      logger.warn(`[adsFactoryAuto][5] no servicesSelected — defaulting to text×${pairsPerCycle} + image×${pairsPerCycle}`);
+    }
+
+    const updatedServices = baseServices.map((srv) => ({
       ...srv,
       serviceParams: {
         ...srv.serviceParams,
@@ -421,8 +615,13 @@ async function run(jobId) {
       generated: 0,
     }));
 
+    logger.info(
+      `[adsFactoryAuto][5] updatedServices: ${updatedServices.map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(", ")}`
+    );
+
     // Force all required nodes to "success" so sendAdFactoryRequest passes its
     // node-check — a draft/new campaign may have some nodes still in "draft" status.
+    // Also clear accumulated stale creatives (empty imageUrl entries from past broken runs).
     await Campaign.updateOne(
       { "metadata.campaignId": campaign.metadata.campaignId },
       {
@@ -433,10 +632,10 @@ async function run(jobId) {
           "assets.status":       "success",
           "distribution.status": "success",
           "services.status":     "success",
+          creatives:             [],  // wipe stale accumulated creatives — history is in runHistory
         },
       }
     );
-
     // Append new empty slots for python to fill
     const pushUpdate = {};
     for (const srv of updatedServices) {
@@ -447,7 +646,7 @@ async function run(jobId) {
         if (srv.serviceName === "video") pushUpdate["results.video"] = { $each: Array.from({ length: qty }, () => ({})) };
       }
     }
-    
+
     if (Object.keys(pushUpdate).length > 0) {
       await Campaign.updateOne(
         { "metadata.campaignId": campaign.metadata.campaignId },
@@ -455,17 +654,30 @@ async function run(jobId) {
       );
     }
 
-    // 5. Send to Python (targeting the original campaign)
+    // ── Step 6: Send to Python ────────────────────────────────────────────────
+    logger.info(`[adsFactoryAuto][6] sending campaignId=${campaignId} to Python API`);
     let completedCampaign;
     try {
       const pythonResult = await ctrl.sendAdFactoryRequest(campaign.metadata.campaignId, "autopilot", "active", job._id.toString());
+      logger.info(
+        `[adsFactoryAuto][6] Python response  allNodesSuccess=${pythonResult?.allNodesSuccess}  ` +
+        `message="${pythonResult?.message || ""}"  error="${pythonResult?.error || ""}"`
+      );
       if (!pythonResult?.allNodesSuccess) {
         throw new Error(`Python API rejected: ${pythonResult?.message || pythonResult?.error || "unknown"}`);
       }
 
-      // 6. Poll until Python writes results back
+      // ── Step 7: Poll for generation completion ────────────────────────────
+      logger.info(`[adsFactoryAuto][7] polling for generation completion  campaignId=${campaignId}`);
       completedCampaign = await waitForGenerationComplete(campaign.metadata.campaignId);
+      const textCount  = (completedCampaign.results?.text  || []).filter((t) => t.status === 200).length;
+      const imageCount = (completedCampaign.results?.image || []).filter((i) => i.status === 200).length;
+      logger.info(
+        `[adsFactoryAuto][7] generation complete  texts_ok=${textCount}  images_ok=${imageCount}  ` +
+        `total_texts=${completedCampaign.results?.text?.length || 0}  total_images=${completedCampaign.results?.image?.length || 0}`
+      );
     } catch (err) {
+      logger.error(`[adsFactoryAuto][6-7] generation failed: ${err.message}`);
       // Rollback the campaign status so it isn't stuck 'in-progress' forever
       await Campaign.updateOne(
         { "metadata.campaignId": campaign.metadata.campaignId },
@@ -474,41 +686,49 @@ async function run(jobId) {
       throw err;
     }
 
+    // ── Step 7b: Build creatives ──────────────────────────────────────────────
     const metaPayload = job.targets?.meta?.template?.payload || {};
     const ctaList = metaPayload.callToAction ? [metaPayload.callToAction] : [];
     newCreatives = buildCreativesFromResults(completedCampaign, ctaList, metaPayload.linkUrl || "", pairsPerCycle);
     rawTexts  = completedCampaign.results?.text?.slice(-pairsPerCycle)  || [];
     rawImages = completedCampaign.results?.image?.slice(-pairsPerCycle) || [];
-
-    // Save the newly assembled creatives to the campaign in MongoDB immediately so they are visible on the frontend
-    if (newCreatives && newCreatives.length > 0) {
-      try {
-        await Campaign.updateOne(
-          { "metadata.campaignId": campaign.metadata.campaignId },
-          { 
-            $push: { creatives: { $each: newCreatives } },
-            $set: { status: "success", "results.status": "success" }
-          }
-        );
-        logger.info(`[adsFactoryAuto] Saved ${newCreatives.length} generated creatives to campaign ${campaign.metadata.campaignId}`);
-      } catch (saveCreativesErr) {
-        logger.error(`[adsFactoryAuto] failed to save creatives to campaign: ${saveCreativesErr.message}`);
-      }
+    logger.info(
+      `[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  ` +
+      `withImage=${newCreatives.filter((c) => c.imageUrl).length}  ` +
+      `withText=${newCreatives.filter((c) => c.headline || c.message).length}`
+    );
+    // Mark campaign back to success — creatives are stored in runHistory, not pushed to campaign.creatives
+    // (pushing to campaign.creatives on every run causes unbounded accumulation)
+    try {
+      await Campaign.updateOne(
+        { "metadata.campaignId": campaign.metadata.campaignId },
+        { $set: { status: "success", "results.status": "success" } }
+      );
+    } catch (e) {
+      logger.warn(`[adsFactoryAuto][7b] failed to reset campaign status: ${e.message}`);
     }
 
-    // 8. Post to each configured platform
+    // ── Step 8: Post to each configured platform ──────────────────────────────
     const targets        = job.targets || {};
     const platformErrors = [];
+
+    const configuredPlatforms = Object.entries(PLATFORM_POSTERS).filter(([p, poster]) => poster.isConfigured(targets[p]));
+    const unconfiguredPlatforms = Object.keys(PLATFORM_POSTERS).filter((p) => !PLATFORM_POSTERS[p].isConfigured(targets[p]));
+    logger.info(
+      `[adsFactoryAuto][8] platforms configured=[${configuredPlatforms.map(([p]) => p).join(",")}]  ` +
+      `skipped=[${unconfiguredPlatforms.join(",")}]`
+    );
 
     for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
       const target = targets[platformName];
 
       if (!poster.isConfigured(target)) continue; // not configured — skip silently
 
+      logger.info(`[adsFactoryAuto][8] posting to ${platformName}  creatives=${newCreatives.length}`);
       try {
         const result = await poster.post(target, job, newCreatives, completedCampaign);
         postedAdIds[platformName] = result.adId;
-        logger.info(`[adsFactoryAuto] ${platformName} ad posted: ${result.adId}`);
+        logger.info(`[adsFactoryAuto][8] ${platformName} ad posted OK  adId="${result.adId}"`);
       } catch (platformErr) {
         let errMsg = platformErr.message;
         if (platformName === "meta") {
@@ -518,7 +738,7 @@ async function run(jobId) {
             errMsg = m.title || errMsg;
           } catch (_) {}
         }
-        logger.error(`[adsFactoryAuto:${platformName}] post failed: ${errMsg}`);
+        logger.error(`[adsFactoryAuto][8] ${platformName} post FAILED: ${errMsg}`);
         platformErrors.push(`${platformName}: ${errMsg}`);
       }
     }
@@ -529,13 +749,23 @@ async function run(jobId) {
       : "success";
     if (platformErrors.length) runError = platformErrors.join(" | ");
 
+    logger.info(
+      `[adsFactoryAuto][8] posting done  runStatus=${runStatus}  postedPlatforms=[${Object.keys(postedAdIds).join(",")}]  ` +
+      `errors=${platformErrors.length}  runError="${runError || "none"}"`
+    );
+
   } catch (err) {
     runError  = err.message;
     runStatus = "failed";
-    logger.error(`[adsFactoryAuto:orchestrator] run ${runId} failed: ${err.message}`);
+    logger.error(`[adsFactoryAuto:orchestrator] run ${runId} FAILED: ${err.message}`);
   }
 
-  // 9. Save run history
+  // ── Step 9: Save run history ─────────────────────────────────────────────────
+  logger.info(
+    `[adsFactoryAuto][9] saving run history  runId=${runId}  runStatus=${runStatus}  ` +
+    `creatives=${newCreatives.length}  postedAdIds=${JSON.stringify(postedAdIds)}  ` +
+    `error="${runError || "none"}"`
+  );
   if (job) {
     try {
       job.runHistory.push({
@@ -558,18 +788,22 @@ async function run(jobId) {
       try {
         const { getNextRunTime } = require("./adsFactoryAutoQueue");
         const nextTime = await getNextRunTime(jobId);
-        if (nextTime) job.schedule.nextRunAt = nextTime;
+        if (nextTime) {
+          job.schedule.nextRunAt = nextTime;
+          logger.info(`[adsFactoryAuto][9] nextRunAt updated to ${nextTime}`);
+        }
       } catch (e) {
-        logger.warn(`[adsFactoryAuto] could not update nextRunAt: ${e.message}`);
+        logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);
       }
 
       await job.save();
+      logger.info(`[adsFactoryAuto][9] run history saved  totalRuns=${job.totalRuns}  failedRuns=${job.failedRuns || 0}`);
 
     } catch (saveErr) {
-      logger.error(`[adsFactoryAuto:orchestrator] save history failed: ${saveErr.message}`);
+      logger.error(`[adsFactoryAuto][9] save history FAILED: ${saveErr.message}`);
     }
 
-    // 10. Real-time notification via Socket.IO — always fires, even if save failed
+    // ── Step 10: Socket.IO emit ───────────────────────────────────────────────
     if (global.io) {
       try {
           const adsPosted = Object.keys(postedAdIds).length > 0
@@ -732,20 +966,21 @@ async function run(jobId) {
           };
 
           global.io.to(job.userId).emit("adsFactory:runComplete", socketPayload);
-          logger.info(`[adsFactoryAuto] emitted adsFactory:runComplete to user ${job.userId}`);
+          logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to user room ${job.userId}`);
 
           if (job.campaignId) {
             const campIdStr = job.campaignId.toString();
             global.io.to(campIdStr).emit("adsFactory:runComplete", socketPayload);
-            logger.info(`[adsFactoryAuto] emitted adsFactory:runComplete to campaign room ${campIdStr}`);
+            logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to campaign room ${campIdStr}`);
           }
         } catch (e) {
-          logger.error(`[adsFactoryAuto] failed to emit activity socket: ${e.message}`);
+          logger.error(`[adsFactoryAuto][10] failed to emit activity socket: ${e.message}`);
         }
       }
   }
 
   _runningJobs.delete(jobId);
+  logger.info(`[adsFactoryAuto] ■ run END  jobId=${jobId}  runId=${runId}  finalStatus=${runStatus}  durationMs=${Date.now() - startedAt.getTime()}`);
 }
 
 const adsFactoryOrchestrator = { run };

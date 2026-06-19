@@ -88,7 +88,7 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate) {
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
   // 0–23. Backend accepts `0` so we always send it (default if unset).
-  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : (parseInt(frequency.hour, 10) || 0);
 
   // Custom frequency: only attach the customFrequency block when actually
   // using a custom recurrence; the backend rejects it for other presets.
@@ -144,7 +144,7 @@ function buildJobUpdatePayload(config, fullTemplate) {
   };
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
-  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : (parseInt(frequency.hour, 10) || 0);
   if (frequency.preset === 'custom') {
     const custom = frequency.custom || {};
     const repeatOnDays = Array.isArray(custom.daysOfWeek)
@@ -887,7 +887,7 @@ function buildSummaryPayload(campaignId, config) {
   };
   if (frequency.startDate) schedule.startDate = frequency.startDate;
   if (frequency.endDate) schedule.endDate = frequency.endDate;
-  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : 0;
+  schedule.hour = Number.isInteger(frequency.hour) ? frequency.hour : (parseInt(frequency.hour, 10) || 0);
   if (frequency.preset === 'custom') {
     const custom = frequency.custom || {};
     const repeatOnDays = Array.isArray(custom.daysOfWeek)

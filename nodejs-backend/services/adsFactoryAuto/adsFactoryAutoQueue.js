@@ -281,7 +281,25 @@ function startWorker() {
  */
 async function reloadActiveJobs() {
   const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
+  const Campaign      = require("../../Module/adFactory/adFactory");
   const activeJobs = await AdsFactoryJob.find({ status: "active" }).lean();
+
+  // On restart, any campaign still marked in-progress was interrupted mid-run.
+  // Reset them to "error" so the next tick can re-run instead of skipping forever.
+  const mongoose = require("mongoose");
+  const campaignObjectIds = [...new Set(activeJobs.map((j) => j.campaignId).filter(Boolean))]
+    .map((id) => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
+    .filter(Boolean);
+  if (campaignObjectIds.length) {
+    const result = await Campaign.updateMany(
+      { _id: { $in: campaignObjectIds }, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
+      { $set: { status: "error", "results.status": "error" } }
+    );
+    if (result.modifiedCount > 0) {
+      logger.warn(`[adsFactoryAuto] reset ${result.modifiedCount} stuck in-progress campaign(s) to error on startup`);
+    }
+  }
+
   let count = 0;
   for (const job of activeJobs) {
     try {
