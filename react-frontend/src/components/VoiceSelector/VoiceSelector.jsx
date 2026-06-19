@@ -7,6 +7,7 @@ import {
   getAges,
   getVoices,
   searchVoices,
+  labelForLanguage,
 } from '@/apis/voiceSelector/voiceSelectorApi';
 import ChipDropdown from './ChipDropdown';
 
@@ -83,15 +84,18 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         };
         let data = [];
         if (field === 'language') {
-          // Only English and Hindi are offered as direct picks for now. Every
-          // other locale the catalog returns stays blocked until we support it
-          // — but "Other" (appended below) opens free-text search to reach them.
-          const ALLOWED_LANGUAGES = ['en', 'hi'];
+          // Show every language the catalog returns as a direct pick, then
+          // append the "Other" escape hatch (free-text /search) at the end for
+          // any locale not surfaced in the list (Telugu, Kannada, …).
+          // Normalize each label via labelForLanguage so codes the API sends raw
+          // (e.g. "BG", "FIL", "HU") render as proper names (Bulgarian, …).
           const all = await getLanguages();
-          data = all.filter((l) => ALLOWED_LANGUAGES.includes(l?.code || l));
-          // data = all;
-          // Append the "Other" escape hatch after Hindi.
-          data = [...data, { code: OTHER_LANG, label: 'Other' }];
+          data = all.map((l) => {
+            const code = l?.code || l;
+            return { code, label: labelForLanguage(code) };
+          });
+          // "Other" (free-text /search) option disabled — no longer offered.
+          // data = [...data, { code: OTHER_LANG, label: 'Other' }];
         }
         else if (field === 'gender') data = await getGenders({ language: upstream.language });
         else if (field === 'accent') data = await getAccents({ language: upstream.language, gender: upstream.gender });
