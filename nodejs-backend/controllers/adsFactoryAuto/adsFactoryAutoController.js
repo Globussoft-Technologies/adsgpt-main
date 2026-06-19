@@ -67,7 +67,10 @@ class AdsFactoryAutoController {
       await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
 
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
-      if (nextTime) job.schedule.nextRunAt = nextTime;
+      if (nextTime) {
+        job.schedule.nextRunAt = nextTime;
+        await job.save();
+      }
 
       return res.status(201).json({ success: true, data: job });
     } catch (err) {
@@ -199,9 +202,9 @@ class AdsFactoryAutoController {
         }
       }
 
-      await job.save();
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
       if (nextTime) job.schedule.nextRunAt = nextTime;
+      await job.save();
 
       return res.json({ success: true, data: job });
     } catch (err) {
@@ -281,7 +284,10 @@ class AdsFactoryAutoController {
         }
       }
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
-      if (nextTime) job.schedule.nextRunAt = nextTime;
+      if (nextTime) {
+        job.schedule.nextRunAt = nextTime;
+        await job.save();
+      }
 
       return res.json({ success: true, data: job });
     } catch (err) {
@@ -311,10 +317,10 @@ class AdsFactoryAutoController {
         return res.status(400).json({ success: false, error: "Cannot resume a completed job" });
       }
       job.status = "active";
-      await job.save();
       await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
       if (nextTime) job.schedule.nextRunAt = nextTime;
+      await job.save();
 
       return res.json({ success: true, data: job });
     } catch (err) {
@@ -964,7 +970,7 @@ class AdsFactoryAutoController {
           try {
             const cronParser = require("cron-parser");
             nextRunAt = cronParser.parseExpression(cronOnce, {
-              currentDate: new Date(schedule.startDate + "T00:00:00"),
+              currentDate: new Date(schedule.startDate),
               tz,
             }).next().toDate();
           } catch (_) {

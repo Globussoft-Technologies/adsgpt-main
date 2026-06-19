@@ -42,7 +42,23 @@ function resolveScheduleForQueue(schedule) {
   const { frequency, startDate, timezone } = schedule;
 
   if (frequency === "does_not_repeat") {
-    const runAt = startDate ? new Date(startDate) : new Date();
+    let runAt;
+    if (startDate) {
+      try {
+        const cronParser = require("cron-parser");
+        const hour = Number(schedule.hour) || 0;
+        const tz   = timezone || "UTC";
+        runAt = cronParser.parseExpression(`0 ${hour} * * *`, {
+          currentDate: new Date(startDate),
+          tz,
+        }).next().toDate();
+      } catch (e) {
+        logger.warn(`[resolveScheduleForQueue] cron-parser failed (${e.message}), falling back to startDate`);
+        runAt = new Date(startDate);
+      }
+    } else {
+      runAt = new Date();
+    }
     return { type: "once", runAt, timezone };
   }
 
@@ -181,7 +197,19 @@ async function getNextRunTime(jobId, schedule = null) {
   // Fallback for paused jobs or one-shot jobs not in BullMQ repeatables.
   if (schedule) {
     if (schedule.frequency === "does_not_repeat") {
-      return schedule.startDate ? new Date(schedule.startDate) : null;
+      if (!schedule.startDate) return null;
+      try {
+        const parser = require("cron-parser");
+        const hour   = Number(schedule.hour) || 0;
+        const result = parser.parseExpression(`0 ${hour} * * *`, {
+          currentDate: new Date(schedule.startDate),
+          tz: schedule.timezone || "UTC",
+        }).next().toDate();
+        return result;
+      } catch (e) {
+        logger.warn(`[getNextRunTime] cron-parser failed (${e.message}), falling back to startDate`);
+        return new Date(schedule.startDate);
+      }
     }
     if (schedule.cronExpression) {
       try {
