@@ -938,6 +938,21 @@ export const fetchGoogleCampaigns = createAsyncThunk(
     }
   }
 );
+export const fetchGoogleCampaignsMySpace = createAsyncThunk(
+  'adFactory/fetchGoogleCampaigns',
+  async ({ adAccountId }, { rejectWithValue }) => {
+    try {
+      const token = getCookies();
+      const res = await axios.get(`${BACKEND_HOST}/adsgpt/google-ads/get-campaigns?adAccountId=${adAccountId}&adType=text&adType=image&adType=video`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      return res?.data?.data?.[0]?.campaigns || [];
+    } catch (err) {
+      if (err?.response?.status === 403) window.location.href = REDIRECT_LOGIN;
+      return rejectWithValue(err?.response?.data?.message || err?.message || 'Failed to fetch Google Campaigns');
+    }
+  }
+);
 
 export const fetchGoogleAdGroups = createAsyncThunk(
   'adFactory/fetchGoogleAdGroups',

@@ -5,6 +5,7 @@ import {
   fetchGoogleAdAccounts,
   fetchGoogleAdGroups,
   fetchGoogleCampaigns,
+  fetchGoogleCampaignsMySpace,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
 import {
   Select,
@@ -213,7 +214,7 @@ export default function GoogleSelectStep({ payload, onBack, onNext }) {
       setSelectedAdGroup('');
       if (accountId) {
         setLoadingCampaigns(true);
-        dispatch(fetchGoogleCampaigns({ adAccountId: accountId })).finally(() =>
+        dispatch(fetchGoogleCampaignsMySpace({ adAccountId: accountId })).finally(() =>
           setLoadingCampaigns(false),
         );
       }
