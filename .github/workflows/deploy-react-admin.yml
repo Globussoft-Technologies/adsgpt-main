@@ -92,7 +92,14 @@ jobs:
 
           # Fail the job on any non-2xx response so a rejected/failed redeploy
           # surfaces in CI instead of silently passing.
-          HTTP_CODE=$(curl -sS -X POST \
+          #
+          # -k / --insecure: TLS certificate verification is DISABLED because
+          # the server is reached at a host the cert does not cover (curl 60).
+          # The HMAC-SHA256 signature still prevents a third party from forging
+          # a redeploy, but TLS no longer protects the payload in transit (it is
+          # exposed to MITM / replay). Prefer fixing the cert/domain and removing
+          # this flag when possible.
+          HTTP_CODE=$(curl -sS -k -X POST \
             --max-time 60 \
             -o /tmp/webhook_response.txt \
             -w '%{http_code}' \
