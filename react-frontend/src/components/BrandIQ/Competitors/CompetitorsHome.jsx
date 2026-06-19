@@ -39,7 +39,7 @@ const platformPills = [
   { key: 'all', label: 'All', platforms: [] },
   { key: 'facebook', label: 'Facebook', platforms: ['facebook'] },
   { key: 'instagram', label: 'Instagram', platforms: ['instagram'] },
-  { key: 'google', label: 'Google', platforms: ['google'] },
+  // { key: 'google', label: 'Google', platforms: ['google'] },
   { key: 'youtube', label: 'YouTube', platforms: ['youtube'] },
   { key: 'linkedin', label: 'LinkedIn', platforms: ['linkedin'] },
   { key: 'gdn', label: 'GDN', platforms: ['gdn'] },

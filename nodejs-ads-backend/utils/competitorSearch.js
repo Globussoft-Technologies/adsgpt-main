@@ -73,29 +73,32 @@ const PLATFORM_CONFIGS = {
     categoryId: 'category_id',
     subCategoryId: 'subCategory_id',
   },
-  google: {
-    index: process.env.COMPETITOR_INDEX_GG || 'google_ads_data',
-    adIdField: 'id',
-    postOwner: 'post_owner_name',
-    postOwnerIsKeyword: true,
-    postOwnerImage: 'post_owner_image',
-    adTitle: 'title',
-    adText: 'text',
-    newsfeedDescription: 'newsfeed_description',
-    firstSeen: 'first_seen',
-    lastSeen: 'last_seen',
-    adType: 'type',
-    adUrl: 'destination_url',
-    imageUrl: 'image_url',
-    fallbackImage: 'new_nas_image_url',
-    imageExistsFields: ['image_url', 'new_nas_image_url'],
-    validImageFields: ['image_url', 'new_nas_image_url'],
-    popularity: null,
-    categoryName: 'category',
-    subCategoryName: 'subCategory',
-    categoryId: 'category_id',
-    subCategoryId: 'subCategory_id',
-  },
+  // Google hidden for now (too little renderable Google data). Commenting the whole
+  // config keeps it out of BOTH the "all" fan-out (driven by Object.keys below) and
+  // any direct platform=google request. Uncomment this block to restore it.
+  // google: {
+  //   index: process.env.COMPETITOR_INDEX_GG || 'google_ads_data',
+  //   adIdField: 'id',
+  //   postOwner: 'post_owner_name',
+  //   postOwnerIsKeyword: true,
+  //   postOwnerImage: 'post_owner_image',
+  //   adTitle: 'title',
+  //   adText: 'text',
+  //   newsfeedDescription: 'newsfeed_description',
+  //   firstSeen: 'first_seen',
+  //   lastSeen: 'last_seen',
+  //   adType: 'type',
+  //   adUrl: 'destination_url',
+  //   imageUrl: 'image_url',
+  //   fallbackImage: 'new_nas_image_url',
+  //   imageExistsFields: ['image_url', 'new_nas_image_url'],
+  //   validImageFields: ['image_url', 'new_nas_image_url'],
+  //   popularity: null,
+  //   categoryName: 'category',
+  //   subCategoryName: 'subCategory',
+  //   categoryId: 'category_id',
+  //   subCategoryId: 'subCategory_id',
+  // },
   // LinkedIn — flat fields (like youtube/google), index `linkedin_ads_data`.
   // Renderable images live only in `new_nas_image_url` (/PowerAdspy/n2/linkedin/...
   // → served from the NAS). The legacy `ad_image_or_video` (pasimages/linkedin/...)
@@ -545,13 +548,16 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       const competitorMatchClauses = [];
 
       if (isGoogle) {
-        // Google: post_owner is a keyword field (exact). Use match_phrase_prefix
-        // per competitor so a brand short-name also catches its official
-        // sub-accounts (e.g. "lenovo" → "lenovo india", "lenovo.com").
-        // Plain `terms` would only match the exact string and miss those.
+        // Google: post_owner_name is a keyword field with a lowercase_normalizer,
+        // so its values are stored lowercased. match_phrase_prefix does NOT apply
+        // the normalizer to the query, so a capitalized name (e.g. "Motorola" from
+        // discovery) would never match the lowercased index — we must lowercase it
+        // ourselves. We still use match_phrase_prefix per competitor so a brand
+        // short-name also catches its official sub-accounts (e.g. "lenovo" →
+        // "lenovo india", "lenovo.com"). Plain `terms` would miss those.
         competitorNames.forEach(name => {
           competitorMatchClauses.push({
-            match_phrase_prefix: { [config.postOwner]: { query: name, boost: 5.0 } }
+            match_phrase_prefix: { [config.postOwner]: { query: name.toLowerCase(), boost: 5.0 } }
           });
         });
       } else {
