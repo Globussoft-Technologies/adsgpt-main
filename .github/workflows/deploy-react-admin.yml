@@ -48,7 +48,7 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Trigger production pull (webhook)
+    name: Deploy to dev server
     needs: ci
     # No deploy on PR runs — only on push to main or manual dispatch.
     if: github.event_name != 'pull_request'
