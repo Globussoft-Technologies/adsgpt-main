@@ -530,6 +530,24 @@ export default function AdFactoryWorkflowDarkReal() {
     return () => clearInterval(id);
   }, [queryCampaignId, isAutoActive, autoExpanded, dispatch]);
 
+  // Refresh stats when the Services / Edit-automation modal closes. The
+  // save/update thunks already chain into fetchAutomationStats on success,
+  // but a user who opens Edit, glances at it, and closes via X / Cancel
+  // walks back to a canvas card showing stale numbers — anything the cron
+  // worker did while the modal was open (or any pause/resume done in another
+  // tab) is invisible until the next 5-min poll. Watch activeForm
+  // transitions: when it goes 'services' → null and automation is live,
+  // re-poll. Double-dispatch on save is harmless — fetchStats is idempotent.
+  const previousActiveFormRef = React.useRef(activeForm);
+  useEffect(() => {
+    const closed =
+      previousActiveFormRef.current === 'services' && !activeForm;
+    previousActiveFormRef.current = activeForm;
+    if (closed && queryCampaignId && isAutoActive) {
+      dispatch(fetchAutomationStats(queryCampaignId));
+    }
+  }, [activeForm, queryCampaignId, isAutoActive, dispatch]);
+
   // Trunk + (in automation mode) the two services → group edges. Inner edges
   // (image-gen → preview, text-gen → preview, preview → post-ad,
   // automation-active → automation-result) live inside their respective group

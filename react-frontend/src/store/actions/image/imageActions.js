@@ -5,12 +5,13 @@
 //   - pollImageAction(sessionId)  recursive setTimeout poll until done
 //   - fetchImageHistoryAction()   paginated history loader
 
-import { generateImage, getAllImages, getImageById } from '@/apis/image/imageApi';
+import { generateImage, getAllImages, getImageById, saveEditedImage } from '@/apis/image/imageApi';
 import {
   submitStarted,
   submitSucceeded,
   submitFailed,
   pollUpdated,
+  updateImage,
   historyLoadStarted,
   historyLoadSucceeded,
   historyLoadFailed,
@@ -105,6 +106,25 @@ export const pollImageAction = (sessionId) => async (dispatch, getState) => {
   };
   tick();
 };
+
+// ── save an edited image as a new record ────────────────────────────────
+//
+// Called after the logo editor uploads its composite to S3. Persists a new
+// completed record on the backend, then upserts the returned record into
+// history so it shows immediately AND survives a refresh.
+export const saveEditedImageAction =
+  ({ url, sourceImageId, inputs }) =>
+  async (dispatch) => {
+    try {
+      const data = await saveEditedImage({ url, sourceImageId, inputs });
+      const record = data?.data;
+      if (record) dispatch(updateImage(record));
+      return record;
+    } catch (err) {
+      console.error('saveEditedImage failed:', err.response?.data?.error || err.message);
+      return null;
+    }
+  };
 
 // ── history list ────────────────────────────────────────────────────────
 //

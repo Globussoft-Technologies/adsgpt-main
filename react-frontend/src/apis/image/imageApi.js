@@ -35,6 +35,20 @@ export const generateImage = async (body) => {
   return data;
 };
 
+// ── POST /image/save-edited ──────────────────────────────────────────────
+//
+// Persist a client-side edited image (logo editor "Save as new") as a new
+// completed record. `body`: { url, sourceImageId, inputs }. The backend
+// clones the source's inputs when sourceImageId resolves, else uses inputs.
+export const saveEditedImage = async (body) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/image/save-edited`,
+    body,
+    { headers: headers() },
+  );
+  return data;
+};
+
 // ── GET /image/all ───────────────────────────────────────────────────────
 //
 // Paginated history. All filters are optional; undefined values are dropped

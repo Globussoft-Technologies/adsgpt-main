@@ -6,9 +6,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Megaphone,
+  Pencil,
 } from 'lucide-react';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
+import MySpaceLogoEditor from './MySpaceLogoEditor';
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
+import { saveEditedImageAction } from '@/store/actions/image/imageActions';
 import { useDispatch, useSelector } from 'react-redux';
 import { setImageRecreateInputs } from '@/store/reducers/image/imageSlice';
 import {
@@ -98,6 +101,30 @@ export default function ImageCard({
   const [activeNavIndex, setActiveNavIndex] = useState(imageIndex);
   const [activeImageUrl, setActiveImageUrl] = useState(item?.results?.[0]?.url ?? '');
   const [canvaLoading, setCanvaLoading] = useState(false);
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+
+  // Open the logo editor on the current image. Exits the browser-fullscreen
+  // layer first — a position:fixed overlay can't render above the
+  // fullscreen element, so we drop out of it before mounting the editor.
+  const handleOpenLogoEditor = (e) => {
+    e.stopPropagation();
+    if (!item?.results?.[0]?.url) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    setLogoEditorOpen(true);
+  };
+
+  // Save-as-new: the editor uploaded a flattened composite to S3; persist it
+  // as a brand-new record (original untouched) so it appears immediately and
+  // survives a refresh.
+  const handleLogoSaved = (newUrl) => {
+    dispatch(
+      saveEditedImageAction({
+        url: newUrl,
+        sourceImageId: item?._id,
+        inputs: item?.inputs,
+      })
+    );
+  };
 
   const handleEditWithCanva = async (e) => {
     e.stopPropagation();
@@ -372,6 +399,7 @@ export default function ImageCard({
   );
 
   return (
+    <>
     <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
 
@@ -459,6 +487,13 @@ export default function ImageCard({
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            <button
+              title="Add logo"
+              onClick={handleOpenLogoEditor}
+              className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+            >
+              <Pencil size={18} />
+            </button>
             {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"
@@ -534,5 +569,14 @@ export default function ImageCard({
         </div>
       )}
     </div>
+    {logoEditorOpen && (
+      <MySpaceLogoEditor
+        baseImageUrl={resolveImageUrl(item?.results?.[0]?.url)}
+        userId={userId}
+        onClose={() => setLogoEditorOpen(false)}
+        onSaved={handleLogoSaved}
+      />
+    )}
+    </>
   );
 }

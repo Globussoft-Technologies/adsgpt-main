@@ -17,6 +17,7 @@ import {
   selectCtaOptionsLoading,
   selectAutomationSummary,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import { AUTOMATION_STATUS } from '@/store/reducers/adFactoryAutomation/constants';
 import {
   checkFbUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
@@ -311,16 +312,29 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   }, [isMetaConnected, values, ctaUnsupported, ctaOptions]);
   const canActivate = validationErrors.length === 0;
 
-  // Edit mode = we already have a backend job for this campaign. Drives the
-  // footer button label (Update vs Activate) and which thunk gets dispatched
-  // (PATCH vs POST).
-  const isEditMode = !!entry?.jobId;
+  // Edit mode = we already have an active backend job for this campaign.
+  // Drives the footer button label (Update vs Activate) and which thunk gets
+  // dispatched (PATCH vs POST). A COMPLETED job is intentionally NOT edit-
+  // mode: the backend job is done and PATCHing it would either no-op or
+  // reject. Hitting "Activate" with the saved config creates a fresh job
+  // instead — matches the user's mental model of "this finished, restart it
+  // with my latest tweaks".
+  const isCompleted = entry?.status === AUTOMATION_STATUS.COMPLETED;
+  const isEditMode = !!entry?.jobId && !isCompleted;
 
   const handleActivateClick = async () => {
     if (!campaignId) return;
     const action = isEditMode ? updateAutomation : saveAutomation;
-    const successMsg = isEditMode ? 'Automation updated' : 'Automation activated';
-    const failureMsg = isEditMode ? 'Failed to update automation' : 'Failed to activate automation';
+    const successMsg = isEditMode
+      ? 'Automation updated'
+      : isCompleted
+        ? 'Automation re-activated'
+        : 'Automation activated';
+    const failureMsg = isEditMode
+      ? 'Failed to update automation'
+      : isCompleted
+        ? 'Failed to re-activate automation'
+        : 'Failed to activate automation';
     const res = await dispatch(action({ campaignId, config: values }));
     if (action.fulfilled.match(res)) {
       toast.success(successMsg);
