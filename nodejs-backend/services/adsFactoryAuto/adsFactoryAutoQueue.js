@@ -168,15 +168,32 @@ async function scheduleJob(jobId, schedule) {
 }
 
 /**
- * Remove all BullMQ repeatable entries for a given AdsFactoryJob id.
+ * Remove all BullMQ entries (repeatable + delayed/waiting) for a given AdsFactoryJob id.
+ * does_not_repeat jobs are stored as plain delayed jobs (no repeat key) — they must be
+ * found via getDelayed()/getWaiting() and removed by job id, otherwise every restart
+ * adds a new duplicate entry and all of them fire.
  */
 async function cancelJob(jobId) {
   const queue = getQueue();
   const name  = jobName(jobId);
+
+  // 1. Remove repeatable entries (daily / weekly / custom cron jobs)
   const repeatableJobs = await queue.getRepeatableJobs();
   for (const rep of repeatableJobs) {
     if (rep.name === name) {
       await queue.removeRepeatableByKey(rep.key);
+    }
+  }
+
+  // 2. Remove delayed + waiting one-shot entries (does_not_repeat jobs)
+  // BullMQ stores these as regular jobs with a future timestamp, not as repeatables.
+  const [delayed, waiting] = await Promise.all([
+    queue.getDelayed(),
+    queue.getWaiting(),
+  ]);
+  for (const j of [...delayed, ...waiting]) {
+    if (j.name === name) {
+      await j.remove().catch(() => {});
     }
   }
 }
@@ -300,16 +317,118 @@ async function reloadActiveJobs() {
     }
   }
 
+  // Find which campaignIds actually exist in DB
+  const existingCampaigns = await Campaign.find({ _id: { $in: campaignObjectIds } }, { _id: 1 }).lean();
+  const existingCampaignIds = new Set(existingCampaigns.map((c) => c._id.toString()));
+
+  // Auto-pause jobs whose campaign no longer exists AND remove them from BullMQ queue
+  const orphanJobs = activeJobs.filter((j) => j.campaignId && !existingCampaignIds.has(j.campaignId.toString()));
+  if (orphanJobs.length) {
+    const orphanIds = orphanJobs.map((j) => j._id);
+    await AdsFactoryJob.updateMany({ _id: { $in: orphanIds } }, { $set: { status: "paused" } });
+    // Also cancel from BullMQ so they don't fire on this boot
+    for (const job of orphanJobs) {
+      await cancelJob(job._id.toString()).catch(() => {});
+    }
+    logger.warn(`[adsFactoryAuto] auto-paused + removed from queue ${orphanJobs.length} job(s) with deleted campaigns: ${orphanIds.join(", ")}`);
+  }
+
+  // Auto-complete does_not_repeat jobs that already have a successful/partial run.
+  // These were left "active" before the completed-marking fix was deployed.
+  const staleOneShots = activeJobs.filter(
+    (j) =>
+      j.schedule?.frequency === "does_not_repeat" &&
+      (j.runHistory || []).some((r) => r.status === "success" || r.status === "partial")
+  );
+  if (staleOneShots.length) {
+    const staleIds = staleOneShots.map((j) => j._id);
+    await AdsFactoryJob.updateMany(
+      { _id: { $in: staleIds } },
+      { $set: { status: "completed", "schedule.nextRunAt": null } }
+    );
+    for (const job of staleOneShots) {
+      await cancelJob(job._id.toString()).catch(() => {});
+    }
+    logger.warn(`[adsFactoryAuto] auto-completed ${staleOneShots.length} stale does_not_repeat job(s) on startup: ${staleIds.join(", ")}`);
+  }
+  const staleOneShotIds = new Set(staleOneShots.map((j) => j._id.toString()));
+
+  // For does_not_repeat jobs that already ran (lastRunAt set) but still show a stale nextRunAt,
+  // clear it so the UI doesn't display a phantom next run time.
+  const staleNextRunAt = activeJobs.filter(
+    (j) =>
+      j.schedule?.frequency === "does_not_repeat" &&
+      j.schedule?.lastRunAt &&
+      j.schedule?.nextRunAt &&
+      !staleOneShotIds.has(j._id.toString())
+  );
+  if (staleNextRunAt.length) {
+    await AdsFactoryJob.updateMany(
+      { _id: { $in: staleNextRunAt.map((j) => j._id) } },
+      { $set: { "schedule.nextRunAt": null } }
+    );
+    logger.warn(`[adsFactoryAuto] cleared stale nextRunAt for ${staleNextRunAt.length} does_not_repeat job(s) that already ran`);
+  }
+
+  const validJobs = activeJobs.filter(
+    (j) =>
+      (!j.campaignId || existingCampaignIds.has(j.campaignId.toString())) &&
+      !staleOneShotIds.has(j._id.toString())
+  );
+
   let count = 0;
-  for (const job of activeJobs) {
+  let skippedPast = 0;
+  for (const job of validJobs) {
     try {
-      await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
+      const resolved = resolveScheduleForQueue(job.schedule);
+
+      // For one-shot (does_not_repeat) jobs — strict rules on restart:
+      //   1. Already ran (lastRunAt set) → skip entirely, never auto-fire again.
+      //      (success/partial already marked completed above; failed stays active for manual retry)
+      //   2. Scheduled time is in the past and job never ran → mark as failed (missed), cancel from queue.
+      //      The user chose a specific time — firing late silently is worse than failing visibly.
+      //   3. Scheduled time is still in the future → re-enqueue with correct delay (normal case).
+      if (resolved.type === "once") {
+        if (job.schedule?.lastRunAt) {
+          logger.warn(`[adsFactoryAuto] skipping does_not_repeat job ${job._id} on reload — already ran (lastRunAt=${job.schedule.lastRunAt}); user must trigger manually`);
+          await cancelJob(job._id.toString()).catch(() => {});
+          skippedPast++;
+          continue;
+        }
+
+        // Check if the scheduled time has already passed
+        const scheduledAt = resolved.runAt ? new Date(resolved.runAt) : null;
+        if (scheduledAt && scheduledAt < new Date()) {
+          // Missed — mark failed and cancel
+          logger.warn(`[adsFactoryAuto] does_not_repeat job ${job._id} missed its scheduled time (${scheduledAt.toISOString()}) — marking failed`);
+          await AdsFactoryJob.updateOne(
+            { _id: job._id },
+            {
+              $set:  { "schedule.nextRunAt": null },
+              $push: {
+                runHistory: {
+                  runId:       `missed-${Date.now()}`,
+                  startedAt:   scheduledAt,
+                  completedAt: new Date(),
+                  status:      "failed",
+                  error:       `Scheduled run was missed — server was not running at ${scheduledAt.toISOString()}`,
+                },
+              },
+            }
+          );
+          await cancelJob(job._id.toString()).catch(() => {});
+          skippedPast++;
+          continue;
+        }
+      }
+
+      await scheduleJob(job._id, resolved);
       count++;
     } catch (err) {
       logger.error(`[adsFactoryAuto] failed to reload job ${job._id}: ${err.message}`);
     }
   }
-  logger.info(`[adsFactoryAuto] reloaded ${count} active autopilot jobs into BullMQ`);
+  logger.info(`[adsFactoryAuto] reloaded ${count} active autopilot jobs into BullMQ  (skipped ${orphanJobs.length} orphan + ${skippedPast} already-ran does_not_repeat)`);
 }
 
 module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, resolvePresetCron, getNextRunTime };

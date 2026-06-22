@@ -78,8 +78,11 @@ async function createServer() {
   // * Ads Factory Auto-Pilot — start BullMQ worker + reload active jobs
   try {
     const { startWorker, reloadActiveJobs } = require("./services/adsFactoryAuto/adsFactoryAutoQueue");
-    startWorker();
+    // reloadActiveJobs MUST run before startWorker — it cancels stale/orphan BullMQ
+    // entries from Redis. If the worker starts first it will pick up those stale jobs
+    // and fire them immediately (past-due one-shots, orphan jobs from deleted campaigns).
     await reloadActiveJobs();
+    startWorker();
   } catch (err) {
     console.error("[adsFactory] failed to start autopilot queue:", err.message);
   }

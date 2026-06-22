@@ -697,13 +697,16 @@ class AdsFactoryAutoController {
             : {},
         }));
 
-      let dynamicNextRun = job.schedule?.nextRunAt || "";
-      if (!dynamicNextRun) {
-        try {
-          const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
-          const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
-          if (nextTime) dynamicNextRun = nextTime;
-        } catch (e) {}
+      let dynamicNextRun = null;
+      if (job.status !== "completed" && job.status !== "paused") {
+        dynamicNextRun = job.schedule?.nextRunAt || null;
+        if (!dynamicNextRun) {
+          try {
+            const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+            const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
+            if (nextTime) dynamicNextRun = nextTime;
+          } catch (e) {}
+        }
       }
 
       return res.json({
@@ -900,7 +903,7 @@ class AdsFactoryAutoController {
               endDate:         job.schedule?.endDate         || null,
               hour:            job.schedule?.hour            ?? null,
               timezone:        job.schedule?.timezone        || "UTC",
-              nextRunAt:       job.schedule?.nextRunAt       || null,
+              nextRunAt:       (job.status === "completed" || job.status === "paused") ? null : (job.schedule?.nextRunAt || null),
               lastRunAt:       job.schedule?.lastRunAt       || null,
               customFrequency: job.schedule?.customFrequency || null,
             },

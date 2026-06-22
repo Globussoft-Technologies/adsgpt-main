@@ -259,7 +259,9 @@ const PLATFORM_POSTERS = {
       for (let i = 0; i < creativesToProcess.length; i++) {
         const creative = creativesToProcess[i];
         
+        logger.debug(`[adsFactoryAuto:meta] creative[${i}] uploading image  url="${(creative.imageUrl || "").slice(0, 120)}"`);
         const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
+        logger.debug(`[adsFactoryAuto:meta] creative[${i}] image uploaded  hash=${imageHash}`);
         const adName = `Automation Ad ${i+1} — ${tsName}`;
         const adPayload = {
           adAccountId: p.adAccountId,
@@ -338,6 +340,8 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
 
     const services = campaign.services?.servicesSelected || [];
     const elapsedSec = Math.round((Date.now() - start) / 1000);
+    const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
+    logger.debug(`[adsFactoryAuto][poll] tick=${tick}  elapsed=${elapsedSec}s  progress=[${progress}]  results.status=${campaign.results?.status}`);
 
     const allDone = services.every((srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0));
     if (allDone) {
@@ -432,14 +436,30 @@ async function run(jobId) {
 
   try {
     // ── Step 1: Load job ──────────────────────────────────────────────────────
+    logger.debug(`[adsFactoryAuto][1] loading job from DB  jobId=${jobId}`);
     job = await AdsFactoryJob.findById(jobId);
     if (!job) throw new Error(`AdsFactoryJob ${jobId} not found`);
     logger.info(`[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  campaignId=${job.campaignId}  frequency=${job.schedule?.frequency}`);
+    logger.debug(`[adsFactoryAuto][1] job detail  pairsPerCycle=${job.pairsPerCycle}  model=${job.model || "default"}  targets=${Object.keys(job.targets || {}).join(",") || "none"}  nextRunAt=${job.schedule?.nextRunAt || "null"}  lastRunAt=${job.schedule?.lastRunAt || "null"}`);
 
     if (job.status !== "active") {
       logger.info(`[adsFactoryAuto][1] job ${jobId} is ${job.status}, skipping`);
       _runningJobs.delete(jobId);
       return;
+    }
+
+    // For does_not_repeat jobs, guard against early firing caused by BullMQ re-registration
+    // on server restart (nodemon restarts, deployments). If the scheduled time hasn't arrived
+    // yet, skip this tick — the correctly-delayed entry will fire at the right time.
+    if (job.schedule?.frequency === "does_not_repeat") {
+      const nextRunAt = job.schedule?.nextRunAt ? new Date(job.schedule.nextRunAt) : null;
+      if (nextRunAt && nextRunAt > new Date()) {
+        logger.warn(
+          `[adsFactoryAuto][1] does_not_repeat job ${jobId} fired early — scheduled at ${nextRunAt.toISOString()} but now is ${new Date().toISOString()} — skipping stale BullMQ tick`
+        );
+        _runningJobs.delete(jobId);
+        return;
+      }
     }
 
     // For custom "every N weeks" schedules, BullMQ fires every week on the selected days.
@@ -475,6 +495,7 @@ async function run(jobId) {
     }
 
     // ── Step 2: Load campaign ─────────────────────────────────────────────────
+    logger.debug(`[adsFactoryAuto][2] loading campaign  campaignId=${job.campaignId}`);
     campaign = await Campaign.findById(job.campaignId).lean();
     if (!campaign) {
       logger.warn(`[adsFactoryAuto][2] campaign ${job.campaignId} not found — pausing job ${jobId}`);
@@ -498,6 +519,7 @@ async function run(jobId) {
     }
 
     logger.info(`[adsFactoryAuto][2] campaign loaded  campaignId=${campaign.metadata?.campaignId}  status=${campaign.status}`);
+    logger.debug(`[adsFactoryAuto][2] campaign detail  name="${campaign.metadata?.campaignName}"  results.status=${campaign.results?.status}  services=${(campaign.services?.servicesSelected || []).map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}(gen=${s.generated || 0})`).join(",")}`);
 
     // Guard: skip if a previous tick's generation is still in-progress — avoids
     // overlapping Python runs on the same campaign when the schedule fires faster
@@ -514,8 +536,10 @@ async function run(jobId) {
     const userId         = job.userId;
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
+    logger.debug(`[adsFactoryAuto][2] resolved  campaignId=${campaignId}  userId=${userId}  pairsPerCycle=${pairsPerCycle}  model=${model || "default"}`);
 
     // ── Step 3: Credit check ──────────────────────────────────────────────────
+    logger.debug(`[adsFactoryAuto][3] validating credits  userId=${userId}`);
     let created_from = "GPT";
     let rawUserId = userId;
     if (userId && userId.includes("-")) {
@@ -531,6 +555,7 @@ async function run(jobId) {
       campaign.services
     );
     logger.info(`[adsFactoryAuto][3] credits  required=${creditResult.totalRequired}  success=${creditResult.success}`);
+    logger.debug(`[adsFactoryAuto][3] credit detail  code=${creditResult.code}  available=${creditResult.available ?? "n/a"}  userId=${creditResult.userId || "n/a"}  message="${creditResult.message || ""}"`);
     if (!creditResult.success && creditResult.code === 400) {
       logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
       job.status = "paused";
@@ -543,6 +568,7 @@ async function run(jobId) {
     // campaignId; updateGenerationResult / deleteCampaign release the hold
     // after per-batch deducts settle the actual cost.
     if (creditResult?.totalRequired > 0 && creditResult?.userId) {
+      logger.debug(`[adsFactoryAuto][4] freezing ${creditResult.totalRequired} credits  userId=${creditResult.userId}  key=campaign:${campaign.metadata.campaignId}`);
       const freeze = await UnifiedCreditController.freezeCredits({
         userId: creditResult.userId,
         reservationKey: `campaign:${campaign.metadata.campaignId}`,
@@ -552,6 +578,7 @@ async function run(jobId) {
           campaignId: campaign.metadata.campaignId,
         },
       });
+      logger.debug(`[adsFactoryAuto][4] freeze result  ok=${freeze.ok}  reason=${freeze.reason || "none"}  idempotent=${freeze.idempotent}  remaining=${freeze.remaining ?? "n/a"}`);
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
         logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
         job.status = "paused";
@@ -573,6 +600,7 @@ async function run(jobId) {
     }
 
     // ── Step 5: Update campaign services ─────────────────────────────────────
+    logger.debug(`[adsFactoryAuto][5] updating campaign services  campaignId=${campaignId}  pairsPerCycle=${pairsPerCycle}`);
 
     // If the campaign has no services configured, default to text + image.
     // This happens when the campaign was created outside the full wizard flow.
@@ -626,6 +654,7 @@ async function run(jobId) {
     }
 
     if (Object.keys(pushUpdate).length > 0) {
+      logger.debug(`[adsFactoryAuto][5] pushing empty result slots  keys=${Object.keys(pushUpdate).join(",")}`);
       await Campaign.updateOne(
         { "metadata.campaignId": campaign.metadata.campaignId },
         { $push: pushUpdate, $set: { "results.status": "in-progress", status: "in-progress" } }
@@ -637,6 +666,7 @@ async function run(jobId) {
     let completedCampaign;
     try {
       const pythonResult = await ctrl.sendAdFactoryRequest(campaign.metadata.campaignId, "autopilot", "active", job._id.toString());
+      logger.debug(`[adsFactoryAuto][6] Python response  allNodesSuccess=${pythonResult?.allNodesSuccess}  message="${pythonResult?.message || ""}"  error="${pythonResult?.error || ""}"`);
       if (!pythonResult?.allNodesSuccess) {
         throw new Error(`Python API rejected: ${pythonResult?.message || pythonResult?.error || "unknown"}`);
       }
@@ -661,6 +691,9 @@ async function run(jobId) {
     rawTexts  = completedCampaign.results?.text?.slice(-pairsPerCycle)  || [];
     rawImages = completedCampaign.results?.image?.slice(-pairsPerCycle) || [];
     logger.info(`[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  withImage=${newCreatives.filter((c) => c.imageUrl).length}`);
+    newCreatives.forEach((c, i) => {
+      logger.debug(`[adsFactoryAuto][7b] creative[${i}]  imageUrl="${(c.imageUrl || "").slice(0, 80)}"  headline="${(c.headline || "").slice(0, 50)}"  cta="${c.callToAction}"  linkUrl="${c.linkUrl || ""}"`);
+    });
     // Mark campaign back to success — creatives are stored in runHistory, not pushed to campaign.creatives
     // (pushing to campaign.creatives on every run causes unbounded accumulation)
     try {
@@ -744,11 +777,34 @@ async function run(jobId) {
       job.schedule.lastRunAt = new Date();
       if (runStatus === "failed") job.failedRuns = (job.failedRuns || 0) + 1;
 
+      // One-shot job — always cancel from BullMQ after any run attempt (success, partial, or failed).
+      // Success/partial → mark completed. Failed → stay active so user can retry via run-now.
+      // Either way the BullMQ delayed entry must be removed — otherwise it fires again on the next tick.
+      if (job.schedule?.frequency === "does_not_repeat") {
+        job.schedule.nextRunAt = null;
+        if (runStatus === "success" || runStatus === "partial") {
+          job.status = "completed";
+          logger.info(`[adsFactoryAuto][9] job ${jobId} is does_not_repeat — marking completed, cleared nextRunAt`);
+        } else {
+          logger.info(`[adsFactoryAuto][9] job ${jobId} is does_not_repeat and failed — staying active for manual retry, removing from queue`);
+        }
+        try {
+          const { cancelJob } = require("./adsFactoryAutoQueue");
+          await cancelJob(jobId);
+        } catch (e) {
+          logger.warn(`[adsFactoryAuto][9] could not cancel does_not_repeat job from queue: ${e.message}`);
+        }
+      }
+
       try {
         const { getNextRunTime } = require("./adsFactoryAutoQueue");
-        const nextTime = await getNextRunTime(jobId);
+        // Only update nextRunAt for repeating jobs — does_not_repeat already cleared it above
+        const nextTime = job.schedule?.frequency !== "does_not_repeat" ? await getNextRunTime(jobId) : null;
         if (nextTime) {
           job.schedule.nextRunAt = nextTime;
+          logger.debug(`[adsFactoryAuto][9] nextRunAt=${nextTime}`);
+        } else {
+          logger.debug(`[adsFactoryAuto][9] nextRunAt=null (does_not_repeat or no future run)`);
         }
       } catch (e) {
         logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);
@@ -762,6 +818,7 @@ async function run(jobId) {
     }
 
     // ── Step 10: Socket.IO emit ───────────────────────────────────────────────
+    logger.debug(`[adsFactoryAuto][10] emitting socket  global.io=${!!global.io}  room=${job.userId}`);
     if (global.io) {
       try {
           const adsPosted = Object.keys(postedAdIds).length > 0
@@ -924,10 +981,12 @@ async function run(jobId) {
           };
 
           global.io.to(job.userId).emit("adsFactory:runComplete", socketPayload);
+          logger.debug(`[adsFactoryAuto][10] emitted to user room  ${job.userId}`);
 
           if (job.campaignId) {
             const campIdStr = job.campaignId.toString();
             global.io.to(campIdStr).emit("adsFactory:runComplete", socketPayload);
+            logger.debug(`[adsFactoryAuto][10] emitted to campaign room  ${campIdStr}`);
           }
         } catch (e) {
           logger.error(`[adsFactoryAuto][10] failed to emit activity socket: ${e.message}`);
