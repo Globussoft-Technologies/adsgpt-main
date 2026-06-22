@@ -92,9 +92,13 @@ const initialState = {
   stopConfirmFor: null,
   // Which campaign's Published Ads modal is open (campaignId | null).
   publishedAdsOpenFor: null,
-  // Per-job activity trace cache, keyed by jobId. Populated by fetchActivity.
-  //   { [jobId]: { loading, error, runs, total, generationHealth } }
-  activityByJob: {},
+  // Per-campaign activity trace cache, keyed by AdsGPT campaignId. Populated
+  // by fetchActivity. Was previously keyed by jobId — switched because the
+  // backend activity endpoint now keys by campaignId, and one campaign can
+  // span multiple jobs over its lifetime (activate → complete → re-activate
+  // creates a new job but the user sees one continuous trace).
+  //   { [campaignId]: { loading, error, runs, total, generationHealth, campaign } }
+  activityByCampaign: {},
   // CTA option cache, keyed by Meta campaign objective enum.
   //   { OUTCOME_TRAFFIC: { status: 'ok', options: [{value,label}, ...] },
   //     OUTCOME_SALES:   { status: 'unsupported' } }
@@ -145,7 +149,7 @@ const adFactoryAutomationSlice = createSlice({
 
     // Merge a socket-delivered runComplete payload into the activity cache.
     //
-    //   action.payload = { jobId, payload: <socket-event-body> }
+    //   action.payload = { campaignId, payload: <socket-event-body> }
     //
     // The live `adsFactory:runComplete` payload (see AUTOPILOT_SOCKET_EVENTS.md
     // for the doc shape, which differs) ships ONE run per event under
@@ -157,12 +161,12 @@ const adFactoryAutomationSlice = createSlice({
     // the live event so existing values are preserved — they only get
     // refreshed on a full GET /activity.
     mergeActivityFromSocket(state, action) {
-      const { jobId, payload } = action.payload || {};
-      if (!jobId || !payload) return;
+      const { campaignId, payload } = action.payload || {};
+      if (!campaignId || !payload) return;
 
       const existing = {
         ...emptyActivityBucket(),
-        ...(state.activityByJob[jobId] || {}),
+        ...(state.activityByCampaign[campaignId] || {}),
       };
 
       // Live payload uses `payload.run` (single object). Doc payload uses
@@ -186,7 +190,7 @@ const adFactoryAutomationSlice = createSlice({
         (r) => r?.runId && !incomingIds.has(r.runId),
       );
 
-      state.activityByJob[jobId] = {
+      state.activityByCampaign[campaignId] = {
         ...existing,
         loading: false,
         error: null,
@@ -314,26 +318,26 @@ const adFactoryAutomationSlice = createSlice({
         };
       })
 
-      // -- activity (per-job run trace) --
-      // Loading/error are tracked per jobId so two campaigns' modals can't
+      // -- activity (per-campaign run trace) --
+      // Loading/error are tracked per campaignId so two campaign tabs can't
       // clobber each other if the user pops between them.
       .addCase(fetchActivity.pending, (state, action) => {
-        const jobId = action.meta?.arg?.jobId;
-        if (!jobId) return;
+        const campaignId = action.meta?.arg?.campaignId;
+        if (!campaignId) return;
         // Spread defaults first so `runs`/`total`/etc. are always present
         // even on the first fetch (when no prior bucket exists). Existing
         // values then win, and the loading flag is set last.
-        state.activityByJob[jobId] = {
+        state.activityByCampaign[campaignId] = {
           ...emptyActivityBucket(),
-          ...(state.activityByJob[jobId] || {}),
+          ...(state.activityByCampaign[campaignId] || {}),
           loading: true,
           error: null,
         };
       })
       .addCase(fetchActivity.fulfilled, (state, action) => {
-        const { jobId, runs, total, generationHealth, campaign } = action.payload || {};
-        if (!jobId) return;
-        state.activityByJob[jobId] = {
+        const { campaignId, runs, total, generationHealth, campaign } = action.payload || {};
+        if (!campaignId) return;
+        state.activityByCampaign[campaignId] = {
           ...emptyActivityBucket(),
           loading: false,
           error: null,
@@ -344,11 +348,11 @@ const adFactoryAutomationSlice = createSlice({
         };
       })
       .addCase(fetchActivity.rejected, (state, action) => {
-        const jobId = action.meta?.arg?.jobId;
-        if (!jobId) return;
-        state.activityByJob[jobId] = {
+        const campaignId = action.meta?.arg?.campaignId;
+        if (!campaignId) return;
+        state.activityByCampaign[campaignId] = {
           ...emptyActivityBucket(),
-          ...(state.activityByJob[jobId] || {}),
+          ...(state.activityByCampaign[campaignId] || {}),
           loading: false,
           error: action.payload?.message || action.error?.message || 'Failed to load activity',
         };
@@ -502,11 +506,11 @@ export const selectHistoryOpenFor = (state) => state.adFactoryAutomation.history
 export const selectStopConfirmFor = (state) => state.adFactoryAutomation.stopConfirmFor;
 export const selectPublishedAdsOpenFor = (state) => state.adFactoryAutomation.publishedAdsOpenFor;
 
-// Per-job activity selector. Returns:
+// Per-campaign activity selector. Returns:
 //   undefined → never fetched
-//   { loading, error, runs, total, generationHealth } otherwise
-export const selectActivityForJob = (state, jobId) =>
-  jobId ? state.adFactoryAutomation.activityByJob[jobId] : undefined;
+//   { loading, error, runs, total, generationHealth, campaign } otherwise
+export const selectActivityForCampaign = (state, campaignId) =>
+  campaignId ? state.adFactoryAutomation.activityByCampaign[campaignId] : undefined;
 
 // Derive virtual `pending` placeholder runs for the History modal to show
 // while a cycle is mid-run but the `adsFactory:runComplete` socket hasn't
@@ -558,16 +562,16 @@ function derivePendingPlaceholders(entry, runs, now) {
 
 // Activity selector with virtual pending-placeholder runs prepended when
 // the active cycle is overdue. Modal binds to this instead of
-// selectActivityForJob so the placeholders show without any extra
+// selectActivityForCampaign so the placeholders show without any extra
 // dispatching — they're derived purely from the existing entry + runs.
 //
-// Args object: { jobId, campaignId, now }
-//   - jobId      : keys into activityByJob
-//   - campaignId : keys into configsByCampaign for status + nextRunAt + pairs
+// Args object: { campaignId, now }
+//   - campaignId : keys into activityByCampaign for runs + configsByCampaign
+//                  for status + nextRunAt + pairs
 //   - now        : Date.now() at render time (caller ticks for the
 //                  overdue/stale checks to recompute)
-export const selectActivityWithPending = (state, { jobId, campaignId, now }) => {
-  const activity = selectActivityForJob(state, jobId);
+export const selectActivityWithPending = (state, { campaignId, now }) => {
+  const activity = selectActivityForCampaign(state, campaignId);
   const entry =
     campaignId && state.adFactoryAutomation.configsByCampaign[campaignId];
   const placeholders = derivePendingPlaceholders(

@@ -577,39 +577,29 @@ export const initSocket = (url) => (dispatch, getState) => {
     //     platforms: { meta: { config: {...} } },
     //     data: [ { runId, status, ...generationSummary, creatives[] } ] }
     //
-    // jobId (the autopilot job's Mongo _id, used as the activityByJob key)
-    // lives at `campaign._id` — same value the actions layer captures as
-    // `jobId: job._id` when saving a config. We fall back to a couple of
-    // legacy field names so a server shape drift doesn't silently drop the
-    // event. campaignId (the AdFactory campaign reference, used to refresh
-    // the countdown) is a separate field on the job document — distinct
-    // from jobId in general — and is reverse-resolved from configsByCampaign
-    // when not explicitly present on the payload.
+    // jobId on the payload is used only as a reverse-lookup hint to resolve
+    // the AdFactory campaignId when the event doesn't carry an explicit
+    // `campaign.campaignId`. The activity cache itself is keyed by
+    // campaignId — one campaign can span multiple jobs (e.g. completed →
+    // re-activated creates a new job) and the trace stays continuous.
     if (IS_AUTOMATION_ENABLED) socket.on('adsFactory:runComplete', (data) => {
-      // jobId now ships at the top level of the payload (the cleanest
-      // source). Older shapes nested it under `campaign._id`; we keep that
-      // as a fallback so a partial server rollback doesn't drop events.
+      // jobId on the payload is still used for the reverse-lookup fallback
+      // — older event shapes may not carry an explicit campaignId. The
+      // activity cache itself is now keyed by AdsGPT campaignId (one
+      // campaign can span multiple jobs over its lifetime).
       const jobId =
         data?.jobId ||
         data?.campaign?._id ||
         data?.data?.[0]?.jobId;
-      if (!jobId) {
-        console.warn('adsFactory:runComplete missing jobId', data);
-        return;
-      }
 
-      // Merge first — modal may or may not be open, but the bucket stays
-      // warm so the next open is instant. Keyed by jobId only.
-      dispatch(mergeActivityFromSocket({ jobId, payload: data }));
-
-      // Resolve campaignId by reverse-lookup against configsByCampaign.
-      // `campaign.campaignId` on the payload is sometimes aliased to the
-      // jobId (same Mongo ObjectId), so we can't trust it as the AdFactory
-      // campaign reference — the reverse lookup is authoritative.
+      // Resolve campaignId. Prefer an explicit field on the payload; fall
+      // back to reverse-lookup against configsByCampaign via jobId.
+      // `campaign.campaignId` is sometimes aliased to the jobId (same Mongo
+      // ObjectId), so reject that shape and use the reverse lookup.
       const configs = getState().adFactoryAutomation?.configsByCampaign || {};
       const rawCampaignId = data?.campaign?.campaignId || null;
       let campaignId = rawCampaignId && rawCampaignId !== jobId ? rawCampaignId : null;
-      if (!campaignId) {
+      if (!campaignId && jobId) {
         for (const [cid, entry] of Object.entries(configs)) {
           if (entry?.jobId === jobId) {
             campaignId = cid;
@@ -618,7 +608,16 @@ export const initSocket = (url) => (dispatch, getState) => {
         }
       }
 
-      if (campaignId) {
+      if (!campaignId) {
+        console.warn('adsFactory:runComplete could not resolve campaignId', data);
+        return;
+      }
+
+      // Merge first — modal may or may not be open, but the bucket stays
+      // warm so the next open is instant. Keyed by campaignId now.
+      dispatch(mergeActivityFromSocket({ campaignId, payload: data }));
+
+      {
         // Eager stats patch built straight from the socket payload — the
         // event already carries every field the AutomationActiveNode reads,
         // so the canvas updates in the same tick as the event without

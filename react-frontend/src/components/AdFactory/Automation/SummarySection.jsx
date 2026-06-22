@@ -44,7 +44,8 @@ export default function SummarySection({
       const affordable = apiSummary.cyclesCredsCover ?? 0;
       const costPerCycle = Number(apiSummary.creditsPerCycle) || 0;
       const totalCost = Number(apiSummary.creditsUsedAcrossRunnable) || 0;
-      const total = Number(apiSummary.totalCredits) || availableCredits;
+      const total = Number(apiSummary.remainingCredits) || availableCredits;
+      // const total = Number(apiSummary.totalCredits) || availableCredits;
       const exceedsCredits =
         cyclesScheduled != null && affordable < cyclesScheduled;
       const isOpenEnded = cyclesScheduled == null;

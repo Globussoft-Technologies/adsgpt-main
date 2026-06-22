@@ -28,7 +28,7 @@ import CreativeGeneratingLoader from '@/components/AdStudio/AdCreatives/Creative
 // PublishedAdsModal — full-screen dialog that lists ads produced by an
 // active automation, bucketed by the day they posted.
 //
-// Data source: GET /ads-factory/autopilot/jobs/:jobId/activity. Each run's
+// Data source: GET /ads-factory/autopilot/jobs/:campaignId/activity. Each run's
 // `creatives[]` is flattened so every assembled creative becomes one card.
 // Posting state drives the card variant (green "Posted" badge vs red "Failed"
 // + run error reason). Filters operate over the flattened list.
@@ -59,7 +59,6 @@ export default function PublishedAdsModal() {
   const dispatch = useDispatch();
   const campaignId = useSelector(selectPublishedAdsOpenFor);
   const entry = useSelector((state) => selectAutomationEntry(state, campaignId));
-  const jobId = entry?.jobId || null;
   // Ticker drives the overdue/stale derivation inside selectActivityWithPending.
   // 10s is the cheapest cadence that still flips placeholders from `pending` to
   // `failed` (after STALE_PENDING_MS) within ~10s of the threshold — fine for a
@@ -70,7 +69,7 @@ export default function PublishedAdsModal() {
     return () => clearInterval(id);
   }, []);
   const activity = useSelector((state) =>
-    selectActivityWithPending(state, { jobId, campaignId, now }),
+    selectActivityWithPending(state, { campaignId, now }),
   );
   const brandInfo = useSelector((state) => state?.adFactoryNew?.brandInfo);
   // Fallback chain for the header label uses the campaigns dropdown when the
@@ -95,15 +94,17 @@ export default function PublishedAdsModal() {
     setCustomRange({ startDate: null, endDate: null });
   };
 
-  // Fetch activity on open / job change. Cached results re-render instantly;
-  // a fresh refetch happens any time the jobId changes (e.g. user pops to a
-  // different campaign's automation).
+  // Fetch activity on open / campaign change. Cached results re-render
+  // instantly; a fresh refetch happens any time the campaignId changes (e.g.
+  // user pops to a different campaign's automation). The endpoint is now
+  // keyed by campaignId — one campaign can span multiple jobs (e.g. after a
+  // re-activation) and the trace stays continuous.
   useEffect(() => {
-    if (!campaignId || !jobId) return;
-    dispatch(fetchActivity({ jobId }));
-  }, [dispatch, campaignId, jobId]);
+    if (!campaignId) return;
+    dispatch(fetchActivity({ campaignId }));
+  }, [dispatch, campaignId]);
 
-  const loading = activity?.loading ?? Boolean(jobId);
+  const loading = activity?.loading ?? Boolean(campaignId);
   const error = activity?.error || null;
   const runs = useMemo(() => (Array.isArray(activity?.runs) ? activity.runs : []), [activity?.runs]);
 
@@ -211,7 +212,7 @@ export default function PublishedAdsModal() {
 
   const close = () => dispatch(closePublishedAds());
   const retry = () => {
-    if (jobId) dispatch(fetchActivity({ jobId }));
+    if (campaignId) dispatch(fetchActivity({ campaignId }));
   };
   const campaignLabel = resolveCampaignName({
     activityCampaign: activity?.campaign,
@@ -307,7 +308,7 @@ export default function PublishedAdsModal() {
 
         {/* Body */}
         <div className="relative flex-1 overflow-y-auto px-6 py-5">
-          {!jobId ? (
+          {!entry?.jobId ? (
             <EmptyState
               title="No active automation"
               hint="Activate Autopilot on this campaign to start producing posted ads."

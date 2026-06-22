@@ -764,22 +764,27 @@ export const fetchAutomationStats = createAsyncThunk(
 );
 
 // ----------------------------------------------------------------------------
-// fetchActivity — GET /ads-factory/autopilot/jobs/:jobId/activity
+// fetchActivity — GET /ads-factory/autopilot/jobs/:campaignId/activity
 //
-// Returns the full per-run activity trace for a job: every run with its
+// Returns the full per-run activity trace for a campaign: every run with its
 // generated images, generated texts, and assembled `creatives[]` (each carrying
-// an `ad` block + `posting` block). The PublishedAdsModal flattens this into
-// individual ad cards and renders posted / failed states from `posting.posted`.
+// an `ad` block + `posting` block). Backend now keys this endpoint by
+// AdsGPT campaignId instead of jobId — one campaign can have multiple jobs
+// over its lifetime (e.g. activate → complete → re-activate creates a new
+// job) and the trace stays continuous from the user's perspective.
+//
+// The PublishedAdsModal flattens this into individual ad cards and renders
+// posted / failed states from `posting.posted`.
 // ----------------------------------------------------------------------------
 export const fetchActivity = createAsyncThunk(
   'adFactoryAutomation/fetchActivity',
-  async ({ jobId, skip = 0, limit = 50 } = {}, { rejectWithValue }) => {
-    if (!jobId) {
-      return rejectWithValue({ jobId: null, message: 'Missing jobId' });
+  async ({ campaignId, skip = 0, limit = 50 } = {}, { rejectWithValue }) => {
+    if (!campaignId) {
+      return rejectWithValue({ campaignId: null, message: 'Missing campaignId' });
     }
     try {
       const token = getCookies();
-      const res = await axios.get(`${AUTOPILOT_BASE}/jobs/${jobId}/activity`, {
+      const res = await axios.get(`${AUTOPILOT_BASE}/jobs/${campaignId}/activity`, {
         params: { skip, limit },
         headers: {
           Authorization: `Bearer ${token}`,
@@ -788,7 +793,7 @@ export const fetchActivity = createAsyncThunk(
       });
       const payload = res?.data || {};
       return {
-        jobId,
+        campaignId,
         runs: Array.isArray(payload.data) ? payload.data : [],
         total: Number(payload.total) || 0,
         generationHealth: payload.generationHealth || null,
@@ -796,7 +801,7 @@ export const fetchActivity = createAsyncThunk(
       };
     } catch (err) {
       return rejectWithValue({
-        jobId,
+        campaignId,
         message:
           err?.response?.data?.error ||
           err?.response?.data?.message ||
