@@ -4828,6 +4828,17 @@ class GoogleAdController {
     } catch (e) {
       const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
       logger.error(`Failed to upload video to YouTube from URL ${videoUrl}: ${detail}`);
+
+      // youtubeSignupRequired = the Google account has no YouTube channel
+      const errors = e.response?.data?.error?.errors || [];
+      const isNoChannel = errors.some((err) => err.reason === 'youtubeSignupRequired');
+      if (isNoChannel) {
+        throw new Error(
+          'The connected Google account does not have a YouTube channel. ' +
+          'Please visit youtube.com, sign in with the same account, and create a channel before uploading video ads.'
+        );
+      }
+
       throw new Error(`Video upload to YouTube failed: ${detail}`);
     }
   }

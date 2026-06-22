@@ -7,6 +7,7 @@ const {
   updateJobSchema,
 } = require("../../Validations/adsFactoryAuto/adsFactoryAutoValidation");
 const logger = require("../../utils/logger");
+const { _runningJobs } = require("../../services/adsFactoryAuto/adsFactoryAutoOrchestrator");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { getCreditDeduction, imageEntries } = require("../../config/modelRegistry");
 
@@ -186,6 +187,21 @@ class AdsFactoryAutoController {
       const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
 
+      if (job.status === "completed") {
+        return res.status(409).json({
+          success: false,
+          error: "This job has already completed. You cannot edit a completed job — please create a new one instead.",
+        });
+      }
+
+      const isRunning = _runningJobs.has(job._id.toString());
+      if (isRunning) {
+        return res.status(409).json({
+          success: false,
+          error: "This job is currently running. Editing it now would cause a duplicate posting — please wait for the current run to finish before making changes.",
+        });
+      }
+
       if (value.campaignId     !== undefined) job.campaignId     = value.campaignId;
       if (value.pairsPerCycle  !== undefined) job.pairsPerCycle  = value.pairsPerCycle;
       if (value.model          !== undefined) job.model          = value.model;
@@ -223,8 +239,17 @@ class AdsFactoryAutoController {
     */
     try {
       const userId = req.user.user_id;
-      const job = await AdsFactoryJob.findOneAndDelete({ _id: req.params.id, userId });
+      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      if (_runningJobs.has(job._id.toString())) {
+        return res.status(409).json({
+          success: false,
+          error: "This job is currently running. Deleting it now could cause incomplete postings — please wait for the current run to finish before deleting.",
+        });
+      }
+
+      await AdsFactoryJob.findOneAndDelete({ _id: req.params.id, userId });
       await cancelJob(req.params.id);
       if (job.campaignId) {
         const stuckCampaign = await Campaign.findOne(
@@ -265,6 +290,14 @@ class AdsFactoryAutoController {
         if (nextTime) job.schedule.nextRunAt = nextTime;
         return res.json({ success: true, message: "Already paused", data: job });
       }
+
+      if (_runningJobs.has(job._id.toString())) {
+        return res.status(409).json({
+          success: false,
+          error: "This job is currently running. Please wait for the current run to finish, then pause it.",
+        });
+      }
+
       job.status = "paused";
       await job.save();
       await cancelJob(job._id.toString());
@@ -347,6 +380,12 @@ class AdsFactoryAutoController {
       }
       if (job.status === "completed") {
         return res.status(400).json({ success: false, error: "Cannot run a completed job." });
+      }
+      if (_runningJobs.has(job._id.toString())) {
+        return res.status(409).json({
+          success: false,
+          error: "This job is already running right now. Please wait for the current run to finish before triggering another one.",
+        });
       }
 
       await runJobNow(req.params.id);
@@ -718,205 +757,187 @@ class AdsFactoryAutoController {
       const userId = req.user.user_id;
       const { skip = 0, limit = 10 } = req.query;
 
-      // ── 1. Load job ──────────────────────────────────────────────────────────
-      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId })
-        .select("campaignId runHistory totalRuns failedRuns status schedule pairsPerCycle createdAt")
-        .lean();
-      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+      // ── 1. Detect whether :id is a jobId or a campaignId ────────────────────
+      // Strategy: try jobId lookup first (exact _id match).
+      // If that returns nothing, treat :id as a campaignId and return ALL jobs
+      // for that campaign — each with their own full activity data.
+      const SELECT = "campaignId runHistory totalRuns failedRuns status schedule pairsPerCycle model createdAt targets";
 
-      // ── 2. Load associated campaign ──────────────────────────────────────────
-      const campaign = await Campaign.findById(job.campaignId)
-        .select("metadata brandInfo results creatives services status")
-        .lean();
+      let jobs = [];
+      let idType = "jobId";
 
-      // ── 3. Slice run history (newest-first) ───────────────────────────────
-      const allRuns = [...(job.runHistory || [])].reverse();
-      const skipNum = Number(skip);
-      const limitNum = Number(limit);
-      const pageRuns = allRuns.slice(skipNum, skipNum + limitNum);
+      const jobById = await AdsFactoryJob.findOne({ _id: req.params.id, userId })
+        .select(SELECT).lean();
 
-      // ── 4. Removed campaign.results dependency ─────────────
-      // The orchestrator no longer pushes to campaign.creatives.
-      // All historical data (generated pairs and stats) is now safely
-      // stored inside the job's runHistory directly.
+      if (jobById) {
+        jobs = [jobById];
+      } else {
+        // :id is a campaignId — load all autopilot jobs for that campaign
+        const byCampaign = await AdsFactoryJob.find({ campaignId: req.params.id, userId })
+          .select(SELECT).sort({ createdAt: -1 }).lean();
+        if (!byCampaign || byCampaign.length === 0) {
+          return res.status(404).json({ success: false, error: "No autopilot jobs found for this campaign" });
+        }
+        jobs = byCampaign;
+        idType = "campaignId";
+      }
 
-      // ── 5. Build per-run activity rows ───────────────────────────────────────
-      const runActivity = pageRuns.map((run) => {
-        const adsPosted = run.platformAdIds
-          ? (run.platformAdIds instanceof Map
-              ? Object.fromEntries(run.platformAdIds)
-              : run.platformAdIds)
-          : {};
+      // ── Shared helper — builds full activity detail for one job ─────────────
+      const buildJobDetail = async (job, skipNum, limitNum) => {
+        const campaign = await Campaign.findById(job.campaignId)
+          .select("metadata brandInfo results creatives services status").lean();
 
-        const posted = Object.keys(adsPosted).length > 0;
-        const runCreatives = run.automationCreatives || [];
-        
-        // Calculate dynamic stats
-        const imagesRequested = job.pairsPerCycle || 1;
-        const textsRequested  = job.pairsPerCycle || 1;
-        const imagesGenerated = runCreatives.filter(c => c.imageUrl).length;
-        const textsGenerated  = runCreatives.filter(c => c.headline || c.message).length;
+        const allRuns   = [...(job.runHistory || [])].reverse();
+        const pageRuns  = allRuns.slice(skipNum, skipNum + limitNum);
 
-        const rawImages = run.rawImages || [];
-        const rawTexts  = run.rawTexts  || [];
+        const runActivity = pageRuns.map((run) => {
+          const adsPosted = run.platformAdIds
+            ? (run.platformAdIds instanceof Map ? Object.fromEntries(run.platformAdIds) : run.platformAdIds)
+            : {};
+          const posted       = Object.keys(adsPosted).length > 0;
+          const runCreatives = run.automationCreatives || [];
+          const rawImages    = run.rawImages || [];
+          const rawTexts     = run.rawTexts  || [];
 
-        // Reconstruct generated assets directly from the raw python results saved to the job
-        const generatedImages = rawImages.map((img, i) => {
-          const imgUrl = typeof img.data === "string" ? img.data : (img.data?.base_image || img.data?.url || img.data?.data || null);
-          const aspectRatio = typeof img.data === "object" ? (img.data?.aspect_ratio || img.data?.aspectRatio || img.data?.aspectRatioString || null) : null;
+          const generatedImages = rawImages.map((img, i) => {
+            const imgUrl = typeof img.data === "string" ? img.data : (img.data?.base_image || img.data?.url || img.data?.data || null);
+            const aspectRatio = typeof img.data === "object" ? (img.data?.aspect_ratio || img.data?.aspectRatio || img.data?.aspectRatioString || null) : null;
+            return { index: i, generated: img.status === 200, status: img.status, url: imgUrl, aspectRatio, prompt: img.prompt || null, error: img.error || null };
+          });
+
+          const generatedTexts = rawTexts.map((txt, i) => ({
+            index:       i,
+            generated:   txt.status === 200,
+            status:      txt.status,
+            headline:    typeof txt.data === "object" ? txt.data?.meta?.headline || txt.data?.google?.headline || txt.data?.headline : txt.data || null,
+            body:        typeof txt.data === "object" ? txt.data?.meta?.primary_text || txt.data?.google?.description || txt.data?.body || txt.data?.message : null,
+            description: typeof txt.data === "object" ? txt.data?.meta?.description || txt.data?.description : null,
+            error:       txt.error || null,
+          }));
+
+          const imagesRequested = job.pairsPerCycle || 1;
+          const textsRequested  = job.pairsPerCycle || 1;
+          const imagesGenerated = runCreatives.filter(c => c.imageUrl).length;
+          const textsGenerated  = runCreatives.filter(c => c.headline || c.message).length;
+
           return {
-            index:     i,
-            generated: img.status === 200,
-            status:    img.status,
-            url:       imgUrl,
-            aspectRatio: aspectRatio,
-            prompt:    img.prompt || null,
-            error:     img.error || null,
+            runId:       run.runId,
+            status:      run.status,
+            startedAt:   run.startedAt,
+            completedAt: run.completedAt,
+            durationMs:  (run.startedAt && run.completedAt) ? new Date(run.completedAt) - new Date(run.startedAt) : null,
+            error:       run.error || null,
+            generationSummary: {
+              imagesRequested, imagesGenerated, imagesFailed: Math.max(0, imagesRequested - imagesGenerated),
+              textsRequested,  textsGenerated,  textsFailed:  Math.max(0, textsRequested  - textsGenerated),
+              creativesAssembled: runCreatives.length,
+            },
+            postingSummary: { posted, platforms: Object.keys(adsPosted), adIds: adsPosted },
+            generatedImages,
+            generatedTexts,
+            creatives: runCreatives.map((c, i) => ({
+              creativeId: c.creativeId, imageIndex: i, textIndex: i,
+              runStatus: run.status, runError: run.error,
+              ad: {
+                imageUrl: c.imageUrl, imageStatus: c.imageUrl ? "generated" : "missing",
+                headline: c.headline, body: c.message, description: c.description,
+                textStatus: (c.headline || c.message) ? "generated" : "missing",
+                callToAction: c.callToAction, linkUrl: c.linkUrl, platform: c.platform,
+              },
+              posting: { posted, postedAdIds: adsPosted, postedAt: posted ? (run.completedAt || null) : null },
+            })),
           };
         });
 
-        const generatedTexts = rawTexts.map((txt, i) => ({
-          index:       i,
-          generated:   txt.status === 200,
-          status:      txt.status,
-          headline:    typeof txt.data === "object" ? txt.data?.meta?.headline || txt.data?.google?.headline || txt.data?.headline : txt.data || null,
-          body:        typeof txt.data === "object" ? txt.data?.meta?.primary_text || txt.data?.google?.description || txt.data?.body || txt.data?.message : null,
-          description: typeof txt.data === "object" ? txt.data?.meta?.description || txt.data?.description : null,
-          error:       txt.error || null,
-        }));
+        let totalImagesRequested = 0, totalImagesGenerated = 0;
+        let totalTextsRequested  = 0, totalTextsGenerated  = 0;
+        let totalCreativesAssembled = 0, totalCreativesPosted = 0, totalCreativesNotPosted = 0;
+        for (const run of allRuns) {
+          const ri = run.rawImages || [], rt = run.rawTexts || [];
+          totalImagesRequested += job.pairsPerCycle || 1;
+          totalImagesGenerated += ri.filter(i => i.status === 200).length;
+          totalTextsRequested  += job.pairsPerCycle || 1;
+          totalTextsGenerated  += rt.filter(t => t.status === 200).length;
+          const cLen = (run.automationCreatives || []).length;
+          totalCreativesAssembled += cLen;
+          const p = run.platformAdIds && (run.platformAdIds instanceof Map ? run.platformAdIds.size > 0 : Object.keys(run.platformAdIds).length > 0);
+          if (p) totalCreativesPosted += cLen; else totalCreativesNotPosted += cLen;
+        }
 
+        const platformDetails = {};
+        for (const [platform, config] of Object.entries(job.targets || {})) {
+          if (!config || Object.keys(config).length === 0) continue;
+          platformDetails[platform] = { config };
+        }
+
+        const metaTemplate = job.targets?.meta?.template || null;
+        const templateInputs = metaTemplate ? {
+          objective:          metaTemplate.objective          || null,
+          conversionLocation: metaTemplate.conversionLocation || null,
+          pageId:             metaTemplate.pageId             || metaTemplate.payload?.pageId || null,
+          adAccountId:        metaTemplate.payload?.adAccountId || null,
+          bidStrategy:        metaTemplate.payload?.bidStrategy || null,
+          dailyBudget:        metaTemplate.payload?.dailyBudget || null,
+          lifetimeBudget:     metaTemplate.payload?.lifetimeBudget || null,
+          callToAction:       metaTemplate.payload?.callToAction || null,
+          linkUrl:            metaTemplate.payload?.linkUrl || null,
+          targeting:          metaTemplate.payload?.targeting || null,
+        } : null;
 
         return {
-          runId:       run.runId,
-          status:      run.status,
-          startedAt:   run.startedAt,
-          completedAt: run.completedAt,
-          durationMs:  (run.startedAt && run.completedAt)
-            ? new Date(run.completedAt) - new Date(run.startedAt)
-            : null,
-          error: run.error || null,
-
-          generationSummary: {
-            imagesRequested,
-            imagesGenerated,
-            imagesFailed:    Math.max(0, imagesRequested - imagesGenerated),
-            textsRequested,
-            textsGenerated,
-            textsFailed:     Math.max(0, textsRequested - textsGenerated),
-            creativesAssembled: runCreatives.length,
-          },
-
-          postingSummary: {
-            posted,
-            platforms: Object.keys(adsPosted),
-            adIds:     adsPosted,
-          },
-
-          generatedImages,
-          generatedTexts,
-
-          // ── assembled creatives to post (image+text combos) ──────────────────
-          creatives: runCreatives.map((c, i) => ({
-            creativeId:  c.creativeId,
-            imageIndex:  i,
-            textIndex:   i,
-            runStatus:   run.status,
-            runError:    run.error,
-            ad: {
-              imageUrl:     c.imageUrl,
-              imageStatus:  c.imageUrl ? "generated" : "missing",
-              headline:     c.headline,
-              body:         c.message,
-              description:  c.description,
-              textStatus:   (c.headline || c.message) ? "generated" : "missing",
-              callToAction: c.callToAction,
-              linkUrl:      c.linkUrl,
-              platform:     c.platform,
+          jobId:  job._id,
+          total:  allRuns.length,
+          skip:   skipNum,
+          limit:  limitNum,
+          jobConfig: {
+            status:        job.status,
+            pairsPerCycle: job.pairsPerCycle,
+            model:         job.model || null,
+            createdAt:     job.createdAt,
+            schedule: {
+              frequency:       job.schedule?.frequency,
+              startDate:       job.schedule?.startDate       || null,
+              endDate:         job.schedule?.endDate         || null,
+              hour:            job.schedule?.hour            ?? null,
+              timezone:        job.schedule?.timezone        || "UTC",
+              nextRunAt:       job.schedule?.nextRunAt       || null,
+              lastRunAt:       job.schedule?.lastRunAt       || null,
+              customFrequency: job.schedule?.customFrequency || null,
             },
-            posting: {
-              posted,
-              postedAdIds: adsPosted,
-              postedAt:    posted ? (run.completedAt || null) : null,
-            },
-          })),
+            templateInputs,
+          },
+          campaign: campaign ? {
+            _id:          campaign._id,
+            campaignId:   campaign.metadata?.campaignId,
+            campaignName: campaign.metadata?.campaignName,
+            status:       campaign.status,
+          } : null,
+          generationHealth: {
+            totalImagesRequested, totalImagesGenerated, totalImagesFailed: Math.max(0, totalImagesRequested - totalImagesGenerated),
+            totalTextsRequested,  totalTextsGenerated,  totalTextsFailed:  Math.max(0, totalTextsRequested  - totalTextsGenerated),
+            totalCreativesAssembled, totalCreativesPosted, totalCreativesNotPosted,
+          },
+          platforms: platformDetails,
+          data: runActivity,
         };
-      });
-
-      // ── 6. Overall campaign generation health ────────────────────────────────
-      let totalImagesRequested = 0, totalImagesGenerated = 0;
-      let totalTextsRequested = 0,  totalTextsGenerated = 0;
-      let totalCreativesAssembled = 0, totalCreativesPosted = 0, totalCreativesNotPosted = 0;
-
-      for (const run of allRuns) {
-        const rawImages = run.rawImages || [];
-        const rawTexts  = run.rawTexts  || [];
-        
-        totalImagesRequested += job.pairsPerCycle || 1;
-        totalImagesGenerated += rawImages.filter(i => i.status === 200).length;
-        totalTextsRequested  += job.pairsPerCycle || 1;
-        totalTextsGenerated  += rawTexts.filter(t => t.status === 200).length;
-        
-        const cLen = (run.automationCreatives || []).length;
-        totalCreativesAssembled += cLen;
-
-        const posted = run.platformAdIds && (run.platformAdIds instanceof Map ? run.platformAdIds.size > 0 : Object.keys(run.platformAdIds).length > 0);
-        if (posted) {
-          totalCreativesPosted += cLen;
-        } else {
-          totalCreativesNotPosted += cLen;
-        }
-      }
-      
-      const generationHealth = {
-        totalImagesRequested,
-        totalImagesGenerated,
-        totalImagesFailed:    Math.max(0, totalImagesRequested - totalImagesGenerated),
-        totalTextsRequested,
-        totalTextsGenerated,
-        totalTextsFailed:     Math.max(0, totalTextsRequested - totalTextsGenerated),
-        totalCreativesAssembled,
-        totalCreativesPosted,
-        totalCreativesNotPosted,
       };
 
-      const platformAdSummary = {};
-      for (const run of allRuns) {
-        const ids = run.platformAdIds
-          ? (run.platformAdIds instanceof Map
-              ? Object.fromEntries(run.platformAdIds)
-              : run.platformAdIds)
-          : {};
-        for (const [platform, adId] of Object.entries(ids)) {
-          if (!adId) continue;
-          if (!platformAdSummary[platform]) platformAdSummary[platform] = [];
-          platformAdSummary[platform].push(adId);
-        }
+      // ── If campaignId was passed, return full detail for ALL jobs ─────────────
+      if (idType === "campaignId") {
+        const skipNum  = Number(skip);
+        const limitNum = Number(limit);
+        const results  = await Promise.all(jobs.map((job) => buildJobDetail(job, skipNum, limitNum)));
+        return res.json({
+          success:    true,
+          campaignId: req.params.id,
+          total:      jobs.length,
+          jobs:       results,
+        });
       }
 
-      const platformDetails = {};
-      for (const [platform, config] of Object.entries(job.targets || {})) {
-        if (!config || Object.keys(config).length === 0) continue;
-        platformDetails[platform] = {
-          config
-        };
-      }
-
-      return res.json({
-        success: true,
-        jobId:   job._id,
-        total:   allRuns.length,
-        skip:    skipNum,
-        limit:   limitNum,
-        campaign: campaign ? {
-          _id:          campaign._id,
-          campaignId:   campaign.metadata?.campaignId,
-          campaignName: campaign.metadata?.campaignName,
-          status:       campaign.status,
-        } : null,
-        generationHealth,
-        platforms: platformDetails,
-        data: runActivity,
-      });
+      // ── jobId path — unchanged response shape ────────────────────────────────
+      const detail = await buildJobDetail(jobs[0], Number(skip), Number(limit));
+      return res.json({ success: true, ...detail });
     } catch (err) {
       logger.error(`[adsFactoryAuto:getJobActivity] ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });

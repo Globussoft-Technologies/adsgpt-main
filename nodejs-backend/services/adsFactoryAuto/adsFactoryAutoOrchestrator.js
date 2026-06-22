@@ -61,7 +61,9 @@ const PLATFORM_POSTERS = {
         throw new Error("Template payload is missing adAccountId");
       }
 
-      const fbUser = await FBUsers.findOne({ userId: job.userId });
+      // job.userId may be prefixed e.g. "GPT-438" — FBUsers stores the raw numeric part
+      const rawFbUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
+      const fbUser = await FBUsers.findOne({ $or: [{ userId: job.userId }, { userId: rawFbUserId }] });
       if (!fbUser) throw new Error(`No Facebook account linked for user ${job.userId}`);
       const accessToken = decrypt(fbUser.accessToken);
       if (!accessToken) throw new Error("Facebook access token is missing");
@@ -257,9 +259,7 @@ const PLATFORM_POSTERS = {
       for (let i = 0; i < creativesToProcess.length; i++) {
         const creative = creativesToProcess[i];
         
-        logger.info(`[adsFactoryAuto:meta] uploading image — ${(creative.imageUrl || "").slice(0, 120)}`);
         const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
-        logger.info(`[adsFactoryAuto:meta] image hash: ${imageHash}`);
         const adName = `Automation Ad ${i+1} — ${tsName}`;
         const adPayload = {
           adAccountId: p.adAccountId,
@@ -337,16 +337,15 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
     }
 
     const services = campaign.services?.servicesSelected || [];
-    const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
     const elapsedSec = Math.round((Date.now() - start) / 1000);
 
     const allDone = services.every((srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0));
     if (allDone) {
-      logger.info(`[adsFactoryAuto][poll] generation complete after ${tick} ticks (${elapsedSec}s)  progress=[${progress}]`);
+      logger.info(`[adsFactoryAuto][poll] generation complete after ${tick} ticks (${elapsedSec}s)`);
       return campaign;
     }
     if (campaign.results?.status === "error" || campaign.status === "error") {
-      logger.error(`[adsFactoryAuto][poll] campaign status=error after tick=${tick}  progress=[${progress}]`);
+      logger.error(`[adsFactoryAuto][poll] campaign status=error after tick=${tick} (${elapsedSec}s)`);
       throw new Error("Campaign generation failed (status updated to error)");
     }
 
@@ -435,12 +434,7 @@ async function run(jobId) {
     // ── Step 1: Load job ──────────────────────────────────────────────────────
     job = await AdsFactoryJob.findById(jobId);
     if (!job) throw new Error(`AdsFactoryJob ${jobId} not found`);
-
-    logger.info(
-      `[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  ` +
-      `campaignId=${job.campaignId}  pairsPerCycle=${job.pairsPerCycle}  ` +
-      `schedule.frequency=${job.schedule?.frequency}  targets=${Object.keys(job.targets || {}).join(",") || "none"}`
-    );
+    logger.info(`[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  campaignId=${job.campaignId}  frequency=${job.schedule?.frequency}`);
 
     if (job.status !== "active") {
       logger.info(`[adsFactoryAuto][1] job ${jobId} is ${job.status}, skipping`);
@@ -503,12 +497,7 @@ async function run(jobId) {
       );
     }
 
-    logger.info(
-      `[adsFactoryAuto][2] campaign loaded  campaignId=${campaign.metadata?.campaignId}  ` +
-      `name="${campaign.metadata?.campaignName}"  status=${campaign.status}  ` +
-      `results.status=${campaign.results?.status}  ` +
-      `services=${(campaign.services?.servicesSelected || []).map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(",")}`
-    );
+    logger.info(`[adsFactoryAuto][2] campaign loaded  campaignId=${campaign.metadata?.campaignId}  status=${campaign.status}`);
 
     // Guard: skip if a previous tick's generation is still in-progress — avoids
     // overlapping Python runs on the same campaign when the schedule fires faster
@@ -526,7 +515,6 @@ async function run(jobId) {
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
 
-
     // ── Step 3: Credit check ──────────────────────────────────────────────────
     let created_from = "GPT";
     let rawUserId = userId;
@@ -542,11 +530,7 @@ async function run(jobId) {
       "autopilot",
       campaign.services
     );
-    logger.info(
-      `[adsFactoryAuto][3] credit check  success=${creditResult.success}  ` +
-      `code=${creditResult.code}  totalRequired=${creditResult.totalRequired}  ` +
-      `available=${creditResult.available ?? "n/a"}  message="${creditResult.message || ""}"`
-    );
+    logger.info(`[adsFactoryAuto][3] credits  required=${creditResult.totalRequired}  success=${creditResult.success}`);
     if (!creditResult.success && creditResult.code === 400) {
       logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
       job.status = "paused";
@@ -568,10 +552,6 @@ async function run(jobId) {
           campaignId: campaign.metadata.campaignId,
         },
       });
-      logger.info(
-        `[adsFactoryAuto][4] freeze result  ok=${freeze.ok}  reason=${freeze.reason || "none"}  ` +
-        `idempotent=${freeze.idempotent}  remaining=${freeze.remaining ?? "n/a"}`
-      );
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
         logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
         job.status = "paused";
@@ -615,9 +595,7 @@ async function run(jobId) {
       generated: 0,
     }));
 
-    logger.info(
-      `[adsFactoryAuto][5] updatedServices: ${updatedServices.map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(", ")}`
-    );
+    logger.info(`[adsFactoryAuto][5] services  ${updatedServices.map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(", ")}`);
 
     // Force all required nodes to "success" so sendAdFactoryRequest passes its
     // node-check — a draft/new campaign may have some nodes still in "draft" status.
@@ -659,10 +637,6 @@ async function run(jobId) {
     let completedCampaign;
     try {
       const pythonResult = await ctrl.sendAdFactoryRequest(campaign.metadata.campaignId, "autopilot", "active", job._id.toString());
-      logger.info(
-        `[adsFactoryAuto][6] Python response  allNodesSuccess=${pythonResult?.allNodesSuccess}  ` +
-        `message="${pythonResult?.message || ""}"  error="${pythonResult?.error || ""}"`
-      );
       if (!pythonResult?.allNodesSuccess) {
         throw new Error(`Python API rejected: ${pythonResult?.message || pythonResult?.error || "unknown"}`);
       }
@@ -670,12 +644,6 @@ async function run(jobId) {
       // ── Step 7: Poll for generation completion ────────────────────────────
       logger.info(`[adsFactoryAuto][7] polling for generation completion  campaignId=${campaignId}`);
       completedCampaign = await waitForGenerationComplete(campaign.metadata.campaignId);
-      const textCount  = (completedCampaign.results?.text  || []).filter((t) => t.status === 200).length;
-      const imageCount = (completedCampaign.results?.image || []).filter((i) => i.status === 200).length;
-      logger.info(
-        `[adsFactoryAuto][7] generation complete  texts_ok=${textCount}  images_ok=${imageCount}  ` +
-        `total_texts=${completedCampaign.results?.text?.length || 0}  total_images=${completedCampaign.results?.image?.length || 0}`
-      );
     } catch (err) {
       logger.error(`[adsFactoryAuto][6-7] generation failed: ${err.message}`);
       // Rollback the campaign status so it isn't stuck 'in-progress' forever
@@ -692,11 +660,7 @@ async function run(jobId) {
     newCreatives = buildCreativesFromResults(completedCampaign, ctaList, metaPayload.linkUrl || "", pairsPerCycle);
     rawTexts  = completedCampaign.results?.text?.slice(-pairsPerCycle)  || [];
     rawImages = completedCampaign.results?.image?.slice(-pairsPerCycle) || [];
-    logger.info(
-      `[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  ` +
-      `withImage=${newCreatives.filter((c) => c.imageUrl).length}  ` +
-      `withText=${newCreatives.filter((c) => c.headline || c.message).length}`
-    );
+    logger.info(`[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  withImage=${newCreatives.filter((c) => c.imageUrl).length}`);
     // Mark campaign back to success — creatives are stored in runHistory, not pushed to campaign.creatives
     // (pushing to campaign.creatives on every run causes unbounded accumulation)
     try {
@@ -761,11 +725,6 @@ async function run(jobId) {
   }
 
   // ── Step 9: Save run history ─────────────────────────────────────────────────
-  logger.info(
-    `[adsFactoryAuto][9] saving run history  runId=${runId}  runStatus=${runStatus}  ` +
-    `creatives=${newCreatives.length}  postedAdIds=${JSON.stringify(postedAdIds)}  ` +
-    `error="${runError || "none"}"`
-  );
   if (job) {
     try {
       job.runHistory.push({
@@ -790,7 +749,6 @@ async function run(jobId) {
         const nextTime = await getNextRunTime(jobId);
         if (nextTime) {
           job.schedule.nextRunAt = nextTime;
-          logger.info(`[adsFactoryAuto][9] nextRunAt updated to ${nextTime}`);
         }
       } catch (e) {
         logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);
@@ -966,12 +924,10 @@ async function run(jobId) {
           };
 
           global.io.to(job.userId).emit("adsFactory:runComplete", socketPayload);
-          logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to user room ${job.userId}`);
 
           if (job.campaignId) {
             const campIdStr = job.campaignId.toString();
             global.io.to(campIdStr).emit("adsFactory:runComplete", socketPayload);
-            logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to campaign room ${campIdStr}`);
           }
         } catch (e) {
           logger.error(`[adsFactoryAuto][10] failed to emit activity socket: ${e.message}`);
@@ -984,4 +940,4 @@ async function run(jobId) {
 }
 
 const adsFactoryOrchestrator = { run };
-module.exports = { adsFactoryOrchestrator };
+module.exports = { adsFactoryOrchestrator, _runningJobs };
