@@ -18,6 +18,8 @@ router.patch(
     imageController.updateImageResult
 );
 
+router.post("/save-edited", authenticateJWT, imageController.saveEditedImage);
+
 router.get("/all", authenticateJWT, imageController.getAllImages);
 
 router.get("/processing-count", authenticateJWT, imageController.getProcessingCount);

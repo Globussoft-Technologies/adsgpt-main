@@ -5,6 +5,7 @@ const {
 } = require("../Validations/imageValidator");
 const ImageGeneration = require("../Module/imageGeneration/imageModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
+const mongoose = require("mongoose");
 const axios = require("axios");
 const logger = require("../utils/logger");
 const modelPricingConfig = require("../config/modelPricingConfig");
@@ -453,6 +454,65 @@ exports.generateImage = async (req, res) => {
             success: false,
             error: err.message || "An error occurred while processing your request",
         });
+    }
+};
+
+// Persist a client-side edited image (e.g. the MySpace logo editor's
+// "Save as new") as a brand-new completed record so it survives a refresh
+// and shows up in GET /image/all alongside generated images.
+//
+// No credits are charged — the composite was produced client-side and the
+// file is already on S3; this is purely a DB insert. The new record clones
+// the source image's `inputs` (authoritative + schema-valid) so the card's
+// Info tooltip and Recreate behave exactly like the source.
+exports.saveEditedImage = async (req, res) => {
+    try {
+        /* #swagger.tags = ['Image Generation']
+           #swagger.summary = 'Save a client-side edited image as a new record' */
+        const userId = req.user?.user_id || req.user?.id || req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, error: "Authentication required" });
+        }
+
+        const { url, sourceImageId, inputs: bodyInputs, aspectRatio } = req.body || {};
+        if (!url || typeof url !== "string") {
+            return res.status(400).json({ success: false, error: "url is required" });
+        }
+
+        // Prefer the source record's inputs (authoritative); fall back to the
+        // inputs the client carried over from the original generation.
+        let inputs = null;
+        if (sourceImageId && mongoose.Types.ObjectId.isValid(sourceImageId)) {
+            const source = await ImageGeneration.findOne({ _id: sourceImageId, userId }).lean();
+            if (source?.inputs) inputs = source.inputs;
+        }
+        if (!inputs) inputs = bodyInputs;
+        if (!inputs || !inputs.type || !inputs.model) {
+            return res.status(400).json({
+                success: false,
+                error: "Could not resolve source image inputs",
+            });
+        }
+
+        const record = await ImageGeneration.create({
+            userId,
+            status: "completed",
+            creativeType: "logo_edited",
+            model: inputs.model,
+            inputs,
+            results: [
+                {
+                    generatedImageUrl: url,
+                    status: "completed",
+                    aspectRatio: aspectRatio || inputs.aspectRatio,
+                },
+            ],
+        });
+
+        return res.status(201).json({ success: true, data: record });
+    } catch (err) {
+        console.error("[saveEditedImage] Error:", err.message);
+        return res.status(500).json({ success: false, error: err.message });
     }
 };
 
