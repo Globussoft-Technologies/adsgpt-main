@@ -66,6 +66,12 @@ router.post("/create-pixel", metaAdController.createPixel);
 // product sets within a chosen catalog.
 router.get("/get-catalogs", metaAdController.getCatalogs);
 router.get("/get-product-sets", metaAdController.getProductSets);
+// Ad Preview pane media resolver — fetches full-res image / playable
+// video source for one ad on demand. Bulk list endpoints return
+// `thumbnail_url` only (low-res) and `object_story_spec.video_data`
+// (no playable URL), so the preview pane was rendering blurry images
+// and dead video players until this lazy resolver was added.
+router.get("/get-ad-preview-media", metaAdController.getAdPreviewMedia);
 
 // V1 creation flow — campaign → adset → image → ad. Each step is its own
 // endpoint so the wizard can recover from a failure mid-flow without redoing

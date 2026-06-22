@@ -85,6 +85,10 @@ const ALL_CACHE_PREFIXES = [
   // the previous user's catalogues.
   "metaCatalogs",
   "metaProductSets",
+  // Ad-preview media URLs (full-res image / playable video source).
+  // CDN-signed URLs valid for hours; clear on disconnect so stale signed
+  // URLs from a different connection don't leak across reconnects.
+  "metaAdPreview",
 ];
 
 async function invalidateMetaCacheByPrefixes(userId, prefixes) {
@@ -1766,6 +1770,189 @@ class MetaAdLauncher {
       return res.status(500).json({
         status: false,
         error: m.title || "Failed to load product sets",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // * 7e4. GET full-resolution media URLs for an ad's creative preview.
+  // The Campaigns table view's Ad Preview pane needs a playable video
+  // source AND a full-resolution image — neither is in the bulk
+  // getAdsByAdSetId response, which returns only `creative.thumbnail_url`
+  // (Meta's tiny ~128px thumbnail) and `creative.object_story_spec`
+  // (which carries `video_id` but NOT a playable `video_url`).
+  //
+  // Resolved here on-demand when the preview pane opens:
+  //   - Video ads → fetch `AdVideo(video_id).source` (the streamable MP4)
+  //   - Image ads → prefer the creative's `image_url` (full-res), fall
+  //     back to AdImage(image_hash).url, fall back to thumbnail_url
+  //
+  // Lazy by design — eager-resolving every ad in the list would add 1
+  // extra Meta call per ad with video, slowing the table dramatically
+  // for large ad sets.
+  //
+  // Returns:
+  //   { kind: 'image' | 'video', imageUrl?, videoUrl?, posterUrl? }
+  async getAdPreviewMedia(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Resolve full-res image / playable video URL for an ad preview'
+    */
+    try {
+      const { adId } = req.query;
+      if (!adId) {
+        return res.status(400).json({ status: false, error: "adId is required" });
+      }
+      const userId = req.user.user_id;
+      await initApiForUser(userId);
+
+      // 30-min cache — these URLs are CDN-signed but stable for the
+      // creative's lifetime. Image URLs are valid 24h+, video source URLs
+      // are valid for hours. Keep TTL conservative.
+      const cacheKey = `metaAdPreview:${userId}:${adId}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.status(200).json(JSON.parse(cached));
+
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+      const ad = await new bizSdk.Ad(adId).get([
+        "id",
+        "creative{id,image_url,image_hash,video_id,thumbnail_url,object_story_spec}",
+        "account_id",
+      ]);
+      const adData = ad?._data || ad || {};
+      const creative = adData.creative?._data || adData.creative || {};
+      const oss = creative.object_story_spec || {};
+      const link = oss.link_data || {};
+      const video = oss.video_data || {};
+
+      const videoId = video.video_id || creative.video_id || null;
+      const imageHash = link.image_hash || creative.image_hash || null;
+      const isVideo = !!videoId;
+
+      let response;
+      if (isVideo) {
+        // Resolve video playback URL. Meta exposes several fields on the
+        // AdVideo node; we try them in preference order because:
+        //   • `source` — direct MP4 URL, but Meta restricts it on many
+        //     ads-uploaded videos (returns empty / requires the asset
+        //     to be owned by the app uploading the read request).
+        //   • `permalink_url` — link to the Facebook video page. We build
+        //     a clean `plugins/video.php` embed URL from this with
+        //     show_text=false so the iframe shows ONLY the player (Meta's
+        //     `embed_html` field includes comments + reactions chrome,
+        //     which doesn't fit our square preview).
+        let videoUrl = null;
+        let permalinkUrl = null;
+        let embedUrl = null;
+        let fullPermalink = null;
+        let posterUrl = video.image_url || null;
+        let width = null;
+        let height = null;
+        try {
+          // `format` returns an array of available encodings with their
+          // dimensions — we use the first to compute aspect ratio so the
+          // frontend container doesn't squash 9:16 reels into 1:1 squares.
+          const vid = await api.call("GET", [videoId], {
+            fields: "source,picture,permalink_url,format",
+          });
+          const data = vid?._data || vid || {};
+          videoUrl = data.source || null;
+          permalinkUrl = data.permalink_url || null;
+          posterUrl = data.picture || posterUrl;
+          const fmt = Array.isArray(data.format) ? data.format[0] : null;
+          if (fmt) {
+            width = Number(fmt.width) || null;
+            height = Number(fmt.height) || null;
+          }
+          // permalink_url comes back as a path like `/{page_id}/videos/{id}`.
+          // Build the absolute URL + the embed URL. We don't pass width/
+          // height to plugins/video.php — FB respects our iframe's CSS
+          // size when those are omitted, which lets us drive the size
+          // from the actual video dimensions on the frontend instead.
+          if (permalinkUrl) {
+            fullPermalink = permalinkUrl.startsWith("http")
+              ? permalinkUrl
+              : `https://www.facebook.com${permalinkUrl}`;
+            embedUrl =
+              `https://www.facebook.com/plugins/video.php`
+              + `?href=${encodeURIComponent(fullPermalink)}`
+              + `&show_text=false&show_captions=false&t=0`;
+          }
+          logger.info(
+            `getAdPreviewMedia: video ${videoId} resolved — source:${!!videoUrl} embed:${!!embedUrl} dims:${width}x${height}`,
+          );
+        } catch (e) {
+          logger.warn(
+            `getAdPreviewMedia: video ${videoId} fetch failed: ${e.message}`,
+          );
+        }
+        response = {
+          status: true,
+          kind: "video",
+          videoUrl,
+          embedUrl,
+          permalinkUrl: fullPermalink,
+          posterUrl,
+          width,
+          height,
+        };
+      } else {
+        // Image creative. Preference order for the URL:
+        //   1. creative.image_url           — full-res permalink set when
+        //                                     the creative was created
+        //   2. link_data.image_url          — same shape on object_story_spec
+        //   3. AdImage(image_hash).url      — fallback fetch by hash
+        //   4. creative.thumbnail_url       — last resort (low-res)
+        let imageUrl =
+          creative.image_url
+          || link.image_url
+          || null;
+        if (!imageUrl && imageHash && adData.account_id) {
+          try {
+            // adimages edge — pass the hash as a JSON-encoded array per
+            // Meta's field spec. Returns one entry keyed by the hash.
+            const adAccountId = String(adData.account_id);
+            const acct = adAccountId.startsWith("act_")
+              ? adAccountId
+              : `act_${adAccountId}`;
+            const img = await api.call("GET", [acct, "adimages"], {
+              hashes: JSON.stringify([imageHash]),
+              fields: "url,permalink_url",
+            });
+            const arr = img?.data || img?._data?.data || [];
+            imageUrl = arr[0]?.url || arr[0]?.permalink_url || null;
+          } catch (e) {
+            logger.warn(`getAdPreviewMedia: adimages lookup for ${imageHash} failed: ${e.message}`);
+          }
+        }
+        imageUrl = imageUrl || creative.thumbnail_url || null;
+        response = {
+          status: true,
+          kind: "image",
+          imageUrl,
+        };
+      }
+
+      // Skip the cache when we got nothing useful — usually a transient
+      // permission glitch or Meta API hiccup. Caching a dead response
+      // would lock the preview as broken for 30 min.
+      const isEmpty =
+        response.kind === "video"
+          ? !response.videoUrl && !response.embedUrl && !response.permalinkUrl
+          : !response.imageUrl;
+      if (!isEmpty) {
+        await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      } else {
+        logger.info(
+          `getAdPreviewMedia: skipping cache for ad ${adId} — no usable URL resolved`,
+        );
+      }
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("getAdPreviewMedia error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to load preview media",
         details: m.message,
         meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
       });

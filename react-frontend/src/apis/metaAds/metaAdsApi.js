@@ -343,6 +343,19 @@ export const getProductSets = async (catalogId) => {
   return data;
 };
 
+// Full-resolution preview media for one ad — fetched lazily when the Ad
+// Preview pane opens, because the bulk getAds endpoint only returns
+// `thumbnail_url` (low-res) and `object_story_spec.video_data` (no
+// playable URL). Returns `{ kind: 'image' | 'video', imageUrl?,
+// videoUrl?, posterUrl? }`.
+export const getAdPreviewMedia = async (adId) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/get-ad-preview-media`,
+    { params: { adId }, headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 export const createMetaCampaign = async (payload) => {
   const { data } = await axios.post(
     `${BASE_URL}/adsgpt/meta-ads/create-campaign`,

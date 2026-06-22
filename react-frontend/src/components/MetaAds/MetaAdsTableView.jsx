@@ -26,6 +26,7 @@ import {
   resolveCampaignForAdd,
   resolveAdSetForEdit,
   resolveAdForEdit,
+  getAdPreviewMedia,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { StatusBadge, Spinner, EmptyState } from './MetaAdsAtoms';
@@ -757,6 +758,28 @@ function AdDrawer({ ad, onClose }) {
   const destLink      = creative?.object_story_spec?.video_data?.call_to_action?.value?.link ?? null;
   const ctaLabel      = labelCTA(creative?.call_to_action_type);
 
+  // Lazy-fetch the full-resolution image / playable video source. The
+  // bulk getAds endpoint only returns `creative.thumbnail_url` (low-res
+  // ~128px — blurry when scaled to fill the preview) and
+  // `creative.object_story_spec.video_data` (carries `video_id` but no
+  // playable URL — Meta requires a separate AdVideo.source fetch).
+  //
+  // Backend: GET /meta-ads/get-ad-preview-media → { kind, imageUrl?,
+  // videoUrl?, posterUrl? }. 30-min cached. Fetched once per ad when the
+  // drawer opens.
+  const [media, setMedia] = useState(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setMedia(null);
+    setMediaLoading(true);
+    getAdPreviewMedia(ad.id)
+      .then((r) => { if (!cancelled) setMedia(r); })
+      .catch(() => { if (!cancelled) setMedia(null); })
+      .finally(() => { if (!cancelled) setMediaLoading(false); });
+    return () => { cancelled = true; };
+  }, [ad.id]);
+
   const handleToggle = async (e) => {
     e.stopPropagation();
     const next = currentStatus === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
@@ -809,21 +832,80 @@ function AdDrawer({ ad, onClose }) {
             </div>
           </div>
 
-          {/* creative media */}
-          <div className="relative aspect-square w-full overflow-hidden bg-gray-100 dark:bg-[#111]">
-            {isVideo ? (
-              /* video: try direct source URL, fall back to thumbnail poster */
-              <video
-                key={ad.id}
-                src={creative?.object_story_spec?.video_data?.video_url ?? undefined}
-                poster={creative?.object_story_spec?.video_data?.image_url ?? undefined}
-                controls
-                playsInline
-                className="h-full w-full object-cover"
-              />
-            ) : creative?.thumbnail_url ? (
+          {/* creative media — for videos with known dimensions, match the
+              container's aspect to the video so portrait reels (9:16) and
+              landscape ads (16:9) don't get squashed into a square. Images
+              stay aspect-square (matches Instagram feed). */}
+          <div
+            className="relative w-full overflow-hidden bg-gray-100 dark:bg-[#111]"
+            style={{
+              aspectRatio:
+                isVideo && media?.width && media?.height
+                  ? `${media.width} / ${media.height}`
+                  : '1 / 1',
+            }}
+          >
+            {mediaLoading && !media ? (
+              <div className="flex h-full w-full items-center justify-center">
+                <Spinner />
+              </div>
+            ) : isVideo ? (
+              /* Video — preference cascade from getAdPreviewMedia:
+                 1. Direct MP4 `videoUrl` → <video controls> (best UX)
+                 2. `embedUrl` → Facebook's `plugins/video.php` iframe
+                    (player only, no comments/reactions chrome). Backend
+                    builds this from permalink_url with show_text=false.
+                 3. `permalinkUrl` → poster + "Open on Facebook" button
+                 4. Poster only — preserves something visual. */
+              media?.videoUrl ? (
+                <video
+                  key={ad.id}
+                  src={media.videoUrl}
+                  poster={media?.posterUrl ?? undefined}
+                  controls
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              ) : media?.embedUrl ? (
+                <iframe
+                  key={ad.id}
+                  src={media.embedUrl}
+                  title={name}
+                  allow="autoplay; encrypted-media; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="h-full w-full border-0"
+                />
+              ) : media?.posterUrl || media?.permalinkUrl ? (
+                <div className="relative h-full w-full">
+                  {media?.posterUrl && (
+                    <img
+                      src={media.posterUrl}
+                      alt={name}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  {media?.permalinkUrl && (
+                    <a
+                      href={media.permalinkUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white hover:bg-black/60"
+                    >
+                      Open video on Facebook
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+                  <ImageIcon className="h-10 w-10 text-gray-300 dark:text-[#2a2a2a]" />
+                  <span className="text-xs text-gray-400 dark:text-[#333]">
+                    Video preview unavailable
+                  </span>
+                </div>
+              )
+            ) : media?.imageUrl || creative?.thumbnail_url ? (
               <img
-                src={creative.thumbnail_url}
+                src={media?.imageUrl || creative.thumbnail_url}
                 alt={name}
                 className="h-full w-full object-cover"
               />
