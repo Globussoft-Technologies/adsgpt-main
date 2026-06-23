@@ -203,6 +203,22 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   const limit = 20;
   const containerRef = useRef(null);
 
+  // ESC + body-scroll lock while the lightbox is open. Mirrors the
+  // ImageCard lightbox in MySpace so the two flows feel identical.
+  useEffect(() => {
+    if (!fullscreenUrl) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setFullscreenUrl(null);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreenUrl]);
+
   // MySpace → Meta Post Ad modal. Opened from each card's Megaphone button;
   // the payload carries the chosen image URL. `autoAdvance` is set only when
   // restoring after the Facebook OAuth round-trip — it tells the modal to
@@ -400,23 +416,46 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
         </div>
       )}
 
-      {/* Fullscreen overlay */}
+      {/* Fullscreen lightbox — mirrors the MySpace ImageCard lightbox,
+          minus the Edit Logo affordance (AdFactory images don't go
+          through the logo editor). */}
       {fullscreenUrl && (
         <div
-          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/95 p-6"
           onClick={() => setFullscreenUrl(null)}
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/85 backdrop-blur-xl"
         >
+          {/* Close (X) — top-left, frosted-glass circle */}
           <button
-            className="absolute top-5 right-5 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-            onClick={() => setFullscreenUrl(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFullscreenUrl(null);
+            }}
+            title="Close (Esc)"
+            className="absolute top-5 left-5 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white/90 shadow-lg shadow-black/50 backdrop-blur-xl transition-all hover:scale-105 hover:bg-white/15 hover:text-white"
           >
-            <X size={28} />
+            <X size={18} strokeWidth={2.25} />
           </button>
+
+          {/* Action pill — Download only (no Edit Logo for AdFactory) */}
+          <div className="absolute top-5 right-5 z-10 flex items-center gap-0 rounded-2xl border border-white/15 bg-black/45 p-1 shadow-lg shadow-black/50 backdrop-blur-xl">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                dispatch(downloadMediaFromUrl(`${fullscreenUrl}`, 'image'));
+              }}
+              title="Download image"
+              className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-white/85 transition-all hover:bg-white/12 hover:text-white"
+            >
+              <Download size={15} strokeWidth={2} />
+              Download
+            </button>
+          </div>
+
           <img
             src={resolveImageUrl(fullscreenUrl)}
             alt="AdFactory generated"
-            className="max-h-full max-w-full object-contain"
             onClick={(e) => e.stopPropagation()}
+            className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
           />
         </div>
       )}
