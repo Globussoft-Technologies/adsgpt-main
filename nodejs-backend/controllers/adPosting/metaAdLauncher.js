@@ -2139,19 +2139,32 @@ class MetaAdLauncher {
         logger.warn(`getPixelEvents stats failed: ${e.message}`);
       }
 
-      // Fallback / supplement — the canonical Meta event enum values
-      // useful for Lead Gen. Brand-new pixels have no fired events, so
-      // we always surface these so the user can still pick.
+      // Fallback / supplement — the full set of Meta STANDARD conversion
+      // events (custom_event_type enums). Brand-new pixels have no fired
+      // events, so we surface these so the user can still pick. The wizard
+      // filters this list per objective via STANDARD_EVENT_OBJECTIVE_
+      // COMPATIBILITY, mirroring Meta's Events Manager objective filter.
+      // NOTE: SERVICE_BOOKING_REQUEST was removed — it is NOT a Meta standard
+      // event and was rejected at launch (subcode 2446814). A genuine custom
+      // event by that name still surfaces via the `stats` call above.
       const STANDARD_ENUMS = [
+        "PURCHASE",
+        "ADD_TO_CART",
+        "INITIATED_CHECKOUT",
+        "ADD_PAYMENT_INFO",
+        "ADD_TO_WISHLIST",
+        "CONTENT_VIEW",
+        "SEARCH",
+        "SUBSCRIBE",
+        "START_TRIAL",
+        "CUSTOMIZE_PRODUCT",
+        "DONATE",
         "LEAD",
         "COMPLETE_REGISTRATION",
         "CONTACT",
-        "FIND_LOCATION",
         "SCHEDULE",
-        "SUBSCRIBE",
         "SUBMIT_APPLICATION",
-        "START_TRIAL",
-        "SERVICE_BOOKING_REQUEST",
+        "FIND_LOCATION",
       ];
       const known = new Set(standardEvents.map((e) => e.eventType));
       for (const s of STANDARD_ENUMS) {

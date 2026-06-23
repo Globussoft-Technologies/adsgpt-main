@@ -75,30 +75,59 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
     objective,
     destinationType,
   );
-  // Engagement video-views vs post-engagement disambiguation. Meta rejects
-  // destination_type=ON_AD for OUTCOME_ENGAGEMENT (subcode 1815715), so
-  // we OMIT destination_type for these cells — Meta infers from
-  // optimization_goal. That means reverse-inference has nothing on
-  // destination_type to go on either. Use optimization_goal directly:
-  // POST_ENGAGEMENT → POST_ENGAGEMENT cell; THRUPLAY / 2-sec views →
-  // VIDEO_VIEWS cell. (Legacy ad sets that carry destination_type=ON_AD
-  // — created before this fix — still hit this branch via the empty
-  // destinationType fallthrough.)
+  // Engagement video-views vs post-engagement disambiguation. We now send
+  // granular destination_types (ON_VIDEO for VIDEO_VIEWS, ON_POST for
+  // POST_ENGAGEMENT) — these match Meta's SDK enum and pair with the
+  // surface-specific goals. Reverse-inference handles:
+  //   • Current path: ON_VIDEO → VIDEO_VIEWS, ON_POST → POST_ENGAGEMENT
+  //   • Legacy null-destination ad sets — disambiguate by optimization_goal
+  //   • Legacy ON_AD ad sets — same goal-based disambiguation
   if (
     !conversionLocation &&
-    objective === "OUTCOME_ENGAGEMENT" &&
-    (destinationType === "ON_AD" || !destinationType) &&
-    (optimizationGoal === "POST_ENGAGEMENT" ||
-      optimizationGoal === "THRUPLAY" ||
-      optimizationGoal === "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS")
+    objective === "OUTCOME_ENGAGEMENT"
   ) {
-    conversionLocation =
-      optimizationGoal === "POST_ENGAGEMENT" ? "POST_ENGAGEMENT" : "VIDEO_VIEWS";
+    if (destinationType === "ON_VIDEO") {
+      conversionLocation = "VIDEO_VIEWS";
+    } else if (destinationType === "ON_POST") {
+      conversionLocation = "POST_ENGAGEMENT";
+    } else if (
+      (destinationType === "ON_AD" || !destinationType) &&
+      (optimizationGoal === "POST_ENGAGEMENT" ||
+        optimizationGoal === "THRUPLAY" ||
+        optimizationGoal === "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS")
+    ) {
+      conversionLocation =
+        optimizationGoal === "POST_ENGAGEMENT" ? "POST_ENGAGEMENT" : "VIDEO_VIEWS";
+    }
   }
-  // (Engagement/INSTAGRAM_OR_FACEBOOK disambiguation was removed along with
-  // the cell — see wizardSchema.js. Profile-visit goals PAGE_LIKES and
-  // VISIT_INSTAGRAM_PROFILE were rejected by Meta with subcode 2490408,
-  // making the cell unusable. Engagement/WEBSITE now resolves directly.)
+  // Engagement messaging consolidation (Phase 3, 2026-06-18) — mirror of
+  // the Sales pattern below. Three legacy cells (MESSENGER + WHATSAPP +
+  // INSTAGRAM) were consolidated into MESSAGE_DESTINATIONS to match Meta
+  // UI. Any ad set with destination_type=MESSENGER/WHATSAPP/INSTAGRAM_DIRECT
+  // on an OUTCOME_ENGAGEMENT campaign — including legacy ad sets created
+  // under the per-platform cells — collapses to MESSAGE_DESTINATIONS.
+  if (
+    objective === "OUTCOME_ENGAGEMENT" &&
+    (destinationType === "MESSENGER" ||
+      destinationType === "WHATSAPP" ||
+      destinationType === "INSTAGRAM_DIRECT")
+  ) {
+    conversionLocation = "MESSAGE_DESTINATIONS";
+  }
+  // Engagement/INSTAGRAM_OR_FACEBOOK disambiguation (Phase 3 restoration) —
+  // the cell uses destination_type=WEBSITE (same as Traffic/INSTAGRAM_OR_
+  // FACEBOOK) but the optimization_goal distinguishes profile-visit campaigns
+  // (PAGE_LIKES / VISIT_INSTAGRAM_PROFILE) from generic Engagement/WEBSITE.
+  // Without this branch a profile-visit ad set would resolve to WEBSITE and
+  // the wizard would render the wrong fields (Pixel + conversion event,
+  // neither of which the profile-visit cell uses).
+  if (
+    objective === "OUTCOME_ENGAGEMENT" &&
+    (optimizationGoal === "PAGE_LIKES" ||
+      optimizationGoal === "VISIT_INSTAGRAM_PROFILE")
+  ) {
+    conversionLocation = "INSTAGRAM_OR_FACEBOOK";
+  }
   // Sales/CATALOG disambiguation — the catalog cell shares the WEBSITE
   // destination_type's "no value sent" pattern (we omit destination_type
   // and let Meta infer from `promoted_object.product_set_id`). For

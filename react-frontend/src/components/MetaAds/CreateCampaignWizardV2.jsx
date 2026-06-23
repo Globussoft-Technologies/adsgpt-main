@@ -340,10 +340,14 @@ function buildInitialForm(context = null) {
     // Sales/CATALOG — picked on the new Catalog wizard step.
     catalogId: '',
     productSetId: '',
-    // Awareness/STANDARD — Meta frequency cap. Surfaces on AdSet step
-    // only when goal === REACH. Default "2 impressions every 7 days"
-    // matches Meta UI's own placeholder.
-    frequencyControl: { capFrequency: 2, capPeriodDays: 7 },
+    // Awareness/STANDARD — Meta frequency control. Surfaces on AdSet step
+    // only when goal === REACH. Two modes:
+    //   - 'target' — desired average exposure (delivery hint)
+    //   - 'cap'    — hard ceiling on impressions per period (default)
+    // Both map to the same Meta `frequency_control_specs` API payload;
+    // Meta uses the mode as a delivery-system signal. Default "2
+    // impressions every 7 days" matches Meta UI's own placeholder.
+    frequencyControl: { mode: 'cap', capFrequency: 2, capPeriodDays: 7 },
     // Step 4 (conditional) — Lead Form
     leadFormId: '',
     leadFormMode: 'pick', // 'pick' (use existing) | 'build' (create new)
@@ -2143,57 +2147,99 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         )}
       </div>
 
-      {/* Awareness/STANDARD — frequency cap. Surfaces ONLY when the picked
-          goal is REACH (Meta UI's own behaviour). The cap is "max N
-          impressions every M days"; Meta accepts 1–90 for both numbers. */}
+      {/* Awareness/STANDARD — Frequency control. Surfaces ONLY when the
+          picked goal is REACH (Meta UI's own behaviour). Mirrors Meta UI:
+          Target vs Cap radio, per-mode description, live summary sentence.
+          Both modes emit the same `frequency_control_specs` payload;
+          `mode` is a delivery hint Meta reads to bias toward "average"
+          (target) vs "ceiling" (cap) behaviour. */}
       {cell?.adSet?.additionalFields?.includes('frequencyControl') &&
-        form.optimizationGoal === 'REACH' && (
-          <FieldShell
-            label="Frequency cap"
-            hint="At most N impressions every M days"
-          >
-            <div className="flex items-center gap-2 text-sm">
-              <span>At most</span>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={form.frequencyControl?.capFrequency ?? ''}
-                onChange={(e) =>
-                  update({
-                    frequencyControl: {
-                      ...form.frequencyControl,
-                      capFrequency: Number(e.target.value) || 0,
-                    },
-                  })
-                }
-                className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
-              />
-              <span>impressions every</span>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={form.frequencyControl?.capPeriodDays ?? ''}
-                onChange={(e) =>
-                  update({
-                    frequencyControl: {
-                      ...form.frequencyControl,
-                      capPeriodDays: Number(e.target.value) || 0,
-                    },
-                  })
-                }
-                className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
-              />
-              <span>days</span>
-            </div>
-            {errors.frequencyControl && (
-              <div className="mt-1 text-xs text-red-400">
-                {errors.frequencyControl}
+        form.optimizationGoal === 'REACH' && (() => {
+          const fc = form.frequencyControl || { mode: 'cap', capFrequency: 2, capPeriodDays: 7 };
+          const mode = fc.mode || 'cap';
+          const freq = fc.capFrequency ?? '';
+          const days = fc.capPeriodDays ?? '';
+          const setFc = (next) => update({ frequencyControl: { ...fc, ...next } });
+          // Live summary mirrors Meta's "As a maximum, we'll aim to..."
+          const summary = (() => {
+            if (!freq || !days) return null;
+            const noun = Number(freq) === 1 ? 'impression' : 'impressions';
+            const dayNoun = Number(days) === 1 ? 'day' : 'days';
+            return mode === 'target'
+              ? `On average, we'll aim to show your ads about ${freq} ${noun} every ${days} ${dayNoun}.`
+              : `As a maximum, we'll aim to stay under ${freq} ${noun} every ${days} ${dayNoun}.`;
+          })();
+          return (
+            <FieldShell label="Frequency control" hint="Control how often the same person sees your ad">
+              <div className="space-y-3">
+                {/* Target vs Cap radio group */}
+                <div className="space-y-2">
+                  {[
+                    { value: 'target', label: 'Target', desc: 'The average number of times that you want people to see your ads' },
+                    { value: 'cap',    label: 'Cap',    desc: 'The maximum number of times that you want people to see your ads' },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                        mode === opt.value
+                          ? 'border-cyan-500/50 bg-cyan-500/5'
+                          : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="frequencyControlMode"
+                        value={opt.value}
+                        checked={mode === opt.value}
+                        onChange={() => setFc({ mode: opt.value })}
+                        className="mt-0.5 h-4 w-4 accent-cyan-500"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-zinc-100">{opt.label}</div>
+                        <div className="text-xs text-zinc-400">{opt.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Number inputs — same for both modes */}
+                <div className="flex items-center gap-2 text-sm text-zinc-200">
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={freq}
+                    onChange={(e) => setFc({ capFrequency: Number(e.target.value) || 0 })}
+                    aria-label="Impressions"
+                    className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
+                  />
+                  <span>times every</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={days}
+                    onChange={(e) => setFc({ capPeriodDays: Number(e.target.value) || 0 })}
+                    aria-label="Period in days"
+                    className="w-20 rounded-md bg-zinc-800/80 border border-zinc-700 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500"
+                  />
+                  <span>days</span>
+                </div>
+
+                {/* Live summary sentence — Meta's own copy pattern */}
+                {summary && (
+                  <p className="text-xs text-zinc-400">{summary}</p>
+                )}
+
+                {errors.frequencyControl && (
+                  <div className="text-xs text-red-400">
+                    {errors.frequencyControl}
+                  </div>
+                )}
               </div>
-            )}
-          </FieldShell>
-        )}
+            </FieldShell>
+          );
+        })()}
 
       {!form.cbo && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2702,24 +2748,46 @@ function AppLinkagePicker({ form, update, adAccountId, iosOnly = false, errors =
 // Custom events (anything NOT in this map) pass through unfiltered —
 // Meta accepts user-defined events under any objective, and we have no
 // way to know what a custom event represents.
+// Keys MUST be the `custom_event_type` enum values getPixelEvents emits (see
+// PASCAL_TO_ENUM in metaAdLauncher.js) — NOT the pixel-snippet PascalCase
+// names. ViewContent's enum is CONTENT_VIEW (not VIEW_CONTENT) and
+// InitiateCheckout's is INITIATED_CHECKOUT (not INITIATE_CHECKOUT); a
+// mismatched key reads as "custom" and silently bypasses the filter.
+//
+// Objective membership mirrors Meta's Events Manager objective filter — this
+// is the source of truth, do NOT guess. Verified against Meta's UI 2026-06-22:
+//   OUTCOME_ENGAGEMENT (11): Add to wishlist, Contact, Customise product,
+//     Donate, Find location, Schedule, Search, Start trial, Submit
+//     application, Subscribe, View content. (NOT Purchase/Add to cart/
+//     Initiate checkout/Add payment info/Lead/Complete registration.)
+//   OUTCOME_LEADS (10): Complete registration, Contact, Find location, Lead,
+//     Schedule, Search, Start trial, Submit application, Subscribe, View
+//     content. (NOT Customise product/Donate.)
+//   OUTCOME_SALES (11): Add payment info, Add to cart, Add to wishlist,
+//     Complete registration, Donate, Initiate checkout, Purchase, Search,
+//     Start trial, Subscribe, View content. (NOT Customise product — that
+//     one is Engagement-only; NOT Contact/Find location/Lead/Schedule/Submit
+//     application.)
+// OUTCOME_TRAFFIC is not yet re-verified against the UI; correct it the same
+// way when you have the screenshots.
 const STANDARD_EVENT_OBJECTIVE_COMPATIBILITY = {
   PURCHASE: ['OUTCOME_SALES'],
   ADD_TO_CART: ['OUTCOME_SALES'],
-  INITIATE_CHECKOUT: ['OUTCOME_SALES'],
+  INITIATED_CHECKOUT: ['OUTCOME_SALES'],
   ADD_PAYMENT_INFO: ['OUTCOME_SALES'],
-  ADD_TO_WISHLIST: ['OUTCOME_SALES'],
-  VIEW_CONTENT: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT'],
-  SEARCH: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC'],
-  SUBSCRIBE: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
-  START_TRIAL: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
-  CUSTOMIZE_PRODUCT: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
-  DONATE: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  ADD_TO_WISHLIST: ['OUTCOME_SALES', 'OUTCOME_ENGAGEMENT'],
+  CONTENT_VIEW: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT'],
+  SEARCH: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT'],
+  SUBSCRIBE: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT'],
+  START_TRIAL: ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT'],
+  CUSTOMIZE_PRODUCT: ['OUTCOME_ENGAGEMENT'],
+  DONATE: ['OUTCOME_SALES', 'OUTCOME_ENGAGEMENT'],
   LEAD: ['OUTCOME_LEADS'],
-  COMPLETE_REGISTRATION: ['OUTCOME_LEADS'],
-  CONTACT: ['OUTCOME_LEADS'],
-  SCHEDULE: ['OUTCOME_LEADS'],
-  SUBMIT_APPLICATION: ['OUTCOME_LEADS'],
-  FIND_LOCATION: ['OUTCOME_LEADS', 'OUTCOME_TRAFFIC'],
+  COMPLETE_REGISTRATION: ['OUTCOME_SALES', 'OUTCOME_LEADS'],
+  CONTACT: ['OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT'],
+  SCHEDULE: ['OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT'],
+  SUBMIT_APPLICATION: ['OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT'],
+  FIND_LOCATION: ['OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT'],
 };
 
 function isEventCompatibleWithObjective(eventType, objective) {
@@ -2901,6 +2969,13 @@ function PixelEventPicker({ form, update, adAccountId, errors = {}, objective })
             );
             const hiddenCount = events.length - compatibleEvents.length;
             if (
+              // Only auto-clear once events have actually loaded. On a remount
+              // (e.g. clicking Back to the Ad Set step) `events` resets to []
+              // and the fetch is in flight, so compatibleEvents is momentarily
+              // empty — without this guard we'd wipe a perfectly valid persisted
+              // pixelEventType before the list comes back.
+              !eventsLoading &&
+              events.length > 0 &&
               form.pixelEventType &&
               !compatibleEvents.some((e) => e.eventType === form.pixelEventType)
             ) {
@@ -2908,6 +2983,29 @@ function PixelEventPicker({ form, update, adAccountId, errors = {}, objective })
               // schedules a state change for after commit, mirroring how
               // the cell-defaults effect handles auto-clears elsewhere.
               setTimeout(() => update({ pixelEventType: '' }), 0);
+            }
+            // Meta's enum is SCREAMING_SNAKE; show a friendly label
+            // ("COMPLETE_REGISTRATION" → "Complete Registration") but send the
+            // raw enum value to the API.
+            const eventOptions = compatibleEvents.map((e) => ({
+              value: e.eventType,
+              label: e.lastFiredTime
+                ? `${prettifyEventType(e.eventType)} · last fired ${new Date(e.lastFiredTime * 1000 || e.lastFiredTime).toLocaleDateString()}`
+                : `${prettifyEventType(e.eventType)} · not yet fired`,
+            }));
+            // ALWAYS keep the persisted selection renderable. On remount (Back
+            // from the Ad step) `events` is empty until the refetch lands, so
+            // the value wouldn't be in `options` and SelectField would fall
+            // back to the placeholder — making a still-valid pick look lost.
+            // Inject a synthetic option for it until the real list arrives.
+            if (
+              form.pixelEventType &&
+              !eventOptions.some((o) => o.value === form.pixelEventType)
+            ) {
+              eventOptions.unshift({
+                value: form.pixelEventType,
+                label: prettifyEventType(form.pixelEventType),
+              });
             }
             return (
               <SelectField
@@ -2926,15 +3024,7 @@ function PixelEventPicker({ form, update, adAccountId, errors = {}, objective })
                 onChange={(v) => update({ pixelEventType: v })}
                 placeholder={eventsLoading ? 'Loading…' : 'Pick an event'}
                 error={errors.pixelEventType}
-                options={compatibleEvents.map((e) => ({
-                  value: e.eventType,
-                  // Meta's enum is SCREAMING_SNAKE; show a friendly version
-                  // ("COMPLETE_REGISTRATION" → "Complete Registration") but
-                  // send the raw enum value to the API.
-                  label: e.lastFiredTime
-                    ? `${prettifyEventType(e.eventType)} · last fired ${new Date(e.lastFiredTime * 1000 || e.lastFiredTime).toLocaleDateString()}`
-                    : `${prettifyEventType(e.eventType)} · not yet fired`,
-                }))}
+                options={eventOptions}
               />
             );
           })()}

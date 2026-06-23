@@ -1765,10 +1765,13 @@ group("buildAdSetSchemaV2 — bid strategy ↔ goal compatibility", () => {
   });
 
   test("CONVERSATIONS + LOWEST_COST_WITH_BID_CAP → reject (autobid-only)", () => {
-    const whatsappSchema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "WHATSAPP");
-    const { error } = whatsappSchema.validate({
+    // Engagement/WHATSAPP was consolidated into MESSAGE_DESTINATIONS in
+    // Phase 3 (2026-06-18). The autobid-only rule for CONVERSATIONS is
+    // still tested via the consolidated cell.
+    const msgSchema = buildAdSetSchemaV2("OUTCOME_ENGAGEMENT", "MESSAGE_DESTINATIONS");
+    const { error } = msgSchema.validate({
       ...base,
-      conversionLocation: "WHATSAPP",
+      conversionLocation: "MESSAGE_DESTINATIONS",
       optimizationGoal: "CONVERSATIONS",
       bidStrategy: "LOWEST_COST_WITH_BID_CAP",
       bidAmount: 500,
@@ -1959,47 +1962,53 @@ group("OUTCOME_ENGAGEMENT — registered in SUPPORTED_OBJECTIVES (backend)", () 
     );
   });
 
-  test("listConversionLocations exposes the live engagement cells (Phase 1 + Phase 2 minus retired)", () => {
+  test("listConversionLocations exposes the live engagement cells (Phase 3 — 7 cells)", () => {
     const locs = listConversionLocations("OUTCOME_ENGAGEMENT");
     assert.deepEqual(
       [...locs].sort(),
       [
-        // Phase 1 (MVP — shipped 2026-06-02 first half)
-        "MESSENGER", "WHATSAPP", "PHONE_CALL", "VIDEO_VIEWS", "POST_ENGAGEMENT",
-        // Phase 2 (shipped 2026-06-02 second half)
-        "INSTAGRAM", "WEBSITE", "APP",
-        // INSTAGRAM_OR_FACEBOOK was retired — Meta rejected its goals
-        // (subcode 2490408). Deferred to Phase 3.
+        // Phase 3 consolidated MESSENGER + WHATSAPP + INSTAGRAM into ONE
+        // MESSAGE_DESTINATIONS cell (matches Meta UI + mirrors Sales pattern).
+        // INSTAGRAM_OR_FACEBOOK restored — Meta now accepts PAGE_LIKES under
+        // the "Maximise Facebook Page visits" UI label.
+        // EVENT_RESPONSES + REMINDERS_SET deferred — need new picker
+        // infrastructure (Facebook Event picker / reminder-post picker).
+        "MESSAGE_DESTINATIONS", "PHONE_CALL", "VIDEO_VIEWS", "POST_ENGAGEMENT",
+        "WEBSITE", "APP", "INSTAGRAM_OR_FACEBOOK",
       ].sort(),
     );
   });
 });
 
-group("OUTCOME_ENGAGEMENT — destination_type mappings", () => {
-  test("MESSENGER → MESSENGER", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "MESSENGER"), "MESSENGER");
-  });
-  test("WHATSAPP → WHATSAPP", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "WHATSAPP"), "WHATSAPP");
+group("OUTCOME_ENGAGEMENT — destination_type mappings (Phase 3)", () => {
+  // MESSAGE_DESTINATIONS consolidated from MESSENGER+WHATSAPP+INSTAGRAM —
+  // bare key maps to MESSENGER (Meta routes to IG-DM/WhatsApp from there).
+  test("MESSAGE_DESTINATIONS → MESSENGER (bare key; Meta auto-routes)", () => {
+    assert.equal(
+      getMetaDestinationType("OUTCOME_ENGAGEMENT", "MESSAGE_DESTINATIONS"),
+      "MESSENGER",
+    );
   });
   test("PHONE_CALL → PHONE_CALL", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "PHONE_CALL"), "PHONE_CALL");
   });
-  test("VIDEO_VIEWS → null (Meta rejects ON_AD on Engagement — subcode 1815715)", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS"), null);
+  test("VIDEO_VIEWS → ON_VIDEO (granular SDK surface destination)", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "VIDEO_VIEWS"), "ON_VIDEO");
   });
-  test("POST_ENGAGEMENT → null (Meta rejects ON_AD on Engagement — subcode 1815715)", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT"), null);
+  test("POST_ENGAGEMENT → ON_POST", () => {
+    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "POST_ENGAGEMENT"), "ON_POST");
   });
-  // Phase 2 mappings — INSTAGRAM/WEBSITE/APP all reuse the generic bare keys.
-  test("INSTAGRAM → INSTAGRAM_DIRECT (Phase 2)", () => {
-    assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM"), "INSTAGRAM_DIRECT");
-  });
-  test("WEBSITE → WEBSITE (Phase 2)", () => {
+  test("WEBSITE → WEBSITE", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "WEBSITE"), "WEBSITE");
   });
-  test("APP → APP (Phase 2)", () => {
+  test("APP → APP", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "APP"), "APP");
+  });
+  test("INSTAGRAM_OR_FACEBOOK → WEBSITE (Phase 3 restoration; profile URL via link_data)", () => {
+    assert.equal(
+      getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK"),
+      "WEBSITE",
+    );
   });
 });
 
@@ -2102,28 +2111,43 @@ group("OUTCOME_ENGAGEMENT — POST_ENGAGEMENT cell shape", () => {
   });
 });
 
-group("OUTCOME_ENGAGEMENT — MESSENGER cell shape", () => {
-  const cell = getCell("OUTCOME_ENGAGEMENT", "MESSENGER");
+group("OUTCOME_ENGAGEMENT — MESSAGE_DESTINATIONS cell shape (Phase 3)", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "MESSAGE_DESTINATIONS");
 
-  test("default optimisation goal is CONVERSATIONS (LINK_CLICKS still allowed)", () => {
+  test("default optimisation goal is CONVERSATIONS; LINK_CLICKS surfaced as 'Other goal'", () => {
     assert.equal(cell.adSet.defaultOptimizationGoal, "CONVERSATIONS");
     assert.ok(cell.adSet.optimizationGoals.includes("LINK_CLICKS"));
   });
 
-  test("reuses the Traffic Messenger shape (messenger_click_to_message)", () => {
+  test("uses the canonical messenger_click_to_message shape", () => {
     assert.equal(cell.ad.objectStorySpecShape, "messenger_click_to_message");
+  });
+
+  test("CTA list covers all 3 messaging surfaces (Messenger, IG-DM, WhatsApp) + LEARN_MORE", () => {
+    assert.deepEqual(
+      [...cell.ctas.allowed].sort(),
+      ["MESSAGE_PAGE", "WHATSAPP_MESSAGE", "INSTAGRAM_MESSAGE", "LEARN_MORE"].sort(),
+    );
   });
 });
 
-group("OUTCOME_ENGAGEMENT — WHATSAPP cell shape", () => {
-  const cell = getCell("OUTCOME_ENGAGEMENT", "WHATSAPP");
+group("OUTCOME_ENGAGEMENT — INSTAGRAM_OR_FACEBOOK cell shape (Phase 3 restoration)", () => {
+  const cell = getCell("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK");
 
-  test("optimisation goal locked to CONVERSATIONS", () => {
-    assert.deepEqual(cell.adSet.optimizationGoals, ["CONVERSATIONS"]);
+  test("optimisation goals are PAGE_LIKES + VISIT_INSTAGRAM_PROFILE", () => {
+    assert.deepEqual(
+      [...cell.adSet.optimizationGoals].sort(),
+      ["PAGE_LIKES", "VISIT_INSTAGRAM_PROFILE"].sort(),
+    );
   });
 
-  test("single CTA (WHATSAPP_MESSAGE)", () => {
-    assert.deepEqual(cell.ctas.allowed, ["WHATSAPP_MESSAGE"]);
+  test("uses link_data shape (profile URL via linkUrl, surface via CTA)", () => {
+    assert.equal(cell.ad.objectStorySpecShape, "link_data");
+  });
+
+  test("IG identity is OPTIONAL (cell delivers on FB if IG isn't connected)", () => {
+    assert.ok(!cell.identity.required.includes("instagram"));
+    assert.ok(cell.identity.optional.includes("instagram"));
   });
 });
 
@@ -2168,13 +2192,37 @@ group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by op
     assert.equal(out.conversionLocation, "VIDEO_VIEWS");
   });
 
-  test("MESSENGER destination → MESSENGER cell", () => {
+  test("messaging destinations all collapse to MESSAGE_DESTINATIONS (Phase 3 consolidation)", () => {
+    for (const dest of ["MESSENGER", "WHATSAPP", "INSTAGRAM_DIRECT"]) {
+      const out = inferCellForMetaCampaign(campaign, {
+        destination_type: dest,
+        optimization_goal: "CONVERSATIONS",
+      });
+      assert.ok(!out.error, `${dest} unexpectedly errored: ${out.error}`);
+      assert.equal(
+        out.conversionLocation,
+        "MESSAGE_DESTINATIONS",
+        `${dest} should resolve to MESSAGE_DESTINATIONS on Engagement`,
+      );
+    }
+  });
+
+  test("PAGE_LIKES goal resolves to INSTAGRAM_OR_FACEBOOK cell", () => {
     const out = inferCellForMetaCampaign(campaign, {
-      destination_type: "MESSENGER",
-      optimization_goal: "CONVERSATIONS",
+      destination_type: "WEBSITE",
+      optimization_goal: "PAGE_LIKES",
     });
     assert.ok(!out.error, out.error);
-    assert.equal(out.conversionLocation, "MESSENGER");
+    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
+  });
+
+  test("VISIT_INSTAGRAM_PROFILE goal resolves to INSTAGRAM_OR_FACEBOOK cell", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "WEBSITE",
+      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
   });
 
   test("PHONE_CALL on engagement → PHONE_CALL cell (not CALLS — that's the Leads cell)", () => {
@@ -2192,16 +2240,8 @@ group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by op
     assert.equal(out.conversionLocation, "VIDEO_VIEWS");
   });
 
-  // Phase 2 inference paths.
-  test("INSTAGRAM_DIRECT destination → INSTAGRAM cell", () => {
-    const out = inferCellForMetaCampaign(campaign, {
-      destination_type: "INSTAGRAM_DIRECT",
-      optimization_goal: "CONVERSATIONS",
-    });
-    assert.ok(!out.error, out.error);
-    assert.equal(out.conversionLocation, "INSTAGRAM");
-  });
-
+  // Phase 2 inference paths (INSTAGRAM_DIRECT now collapses to
+  // MESSAGE_DESTINATIONS — covered by the consolidation test above).
   test("WEBSITE + OFFSITE_CONVERSIONS → WEBSITE cell (pixel path)", () => {
     const out = inferCellForMetaCampaign(campaign, {
       destination_type: "WEBSITE",
@@ -2221,15 +2261,7 @@ group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by op
   });
 });
 
-group("OUTCOME_ENGAGEMENT — Phase 2 cell shapes", () => {
-  test("INSTAGRAM cell reuses instagram_direct shape + locks CONVERSATIONS goal", () => {
-    const cell = getCell("OUTCOME_ENGAGEMENT", "INSTAGRAM");
-    assert.equal(cell.ad.objectStorySpecShape, "instagram_direct");
-    assert.deepEqual(cell.adSet.optimizationGoals, ["CONVERSATIONS"]);
-    assert.deepEqual(cell.ctas.allowed, ["INSTAGRAM_MESSAGE"]);
-    assert.ok(cell.identity.required.includes("instagram"));
-  });
-
+group("OUTCOME_ENGAGEMENT — Phase 2 cell shapes (INSTAGRAM consolidated into MESSAGE_DESTINATIONS in Phase 3)", () => {
   test("WEBSITE cell uses pixel_website shape + requires pixel additionalFields", () => {
     const cell = getCell("OUTCOME_ENGAGEMENT", "WEBSITE");
     assert.equal(cell.ad.objectStorySpecShape, "pixel_website");

@@ -300,13 +300,15 @@ const updateAdSetSchemaV2 = Joi.object({
   bidStrategy: Joi.any().forbidden().messages({
     "any.unknown": "The bid strategy can't be changed here.",
   }),
-  // Awareness/STANDARD — frequency cap. Same shape + range as the create
-  // path; null sentinel means "remove any existing cap" (Meta accepts
-  // `frequency_control_specs: []` to clear). Sending undefined / omitting
-  // leaves Meta's current cap untouched.
+  // Awareness/STANDARD — frequency control. Same shape + range as the
+  // create path; null sentinel means "remove any existing cap" (Meta
+  // accepts `frequency_control_specs: []` to clear). Sending undefined /
+  // omitting leaves Meta's current cap untouched. `mode` is the UI hint
+  // (target/cap), defaults to cap.
   frequencyControl: Joi.alternatives()
     .try(
       Joi.object({
+        mode: Joi.string().valid("target", "cap").default("cap"),
         capFrequency: Joi.number().integer().min(1).max(90).required(),
         capPeriodDays: Joi.number().integer().min(1).max(90).required(),
       }),
@@ -474,10 +476,17 @@ function buildAdSetSchemaV2(objective, conversionLocation) {
         // the picked goal is REACH, but Joi accepts absence even on REACH
         // so users who want Meta's default (no cap) can omit it. When
         // present, both numbers must be 1–90 (Meta's documented range).
-        // Single-spec model — the wizard exposes one cap; multiple
+        // Single-spec model — the wizard exposes one entry; multiple
         // frequency_control_specs entries are deferred (see §6b in
         // AWARENESS_CELLS_SPEC.md).
+        //
+        // `mode` ('target' | 'cap') is a UI hint that doesn't change the
+        // API payload — both modes emit the same `frequency_control_specs`
+        // structure. Meta's delivery system reads the value semantically:
+        // target = aim for ~N average, cap = hard ceiling. Stored on the
+        // wizard side so edit-resolve can round-trip the user's choice.
         baseShape.frequencyControl = Joi.object({
+          mode: Joi.string().valid("target", "cap").default("cap"),
           capFrequency: Joi.number().integer().min(1).max(90).required(),
           capPeriodDays: Joi.number().integer().min(1).max(90).required(),
         }).optional();

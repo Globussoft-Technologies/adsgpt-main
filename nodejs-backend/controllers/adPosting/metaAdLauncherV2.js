@@ -1116,13 +1116,19 @@ async function resolveAdSetForEdit(req, res) {
       applicationId: adSetData.promoted_object?.application_id || null,
       objectStoreUrl: adSetData.promoted_object?.object_store_url || null,
       productSetId: adSetData.promoted_object?.product_set_id || null,
-      // Awareness frequency cap — Meta returns frequency_control_specs as
-      // an array; the wizard exposes ONE spec, so read entry [0]. null when
+      // Awareness frequency control — Meta returns frequency_control_specs
+      // as an array; the wizard exposes ONE entry, so read [0]. null when
       // the ad set has no cap configured (Meta default = no cap).
+      //
+      // `mode` is a UI hint Meta doesn't preserve; we default to 'cap'
+      // since cap is the stricter / safer interpretation of the same
+      // max_frequency value. User can flip back to 'target' on edit if
+      // their original intent was Target mode.
       frequencyControl: (() => {
         const spec = adSetData.frequency_control_specs?.[0];
         if (!spec) return null;
         return {
+          mode: "cap",
           capFrequency: Number(spec.max_frequency) || 0,
           capPeriodDays: Number(spec.interval_days) || 0,
         };

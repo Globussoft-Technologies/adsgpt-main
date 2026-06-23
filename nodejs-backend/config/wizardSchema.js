@@ -128,6 +128,12 @@ const OPTIMIZATION_GOAL_LABELS = {
   // likely to remember seeing the ad. Brand-lift signal is measured via
   // post-impression surveys; not all accounts surface the goal.
   AD_RECALL_LIFT: "Maximise ad recall lift",
+  // Engagement Phase 3 deferred goals — labels declared so future work has
+  // the wire contract. Both need new picker infrastructure (Event picker
+  // for EVENT_RESPONSES, reminder-post picker for REMINDERS_SET) before
+  // their cells can ship. See OUTCOME_ENGAGEMENT branch's deferred notes.
+  EVENT_RESPONSES: "Maximise event responses",
+  REMINDERS_SET: "Maximise reminders set",
 };
 
 const BILLING_EVENT_LABELS = {
@@ -298,21 +304,32 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   "OUTCOME_SALES:WEBSITE_AND_CALLS": null,
   // Sales/WEBSITE_AND_APP — Multiple cell; same Meta-auto-route pattern.
   WEBSITE_AND_APP: null,
-  // Engagement "On your ad" cells — Meta rejects destination_type=ON_AD
-  // for OUTCOME_ENGAGEMENT with subcode 1815715 ("Valid values are
-  // MESSENGER, UNDEFINED, WEBSITE, APP"). Omit the field (null) so Meta
-  // infers from optimization_goal. VIDEO_VIEWS and POST_ENGAGEMENT are
-  // still disambiguated by optimization_goal in reverse-inference, so
-  // dropping destination_type doesn't break the Edit flow.
+  // Engagement "On your ad" cells — granular surface destination_types.
+  // Meta's older 1815715 error listed "Valid values are MESSENGER,
+  // UNDEFINED, WEBSITE, APP" but that message pre-dates the SDK's
+  // granular ON_VIDEO / ON_POST enums. Sending null triggers 2490408
+  // ("Performance goal isn't available") because null + THRUPLAY doesn't
+  // give Meta enough to identify the surface. ON_VIDEO + THRUPLAY is the
+  // explicit pairing.
+  //
+  // Objective-qualified so Awareness/VIDEO_VIEWS (truly destination-less)
+  // keeps its null mapping. cellInference handles ON_VIDEO + the legacy
+  // null pattern for backward compat on existing ad sets.
+  "OUTCOME_ENGAGEMENT:VIDEO_VIEWS": "ON_VIDEO",
+  "OUTCOME_ENGAGEMENT:POST_ENGAGEMENT": "ON_POST",
+  // Awareness/VIDEO_VIEWS — Meta really does have no destination_type;
+  // the goal alone drives delivery. Keep null.
   VIDEO_VIEWS: null,
   POST_ENGAGEMENT: null,
-  // Engagement Phase 2 cells. INSTAGRAM_OR_FACEBOOK reuses the same
-  // destination_type=WEBSITE pattern as Traffic/INSTAGRAM_OR_FACEBOOK —
-  // the profile-visit signal lives on the CTA enum. Bare WEBSITE / APP
-  // keys would clash with the Traffic / Leads cells if added at this
-  // layer (different objective + same conversionLocation), so the
-  // generic bare keys (WEBSITE → WEBSITE, APP → APP) already cover
-  // Engagement too. No new bare keys needed.
+  // Engagement Phase 2 + 3 cells:
+  //   • INSTAGRAM_OR_FACEBOOK — bare WEBSITE key from above (the profile
+  //     URL goes in link_data; CTA enum signals which surface).
+  //   • MESSAGE_DESTINATIONS — bare MESSAGE_DESTINATIONS → MESSENGER key
+  //     from above. Meta auto-routes to IG-DM / WhatsApp from there based
+  //     on Page connections (same as Traffic/Sales messaging cells).
+  //
+  // No new bare keys needed — generic WEBSITE / APP / MESSAGE_DESTINATIONS
+  // entries above cover Engagement.
   //
   // Sales/CATALOG — destination_type omitted (null) so Meta infers from
   // the product_set promoted_object. Reverse-inference (cellInference.js)
@@ -864,55 +881,51 @@ const CELLS = {
   // (rejecting imageHash). Every other Engagement cell accepts image OR
   // video like Traffic/Leads.
   OUTCOME_ENGAGEMENT: {
-    MESSENGER: {
+    // ─── Engagement Phase 3 (2026-06-18) ──────────────────────────────────
+    // Consolidated MESSENGER + WHATSAPP + INSTAGRAM (3 separate cells in
+    // Phase 1+2) into ONE MESSAGE_DESTINATIONS cell — mirrors what Meta's
+    // UI shows + matches the Sales pattern (Sales messaging consolidation
+    // shipped 2026-06-17 with the same rationale). Meta auto-routes to
+    // Messenger / IG-DM / WhatsApp based on Page connections + CTA.
+    // Reverse-inference (cellInference.js) collapses all 3 destination_type
+    // values to MESSAGE_DESTINATIONS for Engagement so legacy ad sets
+    // created under the old per-platform cells still resolve cleanly.
+    MESSAGE_DESTINATIONS: {
       adSet: {
-        // Engagement/Messenger optimises for STARTED conversations, not
-        // clicks. LINK_CLICKS is still offered as a fallback for reach-style
-        // delivery; Meta surfaces both.
-        optimizationGoals: ["CONVERSATIONS", "LINK_CLICKS"],
+        // CONVERSATIONS is the primary goal Meta surfaces for messaging;
+        // LINK_CLICKS is the "Other goals" fallback in Meta's UI ("for
+        // people most likely to click on them"). IMPRESSIONS / REACH are
+        // accepted on the same cell — Meta delivers messaging creatives
+        // optimised for whichever signal you pick.
+        optimizationGoals: ["CONVERSATIONS", "LINK_CLICKS", "IMPRESSIONS", "REACH"],
         defaultOptimizationGoal: "CONVERSATIONS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "page",
       },
       ad: {
-        // Same shape as Traffic/Message-destinations — fallback link
-        // required (Meta enforces it on every creative).
+        // linkUrl required as bypass-fallback (Meta enforces it on every
+        // creative even when the CTA opens a chat). messenger_click_to_message
+        // is the canonical shape for auto-routed messaging — same as Sales/
+        // MESSAGE_DESTINATIONS + Traffic/MESSAGE_DESTINATIONS.
         requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
         optionalFields: ["description"],
         objectStorySpecShape: "messenger_click_to_message",
       },
       ctas: {
-        allowed: ["MESSAGE_PAGE", "LEARN_MORE"],
+        // All 3 messaging CTAs allowed — user picks which surface to
+        // emphasise; Meta routes per viewer.
+        allowed: ["MESSAGE_PAGE", "WHATSAPP_MESSAGE", "INSTAGRAM_MESSAGE", "LEARN_MORE"],
         default: "MESSAGE_PAGE",
       },
+      // messengerEnabled is the canonical Page-side requirement — the
+      // Page must have Messenger enabled (everyone does by default) plus
+      // any of IG / WhatsApp Business for the corresponding leg to deliver.
+      // Meta gracefully degrades: if WhatsApp isn't connected, that route
+      // is dropped without breaking delivery.
       identity: { required: ["page", "messengerEnabled"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Drive Messenger conversations. Meta opens a chat with your Page when viewers tap.",
-    },
-
-    WHATSAPP: {
-      adSet: {
-        // Meta surfaces only CONVERSATIONS for this cell — same as Leads/WhatsApp.
-        optimizationGoals: ["CONVERSATIONS"],
-        defaultOptimizationGoal: "CONVERSATIONS",
-        billingEvents: ["IMPRESSIONS"],
-        defaultBillingEvent: "IMPRESSIONS",
-        promotedObjectShape: "page",
-      },
-      ad: {
-        requiredFields: ["imageHash", "headline", "primaryText"],
-        optionalFields: ["description"],
-        objectStorySpecShape: "whatsapp_click_to_message",
-      },
-      // Single CTA — Meta locks the dropdown.
-      ctas: {
-        allowed: ["WHATSAPP_MESSAGE"],
-        default: "WHATSAPP_MESSAGE",
-      },
-      identity: { required: ["page", "whatsappBusinessConnected"], optional: ["instagram"] },
-      additionalSteps: [],
-      notes: "Drive WhatsApp conversations. The Page must have a connected WhatsApp Business account.",
+      notes: "Drive messaging conversations — Messenger, Instagram DM, WhatsApp. Meta auto-routes per viewer based on Page connections + CTA. Consolidated from 3 per-platform cells in Phase 3.",
     },
 
     PHONE_CALL: {
@@ -1004,34 +1017,12 @@ const CELLS = {
     // ─── Engagement Phase 2 cells ─────────────────────────────────────────
     // Added 2026-06-02. All reuse existing object_story_spec shapes — no
     // new builder work. See docs/ENGAGEMENT_CELLS_SPEC.md §"Phase 2".
-
-    INSTAGRAM: {
-      adSet: {
-        // Engagement/IG-Direct optimises for STARTED conversations — same
-        // pattern as Engagement/WhatsApp + Leads/Instagram.
-        optimizationGoals: ["CONVERSATIONS"],
-        defaultOptimizationGoal: "CONVERSATIONS",
-        billingEvents: ["IMPRESSIONS"],
-        defaultBillingEvent: "IMPRESSIONS",
-        promotedObjectShape: "page",
-      },
-      ad: {
-        // Same shape as Leads/Instagram — external link required as
-        // bypass-fallback, CTA value carries app_destination=INSTAGRAM_DIRECT.
-        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
-        optionalFields: ["description"],
-        objectStorySpecShape: "instagram_direct",
-      },
-      // Single CTA — Meta locks the dropdown for IG-Direct messaging.
-      ctas: {
-        allowed: ["INSTAGRAM_MESSAGE"],
-        default: "INSTAGRAM_MESSAGE",
-      },
-      // IG identity required (destination IS the IG account's DMs).
-      identity: { required: ["page", "instagram"], optional: [] },
-      additionalSteps: [],
-      notes: "Drive Instagram DM conversations. Requires a connected Instagram account on the Page.",
-    },
+    //
+    // Note (Phase 3): the per-platform INSTAGRAM cell from Phase 2 was
+    // collapsed into MESSAGE_DESTINATIONS above to match Meta UI's single
+    // "Message destinations" option. Reverse-inference still recognises
+    // destination_type=INSTAGRAM_DIRECT and routes legacy ad sets to
+    // MESSAGE_DESTINATIONS.
 
     WEBSITE: {
       adSet: {
@@ -1096,13 +1087,77 @@ const CELLS = {
       notes: "Drive engagement with your existing app (re-opens / in-app actions). For installs, use the App Promotion objective.",
     },
 
-    // OUTCOME_ENGAGEMENT/INSTAGRAM_OR_FACEBOOK was removed (subcode 2490408
-    // — "Performance goal isn't available"). Meta rejected both PAGE_LIKES
-    // and VISIT_INSTAGRAM_PROFILE on this cell at the API layer (even
-    // outside Special Ad Categories), and the universal fallbacks REACH +
-    // IMPRESSIONS would have made this cell indistinguishable from the
-    // WEBSITE cell in reverse-inference. Profile-visit-style campaigns
-    // are deferred to Phase 3 once the canonical Meta enum is verified.
+    // INSTAGRAM_OR_FACEBOOK — restored 2026-06-18 (Phase 3). Previously
+    // removed because Meta rejected PAGE_LIKES + VISIT_INSTAGRAM_PROFILE
+    // with subcode 2490408. Meta UI now auto-substitutes a working goal
+    // (labelled "Maximise number of Facebook Page visits") so the cell is
+    // usable again. The API enum behind that UI label is still PAGE_LIKES;
+    // Meta surfaces it under the new wording on the dropdown but accepts
+    // the same enum on launch. VISIT_INSTAGRAM_PROFILE remains paired so
+    // IG-side delivery has its own optimisation signal.
+    //
+    // Caveat (live verification pending): some accounts may still hit
+    // subcode 2490408 on PAGE_LIKES — particularly accounts under a
+    // Special Ad Category (Financial / Employment / Housing) where Meta
+    // restricts profile-style goals. If verification surfaces the rejection
+    // broadly, fall back to REACH + IMPRESSIONS only (matches Awareness/
+    // STANDARD pattern) and document the SAC carve-out in §6 of the spec.
+    INSTAGRAM_OR_FACEBOOK: {
+      adSet: {
+        // PAGE_LIKES is Meta's API enum for the "Maximise Facebook Page
+        // visits" goal (Meta relabelled the UI without renaming the enum).
+        // VISIT_INSTAGRAM_PROFILE is the IG analogue. Both are autobid-only
+        // per AUTOBID_ONLY_OPTIMIZATION_GOALS — wizard restricts bid
+        // strategy automatically.
+        optimizationGoals: ["PAGE_LIKES", "VISIT_INSTAGRAM_PROFILE"],
+        defaultOptimizationGoal: "PAGE_LIKES",
+        billingEvents: ["IMPRESSIONS"],
+        defaultBillingEvent: "IMPRESSIONS",
+        promotedObjectShape: "page",
+      },
+      ad: {
+        // Same shape as Traffic/INSTAGRAM_OR_FACEBOOK — the destination is
+        // a profile URL embedded in the CTA value's link field; the linkUrl
+        // form field carries the canonical profile URL. Meta surfaces these
+        // creatives in feed + reels + stories.
+        requiredFields: ["imageHash", "headline", "primaryText", "linkUrl"],
+        optionalFields: ["description"],
+        objectStorySpecShape: "link_data",
+      },
+      ctas: {
+        // Profile-visit CTAs — Meta accepts LIKE_PAGE (FB page-side) and
+        // VIEW_INSTAGRAM_PROFILE (IG-side) for INSTAGRAM_OR_FACEBOOK. The
+        // UI label may render as "Follow page" but the API enum is LIKE_PAGE
+        // (same as Traffic/INSTAGRAM_OR_FACEBOOK).
+        allowed: ["VIEW_INSTAGRAM_PROFILE", "LIKE_PAGE", "MESSAGE_PAGE", "LEARN_MORE", "NO_BUTTON"],
+        default: "VIEW_INSTAGRAM_PROFILE",
+      },
+      // IG identity OPTIONAL (cell delivers on FB if IG isn't connected,
+      // matching Meta's "Instagram or Facebook" wording — either surface
+      // works). Page always required as the FB-side identity.
+      identity: { required: ["page"], optional: ["instagram"] },
+      additionalSteps: [],
+      notes: "Drive profile visits on Instagram or Facebook. Meta delivers to whichever surface the viewer is more likely to engage on. PAGE_LIKES is the API enum behind the 'Facebook Page visits' UI label (Meta relabelled but didn't rename).",
+    },
+
+    // ─── DEFERRED — Engagement Phase 3 follow-up cells ────────────────────
+    //
+    // EVENT_RESPONSES — "Event responses" engagement type. Needs:
+    //   • New promotedObjectShape "event" with `{ event_id }` payload
+    //   • New wizard step (Facebook Event picker — list events the Page
+    //     owns + lets user pick one)
+    //   • Backend endpoint to list Page events
+    //   • Reverse-inference signal (promoted_object.event_id presence)
+    //
+    // REMINDERS_SET — "Reminders set" engagement type. Needs:
+    //   • Wizard step to pick a scheduled live video / reminder-eligible
+    //     post (object_story_id reference)
+    //   • Backend endpoint to list reminder-eligible Page content
+    //   • CTA + ad fields adjusted for boost-existing-post pattern
+    //
+    // Both are niche cells gated on net-new picker infrastructure. Goals
+    // declared in OPTIMIZATION_GOAL_LABELS so future work has the wire
+    // contract ready. Re-open when there's customer demand.
   },
 
   OUTCOME_APP_PROMOTION: {
