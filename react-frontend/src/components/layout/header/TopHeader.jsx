@@ -90,8 +90,8 @@ const adStudioTabs = [
   // 'adCreativeNew') now takes this slot under the same "Ad Creative"
   // label so users land in the new experience by default. Restore by
   // un-commenting this entry and dropping the renamed entry below.
-  { id: 'adCreative', label: 'Ad Creative', icon: Image },
-  // { id: 'adCreativeNew', label: 'Ad Creative', icon: Images },
+  // { id: 'adCreative', label: 'Ad Creative', icon: Image },
+  { id: 'adCreativeNew', label: 'Ad Creative', icon: Images },
 ];
 const adVideoTab = { id: 'adVideo', label: 'Ad Video', icon: Video };
 const adVideoNewTab = {
