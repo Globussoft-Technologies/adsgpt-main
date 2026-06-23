@@ -15,7 +15,9 @@ const HOST = import.meta.env.VITE_SOCKET_URL;
 // Route every image through the CORS proxy so Konva's canvas export isn't
 // tainted (toDataURL throws on cross-origin images loaded without CORS).
 // Un-encoded `url=` param matches the proven old-editor contract.
-const proxied = (url) => (url ? `${HOST}/adsgpt/img/preview?url=${url}` : '');
+// Exported so callers (e.g. ImageCard) can preload the same URL to warm
+// the HTTP cache before mounting this editor.
+export const proxied = (url) => (url ? `${HOST}/adsgpt/img/preview?url=${url}` : '');
 
 const defaultLogoProps = { x: 0, y: 0, width: undefined, height: undefined, rotation: 0 };
 

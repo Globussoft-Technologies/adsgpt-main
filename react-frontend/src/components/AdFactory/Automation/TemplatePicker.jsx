@@ -79,8 +79,17 @@ export default function TemplatePicker({ value, onChange, disabled }) {
     onChange?.({
       id: id || null,
       dailyBudgetOverride: null,
+      campaignName: null,
       objective: null,
     });
+  };
+
+  // Campaign-name bounds match the Meta wizard (2–120 chars). We strip
+  // newlines so paste-from-copy doesn't smuggle a multi-line value.
+  const CAMPAIGN_NAME_MAX = 120;
+  const handleCampaignNameChange = (raw) => {
+    const cleaned = raw.replace(/[\r\n]+/g, ' ');
+    onChange?.({ ...picked, campaignName: cleaned });
   };
 
   // Budget bounds: Meta itself enforces a minimum (currency-dependent, but
@@ -119,8 +128,23 @@ export default function TemplatePicker({ value, onChange, disabled }) {
           ? `Maximum daily budget is ${BUDGET_MAX.toLocaleString()} (10 lakhs).`
           : null;
 
+  // Campaign-name inline error. Empty string after trim = "use template
+  // default" → no error. Otherwise must be 2–120 chars to match the Meta
+  // wizard's own bounds.
+  const CAMPAIGN_NAME_MIN = 2;
+  const trimmedNameInput = (picked.campaignName ?? '').trim();
+  const campaignNameError =
+    trimmedNameInput.length === 0
+      ? null
+      : trimmedNameInput.length < CAMPAIGN_NAME_MIN
+        ? `Campaign name must be at least ${CAMPAIGN_NAME_MIN} characters.`
+        : trimmedNameInput.length > CAMPAIGN_NAME_MAX
+          ? `Campaign name must be ${CAMPAIGN_NAME_MAX} characters or fewer.`
+          : null;
+
   const templatePayload = pickedTemplate?.payload || {};
   const templateDailyBudget = templatePayload.dailyBudget;
+  const templateCampaignName = templatePayload.campaignName || templatePayload.name || '';
   const effectiveBudget =
     picked.dailyBudgetOverride != null
       ? picked.dailyBudgetOverride
@@ -171,67 +195,102 @@ export default function TemplatePicker({ value, onChange, disabled }) {
             />
           </Field>
 
-          {/* Budget — pre-filled from the template, editable inline. Sent only
-              when the user actually changes it (null = use template's value). */}
-          <Field
-            label="Daily budget (overrides template)"
-            empty={
-              !picked.id
-                ? 'Pick a template first.'
-                : pickedLoading
-                  ? 'Loading template…'
-                  : templateDailyBudget != null
-                    ? `Template default: ${formatBudget(templateDailyBudget)}`
-                    : null
-            }
-          >
-            <div className="relative">
-              <Coins className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#AFAFAF]" />
+          {/* Daily budget + Campaign name share row 2. Both override fields
+              feed targets.meta.template.payload — daily budget overrides the
+              saved dailyBudget, campaign name overrides campaignName. Empty
+              in either case means "keep the template's value". */}
+          <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2 sm:items-start">
+            <Field
+              label="Daily budget (overrides template)"
+              empty={
+                !picked.id
+                  ? 'Pick a template first.'
+                  : pickedLoading
+                    ? 'Loading template…'
+                    : templateDailyBudget != null
+                      ? `Template default: ${formatBudget(templateDailyBudget)}`
+                      : null
+              }
+            >
+              <div className="relative">
+                <Coins className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#AFAFAF]" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={7}
+                  placeholder={
+                    templateDailyBudget != null
+                      ? String(templateDailyBudget)
+                      : 'Enter daily budget'
+                  }
+                  value={
+                    picked.dailyBudgetOverride != null
+                      ? String(picked.dailyBudgetOverride)
+                      : ''
+                  }
+                  // Block non-digit keystrokes at the source so '-', '+', '.',
+                  // 'e', emojis, and other symbols never reach state. paste is
+                  // still possible — handleBudgetChange filters those too.
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === 'Backspace' ||
+                      e.key === 'Delete' ||
+                      e.key === 'Tab' ||
+                      e.key === 'ArrowLeft' ||
+                      e.key === 'ArrowRight' ||
+                      e.key === 'Home' ||
+                      e.key === 'End' ||
+                      (e.ctrlKey || e.metaKey)
+                    ) return;
+                    if (!/^\d$/.test(e.key)) e.preventDefault();
+                  }}
+                  onChange={(e) => handleBudgetChange(e.target.value)}
+                  disabled={disabled || !picked.id || pickedLoading}
+                  className={`h-10 w-full rounded-full bg-[#383838]/50 pr-5 pl-11 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    budgetError ? 'ring-1 ring-red-500/60' : ''
+                  }`}
+                />
+              </div>
+              {budgetError && (
+                <div className="flex items-center gap-1.5 text-[11px] text-red-400">
+                  <AlertCircle className="size-3" />
+                  {budgetError}
+                </div>
+              )}
+            </Field>
+
+            <Field
+              label="Campaign name (overrides template)"
+              empty={
+                !picked.id
+                  ? 'Pick a template first.'
+                  : pickedLoading
+                    ? 'Loading template…'
+                    : templateCampaignName
+                      ? `Template default: ${templateCampaignName}`
+                      : null
+              }
+            >
               <input
                 type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={7}
-                placeholder={
-                  templateDailyBudget != null
-                    ? String(templateDailyBudget)
-                    : 'Enter daily budget'
-                }
-                value={
-                  picked.dailyBudgetOverride != null
-                    ? String(picked.dailyBudgetOverride)
-                    : ''
-                }
-                // Block non-digit keystrokes at the source so '-', '+', '.',
-                // 'e', emojis, and other symbols never reach state. paste is
-                // still possible — handleBudgetChange filters those too.
-                onKeyDown={(e) => {
-                  if (
-                    e.key === 'Backspace' ||
-                    e.key === 'Delete' ||
-                    e.key === 'Tab' ||
-                    e.key === 'ArrowLeft' ||
-                    e.key === 'ArrowRight' ||
-                    e.key === 'Home' ||
-                    e.key === 'End' ||
-                    (e.ctrlKey || e.metaKey)
-                  ) return;
-                  if (!/^\d$/.test(e.key)) e.preventDefault();
-                }}
-                onChange={(e) => handleBudgetChange(e.target.value)}
+                maxLength={CAMPAIGN_NAME_MAX}
+                placeholder={templateCampaignName || 'Enter campaign name'}
+                value={picked.campaignName ?? ''}
+                onChange={(e) => handleCampaignNameChange(e.target.value)}
                 disabled={disabled || !picked.id || pickedLoading}
-                className={`h-10 w-full rounded-full bg-[#383838]/50 pr-5 pl-11 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  budgetError ? 'ring-1 ring-red-500/60' : ''
+                className={`h-10 w-full rounded-full bg-[#383838]/50 px-4 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  campaignNameError ? 'ring-1 ring-red-500/60' : ''
                 }`}
               />
-            </div>
-            {budgetError && (
-              <div className="flex items-center gap-1.5 text-[11px] text-red-400">
-                <AlertCircle className="size-3" />
-                {budgetError}
-              </div>
-            )}
-          </Field>
+              {campaignNameError && (
+                <div className="flex items-center gap-1.5 text-[11px] text-red-400">
+                  <AlertCircle className="size-3" />
+                  {campaignNameError}
+                </div>
+              )}
+            </Field>
+          </div>
 
           {picked.id && pickedTemplate && (
             <TemplateSummary template={pickedTemplate} effectiveBudget={effectiveBudget} />
@@ -252,12 +311,12 @@ function EmptyState() {
           automation.
         </p>
         <a
-          href="/meta-ads"
+          href="/meta-ads?openWizard=create-full"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-100 hover:bg-amber-400/20"
         >
-          Open Meta Ads
+          Create a template
           <ExternalLink className="size-3" />
         </a>
       </div>

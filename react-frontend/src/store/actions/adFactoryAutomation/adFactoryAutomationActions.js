@@ -56,6 +56,13 @@ function buildMetaTemplateForJob(formTemplate, fullTemplate, callToAction) {
   ) {
     overlay.dailyBudget = Number(formTemplate.dailyBudgetOverride);
   }
+  // Campaign-name override — only attach when the user actually typed
+  // something. Trim to drop accidental leading/trailing whitespace; an
+  // empty string after trim means "leave the template default alone".
+  if (typeof formTemplate.campaignName === 'string') {
+    const trimmedName = formTemplate.campaignName.trim();
+    if (trimmedName) overlay.campaignName = trimmedName;
+  }
   if (callToAction?.button) overlay.callToAction = callToAction.button;
   if (callToAction?.url) overlay.linkUrl = callToAction.url;
 
@@ -246,6 +253,13 @@ function mapJobToEntry(job, previous) {
   const previousOverride = previous?.config?.template?.dailyBudgetOverride;
   const dailyBudgetOverride =
     apiDailyBudget != null ? Number(apiDailyBudget) : previousOverride ?? null;
+  // Same trick for the campaign-name override — the API echoes it inside
+  // `template.payload.campaignName`. Fall back to the previous local value
+  // so a partial response doesn't blank the field.
+  const apiCampaignName =
+    apiTemplate?.payload?.campaignName || apiTemplate?.payload?.name || null;
+  const campaignName =
+    apiCampaignName || previous?.config?.template?.campaignName || null;
 
   return {
     status: mapApiStatusToLocal(job?.status),
@@ -290,6 +304,7 @@ function mapJobToEntry(job, previous) {
         id: templateId,
         objective: apiObjective,
         dailyBudgetOverride,
+        campaignName,
       },
     },
     stats: {

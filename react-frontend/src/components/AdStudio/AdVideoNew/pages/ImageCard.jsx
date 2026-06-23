@@ -7,9 +7,10 @@ import {
   ChevronRight,
   Megaphone,
   Pencil,
+  X,
 } from 'lucide-react';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
-import MySpaceLogoEditor from './MySpaceLogoEditor';
+import MySpaceLogoEditor, { proxied as proxiedImageUrl } from './MySpaceLogoEditor';
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
 import { saveEditedImageAction } from '@/store/actions/image/imageActions';
 import { useDispatch, useSelector } from 'react-redux';
@@ -103,13 +104,29 @@ export default function ImageCard({
   const [canvaLoading, setCanvaLoading] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
 
-  // Open the logo editor on the current image. Exits the browser-fullscreen
-  // layer first — a position:fixed overlay can't render above the
-  // fullscreen element, so we drop out of it before mounting the editor.
+  // Open the logo editor on the current image. Closes the lightbox
+  // first if it's open — the editor is a position:fixed overlay and
+  // would otherwise render behind the lightbox's higher z-index.
+  //
+  // Also kicks a preload for the proxied URL the editor will use, so
+  // by the time Konva's `useImage` fires its own request, the bytes
+  // are already in the HTTP cache. `crossOrigin='anonymous'` matches
+  // useImage('Anonymous') so the cache entries line up — without it,
+  // some browsers treat the CORS and no-CORS requests as separate
+  // cache keys and download the image twice.
   const handleOpenLogoEditor = (e) => {
     e.stopPropagation();
-    if (!item?.results?.[0]?.url) return;
-    if (document.fullscreenElement) document.exitFullscreen?.();
+    const rawUrl = item?.results?.[0]?.url;
+    if (!rawUrl) return;
+    if (isThisFullscreen) closeFullscreen();
+    try {
+      const preload = new Image();
+      preload.crossOrigin = 'anonymous';
+      preload.src = proxiedImageUrl(resolveImageUrl(rawUrl));
+    } catch {
+      // Preload is best-effort — failure just means the editor
+      // resolves the image on its own timeline, no worse than before.
+    }
     setLogoEditorOpen(true);
   };
 
@@ -175,55 +192,44 @@ export default function ImageCard({
     }
   }, [item?.results?.[0]?.url]);
 
+  // Switched away from the browser's `requestFullscreen()` API to a
+  // CSS-based modal lightbox (fixed inset-0 overlay) — keeps the same
+  // image-fits-the-viewport feel without taking over the whole screen
+  // and without the browser's grey toast about pressing ESC.
+  //
+  // Lock body scroll while open so the page underneath doesn't scroll
+  // when the user scrolls inside the lightbox; bind ESC to close.
+  const closeFullscreen = () => {
+    setIsFullscreen(false);
+    onFullscreenChange?.(null);
+    setActiveNavIndex(imageIndex);
+    setActiveImageUrl(item?.results?.[0]?.url ?? '');
+  };
+
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      const active = !!(
-        document.fullscreenElement ||
-        document.webkitFullscreenElement ||
-        document.mozFullScreenElement ||
-        document.msFullscreenElement
-      );
-      setIsFullscreen(active);
-      if (!active) {
-        onFullscreenChange?.(null);
-        setActiveNavIndex(imageIndex);
-        setActiveImageUrl(item?.results?.[0]?.url ?? '');
-      }
+    if (!isThisFullscreen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeFullscreen();
     };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
     };
-    // item url is in deps so closing fullscreen reads the current url, not the
-    // empty value captured at mount when the record was still pending.
-  }, [imageIndex, onFullscreenChange, item?.results?.[0]?.url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isThisFullscreen]);
 
   const handleFullscreen = (e) => {
     e.stopPropagation();
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (!document.fullscreenElement) {
-      onFullscreenChange?.(imageIndex);
-      setActiveNavIndex(imageIndex);
-      if (container.requestFullscreen) {
-        container.requestFullscreen();
-      } else if (container.webkitRequestFullscreen) {
-        container.webkitRequestFullscreen();
-      } else if (container.msRequestFullscreen) {
-        container.msRequestFullscreen();
-      }
-    } else if (document.exitFullscreen) {
-      document.exitFullscreen();
+    if (isThisFullscreen) {
+      closeFullscreen();
+      return;
     }
+    onFullscreenChange?.(imageIndex);
+    setActiveNavIndex(imageIndex);
+    setIsFullscreen(true);
   };
 
   const findCompletedIndex = (from, direction) => {
@@ -400,6 +406,71 @@ export default function ImageCard({
 
   return (
     <>
+      {/* Fullscreen lightbox — frosted-glass overlay matching the old
+          AdCreative "maximize" pattern. Close pill top-left, action
+          pill (Edit Logo + Download) top-right with always-visible
+          labels so they read clearly against any image. Click
+          backdrop or press ESC to close (ESC + body-scroll lock are
+          wired in the useEffect above). */}
+      {isThisFullscreen && (
+        <div
+          onClick={closeFullscreen}
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/85 backdrop-blur-xl"
+        >
+          {/* Close (X) — top-left, frosted-glass pill so it stands
+              apart from the image */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              closeFullscreen();
+            }}
+            title="Close (Esc)"
+            className="absolute top-5 left-5 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white/90 shadow-lg shadow-black/50 backdrop-blur-xl transition-all hover:scale-105 hover:bg-white/15 hover:text-white"
+          >
+            <X size={18} strokeWidth={2.25} />
+          </button>
+
+          {/* Action pill — single rounded container with both buttons
+              joined by a thin divider. Always-visible labels make the
+              affordance obvious; the glass background reads on any
+              backdrop. */}
+          <div className="absolute top-5 right-5 z-10 flex items-center gap-0 rounded-2xl border border-white/15 bg-black/45 p-1 shadow-lg shadow-black/50 backdrop-blur-xl">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenLogoEditor(e);
+              }}
+              title="Open logo editor"
+              className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-white/85 transition-all hover:bg-white/12 hover:text-white"
+            >
+              <Pencil size={15} strokeWidth={2} />
+              Edit Logo
+            </button>
+            <span className="mx-0.5 h-5 w-px bg-white/15" aria-hidden />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                dispatch(downloadMediaFromUrl(`${item?.results?.[0]?.url}`, 'image'));
+              }}
+              title="Download image"
+              className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-white/85 transition-all hover:bg-white/12 hover:text-white"
+            >
+              <Download size={15} strokeWidth={2} />
+              Download
+            </button>
+          </div>
+
+          {/* Centered image — stop propagation so clicking the image
+              doesn't bubble up to the backdrop's close handler. */}
+          <img
+            src={resolveImageUrl(activeImageUrl)}
+            alt="Generated"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
+          />
+        </div>
+      )}
+
     <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
 
@@ -455,35 +526,16 @@ export default function ImageCard({
           <img
             src={resolveImageUrl(activeImageUrl)}
             alt="Generated"
-            onClick={!isThisFullscreen ? handleFullscreen : undefined}
-            className={`h-full w-full transition-opacity duration-300 ${
-              isThisFullscreen ? 'object-contain' : 'cursor-pointer object-cover'
-            } ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${
-              !isThisFullscreen ? 'max-h-[800px] rounded-2xl' : ''
+            onClick={handleFullscreen}
+            className={`h-full w-full cursor-pointer object-cover transition-opacity duration-300 max-h-[800px] rounded-2xl ${
+              imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setImageLoaded(true)}
           />
 
-          {isThisFullscreen && (
-            <>
-              {hasPrev && (
-                <button
-                  onClick={handleNavPrev}
-                  className="absolute top-1/2 left-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
-                >
-                  <ChevronLeft size={28} strokeWidth={2.5} />
-                </button>
-              )}
-              {hasNext && (
-                <button
-                  onClick={handleNavNext}
-                  className="absolute top-1/2 right-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
-                >
-                  <ChevronRight size={28} strokeWidth={2.5} />
-                </button>
-              )}
-            </>
-          )}
+          {/* Lightbox lives as a separate fixed overlay further down in
+              this component's render — see the `isThisFullscreen` block
+              just inside the outer fragment. */}
 
           {/* Controls Bar — fullscreen now lives on the image itself */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">

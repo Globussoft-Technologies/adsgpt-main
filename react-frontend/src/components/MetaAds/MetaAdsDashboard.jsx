@@ -37,12 +37,13 @@ import LeadsTab from './LeadsTab';
 // to true in the relevant env file. See docs/CAMPAIGN_CREATION_PARITY_PLAN.md.
 const FEATURE_WIZARD_V2 = import.meta.env.VITE_FEATURE_WIZARD_V2 === 'true';
 import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 const FEATURE_LEADS_TAB = import.meta.env.VITE_FEATURE_LEADS_TAB === 'true';
 
 export default function MetaAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [adAccounts, setAdAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
@@ -72,6 +73,24 @@ export default function MetaAdsDashboard() {
     () => setWizard((w) => ({ ...w, open: false })),
     [],
   );
+
+  // Deep-link entry: callers (e.g. the TemplatePicker empty-state in
+  // AdFactory Automation) navigate here with `?openWizard=create-full` to
+  // jump straight into the New Campaign flow. Switch to the Campaigns tab
+  // so the wizard's "Campaigns refreshed" outcome lands on the right view,
+  // open the wizard, then strip the query param so a refresh / back-nav
+  // doesn't keep re-opening it.
+  const autoOpenWizardMode = searchParams.get('openWizard');
+  useEffect(() => {
+    if (!autoOpenWizardMode) return;
+    setActiveTab('campaigns');
+    openWizard(autoOpenWizardMode);
+    const next = new URLSearchParams(searchParams);
+    next.delete('openWizard');
+    setSearchParams(next, { replace: true });
+    // Intentionally only watches the param value — setSearchParams identity
+    // is stable but listing it keeps the lint rule happy.
+  }, [autoOpenWizardMode, openWizard, searchParams, setSearchParams]);
 
   const reloadCampaigns = useCallback(async () => {
     if (!selectedAccount) return;

@@ -110,12 +110,13 @@ const defaultFormValues = () => {
     imageModelProvider: 'google',
     callToAction: { button: null, url: '' },
     // Meta Ads V2 template the autopilot job will attach to. id = picked,
-    // dailyBudgetOverride = inline edit, objective = mirrored from the
-    // resolved template so CallToActionSection can fetch CTA options without
-    // a second round-trip.
+    // dailyBudgetOverride / campaignName = inline edits, objective = mirrored
+    // from the resolved template so CallToActionSection can fetch CTA options
+    // without a second round-trip.
     template: {
       id: null,
       dailyBudgetOverride: null,
+      campaignName: null,
       objective: null,
     },
   };
@@ -291,6 +292,17 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         errs.push('Minimum daily budget is 100');
       } else if (dbo > 1_000_000) {
         errs.push('Maximum daily budget is 10 lakhs');
+      }
+    }
+    // Campaign-name override — null means "use template default" (fine).
+    // Otherwise must be 2–120 chars after trim, matching the Meta wizard.
+    const rawName = values.template?.campaignName;
+    if (rawName != null) {
+      const trimmed = String(rawName).trim();
+      if (trimmed.length > 0 && trimmed.length < 2) {
+        errs.push('Campaign name must be at least 2 characters');
+      } else if (trimmed.length > 120) {
+        errs.push('Campaign name must be 120 characters or fewer');
       }
     }
     // Block activation if the user has picked today as start date but the
