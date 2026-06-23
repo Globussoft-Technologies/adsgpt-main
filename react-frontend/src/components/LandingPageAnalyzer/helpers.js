@@ -182,19 +182,24 @@ export function deriveKeySignals(report) {
     (report?.technical_seo || []).filter((t) => String(t.priority).toLowerCase() === 'high')
       .length;
 
+  // Sub-labels mirror the reference design: a short qualitative read under each
+  // headline metric (target / rating / state) rather than a category word.
+  const mobileRating =
+    mobile == null ? '—' : mobile >= 80 ? 'Good' : mobile >= 50 ? 'Average' : 'Poor';
+
   return [
     {
       label: 'Load Time',
       icon: 'zap',
       value: ms != null ? `${(ms / 1000).toFixed(1)}s` : '—',
-      sub: 'target < 3s',
+      sub: 'Target: <3s',
       sev: ms == null ? 'warn' : ms < 3000 ? 'good' : ms < 6000 ? 'warn' : 'crit',
     },
     {
-      label: 'Mobile',
+      label: 'Mobile Performance',
       icon: 'smartphone',
-      value: mobile != null ? `${mobile}/100` : '—',
-      sub: 'performance',
+      value: mobile != null ? `${mobile} / 100` : '—',
+      sub: mobileRating,
       sev: mobile == null ? 'warn' : mobile >= 80 ? 'good' : mobile >= 50 ? 'warn' : 'crit',
     },
     {
@@ -203,26 +208,26 @@ export function deriveKeySignals(report) {
       // insecure URL read as "secure" at a glance.
       icon: https ? 'lock' : 'unlock',
       value: https ? 'Secure' : 'None',
-      sub: 'encryption',
+      sub: https ? 'Secure' : 'Not secure',
       sev: https ? 'good' : 'crit',
     },
     {
       label: 'High Issues',
       icon: 'alert',
       value: String(highCount),
-      sub: 'priority fixes',
+      sub: 'Priority Fixes',
       sev: highCount === 0 ? 'good' : highCount <= 2 ? 'warn' : 'crit',
     },
   ];
 }
 
-// "analyzed Jun 11, 2026" style date for the header.
+// "15 Jun 2026" style date for the header (day-first, matches the reference UI).
 export function prettyDate(iso) {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: 'short',
+    return new Date(iso).toLocaleDateString('en-GB', {
       day: 'numeric',
+      month: 'short',
       year: 'numeric',
     });
   } catch {
@@ -248,7 +253,7 @@ export function priorityRank(priority) {
 export const RESULT_SECTIONS = [
   { id: 'overview', label: 'Overview' },
   { id: 'section-scores', label: 'Section Scores' },
-  { id: 'on-page-audit', label: 'On-Page Audit' },
+  // { id: 'on-page-audit', label: 'On-Page Audit' },
   { id: 'improvement-ideas', label: 'Improvement Ideas' },
   { id: 'technical-seo', label: 'Technical SEO' },
 ];

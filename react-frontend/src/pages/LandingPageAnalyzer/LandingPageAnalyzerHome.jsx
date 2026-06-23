@@ -263,21 +263,24 @@ export default function LandingPageAnalyzerHome() {
         </>
       )}
 
-      {/* new-analysis modal */}
+      {/* new-analysis modal — styled to match the AI-Ads AnalysisStep UI:
+          #1C1C1F surface, muted input fill, and a monochrome action button. */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="bg-white sm:max-w-md dark:bg-[#1C1C1F]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-extrabold">New Analysis</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">
+              New Analysis
+            </DialogTitle>
             <DialogDescription>
               Paste a landing-page URL to score its conversion readiness.
             </DialogDescription>
           </DialogHeader>
 
           <div
-            className={`flex items-center gap-2 rounded-xl border bg-gray-50 px-3 transition dark:bg-white/5 ${
+            className={`flex items-center gap-2 rounded-xl border bg-gray-100 px-3 transition dark:bg-[#909294]/15 ${
               inlineError
-                ? 'border-red-400/60 dark:border-red-500/40'
-                : 'border-gray-200 dark:border-white/10'
+                ? 'border-red-500'
+                : 'border-transparent focus-within:border-black/20 dark:focus-within:border-white/20'
             }`}
           >
             <Search className="h-4.5 w-4.5 shrink-0 text-gray-400 dark:text-white/45" />
@@ -287,20 +290,20 @@ export default function LandingPageAnalyzerHome() {
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
               placeholder="https://example.com"
-              className="min-w-0 flex-1 bg-transparent py-3 text-base text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
+              className="min-w-0 flex-1 bg-transparent py-3 text-base text-gray-900 outline-none placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#afafaf]"
             />
           </div>
           {inlineError && <p className="text-13 text-red-500">{inlineError}</p>}
 
-          <GradBtn
-            icon={submitting ? Loader2 : Search}
-            spinning={submitting}
+          <button
+            type="button"
             onClick={handleAnalyze}
             disabled={submitting || !urlValid}
-            className="w-full justify-center"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-6 py-2.5 text-13 font-semibold text-white transition hover:bg-gray-800 disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/90"
           >
+            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {submitting ? 'Starting…' : 'Analyze'}
-          </GradBtn>
+          </button>
         </DialogContent>
       </Dialog>
     </div>
@@ -313,7 +316,7 @@ const EXAMPLES = ['stripe.com', 'airbnb.com', 'notion.so', 'spotify.com', 'apple
 // gradient headline, inline analyze field, and quick-try example chips.
 function EmptyHero({ url, setUrl, onAnalyze, submitting, error, canSubmit }) {
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden py-12 text-center">
+    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden py-6 2xl:py-12 text-center">
       {/* ambient glow */}
       <span className="pointer-events-none absolute left-1/2 top-1/4 h-80 w-80 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,#15DCFF,transparent_70%)] opacity-10 blur-3xl" />
       <span className="pointer-events-none absolute bottom-1/4 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,#6b72f8,transparent_70%)] opacity-10 blur-3xl" />
@@ -333,7 +336,7 @@ function EmptyHero({ url, setUrl, onAnalyze, submitting, error, canSubmit }) {
         </span>
 
         {/* headline */}
-        <h2 className="mt-6 max-w-3xl text-4xl font-extrabold leading-[1.08] tracking-tight text-gray-900 dark:text-white sm:text-5xl">
+        <h2 className="mt-6 max-w-3xl text-4xl 2xl:text-5xl font-extrabold leading-[1.08] tracking-tight text-gray-900 dark:text-white">
           Turn any page into a{' '}
           <span className="bg-linear-to-r from-[#15DCFF] to-[#6b72f8] bg-clip-text text-transparent">
             conversion plan.
@@ -341,7 +344,7 @@ function EmptyHero({ url, setUrl, onAnalyze, submitting, error, canSubmit }) {
         </h2>
 
         {/* subtitle */}
-        <p className="mt-5 max-w-lg text-base leading-relaxed text-gray-500 dark:text-white/60">
+        <p className="mt-5 max-w-lg text-sm 2xl:text-base leading-relaxed text-gray-500 dark:text-white/60">
           No analyses yet. Paste a URL and we'll score it across 60+ criteria — messaging,
           structure, trust, and speed — then hand you a prioritized list of fixes. Takes about 10
           seconds.
@@ -349,7 +352,7 @@ function EmptyHero({ url, setUrl, onAnalyze, submitting, error, canSubmit }) {
 
         {/* input */}
         <div
-          className={`mt-8 flex w-full max-w-xl items-center gap-2 rounded-2xl border bg-gray-50 p-2 pl-4 transition dark:bg-white/5 ${
+          className={`mt-8 flex w-full max-w-xl items-center gap-2 rounded-2xl border bg-gray-50 p-1 2xl:p-2 pl-4 transition dark:bg-white/5 ${
             error
               ? 'border-red-400/60 dark:border-red-500/40'
               : 'border-gray-200 dark:border-white/10'
@@ -361,7 +364,7 @@ function EmptyHero({ url, setUrl, onAnalyze, submitting, error, canSubmit }) {
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onAnalyze()}
             placeholder="yourpage.com"
-            className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
+            className="min-w-0 flex-1 bg-transparent 2xl:py-2 2xl:py-2.5 text-base text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
           />
           <GradBtn
             icon={submitting ? Loader2 : ArrowRight}

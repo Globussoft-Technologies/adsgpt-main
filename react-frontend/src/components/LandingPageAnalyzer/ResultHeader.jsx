@@ -26,34 +26,34 @@ export default function ResultHeader({ report, url, onRelaunch, relaunching }) {
   };
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 py-5">
-      <div className="flex flex-wrap items-center gap-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-4 py-2">
+      <div className="flex flex-wrap items-center gap-3">
         <a
           href={url || report?.url || '#'}
           target="_blank"
           rel="noreferrer"
-          className="group inline-flex max-w-full items-center gap-3 text-[32px] font-extrabold tracking-tight text-gray-900 dark:text-white 2xl:text-[36px]"
+          className="group inline-flex items-center gap-2.5 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white 2xl:text-[26px]"
         >
-          <Globe className="h-7 w-7 shrink-0 text-gray-400 dark:text-white/55" />
-          <span className="break-all group-hover:underline">{displayUrl}</span>
-          <ExternalLink className="h-5 w-5 shrink-0 text-gray-400 dark:text-white/45" />
+          <Globe className="h-5 w-5 shrink-0 text-gray-400 dark:text-white/55 2xl:h-6 2xl:w-6" />
+          <span className="group-hover:underline">{displayUrl}</span>
+          <ExternalLink className="h-4 w-4 2xl:h-5 2xl:w-5 shrink-0 text-gray-400 dark:text-white/45" />
         </a>
         <span
-          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 ${band.bg} ${band.ring}`}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${band.bg} ${band.ring}`}
         >
-          <span className="text-lg font-extrabold tabular-nums" style={{ color: band.stroke }}>
-            {overall.score}
+          <span className="text-sm font-extrabold tabular-nums" style={{ color: band.stroke }}>
+            {overall.score} / 100
           </span>
-          <span className="text-sm font-bold" style={{ color: band.stroke }}>
+          <span className="text-13 font-bold" style={{ color: band.stroke }}>
             {overall.grade || band.label}
           </span>
         </span>
         {analyzedAt && (
-          <span className="text-sm text-gray-400 dark:text-white/45">analyzed {analyzedAt}</span>
+          <span className="text-sm text-gray-400 dark:text-white/45">Analyzed {analyzedAt}</span>
         )}
       </div>
 
-      <div className="flex items-center gap-2 pt-1">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         <GhostBtn icon={copied ? Check : Copy} onClick={handleCopy}>
           {copied ? 'Copied' : 'Copy recommendations'}
         </GhostBtn>

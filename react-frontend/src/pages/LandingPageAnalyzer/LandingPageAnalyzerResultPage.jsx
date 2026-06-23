@@ -253,40 +253,67 @@ export default function LandingPageAnalyzerResultPage() {
 
   // ── dashboard ───────────────────────────────────────────────────────────────
   return (
-    <Shell containerRef={containerRef}>
-      <ResultHeader
-        report={report}
-        url={pageUrl}
-        onRelaunch={handleRelaunch}
-        relaunching={relaunching}
-      />
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Fixed header — back link, title/score, and the section tabs stay put;
+          only the content area below scrolls. */}
+      <div className="shrink-0">
+        <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
+          <button
+            type="button"
+            onClick={() => navigate('/landing-page-analyzer')}
+            className="mt-3 inline-flex items-center gap-1.5 text-13 font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-white/55 dark:hover:text-white"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to analyses
+          </button>
 
-      <SectionNav sections={RESULT_SECTIONS} activeId={activeId} onSelect={handleSelect} />
+          <ResultHeader
+            report={report}
+            url={pageUrl}
+            onRelaunch={handleRelaunch}
+            relaunching={relaunching}
+          />
 
-      {relaunchMsg && (
-        <div className="mb-6 rounded-xl border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-4 py-2.5 text-13 text-cyan-700 dark:text-cyan-300">
-          {relaunchMsg}
+          <SectionNav sections={RESULT_SECTIONS} activeId={activeId} onSelect={handleSelect} />
         </div>
-      )}
+      </div>
 
-      <div className="space-y-14">
-        <motion.section id="overview" className="scroll-mt-24" {...reveal}>
-          <ExecutiveSummary report={report} />
-        </motion.section>
+      {/* Scrollable content — the only part that scrolls. */}
+      <div ref={containerRef} className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="mx-auto max-w-375 px-4 pb-24 2xl:px-8">
+          {relaunchMsg && (
+            <div className="mb-6 rounded-xl border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-4 py-2.5 text-13 text-cyan-700 dark:text-cyan-300">
+              {relaunchMsg}
+            </div>
+          )}
+
+          <div className="space-y-14 pt-2">
+            {/* Hero — one white section heading above a common parent card that
+                holds Page Overview + Executive Summary as two equal-height cards. */}
+        <motion.div {...reveal}>
+          <h2 className="mb-4 text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+            Page Overview
+          </h2>
+          <Card className="p-4 2xl:p-5">
+            <div className="grid items-stretch gap-4 xl:grid-cols-[1.05fr_1fr] 2xl:gap-5">
+              <section id="on-page-audit" className="scroll-mt-24">
+                <PageOverview report={report} showCaption={false} />
+              </section>
+
+              <section id="overview" className="scroll-mt-24">
+                <ExecutiveSummary report={report} showCaption={false} />
+              </section>
+            </div>
+          </Card>
+        </motion.div>
 
         <motion.section id="section-scores" className="scroll-mt-24" {...reveal}>
           <SectionScores report={report} />
         </motion.section>
 
-        <div className="grid items-start gap-8 xl:grid-cols-[1.15fr_1fr]">
-          <motion.section id="on-page-audit" className="scroll-mt-24" {...reveal}>
-            <PageOverview report={report} />
-          </motion.section>
-
-          <motion.section id="improvement-ideas" className="scroll-mt-24" {...reveal}>
-            <ImprovementIdeas report={report} />
-          </motion.section>
-        </div>
+        <motion.section id="improvement-ideas" className="scroll-mt-24" {...reveal}>
+          <ImprovementIdeas report={report} />
+        </motion.section>
 
         <motion.section id="technical-seo" className="scroll-mt-24" {...reveal}>
           <TechnicalSeo report={report} />
@@ -296,7 +323,7 @@ export default function LandingPageAnalyzerResultPage() {
         <motion.div {...reveal}>
           <Card className="flex flex-wrap items-center gap-4 p-7 2xl:p-8">
             <div className="min-w-55 flex-1">
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
+              <div className="text-lg 2xl:text-xl font-bold text-gray-900 dark:text-white">
                 Made changes? Relaunch the analysis.
               </div>
               <div className="mt-1 text-sm text-gray-500 dark:text-white/60">
@@ -308,8 +335,10 @@ export default function LandingPageAnalyzerResultPage() {
             </GradBtn>
           </Card>
         </motion.div>
+          </div>
+        </div>
       </div>
-    </Shell>
+    </div>
   );
 }
 
@@ -318,15 +347,18 @@ function Shell({ children, containerRef }) {
   const navigate = useNavigate();
   return (
     <div ref={containerRef} className="h-full overflow-y-auto scrollbar-thin">
-      <div className="mx-auto max-w-375 px-4 pb-24 pt-2 2xl:px-8">
-        <button
-          type="button"
-          onClick={() => navigate('/landing-page-analyzer')}
-          className="mt-3 inline-flex items-center gap-1.5 text-13 font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-white/55 dark:hover:text-white"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to analyses
-        </button>
+      <div className="mx-auto max-w-375 px-4 pb-24 2xl:px-8">
+        {/* Sticky back bar — pins above the (also sticky) section nav. */}
+        <div className="sticky top-0 z-30 -mx-4 bg-background/85 px-4 py-3 2xl:-mx-8 2xl:px-8">
+          <button
+            type="button"
+            onClick={() => navigate('/landing-page-analyzer')}
+            className="inline-flex items-center gap-1.5 text-13 font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-white/55 dark:hover:text-white"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to analyses
+          </button>
+        </div>
         {children}
       </div>
     </div>
@@ -385,19 +417,75 @@ function CenteredCard({
 }
 
 // ── first-load skeleton ───────────────────────────────────────────────────────
+// Mirrors the loaded hero: header + tabs, the "Page Overview" heading, and the
+// two-column parent card (Page Overview screenshot · Executive Summary).
 function LoadingState() {
+  const bar = 'rounded bg-gray-100 dark:bg-white/5';
   return (
     <div className="animate-pulse">
-      <div className="flex items-center justify-between py-4">
-        <div className="h-5 w-40 rounded bg-gray-100 dark:bg-white/5" />
+      {/* header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-5">
+        <div className="flex items-center gap-3">
+          <div className={`h-7 w-40 ${bar}`} />
+          <div className="h-6 w-24 rounded-full bg-gray-100 dark:bg-white/5" />
+          <div className={`h-4 w-28 ${bar}`} />
+        </div>
         <div className="flex gap-2">
           <div className="h-9 w-44 rounded-xl bg-gray-100 dark:bg-white/5" />
-          <div className="h-9 w-24 rounded-xl bg-gray-100 dark:bg-white/5" />
           <div className="h-9 w-40 rounded-xl bg-gray-100 dark:bg-white/5" />
         </div>
       </div>
-      <div className="mb-8 h-10 border-b border-gray-200 dark:border-white/10" />
-      <div className="h-64 rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#14181D]" />
+
+      {/* nav tabs */}
+      <div className="mb-8 flex gap-8 border-b border-gray-200 pb-4 dark:border-white/10">
+        <div className={`h-4 w-16 ${bar}`} />
+        <div className={`h-4 w-24 ${bar}`} />
+        <div className={`h-4 w-28 ${bar}`} />
+        <div className={`h-4 w-24 ${bar}`} />
+      </div>
+
+      {/* Page Overview heading */}
+      <div className={`mb-4 h-6 w-44 ${bar}`} />
+
+      {/* hero parent card */}
+      <Card className="p-4 2xl:p-5">
+        <div className="grid items-stretch gap-4 lg:grid-cols-[1.05fr_1fr] 2xl:gap-5">
+          {/* left — page overview */}
+          <Card className="flex min-h-100 flex-col overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-white/10">
+              <div className="flex gap-2">
+                <span className="h-3 w-3 rounded-full bg-gray-200 dark:bg-white/10" />
+                <span className="h-3 w-3 rounded-full bg-gray-200 dark:bg-white/10" />
+                <span className="h-3 w-3 rounded-full bg-gray-200 dark:bg-white/10" />
+              </div>
+              <div className="mx-auto h-7 w-72 max-w-full rounded-lg bg-gray-100 dark:bg-white/5" />
+            </div>
+            <div className="flex-1 bg-gray-100 dark:bg-white/3" />
+          </Card>
+
+          {/* right — executive summary */}
+          <Card className="flex flex-col gap-6 p-6">
+            <div className="flex flex-col items-center gap-6 sm:flex-row">
+              <div className="h-[150px] w-[150px] shrink-0 rounded-full border-[12px] border-gray-100 dark:border-white/6" />
+              <div className="w-full flex-1 space-y-2.5">
+                <div className={`h-3.5 w-full ${bar}`} />
+                <div className={`h-3.5 w-[92%] ${bar}`} />
+                <div className={`h-3.5 w-[96%] ${bar}`} />
+                <div className={`h-3.5 w-[85%] ${bar}`} />
+                <div className={`h-3.5 w-3/5 ${bar}`} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-24 rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/3"
+                />
+              ))}
+            </div>
+          </Card>
+        </div>
+      </Card>
     </div>
   );
 }

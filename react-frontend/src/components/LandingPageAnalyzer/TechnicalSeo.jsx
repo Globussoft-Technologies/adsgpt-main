@@ -1,4 +1,3 @@
-import { SearchCode } from 'lucide-react';
 import { Card, PriorityBadge, SectionTitle } from './_atoms';
 import { priorityRank } from './helpers';
 
@@ -10,7 +9,7 @@ export default function TechnicalSeo({ report }) {
 
   return (
     <>
-      <SectionTitle icon={SearchCode} hint="Crawl-level issues affecting indexing and performance.">
+      <SectionTitle hint="Crawl-level issues affecting indexing and performance.">
         Technical SEO
       </SectionTitle>
 
@@ -25,7 +24,7 @@ export default function TechnicalSeo({ report }) {
             {rows.map((r, i) => (
               <div
                 key={i}
-                className={`grid grid-cols-[1.5fr_0.6fr_2.4fr] items-center px-6 py-4.5 text-base transition-colors hover:bg-gray-50 dark:hover:bg-white/2 ${
+                className={`grid grid-cols-[1.5fr_0.6fr_2.4fr] items-center px-6 py-4.5 text-sm 2xl:text-base transition-colors hover:bg-gray-50 dark:hover:bg-white/2 ${
                   i ? 'border-t border-gray-100 dark:border-white/6' : ''
                 }`}
               >

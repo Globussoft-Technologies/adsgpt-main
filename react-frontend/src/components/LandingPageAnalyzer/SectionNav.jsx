@@ -4,8 +4,8 @@ import { motion } from 'framer-motion';
 // Click → page handles smooth scrollIntoView.
 export default function SectionNav({ sections, activeId, onSelect }) {
   return (
-    <div className="sticky top-0 z-20 -mx-4 mb-8 border-b border-gray-200 bg-background/85 px-4 backdrop-blur-xl dark:border-white/10 2xl:-mx-6 2xl:px-6">
-      <div className="mx-auto flex max-w-375 gap-8 overflow-x-auto scrollbar-hide">
+    <div className="sticky top-11 z-20 mx-2 mb-8 border-b border-gray-200 dark:border-white/10 2xl:-mx-6 2xl:px-6">
+      <div className="flex max-w-300 2xl:max-w-375 gap-8 overflow-x-auto scrollbar-hide">
         {sections.map((s) => {
           const active = s.id === activeId;
           return (

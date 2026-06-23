@@ -1,22 +1,29 @@
 import { useState } from 'react';
-import { Eye, ImageOff, Lock } from 'lucide-react';
-import { Card, SectionTitle } from './_atoms';
+import { ImageOff, Lock } from 'lucide-react';
+import { Card, CardCaption } from './_atoms';
 import { resolveScreenshotUrl } from './helpers';
 
-// BLOCK 3 — Page Overview. Browser frame (report.jsx style) with the full-page
-// capture in a fixed-height, vertically-scrollable viewport.
-export default function PageOverview({ report }) {
+// BLOCK 3 — Page Overview. In-card caption + browser frame (report.jsx style)
+// with the full-page capture in a fixed-height, vertically-scrollable viewport.
+// `bare` skips the Card wrapper so it can share a container with another panel.
+// `showCaption=false` drops the in-card heading (when the heading is rendered by
+// a parent container instead).
+export default function PageOverview({ report, bare = false, showCaption = true }) {
   const [imgFailed, setImgFailed] = useState(false);
   const src = resolveScreenshotUrl(report?.screenshot_url);
   const showImage = src && !imgFailed;
 
-  return (
+  const content = (
     <>
-      <SectionTitle icon={Eye} hint="The page exactly as our crawler captured it.">
-        Page Overview
-      </SectionTitle>
+      {showCaption && (
+        <CardCaption hint="A snapshot of the page as seen by our crawler." className="p-6 pb-5">
+          Page Overview
+        </CardCaption>
+      )}
 
-      <Card className="overflow-hidden">
+      <div
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${showCaption ? 'border-t border-gray-200 dark:border-white/10' : ''}`}
+      >
         {/* browser chrome */}
         <div className="flex items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-white/10">
           <div className="flex gap-2">
@@ -33,22 +40,31 @@ export default function PageOverview({ report }) {
         </div>
 
         {showImage ? (
-          <div className="max-h-150 overflow-y-auto scrollbar-thin bg-[#0e0e12]">
-            <img
-              src={src}
-              alt="Captured landing page"
-              loading="lazy"
-              onError={() => setImgFailed(true)}
-              className="block w-full"
-            />
+          // The capture scrolls inside an absolutely-positioned layer so a tall
+          // screenshot doesn't inflate the card's height. When stacked (below lg)
+          // there's no neighbouring card to drive the height, so a fixed height
+          // keeps it from collapsing; at lg+ it fills the row beside the summary.
+          <div className="relative min-h-80 bg-[#0e0e12] lg:flex-1">
+            <div className="absolute inset-0 overflow-y-auto scrollbar-thin">
+              <img
+                src={src}
+                alt="Captured landing page"
+                loading="lazy"
+                onError={() => setImgFailed(true)}
+                className="block w-full"
+              />
+            </div>
           </div>
         ) : (
-          <div className="flex h-100 flex-col items-center justify-center gap-2.5 bg-gray-50 text-gray-400 dark:bg-[#0e0e12] dark:text-white/40">
+          <div className="flex h-100 flex-1 flex-col items-center justify-center gap-2.5 bg-gray-50 text-gray-400 dark:bg-[#0e0e12] dark:text-white/40">
             <ImageOff className="h-7 w-7" />
             <span className="text-sm">No screenshot available</span>
           </div>
         )}
-      </Card>
+      </div>
     </>
   );
+
+  if (bare) return <div className="flex h-full flex-col overflow-hidden">{content}</div>;
+  return <Card className="flex h-full flex-col overflow-hidden">{content}</Card>;
 }

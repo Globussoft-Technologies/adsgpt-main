@@ -56,13 +56,14 @@ export default function ScoreGauge({ score = 0, band, size = 210, stroke = 16 })
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">
         <div>
+          {/* Number scales with the ring so the gauge reads well at any size. */}
           <div
-            className="text-[66px] font-extrabold leading-none tracking-tight tabular-nums"
-            style={{ color: band.stroke }}
+            className="font-bold leading-none tracking-tight tabular-nums"
+            style={{ color: band.stroke, fontSize: Math.round(size * 0.31) }}
           >
             {val}
           </div>
-          <div className="mt-2 text-13 font-bold tracking-[0.2em] text-gray-400 dark:text-white/40">
+          <div className="mt-1.5 text-13 font-bold tracking-[0.2em] text-gray-400 dark:text-white/40">
             / 100
           </div>
         </div>

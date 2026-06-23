@@ -12,17 +12,31 @@ export const Card = ({ children, className = '', style }) => (
   </div>
 );
 
-// Section header with a soft-accent icon chip, title, and optional hint + right slot.
-export const SectionTitle = ({ icon: Icon, children, hint, right }) => (
-  <div className="mb-5 flex items-center gap-4">
-    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[#6b72f8]/30 bg-[#6b72f8]/10 text-[#7c93ff]">
-      {Icon && <Icon className="h-[22px] w-[22px]" />}
-    </span>
-    <div className="min-w-0 flex-1">
-      <h2 className="text-[26px] font-extrabold tracking-tight text-gray-900 dark:text-white">
+// Section header — bold white title (matches the "Page Overview" hero heading)
+// + subtitle, with an optional right slot. `icon` is still accepted for
+// backwards-compat with callers but is intentionally not rendered.
+export const SectionTitle = ({ children, hint, right }) => (
+  <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="min-w-0">
+      <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
         {children}
       </h2>
-      {hint && <p className="mt-1 text-sm text-gray-500 dark:text-white/55">{hint}</p>}
+      {hint && <p className="2xl:mt-1.5 text-sm text-gray-400 dark:text-white/45">{hint}</p>}
+    </div>
+    {right}
+  </div>
+);
+
+// In-card header — same caption + subtitle treatment, sized for use inside a
+// Card's padded body (Page Overview / Top Priority Issues panels). Optional
+// `right` slot for a trailing action (e.g. "View all issues →").
+export const CardCaption = ({ children, hint, right, className = '' }) => (
+  <div className={`flex items-start justify-between gap-3 ${className}`}>
+    <div className="min-w-0">
+      <h3 className="text-13 font-extrabold uppercase tracking-[0.14em] text-gray-500 dark:text-white/55">
+        {children}
+      </h3>
+      {hint && <p className="mt-1.5 text-sm text-gray-400 dark:text-white/45">{hint}</p>}
     </div>
     {right}
   </div>
@@ -31,7 +45,7 @@ export const SectionTitle = ({ icon: Icon, children, hint, right }) => (
 // ─── pills / badges ──────────────────────────────────────────────────────────
 export const Pill = ({ band, children, dot = false, className = '' }) => (
   <span
-    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide ${band.bg} ${band.ring} ${band.text} ${className}`}
+    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] 2xl:text-[11px] font-extrabold uppercase tracking-wide ${band.bg} ${band.ring} ${band.text} ${className}`}
   >
     {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
     {children}
@@ -58,10 +72,10 @@ export const Delta = ({ value }) => {
   );
 };
 
-// Soft-accent numbered chip (improvement rows).
+// Plain accent number (improvement rows) — no chip background/border.
 export const NumberBadge = ({ children, className = '' }) => (
   <span
-    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#6b72f8]/30 bg-[#6b72f8]/10 text-base font-extrabold text-[#7c93ff] ${className}`}
+    className={`grid h-8 w-8 shrink-0 place-items-center text-base font-extrabold text-white ${className}`}
   >
     {children}
   </span>

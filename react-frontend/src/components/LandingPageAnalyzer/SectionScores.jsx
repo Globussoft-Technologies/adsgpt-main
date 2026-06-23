@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  ChevronRight,
   Eye,
   Gauge,
   Gem,
-  LayoutGrid,
   LayoutPanelTop,
   MousePointerClick,
   PenLine,
@@ -12,7 +12,7 @@ import {
   Smartphone,
   Sparkles,
 } from 'lucide-react';
-import { Card, Delta, Pill, SectionTitle } from './_atoms';
+import { Card, Pill, SectionTitle } from './_atoms';
 import { parsePoint, scoreBand } from './helpers';
 
 const DIM_ICONS = {
@@ -25,6 +25,9 @@ const DIM_ICONS = {
   mobile_experience: Smartphone,
   page_speed: Gauge,
 };
+
+// How many bullet points to show before "View details" expands the rest.
+const COLLAPSED_POINTS = 4;
 
 // BLOCK 2 — the scoring dimension cards, with a worst-first / by-category sort.
 export default function SectionScores({ report }) {
@@ -39,16 +42,16 @@ export default function SectionScores({ report }) {
   const sortToggle = (
     <div className="inline-flex gap-0.5 rounded-10 border border-gray-200 bg-gray-100 p-1 dark:border-white/10 dark:bg-white/4">
       {[
-        ['severity', 'Worst first'],
-        ['category', 'By category'],
+        ['severity', 'Worst First'],
+        ['category', 'By Category'],
       ].map(([k, lbl]) => (
         <button
           key={k}
           type="button"
           onClick={() => setSort(k)}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+          className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
             sort === k
-              ? 'bg-linear-to-r from-[#15DCFF] to-[#6b72f8] text-black'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-white/12 dark:text-white'
               : 'text-gray-500 hover:text-gray-800 dark:text-white/60 dark:hover:text-white'
           }`}
         >
@@ -60,15 +63,11 @@ export default function SectionScores({ report }) {
 
   return (
     <>
-      <SectionTitle
-        icon={LayoutGrid}
-        hint="Scored across 60+ conversion criteria."
-        right={sortToggle}
-      >
-        Your Score, Explained
+      <SectionTitle hint="Scored across 60+ conversion criteria." right={sortToggle}>
+        Your Score Breakdown
       </SectionTitle>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((d, i) => (
           <ScoreCard key={d.key || i} dim={d} index={i} />
         ))}
@@ -80,6 +79,10 @@ export default function SectionScores({ report }) {
 function ScoreCard({ dim, index }) {
   const band = scoreBand(dim.score);
   const Icon = DIM_ICONS[dim.key] || Sparkles;
+  const points = dim.points || [];
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = points.length > COLLAPSED_POINTS;
+  const visible = expanded ? points : points.slice(0, COLLAPSED_POINTS);
 
   return (
     <motion.div
@@ -89,52 +92,57 @@ function ScoreCard({ dim, index }) {
       transition={{ duration: 0.4, delay: index * 0.04, ease: [0.22, 1, 0.36, 1] }}
       className="h-full"
     >
-      <Card className="flex h-full flex-col overflow-hidden">
-        {/* severity top bar */}
-        <div className="h-1" style={{ backgroundColor: band.stroke }} />
-        <div className="flex flex-1 flex-col gap-4 p-6">
-          <div className="flex items-center gap-2">
-            <Icon className="h-4.5 w-4.5 text-gray-400 dark:text-white/55" />
-            <span className="flex-1 truncate text-lg font-bold text-gray-900 dark:text-white">
-              {dim.label}
+      <Card className="flex h-full min-h-[250px] 2xl:min-h-[300px] flex-col">
+        <div className="flex flex-1 flex-col gap-4 py-6 px-5">
+          <div className="flex items-center gap-2.5">
+            {/* Larger icon in a neutral chip. */}
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+              <Icon className="h-5 w-5" />
             </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span
-              className="text-[48px] font-extrabold leading-none tracking-tight tabular-nums"
-              style={{ color: band.stroke }}
-            >
-              {dim.score}
+            <span className="text-15 flex-1 truncate font-bold text-gray-900 dark:text-white">
+              {dim.label}
             </span>
             <Pill band={band}>{dim.rating}</Pill>
           </div>
 
-          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/[0.07]">
-            <motion.div
-              className="h-full rounded-full"
-              style={{ backgroundColor: band.stroke }}
-              initial={{ width: 0 }}
-              whileInView={{ width: `${Math.max(0, Math.min(100, dim.score))}%` }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.9, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            />
+          <div className="flex items-baseline gap-1">
+            <span
+              className="text-[35px] leading-none font-bold tracking-tight tabular-nums"
+              style={{ color: band.stroke }}
+            >
+              {dim.score}
+            </span>
+            <span className="text-sm font-bold text-gray-400 dark:text-white/40">/ 100</span>
           </div>
 
-          <ul className="mt-1 flex flex-col gap-2.5">
-            {(dim.points || []).map((p, i) => {
-              const { text, value } = parsePoint(p);
-              return (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 text-sm leading-snug text-gray-500 dark:text-white/60"
-                >
-                  <span className="flex-1">{text}</span>
-                  <Delta value={value} />
-                </li>
-              );
-            })}
-          </ul>
+          <div className="scrollbar-thin mt-1 flex max-h-35 2xl:max-h-44 flex-col gap-2 overflow-y-auto pr-4">
+            <ul className="mt-1 ml-6! flex flex-1 flex-col gap-2">
+              {visible.map((p, i) => {
+                const { text } = parsePoint(p);
+                return (
+                  <li
+                    key={i}
+                    className="text-left text-xs 2xl:text-sm leading-snug text-gray-500 dark:text-white/60"
+                  >
+                    {text}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {/* {hasMore && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-1 inline-flex items-center gap-1 self-start text-sm font-semibold text-[#0fafcb] transition-colors hover:text-[#15DCFF] dark:text-[#15DCFF] dark:hover:text-[#7c93ff]"
+            >
+              {expanded ? 'Show less' : 'View details'}
+              <ChevronRight
+                className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              />
+            </button>
+          )} */}
         </div>
       </Card>
     </motion.div>
