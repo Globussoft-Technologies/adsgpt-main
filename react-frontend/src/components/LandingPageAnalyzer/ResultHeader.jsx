@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { Check, Copy, ExternalLink, Globe, RotateCw } from 'lucide-react';
+import { globalToast } from '@/utils/globalToast';
 import { GhostBtn, GradBtn } from './_atoms';
-import { buildRecommendationsText, prettyDate, prettyHost, scoreBand } from './helpers';
+import { buildRecommendationsText, prettyDate, prettyUrl, scoreBand } from './helpers';
 
 // Header row: analysed URL + inline score/verdict pill + date, and the
 // Copy / Relaunch actions. Copy gives transient inline feedback.
 export default function ResultHeader({ report, url, onRelaunch, relaunching }) {
   const [copied, setCopied] = useState(false);
 
-  const host = prettyHost(url || report?.url);
+  const displayUrl = prettyUrl(url || report?.url);
   const overall = report?.overall || {};
   const band = scoreBand(overall.score);
   const analyzedAt = prettyDate(report?.scanned_at);
@@ -18,8 +19,9 @@ export default function ResultHeader({ report, url, onRelaunch, relaunching }) {
       await navigator.clipboard.writeText(buildRecommendationsText(report));
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
+      globalToast.success('Recommendations copied to clipboard');
     } catch {
-      /* clipboard blocked */
+      globalToast.error('Couldn’t copy — clipboard access was blocked');
     }
   };
 
@@ -30,11 +32,11 @@ export default function ResultHeader({ report, url, onRelaunch, relaunching }) {
           href={url || report?.url || '#'}
           target="_blank"
           rel="noreferrer"
-          className="group inline-flex items-center gap-3 text-[32px] font-extrabold tracking-tight text-gray-900 dark:text-white 2xl:text-[36px]"
+          className="group inline-flex max-w-full items-center gap-3 text-[32px] font-extrabold tracking-tight text-gray-900 dark:text-white 2xl:text-[36px]"
         >
-          <Globe className="h-7 w-7 text-gray-400 dark:text-white/55" />
-          <span className="group-hover:underline">{host}</span>
-          <ExternalLink className="h-5 w-5 text-gray-400 dark:text-white/45" />
+          <Globe className="h-7 w-7 shrink-0 text-gray-400 dark:text-white/55" />
+          <span className="break-all group-hover:underline">{displayUrl}</span>
+          <ExternalLink className="h-5 w-5 shrink-0 text-gray-400 dark:text-white/45" />
         </a>
         <span
           className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 ${band.bg} ${band.ring}`}

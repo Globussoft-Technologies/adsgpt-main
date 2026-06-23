@@ -105,6 +105,16 @@ export function prettyHost(url) {
   }
 }
 
+// Full analysed URL minus the noisy protocol/www and any trailing slash. Used in
+// the result header so it shows the exact page that was scored (path + query),
+// not just the root domain — which otherwise mismatched the detailed sections.
+export function prettyUrl(url) {
+  return String(url || '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/, '');
+}
+
 // Plain-text export of the whole report for "Copy recommendations".
 export function buildRecommendationsText(report) {
   if (!report) return '';
@@ -189,7 +199,9 @@ export function deriveKeySignals(report) {
     },
     {
       label: 'HTTPS',
-      icon: 'lock',
+      // Open padlock when the page isn't served over HTTPS — a closed lock on an
+      // insecure URL read as "secure" at a glance.
+      icon: https ? 'lock' : 'unlock',
       value: https ? 'Secure' : 'None',
       sub: 'encryption',
       sev: https ? 'good' : 'crit',

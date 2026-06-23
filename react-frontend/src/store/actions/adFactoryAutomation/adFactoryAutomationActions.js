@@ -767,15 +767,106 @@ export const fetchAutomationStats = createAsyncThunk(
 // fetchActivity — GET /ads-factory/autopilot/jobs/:campaignId/activity
 //
 // Returns the full per-run activity trace for a campaign: every run with its
-// generated images, generated texts, and assembled `creatives[]` (each carrying
-// an `ad` block + `posting` block). Backend now keys this endpoint by
-// AdsGPT campaignId instead of jobId — one campaign can have multiple jobs
-// over its lifetime (e.g. activate → complete → re-activate creates a new
-// job) and the trace stays continuous from the user's perspective.
+// generated images, generated texts, and assembled `creatives[]` (each
+// carrying an `ad` block + `posting` block). Backend keys this endpoint by
+// AdsGPT campaignId — one campaign can span multiple jobs over its lifetime
+// (e.g. activate → complete → re-activate creates a new job) and the trace
+// stays continuous from the user's perspective.
 //
-// The PublishedAdsModal flattens this into individual ad cards and renders
-// posted / failed states from `posting.posted`.
+// Response shape:
+//   { success, campaignId, total: <#jobs>, jobs: [
+//       { jobId, total: <#runs for this job>, skip, limit,
+//         jobConfig, campaign, generationHealth, platforms,
+//         data: [run, run, ...] },
+//       ...
+//     ] }
+//
+// The slice + PublishedAdsModal want a flat runs array and a single
+// aggregated `generationHealth`, so we normalise here on the way in.
+// Generation-health fields sum across jobs (a campaign's totalCreatives-
+// Posted across its lifetime). campaign metadata is the same on every job —
+// we take the first non-null one. Runs are sorted newest-first.
+//
+// `data` (old top-level shape) is still accepted as a fallback so a
+// partial server rollback doesn't break the modal.
 // ----------------------------------------------------------------------------
+
+// Field names we sum when aggregating generationHealth across jobs.
+const HEALTH_FIELDS = Object.freeze([
+  'totalImagesRequested',
+  'totalImagesGenerated',
+  'totalImagesFailed',
+  'totalTextsRequested',
+  'totalTextsGenerated',
+  'totalTextsFailed',
+  'totalCreativesAssembled',
+  'totalCreativesPosted',
+  'totalCreativesNotPosted',
+]);
+
+function aggregateHealth(acc, next) {
+  if (!next) return acc;
+  if (!acc) {
+    const out = {};
+    HEALTH_FIELDS.forEach((f) => {
+      out[f] = Number(next[f]) || 0;
+    });
+    return out;
+  }
+  const out = { ...acc };
+  HEALTH_FIELDS.forEach((f) => {
+    out[f] = (Number(acc[f]) || 0) + (Number(next[f]) || 0);
+  });
+  return out;
+}
+
+function normalizeActivityResponse(payload) {
+  if (!payload) return { runs: [], total: 0, generationHealth: null, campaign: null };
+
+  // New shape — jobs[] with per-job data[] inside.
+  if (Array.isArray(payload.jobs)) {
+    const allRuns = [];
+    let aggregatedHealth = null;
+    let campaign = null;
+    let totalRuns = 0;
+
+    payload.jobs.forEach((job) => {
+      if (!job) return;
+      if (Array.isArray(job.data)) allRuns.push(...job.data);
+      aggregatedHealth = aggregateHealth(aggregatedHealth, job.generationHealth);
+      if (!campaign && job.campaign) campaign = job.campaign;
+      // `job.total` = total runs for that job (may exceed job.data.length
+      // when paginated). Sum across jobs so the modal can show "X runs
+      // across Y jobs" or similar later.
+      totalRuns += Number(job.total) || (Array.isArray(job.data) ? job.data.length : 0);
+    });
+
+    // Sort runs newest-first — across jobs, since users expect chronology,
+    // not job-grouping, in the published-ads modal.
+    allRuns.sort((a, b) => {
+      const at = a?.startedAt ? new Date(a.startedAt).getTime() : 0;
+      const bt = b?.startedAt ? new Date(b.startedAt).getTime() : 0;
+      return bt - at;
+    });
+
+    return {
+      runs: allRuns,
+      total: totalRuns,
+      generationHealth: aggregatedHealth,
+      campaign,
+    };
+  }
+
+  // Legacy single-job shape — kept as a fallback so a partial server
+  // rollback doesn't blank the modal.
+  return {
+    runs: Array.isArray(payload.data) ? payload.data : [],
+    total: Number(payload.total) || 0,
+    generationHealth: payload.generationHealth || null,
+    campaign: payload.campaign || null,
+  };
+}
+
 export const fetchActivity = createAsyncThunk(
   'adFactoryAutomation/fetchActivity',
   async ({ campaignId, skip = 0, limit = 50 } = {}, { rejectWithValue }) => {
@@ -791,14 +882,8 @@ export const fetchActivity = createAsyncThunk(
           'Content-Type': 'application/json',
         },
       });
-      const payload = res?.data || {};
-      return {
-        campaignId,
-        runs: Array.isArray(payload.data) ? payload.data : [],
-        total: Number(payload.total) || 0,
-        generationHealth: payload.generationHealth || null,
-        campaign: payload.campaign || null,
-      };
+      const normalised = normalizeActivityResponse(res?.data || {});
+      return { campaignId, ...normalised };
     } catch (err) {
       return rejectWithValue({
         campaignId,

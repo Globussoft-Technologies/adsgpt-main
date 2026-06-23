@@ -1,9 +1,9 @@
-import { AlertTriangle, ClipboardList, Lock, Smartphone, Zap } from 'lucide-react';
+import { AlertTriangle, ClipboardList, Lock, Smartphone, Unlock, Zap } from 'lucide-react';
 import { Card, SectionTitle } from './_atoms';
 import ScoreGauge from './ScoreGauge';
 import { deriveKeySignals, scoreBand, SEV_HEX } from './helpers';
 
-const SIGNAL_ICONS = { zap: Zap, smartphone: Smartphone, lock: Lock, alert: AlertTriangle };
+const SIGNAL_ICONS = { zap: Zap, smartphone: Smartphone, lock: Lock, unlock: Unlock, alert: AlertTriangle };
 
 // BLOCK 1 — Hero. Left: score ring + verdict. Right: summary + Key Signals.
 export default function ExecutiveSummary({ report }) {

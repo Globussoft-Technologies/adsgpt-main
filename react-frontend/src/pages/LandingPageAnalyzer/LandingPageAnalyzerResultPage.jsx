@@ -35,6 +35,9 @@ export default function LandingPageAnalyzerResultPage() {
   const [relaunching, setRelaunching] = useState(false);
   const [relaunchMsg, setRelaunchMsg] = useState('');
   const [activeId, setActiveId] = useState(RESULT_SECTIONS[0].id);
+  // Section we're programmatically scrolling to (tab click). While set, the
+  // scroll-spy won't flicker through the sections we pass on the way there.
+  const lockedRef = useRef(null);
   // Accumulated live-event stream (drives the analysing monitor).
   const [liveEvents, setLiveEvents] = useState([]);
 
@@ -91,25 +94,52 @@ export default function LandingPageAnalyzerResultPage() {
   const isDashboard = report && report.success === true;
 
   // Scroll-spy: highlight the nav tab for whichever section is in view.
+  // Position-based (not IntersectionObserver) on purpose: IO fires on ANY
+  // reflow — e.g. the Section-Scores "By category" re-sort animating cards in —
+  // which made the active tab flicker to Overview and back. A scroll listener
+  // only fires on real scrolling, so content reflows can't move the active tab.
   useEffect(() => {
     if (!isDashboard) return undefined;
     const root = containerRef.current;
-    const els = RESULT_SECTIONS.map((s) => document.getElementById(s.id)).filter(Boolean);
-    if (!els.length) return undefined;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]) setActiveId(visible[0].target.id);
-      },
-      { root, rootMargin: '-20% 0px -65% 0px', threshold: [0, 0.25, 0.5, 1] },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    if (!root) return undefined;
+    const ids = RESULT_SECTIONS.map((s) => s.id);
+
+    let raf = 0;
+    const compute = () => {
+      raf = 0;
+      // Activation line ~28% down the viewport: the active section is the last
+      // one whose top has crossed it.
+      const line = root.getBoundingClientRect().top + root.clientHeight * 0.28;
+      let current = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) current = id;
+      }
+      // Bottom of the page can't push the last section past the line — pin it.
+      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 2) {
+        current = ids[ids.length - 1];
+      }
+      // Mid programmatic scroll: hold the target tab, release once we arrive.
+      if (lockedRef.current) {
+        if (current === lockedRef.current) lockedRef.current = null;
+        return;
+      }
+      setActiveId(current);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(compute);
+    };
+
+    root.addEventListener('scroll', onScroll, { passive: true });
+    compute(); // initial highlight
+    return () => {
+      root.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [isDashboard]);
 
   const handleSelect = (sectionId) => {
+    lockedRef.current = sectionId; // don't flicker through passed sections
     setActiveId(sectionId);
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };

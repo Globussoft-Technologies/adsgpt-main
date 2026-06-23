@@ -73,7 +73,7 @@ export const GradBtn = ({ children, onClick, disabled, icon: Icon, spinning, cla
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className={`flex shrink-0 items-center gap-2 rounded-xl bg-linear-to-r from-[#15DCFF] to-[#6b72f8] px-4 py-2.5 text-sm font-bold text-black transition-all hover:opacity-90 disabled:opacity-50 ${className}`}
+    className={`flex shrink-0 items-center gap-2 rounded-xl bg-linear-to-r from-[#15DCFF] to-[#6b72f8] px-4 py-2.5 text-sm font-bold text-black transition-all enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
   >
     {Icon && <Icon className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} />}
     {children}
