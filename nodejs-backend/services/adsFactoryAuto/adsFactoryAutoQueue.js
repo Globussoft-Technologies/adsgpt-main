@@ -399,7 +399,21 @@ async function reloadActiveJobs() {
         // Check if the scheduled time has already passed
         const scheduledAt = resolved.runAt ? new Date(resolved.runAt) : null;
         if (scheduledAt && scheduledAt < new Date()) {
-          // Missed — mark failed and cancel
+          // Grace window: if the job was scheduled within the last 10 minutes,
+          // run it immediately instead of marking it missed. This handles the case
+          // where nodemon/deployment restarts the server seconds before/after the
+          // scheduled time and the job never got a chance to fire.
+          const GRACE_MS = 10 * 60 * 1000; // 10 minutes
+          const overdueMs = Date.now() - scheduledAt.getTime();
+          if (overdueMs <= GRACE_MS) {
+            logger.info(`[adsFactoryAuto] does_not_repeat job ${job._id} missed by ${Math.round(overdueMs / 1000)}s — within grace window, running immediately`);
+            // Enqueue with delay=0 so it fires right away
+            await scheduleJob(job._id, { ...resolved, runAt: new Date() });
+            count++;
+            continue;
+          }
+
+          // Beyond grace window — truly missed, mark failed
           logger.warn(`[adsFactoryAuto] does_not_repeat job ${job._id} missed its scheduled time (${scheduledAt.toISOString()}) — marking failed`);
           await AdsFactoryJob.updateOne(
             { _id: job._id },

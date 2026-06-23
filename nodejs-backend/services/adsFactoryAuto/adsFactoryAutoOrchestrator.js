@@ -99,8 +99,6 @@ const PLATFORM_POSTERS = {
       // ── Create Campaign & AdSet from Template (Runs EVERY cycle) ──────────────
       logger.info(`[adsFactoryAuto:meta] Template mode — calling V2 create APIs internally`);
       
-      const tsName = `Auto — ${new Date().toISOString().slice(0, 10)}`;
-
       // 1. Call createCampaignV2
       // Strip fields that belong to the template/wizard context but are not
       // accepted by the campaign Joi schema (conversionLocation, objective live
@@ -151,7 +149,7 @@ const PLATFORM_POSTERS = {
 
       const campaignPayload = {
         ...cleanPayload,
-        name: `${p.name || p.campaignName || "Auto"} — ${tsName}`,
+        name: p.name || p.campaignName || "Auto",
         // If specialAdCategories is empty or not set, ensure specialAdCategoryCountries is also cleared
         // to avoid Meta rejecting the adSet for location/country mismatch
         specialAdCategories: cleanPayload.specialAdCategories?.length ? cleanPayload.specialAdCategories : ["NONE"],
@@ -225,7 +223,7 @@ const PLATFORM_POSTERS = {
       const adSetPayload = {
         ...adSetBase,
         adAccountId: p.adAccountId,
-        name: `${p.name || p.adSetName || p.campaignName || "Auto"} — ${tsName}`,
+        name: p.name || p.adSetName || p.campaignName || "Auto",
         campaignId: usedCampaignId,
         // objective + conversionLocation live on template root, not payload — required by adSet Joi schema
         objective:          template.objective          || p.objective          || undefined,
@@ -262,7 +260,7 @@ const PLATFORM_POSTERS = {
         logger.debug(`[adsFactoryAuto:meta] creative[${i}] uploading image  url="${(creative.imageUrl || "").slice(0, 120)}"`);
         const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
         logger.debug(`[adsFactoryAuto:meta] creative[${i}] image uploaded  hash=${imageHash}`);
-        const adName = `Automation Ad ${i+1} — ${tsName}`;
+        const adName = p.adName || p.name || p.campaignName || `Ad ${i+1}`;
         const adPayload = {
           adAccountId: p.adAccountId,
           name: adName,
