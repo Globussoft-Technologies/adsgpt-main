@@ -41,7 +41,7 @@ const { inferCellForMetaCampaign } = require("./cellInference");
 // formatMetaError + logMetaError as named exports on its module object.
 // Importing here keeps the SDK / Redis / logging plumbing single-sourced.
 const v1Controller = require("./metaAdLauncher");
-const { initApiForUser, invalidateAfterCreate, logMetaError, getPagePhone } = v1Controller;
+const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone } = v1Controller;
 const logger = require("../../utils/logger");
 
 const CAPPED_BID_STRATEGIES = new Set([
@@ -100,40 +100,14 @@ function resolveCellOr400(req) {
   return { ok: true, cell: getCell(objective, conversionLocation) };
 }
 
-// Friendlier copy per Meta subcode — overrides Meta's generic strings
-// when we have a more actionable / specific message. Returns null when
-// we don't have a custom mapping (in which case Meta's own title/message
-// is used). Add entries here as recurring subcodes accumulate.
-function frontendSubcodeOverride(subcode) {
-  switch (subcode) {
-    case 2446759:
-      // "When setting post conversion for the Conversions objective, you
-      // must specify the pixel_id and custom_event_type as the main
-      // conversion." Fires when a regulated Special Ad Category
-      // (Financial / Employment / Housing / Credit / Issues-Elections-
-      // Politics) is combined with an App cell — Meta requires Pixel
-      // tracking for regulated verticals, App cells use app_link
-      // tracking. Frontend validation should catch this pre-launch; this
-      // is the defense-in-depth message for cases that slip through.
-      return {
-        title: "App cells don’t work with regulated Special Ad Categories",
-        message:
-          "Meta requires Pixel-based conversion tracking for Financial / Employment / Housing / Credit / Politics campaigns. App campaigns use app store tracking instead. Either drop the Special Ad Category on the Campaign step or switch to a Website cell (which uses Pixel).",
-      };
-    default:
-      return null;
-  }
-}
-
 // Format a Meta SDK error into the project's standard error envelope.
 // Identical shape to V1 so the frontend handler works for both.
 function metaErrorResponse(err, action) {
   const m = logMetaError(`${action} error`, err);
-  const override = frontendSubcodeOverride(m.subcode);
   return {
     status: false,
-    error: override?.title || m.title || `Failed to ${action}`,
-    details: override?.message || m.message,
+    error: m.title || `Failed to ${action}`,
+    details: m.message,
     meta: {
       code: m.code,
       subcode: m.subcode,
@@ -484,6 +458,110 @@ async function createAdSetV2(req, res) {
     });
     if (promotedObject) adSetParams.promoted_object = promotedObject;
 
+    // ─── DIAGNOSTIC LOGGING (subcode 2446759 investigation) ──────────────
+    // Logs the exact resolved values + final ad set payload Meta receives.
+    // Read alongside the Meta error response to diff against a successful
+    // Meta UI launch's network capture.
+    logger.info(
+      `[2446759-DIAG] Pre-create snapshot: ` +
+        JSON.stringify({
+          campaignId: value.campaignId,
+          objective,
+          conversionLocation,
+          // Compute inline — the local `metaDestinationType` const is
+          // declared further down (the original control flow); referencing
+          // it here would be a temporal-dead-zone error.
+          destinationType: getMetaDestinationType(objective, conversionLocation),
+          optimizationGoal: value.optimizationGoal,
+          billingEvent: value.billingEvent,
+          promotedObjectShape: cell.adSet.promotedObjectShape,
+          formPixelId: value.pixelId || null,
+          formPixelEventType: value.pixelEventType || null,
+          formApplicationId: value.applicationId || null,
+          formObjectStoreUrl: value.objectStoreUrl || null,
+          builtPromotedObject: promotedObject || null,
+        }),
+    );
+
+    // For Conversions-family objectives (Leads / Sales) with App
+    // destination, attempt to set campaign.promoted_object with
+    // pixel + event before creating the ad set. Errors are surfaced in
+    // the log (no swallowing) so we can diagnose what Meta rejects on
+    // the campaign-update path.
+    //
+    // SKIP for OUTCOME_LEADS — Meta confirmed subcode 1815023 ("Promoted
+    // object is not valid for the objective") on this path 2026-06-24.
+    // The Leads/APP fix is at the adset.promoted_object level via the
+    // `app` shape returning custom_event_type alongside the app fields
+    // (see promotedObject.js). Leaving the branch reachable for other
+    // objectives in case the constraint differs.
+    if (
+      cell.adSet.promotedObjectShape === "app" &&
+      objective === "OUTCOME_SALES" &&
+      value.pixelId &&
+      value.pixelEventType
+    ) {
+      const campaignPromotedObject = {
+        pixel_id: value.pixelId,
+        custom_event_type: value.pixelEventType,
+      };
+      logger.info(
+        `[2446759-DIAG] Attempting campaign.update on ${value.campaignId} with promoted_object=` +
+          JSON.stringify(campaignPromotedObject),
+      );
+      try {
+        const updateResult = await new bizSdk.Campaign(value.campaignId).update(
+          [],
+          { promoted_object: campaignPromotedObject },
+        );
+        logger.info(
+          `[2446759-DIAG] campaign.update SUCCEEDED on ${value.campaignId}, result=` +
+            JSON.stringify(updateResult?._data || updateResult || {}),
+        );
+        // Verify by reading the campaign back.
+        try {
+          const c = await new bizSdk.Campaign(value.campaignId).get([
+            "id",
+            "objective",
+            "promoted_object",
+          ]);
+          const cd = c?._data || c || {};
+          logger.info(
+            `[2446759-DIAG] campaign read-back after update: ` +
+              JSON.stringify({
+                id: cd.id,
+                objective: cd.objective,
+                promoted_object: cd.promoted_object,
+              }),
+          );
+        } catch (readErr) {
+          logger.warn(
+            `[2446759-DIAG] campaign read-back FAILED: ${readErr.message}`,
+          );
+        }
+      } catch (e) {
+        // DO NOT swallow — log the full Meta error so we know what's
+        // actually being rejected on the campaign-update path.
+        const m = formatMetaError(e);
+        logger.warn(
+          `[2446759-DIAG] campaign.update FAILED on ${value.campaignId}: ` +
+            JSON.stringify({
+              message: m.message,
+              code: m.code,
+              subcode: m.subcode,
+              fbtraceId: m.fbtraceId,
+              data: m.data,
+              raw: e?.response,
+            }),
+        );
+      }
+    }
+
+    // (FINAL adSetParams logging moved to immediately before
+    //  account.createAdSet() — see below — so the snapshot includes
+    //  every field that gets set after this point: destination_type,
+    //  budget, attribution, schedule, frequency_control_specs, DSA, etc.)
+
     // destination_type — resolved per (objective, conversionLocation).
     // Some conversion-location keys (WEBSITE_AND_CALLS) need a different
     // value depending on objective, so both args matter. `null` ⇒ omit
@@ -567,6 +645,16 @@ async function createAdSetV2(req, res) {
     // to Taiwan regulation, the identity must be registered in Meta
     // Business Settings first and its id wired through here. Tracked in
     // CAMPAIGN_CREATION_STATUS.md.
+
+    // ─── DIAGNOSTIC LOG (subcode 2446759 investigation) ─────────────────
+    // This logs the COMPLETE adSetParams object Meta is about to receive —
+    // includes everything set above (destination_type, budget, attribution,
+    // schedule, frequency_control_specs, DSA, etc.). Used to diff against
+    // a successful Meta UI launch's network capture.
+    logger.info(
+      `[2446759-DIAG] FINAL adSetParams sent to Meta create-adset: ` +
+        JSON.stringify(adSetParams, null, 2),
+    );
 
     const adSet = await account.createAdSet([], adSetParams);
 
@@ -663,15 +751,19 @@ async function buildAdCreativeOr400(account, cell, value) {
   };
   if (value.urlTags) creativeParams.url_tags = value.urlTags.replace(/^\?/, "");
 
-  // Auto-translate (formerly on link_data.automatic_translation — Meta moved
-  // it out of object_story_spec in v24, see objectStorySpec.attachCopy note).
-  // The canonical placement in v24 is degrees_of_freedom_spec under the
-  // creative_features_spec → translate_text opt-in. Meta uses this to enable
-  // Advantage+ Creative auto-translation across viewers' locales.
+  // Auto-translate ad copy across viewers' locales. Meta moved the setting
+  // out of object_story_spec.link_data in v24 (now triggers subcode 1443050
+  // there) and into the AdCreative's degrees_of_freedom_spec under
+  // creative_features_spec. The valid key per Meta's API is
+  // `TEXT_OVERLAY_TRANSLATION` (uppercase enum, not the lowercase
+  // `translate_text` Meta hints at in some older docs). Meta's full
+  // accepted set: IG_VIDEO_NATIVE_SUBTITLE, IMAGE_ANIMATION,
+  // PRODUCT_BROWSING, PRODUCT_METADATA_AUTOMATION, PROFILE_CARD,
+  // STANDARD_ENHANCEMENTS_CATALOG, TEXT_OVERLAY_TRANSLATION.
   if (value.autoTranslate) {
     creativeParams.degrees_of_freedom_spec = {
       creative_features_spec: {
-        translate_text: { enroll_status: "OPT_IN" },
+        TEXT_OVERLAY_TRANSLATION: { enroll_status: "OPT_IN" },
       },
     };
   }

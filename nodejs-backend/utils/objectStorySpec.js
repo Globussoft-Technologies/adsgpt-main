@@ -188,11 +188,15 @@ function attachCopy(data, p) {
     else data.description = p.description;
   }
   // NOTE: `automatic_translation` used to live here (on link_data / video_data)
-  // but Meta moved it out of object_story_spec in v24 — sending it here now
-  // triggers subcode 1443050 ("The field automatic_translation is not supported
-  // in the field link_data of object_story_spec"). The setting is now applied at
-  // the AdCreative level via degrees_of_freedom_spec.creative_features_spec
-  // — see `buildAdCreativeOr400` in metaAdLauncherV2.js for the new placement.
+  // but Meta moved it out of object_story_spec in v24 — sending it here triggers
+  // subcode 1443050 ("The field automatic_translation is not supported in the
+  // field link_data of object_story_spec"). The setting now applies at the
+  // AdCreative level via degrees_of_freedom_spec.creative_features_spec.
+  // TEXT_OVERLAY_TRANSLATION — see `buildAdCreativeOr400` in metaAdLauncherV2.js.
+  // (Meta's valid creative_features_spec keys: IG_VIDEO_NATIVE_SUBTITLE,
+  // IMAGE_ANIMATION, PRODUCT_BROWSING, PRODUCT_METADATA_AUTOMATION, PROFILE_CARD,
+  // STANDARD_ENHANCEMENTS_CATALOG, TEXT_OVERLAY_TRANSLATION — per Meta API #100
+  // error response. The earlier `translate_text` key was wrong.)
   return data;
 }
 

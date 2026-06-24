@@ -42,16 +42,30 @@ function buildPromotedObject(shape, params) {
     }
 
     case "app": {
-      const { applicationId, objectStoreUrl } = params || {};
+      // Meta's App Ads optimisation doc: "Set custom_event_type in the
+      // promoted object to the app event you want to optimize when
+      // configuring app event optimization." For Leads/APP and similar
+      // Conversions-family cells, Meta demands a `custom_event_type` as
+      // the "main conversion" (subcode 2446759) — but rejects pixel_id
+      // on the same App-shaped promoted_object (subcode 1815229). The
+      // resolution: include custom_event_type alone (no pixel_id) when
+      // the cell collected a pixelEventType from the user.
+      //
+      // App Promotion's APP cell (which doesn't pass pixelEventType in
+      // params) gets just the app fields — Meta accepts that path
+      // because App Promotion isn't "Conversions-family."
+      const { applicationId, objectStoreUrl, pixelEventType } = params || {};
       if (!applicationId || !objectStoreUrl) {
         throw new Error(
           "buildPromotedObject('app'): applicationId + objectStoreUrl are both required",
         );
       }
-      return {
+      const obj = {
         application_id: applicationId,
         object_store_url: objectStoreUrl,
       };
+      if (pixelEventType) obj.custom_event_type = pixelEventType;
+      return obj;
     }
 
     case "pixel": {

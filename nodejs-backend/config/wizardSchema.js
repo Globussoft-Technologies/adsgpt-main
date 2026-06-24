@@ -829,20 +829,29 @@ const CELLS = {
     APP: {
       group: "single",
       adSet: {
-        // OFFSITE_CONVERSIONS was retired from this cell. Meta requires a
-        // Pixel + custom_event_type alongside it for app destinations
-        // (subcode 2446759 — "When setting post conversion for the
-        // Conversions objective, you must specify the pixel_id and
-        // custom_event_type"). Without an MMP integration to forward
-        // in-app events, the cell ships without a pixel and the goal is
-        // unfulfillable. Same constraint we documented on OUTCOME_APP_PROMOTION
-        // — only LINK_CLICKS + REACH are universally accepted.
+        // OFFSITE_CONVERSIONS was retired from this cell. Meta still
+        // demands pixel_id + custom_event_type as the "main conversion"
+        // for Lead campaigns on App destinations (subcode 2446759 — Meta
+        // treats Leads/App as a Conversions-family campaign regardless
+        // of optimization_goal). The Pixel fields surface in the wizard
+        // via additionalFields below; createAdSetV2 then PATCHes
+        // campaign.promoted_object with them BEFORE creating the ad set
+        // — pixel fields cannot live on adset.promoted_object alongside
+        // app fields (Meta rejects with subcode 1815229 "pixel_id not
+        // supported for WEBSITE_CONVERSIONS"). The two-level structure
+        // is the only path that resolves both error pairs.
         optimizationGoals: ["LINK_CLICKS", "REACH"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "app",
-        additionalFields: ["mobileAppStore", "applicationId", "objectStoreUrl"],
+        additionalFields: [
+          "mobileAppStore",
+          "applicationId",
+          "objectStoreUrl",
+          "pixelId",
+          "pixelEventType",
+        ],
       },
       ad: {
         requiredFields: ["imageHash", "headline", "primaryText"],
@@ -1063,15 +1072,27 @@ const CELLS = {
     APP: {
       adSet: {
         // Engagement/App — drive engagement WITH an existing app (not
-        // installs). OFFSITE_CONVERSIONS deferred because it requires an
-        // MMP forwarding in-app events; without MMP delivery starves.
-        // LINK_CLICKS + REACH + IMPRESSIONS use Meta's own signals.
+        // installs). Same Meta constraint as Leads/APP: Meta demands a
+        // `custom_event_type` in promoted_object as the "main conversion"
+        // for Conversions-family campaigns on App destination (subcode
+        // 2446759). The `app` promoted_object shape auto-includes
+        // custom_event_type when the form supplies pixelEventType — so
+        // pixelId + pixelEventType in additionalFields surface the
+        // wizard's Pixel/Event picker. We pass pixelEventType through
+        // but NOT pixel_id (Meta rejects pixel_id alongside app fields
+        // with subcode 1815229 "not supported for WEBSITE_CONVERSIONS").
         optimizationGoals: ["LINK_CLICKS", "REACH", "IMPRESSIONS"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "app",
-        additionalFields: ["mobileAppStore", "applicationId", "objectStoreUrl"],
+        additionalFields: [
+          "mobileAppStore",
+          "applicationId",
+          "objectStoreUrl",
+          "pixelId",
+          "pixelEventType",
+        ],
       },
       ad: {
         requiredFields: ["imageHash", "headline", "primaryText"],
@@ -1415,16 +1436,25 @@ const CELLS = {
 
     APP: {
       adSet: {
-        // No OFFSITE_CONVERSIONS — same MMP constraint as Engagement/App
-        // and Leads/App. In-app conversion optimisation needs an MMP
-        // (AppsFlyer / Adjust) forwarding events to Meta; stack
-        // doesn't integrate one. LINK_CLICKS + REACH work without MMP.
+        // Sales/App — same Meta constraint as Leads/APP and Engagement/APP:
+        // Meta demands `custom_event_type` in promoted_object as the "main
+        // conversion" for Conversions-family campaigns on App destination
+        // (subcode 2446759). The `app` promoted_object shape auto-includes
+        // custom_event_type when the form supplies pixelEventType. Pixel
+        // picker surfaced via additionalFields. pixel_id NOT passed to
+        // adset.promoted_object (Meta rejects with 1815229).
         optimizationGoals: ["LINK_CLICKS", "REACH"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "app",
-        additionalFields: ["mobileAppStore", "applicationId", "objectStoreUrl"],
+        additionalFields: [
+          "mobileAppStore",
+          "applicationId",
+          "objectStoreUrl",
+          "pixelId",
+          "pixelEventType",
+        ],
       },
       ad: {
         requiredFields: ["imageHash", "headline", "primaryText"],
