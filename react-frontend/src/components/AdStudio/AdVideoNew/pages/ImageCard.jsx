@@ -8,6 +8,7 @@ import {
   Megaphone,
   Pencil,
   X,
+  Repeat
 } from 'lucide-react';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import MySpaceLogoEditor, { proxied as proxiedImageUrl } from './MySpaceLogoEditor';
@@ -568,7 +569,7 @@ export default function ImageCard({
               onClick={handleRecreate}
               title="Recreate Image"
             >
-              <Edit size={18} />
+              <Repeat size={18} />
             </button>
             {CANVA_ENABLED && (
             <button
@@ -615,7 +616,7 @@ export default function ImageCard({
               onClick={handleRecreate}
               title="Recreate Image"
             >
-              <Edit size={18} />
+              <Repeat size={18} />
             </button>
           </div>
         </div>
