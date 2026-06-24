@@ -46,6 +46,7 @@ export const streamChat = ({
   attachments,
   enabledTools,
   formResponse,
+  quote,
   onEvent,
 }) => {
   const controller = new AbortController();
@@ -69,6 +70,11 @@ export const streamChat = ({
           // the agent should treat `form_response` as authoritative for the
           // params it asked about and skip re-asking.
           form_response: formResponse || null,
+          // A message/selection the user is replying to → { text, role, messageId }.
+          // Maps to the backend QuoteItem (message_id). null when not replying.
+          quote: quote
+            ? { text: quote.text, role: quote.role || null, message_id: quote.messageId || null }
+            : null,
         }),
         signal: controller.signal,
       });

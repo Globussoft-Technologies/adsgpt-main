@@ -94,12 +94,13 @@ const aiAssistantSlice = createSlice({
         state.messages.push(action.payload);
         state.error = null;
       },
-      prepare: ({ text, attachments }) => ({
+      prepare: ({ text, attachments, quote }) => ({
         payload: {
           id: nanoid(),
           role: 'user',
           text,
           attachments: attachments || [],
+          quote: quote || null,
         },
       }),
     },
@@ -268,7 +269,10 @@ const aiAssistantSlice = createSlice({
         role: m.role,
         text: m.text || '',
         attachments: m.attachments || [],
-        images: [],
+        images: Array.isArray(m.images) ? m.images : [],
+        quote: m.quote
+          ? { text: m.quote.text, role: m.quote.role || null, messageId: m.quote.message_id || null }
+          : null,
         steps: [],
         complete: true,
         feedback: m.feedback || null,

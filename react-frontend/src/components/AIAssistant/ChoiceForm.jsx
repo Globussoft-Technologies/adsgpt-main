@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Sparkles, Check, Loader2 } from 'lucide-react';
+import { Sparkles, Check, Loader2, Plus, X, Pencil } from 'lucide-react';
+import toast from 'react-hot-toast';
 
+import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 
 // ─── Normalisation helpers ─────────────────────────────────────────────────
@@ -18,8 +20,22 @@ const normaliseOptions = (options) => {
   });
 };
 
+// Field types whose value is an array.
+const ARRAY_TYPES = new Set(['checkbox', 'color_chips', 'image_upload']);
+
 const initialValueForField = (field) => {
-  if (field.default !== undefined && field.default !== null) return field.default;
+  if (field.default !== undefined && field.default !== null) {
+    // Coerce array-type defaults that arrived as a single value / CSV string.
+    if (ARRAY_TYPES.has(field.type)) {
+      if (Array.isArray(field.default)) return field.default;
+      if (typeof field.default === 'string') {
+        return field.default.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      return field.default == null ? [] : [field.default];
+    }
+    return field.default;
+  }
+  if (ARRAY_TYPES.has(field.type)) return [];
   if (field.type === 'segmented' || field.type === 'select') {
     const opts = normaliseOptions(field.options);
     return opts.length ? opts[0].value : '';
@@ -33,6 +49,11 @@ const formatValueLabel = (field, value) => {
     const match = normaliseOptions(field.options).find((o) => o.value === value);
     return match ? match.label : String(value ?? '');
   }
+  if (field.type === 'image_upload') {
+    const n = Array.isArray(value) ? value.length : 0;
+    return n ? `${n} image${n > 1 ? 's' : ''}` : '—';
+  }
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
   if (value == null || value === '') return '—';
   const str = String(value);
   return str.length > 60 ? `${str.slice(0, 57)}…` : str;
@@ -53,7 +74,7 @@ const SegmentedField = ({ field, value, onChange, disabled }) => {
             disabled={disabled}
             className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
               isOn
-                ? 'border-[#15DCFF] bg-[#15DCFF]/15 text-white shadow-[0_0_0_1px_#15DCFF55,0_0_10px_#15DCFF33]'
+                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
                 : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
             } disabled:cursor-not-allowed disabled:opacity-60`}
           >
@@ -77,7 +98,7 @@ const SelectField = ({ field, value, onChange, disabled }) => {
         onChange(match ? match.value : raw);
       }}
       disabled={disabled}
-      className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-60"
+      className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {opts.map((o) => (
         <option key={String(o.value)} value={String(o.value)} className="bg-[#111]">
@@ -95,7 +116,7 @@ const TextField = ({ field, value, onChange, disabled }) => (
     placeholder={field.placeholder || ''}
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
-    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-60"
+    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
   />
 );
 
@@ -106,7 +127,7 @@ const TextareaField = ({ field, value, onChange, disabled }) => (
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
     rows={field.rows || 3}
-    className="w-full resize-y rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-[13px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-60"
+    className="w-full resize-y rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-[13px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
   />
 );
 
@@ -122,9 +143,165 @@ const NumberField = ({ field, value, onChange, disabled }) => (
       onChange(raw === '' ? '' : Number(raw));
     }}
     disabled={disabled}
-    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-60"
+    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
   />
 );
+
+// Multi-select pills (e.g. several aspect ratios at once). Value is an array.
+const CheckboxField = ({ field, value, onChange, disabled }) => {
+  const opts = normaliseOptions(field.options);
+  const arr = Array.isArray(value) ? value : value == null ? [] : [value];
+  const toggle = (v) => {
+    if (arr.includes(v)) onChange(arr.filter((x) => x !== v));
+    else onChange([...arr, v]);
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {opts.map((o) => {
+        const isOn = arr.includes(o.value);
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            onClick={() => toggle(o.value)}
+            disabled={disabled}
+            className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
+              isOn
+                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
+                : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// Brand-color swatches with add (hex text + native picker) and remove.
+const ColorChipsField = ({ field, value, onChange, disabled }) => {
+  const arr = Array.isArray(value)
+    ? value
+    : typeof value === 'string' && value
+      ? value.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+  const [draft, setDraft] = useState('');
+  const add = (c) => {
+    const color = (c || '').trim();
+    if (color && !arr.includes(color)) onChange([...arr, color]);
+    setDraft('');
+  };
+  const remove = (c) => onChange(arr.filter((x) => x !== c));
+  return (
+    <div className="flex flex-col gap-2">
+      {arr.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {arr.map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] py-0.5 pr-1 pl-1.5 text-[11px] text-white/80"
+            >
+              <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ background: c }} />
+              {c}
+              {!disabled && (
+                <button type="button" onClick={() => remove(c)} className="text-white/40 hover:text-white">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {!disabled && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={draft}
+            placeholder={field.placeholder || '#E4002B'}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add(draft);
+              }
+            }}
+            className="h-8 w-28 rounded-lg border border-white/10 bg-[#111] px-2.5 text-[12px] text-white outline-none placeholder:text-white/35 focus:border-white/40"
+          />
+          <input
+            type="color"
+            onChange={(e) => add(e.target.value)}
+            className="h-8 w-8 cursor-pointer rounded-lg border border-white/10 bg-[#111] p-0.5"
+            title="Pick a color"
+          />
+          <button
+            type="button"
+            onClick={() => add(draft)}
+            className="h-8 rounded-lg border border-white/10 px-2.5 text-[12px] text-white/70 hover:border-white/25 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Reference-image / logo uploader. Reuses the existing /upload endpoint and
+// stores [{url, filename}] so the agent can pass the URLs straight through.
+const ImageUploadField = ({ field, value, onChange, disabled }) => {
+  const arr = Array.isArray(value) ? value : value ? [value] : [];
+  const [uploading, setUploading] = useState(false);
+  const maxFiles = field.maxFiles || 5;
+  const onPick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const up = await Promise.all(
+        files.map(async (f) => {
+          const r = await uploadFile(f);
+          return { url: r.url, filename: r.filename };
+        }),
+      );
+      onChange([...arr, ...up].slice(0, maxFiles));
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const remove = (i) => onChange(arr.filter((_, idx) => idx !== i));
+  return (
+    <div className="flex flex-wrap gap-2">
+      {arr.map((img, i) => {
+        const url = typeof img === 'string' ? img : img.url;
+        return (
+          <div key={`${url}-${i}`} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10">
+            <img src={url} alt="" className="h-full w-full object-cover" />
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white/80 hover:bg-black hover:text-white"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {!disabled && arr.length < maxFiles && (
+        <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40/60 hover:text-white/70">
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          <span className="text-[9px]">{uploading ? 'Uploading' : 'Add'}</span>
+          <input type="file" accept="image/*" multiple={maxFiles > 1} onChange={onPick} className="hidden" />
+        </label>
+      )}
+    </div>
+  );
+};
 
 const FIELD_RENDERERS = {
   segmented: SegmentedField,
@@ -132,6 +309,9 @@ const FIELD_RENDERERS = {
   text: TextField,
   textarea: TextareaField,
   number: NumberField,
+  checkbox: CheckboxField,
+  color_chips: ColorChipsField,
+  image_upload: ImageUploadField,
 };
 
 // ─── Top-level form ────────────────────────────────────────────────────────
@@ -149,9 +329,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
   const [values, setValues] = useState(initialValues);
   const [submitting, setSubmitting] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const isSubmitted = !!result;
-  const isLocked = isSubmitted || disabled || submitting;
+  // After submitting, the card collapses to a summary — but the user can reopen
+  // it ("Edit & regenerate"), tweak values, and fire a fresh generation. So the
+  // lock only applies while collapsed (or disabled / mid-submit), not forever.
+  const isLocked = (isSubmitted && !editing) || disabled || submitting;
 
   const setField = (key, val) => setValues((prev) => ({ ...prev, [key]: val }));
 
@@ -162,7 +346,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       const isEmpty =
         v == null ||
         (typeof v === 'string' && v.trim() === '') ||
-        (typeof v === 'number' && Number.isNaN(v));
+        (typeof v === 'number' && Number.isNaN(v)) ||
+        (Array.isArray(v) && v.length === 0);
       if (isEmpty) return `${f.label || f.key} is required`;
     }
     return null;
@@ -176,6 +361,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       // Hand the values back to the parent (ChatInterface) which decides
       // whether to fire a real streamChat turn or a mocked one.
       await onSubmit?.({ formId: form.form_id, values });
+      setEditing(false); // collapse back to the summary after a (re)generation
     } finally {
       setSubmitting(false);
     }
@@ -186,7 +372,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-[#15DCFF] uppercase">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-white/70 uppercase">
             <Sparkles className="h-3 w-3" />
             <span>Quick setup</span>
           </div>
@@ -220,7 +406,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               <div className="flex items-baseline justify-between gap-2">
                 <label className="text-[12px] font-medium text-white/80">
                   {field.label || field.key}
-                  {field.required && <span className="ml-0.5 text-[#EC4899]">*</span>}
+                  {field.required && <span className="ml-0.5 text-white/50">*</span>}
                 </label>
                 {field.description && (
                   <span className="text-[11px] text-white/40">{field.description}</span>
@@ -239,7 +425,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
       {/* Footer — submit OR submitted summary */}
       <div className="border-t border-white/[0.05] bg-black/30 px-4 py-3">
-        {isSubmitted ? (
+        {isSubmitted && !editing ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <Check className="h-3.5 w-3.5 text-emerald-400" />
             <span className="text-[11.5px] text-white/55">Submitted with</span>
@@ -251,11 +437,25 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 {f.label || f.key}: {formatValueLabel(f, result.values?.[f.key])}
               </span>
             ))}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full bg-white/[0.06] px-3 text-[11.5px] font-medium text-white/80 transition-colors hover:bg-white/[0.12]"
+              >
+                <Pencil className="h-3 w-3" />
+                <span>Edit &amp; regenerate</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] text-white/40">
-              {validationError ? validationError : 'You can change anything before submitting.'}
+              {validationError
+                ? validationError
+                : isSubmitted
+                  ? 'Tweak anything, then regenerate.'
+                  : 'You can change anything before submitting.'}
             </span>
             <button
               type="button"
@@ -272,7 +472,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              <span>{form.submit_label || 'Generate'}</span>
+              <span>{isSubmitted ? 'Regenerate' : form.submit_label || 'Generate'}</span>
             </button>
           </div>
         )}

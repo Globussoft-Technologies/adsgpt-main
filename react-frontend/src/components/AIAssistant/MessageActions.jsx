@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Check, Copy, ThumbsDown, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
+import { Check, Copy, Reply, ThumbsDown, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { logActivity, sendFeedback } from '@/apis/aiAssistant/aiAssistantApi';
@@ -47,6 +47,7 @@ const MessageActions = ({
   role, // 'user' | 'assistant'
   text,
   feedback, // { rating: 1 | -1 } | null
+  onReply, // () => void — quote this whole message into the composer
   className = '',
 }) => {
   const dispatch = useDispatch();
@@ -155,6 +156,12 @@ const MessageActions = ({
       <ActionButton onClick={handleCopy} label={copied ? 'Copied' : 'Copy'}>
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </ActionButton>
+
+      {onReply && (
+        <ActionButton onClick={onReply} label="Reply">
+          <Reply className="h-3.5 w-3.5" />
+        </ActionButton>
+      )}
 
       {role === 'assistant' && (
         <>

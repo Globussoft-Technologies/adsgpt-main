@@ -370,7 +370,7 @@ export default function TopHeader() {
             className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
           >
             {/* AI Assistant — History + New Chat */}
-            {/* {currentRoute === '/assistant' && <AIAssistantHeaderActions />} */}
+            {currentRoute === '/assistant' && <AIAssistantHeaderActions />}
 
             {/* for AdStudio */}
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (

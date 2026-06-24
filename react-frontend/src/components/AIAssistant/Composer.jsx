@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Paperclip, Send, X } from 'lucide-react';
+import { Loader2, Paperclip, Send, X, Quote } from 'lucide-react';
 import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import toast from 'react-hot-toast';
 import BorderGlow from './BorderGlow/BorderGlow';
@@ -18,6 +18,8 @@ const Composer = ({
   disabled,
   variant = 'centered', // 'centered' | 'docked'
   placeholder = 'Ask Anything...',
+  quote = null, // { text, role, messageId } the user is replying to
+  onClearQuote,
 }) => {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState([]);
@@ -38,6 +40,11 @@ const Composer = ({
     el.style.height = 'auto';
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minTextareaPx), maxTextareaPx)}px`;
   }, [text, minTextareaPx, maxTextareaPx]);
+
+  // Focus the input when the user picks something to reply to.
+  useEffect(() => {
+    if (quote?.text) textareaRef.current?.focus();
+  }, [quote]);
 
   const canSend = !disabled && !uploading && (text.trim().length > 0 || attachments.length > 0);
 
@@ -95,6 +102,28 @@ const Composer = ({
       colors={['#c084fc', '#f472b6', '#38bdf8']}
     >
       <div className="flex w-full flex-col gap-2 px-5 py-4">
+        {quote?.text && (
+          <div className="flex items-start gap-2 rounded-xl border-l-2 border-white/30 bg-white/[0.04] px-3 py-2">
+            <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/70" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] font-medium tracking-wide text-white/70 uppercase">
+                Replying to {quote.role === 'assistant' ? 'assistant' : quote.role === 'user' ? 'you' : 'message'}
+              </div>
+              <div className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-white/65">
+                {quote.text}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onClearQuote?.()}
+              className="shrink-0 text-white/45 hover:text-white"
+              aria-label="Cancel reply"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {attachments.map((a, i) => (

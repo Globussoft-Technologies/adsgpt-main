@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 
@@ -43,6 +43,13 @@ const ChatInterface = () => {
     c.toUpperCase(),
   );
 
+  // The message/selection the user is replying to, if any: { text, role, messageId }.
+  // Set by the Reply button and the highlight-to-quote popover; cleared on send.
+  const [quote, setQuote] = useState(null);
+  const handleQuote = useCallback((q) => {
+    if (q && q.text && q.text.trim()) setQuote({ ...q, text: q.text.trim() });
+  }, []);
+
   const isEmpty = messages.length === 0 && !pending;
 
   // Cancel any in-flight stream when this component unmounts.
@@ -65,7 +72,7 @@ const ChatInterface = () => {
   // Real network turn — extracted so both `/cascade` follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.
   const runStreamingTurn = useCallback(
-    ({ text, attachments, formResponse }) => {
+    ({ text, attachments, formResponse, quote: turnQuote }) => {
       const controller = streamChat({
         sessionId,
         message: text,
@@ -74,6 +81,7 @@ const ChatInterface = () => {
           : null,
         enabledTools,
         formResponse: formResponse || null,
+        quote: turnQuote || null,
         onEvent: (event, data) => {
           switch (event) {
             case 'session':
@@ -155,19 +163,22 @@ const ChatInterface = () => {
     (text, attachments) => {
       if (pending) return;
 
+      const activeQuote = quote;
+      setQuote(null); // consume the quote — one reply per quote
+
       const cascadeKind = parseCascadeCommand(text);
       if (cascadeKind && !attachments?.length) {
         // Still push the user message so the chat reflects what they typed.
-        dispatch(pushUserMessage({ text, attachments }));
+        dispatch(pushUserMessage({ text, attachments, quote: activeQuote }));
         handleCascadeDemo(cascadeKind);
         return;
       }
 
-      dispatch(pushUserMessage({ text, attachments }));
+      dispatch(pushUserMessage({ text, attachments, quote: activeQuote }));
       dispatch(startAssistantStream());
-      runStreamingTurn({ text, attachments });
+      runStreamingTurn({ text, attachments, quote: activeQuote });
     },
-    [dispatch, pending, runStreamingTurn, handleCascadeDemo],
+    [dispatch, pending, quote, runStreamingTurn, handleCascadeDemo],
   );
 
   // Called by ChoiceForm when the user submits picks. Mock forms (form_id
@@ -207,7 +218,13 @@ const ChatInterface = () => {
           </h2>
           <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
           <div className="mt-7 w-full max-w-[820px]">
-            <Composer onSend={handleSend} disabled={pending} variant="centered" />
+            <Composer
+              onSend={handleSend}
+              disabled={pending}
+              variant="centered"
+              quote={quote}
+              onClearQuote={() => setQuote(null)}
+            />
           </div>
         </div>
       ) : (
@@ -221,6 +238,7 @@ const ChatInterface = () => {
                 pendingDoneLabels={pendingDoneLabels}
                 completedLabel={completedLabel}
                 onChoiceFormSubmit={handleChoiceFormSubmit}
+                onQuote={handleQuote}
               />
             </div>
           </div>
@@ -231,6 +249,8 @@ const ChatInterface = () => {
                 disabled={pending}
                 variant="docked"
                 placeholder="Ask anything..."
+                quote={quote}
+                onClearQuote={() => setQuote(null)}
               />
             </div>
           </div>

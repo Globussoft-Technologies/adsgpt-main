@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { Bot } from 'lucide-react';
+import { Bot, Quote } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import StepsIndicator from './StepsIndicator';
@@ -9,33 +9,52 @@ import CompetitorAdsGrid from './CompetitorAdsGrid';
 import VideoStoryboard from './VideoStoryboard';
 import AdCreativePackage from './AdCreativePackage';
 import ChoiceForm from './ChoiceForm';
+import QuotableText from './QuotableText';
+import toMediaUrl from '@/utils/mediaUrl';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
+
+// Small "replying to …" block shown above a message that carries a quote.
+const QuotedBlock = ({ quote, align = 'left' }) => {
+  if (!quote?.text) return null;
+  return (
+    <div className={`mb-1.5 max-w-3xl ${align === 'right' ? 'ml-12 self-end' : ''}`}>
+      <div className="rounded-lg border-l-2 border-white/40 bg-white/[0.04] px-3 py-1.5">
+        <div className="flex items-center gap-1 text-[10px] font-medium tracking-wide text-white/70 uppercase">
+          <Quote className="h-2.5 w-2.5" />
+          {quote.role === 'assistant' ? 'Replying to assistant' : quote.role === 'user' ? 'Replying to you' : 'Replying to'}
+        </div>
+        <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/55">{quote.text}</div>
+      </div>
+    </div>
+  );
+};
 
 const MediaGrid = ({ urls = [] }) => {
   if (!urls.length) return null;
   return (
     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {urls.map((url) =>
-        isVideoUrl(url) ? (
+      {urls.map((url) => {
+        const src = toMediaUrl(url);
+        return isVideoUrl(url) ? (
           <video
             key={url}
-            src={url}
+            src={src}
             controls
             className="w-full rounded-xl border border-white/10 bg-black"
           />
         ) : (
           <a
             key={url}
-            href={url}
+            href={src}
             target="_blank"
             rel="noreferrer"
             className="block overflow-hidden rounded-xl border border-white/10 bg-black/40"
           >
-            <img src={url} alt="Generated" className="h-full w-full object-cover" loading="lazy" />
+            <img src={src} alt="Generated" className="h-full w-full object-cover" loading="lazy" />
           </a>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 };
@@ -47,6 +66,7 @@ const Messages = ({
   pendingDoneLabels,
   completedLabel,
   onChoiceFormSubmit,
+  onQuote,
 }) => {
   const endRef = useRef(null);
   const sessionId = useSelector((state) => state.aiAssistant.sessionId);
@@ -61,12 +81,15 @@ const Messages = ({
         if (m.role === 'user') {
           return (
             <div key={m.id} className="group flex flex-col items-end">
+              <QuotedBlock quote={m.quote} align="right" />
               <div className="ml-12 max-w-3xl">
                 <div
                   className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed backdrop-blur-[100px] 2xl:text-[18px]"
                   style={{ borderRadius: '30px 30px 1px 30px' }}
                 >
-                  {m.text}
+                  <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
+                    {m.text}
+                  </QuotableText>
                 </div>
                 {m.attachments?.length > 0 && (
                   <div className="mt-1 flex flex-wrap justify-end gap-1.5">
@@ -94,6 +117,7 @@ const Messages = ({
                   conversationId={sessionId}
                   role="user"
                   text={m.text}
+                  onReply={() => onQuote?.({ text: m.text, role: 'user', messageId: m.id })}
                 />
               </div>
             </div>
@@ -132,9 +156,23 @@ const Messages = ({
               )}
 
               {m.text ? (
-                <div className="prose prose-invert prose-lg max-w-none break-words [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_li]:text-[17px] [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_code]:text-[15px]">
-                  <ReactMarkdown>{m.text}</ReactMarkdown>
-                </div>
+                <QuotableText
+                  onQuote={(text) => onQuote?.({ text, role: 'assistant', messageId: m.id })}
+                  className="prose prose-invert prose-lg max-w-none break-words [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_li]:text-[17px] [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_code]:text-[15px]"
+                >
+                  <ReactMarkdown
+                    components={{
+                      img: ({ node, src, ...props }) => (
+                        <img src={toMediaUrl(src)} loading="lazy" {...props} />
+                      ),
+                      a: ({ node, href, ...props }) => (
+                        <a href={toMediaUrl(href)} target="_blank" rel="noreferrer" {...props} />
+                      ),
+                    }}
+                  >
+                    {m.text}
+                  </ReactMarkdown>
+                </QuotableText>
               ) : (
                 showLiveSteps &&
                 !pendingActiveLabel?.length && (
@@ -178,6 +216,7 @@ const Messages = ({
                     role="assistant"
                     text={m.text}
                     feedback={m.feedback}
+                    onReply={() => onQuote?.({ text: m.text, role: 'assistant', messageId: m.id })}
                   />
                 </div>
               )}

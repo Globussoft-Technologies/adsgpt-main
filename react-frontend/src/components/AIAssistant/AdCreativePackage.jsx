@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { Check, Copy, Download, ExternalLink, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
+import toMediaUrl from '@/utils/mediaUrl';
 
 // Color accent per angle. Falls back to a neutral chip for unknown angles.
 const ANGLE_ACCENT = {
-  emotional: { dot: 'bg-[#EC4899]', text: 'text-[#EC4899]' },
-  direct_value: { dot: 'bg-[#15DCFF]', text: 'text-[#15DCFF]' },
-  playful: { dot: 'bg-[#A855F7]', text: 'text-[#A855F7]' },
-  urgency: { dot: 'bg-[#F59E0B]', text: 'text-[#F59E0B]' },
-  authority: { dot: 'bg-[#10B981]', text: 'text-[#10B981]' },
+  emotional: { dot: 'bg-white/70', text: 'text-white/70' },
+  direct_value: { dot: 'bg-white/70', text: 'text-white/70' },
+  playful: { dot: 'bg-white/70', text: 'text-white/70' },
+  urgency: { dot: 'bg-white/70', text: 'text-white/70' },
+  authority: { dot: 'bg-white/70', text: 'text-white/70' },
 };
 const DEFAULT_ACCENT = { dot: 'bg-white/40', text: 'text-white/70' };
 
@@ -73,14 +74,14 @@ const VariantCard = ({ variant, index }) => {
       {/* Image */}
       {variant.image_url && (
         <a
-          href={variant.image_url}
+          href={toMediaUrl(variant.image_url)}
           target="_blank"
           rel="noreferrer"
           className="mt-3 block bg-black"
           title="Open full-size in a new tab"
         >
           <img
-            src={variant.image_url}
+            src={toMediaUrl(variant.image_url)}
             alt={headline || `Ad variant ${index + 1}`}
             loading="lazy"
             className="block w-full select-none"
@@ -125,7 +126,7 @@ const VariantCard = ({ variant, index }) => {
         </div>
         {variant.image_url && (
           <a
-            href={variant.image_url}
+            href={toMediaUrl(variant.image_url)}
             target="_blank"
             rel="noreferrer"
             download
