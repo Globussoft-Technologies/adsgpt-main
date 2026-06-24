@@ -100,14 +100,40 @@ function resolveCellOr400(req) {
   return { ok: true, cell: getCell(objective, conversionLocation) };
 }
 
+// Friendlier copy per Meta subcode — overrides Meta's generic strings
+// when we have a more actionable / specific message. Returns null when
+// we don't have a custom mapping (in which case Meta's own title/message
+// is used). Add entries here as recurring subcodes accumulate.
+function frontendSubcodeOverride(subcode) {
+  switch (subcode) {
+    case 2446759:
+      // "When setting post conversion for the Conversions objective, you
+      // must specify the pixel_id and custom_event_type as the main
+      // conversion." Fires when a regulated Special Ad Category
+      // (Financial / Employment / Housing / Credit / Issues-Elections-
+      // Politics) is combined with an App cell — Meta requires Pixel
+      // tracking for regulated verticals, App cells use app_link
+      // tracking. Frontend validation should catch this pre-launch; this
+      // is the defense-in-depth message for cases that slip through.
+      return {
+        title: "App cells don’t work with regulated Special Ad Categories",
+        message:
+          "Meta requires Pixel-based conversion tracking for Financial / Employment / Housing / Credit / Politics campaigns. App campaigns use app store tracking instead. Either drop the Special Ad Category on the Campaign step or switch to a Website cell (which uses Pixel).",
+      };
+    default:
+      return null;
+  }
+}
+
 // Format a Meta SDK error into the project's standard error envelope.
 // Identical shape to V1 so the frontend handler works for both.
 function metaErrorResponse(err, action) {
   const m = logMetaError(`${action} error`, err);
+  const override = frontendSubcodeOverride(m.subcode);
   return {
     status: false,
-    error: m.title || `Failed to ${action}`,
-    details: m.message,
+    error: override?.title || m.title || `Failed to ${action}`,
+    details: override?.message || m.message,
     meta: {
       code: m.code,
       subcode: m.subcode,
@@ -636,6 +662,19 @@ async function buildAdCreativeOr400(account, cell, value) {
     object_story_spec: objectStorySpec,
   };
   if (value.urlTags) creativeParams.url_tags = value.urlTags.replace(/^\?/, "");
+
+  // Auto-translate (formerly on link_data.automatic_translation — Meta moved
+  // it out of object_story_spec in v24, see objectStorySpec.attachCopy note).
+  // The canonical placement in v24 is degrees_of_freedom_spec under the
+  // creative_features_spec → translate_text opt-in. Meta uses this to enable
+  // Advantage+ Creative auto-translation across viewers' locales.
+  if (value.autoTranslate) {
+    creativeParams.degrees_of_freedom_spec = {
+      creative_features_spec: {
+        translate_text: { enroll_status: "OPT_IN" },
+      },
+    };
+  }
 
   if (cell.ad.objectStorySpecShape === "click_to_call") {
     const ctaValue =

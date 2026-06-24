@@ -162,6 +162,22 @@ function validateCampaign(form, ctx) {
 }
 
 // ── Step: Ad Set ────────────────────────────────────────────────────────
+// Special Ad Categories that require Pixel-based conversion tracking even
+// when the user picked a non-conversion goal. Meta enforces this for
+// regulated verticals (Financial, Employment, Housing, Credit, Issues/
+// Elections/Politics) — campaigns under these categories rejected with
+// subcode 2446759 ("Conversion event is required") when the cell uses an
+// App-promoted_object (no Pixel) instead of a Pixel-promoted_object.
+// Gambling is excluded — Meta accepts App cells there since gaming
+// commonly runs install campaigns without conversion tracking.
+const PIXEL_REQUIRED_SACS = new Set([
+  'FINANCIAL_PRODUCTS_SERVICES',
+  'CREDIT',
+  'EMPLOYMENT',
+  'HOUSING',
+  'ISSUES_ELECTIONS_POLITICS',
+]);
+
 function validateAdSet(form, cell, ctx, mode) {
   const e = {};
   // In edit-adset the identity/delivery fields (page, app, pixel) are locked
@@ -172,6 +188,20 @@ function validateAdSet(form, cell, ctx, mode) {
     e.adSetName = 'Ad set name is required.';
   } else if (form.adSetName.trim().length < 2) {
     e.adSetName = 'Ad set name must be at least 2 characters.';
+  }
+
+  // App cell ↔ regulated Special Ad Category — Meta requires Pixel-based
+  // conversion tracking for regulated categories, but App cells use
+  // app_link tracking (no Pixel). Subcode 2446759 fires at launch
+  // otherwise. Surface as an actionable error so user can fix at the
+  // Campaign step (drop the SAC) or Destination step (switch to Website
+  // cell which uses Pixel).
+  const isAppCell = cell?.adSet?.promotedObjectShape === 'app';
+  const sacs = form.specialAdCategories || [];
+  const blockingSAC = sacs.find((c) => PIXEL_REQUIRED_SACS.has(c));
+  if (isAppCell && blockingSAC) {
+    e.specialAdCategories =
+      `App campaigns aren’t compatible with the ${blockingSAC} Special Ad Category — Meta requires Pixel-based conversion tracking for that category. Either remove the category on the Campaign step, or switch to a Website cell on the Destination step.`;
   }
 
   if (isBlank(form.pageId)) e.pageId = 'Select a Facebook Page.';

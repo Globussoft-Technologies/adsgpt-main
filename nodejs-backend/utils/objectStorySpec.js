@@ -187,7 +187,12 @@ function attachCopy(data, p) {
     if (p.videoId) data.link_description = p.description;
     else data.description = p.description;
   }
-  if (p.autoTranslate) data.automatic_translation = true;
+  // NOTE: `automatic_translation` used to live here (on link_data / video_data)
+  // but Meta moved it out of object_story_spec in v24 — sending it here now
+  // triggers subcode 1443050 ("The field automatic_translation is not supported
+  // in the field link_data of object_story_spec"). The setting is now applied at
+  // the AdCreative level via degrees_of_freedom_spec.creative_features_spec
+  // — see `buildAdCreativeOr400` in metaAdLauncherV2.js for the new placement.
   return data;
 }
 
