@@ -46,13 +46,14 @@ const GoogleAdCard = ({ creative }) => {
         </p>
       </div>
 
-      {/* Image */}
+      {/* Image — object-contain so the whole creative is visible (ad images
+          vary in aspect ratio); object-cover was cropping the sides off. */}
       {creative.imageUrl && (
-        <div className="mx-4 mb-3 overflow-hidden rounded-xl">
+        <div className="mx-4 mb-3 overflow-hidden rounded-xl bg-gray-50">
           <img
             src={creative.imageUrl}
             alt="Ad Visual"
-            className="h-70 w-full object-cover"
+            className="h-70 w-full object-contain"
           />
         </div>
       )}

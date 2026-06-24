@@ -1,18 +1,22 @@
 import Masonry from 'react-masonry-css';
-import { Download, Info, Megaphone, X } from 'lucide-react';
+import { Download, Info, Megaphone, Pencil, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   downloadMediaFromUrl,
   downloadMediaZipAction,
 } from '@/store/actions/adVideoNew/Advideoactions';
-import { getAdFactoryImages } from '@/apis/adFactory/adFactoryImagesApi';
+import {
+  getAdFactoryImages,
+  saveEditedAdFactoryImage,
+} from '@/apis/adFactory/adFactoryImagesApi';
 import { emitWhenConnected } from '@/utils/socketEmitter';
 import emitter from '@/utils/eventEmitter';
 import { mergeCampaignImageResults } from './adFactoryImagesMerge';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
+import MySpaceLogoEditor, { proxied as proxiedImageUrl } from './MySpaceLogoEditor';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -34,7 +38,7 @@ const resolveImageUrl = (url) => {
 };
 
 // ── Single card ─────────────────────────────────────────────────────────────
-function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPostAdModal }) {
+function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPostAdModal, onOpenLogoEditor }) {
   const dispatch = useDispatch();
   const [showInfo, setShowInfo] = useState(false);
   const infoTimeout = useRef(null);
@@ -154,6 +158,18 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPo
           />
           {/* Controls bar */}
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            {onOpenLogoEditor && (
+              <button
+                title="Add logo"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenLogoEditor(item, item?.url);
+                }}
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+              >
+                <Pencil size={18} />
+              </button>
+            )}
             {SHOW_POST_AD_NAV && onOpenPostAdModal && (
               <button
                 title="Post as ad"
@@ -199,7 +215,80 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [fullscreenUrl, setFullscreenUrl] = useState(null);
+  // Lightbox carries both the URL (for download) and the source item
+  // (for the logo-editor save handler, which records lineage onto a
+  // brand-new MySpace record).
+  const [fullscreen, setFullscreen] = useState(null); // { url, item } | null
+  const fullscreenUrl = fullscreen?.url || null;
+  const fullscreenItem = fullscreen?.item || null;
+  const closeFullscreen = () => setFullscreen(null);
+
+  // Logo editor state — opened from inside the lightbox. We close the
+  // lightbox before mounting the editor so the editor's overlay isn't
+  // stacked behind the lightbox.
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  const [logoEditorItem, setLogoEditorItem] = useState(null);
+
+  const handleOpenLogoEditor = (item, url) => {
+    if (!url) return;
+    closeFullscreen();
+    // Preload the proxied URL so Konva's useImage hits the HTTP cache
+    // on mount — same trick as the regular MySpace lightbox.
+    try {
+      const preload = new Image();
+      preload.crossOrigin = 'anonymous';
+      preload.src = proxiedImageUrl(resolveImageUrl(url));
+    } catch {
+      // Best-effort; if it fails the editor just resolves the image
+      // on its own timeline (no regression vs. no preload).
+    }
+    setLogoEditorItem(item);
+    setLogoEditorOpen(true);
+  };
+
+  const handleLogoSaved = async (newUrl) => {
+    // Backend = `saveEditedAdImage` in nodejs-backend/controllers/adFactory.js.
+    // Pushes the new image to the campaign's results AND to the saved
+    // gallery so it shows up everywhere this campaign surfaces.
+    if (!logoEditorItem?.campaignId || !userId) return;
+
+    // Optimistic insert — prepend the new image to `items` so the
+    // user sees it instantly. Same shape that mergeCampaignImageResults
+    // produces, so the grid renders it without special-casing. If the
+    // backend save fails we roll back below.
+    const optimisticItem = {
+      url: newUrl,
+      prompt: 'Edited image',
+      model: logoEditorItem.model || null,
+      modelLabel: logoEditorItem.modelLabel || logoEditorItem.model || null,
+      status: 'success',
+      error: null,
+      aspectRatio: logoEditorItem.aspectRatio || null,
+      campaignId: logoEditorItem.campaignId,
+      campaignName: logoEditorItem.campaignName || null,
+      jobId: null,
+      origin: 'live',
+      timestamp: new Date().toISOString(),
+    };
+    setItems((prev) => [optimisticItem, ...prev]);
+
+    try {
+      await saveEditedAdFactoryImage({
+        userId,
+        campaignId: logoEditorItem.campaignId,
+        imageUrl: newUrl,
+        prompt: logoEditorItem.campaignName || 'Edited image',
+        // historyId / contextType:'history' would attach to a history
+        // record instead of the current campaign — not modelled on
+        // these MySpace items yet, so default to current.
+      });
+    } catch (e) {
+      console.error('saveEditedAdFactoryImage failed:', e);
+      // Roll back the optimistic insert so the grid matches reality.
+      setItems((prev) => prev.filter((i) => i.url !== newUrl));
+    }
+  };
+
   const limit = 20;
   const containerRef = useRef(null);
 
@@ -208,7 +297,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   useEffect(() => {
     if (!fullscreenUrl) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') setFullscreenUrl(null);
+      if (e.key === 'Escape') closeFullscreen();
     };
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -399,10 +488,11 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
               item={item}
               isSelected={selectedImages.includes(item.url)}
               onSelect={() => toggleSelection(item.url)}
-              onFullscreen={setFullscreenUrl}
+              onFullscreen={(url) => setFullscreen({ url, item })}
               onOpenPostAdModal={(payload) =>
                 setPostAdState({ open: true, payload, autoAdvance: false })
               }
+              onOpenLogoEditor={handleOpenLogoEditor}
             />
           ))}
       </Masonry>
@@ -416,19 +506,20 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
         </div>
       )}
 
-      {/* Fullscreen lightbox — mirrors the MySpace ImageCard lightbox,
-          minus the Edit Logo affordance (AdFactory images don't go
-          through the logo editor). */}
+      {/* Fullscreen lightbox — mirrors the MySpace ImageCard lightbox.
+          Top-right pill now includes Edit Logo + Download. Clicking
+          Edit Logo closes the lightbox and opens the logo editor for
+          the source item. */}
       {fullscreenUrl && (
         <div
-          onClick={() => setFullscreenUrl(null)}
+          onClick={closeFullscreen}
           className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/85 backdrop-blur-xl"
         >
           {/* Close (X) — top-left, frosted-glass circle */}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setFullscreenUrl(null);
+              closeFullscreen();
             }}
             title="Close (Esc)"
             className="absolute top-5 left-5 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white/90 shadow-lg shadow-black/50 backdrop-blur-xl transition-all hover:scale-105 hover:bg-white/15 hover:text-white"
@@ -436,8 +527,20 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
             <X size={18} strokeWidth={2.25} />
           </button>
 
-          {/* Action pill — Download only (no Edit Logo for AdFactory) */}
+          {/* Action pill — Edit Logo + Download */}
           <div className="absolute top-5 right-5 z-10 flex items-center gap-0 rounded-2xl border border-white/15 bg-black/45 p-1 shadow-lg shadow-black/50 backdrop-blur-xl">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenLogoEditor(fullscreenItem, fullscreenUrl);
+              }}
+              title="Open logo editor"
+              className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-white/85 transition-all hover:bg-white/12 hover:text-white"
+            >
+              <Pencil size={15} strokeWidth={2} />
+              Edit Logo
+            </button>
+            <span className="mx-0.5 h-5 w-px bg-white/15" aria-hidden />
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -466,6 +569,18 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
         payload={postAdState.payload}
         autoAdvance={postAdState.autoAdvance}
       />
+
+      {logoEditorOpen && logoEditorItem?.url && (
+        <MySpaceLogoEditor
+          baseImageUrl={resolveImageUrl(logoEditorItem.url)}
+          userId={userId}
+          onClose={() => {
+            setLogoEditorOpen(false);
+            setLogoEditorItem(null);
+          }}
+          onSaved={handleLogoSaved}
+        />
+      )}
     </div>
   );
 }

@@ -95,10 +95,12 @@ const GoogleMobilePreview = ({ image, text, cta, ctaLink }) => {
                 {text?.primaryText || text?.primary_text || text?.description}
               </div>
 
-              {/* Full-width image */}
+              {/* Full-width image — object-contain in a fixed-height box so the
+                  whole creative shows at its real aspect ratio (matches the Meta
+                  MobilePreview); object-cover was cropping the image. */}
               {image && (
-                <div className="w-full bg-gray-100">
-                  <img src={image} alt="Ad" className="w-full object-cover" style={{ maxHeight: '320px' }} />
+                <div className="h-80 w-full bg-gray-100">
+                  <img src={image} alt="Ad" className="h-full w-full object-contain" />
                 </div>
               )}
 

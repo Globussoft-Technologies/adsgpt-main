@@ -35,3 +35,27 @@ export const getAdFactoryImages = async ({
   );
   return data;
 };
+
+// Persists a logo-edited (or otherwise altered) AdFactory image so it
+// shows up in the campaign's results AND in the user's saved gallery.
+// Backend = `saveEditedAdImage` in nodejs-backend/controllers/adFactory.js.
+//
+// Required: userId, campaignId, imageUrl.
+// Optional: historyId + contextType: 'history' to attach to a history
+// record instead of the current campaign; prompt for the result label
+// (defaults to "Edited image" server-side).
+export const saveEditedAdFactoryImage = async ({
+  userId,
+  campaignId,
+  imageUrl,
+  historyId,
+  contextType,
+  prompt,
+}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/campaign/save-edited-image`,
+    { userId, campaignId, imageUrl, historyId, contextType, prompt },
+    { headers: { ...headers(), 'Content-Type': 'application/json' } },
+  );
+  return data;
+};
