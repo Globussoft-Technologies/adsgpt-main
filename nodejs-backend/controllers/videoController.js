@@ -3036,10 +3036,41 @@ exports.generateCloneVideo = async (req, res) => {
       });
     }
 
-    // generatedScript is stored as { videoDuration, script: [...] } — send the full object
-    const scriptObject = Array.isArray(video.generatedScript)
+    // Normalize script items:
+    // 1. Lowercase "Voice" → "voice"
+    // 2. If user edited "text", sync voice field: keep [emotion] tag but replace spoken words with updated text
+    const normalizeScriptItems = (items) =>
+      (items || []).map((item) => {
+        const normalized = { ...item };
+
+        // Normalize key casing
+        if ("Voice" in normalized && !("voice" in normalized)) {
+          normalized.voice = normalized.Voice;
+          delete normalized.Voice;
+        }
+
+        // Sync voice text with edited text (preserve [emotion] tag)
+        if (normalized.voice && normalized.text) {
+          const emotionMatch = normalized.voice.match(/^(\[.*?\])\s*/);
+          if (emotionMatch) {
+            const emotionTag = emotionMatch[1];
+            const voiceText = normalized.voice.replace(/^(\[.*?\])\s*/, "").trim();
+            if (voiceText !== normalized.text.trim()) {
+              normalized.voice = `${emotionTag} ${normalized.text.trim()}`;
+            }
+          }
+        }
+
+        return normalized;
+      });
+
+    let scriptObject = Array.isArray(video.generatedScript)
       ? { script: video.generatedScript }
       : video.generatedScript || {};
+
+    if (scriptObject.script && Array.isArray(scriptObject.script)) {
+      scriptObject = { ...scriptObject, script: normalizeScriptItems(scriptObject.script) };
+    }
 
     const pythonPayload = {
       sessionId: id,
