@@ -323,20 +323,32 @@ export default function ProfileHome() {
                 </span>
               </p>
             </div>
-            {subscriptionType !== '9' && subscriptionType !== '12' && (
-              <div className="inline-block rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
-                <button className="rounded-[50px] bg-white px-4 py-1.5 text-sm hover:bg-gray-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]">
-                  <a
-                    href={import.meta.env.VITE_SIGNUP_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-xs font-semibold whitespace-nowrap text-transparent hover:from-[#3F51B5] hover:to-[#3A91B7] 2xl:text-base dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
-                  >
-                    Upgrade Plan
-                  </a>
-                </button>
-              </div>
-            )}
+            <div className="flex shrink-0 items-center gap-2">
+              {subscriptionType !== '9' && subscriptionType !== '12' && (
+                <div className="inline-block rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
+                  <button className="rounded-[50px] bg-white px-4 py-1.5 text-sm hover:bg-gray-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]">
+                    <a
+                      href={import.meta.env.VITE_SIGNUP_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-xs font-semibold whitespace-nowrap text-transparent hover:from-[#3F51B5] hover:to-[#3A91B7] 2xl:text-base dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
+                    >
+                      Upgrade Plan
+                    </a>
+                  </button>
+                </div>
+              )}
+              {subscriptionType !== '8' && (
+                <a
+                  href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[50px] border border-red-500 bg-red-500 px-4 py-1.5 text-xs font-semibold whitespace-nowrap text-white hover:bg-red-600 2xl:text-base"
+                >
+                  Cancel Subscription
+                </a>
+              )}
+            </div>
 
             {/* ✅ Upgrade button only if topPlan is false */}
             {/* {userData?.featureObject?.planDetails?.topPlan === false && (
