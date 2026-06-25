@@ -11,7 +11,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addImage } from '@/store/reducers/adStudio/promptSlice';
 import { formatUrl } from '@/utils/formatUrl';
 import { FaFacebookF, FaPinterest, FaYoutube, FaLinkedin, FaReddit } from 'react-icons/fa';
-import { SiGoogle } from 'react-icons/si';
+import { SiGoogleads } from 'react-icons/si';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { motion } from 'framer-motion';
 import { FADE_UP_ANIMATION_VARIANT } from '@/utils/ui/framerMotionVariants';
@@ -28,7 +28,7 @@ import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 const networks = {
   instagram: <Instagram className="h-4 w-4" />,
   facebook: <FaFacebookF className="h-4 w-4" />,
-  gdn: <SiGoogle className="h-4 w-4" color="white" />,
+  gdn: <SiGoogleads className="h-4 w-4" />,
   pinterest: <FaPinterest className="h-4 w-4" />,
   youtube: <FaYoutube className="h-4 w-4" />,
   linkedin: <FaLinkedin className="h-4 w-4" />,
@@ -38,7 +38,7 @@ const networks = {
 const networkLabels = {
   instagram: 'Instagram',
   facebook: 'Facebook',
-  gdn: 'Google',
+  gdn: 'Google Display Network',
   pinterest: 'Pinterest',
   youtube: 'YouTube',
   linkedin: 'LinkedIn',

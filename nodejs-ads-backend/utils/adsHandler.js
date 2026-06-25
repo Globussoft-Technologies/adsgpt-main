@@ -289,8 +289,12 @@ exports.processCommonAdsData = (data = [], network) => {
             : [];
 
         const postImage = mediaUrls[0] || "";
-        // Cards render <img>; drop rows without a usable image URL.
-        if (!postImage || !postImage.startsWith("http")) return null;
+        // Drop ads without a usable creative: no URL, non-http, or the "no image"
+        // DefaultImage placeholder (which 404s). Filtering here keeps blank/broken
+        // ads out of the UI entirely — no frontend placeholder and no need to hide
+        // Recreate/preview on them.
+        if (!postImage || !postImage.startsWith("http") || postImage.includes("DefaultImage"))
+          return null;
 
         let extraMedia = ad?.ad_image_video;
         if (typeof extraMedia === "string") {
