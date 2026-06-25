@@ -1,7 +1,7 @@
 require("dotenv").config();
 const client = require("../DB/connect");
 const axios = require('axios')
-const { processAdsAdata, processExploreAdsAdata , processExploreAdsAdataPAS} = require("./adsHandler");
+const { processAdsAdata, processExploreAdsAdata , processExploreAdsAdataPAS, processCommonAdsData} = require("./adsHandler");
 const logger = require("../controllers/Loggers/logs");
 
 const INDEX_NAME = process.env.INDEX_NAME;
@@ -366,24 +366,51 @@ exports.fetchExploreAds = async (from, size, networks, popularity, type, token, 
 
 if((platform || platform.length>0 || platform.length == 0 )|| (competitor && competitor.length>0)){
   let reqNetwork = platform.length > 0 ? platform : ["facebook","instagram"];
-  const actions = {
-    facebook: competitorSearch,
-    instagram: competitorSearchInsta,
-    google:competitorSearchGT,
-    youtube:competitorSearchYT,
-    pinterest: competitorSearchPin,
-    linkedin: competitorSearchLinkedIn,
-    reddit: competitorSearchReddit,
-    google_display_ads: competitorSearchGDN   
-};
-const promises = reqNetwork
-    .filter(p => actions[p]) // Ensure only valid platforms are considered
-    .map(p => actions[p](from, size, p, popularity, type, platform, competitor,searchType)); // Execute each function
 
-if (promises.length > 0) {
-  let adsData = await Promise.all(promises); // Run all functions at the same time
-  return adsData.flat();  // Run all at the same time
-}
+  // Map the ES/platform names the clients send to the common-API network names.
+  // Only Google Display differs ("google_display_ads" -> "gdn").
+  const COMMON_NETWORK_MAP = {
+    facebook: "facebook",
+    instagram: "instagram",
+    google: "google",
+    youtube: "youtube",
+    pinterest: "pinterest",
+    linkedin: "linkedin",
+    reddit: "reddit",
+    google_display_ads: "gdn",
+  };
+
+  // One unified /api/v1/common/ads/search call per network (single network each,
+  // as the API expects), then merge — same per-network shape as before but a
+  // single endpoint instead of the 8 split per-network endpoints.
+  const promises = reqNetwork
+    .map((p) => COMMON_NETWORK_MAP[p])
+    .filter(Boolean)
+    .map((net) => commonSearch(from, size, net, competitor, searchType));
+
+  if (promises.length > 0) {
+    let adsData = await Promise.all(promises);
+    return adsData.flat();
+  }
+
+  // ── OLD: split across 8 per-network poweradspy endpoints (kept for rollback) ──
+  // const actions = {
+  //   facebook: competitorSearch,
+  //   instagram: competitorSearchInsta,
+  //   google:competitorSearchGT,
+  //   youtube:competitorSearchYT,
+  //   pinterest: competitorSearchPin,
+  //   linkedin: competitorSearchLinkedIn,
+  //   reddit: competitorSearchReddit,
+  //   google_display_ads: competitorSearchGDN
+  // };
+  // const promises = reqNetwork
+  //   .filter(p => actions[p])
+  //   .map(p => actions[p](from, size, p, popularity, type, platform, competitor,searchType));
+  // if (promises.length > 0) {
+  //   let adsData = await Promise.all(promises);
+  //   return adsData.flat();
+  // }
 }
 
   const urls = [
@@ -560,6 +587,133 @@ queryVector3 = timeMappings[2].vector;
   } catch (error) {
     console.error('Error fetching ads data:', error.body ? error.body : error.message);
     throw error; 
+  }
+}
+
+// Unified poweradspy ads search — replaces the 8 split per-network endpoints
+// (competitorSearch / competitorSearchInsta / ...). One network per request.
+// Auth: temp Bearer JWT in COMMON_PAS_TOKEN for now; a secret-key middleware
+// will replace it later.
+async function commonSearch(from, size, network, competitor, searchType) {
+  try {
+    const value = Array.isArray(competitor) && competitor.length ? competitor[0] : "NA";
+    const fields = { competitor: "advertiser", domain: "domain", keyword: "keyword" };
+
+    const body = {
+      adBudget: "NA",
+      adBudget_sort: "NA",
+      adDetail_id: "NA",
+      ad_position: "NA",
+      ad_position_filter: "NA",
+      ad_sub_position: "NA",
+      adcategory: "NA",
+      advertiser: "NA",
+      affiliate: "NA",
+      budget: "NA",
+      call_to_action: "NA",
+      city: "NA",
+      commentdata: "NA",
+      comments: "NA",
+      comments_sort: "NA",
+      country: "NA",
+      country_session: 0,
+      ctr: "NA",
+      discoverer_user_id: "NA",
+      domain: "NA",
+      domain_date_btn_sort: "NA",
+      domain_sort: "NA",
+      ecommerce: "NA",
+      exact_search: 0,
+      favorite: "false",
+      funnel: "NA",
+      gender: "NA",
+      gender_activity: "NA",
+      hidden: "false",
+      hits_sort: "NA",
+      html: "NA",
+      html_content: "NA",
+      image_celebrity: "NA",
+      image_logo: "NA",
+      image_object: "NA",
+      impression: "NA",
+      impression_sort: "NA",
+      impressions: "NA",
+      industry: "NA",
+      ipBasedCountry: "NA",
+      keyword: "NA",
+      lang: "NA",
+      language: "en",
+      last_seen_sort: "NA",
+      likes: "NA",
+      likes_sort: "NA",
+      lower_age: "NA",
+      market_platform: "NA",
+      mixdata: "NA",
+      nativeNetwork: "NA",
+      needle: "NA",
+      network: [network],
+      newest_sort: "newest_sort",
+      not_country: "",
+      ocr: "NA",
+      order_by: "desc",
+      order_column: "post_date",
+      page_creation: "NA",
+      platform: "NA",
+      platform_positions: "NA",
+      popularity: "NA",
+      popularity_sort: "NA",
+      post_date_btn_sort: "NA",
+      running_longest_sort: "NA",
+      seen_btn_sort: "NA",
+      selected_user: "NA",
+      shares: "NA",
+      shares_sort: "NA",
+      size: "NA",
+      source: "NA",
+      state: "NA",
+      subCategory: "NA",
+      subscriptionType: "NA",
+      tags: "NA",
+      take: `${size}`,
+      track: "NA",
+      // Image-only surface (cards render <img>); flip to "NA" to include video.
+      // gdn (Google Display, stored as youtube_display) returns 0 for type:"IMAGE",
+      // so it must go unfiltered.
+      type: network === "gdn" ? "NA" : "IMAGE",
+      upper_age: "NA",
+      userSubscription: "NA",
+      userkeyword: false,
+      verified: "NA",
+      version: "NA",
+      view: "NA",
+      views_sort: "NA",
+      // skip = page index, take = page size (same contract as the old endpoints).
+      skip: Math.floor((from || 0) / (size || 10)),
+    };
+
+    const field = fields[searchType] || "advertiser";
+    body[field] = value;
+
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.COMMON_PAS_TOKEN}`,
+    };
+
+    const response = await axios.post(
+      `${process.env.COMMON_PAS_URL}/api/v1/common/ads/search`,
+      body,
+      { headers, timeout: 10000 }
+    );
+
+    const adsData = response.data?.data || [];
+    return processCommonAdsData(adsData, network);
+  } catch (error) {
+    logger.error(
+      `commonSearch error for network ${network}: ${error?.response?.status || ""} ${
+        error?.message || error
+      }`
+    );
+    return [];
   }
 }
 

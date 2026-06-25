@@ -270,6 +270,70 @@ exports.processExploreAdsAdataPAS = async (esData, network) => {
 };
 
 
+// Transform the poweradspy unified /api/v1/common/ads/search `data[]` into the
+// same camelCase shape the explore-ads clients already consume. Unlike
+// processExploreAdsAdataPAS, the unified endpoint returns already-resolved full
+// URLs (https://media.globussoft.com/pas-dev/...), so we must NOT re-prefix them
+// or drop on `.includes('pas')` — we just keep rows that have a usable http image.
+exports.processCommonAdsData = (data = [], network) => {
+  try {
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((ad) => {
+        const mediaUrls =
+          typeof ad?.image_video_url === "string" && ad.image_video_url.includes("||")
+            ? ad.image_video_url.split("||").map((u) => u.trim()).filter(Boolean)
+            : ad?.image_video_url
+            ? [ad.image_video_url]
+            : [];
+
+        const postImage = mediaUrls[0] || "";
+        // Cards render <img>; drop rows without a usable image URL.
+        if (!postImage || !postImage.startsWith("http")) return null;
+
+        let extraMedia = ad?.ad_image_video;
+        if (typeof extraMedia === "string") {
+          try {
+            extraMedia = JSON.parse(extraMedia);
+          } catch {
+            extraMedia = [];
+          }
+        }
+
+        const otherMedia = [
+          ...mediaUrls.slice(1),
+          ...(Array.isArray(extraMedia) ? extraMedia.filter(Boolean) : []),
+        ];
+
+        return {
+          id: ad?.id ?? ad?.ad_id ?? "",
+          // Label by the requested network (one network per request). Needed for
+          // gdn: Google Display ads come back as network:"youtube"
+          // (ad_origin:"youtube_display"), but the user searched Google Display.
+          network: network || ad?.network || "",
+          postOwner: ad?.post_owner || "",
+          postOwnerImage: ad?.post_owner_image || "",
+          postImage,
+          description: ad?.ad_text || "",
+          newsfeedDescription: ad?.news_feed_description || "",
+          adUrl: ad?.ad_url || "",
+          adTitle: ad?.ad_title || "",
+          adType: otherMedia.length > 0 ? "CAROUSAL_AD" : ad?.type || "IMAGE",
+          popularityIndex: 0,
+          lastSeen: ad?.last_seen || "",
+          type: ad?.type || "",
+          otherMedia,
+          popularity: ad?.popularity ?? 0,
+          impression: ad?.impression ?? 0,
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error("Error processing common ads:", error);
+    return [];
+  }
+};
 
 
 async function checkIfBlankImage(imageUrl, thresholdPercentage = 0.005) {
