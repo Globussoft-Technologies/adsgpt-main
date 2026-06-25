@@ -1100,7 +1100,12 @@ const CELLS = {
         objectStorySpecShape: "app_link",
       },
       ctas: {
-        allowed: ["USE_APP", "USE_MOBILE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
+        // USE_MOBILE_APP previously here too — same Meta enum behavior,
+        // same "Use app" display label as USE_APP → rendered as a
+        // duplicate entry in the dropdown. Keep USE_APP (the canonical
+        // one used here historically). Leads/APP keeps USE_MOBILE_APP
+        // because Meta defaults to that one specifically there.
+        allowed: ["USE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
         default: "USE_APP",
       },
       identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
@@ -1462,7 +1467,12 @@ const CELLS = {
         objectStorySpecShape: "app_link",
       },
       ctas: {
-        allowed: ["USE_APP", "USE_MOBILE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
+        // USE_MOBILE_APP previously here too — same Meta enum behavior,
+        // same "Use app" display label as USE_APP → rendered as a
+        // duplicate entry in the dropdown. Keep USE_APP (the canonical
+        // one used here historically). Leads/APP keeps USE_MOBILE_APP
+        // because Meta defaults to that one specifically there.
+        allowed: ["USE_APP", "DOWNLOAD", "LEARN_MORE", "SHOP_NOW"],
         default: "USE_APP",
       },
       identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
