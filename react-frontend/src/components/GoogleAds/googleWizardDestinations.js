@@ -73,3 +73,40 @@ export function destinationLabel(destination, schema, objectives = []) {
 export function objectiveLabel(objective, objectives = []) {
   return objectives.find((o) => o.value === objective)?.label || objective;
 }
+
+/** Get goal options for an objective from the schema (or empty array). */
+export function getGoalsForObjective(objective, schema) {
+  if (!objective || !schema?.objectiveGoals) return [];
+  return schema.objectiveGoals[objective] || [];
+}
+
+/**
+ * Returns the allowed destination values for a given goal.
+ * Uses schema.goalDestinations when available, falls back to client-side map.
+ * Returns null when goal has no restriction (show all objective destinations).
+ */
+const GOAL_DESTINATIONS_FALLBACK = {
+  PURCHASE:      ["SEARCH", "PERFORMANCE_MAX", "SHOPPING"],
+  SUBSCRIPTION:  ["SEARCH", "PERFORMANCE_MAX"],
+  ADD_TO_CART:   ["SEARCH", "PERFORMANCE_MAX", "SHOPPING"],
+  CHECKOUT:      ["SEARCH", "PERFORMANCE_MAX"],
+  LEAD_FORM:     ["SEARCH", "PERFORMANCE_MAX", "DISPLAY"],
+  PHONE_CALL:    ["SEARCH"],
+  BOOK_DEMO:     ["SEARCH", "DISPLAY"],
+  CONTACT_FORM:  ["SEARCH", "PERFORMANCE_MAX", "DISPLAY"],
+  PAGE_VIEW:          ["SEARCH", "DISPLAY", "PERFORMANCE_MAX", "YOUTUBE_REACH"],
+  LANDING_PAGE_VIEW:  ["SEARCH", "PERFORMANCE_MAX"],
+  WEBSITE_VISIT:      ["SEARCH", "DISPLAY", "PERFORMANCE_MAX", "YOUTUBE_REACH"],
+  INSTALL:       ["APP_PROMOTION"],
+  REGISTRATION:  ["APP_PROMOTION"],
+  IN_APP_ACTION: ["APP_PROMOTION"],
+  REACH:           ["YOUTUBE_REACH"],
+  IMPRESSIONS:     ["YOUTUBE_REACH"],
+  BRAND_AWARENESS: ["YOUTUBE_REACH"],
+};
+
+export function getDestinationsForGoal(goal, schema) {
+  if (!goal) return null;
+  const map = schema?.goalDestinations || GOAL_DESTINATIONS_FALLBACK;
+  return map[goal] || null;
+}

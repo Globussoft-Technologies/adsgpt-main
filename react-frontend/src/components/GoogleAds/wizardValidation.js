@@ -16,6 +16,52 @@ const toNumber = (v) => {
   return Number.isFinite(n) ? n : NaN;
 };
 
+/**
+ * Extracts the root domain (eTLD+1) from a URL hostname.
+ * shop.example.com → example.com
+ * www.example.com  → example.com
+ * example.com      → example.com
+ */
+const MULTI_LEVEL_TLDS = new Set([
+  'co.uk','co.in','co.jp','co.nz','co.za','co.kr','co.au',
+  'com.au','com.br','com.mx','com.ar','com.tr','com.sg','com.my','com.ph',
+  'org.uk','net.au','gov.au','gov.uk',
+]);
+
+function extractRootDomain(url) {
+  try {
+    const { hostname } = new URL(String(url).trim());
+    const parts = hostname.toLowerCase().split('.');
+    if (parts.length >= 3) {
+      const candidate = parts.slice(-2).join('.');
+      if (MULTI_LEVEL_TLDS.has(candidate)) return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Campaign domain policy: every ad's Final URL must share the same root domain
+ * as the campaign website URL.
+ *
+ * ✅ example.com, www.example.com, shop.example.com  → root = example.com
+ * ❌ example2.com, otherdomain.com                   → different root → blocked
+ *
+ * Returns an error string or null if valid / not checkable.
+ */
+function validateFinalUrlDomain(finalUrl, websiteUrl) {
+  if (!finalUrl || !websiteUrl) return null;
+  const adRoot   = extractRootDomain(finalUrl);
+  const siteRoot = extractRootDomain(websiteUrl);
+  if (!adRoot || !siteRoot) return null;
+  if (adRoot !== siteRoot) {
+    return `Final URL domain (${adRoot}) does not match the campaign domain (${siteRoot}). Subdomains like shop.${siteRoot} are allowed, but ${adRoot} is a different domain and will be rejected by Google.`;
+  }
+  return null;
+}
+
 const isPositive = (v) => {
   const n = toNumber(v);
   return Number.isFinite(n) && n > 0;
@@ -85,14 +131,6 @@ function validateCampaign(form) {
     e.campaignName = 'Campaign name must be 120 characters or fewer.';
   }
 
-  if (isBlank(form.dailyBudget)) {
-    e.dailyBudget = 'Daily budget is required.';
-  } else if (!isPositive(form.dailyBudget)) {
-    e.dailyBudget = 'Daily budget must be a positive amount.';
-  } else if (toNumber(form.dailyBudget) * 1_000_000 < 10_000) {
-    e.dailyBudget = 'Daily budget must be at least ₹0.01 per day.';
-  }
-
   if (!isBlank(form.endDate) && !isBlank(form.startDate)) {
     if (new Date(form.endDate) <= new Date(form.startDate)) {
       e.endDate = 'End date must be after the start date.';
@@ -130,24 +168,42 @@ function validateCampaign(form) {
   }
 
   if (channel === 'PERFORMANCE_MAX') {
-    if (isBlank(form.assetGroupName))
-      e.assetGroupName = 'Asset group name is required.';
     if (isBlank(form.pmaxFinalUrl))
       e.pmaxFinalUrl = 'Landing page URL is required.';
     else if (!isHttpUrl(form.pmaxFinalUrl))
       e.pmaxFinalUrl = 'Enter a valid URL (https://…).';
-    if (isBlank(form.pmaxBusinessName))
-      e.pmaxBusinessName = 'Business name is required.';
-    const heads = (form.pmaxHeadlines || []).filter((h) => h && h.trim());
-    if (heads.length < 3)
-      e.pmaxHeadlines = 'At least 3 headlines are required.';
-    else if ([...new Set(heads.map((h) => h.toLowerCase()))].length < heads.length)
-      e.pmaxHeadlines = 'Headlines must be unique.';
-    const descs = (form.pmaxDescriptions || []).filter((d) => d && d.trim());
-    if (descs.length < 2)
-      e.pmaxDescriptions = 'At least 2 descriptions are required.';
+    else {
+      const domainErr = validateFinalUrlDomain(form.pmaxFinalUrl, form.websiteUrl);
+      if (domainErr) e.pmaxFinalUrl = domainErr;
+    }
   }
 
+  return e;
+}
+
+function validateAssets(form) {
+  const e = {};
+  if (isBlank(form.assetGroupName))
+    e.assetGroupName = 'Asset group name is required.';
+  // pmaxBusinessName is optional — backend auto-fetches from Google account if omitted
+  const heads = (form.pmaxHeadlines || []).filter((h) => h && h.trim());
+  const allSlotsFilled = (form.pmaxHeadlines || []).every((h) => h && h.trim());
+  if (heads.length < 3)
+    e.pmaxHeadlines = `Fill in all ${form.pmaxHeadlines?.length || 3} headline fields (${heads.length}/${form.pmaxHeadlines?.length || 3} filled).`;
+  else if (!allSlotsFilled)
+    e.pmaxHeadlines = 'All headline fields must be filled in.';
+  else if ([...new Set(heads.map((h) => h.toLowerCase()))].length < heads.length)
+    e.pmaxHeadlines = 'Headlines must be unique.';
+  if (isBlank(form.pmaxLongHeadline))
+    e.pmaxLongHeadline = 'Long headline is required by Google (min 1, max 90 chars).';
+  else if (String(form.pmaxLongHeadline).trim().length > 90)
+    e.pmaxLongHeadline = 'Long headline must be 90 characters or fewer.';
+  const descs = (form.pmaxDescriptions || []).filter((d) => d && d.trim());
+  if (descs.length < 2)
+    e.pmaxDescriptions = `Fill in both description fields (${descs.length}/2 filled).`;
+  // At least one media asset required: image (URL or uploaded) or YouTube video
+  if (isBlank(form.pmaxImageUrl) && isBlank(form.pmaxImageAssetRN) && isBlank(form.pmaxVideoUrl))
+    e.pmaxMedia = 'Add at least one media asset — an image or a YouTube video.';
   return e;
 }
 
@@ -167,27 +223,20 @@ function validateAdGroup(form) {
     e.cpcBid = 'CPC bid must be a positive amount.';
   }
 
-  if (!isBlank(form.ageMin)) {
-    const v = toNumber(form.ageMin);
-    if (!Number.isFinite(v) || v < 18 || v > 65) e.ageMin = 'Age must be between 18 and 65.';
-  }
-  if (!isBlank(form.ageMax)) {
-    const v = toNumber(form.ageMax);
-    if (!Number.isFinite(v) || v < 18 || v > 65) e.ageMax = 'Age must be between 18 and 65.';
-  }
-  if (!isBlank(form.ageMin) && !isBlank(form.ageMax)) {
-    if (toNumber(form.ageMax) < toNumber(form.ageMin)) {
-      e.ageMax = 'Max age must be greater than or equal to min age.';
-    }
-  }
-
   // ── Objective-specific ad group fields ────────────────────────────────────
   const SEARCH_OBJECTIVES = new Set(['SALES', 'LEADS', 'WEBSITE_TRAFFIC', 'SEARCH', 'LOCAL_STORE']);
   if (SEARCH_OBJECTIVES.has(channel)) {
-    // At least one non-empty keyword required
     const hasKeyword = form.keywords?.some((k) => !isBlank(k.text));
     if (!hasKeyword) e.keywords = 'Add at least one keyword.';
+  }
 
+  if (channel === 'DISPLAY') {
+    if (!isBlank(form.frequencyCap) && toNumber(form.frequencyCap) < 1)
+      e.frequencyCap = 'Frequency cap must be at least 1.';
+  }
+
+  const BIDDING_CHANNELS = new Set(['SALES', 'LEADS', 'WEBSITE_TRAFFIC', 'SEARCH', 'LOCAL_STORE', 'DISPLAY']);
+  if (BIDDING_CHANNELS.has(channel)) {
     if (form.biddingGoal === 'TARGET_CPA') {
       if (isBlank(form.targetCpa) || !isPositive(form.targetCpa))
         e.targetCpa = 'Target CPA amount is required and must be positive.';
@@ -196,11 +245,6 @@ function validateAdGroup(form) {
       if (isBlank(form.targetRoas) || !isPositive(form.targetRoas))
         e.targetRoas = 'Target ROAS % is required and must be positive.';
     }
-  }
-
-  if (channel === 'DISPLAY') {
-    if (!isBlank(form.frequencyCap) && toNumber(form.frequencyCap) < 1)
-      e.frequencyCap = 'Frequency cap must be at least 1.';
   }
 
   return e;
@@ -241,6 +285,9 @@ function validateAd(form, adType) {
       e.finalUrl = 'Landing page URL is required.';
     } else if (!isHttpUrl(form.finalUrl)) {
       e.finalUrl = 'Enter a valid URL (https://…).';
+    } else {
+      const domainErr = validateFinalUrlDomain(form.finalUrl, form.websiteUrl);
+      if (domainErr) e.finalUrl = domainErr;
     }
   }
 
@@ -265,6 +312,9 @@ function validateAd(form, adType) {
       e.finalUrl = 'Landing page URL is required.';
     } else if (!isHttpUrl(form.finalUrl)) {
       e.finalUrl = 'Enter a valid URL (https://…).';
+    } else {
+      const domainErr = validateFinalUrlDomain(form.finalUrl, form.websiteUrl);
+      if (domainErr) e.finalUrl = domainErr;
     }
   }
 
@@ -277,6 +327,9 @@ function validateAd(form, adType) {
       e.finalUrl = 'Landing page URL is required.';
     } else if (!isHttpUrl(form.finalUrl)) {
       e.finalUrl = 'Enter a valid URL (https://…).';
+    } else {
+      const domainErr = validateFinalUrlDomain(form.finalUrl, form.websiteUrl);
+      if (domainErr) e.finalUrl = domainErr;
     }
 
     if (isBlank(form.headline)) {
@@ -296,21 +349,84 @@ function validateAd(form, adType) {
   return e;
 }
 
+// ── Goal ───────────────────────────────────────────────────────────────────────
+function validateGoal(form, schema) {
+  const goals = schema?.objectiveGoals?.[form.objective] || [];
+  if (!goals.length) return {};
+  if (isBlank(form.goal)) return { goal: 'Select a conversion goal to continue.' };
+  return {};
+}
+
+// ── Audience ───────────────────────────────────────────────────────────────────
+function validateAudience(form) {
+  const e = {};
+  if (!isBlank(form.ageMin)) {
+    const v = toNumber(form.ageMin);
+    if (!Number.isFinite(v) || v < 18 || v > 65) e.ageMin = 'Age must be between 18 and 65.';
+  }
+  if (!isBlank(form.ageMax)) {
+    const v = toNumber(form.ageMax);
+    if (!Number.isFinite(v) || v < 18 || v > 65) e.ageMax = 'Age must be between 18 and 65.';
+  }
+  if (!isBlank(form.ageMin) && !isBlank(form.ageMax)) {
+    if (toNumber(form.ageMax) < toNumber(form.ageMin)) {
+      e.ageMax = 'Max age must be greater than or equal to min age.';
+    }
+  }
+  return e;
+}
+
+// ── Budget ─────────────────────────────────────────────────────────────────────
+function validateBudget(form) {
+  const e = {};
+  if (form.budgetType === 'CAMPAIGN_TOTAL') {
+    if (isBlank(form.lifetimeBudget)) {
+      e.lifetimeBudget = 'Campaign total budget is required.';
+    } else if (!isPositive(form.lifetimeBudget)) {
+      e.lifetimeBudget = 'Campaign total budget must be a positive amount.';
+    }
+    if (isBlank(form.startDate)) {
+      e.startDate = 'A start date is required for campaign total budget.';
+    }
+    if (isBlank(form.endDate)) {
+      e.endDate = 'An end date is required for campaign total budget.';
+    }
+  } else {
+    if (isBlank(form.dailyBudget)) {
+      e.dailyBudget = 'Daily budget is required.';
+    } else if (!isPositive(form.dailyBudget)) {
+      e.dailyBudget = 'Daily budget must be a positive amount.';
+    } else if (toNumber(form.dailyBudget) * 1_000_000 < 10_000) {
+      e.dailyBudget = 'Daily budget must be at least ₹0.01 per day.';
+    }
+  }
+
+  return e;
+}
+
 /**
  * Validate one wizard step.
- * @param {string} stepId   'objective' | 'campaign' | 'adGroup' | 'ad' | 'review'
+ * @param {string} stepId   'objective' | 'destination' | 'goal' | 'campaign' | 'audience' | 'budget' | 'adGroup' | 'ad' | 'review'
  * @param {object} form     current form state
  * @param {string} adType   'SEARCH' | 'DISPLAY' | 'DEMAND_GEN' (required for ad step)
+ * @param {object} schema   wizard schema from server
  */
 export function validateStep(stepId, form, adType, schema) {
   switch (stepId) {
-    case 'objective':  return validateObjective(form);
-    case 'destination': return validateDestination(form, schema);
-    case 'campaign':   return validateCampaign(form);
-    case 'adGroup':    return validateAdGroup(form);
-    case 'ad':         return effectiveChannel(form) === 'SHOPPING' ? {} : validateAd(form, adType || deriveAdType(effectiveChannel(form)));
-    case 'review':     return {};
-    default:           return {};
+    case 'objective':    return { ...validateObjective(form), ...validateGoal(form, schema) };
+    case 'destination':  return validateDestination(form, schema);
+    case 'campaign':     return {
+      ...validateObjective(form),
+      ...validateDestination(form, schema),
+      ...validateGoal(form, schema),
+      ...validateCampaign(form),
+      ...validateBudget(form),
+    };
+    case 'assets':       return validateAssets(form);
+    case 'adGroup':      return { ...validateAdGroup(form), ...validateAudience(form) };
+    case 'ad':           return effectiveChannel(form) === 'SHOPPING' ? {} : validateAd(form, adType || deriveAdType(effectiveChannel(form)));
+    case 'review':       return {};
+    default:             return {};
   }
 }
 

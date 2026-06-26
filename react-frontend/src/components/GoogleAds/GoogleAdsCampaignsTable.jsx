@@ -14,9 +14,11 @@ import {
   DollarSign,
   Image as ImageIcon,
   Play,
+  Pause,
   X,
   ExternalLink,
   RefreshCw,
+  Layers,
 } from 'lucide-react';
 import {
   getGoogleAdGroups,
@@ -25,6 +27,10 @@ import {
   updateGoogleAdStatus,
   deleteGoogleCampaign,
   deleteGoogleAd,
+  deleteGoogleAdGroup,
+  addAssetToAssetGroup,
+  removeAssetFromAssetGroup,
+  uploadGoogleImage,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
@@ -149,17 +155,21 @@ function GoogleServingStatus({ status, primaryStatus, servingStatus, approvalSta
 
 function ToggleSwitch({ status, onToggle, toggling }) {
   const isActive = status === 'ENABLED';
+  // Only ENABLED and PAUSED can be toggled — other statuses are controlled by Google
+  const canToggle = status === 'ENABLED' || status === 'PAUSED';
+  if (!canToggle) return null;
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
       disabled={toggling}
+      title={isActive ? 'Pause' : 'Enable'}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200
-        ${isActive ? 'bg-emerald-500' : 'bg-red-500'}
+        ${isActive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/20'}
         ${toggling ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
       <span
-        className={`absolute top-1 left-1 h-3 w-3 rounded-full shadow transition-transform duration-200
-          ${isActive ? 'translate-x-4 bg-white' : 'translate-x-0 bg-white'}`}
+        className={`absolute top-1 left-1 h-3 w-3 rounded-full bg-white shadow transition-transform duration-200
+          ${isActive ? 'translate-x-4' : 'translate-x-0'}`}
       />
     </button>
   );
@@ -397,14 +407,11 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   </td>
                   {/* status — Google-style serving status */}
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <GoogleServingStatus
-                        status={status}
-                        primaryStatus={getPrimaryStatus(c)}
-                        servingStatus={c.servingStatus}
-                      />
-                      <ToggleSwitch status={status} onToggle={() => handleToggle(c)} toggling={!!toggling[id]} />
-                    </div>
+                    <GoogleServingStatus
+                      status={status}
+                      primaryStatus={getPrimaryStatus(c)}
+                      servingStatus={c.servingStatus}
+                    />
                   </td>
                   {/* objective */}
                   <td className="px-4 py-4">
@@ -424,6 +431,16 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   {/* actions */}
                   <td className="pr-5 pl-2 py-4">
                     <div className="flex items-center justify-end gap-1.5">
+                      {(status === 'ENABLED' || status === 'PAUSED') && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggle(c); }}
+                          disabled={!!toggling[id]}
+                          title={status === 'ENABLED' ? 'Pause campaign' : 'Enable campaign'}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                        >
+                          {toggling[id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : status === 'ENABLED' ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
                       {onLaunchWizard && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-campaign', { campaignId: id, objective: c.objective, destination: c.channelType || c.objective, campaignName: c.name, dailyBudget: budget || '', status: c.status, startDate: c.startDate || c.start_time, endDate: c.endDate || c.end_time }); }}
@@ -436,7 +453,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                       <button
                         onClick={(e) => { e.stopPropagation(); setPendingDelete(c); }}
                         title="Delete campaign"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-400 transition-all hover:border-red-300 hover:bg-red-100 hover:text-red-600 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400/60 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -466,6 +483,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 // ─── ad group table (level 2) ─────────────────────────────────────────────────
 
 function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce }) {
+  const isPmax = String(campaign.objective || campaign.channelType || '').toUpperCase().includes('PERFORMANCE_MAX');
   const [adGroups,     setAdGroups]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
@@ -473,6 +491,8 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
   const [statuses,        setStatuses]        = useState({});
   const [primaryStatuses, setPrimaryStatuses] = useState({});
   const [toggling,        setToggling]        = useState({});
+  const [pendingDelete,   setPendingDelete]   = useState(null);
+  const [deleting,        setDeleting]        = useState(false);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(adGroups, 'name');
 
   const handleRefresh = () => { setRefreshing(true); setRefreshNonce((n) => n + 1); };
@@ -480,7 +500,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getGoogleAdGroups({ adAccountId, campaignId: campaign.campaignId || campaign.id, refresh: true })
+    getGoogleAdGroups({ adAccountId, campaignId: campaign.campaignId || campaign.id, channelType: campaign.channelType || campaign.objective, refresh: true })
       .then((r) => { if (!cancelled) setAdGroups(r.adGroups || []); })
       .catch((e) => {
         if (!cancelled) {
@@ -512,13 +532,48 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
     finally  { setToggling((p) => ({ ...p, [id]: false })); }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteGoogleAdGroup({ adAccountId, adGroupId: pendingDelete.adGroupId || pendingDelete.id, campaignId: campaign.campaignId || campaign.id, isPmax });
+      setAdGroups((prev) => prev.filter((g) => (g.adGroupId || g.id) !== (pendingDelete.adGroupId || pendingDelete.id)));
+      globalToast.success(isPmax ? 'Asset group deleted' : 'Ad group deleted');
+      setPendingDelete(null);
+    } catch (err) { globalToast.error(err?.response?.data?.error || 'Failed to delete'); }
+    finally { setDeleting(false); }
+  };
+
   return (
+    <>
+    {pendingDelete && (
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#1a1a1a]">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Delete {isPmax ? 'Asset Group' : 'Ad Group'}?</p>
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-white/50">
+            <span className="font-semibold text-gray-700 dark:text-white/80">"{pendingDelete.name}"</span> will be permanently deleted.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button onClick={() => setPendingDelete(null)} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60">Cancel</button>
+            <button onClick={handleConfirmDelete} disabled={deleting} className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60">
+              {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
-          Ad groups in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
+          {isPmax ? 'Asset groups' : 'Ad groups'} in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
         </p>
         <div className="flex items-center gap-2">
+          {isPmax && (
+            <span className="inline-flex items-center rounded-full border border-[#4285F4]/30 bg-[#4285F4]/10 px-2.5 py-0.5 text-10 font-semibold text-[#4285F4]">
+              Performance Max
+            </span>
+          )}
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -527,9 +582,15 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
             <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
-          {onLaunchWizard && (
+          {onLaunchWizard && !isPmax && (
             <AddButton
               label="Add Ad Group"
+              onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
+            />
+          )}
+          {onLaunchWizard && isPmax && (
+            <AddButton
+              label="New Asset Group"
               onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
             />
           )}
@@ -539,12 +600,12 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
         <table className="w-full min-w-150 border-collapse">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
-              <SortTh label="Ad Group"   colKey="name"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[35%] pl-5" />
+              <SortTh label={isPmax ? 'Asset Group' : 'Ad Group'} colKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[35%] pl-5" />
               <SortTh label="Status"     colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Type"       colKey="type"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Bidding"    colKey="biddingGoal"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Max CPC"    colKey="cpcBidMicros" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              {onLaunchWizard && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
+              {onLaunchWizard && <th className="w-24 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -552,7 +613,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
               <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><EmptyState message="No ad groups in this campaign" /></td></tr>
+              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><EmptyState message={isPmax ? 'No asset groups in this campaign' : 'No ad groups in this campaign'} /></td></tr>
             )}
             {sorted.map((g, idx) => {
               const id     = g.adGroupId || g.id;
@@ -601,13 +662,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
                   </td>
                   {/* status */}
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <GoogleServingStatus status={status} primaryStatus={getPrimaryStatus(g)} servingStatus={g.servingStatus} />
-                      {g.isPmax || g.type === 'ASSET_GROUP'
-                        ? <span title="Pause via campaign" className="text-10 text-gray-400 dark:text-white/30 italic">PMax</span>
-                        : <ToggleSwitch status={status} onToggle={() => handleToggle(g)} toggling={!!toggling[id]} />
-                      }
-                    </div>
+                    <GoogleServingStatus status={status} primaryStatus={getPrimaryStatus(g)} servingStatus={g.servingStatus} />
                   </td>
                   {/* type */}
                   <td className="px-4 py-4">
@@ -630,13 +685,33 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
                   </td>
                   {onLaunchWizard && (
                     <td className="pr-5 pl-2 py-4">
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* pause/enable — only for regular ad groups, not PMAX asset groups */}
+                        {!isPmax && (status === 'ENABLED' || status === 'PAUSED') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleToggle(g); }}
+                            disabled={!!toggling[id]}
+                            title={status === 'ENABLED' ? 'Pause ad group' : 'Enable ad group'}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                          >
+                            {toggling[id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : status === 'ENABLED' ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                        {!isPmax && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-adgroup', { campaignId: campaign.campaignId || campaign.id, adGroupId: id, adGroupName: g.name, cpcBid: cpc || '', status: g.status, objective: campaign.objective, destination: campaign.channelType || campaign.objective }); }}
+                            title="Edit ad group"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-adgroup', { campaignId: campaign.campaignId || campaign.id, adGroupId: id, adGroupName: g.name, cpcBid: cpc || '', status: g.status, objective: campaign.objective, destination: campaign.channelType || campaign.objective }); }}
-                          title="Edit ad group"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+                          onClick={(e) => { e.stopPropagation(); setPendingDelete(g); }}
+                          title={isPmax ? 'Delete asset group' : 'Delete ad group'}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-400 transition-all hover:border-red-300 hover:bg-red-100 hover:text-red-600 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400/60 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>
@@ -648,14 +723,16 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
         </table>
       </div>
     </div>
+    </>
   );
 }
 
 // ─── ad preview drawer ────────────────────────────────────────────────────────
 
-function GoogleAdDrawer({ ad, adAccountId, onClose }) {
-  const [currentStatus, setCurrentStatus] = useState(ad.status);
+function GoogleAdDrawer({ ad, adAccountId, onClose, onStatusChange }) {
+  const [localStatus, setLocalStatus] = useState(null);
   const [toggling, setToggling] = useState(false);
+  const currentStatus = localStatus ?? ad.status;
   const ctaLabel = labelGoogleCTA(ad.callToAction);
   const headline = adCopyText(ad.longHeadline) || adCopyText(ad.headline) || adCopyText(ad.headlines?.[0]);
   const body = adCopyText(ad.description) || adCopyText(ad.descriptions?.[0]);
@@ -672,7 +749,8 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
     setToggling(true);
     try {
       await updateGoogleAdStatus({ level: 'ad', id, adAccountId, adGroupId: ad.adGroupId, status: next });
-      setCurrentStatus(next);
+      setLocalStatus(next);
+      onStatusChange?.(id, next);
       globalToast.success('Ad status updated');
     } catch {
       globalToast.error('Failed to update ad status');
@@ -885,9 +963,283 @@ function GoogleAdDrawer({ ad, adAccountId, onClose }) {
   );
 }
 
+// ─── PMAX asset group detail view ─────────────────────────────────────────────
+
+function PmaxAssetGroupDetail({ adGroup, adAccountId, manageNonce }) {
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [nonce,       setNonce]       = useState(0);
+  const [deletingRN,  setDeletingRN]  = useState(null); // assetRN being deleted
+  const [addingSection, setAddingSection] = useState(null); // 'headline'|'description'|'image'|'logo'
+  const [addText,     setAddText]     = useState('');
+  const [addingFile,  setAddingFile]  = useState(null);
+  const [saving,      setSaving]      = useState(false);
+
+  const agId = adGroup.adGroupId || adGroup.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getGoogleAdGroupAds({ adAccountId, adGroupId: agId, refresh: true })
+      .then((r) => { if (!cancelled) { const item = (r.ads || [])[0] || null; setData(item); } })
+      .catch(() => { if (!cancelled) setData(null); })
+      .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
+    return () => { cancelled = true; };
+  }, [agId, adAccountId, manageNonce, nonce]);
+
+  const refresh = () => { setRefreshing(true); setNonce(n => n + 1); };
+
+  const handleDeleteAsset = async (asset) => {
+    if (!asset?.assetRN) { globalToast.error('Asset resource name not available'); return; }
+    setDeletingRN(asset.assetRN);
+    try {
+      await removeAssetFromAssetGroup({
+        adAccountId,
+        assetGroupId: agId,
+        assetResourceName: asset.assetRN,
+        fieldType: asset.fieldType,
+      });
+      globalToast.success('Asset removed');
+      refresh();
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.response?.data?.details || e?.message || 'Failed to remove asset';
+      globalToast.error(msg);
+    } finally {
+      setDeletingRN(null);
+    }
+  };
+
+  const handleAddAsset = async () => {
+    if (!addingSection) return;
+    const isImage = addingSection === 'image' || addingSection === 'logo';
+    if (isImage && !addingFile) { globalToast.error('Select an image file'); return; }
+    if (!isImage && !addText.trim()) { globalToast.error('Enter text'); return; }
+    setSaving(true);
+    try {
+      const fieldTypeMap = {
+        headline: 'HEADLINE',
+        description: 'DESCRIPTION',
+        image: 'MARKETING_IMAGE',
+        logo: 'LOGO',
+      };
+      const fieldType = fieldTypeMap[addingSection];
+      let imageAssetRN;
+      if (isImage) {
+        const uploaded = await uploadGoogleImage({ adAccountId, imageFile: addingFile });
+        imageAssetRN = fieldType === 'LOGO'
+          ? (uploaded.squareAssetResourceName || uploaded.assetResourceName)
+          : (uploaded.assetResourceName || uploaded.squareAssetResourceName);
+        if (!imageAssetRN) throw new Error('Image upload did not return an asset resource name');
+      }
+      await addAssetToAssetGroup({
+        adAccountId,
+        assetGroupId: agId,
+        fieldType,
+        ...(isImage ? { imageAssetRN } : { text: addText.trim() }),
+      });
+      globalToast.success('Asset added');
+      setAddingSection(null);
+      setAddText('');
+      setAddingFile(null);
+      refresh();
+    } catch (e) {
+      globalToast.error(e?.response?.data?.message || e?.response?.data?.error || e?.response?.data?.details || e?.message || 'Failed to add asset');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelAdd = () => { setAddingSection(null); setAddText(''); setAddingFile(null); };
+
+  const renderAddRow = (section) => {
+    const isImage = section === 'image' || section === 'logo';
+    if (addingSection !== section) {
+      return (
+        <button onClick={() => setAddingSection(section)}
+          className="mt-2 flex items-center gap-1 rounded-lg border border-dashed border-gray-300 px-2.5 py-1.5 text-xs text-gray-400 transition hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/15 dark:text-white/35 dark:hover:border-[#4285F4]/50 dark:hover:text-[#4285F4]">
+          <Plus className="h-3 w-3" /> Add
+        </button>
+      );
+    }
+    return (
+      <div className="mt-2 flex items-center gap-1.5">
+        {isImage ? (
+          <input type="file" accept="image/*" onChange={(e) => setAddingFile(e.target.files?.[0] || null)}
+            className="text-xs text-gray-600 dark:text-white/60 file:mr-2 file:rounded file:border-0 file:bg-[#4285F4]/10 file:px-2 file:py-0.5 file:text-xs file:text-[#4285F4]" />
+        ) : (
+          <input value={addText} onChange={(e) => setAddText(e.target.value)}
+            placeholder={`Enter ${section}…`} maxLength={section === 'headline' ? 30 : 90}
+            className="flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs outline-none focus:border-[#4285F4] dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-[#4285F4]/60" />
+        )}
+        <button onClick={handleAddAsset} disabled={saving}
+          className="rounded-lg bg-[#4285F4] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50 hover:bg-[#3b78e7]">
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+        </button>
+        <button onClick={cancelAdd} className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-white/50 dark:hover:bg-white/5">
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-16"><Spinner /></div>;
+  if (!data) return (
+    <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-white/30">
+      <Layers className="mb-2 h-8 w-8 opacity-40" />
+      <p className="text-sm">No assets found in this asset group</p>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      {/* header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">{data.name || adGroup.name}</p>
+          {data.finalUrls?.[0] && (
+            <a href={data.finalUrls[0]} target="_blank" rel="noopener noreferrer"
+              className="mt-0.5 block truncate text-xs text-[#4285F4] hover:underline max-w-xs">
+              {data.finalUrls[0]}
+            </a>
+          )}
+        </div>
+        <button onClick={refresh} disabled={refreshing}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:bg-white/8 disabled:opacity-50">
+          <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Headlines */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+          <p className="mb-2 text-10 font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">Headlines</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(data.headlines || []).map((h, i) => {
+              const text = typeof h === 'object' ? h.text : h;
+              const isDeleting = deletingRN && h?.assetRN === deletingRN;
+              return (
+                <span key={i} className="group relative flex items-center gap-1 rounded-full bg-[#4285F4]/10 px-2.5 py-1 text-xs font-medium text-[#4285F4] dark:bg-[#4285F4]/15">
+                  {text}
+                  {h?.assetRN && (
+                    <button onClick={() => handleDeleteAsset(h)} disabled={isDeleting}
+                      className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 disabled:opacity-50">
+                      {isDeleting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <X className="h-2.5 w-2.5" />}
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          {renderAddRow('headline')}
+        </div>
+
+        {/* Descriptions */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+          <p className="mb-2 text-10 font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">Descriptions</p>
+          <div className="flex flex-col gap-1.5">
+            {(data.descriptions || []).map((d, i) => {
+              const text = typeof d === 'object' ? d.text : d;
+              const isDeleting = deletingRN && d?.assetRN === deletingRN;
+              return (
+                <div key={i} className="group flex items-start justify-between gap-2">
+                  <p className="text-xs text-gray-600 dark:text-white/70">{text}</p>
+                  {d?.assetRN && (
+                    <button onClick={() => handleDeleteAsset(d)} disabled={isDeleting}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 disabled:opacity-50">
+                      {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {renderAddRow('description')}
+        </div>
+
+        {/* Images */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+          <p className="mb-2 text-10 font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">Images</p>
+          <div className="flex flex-wrap gap-2">
+            {(data.images || []).map((img, i) => {
+              const isDeleting = deletingRN && img?.assetRN === deletingRN;
+              return (
+                <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200 dark:border-white/10"
+                  style={{ width: img.fieldType === 'SQUARE_MARKETING_IMAGE' ? 80 : 120, height: 64 }}>
+                  <img src={img.url} alt={img.fieldType} className="h-full w-full object-cover" />
+                  <span className="absolute bottom-0.5 left-0.5 rounded bg-black/50 px-1 py-px text-[9px] text-white">
+                    {img.fieldType === 'SQUARE_MARKETING_IMAGE' ? '1:1' : img.fieldType === 'MARKETING_IMAGE' ? '1.91:1' : img.fieldType}
+                  </span>
+                  {img?.assetRN && (
+                    <button onClick={() => handleDeleteAsset(img)} disabled={isDeleting}
+                      className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-600/80 disabled:opacity-50">
+                      {isDeleting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Trash2 className="h-2.5 w-2.5" />}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {renderAddRow('image')}
+        </div>
+
+        {/* Logos */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+          <p className="mb-2 text-10 font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">Logos</p>
+          <div className="flex flex-wrap gap-2">
+            {(data.logos || []).map((logo, i) => {
+              const isDeleting = deletingRN && logo?.assetRN === deletingRN;
+              return (
+                <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200 dark:border-white/10" style={{ width: 64, height: 64 }}>
+                  <img src={logo.url} alt="logo" className="h-full w-full object-contain" />
+                  {logo?.assetRN && (
+                    <button onClick={() => handleDeleteAsset(logo)} disabled={isDeleting}
+                      className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-600/80 disabled:opacity-50">
+                      {isDeleting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Trash2 className="h-2.5 w-2.5" />}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {renderAddRow('logo')}
+        </div>
+      </div>
+
+      {/* empty assets notice */}
+      {!data.headlines?.length && !data.descriptions?.length && !data.images?.length && !data.logos?.length && (
+        <div className="flex flex-col items-center justify-center py-10 text-gray-400 dark:text-white/30">
+          <Layers className="mb-2 h-7 w-7 opacity-40" />
+          <p className="text-sm">Asset group exists but has no assets yet</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ads table (level 3) ──────────────────────────────────────────────────────
 
 function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce }) {
+  if (adGroup.isPmax || adGroup.type === 'ASSET_GROUP') {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+        <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
+          <Layers className="h-3.5 w-3.5 text-[#4285F4]" />
+          <p className="text-xs font-semibold text-gray-500 dark:text-white/70">
+            Assets in <span className="text-gray-900 dark:text-white">{adGroup.name}</span>
+          </p>
+        </div>
+        <div className="scrollbar-thin flex-1 overflow-y-auto">
+          <PmaxAssetGroupDetail adGroup={adGroup} adAccountId={adAccountId} manageNonce={manageNonce} />
+        </div>
+      </div>
+    );
+  }
+  return <AdsTableInner adGroup={adGroup} campaign={campaign} adAccountId={adAccountId} onLaunchWizard={onLaunchWizard} manageNonce={manageNonce} />;
+}
+
+function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce }) {
   const [ads,          setAds]          = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
@@ -1085,14 +1437,11 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
                   </td>
                   {/* status */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <GoogleServingStatus
-                        status={status}
-                        approvalStatus={a.approvalStatus}
-                        reviewStatus={a.reviewStatus}
-                      />
-                      <ToggleSwitch status={status} onToggle={() => handleToggle(a)} toggling={!!toggling[id]} />
-                    </div>
+                    <GoogleServingStatus
+                      status={status}
+                      approvalStatus={a.approvalStatus}
+                      reviewStatus={a.reviewStatus}
+                    />
                   </td>
                   {/* ad type */}
                   <td className="px-4 py-3">
@@ -1136,18 +1485,39 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
                   {onLaunchWizard && (
                     <td className="pr-5 pl-2 py-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={(e) => handleEdit(e, a)}
-                          disabled={editingId === id}
-                          title="Edit ad"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
-                        >
-                          {editingId === id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Pencil className="h-3.5 w-3.5" />
-                          )}
-                        </button>
+                        {/* pause / enable toggle */}
+                        {(status === 'ENABLED' || status === 'PAUSED') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleToggle(a); }}
+                            disabled={!!toggling[id]}
+                            title={status === 'ENABLED' ? 'Pause ad' : 'Enable ad'}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                          >
+                            {toggling[id] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : status === 'ENABLED' ? (
+                              <Pause className="h-3.5 w-3.5" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                        {/* edit — hidden for removed ads */}
+                        {status !== 'REMOVED' && (
+                          <button
+                            onClick={(e) => handleEdit(e, a)}
+                            disabled={editingId === id}
+                            title="Edit ad"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                          >
+                            {editingId === id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Pencil className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                        {/* delete */}
                         <button
                           onClick={(e) => { e.stopPropagation(); setPendingDeleteAd(a); }}
                           title="Delete ad"
@@ -1172,6 +1542,7 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
           ad={{ ...selectedAd, status: getStatus(selectedAd) }}
           adAccountId={adAccountId}
           onClose={() => setSelectedAd(null)}
+          onStatusChange={(id, next) => setStatuses((p) => ({ ...p, [id]: next }))}
         />
       )}
     </AnimatePresence>

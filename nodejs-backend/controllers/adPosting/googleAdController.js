@@ -82,12 +82,83 @@ const ALL_CACHE_PREFIXES = [
   "googleCampaignsAll",
   "googleCampaignsAll:v2",
   "googleCampaignsAll:v3",
+  "googleCampaignsAll:v4",
   "googleAnalytics",
   "googleInsights",
   "googleAudit",
   "googleAccessToken",
   "googleManagerMap",
 ];
+
+// ─── Google API error → plain English ────────────────────────────────────────
+const GOOGLE_ERROR_MESSAGES = {
+  // Asset group
+  NOT_ENOUGH_HEADLINE_ASSET:            "Please add at least 3 headlines.",
+  NOT_ENOUGH_LONG_HEADLINE_ASSET:       "Please add a long headline (required by Google).",
+  NOT_ENOUGH_DESCRIPTION_ASSET:         "Please add at least 2 descriptions.",
+  NOT_ENOUGH_MARKETING_IMAGE_ASSET:     "Please upload a landscape image (1.91:1 ratio).",
+  NOT_ENOUGH_SQUARE_MARKETING_IMAGE_ASSET: "Please upload a square image (1:1 ratio).",
+  NOT_ENOUGH_LOGO_ASSET:                "Please upload a logo image.",
+  DUPLICATE_ASSETS_WITH_DIFFERENT_FIELD_VALUE: "One of your assets already exists with different settings. Try using slightly different text.",
+  ASSET_GROUP_MUST_BE_PART_OF_CAMPAIGN: "The asset group must be linked to a valid campaign.",
+  INVALID_FINAL_URL:                    "The landing page URL is invalid. Make sure it starts with https://.",
+  MISMATCHING_FINAL_URL_AND_FINAL_MOBILE_URL: "The mobile URL must match the landing page domain.",
+  // Campaign
+  DUPLICATE_CAMPAIGN_NAME:              "A campaign with this name already exists. Please choose a different name.",
+  INVALID_CAMPAIGN_NAME:                "Campaign name contains invalid characters.",
+  BIDDING_STRATEGY_NOT_SUPPORTED_IN_DRAFTS: "This bidding strategy is not supported. Try a different one.",
+  INVALID_BUDGET_AMOUNT:                "The budget amount is invalid. Please enter a valid number.",
+  // Ad group
+  DUPLICATE_ADGROUP_NAME:               "An ad group with this name already exists in this campaign.",
+  INVALID_ADGROUP_NAME:                 "Ad group name contains invalid characters.",
+  // Ads
+  DISALLOWED_TEXT_APPLIES_TO_ALL_MATCHING_ADS: "Your ad text was rejected by Google's policy. Please revise the content.",
+  LINE_TOO_WIDE:                        "One of your headlines or descriptions is too long. Please shorten it.",
+  // Auth / account
+  CUSTOMER_NOT_FOUND:                   "Google Ads account not found. Please check your account ID.",
+  NOT_ADS_USER:                         "This Google account is not linked to a Google Ads account.",
+  OAUTH_TOKEN_INVALID:                  "Your Google session has expired. Please reconnect your Google account.",
+  // Generic
+  RESOURCE_EXHAUSTED:                   "Google API rate limit reached. Please wait a moment and try again.",
+  PERMISSION_DENIED:                    "You don't have permission to perform this action in Google Ads.",
+  INVALID_ARGUMENT:                     "Google rejected the request due to invalid data. Please check your inputs.",
+  // Budget
+  BUDGET_BELOW_PER_DAY_MINIMUM:         "Your daily budget is too low for this campaign type. Please increase it and try again.",
+  BUDGET_AMOUNT_MUST_EXCEED_MINIMUM_AMOUNT_PER_CLICK: "Your budget is too low. Please increase it and try again.",
+  BUDGET_CANNOT_BE_ZERO:                "Budget cannot be zero. Please enter a valid daily budget.",
+};
+
+/**
+ * Extracts a human-readable error message from a Google Ads API axios error.
+ * Falls back to a generic message if the error is not recognized.
+ */
+function parseGoogleError(e, fallback = "Something went wrong. Please try again.") {
+  try {
+    const googleErrors = e?.response?.data?.error?.details?.[0]?.errors || [];
+    if (googleErrors.length > 0) {
+      const messages = googleErrors.map((err) => {
+        const codeObj = err.errorCode || {};
+        const code = Object.values(codeObj)[0];
+        // Use our friendly map first, then fall back to Google's own message (still readable)
+        return GOOGLE_ERROR_MESSAGES[code] || err.message || fallback;
+      });
+      return [...new Set(messages)].join(" ");
+    }
+    // No specific errors — check HTTP-level status message from Google
+    const httpMsg = e?.response?.data?.error?.message || "";
+    if (httpMsg) {
+      if (httpMsg.includes("UNAUTHENTICATED") || httpMsg.includes("invalid_grant"))
+        return "Your Google session has expired. Please reconnect your Google account.";
+      if (httpMsg.includes("PERMISSION_DENIED"))
+        return "You don't have permission to perform this action in Google Ads.";
+      if (httpMsg.includes("RESOURCE_EXHAUSTED"))
+        return "Google API rate limit reached. Please wait a moment and try again.";
+      // Return Google's message rather than the generic axios "Request failed with status code 400"
+      return httpMsg;
+    }
+  } catch (_) { /* ignore parse errors */ }
+  return fallback;
+}
 
 const robustFormatStatus = (status) => {
   if (typeof status === "string") return status;
@@ -492,6 +563,9 @@ class GoogleAdController {
     this.resolveAdForEdit = this.resolveAdForEdit.bind(this);
     this.uploadMediaAPI = this.uploadMediaAPI.bind(this);
     this.deleteCampaignAPI = this.deleteCampaignAPI.bind(this);
+    this.deleteAdGroupAPI = this.deleteAdGroupAPI.bind(this);
+    this.addAssetToAssetGroupAPI = this.addAssetToAssetGroupAPI.bind(this);
+    this.removeAssetFromAssetGroupAPI = this.removeAssetFromAssetGroupAPI.bind(this);
     this.getWizardSchema = this.getWizardSchema.bind(this);
     this.getCtaOptions = this.getCtaOptions.bind(this);
   }
@@ -606,7 +680,7 @@ class GoogleAdController {
           } catch (err) {
             lastErr = err;
             // Always continue to next candidate on 4xx — only bail on network/timeout errors
-            if (status && status >= 400 && status < 500) continue;
+            if (err?.response?.status >= 400 && err?.response?.status < 500) continue;
             throw err;
           }
         }
@@ -790,7 +864,7 @@ class GoogleAdController {
         : null;
 
       const adTypeKey = adTypes.length ? `:${adTypes.sort().join(',')}` : '';
-      const cacheKey = `googleCampaignsAll:v4:${userId}:${adAccountId || "all"}${adTypeKey}`;
+      const cacheKey = `googleCampaignsAll:v5:${userId}:${adAccountId || "all"}${adTypeKey}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
@@ -1125,6 +1199,7 @@ class GoogleAdController {
               };
             });
           } catch (e) {
+            logger.error(`fetchAdGroups failed: ${e?.response?.data ? JSON.stringify(e.response.data) : e.message}`);
             return [];
           }
         };
@@ -1144,7 +1219,6 @@ class GoogleAdController {
                     campaign.name
                   FROM asset_group
                   WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-                    AND asset_group.status != 'REMOVED'
                 `,
               },
               {
@@ -1172,6 +1246,7 @@ class GoogleAdController {
               };
             });
           } catch (e) {
+            logger.error(`fetchAssetGroups failed: ${e?.response?.data ? JSON.stringify(e.response.data) : e.message}`);
             return [];
           }
         };
@@ -1288,7 +1363,7 @@ class GoogleAdController {
       }
 
       const tid = normalizeCustomerId(adAccountId);
-      const cacheKey = `googleAdGroups:v4:${userId}:${tid}:${campaignId}`;
+      const cacheKey = `googleAdGroups:v6:${userId}:${tid}:${campaignId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
         if (cached) return res.status(200).json(JSON.parse(cached));
@@ -1301,24 +1376,43 @@ class GoogleAdController {
       const cleanCampaignId = sanitizeId(campaignId);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
-      // Run both ad_group and asset_group queries in parallel — no pre-detection call needed
+      // Use channelType hint from frontend if provided, else detect from API
+      const channelTypeHint = String(req.query.channelType || '').toUpperCase();
+      let isPmax = channelTypeHint === 'PERFORMANCE_MAX';
+
+      if (!channelTypeHint) {
+        const campaignTypeResp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+          { query: `SELECT campaign.id, campaign.advertising_channel_type FROM campaign WHERE campaign.id = ${cleanCampaignId}` },
+          { headers }
+        ).catch((err) => { logger.error(`getAdGroups campaign type query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; });
+        const campResults = Array.isArray(campaignTypeResp.data)
+          ? campaignTypeResp.data.flatMap(b => b?.results || [])
+          : [];
+        const detectedType = (campResults[0]?.campaign?.advertisingChannelType || campResults[0]?.campaign?.advertising_channel_type || '').toUpperCase();
+        isPmax = detectedType === 'PERFORMANCE_MAX';
+      }
+
       // Note: ad_group.start_date / end_date are NOT valid Google Ads API fields — removed
       const [adGroupResp, assetGroupResp] = await Promise.all([
-        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-          { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.primary_status, ad_group.primary_status_reasons, ad_group.type, ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
-          { headers }
-        ).catch((err) => { logger.error(`getAdGroups ad_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
-        axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-          { query: `SELECT asset_group.id, asset_group.name, asset_group.status, asset_group.primary_status, campaign.id, campaign.name FROM asset_group WHERE campaign.id = ${cleanCampaignId} AND asset_group.status != 'REMOVED'` },
-          { headers }
-        ).catch((err) => { logger.error(`getAdGroups asset_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
+        isPmax
+          ? Promise.resolve({ data: [] })
+          : axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+              { query: `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.primary_status, ad_group.primary_status_reasons, ad_group.type, ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas, campaign.id, campaign.name, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${cleanCampaignId}` },
+              { headers }
+            ).catch((err) => { logger.error(`getAdGroups ad_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; }),
+        isPmax
+          ? axios.post(`https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+              { query: `SELECT asset_group.id, asset_group.name, asset_group.status, asset_group.primary_status, campaign.id, campaign.name FROM asset_group WHERE campaign.id = ${cleanCampaignId}` },
+              { headers }
+            ).catch((err) => { logger.error(`getAdGroups asset_group query failed: ${err?.response?.data ? JSON.stringify(err.response.data) : err.message}`); return { data: [] }; })
+          : Promise.resolve({ data: [] }),
       ]);
 
       const flatResults = (respData) =>
         Array.isArray(respData) ? respData.flatMap(batch => batch?.results || []) : [];
       const agResults    = flatResults(adGroupResp.data);
       const assetResults = flatResults(assetGroupResp.data);
-      const isPmax = assetResults.length > 0 && agResults.length === 0;
 
       const adGroups = isPmax
         ? assetResults.map(r => {
@@ -1501,16 +1595,18 @@ class GoogleAdController {
           if (!byGroup[gid].finalUrls.length && agFinalUrls.length) {
             byGroup[gid].finalUrls = agFinalUrls;
           }
+          const assetRN = asset.resourceName || asset.resource_name || null;
+          const assetId = String(asset.id || "");
           const text = (asset.textAsset || asset.text_asset)?.text;
           const imgData = asset.imageAsset || asset.image_asset;
           const imageUrl = imgData?.fullSize?.url || imgData?.full_size?.url;
           const mimeType = imgData?.mimeType || imgData?.mime_type || "";
-          if (fieldType === "HEADLINE" && text) byGroup[gid].headlines.push(text);
-          else if (fieldType === "DESCRIPTION" && text) byGroup[gid].descriptions.push(text);
+          if (fieldType === "HEADLINE" && text) byGroup[gid].headlines.push({ text, assetRN, assetId, fieldType });
+          else if ((fieldType === "DESCRIPTION" || fieldType === "LONG_HEADLINE") && text) byGroup[gid].descriptions.push({ text, assetRN, assetId, fieldType });
           else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
-            byGroup[gid].images.push({ url: imageUrl, mimeType, fieldType });
+            byGroup[gid].images.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId });
           } else if ((fieldType === "LOGO" || fieldType === "LANDSCAPE_LOGO") && imageUrl) {
-            byGroup[gid].logos.push({ url: imageUrl, mimeType, fieldType });
+            byGroup[gid].logos.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId });
           }
         });
         ads = Object.values(byGroup);
@@ -1631,16 +1727,19 @@ class GoogleAdController {
           grouped.campaignName = (r.campaign || {}).name || "";
           const agFinalUrls = ag.finalUrls || ag.final_urls || [];
           if (!grouped.finalUrls.length && agFinalUrls.length) grouped.finalUrls = agFinalUrls;
+          const assetRN = asset.resourceName || asset.resource_name || null;
+          const assetId = String(asset.id || "");
           const text = (asset.textAsset || asset.text_asset)?.text;
           const imgData = asset.imageAsset || asset.image_asset;
           const imageUrl = imgData?.fullSize?.url || imgData?.full_size?.url;
           const mimeType = imgData?.mimeType || imgData?.mime_type || "";
-          if (fieldType === "HEADLINE" && text) grouped.headlines.push(text);
-          else if (fieldType === "DESCRIPTION" && text) grouped.descriptions.push(text);
+          if (fieldType === "HEADLINE" && text) grouped.headlines.push({ text, assetRN, assetId, fieldType });
+          else if ((fieldType === "DESCRIPTION" || fieldType === "LONG_HEADLINE") && text) grouped.descriptions.push({ text, assetRN, assetId, fieldType });
+          else if (fieldType === "BUSINESS_NAME" && text) grouped.businessName = { text, assetRN, assetId, fieldType };
           else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
-            grouped.images.push({ url: imageUrl, mimeType, fieldType });
+            grouped.images.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId });
           } else if ((fieldType === "LOGO" || fieldType === "LANDSCAPE_LOGO") && imageUrl) {
-            grouped.logos.push({ url: imageUrl, mimeType, fieldType });
+            grouped.logos.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId });
           }
         });
         ads = results.length ? [grouped] : [];
@@ -2642,6 +2741,160 @@ class GoogleAdController {
     }
   }
 
+  async deleteAdGroupAPI(req, res) {
+    try {
+      const { adAccountId, adGroupId, campaignId, isPmax } = req.body;
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!adGroupId)   return res.status(400).json({ status: false, error: "adGroupId is required" });
+
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
+      const mccId = normalizeCustomerId(resolvedMcc || tid);
+      const customerId = sanitizeId(adAccountId);
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+
+      if (isPmax) {
+        // Delete PMAX asset group via assetGroupOperation remove
+        const assetGroupResource = `customers/${customerId}/assetGroups/${sanitizeId(adGroupId)}`;
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations: [{ assetGroupOperation: { remove: assetGroupResource } }] },
+          { headers }
+        );
+      } else {
+        // Delete regular ad group by setting status to REMOVED
+        const adGroupResource = `customers/${customerId}/adGroups/${sanitizeId(adGroupId)}`;
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations: [{ adGroupOperation: { update: { resource_name: adGroupResource, status: 4 }, update_mask: "status" } }] },
+          { headers }
+        );
+      }
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: isPmax ? "Asset group deleted" : "Ad group deleted" });
+    } catch (error) {
+      const detail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`deleteAdGroupAPI failed: ${detail}`);
+      return res.status(error.response?.status || 500).json({ status: false, error: parseGoogleError(error, isPmax ? "Failed to delete asset group" : "Failed to delete ad group") });
+    }
+  }
+
+  async addAssetToAssetGroupAPI(req, res) {
+    try {
+      const { adAccountId, assetGroupId, fieldType, text, imageAssetRN, imageUrl } = req.body;
+      if (!adAccountId || !assetGroupId || !fieldType) {
+        return res.status(400).json({ status: false, error: "adAccountId, assetGroupId and fieldType are required" });
+      }
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
+      const mccId = normalizeCustomerId(resolvedMcc || tid);
+      const customerId = sanitizeId(adAccountId);
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+      const agResource = `customers/${customerId}/assetGroups/${sanitizeId(assetGroupId)}`;
+
+      let assetRN = imageAssetRN || null;
+
+      if (!assetRN && imageUrl) {
+        const uploaded = await this._uploadImageFromUrl(accessToken, mccId, customerId, imageUrl);
+        assetRN = fieldType === 'SQUARE_MARKETING_IMAGE' || fieldType === 'LOGO'
+          ? (uploaded?.square || uploaded?.landscape)
+          : (uploaded?.landscape || uploaded?.square);
+      }
+
+      if (!assetRN && text) {
+        const assetResp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations: [{ assetOperation: { create: { text_asset: { text: String(text).slice(0, fieldType === 'HEADLINE' ? 30 : 90) } } } }] },
+          { headers }
+        );
+        assetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+      }
+
+      if (!assetRN) return res.status(400).json({ status: false, error: "No asset content provided" });
+
+      await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        { mutateOperations: [{ assetGroupAssetOperation: { create: { asset_group: agResource, asset: assetRN, field_type: fieldType } } }] },
+        { headers }
+      );
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(201).json({ status: true, message: "Asset added", assetResourceName: assetRN });
+    } catch (e) {
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      logger.error(`addAssetToAssetGroupAPI failed: ${detail}`);
+      return res.status(e.response?.status || 500).json({ status: false, error: parseGoogleError(e, "Failed to add asset") });
+    }
+  }
+
+  async removeAssetFromAssetGroupAPI(req, res) {
+    try {
+      const { adAccountId, assetGroupId, assetResourceName, fieldType } = req.body;
+      if (!adAccountId || !assetGroupId || !assetResourceName || !fieldType) {
+        return res.status(400).json({ status: false, error: "adAccountId, assetGroupId, assetResourceName and fieldType are required" });
+      }
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeCustomerId(adAccountId);
+      const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
+      const mccId = normalizeCustomerId(resolvedMcc || tid);
+      const customerId = sanitizeId(adAccountId);
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+      // Google field_type enum values for assetGroupAsset resource name
+      const FIELD_TYPE_ENUM = {
+        HEADLINE: 1, DESCRIPTION: 2, HEADLINE_1: 3, HEADLINE_2: 4, HEADLINE_3: 5,
+        DESCRIPTION_1: 6, DESCRIPTION_2: 7, CALL_TO_ACTION_SELECTION: 8,
+        AD_IMAGE: 9, MARKETING_IMAGE: 10, SQUARE_MARKETING_IMAGE: 11,
+        PORTRAIT_MARKETING_IMAGE: 12, LOGO: 13, LANDSCAPE_LOGO: 14,
+        CALL: 15, STRUCTURED_SNIPPET: 16, SITELINK: 17, MOBILE_APP: 18,
+        HOTEL_CALLOUT: 19, PRICE: 20, LONG_HEADLINE: 21, BUSINESS_NAME: 22,
+        YOUTUBE_VIDEO: 23, BOOK_ON_GOOGLE: 24, LEAD_FORM: 25, PROMOTION: 26,
+        CALLOUT: 27, IMAGE: 28, BUSINESS_LOGO: 29,
+      };
+      const fieldTypeNum = FIELD_TYPE_ENUM[fieldType];
+      if (!fieldTypeNum) {
+        return res.status(400).json({ status: false, error: `Unknown fieldType: ${fieldType}` });
+      }
+
+      // asset_group_asset resource name format: customers/{cid}/assetGroupAssets/{agId}~{assetId}~{fieldTypeNum}
+      const assetId = assetResourceName.split('/').pop();
+      const assetGroupAssetRN = `customers/${customerId}/assetGroupAssets/${sanitizeId(assetGroupId)}~${assetId}~${fieldTypeNum}`;
+
+      await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        { mutateOperations: [{ assetGroupAssetOperation: { remove: assetGroupAssetRN } }] },
+        { headers }
+      );
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Asset removed" });
+    } catch (e) {
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      logger.error(`removeAssetFromAssetGroupAPI failed: ${detail}`);
+      return res.status(e.response?.status || 500).json({ status: false, error: parseGoogleError(e, "Failed to remove asset") });
+    }
+  }
+
   // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
   // * Delete campaign (sets status to REMOVED)
@@ -2766,13 +3019,19 @@ class GoogleAdController {
       const {
         name,
         objective = "SALES",
-        dailyBudgetMicros = 5000000,
+        dailyBudgetMicros,
+        lifetimeBudgetMicros,
+        budgetType = "DAILY",
         status = "PAUSED",
         startTime,
         endTime,
         targeting,
         objectiveExtras = {},
       } = value;
+
+      const resolvedDailyBudgetMicros = budgetType === 'CAMPAIGN_TOTAL'
+        ? (lifetimeBudgetMicros || 5000000)
+        : (dailyBudgetMicros || 5000000);
 
       // ── Init ──────────────────────────────────────────────────────────────
       const { accessToken } = await initGoogleApiForUser(userId);
@@ -2816,8 +3075,11 @@ class GoogleAdController {
         pmaxHeadlines,       // PERFORMANCE_MAX custom headlines array
         pmaxLongHeadline,    // PERFORMANCE_MAX long headline
         pmaxDescriptions,    // PERFORMANCE_MAX custom descriptions array
-        pmaxImageUrl,        // PERFORMANCE_MAX landscape image URL
-        pmaxLogoUrl,         // PERFORMANCE_MAX logo URL
+        pmaxImageUrl,           // PERFORMANCE_MAX landscape image URL (paste)
+        pmaxImageAssetRN,       // PERFORMANCE_MAX landscape image already uploaded (resource name)
+        pmaxSquareImageAssetRN, // PERFORMANCE_MAX square image already uploaded (resource name)
+        pmaxLogoUrl,            // PERFORMANCE_MAX logo URL
+        pmaxLogoAssetRN,        // PERFORMANCE_MAX logo already uploaded (resource name)
         pmaxVideoUrl,        // PERFORMANCE_MAX YouTube video URL or ID
       } = objectiveExtras;
 
@@ -2846,9 +3108,10 @@ class GoogleAdController {
             campaignBudgetOperation: {
               create: {
                 name: `${name} Budget`,
-                amount_micros: String(dailyBudgetMicros),
+                amount_micros: String(resolvedDailyBudgetMicros),
                 delivery_method: "STANDARD",
                 explicitly_shared: false,
+                period: budgetType === 'CAMPAIGN_TOTAL' ? 'CAMPAIGN_TOTAL' : 'DAILY',
               },
             },
           }],
@@ -2858,11 +3121,8 @@ class GoogleAdController {
       const budgetResource = budgetResp.data?.mutateOperationResponses?.[0]?.campaignBudgetResult?.resourceName;
       if (!budgetResource) throw new Error("Campaign budget creation failed — no resourceName returned");
 
-      // ── Step 2a: For PMAX — pre-create brand assets needed for Brand Guidelines ─
-      let pmaxBrandNameAssetRN = null;
-      let pmaxBrandLogoAssetRN = null;
+      // ── Step 2a: For PMAX — resolve business name for use in Step 7 asset group ─
       if (channelType === "PERFORMANCE_MAX") {
-        // Resolve business name
         let resolvedBusinessName = pmaxBusinessName || name || "Brand";
         if (!pmaxBusinessName) {
           try {
@@ -2878,30 +3138,7 @@ class GoogleAdController {
             logger.warn(`PMAX: could not fetch account name (non-fatal): ${e.message}`);
           }
         }
-        // Store on objectiveExtras so Step 7 can reuse it
         objectiveExtras._resolvedBusinessName = String(resolvedBusinessName).slice(0, 25);
-
-        // Create business name asset
-        try {
-          const bnResp = await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-            { mutateOperations: [{ assetOperation: { create: { text_asset: { text: objectiveExtras._resolvedBusinessName } } } }] },
-            { headers }
-          );
-          pmaxBrandNameAssetRN = bnResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
-        } catch (e) {
-          logger.warn(`PMAX: business name asset pre-create failed (non-fatal): ${e.message}`);
-        }
-
-        // Create/upload logo asset
-        if (pmaxLogoUrl) {
-          try {
-            const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxLogoUrl);
-            pmaxBrandLogoAssetRN = uploadResult?.square || uploadResult?.landscape || null;
-          } catch (e) {
-            logger.warn(`PMAX: logo upload failed (non-fatal): ${e.message}`);
-          }
-        }
       }
 
       // ── Step 2: Create campaign ───────────────────────────────────────────
@@ -2935,53 +3172,21 @@ class GoogleAdController {
         };
       }
 
-      // Build campaign mutate ops — include CampaignAsset links for PMAX Brand Guidelines
-      const campaignMutateOps = [{ campaignOperation: { create: campaignBody } }];
-      // CampaignAsset links must be in the same mutate call as campaign creation for PMAX
-      // We use temp resource name "-1" for the campaign and reference it in campaignAsset ops
-      // BUT since we create campaign first and then link, we do it after — so use temp IDs:
-      // Actually Google requires them at same time. Use resource_name temp ID pattern.
-      // We'll handle this after campaign creation by doing a separate mutate with real campaign RN.
+      // ── Step 2: Create campaign ───────────────────────────────────────────────
+      // PMAX: explicitly disable Brand Guidelines to avoid the logo/business-name CampaignAsset
+      // requirement. Business name and logo are provided via the AssetGroup instead (Step 7).
+      if (channelType === "PERFORMANCE_MAX") {
+        campaignBody.brand_guidelines_enabled = false;
+      }
 
       const campaignResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-        {
-          mutateOperations: campaignMutateOps,
-        },
+        { mutateOperations: [{ campaignOperation: { create: campaignBody } }] },
         { headers }
       );
       const campaignResource = campaignResp.data?.mutateOperationResponses?.[0]?.campaignResult?.resourceName;
       const campaignId = campaignResource?.split("/").pop();
       if (!campaignId) throw new Error("Campaign creation failed — no resourceName returned");
-
-      // ── Step 2b: PMAX — link brand assets as CampaignAssets (Brand Guidelines) ─
-      if (channelType === "PERFORMANCE_MAX" && (pmaxBrandNameAssetRN || pmaxBrandLogoAssetRN)) {
-        try {
-          const brandOps = [];
-          if (pmaxBrandNameAssetRN) {
-            brandOps.push({
-              campaignAssetOperation: {
-                create: { campaign: campaignResource, asset: pmaxBrandNameAssetRN, field_type: "BUSINESS_NAME" },
-              },
-            });
-          }
-          if (pmaxBrandLogoAssetRN) {
-            brandOps.push({
-              campaignAssetOperation: {
-                create: { campaign: campaignResource, asset: pmaxBrandLogoAssetRN, field_type: "LOGO" },
-              },
-            });
-          }
-          await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-            { mutateOperations: brandOps },
-            { headers }
-          );
-          logger.info(`PMAX: brand CampaignAssets linked (${brandOps.length} assets)`);
-        } catch (e) {
-          logger.warn(`PMAX: CampaignAsset brand link failed (non-fatal): ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
-        }
-      }
 
       // ── Step 3: Apply start/end dates via update mutate ───────────────────
       if (startTime || endTime) {
@@ -3016,14 +3221,19 @@ class GoogleAdController {
       }
 
       // ── Step 4: Location targeting ────────────────────────────────────────
-      if (targeting?.countries?.length) {
+      // WW = Worldwide — skip geo restriction entirely
+      const nonWorldwideCountries = (targeting?.countries || []).filter((c) => c.toUpperCase() !== "WW");
+      if (nonWorldwideCountries.length) {
         try {
           const COMMON_LOCATIONS = {
             US: 2840, IN: 2356, GB: 2826, CA: 2124, AU: 2036, DE: 2276, FR: 2250,
             BR: 2076, IT: 2380, ES: 2724, JP: 2392, SG: 2702, AE: 2784,
             ZA: 2710, NG: 2566, KE: 2404, PH: 2608, ID: 2360, MX: 2484, NL: 2528,
+            SA: 2682, SE: 2752, NO: 2578, DK: 2208, PL: 2616, RU: 2643,
+            KR: 2410, TH: 2764, MY: 2458, BD: 2050, EG: 2818, KE: 2404,
+            AR: 2032, CO: 2170, NZ: 2554, CH: 2756, TR: 2792, VN: 2704, PK: 2586,
           };
-          const locOps = targeting.countries
+          const locOps = nonWorldwideCountries
             .map((code) => COMMON_LOCATIONS[code.toUpperCase()])
             .filter(Boolean)
             .map((locId) => ({
@@ -3099,146 +3309,8 @@ class GoogleAdController {
         }
       }
 
-      // ── Step 7: PERFORMANCE_MAX — create Asset Group ─────────────────────────
-      if (channelType === "PERFORMANCE_MAX" && assetGroupName) {
-        try {
-          const agName = String(assetGroupName).slice(0, 128);
-          const agFinalUrl = finalUrl;
-          const agResource = `customers/${customerId}/assetGroups/-1`;
-
-          // Business name: reuse resolved name from Step 2a (already fetched from account)
-          const accountBusinessName = objectiveExtras._resolvedBusinessName || String(pmaxBusinessName || name || "Brand").slice(0, 25);
-
-          // Dedup headlines/descriptions case-insensitively
-          const dedup = (arr) => {
-            const seen = new Set();
-            return (arr || []).filter(Boolean).filter((t) => {
-              const k = String(t).trim().toLowerCase();
-              if (seen.has(k)) return false;
-              seen.add(k); return true;
-            });
-          };
-
-          const headlines = dedup(pmaxHeadlines?.length ? pmaxHeadlines : ["Shop Now", "Get Started", "Learn More"]).slice(0, 5);
-          const descriptions = dedup(pmaxDescriptions?.length ? pmaxDescriptions : [
-            businessDescription ? String(businessDescription).slice(0, 90) : "Trusted by thousands. Get started today.",
-            "Shop the best deals online.",
-          ]).slice(0, 4);
-
-          // Upload image assets if URLs provided
-          let imageAssetRN = null;
-          // Reuse logo already uploaded in Step 2a (to avoid duplicate upload)
-          let logoAssetRN = pmaxBrandLogoAssetRN || null;
-          if (pmaxImageUrl) {
-            try {
-              const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxImageUrl);
-              imageAssetRN = uploadResult?.landscape || null;
-            } catch (e) { logger.warn(`PMAX image upload failed (non-fatal): ${e.message}`); }
-          }
-          if (pmaxLogoUrl && !logoAssetRN) {
-            try {
-              const uploadResult = await this._uploadImageFromUrl(accessToken, loginCustomerId, customerId, pmaxLogoUrl);
-              logoAssetRN = uploadResult?.square || uploadResult?.landscape || null;
-            } catch (e) { logger.warn(`PMAX logo upload failed (non-fatal): ${e.message}`); }
-          }
-
-          // Upload / resolve YouTube video
-          let videoAssetRN = null;
-          if (pmaxVideoUrl) {
-            try {
-              const ytMatch = pmaxVideoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-              const youtubeVideoId = ytMatch ? ytMatch[1] : (pmaxVideoUrl.length === 11 ? pmaxVideoUrl : null);
-              if (youtubeVideoId) {
-                const existingResp = await axios.post(
-                  `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
-                  { query: `SELECT asset.resource_name FROM asset WHERE asset.youtube_video_asset.youtube_video_id = '${youtubeVideoId}' LIMIT 1` },
-                  { headers }
-                );
-                const existingRN = existingResp.data?.[0]?.results?.[0]?.asset?.resourceName
-                  || existingResp.data?.[0]?.results?.[0]?.asset?.resource_name;
-                if (existingRN) {
-                  videoAssetRN = existingRN;
-                } else {
-                  const assetResp = await axios.post(
-                    `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-                    { mutateOperations: [{ assetOperation: { create: { name: `yt_${youtubeVideoId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: youtubeVideoId } } } }] },
-                    { headers }
-                  );
-                  videoAssetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
-                }
-              }
-            } catch (e) { logger.warn(`PMAX video asset failed (non-fatal): ${e.message}`); }
-          }
-
-          const mutateOps = [
-            // Asset group
-            {
-              assetGroupOperation: {
-                create: {
-                  resource_name: agResource,
-                  campaign: campaignResource,
-                  name: agName,
-                  status: "PAUSED",
-                  ...(agFinalUrl ? { final_urls: [agFinalUrl] } : {}),
-                },
-              },
-            },
-            // Headlines
-            ...headlines.map((text) => ({
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: { text_asset: { text: String(text).slice(0, 30) } }, field_type: "HEADLINE" },
-              },
-            })),
-            // Long headline
-            ...(pmaxLongHeadline ? [{
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: { text_asset: { text: String(pmaxLongHeadline).slice(0, 90) } }, field_type: "LONG_HEADLINE" },
-              },
-            }] : []),
-            // Descriptions
-            ...descriptions.map((text) => ({
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: { text_asset: { text: String(text).slice(0, 90) } }, field_type: "DESCRIPTION" },
-              },
-            })),
-            // Business name
-            {
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: { text_asset: { text: String(accountBusinessName).slice(0, 25) } }, field_type: "BUSINESS_NAME" },
-              },
-            },
-            // Image
-            ...(imageAssetRN ? [{
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: imageAssetRN, field_type: "MARKETING_IMAGE" },
-              },
-            }] : []),
-            // Logo
-            ...(logoAssetRN ? [{
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: logoAssetRN, field_type: "LOGO" },
-              },
-            }] : []),
-            // Video
-            ...(videoAssetRN ? [{
-              assetGroupAssetOperation: {
-                create: { asset_group: agResource, asset: videoAssetRN, field_type: "YOUTUBE_VIDEO" },
-              },
-            }] : []),
-          ];
-
-          await axios.post(
-            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
-            { mutateOperations: mutateOps },
-            { headers }
-          );
-
-          logger.info(`PMAX asset group created: ${agName}`);
-        } catch (e) {
-          const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-          logger.warn(`PMAX asset group creation failed (non-fatal): ${detail}`);
-        }
-      }
+      // Asset group for PERFORMANCE_MAX is now created by the separate create-ad-group API call
+      // (same flow as Search/Display — campaign first, then ad group / asset group)
 
       // ── Step 9: App campaigns — link app via campaign criterion ──────────────
       if (channelType === "MULTI_CHANNEL" && appId && appPlatform) {
@@ -3309,18 +3381,26 @@ class GoogleAdController {
       );
 
       const isBudgetTooLow = googleErrors.some(
-        (e) => e.errorCode?.campaignBudgetError === "BUDGET_AMOUNT_MUST_EXCEED_MINIMUM_AMOUNT_PER_CLICK"
+        (e) => e.errorCode?.campaignBudgetError === "BUDGET_BELOW_PER_DAY_MINIMUM"
+          || e.errorCode?.campaignBudgetError === "BUDGET_AMOUNT_MUST_EXCEED_MINIMUM_AMOUNT_PER_CLICK"
           || e.errorCode?.campaignBudgetError === "BUDGET_CANNOT_BE_ZERO"
           || (e.message || "").toLowerCase().includes("per-day minimum")
       );
 
       // Extract the minimum amount from Google's error details if present
+      // Google returns camelCase: budgetPerDayMinimumErrorDetails.budgetPerDayMinimumMicros
       const budgetMinDetails = googleErrors.find(
-        (e) => (e.message || "").toLowerCase().includes("per-day minimum")
+        (e) => e.errorCode?.campaignBudgetError === "BUDGET_BELOW_PER_DAY_MINIMUM"
+          || (e.message || "").toLowerCase().includes("per-day minimum")
       );
-      const budgetMinMicros = budgetMinDetails?.details?.budget_per_day_minimum_error_details?.minimum_amount_micros;
+      const budgetMinErrorDetails = budgetMinDetails?.details?.budgetPerDayMinimumErrorDetails
+        || budgetMinDetails?.details?.budget_per_day_minimum_error_details
+        || {};
+      const budgetMinMicros = budgetMinErrorDetails.budgetPerDayMinimumMicros
+        || budgetMinErrorDetails.minimum_amount_micros
+        || budgetMinErrorDetails.minimumBudgetAmountMicros;
       const budgetMinReadable = budgetMinMicros
-        ? `₹${(Number(budgetMinMicros) / 1_000_000).toFixed(0)}`
+        ? `₹${Math.ceil(Number(budgetMinMicros) / 1_000_000)}`
         : null;
 
       const formattedErrors = googleErrors.map((e) => ({
@@ -3329,20 +3409,18 @@ class GoogleAdController {
         code: Object.keys(e.errorCode || {})[0] || null,
       }));
 
+      const minText = budgetMinReadable || null;
+
       return res.status(error.response?.status || 500).json({
         status: false,
         error: isMutateNotAllowed
-          ? "This campaign type cannot be created via the API. YouTube video ads are created as Demand Gen campaigns (DEMAND_GEN channel type), which is the supported programmatic replacement for VIDEO campaigns."
+          ? "This campaign type cannot be created via the API. YouTube video ads are created as Demand Gen campaigns."
           : isMerchantNotFound
-            ? "Merchant Center account not found or not linked to this Google Ads account. Please check your Merchant Center ID and ensure it is linked at ads.google.com → Tools → Linked accounts."
+            ? "Merchant Center account not found or not linked to this Google Ads account. Please link it at Google Ads → Tools → Linked accounts."
           : isBudgetTooLow
-            ? `Daily budget is too low for this campaign type.${budgetMinReadable ? ` Minimum required: ${budgetMinReadable}/day.` : " Please increase your daily budget and try again."}`
-            : formattedErrors[0]?.message ||
-              error.response?.data?.error?.message ||
-              error.message ||
-              "Failed to create campaign",
+            ? `Your daily budget is too low for this campaign type.${minText ? ` The minimum required is ${minText}/day — please increase your budget and try again.` : " Please increase your daily budget and try again."}`
+            : parseGoogleError(error, "Failed to create campaign"),
         validations: formattedErrors,
-        details: error.response?.data || null,
       });
     }
   }
@@ -3409,6 +3487,20 @@ class GoogleAdController {
         keywords = [],
         videoFormat,
         frequencyCap,
+        // PMAX asset group fields
+        assetGroupName,
+        finalUrl: pmaxFinalUrl,
+        businessDescription,
+        pmaxBusinessName,
+        pmaxHeadlines,
+        pmaxLongHeadline,
+        pmaxDescriptions,
+        pmaxImageUrl,
+        pmaxImageAssetRN,
+        pmaxSquareImageAssetRN,
+        pmaxLogoUrl,
+        pmaxLogoAssetRN,
+        pmaxVideoUrl,
       } = value;
 
       const actualBid = bidAmount || cpcBidMicros;
@@ -3447,14 +3539,18 @@ class GoogleAdController {
           }
 
           // Campaign location targeting
-          if (targeting?.countries?.length) {
+          const nonWorldwideCountries2 = (targeting?.countries || []).filter((c) => c.toUpperCase() !== "WW");
+          if (nonWorldwideCountries2.length) {
             const COMMON_LOCATIONS = {
               US: 2840, IN: 2356, GB: 2826, CA: 2124, AU: 2036, DE: 2276, FR: 2250,
               BR: 2076, IT: 2380, ES: 2724, JP: 2392, SG: 2702, AE: 2784,
               ZA: 2710, NG: 2566, KE: 2404, PH: 2608, ID: 2360, MX: 2484, NL: 2528,
+              SA: 2682, SE: 2752, NO: 2578, DK: 2208, PL: 2616, RU: 2643,
+              KR: 2410, TH: 2764, MY: 2458, BD: 2050, EG: 2818,
+              AR: 2032, CO: 2170, NZ: 2554, CH: 2756, TR: 2792, VN: 2704, PK: 2586,
             };
 
-            const locationCriteria = targeting.countries
+            const locationCriteria = nonWorldwideCountries2
               .map((code) => COMMON_LOCATIONS[code.toUpperCase()])
               .filter(Boolean)
               .map((locId) => ({
@@ -3483,9 +3579,13 @@ class GoogleAdController {
       const channelType = campTypeResp.data?.[0]?.results?.[0]?.campaign?.advertisingChannelType || "SEARCH";
 
       if (channelType === "PERFORMANCE_MAX") {
-        return res.status(400).json({
-          status: false,
-          error: "Performance Max campaigns do not support ad groups. Create a Search or Display campaign to use ad groups.",
+        return await this._createPmaxAssetGroup(req, res, {
+          accessToken, mccId, customerId, cleanCampaignId,
+          name, status,
+          assetGroupName, pmaxFinalUrl, businessDescription, pmaxBusinessName,
+          pmaxHeadlines, pmaxLongHeadline, pmaxDescriptions,
+          pmaxImageUrl, pmaxImageAssetRN, pmaxSquareImageAssetRN,
+          pmaxLogoUrl, pmaxLogoAssetRN, pmaxVideoUrl,
         });
       }
 
@@ -3666,11 +3766,7 @@ class GoogleAdController {
 
       return res.status(error.response?.status || 500).json({
         status: false,
-        error:
-          formattedErrors[0]?.message ||
-          error.response?.data?.error?.message ||
-          error.message ||
-          "Failed to create ad group",
+        error: parseGoogleError(error, "Failed to create ad group"),
         validations: formattedErrors,
       });
     }
@@ -4895,6 +4991,163 @@ class GoogleAdController {
     }
   }
 
+  async _createPmaxAssetGroup(req, res, {
+    accessToken, mccId, customerId, cleanCampaignId,
+    name, status,
+    assetGroupName, pmaxFinalUrl, businessDescription, pmaxBusinessName,
+    pmaxHeadlines, pmaxLongHeadline, pmaxDescriptions,
+    pmaxImageUrl, pmaxImageAssetRN, pmaxSquareImageAssetRN,
+    pmaxLogoUrl, pmaxLogoAssetRN, pmaxVideoUrl,
+  }) {
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+      "login-customer-id": mccId,
+      "Content-Type": "application/json",
+    };
+    const campaignResource = `customers/${customerId}/campaigns/${cleanCampaignId}`;
+    const agName = String(assetGroupName || name).slice(0, 128);
+
+    const dedup = (arr) => {
+      const seen = new Set();
+      return (arr || []).filter(Boolean).filter((t) => {
+        const k = String(t).trim().toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k); return true;
+      });
+    };
+    const rawHeadlines    = (pmaxHeadlines    || []).filter(Boolean);
+    const rawDescriptions = (pmaxDescriptions || []).filter(Boolean);
+    const headlines    = dedup(rawHeadlines.length >= 3 ? rawHeadlines : ["Shop Now", "Get Started", "Learn More", ...rawHeadlines]).slice(0, 5);
+    let descriptions   = dedup(rawDescriptions.length   ? rawDescriptions : [
+      businessDescription ? String(businessDescription).slice(0, 90) : "Trusted by thousands. Get started today.",
+      "Shop the best deals online.",
+    ]).slice(0, 4);
+    // Google requires at least 2 descriptions
+    if (descriptions.length < 2) {
+      const fallbacks = ["Trusted by thousands. Get started today.", "Shop the best deals online.", "Discover amazing offers today."];
+      for (const fb of fallbacks) {
+        if (descriptions.length >= 2) break;
+        if (!descriptions.includes(fb)) descriptions.push(fb);
+      }
+    }
+    const accountBusinessName = String(pmaxBusinessName || agName || "Brand").slice(0, 25);
+
+    // Resolve image assets
+    let imageAssetRN  = pmaxImageAssetRN  || null;
+    let squareImageAssetRN = pmaxSquareImageAssetRN || null;
+    if (!imageAssetRN && pmaxImageUrl) {
+      try {
+        const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, pmaxImageUrl);
+        imageAssetRN       = r?.landscape || null;
+        squareImageAssetRN = squareImageAssetRN || r?.square || null;
+      } catch (e) { logger.warn(`PMAX image upload failed: ${e.message}`); }
+    }
+    let logoAssetRN = pmaxLogoAssetRN || null;
+    if (!logoAssetRN && pmaxLogoUrl) {
+      try {
+        const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, pmaxLogoUrl);
+        logoAssetRN = r?.square || r?.landscape || null;
+      } catch (e) { logger.warn(`PMAX logo upload failed: ${e.message}`); }
+    }
+    if (!logoAssetRN && squareImageAssetRN) logoAssetRN = squareImageAssetRN;
+
+    // Resolve YouTube video asset
+    let videoAssetRN = null;
+    if (pmaxVideoUrl) {
+      try {
+        const ytMatch = pmaxVideoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+        const ytId = ytMatch ? ytMatch[1] : (pmaxVideoUrl.length === 11 ? pmaxVideoUrl : null);
+        if (ytId) {
+          const existingResp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+            { query: `SELECT asset.resource_name FROM asset WHERE asset.youtube_video_asset.youtube_video_id = '${ytId}' LIMIT 1` },
+            { headers }
+          );
+          videoAssetRN = existingResp.data?.[0]?.results?.[0]?.asset?.resourceName || null;
+          if (!videoAssetRN) {
+            const assetResp = await axios.post(
+              `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+              { mutateOperations: [{ assetOperation: { create: { name: `yt_${ytId}_${Date.now()}`, youtube_video_asset: { youtube_video_id: ytId } } } }] },
+              { headers }
+            );
+            videoAssetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName || null;
+          }
+        }
+      } catch (e) { logger.warn(`PMAX video asset failed: ${e.message}`); }
+    }
+
+    try {
+      logger.info(`_createPmaxAssetGroup: agName="${agName}" headlines=${headlines.length} descriptions=${descriptions.length} imageRN=${imageAssetRN} squareRN=${squareImageAssetRN} logoRN=${logoAssetRN}`);
+
+      // Step 1: Create text assets
+      // Google requires at least 1 LONG_HEADLINE — fall back to first headline if not provided
+      const resolvedLongHeadline = (pmaxLongHeadline || headlines[0] || "").slice(0, 90);
+      const textAssetDefs = [
+        ...headlines.map((text) => ({ text: String(text).slice(0, 30), fieldType: "HEADLINE" })),
+        { text: resolvedLongHeadline, fieldType: "LONG_HEADLINE" },
+        ...descriptions.map((text) => ({ text: String(text).slice(0, 90), fieldType: "DESCRIPTION" })),
+        { text: accountBusinessName, fieldType: "BUSINESS_NAME" },
+      ];
+      const textAssetResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        {
+          mutateOperations: textAssetDefs.map((def, i) => ({
+            assetOperation: { create: { text_asset: { text: def.text } } },
+          })),
+        },
+        { headers }
+      );
+      const textAssetRNs = (textAssetResp.data?.mutateOperationResponses || []).map((r) => r?.assetResult?.resourceName);
+      logger.info(`_createPmaxAssetGroup: text assets created ${textAssetRNs.filter(Boolean).length}/${textAssetDefs.length}`);
+
+      // Step 2: Create asset group + link all assets in one mutate
+      const agTempRN = `customers/${customerId}/assetGroups/-1`;
+      const agResp = await axios.post(
+        `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+        {
+          mutateOperations: [
+            {
+              assetGroupOperation: {
+                create: {
+                  resource_name: agTempRN,
+                  campaign: campaignResource,
+                  name: agName,
+                  status: status || "PAUSED",
+                  ...(pmaxFinalUrl ? { final_urls: [pmaxFinalUrl] } : {}),
+                },
+              },
+            },
+            ...textAssetRNs.map((rn, i) => rn ? ({
+              assetGroupAssetOperation: { create: { asset_group: agTempRN, asset: rn, field_type: textAssetDefs[i].fieldType } },
+            }) : null).filter(Boolean),
+            ...(imageAssetRN       ? [{ assetGroupAssetOperation: { create: { asset_group: agTempRN, asset: imageAssetRN,       field_type: "MARKETING_IMAGE"        } } }] : []),
+            ...(squareImageAssetRN ? [{ assetGroupAssetOperation: { create: { asset_group: agTempRN, asset: squareImageAssetRN, field_type: "SQUARE_MARKETING_IMAGE"  } } }] : []),
+            ...(logoAssetRN        ? [{ assetGroupAssetOperation: { create: { asset_group: agTempRN, asset: logoAssetRN,        field_type: "LOGO"                    } } }] : []),
+            ...(videoAssetRN       ? [{ assetGroupAssetOperation: { create: { asset_group: agTempRN, asset: videoAssetRN,       field_type: "YOUTUBE_VIDEO"           } } }] : []),
+          ],
+        },
+        { headers }
+      );
+      const createdAgRN = agResp.data?.mutateOperationResponses?.[0]?.assetGroupResult?.resourceName;
+      const assetGroupId = createdAgRN?.split("/").pop();
+      logger.info(`_createPmaxAssetGroup: asset group created ${agName} → ${createdAgRN}`);
+
+      return res.status(201).json({
+        status: true,
+        message: "Asset group created successfully",
+        adGroup: { adGroupId: assetGroupId, name: agName, type: "ASSET_GROUP", resourceName: createdAgRN },
+      });
+    } catch (e) {
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      logger.error(`_createPmaxAssetGroup failed: ${detail}`);
+      return res.status(e.response?.status || 500).json({
+        status: false,
+        error: parseGoogleError(e, "Failed to create asset group"),
+      });
+    }
+  }
+
   async _uploadImageFromUrl(accessToken, loginCustomerId, customerId, imageUrl) {
     try {
       const sharp = require("sharp");
@@ -4954,7 +5207,10 @@ class GoogleAdController {
       const {
         WIZARD_OBJECTIVE_KEYS,
         OBJECTIVE_DESTINATIONS,
+        OBJECTIVE_GOALS,
+        GOAL_DESTINATIONS,
         getDestinationsForObjective,
+        getGoalsForObjective,
       } = require("../../config/googleWizardDestinations");
 
       const OBJECTIVE_DESCRIPTIONS = {
@@ -4994,11 +5250,19 @@ class GoogleAdController {
         description: OBJECTIVE_DESCRIPTIONS[value] || "",
         adType: AD_TYPE_MAP[value] || "SEARCH",
         destinations: getDestinationsForObjective(value),
+        goals: getGoalsForObjective(value),
         ctas: (GOOGLE_CTA_MAP[value] || []).map((v) => ({ value: v, label: GOOGLE_CTA_LABELS[v] || v })),
       }));
 
+      // Flat map of objective → goals for quick lookup on the frontend
+      const objectiveGoals = Object.fromEntries(
+        WIZARD_OBJECTIVE_KEYS.map((k) => [k, getGoalsForObjective(k)])
+      );
+
       const COUNTRY_OPTIONS = [
-        // Top markets first
+        // Worldwide — no geo restriction
+        { code: "WW", label: "Worldwide" },
+        // Top markets
         { code: "US", label: "United States" },
         { code: "IN", label: "India" },
         { code: "GB", label: "United Kingdom" },
@@ -5010,186 +5274,33 @@ class GoogleAdController {
         { code: "BR", label: "Brazil" },
         { code: "SG", label: "Singapore" },
         { code: "AE", label: "UAE" },
-        // Rest of world A–Z
-        { code: "AF", label: "Afghanistan" },
-        { code: "AL", label: "Albania" },
-        { code: "DZ", label: "Algeria" },
-        { code: "AD", label: "Andorra" },
-        { code: "AO", label: "Angola" },
-        { code: "AG", label: "Antigua and Barbuda" },
-        { code: "AR", label: "Argentina" },
-        { code: "AM", label: "Armenia" },
-        { code: "AT", label: "Austria" },
-        { code: "AZ", label: "Azerbaijan" },
-        { code: "BS", label: "Bahamas" },
-        { code: "BH", label: "Bahrain" },
-        { code: "BD", label: "Bangladesh" },
-        { code: "BB", label: "Barbados" },
-        { code: "BY", label: "Belarus" },
-        { code: "BE", label: "Belgium" },
-        { code: "BZ", label: "Belize" },
-        { code: "BJ", label: "Benin" },
-        { code: "BT", label: "Bhutan" },
-        { code: "BO", label: "Bolivia" },
-        { code: "BA", label: "Bosnia and Herzegovina" },
-        { code: "BW", label: "Botswana" },
-        { code: "BN", label: "Brunei" },
-        { code: "BG", label: "Bulgaria" },
-        { code: "BF", label: "Burkina Faso" },
-        { code: "BI", label: "Burundi" },
-        { code: "CV", label: "Cabo Verde" },
-        { code: "KH", label: "Cambodia" },
-        { code: "CM", label: "Cameroon" },
-        { code: "CF", label: "Central African Republic" },
-        { code: "TD", label: "Chad" },
-        { code: "CL", label: "Chile" },
-        { code: "CN", label: "China" },
-        { code: "CO", label: "Colombia" },
-        { code: "KM", label: "Comoros" },
-        { code: "CG", label: "Congo" },
-        { code: "CD", label: "Congo (DRC)" },
-        { code: "CR", label: "Costa Rica" },
-        { code: "HR", label: "Croatia" },
-        { code: "CU", label: "Cuba" },
-        { code: "CY", label: "Cyprus" },
-        { code: "CZ", label: "Czech Republic" },
-        { code: "DK", label: "Denmark" },
-        { code: "DJ", label: "Djibouti" },
-        { code: "DM", label: "Dominica" },
-        { code: "DO", label: "Dominican Republic" },
-        { code: "EC", label: "Ecuador" },
-        { code: "EG", label: "Egypt" },
-        { code: "SV", label: "El Salvador" },
-        { code: "GQ", label: "Equatorial Guinea" },
-        { code: "ER", label: "Eritrea" },
-        { code: "EE", label: "Estonia" },
-        { code: "SZ", label: "Eswatini" },
-        { code: "ET", label: "Ethiopia" },
-        { code: "FJ", label: "Fiji" },
-        { code: "FI", label: "Finland" },
-        { code: "GA", label: "Gabon" },
-        { code: "GM", label: "Gambia" },
-        { code: "GE", label: "Georgia" },
-        { code: "GH", label: "Ghana" },
-        { code: "GR", label: "Greece" },
-        { code: "GD", label: "Grenada" },
-        { code: "GT", label: "Guatemala" },
-        { code: "GN", label: "Guinea" },
-        { code: "GW", label: "Guinea-Bissau" },
-        { code: "GY", label: "Guyana" },
-        { code: "HT", label: "Haiti" },
-        { code: "HN", label: "Honduras" },
-        { code: "HU", label: "Hungary" },
-        { code: "IS", label: "Iceland" },
-        { code: "ID", label: "Indonesia" },
-        { code: "IR", label: "Iran" },
-        { code: "IQ", label: "Iraq" },
-        { code: "IE", label: "Ireland" },
-        { code: "IL", label: "Israel" },
-        { code: "IT", label: "Italy" },
-        { code: "JM", label: "Jamaica" },
-        { code: "JO", label: "Jordan" },
-        { code: "KZ", label: "Kazakhstan" },
-        { code: "KE", label: "Kenya" },
-        { code: "KI", label: "Kiribati" },
-        { code: "KW", label: "Kuwait" },
-        { code: "KG", label: "Kyrgyzstan" },
-        { code: "LA", label: "Laos" },
-        { code: "LV", label: "Latvia" },
-        { code: "LB", label: "Lebanon" },
-        { code: "LS", label: "Lesotho" },
-        { code: "LR", label: "Liberia" },
-        { code: "LY", label: "Libya" },
-        { code: "LI", label: "Liechtenstein" },
-        { code: "LT", label: "Lithuania" },
-        { code: "LU", label: "Luxembourg" },
-        { code: "MG", label: "Madagascar" },
-        { code: "MW", label: "Malawi" },
-        { code: "MY", label: "Malaysia" },
-        { code: "MV", label: "Maldives" },
-        { code: "ML", label: "Mali" },
-        { code: "MT", label: "Malta" },
-        { code: "MH", label: "Marshall Islands" },
-        { code: "MR", label: "Mauritania" },
-        { code: "MU", label: "Mauritius" },
-        { code: "MX", label: "Mexico" },
-        { code: "FM", label: "Micronesia" },
-        { code: "MD", label: "Moldova" },
-        { code: "MC", label: "Monaco" },
-        { code: "MN", label: "Mongolia" },
-        { code: "ME", label: "Montenegro" },
-        { code: "MA", label: "Morocco" },
-        { code: "MZ", label: "Mozambique" },
-        { code: "MM", label: "Myanmar" },
-        { code: "NA", label: "Namibia" },
-        { code: "NR", label: "Nauru" },
-        { code: "NP", label: "Nepal" },
-        { code: "NL", label: "Netherlands" },
-        { code: "NZ", label: "New Zealand" },
-        { code: "NI", label: "Nicaragua" },
-        { code: "NE", label: "Niger" },
-        { code: "NG", label: "Nigeria" },
-        { code: "NO", label: "Norway" },
-        { code: "OM", label: "Oman" },
-        { code: "PK", label: "Pakistan" },
-        { code: "PW", label: "Palau" },
-        { code: "PA", label: "Panama" },
-        { code: "PG", label: "Papua New Guinea" },
-        { code: "PY", label: "Paraguay" },
-        { code: "PE", label: "Peru" },
-        { code: "PH", label: "Philippines" },
-        { code: "PL", label: "Poland" },
-        { code: "PT", label: "Portugal" },
-        { code: "QA", label: "Qatar" },
-        { code: "RO", label: "Romania" },
-        { code: "RU", label: "Russia" },
-        { code: "RW", label: "Rwanda" },
-        { code: "KN", label: "Saint Kitts and Nevis" },
-        { code: "LC", label: "Saint Lucia" },
-        { code: "VC", label: "Saint Vincent and the Grenadines" },
-        { code: "WS", label: "Samoa" },
-        { code: "SM", label: "San Marino" },
-        { code: "ST", label: "Sao Tome and Principe" },
         { code: "SA", label: "Saudi Arabia" },
-        { code: "SN", label: "Senegal" },
-        { code: "RS", label: "Serbia" },
-        { code: "SC", label: "Seychelles" },
-        { code: "SL", label: "Sierra Leone" },
-        { code: "SK", label: "Slovakia" },
-        { code: "SI", label: "Slovenia" },
-        { code: "SB", label: "Solomon Islands" },
-        { code: "SO", label: "Somalia" },
         { code: "ZA", label: "South Africa" },
-        { code: "SS", label: "South Sudan" },
-        { code: "ES", label: "Spain" },
-        { code: "LK", label: "Sri Lanka" },
-        { code: "SD", label: "Sudan" },
-        { code: "SR", label: "Suriname" },
-        { code: "SE", label: "Sweden" },
-        { code: "CH", label: "Switzerland" },
-        { code: "SY", label: "Syria" },
-        { code: "TW", label: "Taiwan" },
-        { code: "TJ", label: "Tajikistan" },
-        { code: "TZ", label: "Tanzania" },
-        { code: "TH", label: "Thailand" },
-        { code: "TL", label: "Timor-Leste" },
-        { code: "TG", label: "Togo" },
-        { code: "TO", label: "Tonga" },
-        { code: "TT", label: "Trinidad and Tobago" },
-        { code: "TN", label: "Tunisia" },
-        { code: "TR", label: "Turkey" },
-        { code: "TM", label: "Turkmenistan" },
-        { code: "TV", label: "Tuvalu" },
-        { code: "UG", label: "Uganda" },
-        { code: "UA", label: "Ukraine" },
-        { code: "UY", label: "Uruguay" },
-        { code: "UZ", label: "Uzbekistan" },
-        { code: "VU", label: "Vanuatu" },
-        { code: "VE", label: "Venezuela" },
+        { code: "NG", label: "Nigeria" },
+        { code: "MX", label: "Mexico" },
+        { code: "ID", label: "Indonesia" },
+        { code: "PK", label: "Pakistan" },
+        { code: "PH", label: "Philippines" },
         { code: "VN", label: "Vietnam" },
-        { code: "YE", label: "Yemen" },
-        { code: "ZM", label: "Zambia" },
-        { code: "ZW", label: "Zimbabwe" },
+        { code: "TR", label: "Turkey" },
+        { code: "IT", label: "Italy" },
+        { code: "ES", label: "Spain" },
+        { code: "NL", label: "Netherlands" },
+        { code: "SE", label: "Sweden" },
+        { code: "NO", label: "Norway" },
+        { code: "DK", label: "Denmark" },
+        { code: "PL", label: "Poland" },
+        { code: "RU", label: "Russia" },
+        { code: "KR", label: "South Korea" },
+        { code: "TH", label: "Thailand" },
+        { code: "MY", label: "Malaysia" },
+        { code: "BD", label: "Bangladesh" },
+        { code: "EG", label: "Egypt" },
+        { code: "KE", label: "Kenya" },
+        { code: "AR", label: "Argentina" },
+        { code: "CO", label: "Colombia" },
+        { code: "NZ", label: "New Zealand" },
+        { code: "CH", label: "Switzerland" },
       ];
 
       const GENDER_OPTIONS = [
@@ -5269,6 +5380,8 @@ class GoogleAdController {
           objectives,
           destinations,
           objectiveDestinations: OBJECTIVE_DESTINATIONS,
+          objectiveGoals,
+          goalDestinations: GOAL_DESTINATIONS,
           adTypeMap: AD_TYPE_MAP,
           ctaMap: Object.fromEntries(
             Object.entries(GOOGLE_CTA_MAP).map(([obj, ctas]) => [

@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const googleAuthController = require("../../controllers/adPosting/googleAuthController");
 const googleAdController = require("../../controllers/adPosting/googleAdController");
+const googleCampaignTemplateController = require("../../controllers/googleCampaignTemplate.controller");
 
 const router = express.Router();
 
@@ -37,6 +38,9 @@ router.delete("/delete-campaign", googleAdController.deleteCampaignAPI);
 // ─── Ad Groups create ──────────────────────────────────────────────────────────
 router.post("/create-ad-group", googleAdController.createAdGroupAPI);
 router.patch("/update-ad-group", googleAdController.updateAdGroupAPI);
+router.delete("/delete-ad-group", googleAdController.deleteAdGroupAPI);
+router.post("/asset-group-asset", googleAdController.addAssetToAssetGroupAPI);
+router.delete("/asset-group-asset", googleAdController.removeAssetFromAssetGroupAPI);
 
 
 // ─── Ads Posting ────────────────────────────────────────────────
@@ -45,6 +49,15 @@ router.post("/ads", googleAdController.createAdAPI);
 router.patch("/ads", googleAdController.updateAdAPI);
 router.get("/ads/:id", googleAdController.getAd);
 router.delete("/ads/:id", googleAdController.deleteAdAPI);
+
+
+// ─── Campaign Templates ────────────────────────────────────────────────────────
+// Campaign Templates — Google only. Uses GoogleCampaignTemplate model + controller.
+// Meta has its own separate model, controller, and routes.
+router.get("/templates",        googleCampaignTemplateController.listTemplates);
+router.get("/templates/:id",    googleCampaignTemplateController.getTemplate);
+router.post("/templates",       googleCampaignTemplateController.createTemplate);
+router.delete("/templates/:id", googleCampaignTemplateController.deleteTemplate);
 
 
 // ─── Analytics, Insights & Audit ──────────────────────────────────────────────

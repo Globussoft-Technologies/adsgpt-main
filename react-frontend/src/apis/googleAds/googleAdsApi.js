@@ -115,9 +115,9 @@ export const getGoogleCtaOptions = async (objective) => {
   return data;
 };
 
-export const getGoogleAdGroups = async ({ adAccountId, campaignId, refresh = false }) => {
+export const getGoogleAdGroups = async ({ adAccountId, campaignId, channelType, refresh = false }) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-ad-groups`, {
-    params: { adAccountId, campaignId, ...(refresh ? { refresh: 'true', _t: Date.now() } : {}) },
+    params: { adAccountId, campaignId, ...(channelType ? { channelType } : {}), ...(refresh ? { refresh: 'true', _t: Date.now() } : {}) },
     headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
   });
   return data;
@@ -223,9 +223,62 @@ export const deleteGoogleAd = async ({ adAccountId, adGroupId, adId }) => {
   return data;
 };
 
+export const addAssetToAssetGroup = async (body) => {
+  const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/asset-group-asset`, body, { headers: authHeaders() });
+  return data;
+};
+
+export const removeAssetFromAssetGroup = async (body) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/asset-group-asset`, {
+    data: body,
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const deleteGoogleAdGroup = async ({ adAccountId, adGroupId, campaignId, isPmax }) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/delete-ad-group`, {
+    data: { adAccountId, adGroupId, campaignId, isPmax },
+    headers: authHeaders(),
+  });
+  return data;
+};
+
 export const deleteGoogleCampaign = async ({ adAccountId, campaignId }) => {
   const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/delete-campaign`, {
     data: { adAccountId, campaignId },
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+// ─── Campaign Templates ────────────────────────────────────────────────────────
+
+export const listGoogleCampaignTemplates = async () => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/templates`, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const getGoogleCampaignTemplate = async (id) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/templates/${id}`, {
+    headers: authHeaders(),
+  });
+  return data;
+};
+
+export const saveGoogleCampaignTemplate = async ({ name, payload, objective, destination }) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/google-ads/templates`,
+    { name, payload, objective, conversionLocation: destination },
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+export const deleteGoogleCampaignTemplate = async (id) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/templates/${id}`, {
     headers: authHeaders(),
   });
   return data;

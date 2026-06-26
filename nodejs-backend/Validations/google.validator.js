@@ -50,14 +50,15 @@ const createCampaignSchema = Joi.object({
     }),
 
   // 1,000,000 micros = ₹1 / $1
-  dailyBudgetMicros: Joi.number()
-    .integer()
-    .min(10000)
-    .default(5000000)
-    .messages({
-      "number.base": "Daily budget must be a valid number.",
-      "number.min": "Daily budget must be at least ₹0.01 per day.",
-    }),
+  dailyBudgetMicros: Joi.number().integer().min(10000).optional().messages({
+    "number.base": "Daily budget must be a valid number.",
+    "number.min": "Daily budget must be at least ₹0.01 per day.",
+  }),
+  lifetimeBudgetMicros: Joi.number().integer().min(10000).optional().messages({
+    "number.base": "Lifetime budget must be a valid number.",
+    "number.min": "Lifetime budget must be at least ₹0.01.",
+  }),
+  budgetType: Joi.string().valid("DAILY", "CAMPAIGN_TOTAL").default("DAILY"),
 
   status: Joi.string()
     .valid("ENABLED", "PAUSED")
@@ -117,12 +118,16 @@ const createCampaignSchema = Joi.object({
     pmaxLongHeadline:    Joi.string().optional(),
     pmaxDescriptions:    Joi.array().items(Joi.string().allow('')).optional(),
     pmaxImageUrl:        Joi.string().optional(),
+    pmaxImageAssetRN:       Joi.string().optional(),
+    pmaxSquareImageAssetRN: Joi.string().optional(),
     pmaxLogoUrl:         Joi.string().optional(),
+    pmaxLogoAssetRN:     Joi.string().optional(),
     pmaxVideoUrl:        Joi.string().optional(),
+    pmaxSearchThemes:    Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.string()).optional(),
     // VIDEO / YOUTUBE_REACH / DEMAND_GEN
     videoGoal:           Joi.string().valid("VIDEO_VIEWS", "REACH", "YOUTUBE_SUBSCRIPTIONS").optional(),
     videoSubtype:        Joi.string().valid("VIDEO_VIEWS", "EFFICIENT_REACH", "NON_SKIPPABLE_REACH", "TARGET_FREQUENCY").optional(),
-  }).optional(),
+  }).unknown(true).optional(),
 
 })
   .or("adAccountId", "customerId")
@@ -199,6 +204,21 @@ const createAdGroupSchema = Joi.object({
 
   // Frequency cap (DISPLAY campaigns)
   frequencyCap: Joi.number().integer().min(1).optional(),
+
+  // PERFORMANCE_MAX asset group fields
+  assetGroupName:         Joi.string().optional(),
+  finalUrl:               Joi.string().uri().optional(),
+  businessDescription:    Joi.string().optional(),
+  pmaxBusinessName:       Joi.string().optional(),
+  pmaxHeadlines:          Joi.array().items(Joi.string().allow('')).optional(),
+  pmaxLongHeadline:       Joi.string().optional(),
+  pmaxDescriptions:       Joi.array().items(Joi.string().allow('')).optional(),
+  pmaxImageUrl:           Joi.string().optional(),
+  pmaxImageAssetRN:       Joi.string().optional(),
+  pmaxSquareImageAssetRN: Joi.string().optional(),
+  pmaxLogoUrl:            Joi.string().optional(),
+  pmaxLogoAssetRN:        Joi.string().optional(),
+  pmaxVideoUrl:           Joi.string().optional(),
 }).or("adAccountId", "customerId")
   .messages({ "object.missing": "adAccountId is required" })
   .custom((value, helpers) => {

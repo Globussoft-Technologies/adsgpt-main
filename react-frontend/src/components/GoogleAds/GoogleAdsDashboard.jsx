@@ -30,7 +30,7 @@ import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
 import GoogleAdsAnalyticsPanel from './GoogleAdsAnalyticsPanel';
 import GoogleAdsCampaignsTable from './GoogleAdsCampaignsTable';
 import GoogleAdsAuditTab from './GoogleAdsAuditTab';
-import CreateCampaignWizard from './CreateCampaignWizard';
+import CreateCampaignWizard, { fetchSchemaOnce } from './CreateCampaignWizard';
 
 const GOOGLE_BLUE = '#4285F4';
 
@@ -47,6 +47,7 @@ export default function GoogleAdsDashboard() {
 
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [schemaLoading, setSchemaLoading] = useState(false);
   const [loadingInsights, setLoadingInsights]   = useState(false);
 
   const [accountOpen, setAccountOpen]         = useState(false);
@@ -463,12 +464,21 @@ export default function GoogleAdsDashboard() {
                     Refresh
                   </button>
                   <button
-                    onClick={() => openWizard('create-full')}
-                    disabled={isGoogleDisconnected}
+                    onClick={() => {
+                      if (schemaLoading || isGoogleDisconnected) return;
+                      setSchemaLoading(true);
+                      fetchSchemaOnce()
+                        .catch(() => {})
+                        .finally(() => { setSchemaLoading(false); openWizard('create-full'); });
+                    }}
+                    disabled={isGoogleDisconnected || schemaLoading}
                     className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                     style={{ background: GOOGLE_BLUE }}
                   >
-                    <Plus className="h-3.5 w-3.5" /> New Campaign
+                    {schemaLoading
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</>
+                      : <><Plus className="h-3.5 w-3.5" /> New Campaign</>
+                    }
                   </button>
                 </div>
               </div>
