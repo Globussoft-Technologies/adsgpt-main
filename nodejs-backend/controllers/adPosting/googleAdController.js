@@ -562,6 +562,7 @@ class GoogleAdController {
     this.getAd = this.getAd.bind(this);
     this.resolveAdForEdit = this.resolveAdForEdit.bind(this);
     this.uploadMediaAPI = this.uploadMediaAPI.bind(this);
+    this.uploadVideoAPI = this.uploadVideoAPI.bind(this);
     this.deleteCampaignAPI = this.deleteCampaignAPI.bind(this);
     this.deleteAdGroupAPI = this.deleteAdGroupAPI.bind(this);
     this.addAssetToAssetGroupAPI = this.addAssetToAssetGroupAPI.bind(this);
@@ -3979,38 +3980,66 @@ class GoogleAdController {
             return res.status(400).json({ status: false, error: detail });
           }
 
-          // Step 2: logo — try YouTube thumbnail (all sizes), fallback to generated solid-color image
+          // Step 2: logo — use the YouTube suggested thumbnail of the video.
+          // Fetch video snippet to get the highest-res suggested thumbnail, upload as logo asset.
           let logoAssetRN;
           try {
             const sharp = require("sharp");
-            const thumbnailCandidates = [
-              `https://i.ytimg.com/vi/${youtubeVideoId}/maxresdefault.jpg`,
-              `https://i.ytimg.com/vi/${youtubeVideoId}/sddefault.jpg`,
-              `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
-              `https://i.ytimg.com/vi/${youtubeVideoId}/mqdefault.jpg`,
-              `https://i.ytimg.com/vi/${youtubeVideoId}/default.jpg`,
-            ];
             let logoBuffer;
-            for (const url of thumbnailCandidates) {
-              try {
-                const resp = await axios.get(url, { responseType: "arraybuffer", timeout: 15000 });
-                if (resp.status === 200 && resp.data?.byteLength > 5000) {
-                  logoBuffer = await sharp(Buffer.from(resp.data))
+
+            // Fetch YouTube suggested thumbnail via Data API v3
+            try {
+              const videoResp = await axios.get("https://www.googleapis.com/youtube/v3/videos", {
+                params: { part: "snippet", id: youtubeVideoId },
+                headers: { Authorization: `Bearer ${accessToken}` },
+                timeout: 10000,
+              });
+              const thumbs = videoResp.data?.items?.[0]?.snippet?.thumbnails;
+              const thumbUrl = thumbs?.maxres?.url || thumbs?.high?.url || thumbs?.medium?.url || thumbs?.default?.url;
+              if (thumbUrl) {
+                const thumbResp = await axios.get(thumbUrl, { responseType: "arraybuffer", timeout: 15000 });
+                if (thumbResp.status === 200 && thumbResp.data?.byteLength > 1000) {
+                  logoBuffer = await sharp(Buffer.from(thumbResp.data))
                     .resize({ width: 128, height: 128, fit: "cover", position: "centre" })
                     .jpeg({ quality: 90 })
                     .toBuffer();
-                  logger.info(`Demand Gen: logo from thumbnail ${url}`);
-                  break;
+                  logger.info(`Demand Gen: logo from YouTube suggested thumbnail videoId=${youtubeVideoId} url=${thumbUrl}`);
                 }
-              } catch (_) {}
+              }
+            } catch (ytApiErr) {
+              logger.warn(`Demand Gen: YouTube suggested thumbnail fetch failed (${ytApiErr.message}) — falling back to i.ytimg.com`);
             }
+
+            // Fallback: i.ytimg.com CDN thumbnails (no API key needed)
             if (!logoBuffer) {
-              // All thumbnails unavailable — generate a plain dark-blue 128x128 fallback
+              const thumbnailCandidates = [
+                `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
+                `https://i.ytimg.com/vi/${youtubeVideoId}/mqdefault.jpg`,
+                `https://i.ytimg.com/vi/${youtubeVideoId}/default.jpg`,
+              ];
+              for (const url of thumbnailCandidates) {
+                try {
+                  const resp = await axios.get(url, { responseType: "arraybuffer", timeout: 10000 });
+                  if (resp.status === 200 && resp.data?.byteLength > 5000) {
+                    logoBuffer = await sharp(Buffer.from(resp.data))
+                      .resize({ width: 128, height: 128, fit: "cover", position: "centre" })
+                      .jpeg({ quality: 90 })
+                      .toBuffer();
+                    logger.info(`Demand Gen: logo fallback from i.ytimg.com ${url}`);
+                    break;
+                  }
+                } catch (_) {}
+              }
+            }
+
+            // Last resort: solid dark-blue square
+            if (!logoBuffer) {
               logoBuffer = await sharp({ create: { width: 128, height: 128, channels: 3, background: { r: 15, g: 23, b: 42 } } })
                 .jpeg({ quality: 90 })
                 .toBuffer();
               logger.info("Demand Gen: using generated fallback logo image");
             }
+
             logoAssetRN = await this._uploadSingleImageBuffer(accessToken, loginCustomerId, customerId, logoBuffer, "logo");
           } catch (e) {
             logger.error(`Demand Gen logo upload failed: ${e.message}`);
@@ -4701,6 +4730,73 @@ class GoogleAdController {
     }
   }
 
+  // ─── Upload video to YouTube ──────────────────────────────────────────────────
+
+  async uploadVideoAPI(req, res) {
+    try {
+      const userId = req.user.user_id;
+      const { adAccountId } = req.body;
+      const file = req.file;
+
+      if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
+      if (!file) return res.status(400).json({ status: false, error: "Video file is required" });
+
+      const { accessToken } = await initGoogleApiForUser(userId);
+
+      const title = (file.originalname || "Ad Video").replace(/\.[^.]+$/, "").slice(0, 100);
+      const contentType = file.mimetype || "video/mp4";
+      const fileSize = file.buffer.length;
+
+      // Initiate YouTube resumable upload session
+      const initResp = await axios.post(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        {
+          snippet: { title, description: "Ad video uploaded via AdsGPT", categoryId: "22" },
+          status: { privacyStatus: "unlisted" },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "X-Upload-Content-Type": contentType,
+            "X-Upload-Content-Length": String(fileSize),
+          },
+        }
+      );
+
+      const uploadUrl = initResp.headers.location;
+      if (!uploadUrl) throw new Error("YouTube upload session URL not returned");
+
+      // Upload the file buffer directly
+      const uploadResp = await axios.put(uploadUrl, file.buffer, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": contentType,
+          "Content-Length": String(fileSize),
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+
+      const youtubeVideoId = uploadResp.data?.id;
+      if (!youtubeVideoId) throw new Error("YouTube upload succeeded but no video ID returned");
+
+      // Wait for video to be processed
+      await this._waitForYouTubeVideo(accessToken, youtubeVideoId);
+
+
+      logger.info(`uploadVideoAPI: uploaded videoId=${youtubeVideoId} for user=${userId}`);
+      return res.status(201).json({
+        status: true,
+        youtubeVideoId,
+        youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+      });
+    } catch (error) {
+      logger.error(`GOOGLE UPLOAD VIDEO ERROR => ${error.message}`);
+      return res.status(500).json({ status: false, error: error.message || "Failed to upload video to YouTube" });
+    }
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   async _createCampaign(accessToken, loginCustomerId, customerId, name, objective, dailyBudgetMicros) {
@@ -5033,9 +5129,52 @@ class GoogleAdController {
     }
     const accountBusinessName = String(pmaxBusinessName || agName || "Brand").slice(0, 25);
 
-    // Resolve image assets
-    let imageAssetRN  = pmaxImageAssetRN  || null;
-    let squareImageAssetRN = pmaxSquareImageAssetRN || null;
+
+    // Helper: fetch image URL from a Google Ads asset RN (works for any customer this token has access to)
+    const fetchAssetImageUrl = async (rn) => {
+      if (!rn) return null;
+      const match = rn.match(/^customers\/(\d+)\//);
+      if (!match) return null;
+      const cid = match[1];
+      // Try both the target MCC and the source customer as login-customer-id
+      const loginIds = [mccId, cid];
+      for (const lid of loginIds) {
+        try {
+          const resp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${cid}/googleAds:searchStream`,
+            { query: `SELECT asset.image_asset.full_size.url FROM asset WHERE asset.resource_name = '${rn}' LIMIT 1` },
+            { headers: { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" } }
+          );
+          const url = resp.data?.[0]?.results?.[0]?.asset?.imageAsset?.fullSize?.url
+            || resp.data?.[0]?.results?.[0]?.asset?.image_asset?.full_size?.url;
+          if (url) { logger.info(`PMAX: fetched asset URL from ${cid} (login=${lid}): ${url}`); return url; }
+        } catch (_) {}
+      }
+      logger.warn(`PMAX: could not fetch image URL for ${rn}`);
+      return null;
+    };
+
+    // Resolve image assets — if RN belongs to a different customer, fetch its URL and re-upload
+    let imageAssetRN = null;
+    let squareImageAssetRN = null;
+    const imgMatch = pmaxImageAssetRN?.match(/^customers\/(\d+)\//);
+    if (imgMatch && imgMatch[1] === String(customerId)) {
+      // Same account — use as-is
+      imageAssetRN = pmaxImageAssetRN;
+      const sqMatch = pmaxSquareImageAssetRN?.match(/^customers\/(\d+)\//);
+      squareImageAssetRN = (sqMatch && sqMatch[1] === String(customerId)) ? pmaxSquareImageAssetRN : null;
+    } else if (pmaxImageAssetRN) {
+      // Different account — fetch image URL and re-upload to target account
+      try {
+        const imageUrl = await fetchAssetImageUrl(pmaxImageAssetRN);
+        if (imageUrl) {
+          logger.info(`PMAX: re-uploading image from source account to ${customerId}`);
+          const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, imageUrl);
+          imageAssetRN = r?.landscape || null;
+          squareImageAssetRN = r?.square || null;
+        }
+      } catch (e) { logger.warn(`PMAX: cross-account image copy failed: ${e.message}`); }
+    }
     if (!imageAssetRN && pmaxImageUrl) {
       try {
         const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, pmaxImageUrl);
@@ -5043,13 +5182,29 @@ class GoogleAdController {
         squareImageAssetRN = squareImageAssetRN || r?.square || null;
       } catch (e) { logger.warn(`PMAX image upload failed: ${e.message}`); }
     }
-    let logoAssetRN = pmaxLogoAssetRN || null;
+    let logoAssetRN = null;
+    if (pmaxLogoAssetRN) {
+      const lMatch = pmaxLogoAssetRN.match(/^customers\/(\d+)\//);
+      if (lMatch && lMatch[1] === String(customerId)) {
+        logoAssetRN = pmaxLogoAssetRN;
+      } else {
+        try {
+          const logoUrl = await fetchAssetImageUrl(pmaxLogoAssetRN);
+          if (logoUrl) {
+            const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, logoUrl);
+            logoAssetRN = r?.square || r?.landscape || null;
+          }
+        } catch (e) { logger.warn(`PMAX: cross-account logo copy failed: ${e.message}`); }
+      }
+    }
     if (!logoAssetRN && pmaxLogoUrl) {
       try {
         const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, pmaxLogoUrl);
         logoAssetRN = r?.square || r?.landscape || null;
       } catch (e) { logger.warn(`PMAX logo upload failed: ${e.message}`); }
     }
+    // Auto-use the square image as logo if no dedicated logo was provided.
+    // Google allows the same asset resource name for both SQUARE_MARKETING_IMAGE and LOGO.
     if (!logoAssetRN && squareImageAssetRN) logoAssetRN = squareImageAssetRN;
 
     // Resolve YouTube video asset
@@ -5075,6 +5230,11 @@ class GoogleAdController {
           }
         }
       } catch (e) { logger.warn(`PMAX video asset failed: ${e.message}`); }
+    }
+
+    // Google requires at least one marketing image, square image, and logo
+    if (!imageAssetRN || !squareImageAssetRN || !logoAssetRN) {
+      logger.warn(`_createPmaxAssetGroup: missing assets — imageRN=${imageAssetRN} squareRN=${squareImageAssetRN} logoRN=${logoAssetRN} — proceeding without them (Google will validate)`);
     }
 
     try {

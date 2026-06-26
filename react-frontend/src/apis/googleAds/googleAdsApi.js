@@ -189,7 +189,7 @@ export const uploadGoogleImage = async ({ adAccountId, imageUrl, imageFile }) =>
     form.append('adAccountId', adAccountId);
     form.append('image', imageFile);
     const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/upload-image`, form, {
-      headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' },
+      headers: authHeaders(), // no Content-Type override — let axios set multipart boundary automatically
     });
     return data;
   }
@@ -198,6 +198,16 @@ export const uploadGoogleImage = async ({ adAccountId, imageUrl, imageFile }) =>
     { adAccountId, imageUrl },
     { headers: authHeaders() },
   );
+  return data;
+};
+
+export const uploadGoogleVideo = async ({ adAccountId, videoFile }) => {
+  const form = new FormData();
+  form.append('adAccountId', adAccountId);
+  form.append('video', videoFile);
+  const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/upload-video`, form, {
+    headers: authHeaders(), // no Content-Type override — let axios set multipart boundary automatically
+  });
   return data;
 };
 

@@ -45,6 +45,13 @@ router.delete("/asset-group-asset", googleAdController.removeAssetFromAssetGroup
 
 // ─── Ads Posting ────────────────────────────────────────────────
 router.post("/upload-image", upload.single("image"), googleAdController.uploadMediaAPI);
+// Video upload — returns { youtubeVideoId, youtubeUrl }. Heavier limit than image:
+// 500 MB cap to support full-length ad videos uploaded to YouTube.
+router.post(
+  "/upload-video",
+  multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"),
+  googleAdController.uploadVideoAPI,
+);
 router.post("/ads", googleAdController.createAdAPI);
 router.patch("/ads", googleAdController.updateAdAPI);
 router.get("/ads/:id", googleAdController.getAd);

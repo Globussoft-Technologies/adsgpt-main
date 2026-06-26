@@ -1399,26 +1399,38 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
                   {/* preview thumbnail */}
                   <td className="py-3 pl-5 pr-3">
                     <div className="relative h-11 w-16 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
-                      {a.imageUrl ? (
-                        <>
-                          <img src={a.imageUrl} alt={a.headline || 'Ad'} className="h-full w-full object-cover" />
-                          {a.videoUrl && (
+                      {(() => {
+                        const ytId = a.youtubeVideoId || (a.videoUrl ? (a.videoUrl.match(/[?&]v=([A-Za-z0-9_-]{11})/) || a.videoUrl.match(/youtu\.be\/([A-Za-z0-9_-]{11})/))?.[1] : null);
+                        if (ytId) return (
+                          <a href={`https://www.youtube.com/watch?v=${ytId}`} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+                            <img
+                              src={`https://i.ytimg.com/vi/${ytId}/mqdefault.jpg`}
+                              alt={a.headline || 'Ad'}
+                              className="h-full w-full object-cover"
+                              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                            />
+                            <div style={{display:'none'}} className="absolute inset-0 items-center justify-center bg-[#1e1e1e]">
+                              <Play className="h-4 w-4 fill-white/40 text-white/40" />
+                            </div>
                             <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                               <Play className="h-4 w-4 fill-white text-white" />
                             </div>
-                          )}
-                        </>
-                      ) : a.type === 'RESPONSIVE_SEARCH_AD' ? (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5">
-                          <div className="h-0.5 w-8 rounded bg-[#4285F4]/60" />
-                          <div className="h-0.5 w-6 rounded bg-gray-300 dark:bg-white/20" />
-                          <div className="h-0.5 w-7 rounded bg-gray-300 dark:bg-white/20" />
-                        </div>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
-                        </div>
-                      )}
+                          </a>
+                        );
+                        if (a.imageUrl) return <img src={a.imageUrl} alt={a.headline || 'Ad'} className="h-full w-full object-cover" />;
+                        if (a.type === 'RESPONSIVE_SEARCH_AD') return (
+                          <div className="flex h-full w-full flex-col items-center justify-center gap-0.5">
+                            <div className="h-0.5 w-8 rounded bg-[#4285F4]/60" />
+                            <div className="h-0.5 w-6 rounded bg-gray-300 dark:bg-white/20" />
+                            <div className="h-0.5 w-7 rounded bg-gray-300 dark:bg-white/20" />
+                          </div>
+                        );
+                        return (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
+                          </div>
+                        );
+                      })()}
                     </div>
                   </td>
                   {/* ad name */}

@@ -202,7 +202,9 @@ function validateAssets(form) {
   if (descs.length < 2)
     e.pmaxDescriptions = `Fill in both description fields (${descs.length}/2 filled).`;
   // At least one media asset required: image (URL or uploaded) or YouTube video
-  if (isBlank(form.pmaxImageUrl) && isBlank(form.pmaxImageAssetRN) && isBlank(form.pmaxVideoUrl))
+  // blob: means video upload is in progress — treat as valid (YouTube URL will replace it)
+  const pmaxVideoUploading = form.pmaxVideoUrl?.startsWith('blob:');
+  if (isBlank(form.pmaxImageUrl) && isBlank(form.pmaxImageAssetRN) && isBlank(form.pmaxVideoUrl) && !pmaxVideoUploading)
     e.pmaxMedia = 'Add at least one media asset — an image or a YouTube video.';
   return e;
 }
@@ -319,7 +321,9 @@ function validateAd(form, adType) {
   }
 
   if (adType === 'DEMAND_GEN') {
-    if (isBlank(form.videoUrl) && isBlank(form.youtubeVideoId)) {
+    const effectiveVideoUrl = form.videoUrl?.startsWith('blob:') ? '' : (form.videoUrl || '');
+    const videoUploading = form.videoUrl?.startsWith('blob:'); // upload in progress — YouTube URL coming
+    if (!videoUploading && isBlank(effectiveVideoUrl) && isBlank(form.youtubeVideoId)) {
       e.videoUrl = 'A YouTube URL or video ID is required.';
     }
 

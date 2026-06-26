@@ -262,6 +262,7 @@ const adItemSchema = Joi.object({
   youtubeVideoId:      Joi.string().max(11).optional(),
   logoUrl:             Joi.string().optional(),
   callToAction:        Joi.string().optional(),
+  status:              Joi.string().valid('ENABLED', 'PAUSED').optional(),
 });
 
 const createAdSchema = Joi.object({

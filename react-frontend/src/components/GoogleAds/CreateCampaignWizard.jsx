@@ -36,6 +36,7 @@ import {
   createGoogleAd,
   updateGoogleAd,
   uploadGoogleImage,
+  uploadGoogleVideo,
   getGoogleWizardSchema,
   listGoogleCampaignTemplates,
   getGoogleCampaignTemplate,
@@ -830,46 +831,12 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
             <div className="mt-1.5 flex items-center gap-2">
               <span className="text-xs text-gray-400 dark:text-white/30">or upload</span>
               <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-                <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={(e) => { if (e.target.files[0]) onPmaxImageUpload(e.target.files[0], 'image'); }} />
+                <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={(e) => { if (e.target.files[0]) { onPmaxImageUpload(e.target.files[0], 'image'); e.target.value = ''; } }} />
                 {uploadingPmaxImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                 {uploadingPmaxImage ? 'Uploading…' : 'Upload image'}
               </label>
               {(form.pmaxImageUrl || form.pmaxImageAssetRN) && <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">✓ Set</span>}
             </div>
-          </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-gray-200 dark:bg-white/8" />
-            <span className="text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">or</span>
-            <div className="h-px flex-1 bg-gray-200 dark:bg-white/8" />
-          </div>
-
-          {/* YouTube video */}
-          <div className="flex flex-col gap-2">
-            <Label>YouTube video URL or ID</Label>
-            <Input
-              value={form.pmaxVideoUrl?.startsWith('blob:') ? '' : (form.pmaxVideoUrl || '')}
-              onChange={(e) => { setField('pmaxVideoUrl', e.target.value); if (form.pmaxVideoFile) { setField('pmaxVideoFile', null); } }}
-              placeholder="https://youtube.com/watch?v=... or video ID"
-            />
-            <div className="flex items-center gap-2">
-              <span className="text-10 text-gray-400 dark:text-white/30">or upload a video</span>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-2.5 py-1 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-                <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,.mp4,.webm,.mov,.avi" className="hidden" onChange={(e) => { if (e.target.files[0]) onPmaxVideoUpload(e.target.files[0]); }} />
-                {uploadingPmaxVideo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                {uploadingPmaxVideo ? 'Loading…' : 'Upload video'}
-              </label>
-              {form.pmaxVideoFile && (
-                <span className="max-w-[110px] truncate rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">✓ {form.pmaxVideoFile.name}</span>
-              )}
-              {!form.pmaxVideoFile && form.pmaxVideoUrl && (
-                <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">✓ Set</span>
-              )}
-            </div>
-            {form.pmaxVideoFile && (
-              <p className="text-10 text-amber-500">Preview only — add a YouTube URL above before submitting.</p>
-            )}
           </div>
 
           <FieldError msg={errors.pmaxMedia} />
@@ -1534,14 +1501,14 @@ function SearchAdFields({ form, setField, errors }) {
                 <span className="absolute top-1/2 right-2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{h.length}/30</span>
               </div>
               {headlines.length > 3 && (
-                <button onClick={() => removeHeadline(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
+                <button type="button" onClick={() => removeHeadline(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
                   <Trash2 className="h-3 w-3" />
                 </button>
               )}
             </div>
           ))}
           {headlines.length < 15 && (
-            <button onClick={addHeadline} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 transition-all hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
+            <button type="button" onClick={addHeadline} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 transition-all hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
               <Plus className="h-3 w-3" /> Add headline
             </button>
           )}
@@ -1559,14 +1526,14 @@ function SearchAdFields({ form, setField, errors }) {
                 <span className="absolute top-1/2 right-2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{d.length}/90</span>
               </div>
               {descriptions.length > 2 && (
-                <button onClick={() => removeDesc(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
+                <button type="button" onClick={() => removeDesc(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
                   <Trash2 className="h-3 w-3" />
                 </button>
               )}
             </div>
           ))}
           {descriptions.length < 4 && (
-            <button onClick={addDesc} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 transition-all hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
+            <button type="button" onClick={addDesc} className="flex items-center gap-1 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400 transition-all hover:border-[#4285F4]/40 hover:text-[#4285F4] dark:border-white/10">
               <Plus className="h-3 w-3" /> Add description
             </button>
           )}
@@ -1660,7 +1627,7 @@ function VideoAdFields({ form, setField, errors, ctaOptions, uploadingVideo, onV
             <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-2.5 py-1 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
               <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,.mp4,.webm,.mov,.avi" className="hidden" onChange={(e) => { if (e.target.files[0]) onVideoUpload(e.target.files[0]); }} />
               {uploadingVideo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {uploadingVideo ? 'Loading…' : 'Upload video'}
+              {uploadingVideo ? 'Uploading to YouTube…' : 'Upload video'}
             </label>
             {form.videoFile && (
               <span className="max-w-[110px] truncate rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">
@@ -1668,8 +1635,8 @@ function VideoAdFields({ form, setField, errors, ctaOptions, uploadingVideo, onV
               </span>
             )}
           </div>
-          {form.videoFile && (
-            <p className="text-10 text-amber-500">Preview only — add a YouTube URL above before submitting.</p>
+          {form.videoFile && uploadingVideo && (
+            <p className="text-10 text-blue-400">Uploading to YouTube, please wait…</p>
           )}
         </div>
         <FieldError msg={errors.videoUrl} />
@@ -2415,7 +2382,7 @@ function ReviewStep({ form, mode, stepErrors, adType, schema, objectives, adAcco
               </>
             )}
             {adType === 'DEMAND_GEN' && (
-              <ReviewRow label="Video" value={form.youtubeVideoId || form.videoUrl} />
+              <ReviewRow label="Video" value={form.youtubeVideoId || (form.videoUrl?.startsWith('blob:') ? `⚠ Local file — add YouTube URL before submitting` : form.videoUrl) || null} />
             )}
             <ReviewRow label="Landing URL" value={form.finalUrl} />
             {form.callToAction && <ReviewRow label="CTA" value={form.callToAction} />}
@@ -2539,6 +2506,25 @@ export default function CreateCampaignWizard({
     setTouched((t) => ({ ...t, ...Object.fromEntries(Object.keys(patch).map((k) => [k, true])) }));
   }, []);
 
+  // Clear uploaded asset RNs when the account changes mid-session —
+  // asset resource names are account-scoped and become invalid under a different customer ID.
+  const prevAdAccountIdRef = useRef(adAccountId);
+  useEffect(() => {
+    if (!open) return;
+    const prev = prevAdAccountIdRef.current;
+    prevAdAccountIdRef.current = adAccountId;
+    if (prev && adAccountId && prev !== adAccountId) {
+      setFormState((f) => ({
+        ...f,
+        pmaxImageAssetRN: '',
+        pmaxSquareImageAssetRN: '',
+        pmaxLogoAssetRN: '',
+        pmaxImageUrl: '',
+        pmaxLogoUrl: '',
+      }));
+    }
+  }, [adAccountId, open]);
+
   const applyTemplate = useCallback((template) => {
     const payload = template?.payload || {};
     const templateAccount = payload.adAccountId || null;
@@ -2615,6 +2601,10 @@ export default function CreateCampaignWizard({
       globalToast.error(`"${file.name}" is not supported. Google Ads only accepts JPEG, PNG, or GIF images.`);
       return;
     }
+    if (!adAccountId) {
+      globalToast.error('No ad account selected. Please select an account first.');
+      return;
+    }
     const urlField = type === 'logo' ? 'pmaxLogoUrl' : 'pmaxImageUrl';
     setUploadingPmaxImage(true);
     try {
@@ -2637,29 +2627,55 @@ export default function CreateCampaignWizard({
   const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
   const ALLOWED_VIDEO_EXTS  = ['.mp4', '.webm', '.ogg', '.mov', '.avi'];
 
-  const handlePmaxVideoUpload = (file) => {
+  const _validateVideoFile = (file) => {
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!ALLOWED_VIDEO_TYPES.includes(file.type) && !ALLOWED_VIDEO_EXTS.includes(ext)) {
       globalToast.error(`"${file.name}" is not a supported video format. Please use MP4, WebM, MOV, or AVI.`);
-      return;
+      return false;
     }
-    setUploadingPmaxVideo(true);
-    // Store blob URL for local preview — YouTube URL/ID still required for submission
-    setField('pmaxVideoUrl', URL.createObjectURL(file));
-    setField('pmaxVideoFile', file);
-    setUploadingPmaxVideo(false);
+    return true;
   };
 
-  const handleVideoUpload = (file) => {
-    const ext = '.' + file.name.split('.').pop().toLowerCase();
-    if (!ALLOWED_VIDEO_TYPES.includes(file.type) && !ALLOWED_VIDEO_EXTS.includes(ext)) {
-      globalToast.error(`"${file.name}" is not a supported video format. Please use MP4, WebM, MOV, or AVI.`);
-      return;
+  const handlePmaxVideoUpload = async (file) => {
+    if (!_validateVideoFile(file)) return;
+    // Show local preview immediately while uploading
+    const blobUrl = URL.createObjectURL(file);
+    setField('pmaxVideoUrl', blobUrl);
+    setField('pmaxVideoFile', file);
+    setUploadingPmaxVideo(true);
+    try {
+      const res = await uploadGoogleVideo({ adAccountId, videoFile: file });
+      // Replace blob with real YouTube URL so it's ready for submission
+      setField('pmaxVideoUrl', res.youtubeUrl);
+      setField('pmaxVideoFile', null);
+      globalToast.success('Video uploaded to YouTube ✓');
+    } catch (e) {
+      globalToast.error(e?.response?.data?.error || 'Video upload to YouTube failed');
+      // Keep blob for preview but user will see validation error on submit
+    } finally {
+      setUploadingPmaxVideo(false);
     }
-    setUploadingVideo(true);
-    setField('videoUrl', URL.createObjectURL(file));
+  };
+
+  const handleVideoUpload = async (file) => {
+    if (!_validateVideoFile(file)) return;
+    const blobUrl = URL.createObjectURL(file);
+    setField('videoUrl', blobUrl);
     setField('videoFile', file);
-    setUploadingVideo(false);
+    setUploadingVideo(true);
+    try {
+      console.log('[VideoUpload] starting upload, adAccountId=', adAccountId, 'file=', file.name);
+      const res = await uploadGoogleVideo({ adAccountId, videoFile: file });
+      console.log('[VideoUpload] response=', res);
+      setField('videoUrl', res.youtubeUrl);
+      setField('videoFile', null);
+      globalToast.success('Video uploaded to YouTube ✓');
+    } catch (e) {
+      console.error('[VideoUpload] error=', e);
+      globalToast.error(e?.response?.data?.error || e?.message || 'Video upload to YouTube failed');
+    } finally {
+      setUploadingVideo(false);
+    }
   };
 
   const goNext = () => {
@@ -2670,7 +2686,25 @@ export default function CreateCampaignWizard({
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   };
 
-  const goBack = () => setStepIndex((i) => Math.max(i - 1, 0));
+  const goBack = () => {
+    setLaunched({ loading: false, error: null });
+    setStepIndex((i) => {
+      const next = Math.max(i - 1, 0);
+      // Going back to assets step — clear stale asset RNs and blob URLs so
+      // the ✓ Set badge doesn't mislead the user into thinking they don't need to re-upload
+      if (steps[next]?.id === 'assets') {
+        setFormState((f) => ({
+          ...f,
+          pmaxImageAssetRN: '',
+          pmaxSquareImageAssetRN: '',
+          pmaxLogoAssetRN: '',
+          pmaxImageUrl: f.pmaxImageUrl?.startsWith('blob:') ? '' : f.pmaxImageUrl,
+          pmaxLogoUrl:  f.pmaxLogoUrl?.startsWith('blob:')  ? '' : f.pmaxLogoUrl,
+        }));
+      }
+      return next;
+    });
+  };
 
   const handleLaunch = async () => {
     if (!canLaunch) return;
@@ -2762,10 +2796,10 @@ export default function CreateCampaignWizard({
           pmaxHeadlines:          form.pmaxHeadlines?.filter(Boolean).length ? form.pmaxHeadlines.filter(Boolean) : undefined,
           pmaxLongHeadline:       form.pmaxLongHeadline    || undefined,
           pmaxDescriptions:       form.pmaxDescriptions?.filter(Boolean).length ? form.pmaxDescriptions.filter(Boolean) : undefined,
-          pmaxImageUrl:           form.pmaxImageUrl        || undefined,
+          pmaxImageUrl:           (form.pmaxImageUrl && !form.pmaxImageUrl.startsWith('blob:')) ? form.pmaxImageUrl : undefined,
           pmaxImageAssetRN:       form.pmaxImageAssetRN    || undefined,
           pmaxSquareImageAssetRN: form.pmaxSquareImageAssetRN || undefined,
-          pmaxLogoUrl:            form.pmaxLogoUrl         || undefined,
+          pmaxLogoUrl:            (form.pmaxLogoUrl && !form.pmaxLogoUrl.startsWith('blob:')) ? form.pmaxLogoUrl : undefined,
           pmaxLogoAssetRN:        form.pmaxLogoAssetRN     || undefined,
           pmaxVideoUrl:           (form.pmaxVideoUrl && !form.pmaxVideoUrl.startsWith('blob:')) ? form.pmaxVideoUrl : undefined,
         });
@@ -2806,7 +2840,7 @@ export default function CreateCampaignWizard({
         if (adType === 'SEARCH') {
           adItem = { headlines: form.headlines.filter(Boolean), descriptions: form.descriptions.filter(Boolean), finalUrl: form.finalUrl, status: adStatus };
         } else if (adType === 'DISPLAY') {
-          adItem = { headline: form.headline, description: form.description, imageUrl: (form.imageUrl && !form.imageUrl.startsWith('blob:')) ? form.imageUrl : undefined, assetResourceName: form.assetResourceName || undefined, squareAssetResourceName: form.squareAssetResourceName || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined, status: adStatus };
+          adItem = { headline: form.headline, description: form.description, businessName: form.businessName || undefined, imageUrl: (form.imageUrl && !form.imageUrl.startsWith('blob:')) ? form.imageUrl : undefined, assetResourceName: form.assetResourceName || undefined, squareAssetResourceName: form.squareAssetResourceName || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined, status: adStatus };
         } else {
           adItem = { videoUrl: (form.videoUrl && !form.videoUrl.startsWith('blob:')) ? form.videoUrl : undefined, youtubeVideoId: form.youtubeVideoId || undefined, headline: form.headline || undefined, longHeadline: form.longHeadline || undefined, description: form.description || undefined, finalUrl: form.finalUrl, callToAction: form.callToAction || undefined, status: adStatus };
         }
@@ -2834,6 +2868,21 @@ export default function CreateCampaignWizard({
         .filter((m) => m !== title);
       const details = fieldHints.length ? fieldHints.join(' ') : '';
 
+      // If the error is about image assets (cross-account mismatch), clear stale RNs
+      // so the user can re-upload immediately on the assets step without closing the wizard
+      if (title.toLowerCase().includes('image assets could not be resolved') || title.toLowerCase().includes('re-upload your images')) {
+        setFormState((f) => ({
+          ...f,
+          pmaxImageAssetRN: '',
+          pmaxSquareImageAssetRN: '',
+          pmaxLogoAssetRN: '',
+          pmaxImageUrl: f.pmaxImageUrl?.startsWith('blob:') ? '' : f.pmaxImageUrl,
+          pmaxLogoUrl:  f.pmaxLogoUrl?.startsWith('blob:')  ? '' : f.pmaxLogoUrl,
+        }));
+        // Go back to assets step so user can re-upload
+        const assetsIdx = steps.findIndex((s) => s.id === 'assets');
+        if (assetsIdx >= 0) setStepIndex(assetsIdx);
+      }
       setLaunched({ loading: false, error: { title, details } });
     }
   };
@@ -2964,10 +3013,11 @@ export default function CreateCampaignWizard({
           {stepIndex < steps.length - 1 ? (
             <button
               onClick={goNext}
-              disabled={schemaLoading}
+              disabled={schemaLoading || uploadingVideo || uploadingPmaxVideo}
+              title={uploadingVideo || uploadingPmaxVideo ? 'Please wait for the video to finish uploading before continuing' : undefined}
               className="flex items-center gap-1.5 rounded-lg bg-[#4285F4] px-4 py-1.5 text-xs font-bold text-white transition-all hover:bg-[#3574e2] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Continue <ChevronRight className="h-3.5 w-3.5" />
+              {uploadingVideo || uploadingPmaxVideo ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</> : <>Continue <ChevronRight className="h-3.5 w-3.5" /></>}
             </button>
           ) : (
             <button

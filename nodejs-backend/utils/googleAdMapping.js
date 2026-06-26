@@ -278,7 +278,7 @@ function mapGoogleStandardAdRow(r, { adImageMap = {}, assetUrlMap = {}, formatSt
   const videoSource = adType === "DEMAND_GEN_VIDEO_RESPONSIVE_AD" ? dga.videos : vra.videos;
   const ytId = extractYoutubeVideoId(videoSource);
   let videoUrl = ytId ? `https://www.youtube.com/watch?v=${ytId}` : null;
-  let videoThumbnail = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+  let videoThumbnail = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null;
   // If inline asset data wasn't present, resolve from the pre-fetched asset map
   if (!videoUrl && Array.isArray(videoSource)) {
     for (const item of videoSource) {
@@ -289,7 +289,7 @@ function mapGoogleStandardAdRow(r, { adImageMap = {}, assetUrlMap = {}, formatSt
       if (resolved) {
         videoUrl = resolved;
         const idFromUrl = String(resolved).match(/[?&]v=([^&]+)/)?.[1];
-        videoThumbnail = idFromUrl ? `https://img.youtube.com/vi/${idFromUrl}/hqdefault.jpg` : null;
+        videoThumbnail = idFromUrl ? `https://i.ytimg.com/vi/${idFromUrl}/hqdefault.jpg` : null;
         break;
       }
     }
