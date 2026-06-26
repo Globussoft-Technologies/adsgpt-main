@@ -114,16 +114,18 @@ function inferCellForMetaCampaign(metaCampaign, metaAdSet) {
   ) {
     conversionLocation = "MESSAGE_DESTINATIONS";
   }
-  // Engagement/INSTAGRAM_OR_FACEBOOK disambiguation (Phase 3 restoration) —
-  // the cell uses destination_type=WEBSITE (same as Traffic/INSTAGRAM_OR_
-  // FACEBOOK) but the optimization_goal distinguishes profile-visit campaigns
-  // (PAGE_LIKES / VISIT_INSTAGRAM_PROFILE) from generic Engagement/WEBSITE.
-  // Without this branch a profile-visit ad set would resolve to WEBSITE and
-  // the wizard would render the wrong fields (Pixel + conversion event,
-  // neither of which the profile-visit cell uses).
+  // Engagement/INSTAGRAM_OR_FACEBOOK disambiguation.
+  //   • destination_type=ON_PAGE is the documented Engagement enum for
+  //     profile/page visits — resolves directly to INSTAGRAM_OR_FACEBOOK.
+  //   • Legacy ad sets created when the cell sent WEBSITE (now corrected)
+  //     are still routed by optimization_goal so historical campaigns
+  //     reverse-infer correctly. PAGE_LIKES / VISIT_INSTAGRAM_PROFILE
+  //     uniquely identify this cell on Engagement regardless of
+  //     destination_type, so a goal-based branch keeps reads safe.
   if (
     objective === "OUTCOME_ENGAGEMENT" &&
-    (optimizationGoal === "PAGE_LIKES" ||
+    (destinationType === "ON_PAGE" ||
+      optimizationGoal === "PAGE_LIKES" ||
       optimizationGoal === "VISIT_INSTAGRAM_PROFILE")
   ) {
     conversionLocation = "INSTAGRAM_OR_FACEBOOK";

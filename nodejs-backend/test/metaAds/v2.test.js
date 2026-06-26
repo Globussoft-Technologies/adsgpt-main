@@ -2004,10 +2004,13 @@ group("OUTCOME_ENGAGEMENT — destination_type mappings (Phase 3)", () => {
   test("APP → APP", () => {
     assert.equal(getMetaDestinationType("OUTCOME_ENGAGEMENT", "APP"), "APP");
   });
-  test("INSTAGRAM_OR_FACEBOOK → WEBSITE (Phase 3 restoration; profile URL via link_data)", () => {
+  test("INSTAGRAM_OR_FACEBOOK → ON_PAGE (per Meta's allowed destination_type list for OUTCOME_ENGAGEMENT)", () => {
+    // Meta docs: developers.facebook.com/docs/marketing-api/adset/destination_type/
+    // OUTCOME_ENGAGEMENT's allowed list does NOT include WEBSITE.
+    // ON_PAGE is the documented profile/page-visit enum for Engagement.
     assert.equal(
       getMetaDestinationType("OUTCOME_ENGAGEMENT", "INSTAGRAM_OR_FACEBOOK"),
-      "WEBSITE",
+      "ON_PAGE",
     );
   });
 });
@@ -2207,7 +2210,16 @@ group("OUTCOME_ENGAGEMENT — inferCellForMetaCampaign disambiguates ON_AD by op
     }
   });
 
-  test("PAGE_LIKES goal resolves to INSTAGRAM_OR_FACEBOOK cell", () => {
+  test("destination_type=ON_PAGE resolves to INSTAGRAM_OR_FACEBOOK cell (current write-side enum)", () => {
+    const out = inferCellForMetaCampaign(campaign, {
+      destination_type: "ON_PAGE",
+      optimization_goal: "PAGE_LIKES",
+    });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.conversionLocation, "INSTAGRAM_OR_FACEBOOK");
+  });
+
+  test("PAGE_LIKES goal resolves to INSTAGRAM_OR_FACEBOOK cell (legacy read-side compat: WEBSITE was the prior wrong enum)", () => {
     const out = inferCellForMetaCampaign(campaign, {
       destination_type: "WEBSITE",
       optimization_goal: "PAGE_LIKES",

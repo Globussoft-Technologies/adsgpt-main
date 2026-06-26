@@ -120,8 +120,19 @@ const OPTIMIZATION_GOAL_LABELS = {
   TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: "Maximise 2-second continuous video views",
   // Profile / Page engagement goals — Meta UI surfaces these on the
   // "Instagram or Facebook" cell. PAGE_LIKES is the historic FB-Page
-  // goal (Meta auto-renders the UI label as "Maximise number of
-  // Facebook Page visits" — the API still accepts the PAGE_LIKES enum).
+  // goal; Meta UI relabels it to "Maximise Facebook Page visits" but
+  // still accepts the enum. VISIT_INSTAGRAM_PROFILE is the IG analogue.
+  //
+  // Known limitation (2026-06-26): regulated Special Ad Categories
+  // (Financial / Employment / Housing / Credit / Issues-Elections) plus
+  // a profile-visit goal fails with subcode 2490408 on the API even
+  // though Meta UI shows the combo as valid. We tried PROFILE_VISIT (the
+  // new SDK enum) as a replacement — it also fails 2490408 on Engagement,
+  // confirming that PROFILE_VISIT belongs to OUTCOME_TRAFFIC's allow-list,
+  // not OUTCOME_ENGAGEMENT's. Meta UI's auto-swap banner under SAC is
+  // misleading: either it routes through a different objective at publish
+  // time, or it would also fail at publish (we can't tell without a real
+  // Meta UI publish on the same SAC account).
   PAGE_LIKES: "Maximise Facebook Page visits",
   VISIT_INSTAGRAM_PROFILE: "Maximise Instagram profile visits",
   // Awareness-only. Meta optimises delivery toward people who are most
@@ -270,9 +281,28 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   // Traffic combined: Message destinations primary-routes to Messenger;
   // Meta auto-extends to IG DM / WhatsApp based on Page connections.
   MESSAGE_DESTINATIONS: "MESSENGER",
-  // Profile-visit destinations — Meta accepts WEBSITE here (the link
-  // points at the profile URL); the CTA enum signals it's a profile.
+  // Profile-visit destinations.
+  //
+  // Traffic: WEBSITE is correct — the link points at the profile/page URL,
+  // and OUTCOME_TRAFFIC explicitly allows WEBSITE (verified working with
+  // LINK_CLICKS goal).
+  //
+  // Engagement: WEBSITE is NOT in OUTCOME_ENGAGEMENT's allowed
+  // destination_type list per Meta docs
+  // (developers.facebook.com/docs/marketing-api/adset/destination_type/) —
+  // allowed values are UNDEFINED, MESSENGER, WHATSAPP, PHONE_CALL,
+  // INSTAGRAM_DIRECT, MESSAGING_*, ON_POST, ON_EVENT, ON_VIDEO, ON_PAGE.
+  // Sending WEBSITE here triggers subcode 2490408 blamed on
+  // optimization_goal (Meta blames the user-facing field, not the
+  // underlying destination_type mismatch). Live-confirmed 2026-06-26
+  // across PAGE_LIKES, PROFILE_VISIT, POST_ENGAGEMENT, THRUPLAY goals on
+  // a no-SAC standard_access account — all failed identically because
+  // the destination_type was the actual rejection axis.
+  //
+  // ON_PAGE is the semantically-correct enum for profile/page visits
+  // on Engagement. Objective-qualified so Traffic keeps WEBSITE.
   INSTAGRAM_OR_FACEBOOK: "WEBSITE",
+  "OUTCOME_ENGAGEMENT:INSTAGRAM_OR_FACEBOOK": "ON_PAGE",
   // Leads "Multiple" cells — destination_type depends on whether the
   // creative carries a website link in its CTA:
   //
@@ -322,14 +352,12 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
   VIDEO_VIEWS: null,
   POST_ENGAGEMENT: null,
   // Engagement Phase 2 + 3 cells:
-  //   • INSTAGRAM_OR_FACEBOOK — bare WEBSITE key from above (the profile
-  //     URL goes in link_data; CTA enum signals which surface).
+  //   • INSTAGRAM_OR_FACEBOOK — objective-qualified ON_PAGE key above
+  //     (WEBSITE bare-key is for Traffic only; Engagement allowed list
+  //     doesn't include WEBSITE per Meta docs).
   //   • MESSAGE_DESTINATIONS — bare MESSAGE_DESTINATIONS → MESSENGER key
   //     from above. Meta auto-routes to IG-DM / WhatsApp from there based
   //     on Page connections (same as Traffic/Sales messaging cells).
-  //
-  // No new bare keys needed — generic WEBSITE / APP / MESSAGE_DESTINATIONS
-  // entries above cover Engagement.
   //
   // Sales/CATALOG — destination_type omitted (null) so Meta infers from
   // the product_set promoted_object. Reverse-inference (cellInference.js)
@@ -1130,11 +1158,18 @@ const CELLS = {
     // STANDARD pattern) and document the SAC carve-out in §6 of the spec.
     INSTAGRAM_OR_FACEBOOK: {
       adSet: {
-        // PAGE_LIKES is Meta's API enum for the "Maximise Facebook Page
-        // visits" goal (Meta relabelled the UI without renaming the enum).
-        // VISIT_INSTAGRAM_PROFILE is the IG analogue. Both are autobid-only
-        // per AUTOBID_ONLY_OPTIMIZATION_GOALS — wizard restricts bid
-        // strategy automatically.
+        // PAGE_LIKES = Meta's enum for "Maximise Facebook Page visits".
+        // VISIT_INSTAGRAM_PROFILE = IG analogue. Both autobid-only per
+        // AUTOBID_ONLY_OPTIMIZATION_GOALS.
+        //
+        // destination_type for this cell is ON_PAGE (per Meta's allowed
+        // destination_type list for OUTCOME_ENGAGEMENT — see
+        // CONVERSION_LOCATION_TO_META_DESTINATION above). Prior to
+        // 2026-06-26 the cell sent destination_type=WEBSITE which is
+        // NOT in OUTCOME_ENGAGEMENT's allowed list — Meta rejected with
+        // subcode 2490408 blamed on optimization_goal (Meta blames the
+        // user-facing field rather than the underlying destination
+        // mismatch).
         optimizationGoals: ["PAGE_LIKES", "VISIT_INSTAGRAM_PROFILE"],
         defaultOptimizationGoal: "PAGE_LIKES",
         billingEvents: ["IMPRESSIONS"],
