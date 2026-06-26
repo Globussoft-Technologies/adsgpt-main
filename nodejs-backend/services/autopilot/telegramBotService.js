@@ -7,14 +7,21 @@
  * id so they can paste it into AdsGPT Settings without scraping JSON
  * from `/getUpdates` or relying on third-party utility bots.
  *
- * Transport: long-polling via `node-telegram-bot-api`. Polling is the
- * right call for our single-process `node index.js` deployment — no
- * public URL or setWebhook dance needed. If we ever scale horizontally
- * (pm2 cluster mode, multiple replicas, etc.) ONE thing changes:
- * Telegram only allows a single active poller per bot token, so the
- * other workers would 409-conflict forever. At that point switch to
- * webhook mode (Telegram POSTs to a single endpoint, any worker can
- * handle it) — the `planReplyForUpdate` core stays unchanged.
+ * Transport: webhook. On boot we `setWebhook` so Telegram POSTs every
+ * update to a single endpoint (`/telegram/webhook`, mounted at app root
+ * in index.js). Any worker can serve it, so this scales horizontally
+ * (pm2 cluster, multiple replicas) with no 409-conflict — unlike polling,
+ * which Telegram only allows from one process per token. We talk to the
+ * Bot API with plain axios (mirroring alertService.postTelegram), so the
+ * inbound path no longer depends on `node-telegram-bot-api` at all.
+ *
+ * Config (all read from env; absence is a clean no-op, not a crash):
+ *   AUTOPILOT_TELEGRAM_BOT_TOKEN      shared bot token (also used outbound)
+ *   AUTOPILOT_TELEGRAM_WEBHOOK_URL    public https URL of the webhook route
+ *   AUTOPILOT_TELEGRAM_WEBHOOK_SECRET secret echoed by Telegram in the
+ *                                     X-Telegram-Bot-Api-Secret-Token
+ *                                     header; we verify it to reject spoofed
+ *                                     callers. Strongly recommended.
  *
  * Update shapes we care about:
  *
@@ -120,113 +127,202 @@ const escapeHtml = (s) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-// ─── transport: polling ────────────────────────────────────────────────────
+// ─── transport: webhook ─────────────────────────────────────────────────────
 
-// One bot per Node process. Re-initializing would double-poll the same
-// token and Telegram would 409-conflict the second connection.
-let _bot = null;
+const API_BASE = "https://api.telegram.org";
 
-/**
- * Boot the polling bot. Idempotent — calling twice is a no-op.
- * Reads `AUTOPILOT_TELEGRAM_BOT_TOKEN` from env. If unset, logs and
- * returns null without throwing — the rest of the app must keep
- * booting even if Telegram is misconfigured.
- *
- * Returns the live `TelegramBot` instance (or the existing one on
- * subsequent calls), `null` if env wasn't set.
- */
-function startTelegramBot() {
-  if (_bot) return _bot;
+// Path the webhook route is mounted at (see index.js). Exported so the
+// route wiring and any future setWebhook tooling share one source of truth.
+const DEFAULT_WEBHOOK_PATH = "/telegram/webhook";
 
-  const token = process.env.AUTOPILOT_TELEGRAM_BOT_TOKEN;
-  if (!token) {
-    logger().info(
-      "[autopilot telegram] AUTOPILOT_TELEGRAM_BOT_TOKEN not set — skipping bot startup (alerts still work for setups that don't need /start auto-reply)",
-    );
-    return null;
-  }
-
-  // Lazy require so test runs and codepaths that don't touch Telegram
-  // don't have to load the SDK.
-  let TelegramBot;
-  try {
-    TelegramBot = require("node-telegram-bot-api");
-  } catch (err) {
-    logger().error(
-      `[autopilot telegram] node-telegram-bot-api not installed — run 'npm install node-telegram-bot-api' in nodejs-backend: ${err.message}`,
-    );
-    return null;
-  }
-
-  try {
-    _bot = new TelegramBot(token, { polling: true });
-  } catch (err) {
-    logger().error(
-      `[autopilot telegram] bot init failed: ${err.message}`,
-    );
-    return null;
-  }
-
-  // Unified handler — we ignore the SDK's regex helpers (`onText`) and
-  // route everything through `planReplyForUpdate` so the logic stays
-  // testable as a pure function.
-  _bot.on("message", async (msg) => {
-    try {
-      const reply = planReplyForUpdate({ message: msg });
-      if (!reply) return;
-      await _bot.sendMessage(reply.chatId, reply.text, {
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      });
-      logger().info(
-        `[autopilot telegram] /start handled for chat=${reply.chatId}`,
-      );
-    } catch (err) {
-      // Never let a handler exception kill the polling loop.
-      logger().error(
-        `[autopilot telegram] message handler error: ${err.message}`,
-      );
-    }
-  });
-
-  // Polling errors (network blip, Telegram 5xx, the dreaded 409 conflict
-  // when two pollers fight for the same token). Logged loudly because
-  // a 409 specifically means another instance is also polling — that's
-  // the signal to either kill the duplicate or switch to webhook mode.
-  _bot.on("polling_error", (err) => {
-    const msg = (err && err.message) || String(err);
-    if (msg.includes("409")) {
-      logger().error(
-        `[autopilot telegram] 409 Conflict — another process is polling this bot token. Polling only works for a single process; stop the duplicate or migrate to webhook mode.`,
-      );
-    } else {
-      logger().warn(`[autopilot telegram] polling error: ${msg}`);
-    }
-  });
-
-  logger().info(
-    "[autopilot telegram] polling started — /start in any group/DM will reply with the chat id",
-  );
-  return _bot;
+let _axios;
+function axios() {
+  if (!_axios) _axios = require("axios");
+  return _axios;
 }
 
 /**
- * Stop polling. Mostly useful for tests + graceful shutdown.
+ * Send a single inbound reply (the /start chat-id greeting) via the Bot
+ * API. Plain axios POST, mirroring alertService.postTelegram — the inbound
+ * path no longer needs node-telegram-bot-api. Best-effort: returns a
+ * `{ sent }` result and never throws, so a failed greeting can't bubble
+ * into the webhook's HTTP response (which would make Telegram retry).
  */
-async function stopTelegramBot() {
-  if (!_bot) return;
+async function sendTelegramMessage({
+  chatId,
+  text,
+  token = process.env.AUTOPILOT_TELEGRAM_BOT_TOKEN,
+  timeoutMs = 10000,
+} = {}) {
+  if (!token) return { sent: false, reason: "no-token" };
+  if (chatId == null) return { sent: false, reason: "no-chat-id" };
   try {
-    await _bot.stopPolling();
-  } catch {
-    // best-effort
+    const url = `${API_BASE}/bot${token}/sendMessage`;
+    const r = await axios().post(
+      url,
+      {
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      },
+      { timeout: timeoutMs, validateStatus: () => true },
+    );
+    const body = r && r.data;
+    if (r && r.status >= 200 && r.status < 300 && body && body.ok) {
+      return { sent: true };
+    }
+    return {
+      sent: false,
+      reason: "api-error",
+      error:
+        (body && (body.description || body.error_code)) ||
+        `HTTP ${r ? r.status : "?"}`,
+    };
+  } catch (err) {
+    return {
+      sent: false,
+      reason: "post-failed",
+      error: err && err.message ? err.message : String(err),
+    };
   }
-  _bot = null;
+}
+
+/**
+ * Process one inbound update: run the pure planReplyForUpdate core and
+ * send the reply if there is one. Never throws — the webhook controller
+ * relies on this so it can always 200 OK. Returns a small result object
+ * for logging/tests.
+ */
+async function handleWebhookUpdate(update) {
+  let reply;
+  try {
+    reply = planReplyForUpdate(update);
+  } catch (err) {
+    logger().error(
+      `[autopilot telegram] planReplyForUpdate threw: ${err.message}`,
+    );
+    return { handled: false };
+  }
+  if (!reply) return { handled: false };
+
+  const r = await sendTelegramMessage({ chatId: reply.chatId, text: reply.text });
+  if (r.sent) {
+    logger().info(
+      `[autopilot telegram] /start handled for chat=${reply.chatId}`,
+    );
+  } else {
+    logger().error(
+      `[autopilot telegram] reply send failed for chat=${reply.chatId}: ${r.reason}${r.error ? " — " + r.error : ""}`,
+    );
+  }
+  return { handled: true, ...r };
+}
+
+/**
+ * Build the Express handler for the Telegram webhook. Mounted at app root
+ * (see index.js). Unauthenticated except for Telegram's secret-token
+ * header, which we verify against AUTOPILOT_TELEGRAM_WEBHOOK_SECRET.
+ *
+ * Acks with 200 immediately and processes the update out-of-band, so a
+ * slow Bot API call can't make Telegram time out and redeliver.
+ */
+function createWebhookHandler({
+  secret = process.env.AUTOPILOT_TELEGRAM_WEBHOOK_SECRET,
+} = {}) {
+  return function telegramWebhook(req, res) {
+    // Telegram echoes the secret we registered via setWebhook in this
+    // header. If we configured one, reject anything that doesn't match —
+    // the endpoint is otherwise unauthenticated and publicly reachable.
+    if (secret) {
+      const got = req.get("X-Telegram-Bot-Api-Secret-Token");
+      if (got !== secret) {
+        logger().warn(
+          "[autopilot telegram] webhook called with bad/missing secret token — rejected",
+        );
+        return res.sendStatus(401);
+      }
+    }
+    // Ack first, work after. Failures are logged inside handleWebhookUpdate.
+    res.sendStatus(200);
+    Promise.resolve()
+      .then(() => handleWebhookUpdate(req.body))
+      .catch((err) =>
+        logger().error(
+          `[autopilot telegram] webhook processing error: ${err.message}`,
+        ),
+      );
+  };
+}
+
+/**
+ * Register the webhook with Telegram on boot. Idempotent — setWebhook with
+ * an unchanged URL is a no-op on Telegram's side, so calling it every boot
+ * is safe. No-op (logs and returns null) when the token or public URL is
+ * absent, so the app keeps booting in environments where Telegram isn't
+ * wired up. Outbound alert delivery is unaffected either way.
+ */
+async function registerWebhook({
+  token = process.env.AUTOPILOT_TELEGRAM_BOT_TOKEN,
+  webhookUrl = process.env.AUTOPILOT_TELEGRAM_WEBHOOK_URL,
+  secret = process.env.AUTOPILOT_TELEGRAM_WEBHOOK_SECRET,
+} = {}) {
+  if (!token) {
+    logger().info(
+      "[autopilot telegram] AUTOPILOT_TELEGRAM_BOT_TOKEN not set — skipping webhook registration (outbound alerts unaffected)",
+    );
+    return null;
+  }
+  if (!webhookUrl) {
+    logger().info(
+      "[autopilot telegram] AUTOPILOT_TELEGRAM_WEBHOOK_URL not set — skipping webhook registration (inbound /start auto-reply disabled; outbound alerts unaffected)",
+    );
+    return null;
+  }
+  try {
+    const url = `${API_BASE}/bot${token}/setWebhook`;
+    const payload = {
+      url: webhookUrl,
+      // We only act on plain messages (/start, group-join). Narrowing the
+      // subscription keeps Telegram from POSTing edits, channel posts,
+      // callback queries, etc. that planReplyForUpdate would just drop.
+      allowed_updates: ["message"],
+    };
+    if (secret) payload.secret_token = secret;
+    const r = await axios().post(url, payload, {
+      timeout: 10000,
+      validateStatus: () => true,
+    });
+    const body = r && r.data;
+    if (r && r.status >= 200 && r.status < 300 && body && body.ok) {
+      logger().info(
+        `[autopilot telegram] webhook registered → ${webhookUrl}${
+          secret
+            ? " (secret-protected)"
+            : " (no secret set — recommend AUTOPILOT_TELEGRAM_WEBHOOK_SECRET)"
+        }`,
+      );
+      return { ok: true };
+    }
+    logger().error(
+      `[autopilot telegram] setWebhook failed: ${
+        (body && body.description) || `HTTP ${r ? r.status : "?"}`
+      }`,
+    );
+    return { ok: false };
+  } catch (err) {
+    logger().error(`[autopilot telegram] setWebhook error: ${err.message}`);
+    return { ok: false };
+  }
 }
 
 module.exports = {
   planReplyForUpdate,
-  startTelegramBot,
-  stopTelegramBot,
+  sendTelegramMessage,
+  handleWebhookUpdate,
+  createWebhookHandler,
+  registerWebhook,
+  DEFAULT_WEBHOOK_PATH,
   // exported for tests
   _internals: { greetingMessage, escapeHtml, DEFAULT_BOT_USERNAME },
 };

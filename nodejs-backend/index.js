@@ -138,17 +138,32 @@ async function createServer() {
   App.get("/api/auth/google", googleAuthController.initiateAuth);
   App.get("/api/auth/google/callback", googleAuthController.handleCallback);
 
-
+  // * 10. Autopilot Telegram webhook (inbound /start → chat-id reply).
+  // Telegram POSTs updates here; the route is public but gated by the
+  // secret-token header inside the handler. Mounted at app root, like the
+  // OAuth callbacks above, since Telegram can't carry our JWT.
+  {
+    const telegram = require("./services/autopilot/telegramBotService");
+    App.post(telegram.DEFAULT_WEBHOOK_PATH, telegram.createWebhookHandler());
+  }
 
   const port = process.env.PORT;
   server.listen(port, () => {
     console.log(`Server Started: port: ${port}`);
-    // Start the Autopilot Telegram bot in polling mode. No-op if
-    // AUTOPILOT_TELEGRAM_BOT_TOKEN isn't set. Polling assumes ONE
-    // process per token — if we ever scale to cluster mode, swap this
-    // for webhook transport (the planReplyForUpdate core is unchanged).
+    // Register the Autopilot Telegram webhook with Telegram (setWebhook).
+    // No-op if AUTOPILOT_TELEGRAM_BOT_TOKEN / _WEBHOOK_URL aren't set.
+    // Idempotent, so re-registering on every boot is safe. Unlike the
+    // old polling transport this scales horizontally — any worker can
+    // serve the webhook route.
     try {
-      require("./services/autopilot/telegramBotService").startTelegramBot();
+      require("./services/autopilot/telegramBotService")
+        .registerWebhook()
+        .catch((err) =>
+          console.error(
+            "[autopilot telegram] webhook registration failed:",
+            err.message,
+          ),
+        );
     } catch (err) {
       console.error("[autopilot telegram] startup failed:", err.message);
     }
