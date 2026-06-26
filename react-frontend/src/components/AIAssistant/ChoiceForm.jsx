@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Sparkles, Check, Loader2, Plus, X, Pencil } from 'lucide-react';
+import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
@@ -146,6 +146,42 @@ const NumberField = ({ field, value, onChange, disabled }) => (
     className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
   />
 );
+
+// Numeric stepper (− N +). Used for "how many per ratio" (1–5). Clamps to
+// [min, max] and never lets the value leave the allowed range.
+const StepperField = ({ field, value, onChange, disabled }) => {
+  const min = field.min ?? 1;
+  const max = field.max ?? 5;
+  const step = field.step || 1;
+  const current = Number.isFinite(Number(value)) ? Number(value) : min;
+  const clamp = (n) => Math.min(max, Math.max(min, n));
+  const set = (n) => onChange(clamp(n));
+  return (
+    <div className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => set(current - step)}
+        disabled={disabled || current <= min}
+        aria-label="Decrease"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </button>
+      <span className="min-w-[2.25rem] text-center text-[14px] font-semibold tabular-nums text-white">
+        {current}
+      </span>
+      <button
+        type="button"
+        onClick={() => set(current + step)}
+        disabled={disabled || current >= max}
+        aria-label="Increase"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+};
 
 // Multi-select pills (e.g. several aspect ratios at once). Value is an array.
 const CheckboxField = ({ field, value, onChange, disabled }) => {
@@ -303,16 +339,74 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
   );
 };
 
+// Multi-select grid of website-scraped images (autofill). Value is the array of
+// picked URLs; on submit these are merged into reference_images. Nothing is
+// preselected so the user explicitly chooses which images to feed generation.
+const ImagePickerField = ({ field, value, onChange, disabled }) => {
+  const candidates = Array.isArray(field.candidates) ? field.candidates : [];
+  const selected = Array.isArray(value) ? value : [];
+  if (!candidates.length) return null;
+  const toggle = (url) => {
+    if (disabled) return;
+    onChange(selected.includes(url) ? selected.filter((u) => u !== url) : [...selected, url]);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+        {candidates.map((url) => {
+          const on = selected.includes(url);
+          return (
+            <button
+              type="button"
+              key={url}
+              onClick={() => toggle(url)}
+              disabled={disabled}
+              className={`group relative aspect-square overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
+                on ? 'border-white' : 'border-transparent hover:border-white/30'
+              }`}
+            >
+              <img
+                src={url}
+                alt=""
+                loading="lazy"
+                className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-75 group-hover:opacity-100'}`}
+              />
+              {on && (
+                <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-black shadow">
+                  <Check className="h-3 w-3" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <span
+        className={`text-[11.5px] font-medium ${selected.length ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
+      >
+        {selected.length
+          ? `${selected.length} image${selected.length > 1 ? 's' : ''} selected`
+          : 'Pick the images you want to use (none selected yet)'}
+      </span>
+    </div>
+  );
+};
+
 const FIELD_RENDERERS = {
   segmented: SegmentedField,
   select: SelectField,
   text: TextField,
   textarea: TextareaField,
   number: NumberField,
+  stepper: StepperField,
   checkbox: CheckboxField,
   color_chips: ColorChipsField,
   image_upload: ImageUploadField,
+  image_picker: ImagePickerField,
 };
+
+// Fields that always span both grid columns (their controls are wide).
+const FULL_WIDTH_TYPES = new Set(['textarea', 'image_upload', 'image_picker']);
+const isFullWidth = (field) => !!field.fullWidth || FULL_WIDTH_TYPES.has(field.type);
 
 // ─── Top-level form ────────────────────────────────────────────────────────
 const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
@@ -353,14 +447,55 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     return null;
   }, [form, values]);
 
+  // ── Live credit + image-count math ────────────────────────────────────────
+  // The agent inlines `form.credit_costs` ({model: creditPerImage, plus "auto"}).
+  // Real cost = perImage × (images per ratio) × (#ratios). An ad pack is fixed
+  // at 3 variants regardless of the stepper. Falls back to the server's static
+  // `estimated_credits` only when the live cost map is unavailable.
+  const creditInfo = useMemo(() => {
+    const costs = form.credit_costs || null;
+    const isPack = values.creative_type === 'ad_pack';
+    const ratiosRaw = values.aspect_ratios;
+    const ratios = Math.max(
+      1,
+      Array.isArray(ratiosRaw) ? ratiosRaw.length : ratiosRaw ? 1 : 1,
+    );
+    const perRatio = isPack ? 3 : Math.max(1, Number(values.num_images) || 1);
+    const totalImages = perRatio * ratios;
+    let perImage = null;
+    if (costs) {
+      const model = values.model || 'auto';
+      perImage = costs[model] != null ? costs[model] : costs.auto ?? null;
+    }
+    const totalCredits =
+      perImage != null ? perImage * totalImages : form.estimated_credits ?? null;
+    return { isPack, ratios, perRatio, totalImages, perImage, totalCredits };
+  }, [values, form.credit_costs, form.estimated_credits]);
+
   const handleSubmit = async () => {
     if (isLocked || validationError) return;
     setSubmitting(true);
     try {
-      dispatch(submitAssistantChoiceForm({ messageId, values }));
+      // Fold any picked website_images into reference_images (the field the
+      // agent maps to product_images), then drop the UI-only picker key.
+      const submitValues = { ...values };
+      const picked = Array.isArray(submitValues.website_images) ? submitValues.website_images : [];
+      if (picked.length) {
+        const existing = Array.isArray(submitValues.reference_images)
+          ? submitValues.reference_images
+          : [];
+        const seen = new Set(existing.map((x) => (typeof x === 'string' ? x : x?.url)));
+        submitValues.reference_images = [
+          ...existing,
+          ...picked.filter((u) => !seen.has(u)).map((u) => ({ url: u })),
+        ];
+      }
+      delete submitValues.website_images;
+
+      dispatch(submitAssistantChoiceForm({ messageId, values: submitValues }));
       // Hand the values back to the parent (ChatInterface) which decides
       // whether to fire a real streamChat turn or a mocked one.
-      await onSubmit?.({ formId: form.form_id, values });
+      await onSubmit?.({ formId: form.form_id, values: submitValues });
       setEditing(false); // collapse back to the summary after a (re)generation
     } finally {
       setSubmitting(false);
@@ -370,14 +505,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   return (
     <div className="mt-3 w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F0F]">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-white/70 uppercase">
-            <Sparkles className="h-3 w-3" />
-            <span>Quick setup</span>
+          <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white/80 uppercase">
+            <Sparkles className="h-2.5 w-2.5" />
+            <span>Creative brief</span>
           </div>
           {form.title && (
-            <h4 className="mt-1 text-[15px] leading-snug font-semibold text-white">
+            <h4 className="mt-1.5 text-[15px] leading-snug font-semibold text-white">
               {form.title}
             </h4>
           )}
@@ -387,26 +522,42 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </p>
           )}
         </div>
-        {form.estimated_credits != null && (
+        {creditInfo.totalCredits != null && (
           <span
-            className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-medium text-white/70"
-            title="Estimated credit cost"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-white/85"
+            title={
+              creditInfo.perImage != null
+                ? `${creditInfo.perImage} credits/image × ${creditInfo.totalImages} image${creditInfo.totalImages > 1 ? 's' : ''}`
+                : 'Estimated credit cost'
+            }
           >
-            ~{form.estimated_credits} credits
+            <Sparkles className="h-3 w-3 text-[#15DCFF]" />
+            ~{creditInfo.totalCredits}
           </span>
         )}
       </div>
 
-      {/* Fields */}
-      <div className="flex flex-col gap-3.5 px-4 py-4">
+      {/* Fields — two-column grid; wide controls span both columns. */}
+      <div className="grid grid-cols-1 gap-x-3 gap-y-3.5 px-4 py-4 sm:grid-cols-2">
         {(form.fields || []).map((field) => {
           const Renderer = FIELD_RENDERERS[field.type] || TextField;
+          const full = isFullWidth(field);
           return (
-            <div key={field.key} className="flex flex-col gap-1.5">
+            <div
+              key={field.key}
+              className={`flex flex-col gap-1.5 ${full ? 'sm:col-span-2' : ''}`}
+            >
               <div className="flex items-baseline justify-between gap-2">
-                <label className="text-[12px] font-medium text-white/80">
-                  {field.label || field.key}
-                  {field.required && <span className="ml-0.5 text-white/50">*</span>}
+                <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
+                  <span>
+                    {field.label || field.key}
+                    {field.required && <span className="ml-0.5 text-white/50">*</span>}
+                  </span>
+                  {field.tooltip && (
+                    <span title={field.tooltip} className="cursor-help text-white/35 hover:text-white/70">
+                      <Info className="h-3 w-3" />
+                    </span>
+                  )}
                 </label>
                 {field.description && (
                   <span className="text-[11px] text-white/40">{field.description}</span>
@@ -421,6 +572,26 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </div>
           );
         })}
+
+        {/* Total-images notice — clarifies per-ratio vs total so the count isn't
+            mistaken for the grand total. Shown in red whenever >1 image. */}
+        {creditInfo.totalImages > 1 && (
+          <p className="sm:col-span-2 -mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-red-400/90">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            {creditInfo.isPack ? (
+              <span>
+                Ad pack: generating {creditInfo.totalImages} image
+                {creditInfo.totalImages > 1 ? 's' : ''} total (3 variants ×{' '}
+                {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}).
+              </span>
+            ) : (
+              <span>
+                Generating {creditInfo.totalImages} images total — {creditInfo.perRatio} per
+                ratio × {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}.
+              </span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Footer — submit OR submitted summary */}

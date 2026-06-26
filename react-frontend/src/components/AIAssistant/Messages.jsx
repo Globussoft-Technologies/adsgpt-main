@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useSelector } from 'react-redux';
-import { Bot, Quote } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+import { Bot, Quote, ArrowRight } from 'lucide-react';
+import { setMySpaceTab, setMySpaceImageSource } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import StepsIndicator from './StepsIndicator';
@@ -30,31 +32,89 @@ const QuotedBlock = ({ quote, align = 'left' }) => {
   );
 };
 
+// How many thumbnails we render inline before collapsing the rest behind a
+// "View more" affordance that jumps to My Space (the user's media library).
+const MEDIA_GRID_LIMIT = 6;
+
+// Column count adapts to how many images there are, so the grid stays compact
+// and square instead of stretching into one tall column:
+//   1 → single (capped width)   2 / 4 → 2-up   3 and 5+ → 3-up
+const gridColsClass = (n) => {
+  if (n <= 1) return 'grid-cols-1 max-w-[260px]';
+  if (n === 2 || n === 4) return 'grid-cols-2';
+  return 'grid-cols-3';
+};
+
 const MediaGrid = ({ urls = [] }) => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   if (!urls.length) return null;
+
+  const total = urls.length;
+  const visible = urls.slice(0, MEDIA_GRID_LIMIT);
+  const overflow = total - visible.length;
+
+  // Open My Space → Images → AI Assistant source (where these chat-generated
+  // images live). MySpace lives inside /adstudio and both its active tab and
+  // image source are redux-driven, so set them before routing.
+  const openMySpace = () => {
+    dispatch(setMySpaceTab('images'));
+    dispatch(setMySpaceImageSource('aiAssistant'));
+    navigate('/adstudio');
+  };
+
   return (
-    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {urls.map((url) => {
-        const src = toMediaUrl(url);
-        return isVideoUrl(url) ? (
-          <video
-            key={url}
-            src={src}
-            controls
-            className="w-full rounded-xl border border-white/10 bg-black"
-          />
-        ) : (
-          <a
-            key={url}
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded-xl border border-white/10 bg-black/40"
-          >
-            <img src={src} alt="Generated" className="h-full w-full object-cover" loading="lazy" />
-          </a>
-        );
-      })}
+    <div className="mt-3 flex flex-col gap-2">
+      <div className={`grid gap-2 ${gridColsClass(visible.length)}`}>
+        {visible.map((url, i) => {
+          const src = toMediaUrl(url);
+          const isOverflowTile = overflow > 0 && i === visible.length - 1;
+          if (isVideoUrl(url)) {
+            return (
+              <video
+                key={url}
+                src={src}
+                controls
+                className="aspect-square w-full rounded-xl border border-white/10 bg-black object-cover"
+              />
+            );
+          }
+          return (
+            <a
+              key={url}
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              onClick={isOverflowTile ? (e) => { e.preventDefault(); openMySpace(); } : undefined}
+              className="group relative block aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/40"
+            >
+              <img
+                src={src}
+                alt="Generated"
+                loading="lazy"
+                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+              />
+              {isOverflowTile && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/65 text-white backdrop-blur-[2px]">
+                  <span className="text-[18px] font-semibold">+{overflow}</span>
+                  <span className="text-[11px] text-white/80">View more</span>
+                </div>
+              )}
+            </a>
+          );
+        })}
+      </div>
+
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={openMySpace}
+          className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11.5px] font-medium text-white/70 transition-colors hover:border-white/25 hover:text-white"
+        >
+          View all {total} in My Space
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 };

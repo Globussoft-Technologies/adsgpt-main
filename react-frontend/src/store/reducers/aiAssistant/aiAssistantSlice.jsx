@@ -217,11 +217,14 @@ const aiAssistantSlice = createSlice({
       msg.storyboard.final_video_url = url;
     },
     finishAssistantStream: (state, action) => {
-      const { messageId, sessionId, completedLabel } = action.payload || {};
+      const { messageId, sessionId, completedLabel, steps } = action.payload || {};
       const msg = state.messages[state.messages.length - 1];
       if (msg && msg.role === 'assistant') {
         msg.complete = true;
         if (messageId) msg.id = messageId;
+        // Live rows used present-continuous ("Generating…"); swap to the past-tense
+        // list for the finished message ("Generated…").
+        if (Array.isArray(steps) && steps.length) msg.steps = steps;
       }
       if (sessionId) {
         state.sessionId = sessionId;

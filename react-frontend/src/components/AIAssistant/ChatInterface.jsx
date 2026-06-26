@@ -122,6 +122,7 @@ const ChatInterface = () => {
                   messageId: data.message_id,
                   sessionId: data.session_id,
                   completedLabel: data.completed_label,
+                  steps: data.steps,
                 }),
               );
               break;

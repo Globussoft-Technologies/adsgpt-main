@@ -17,6 +17,7 @@ import AIAdsPage from './pages/AI-ADS/AIAdsPage';
 import {
   setActivePage,
   setMySpaceTab,
+  setMySpaceImageSource,
   incrementSavedCount,
   showSavedFolder as showSavedFolderAction,
   setAvatarStep,
@@ -32,6 +33,7 @@ import genieMinimize, { captureModal } from '@/utils/ui/genieMinimize';
 import MyVideosPage from './pages/MyVideosPage';
 import MyImagesPage from './pages/MyImagesPage';
 import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
+import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 
@@ -101,12 +103,16 @@ const selectImageType = [
 const selectImageSource = [
   { value: 'adCreative', label: 'AdCreative' },
   { value: 'adFactory', label: 'AdFactory' },
+  { value: 'aiAssistant', label: 'AI Assistant' },
 ];
 
 const AdVideoLayout = () => {
   const [videoType, setVideoType] = useState('');
   const [imageType, setImageType] = useState('');
-  const [imageSource, setImageSource] = useState('adCreative');
+  // Image source lives in redux so the AI Assistant "View more" deep-link can
+  // preselect this source before navigating here. (setImageSource is defined
+  // below, once `dispatch` exists.)
+  const imageSource = useSelector((state) => state.adVideoNew.mySpaceImageSource);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -123,6 +129,7 @@ const AdVideoLayout = () => {
     aiAdsSceneLoading,
   } = useSelector((state) => state.adVideoNew);
   const dispatch = useDispatch();
+  const setImageSource = (value) => dispatch(setMySpaceImageSource(value));
   const modalRef = useRef();
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -401,6 +408,8 @@ const AdVideoLayout = () => {
           {mySpaceTab === 'images' ? (
             imageSource === 'adFactory' ? (
               <MyAdFactoryImagesPage startDate={startDate} endDate={endDate} />
+            ) : imageSource === 'aiAssistant' ? (
+              <MyAssistantImagesPage />
             ) : (
               <MyImagesPage imageType={imageType} startDate={startDate} endDate={endDate} />
             )

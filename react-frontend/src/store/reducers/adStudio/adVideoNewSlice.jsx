@@ -10,9 +10,21 @@ const getInitialMySpaceTab = () => {
   return stored === 'videos' || stored === 'images' ? stored : 'images';
 };
 
+// Which image source the MySpace › Images tab is browsing:
+//   'adCreative'  — Ad Studio's ImageGeneration store (default)
+//   'adFactory'   — AdFactory images API
+//   'aiAssistant' — AI Assistant (Sherry) generations, from /generated-media/library
+const getInitialImageSource = () => {
+  const stored = sessionStorage.getItem('mySpaceImageSource');
+  return ['adCreative', 'adFactory', 'aiAssistant'].includes(stored)
+    ? stored
+    : 'adCreative';
+};
+
 const initialState = {
   activePage: getInitialActivePage(),
   mySpaceTab: getInitialMySpaceTab(), // 'images' | 'videos' — set before navigating to MySpace.
+  mySpaceImageSource: getInitialImageSource(),
   savedCount: 0,
   showSavedFolder: false,
   isLoading: false,
@@ -55,6 +67,16 @@ const adVideoNewSlice = createSlice({
         sessionStorage.setItem('mySpaceTab', action.payload);
       } catch {
         /* sessionStorage may be disabled — best-effort persistence */
+      }
+    },
+    setMySpaceImageSource: (state, action) => {
+      state.mySpaceImageSource = action.payload;
+      // Persist so a deep-link (e.g. the AI Assistant "View more" button) and a
+      // subsequent refresh keep showing the chosen source.
+      try {
+        sessionStorage.setItem('mySpaceImageSource', action.payload);
+      } catch {
+        /* best-effort */
       }
     },
     // incrementSavedCount: (state) => {
@@ -237,6 +259,7 @@ const adVideoNewSlice = createSlice({
 export const {
   setActivePage,
   setMySpaceTab,
+  setMySpaceImageSource,
   incrementSavedCount,
   setSavedCount,
   setLoading,
