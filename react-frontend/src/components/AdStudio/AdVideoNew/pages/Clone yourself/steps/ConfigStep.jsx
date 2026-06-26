@@ -202,7 +202,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
   const videoTimer = useMemo(() => {
     const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-    if (videoModel === 'veo_4k' || videoModel === 'veo-3.1-fast') return [{ value: '8s', label: '8s' }];
+    if (videoModel === 'veo_4k' || videoModel === 'veo-3.1-fast') return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
     if (videoModel === 'veo' ) {
       return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
     }
