@@ -87,6 +87,14 @@ async function createServer() {
     console.error("[adsFactory] failed to start autopilot queue:", err.message);
   }
 
+  // * Warm up push (FCM) so the boot log confirms whether it's configured.
+  // Init is otherwise lazy; this just surfaces enabled/disabled state per env.
+  try {
+    require("./services/push/firebaseAdmin").isPushEnabled();
+  } catch (err) {
+    console.error("[push] warm-up failed:", err.message);
+  }
+
   // ! To be reworked properly
   sub.subscribe("analyticsChartTop");
   sub.subscribe("analyticsChartMid");

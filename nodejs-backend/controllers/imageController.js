@@ -12,6 +12,7 @@ const modelPricingConfig = require("../config/modelPricingConfig");
 const { findModel } = require("../config/modelRegistry");
 const GeneratedMediaController = require("./generatedMedia.controller");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
+const { notifyUser } = require("../services/push/notifyUser");
 
 // Format Joi validation errors into user-friendly messages
 const formatValidationError = (errorDetails) => {
@@ -689,20 +690,20 @@ exports.updateImageResult = async (req, res) => {
                     `prior_status=${priorDoc.status} new_status=${status} ` +
                     `— skipping credit work`,
             );
-            if (global.io) {
-                try {
-                    global.io.to(image?.userId).emit("imageCreated", {
-                        _id: image._id,
-                        image: {
-                            ...image,
-                            url: images?.[0]?.generatedImageUrl || "",
-                        },
-                        userId: image?.userId,
-                    });
-                } catch (e) {
-                    console.error(`[Socket] duplicate emit failed: ${e.message}`);
-                }
-            }
+            // Re-emit to the socket only (reconnected web tabs may have missed
+            // the first emit). No push here — the original callback already
+            // pushed, and re-pushing would double-buzz the app.
+            await notifyUser(image?.userId, {
+                event: "imageCreated",
+                socketPayload: {
+                    _id: image._id,
+                    image: {
+                        ...image,
+                        url: images?.[0]?.generatedImageUrl || "",
+                    },
+                    userId: image?.userId,
+                },
+            });
             return res.status(200).json({ success: true, duplicate: true });
         }
 
@@ -792,23 +793,27 @@ exports.updateImageResult = async (req, res) => {
             await UnifiedCreditController.releaseCredits(sessionId);
         }
 
-        if (global.io) {
-            try {
-                global.io.to(image?.userId).emit("imageCreated", {
-                    _id: image._id,
-                    image: {
-                        ...image,
-                        url: images?.[0]?.generatedImageUrl || "",
-                    },
-                    userId: image?.userId,
-                });
-                console.log(`[Socket] Emitted imageCreated for userId: ${image?.userId}`);
-            } catch (socketErr) {
-                console.error(`[Socket] Failed to emit imageCreated: ${socketErr.message}`);
-            }
-        } else {
-            console.warn("[Socket] global.io not available - socket events will not be sent");
-        }
+        // Notify over websocket (web + foreground app) and, when the image
+        // actually succeeded, FCM push (backgrounded/closed native apps).
+        const imageSucceeded = !!images?.[0]?.generatedImageUrl;
+        await notifyUser(image?.userId, {
+            event: "imageCreated",
+            socketPayload: {
+                _id: image._id,
+                image: {
+                    ...image,
+                    url: images?.[0]?.generatedImageUrl || "",
+                },
+                userId: image?.userId,
+            },
+            push: imageSucceeded
+                ? {
+                      title: "Image ready 🎨",
+                      body: "Your generated image is ready. Tap to view it.",
+                      data: { type: "image", id: image._id?.toString() || "" },
+                  }
+                : undefined,
+        });
 
         emitCreditStatus(userId);
 

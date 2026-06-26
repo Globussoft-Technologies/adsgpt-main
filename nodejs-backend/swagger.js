@@ -99,6 +99,10 @@ const doc = {
       description: "Usage logging, generation stats, and model credit values",
     },
     {
+      name: "Device Tokens",
+      description: "Register/unregister native app FCM tokens for push notifications",
+    },
+    {
       name: "default",
       description: "Miscellaneous APIs",
     },

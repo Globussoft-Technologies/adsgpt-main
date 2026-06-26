@@ -834,7 +834,7 @@ class AutopilotController {
     /* #swagger.tags = ['Autopilot']
        #swagger.description = 'Run Autopilot auto-pause for one ad account. Dry-run by default. Honours the caller\'s saved AutopilotSettings (severityFloor, dryRunGlobal, enabled).'
        #swagger.parameters['adAccountId'] = { description: 'Meta Ad Account ID', type: 'string', required: true }
-       #swagger.parameters['dryRun'] = { description: 'If "false", actually pause. Defaults from settings.dryRunGlobal (true if unset).', type: 'string' }
+       #swagger.parameters['dryRun'] = { description: 'When set to false, actually pause. Defaults from settings.dryRunGlobal (true if unset).', type: 'string' }
        #swagger.parameters['severityFloor'] = { description: 'critical|warning|opportunity. Defaults from settings.severityFloor.', type: 'string' }
     */
     try {

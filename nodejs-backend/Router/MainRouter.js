@@ -51,6 +51,7 @@ const voiceSelectorRoutes = require("./voiceSelectorRoutes");
 const promptTemplateRoutes = require("./promptTemplate/promptTemplateRoutes");
 const creditsApiRoutes = require("./creditsApiRoutes");
 const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnalyzerRoutes");
+const deviceTokenRoutes = require("./deviceTokenRoutes");
 
 const app = express();
 app.use("/adcopy", authenticateJWT, adCopyRouter);
@@ -105,5 +106,6 @@ app.use("/ads-factory/autopilot", adsFactoryAutoPilotRoutes);
 app.use("/prompt-templates", promptTemplateRoutes);
 app.use("/credits", creditsApiRoutes);
 app.use("/landing-page-analyzer", landingPageAnalyzerRoutes);
+app.use("/device-tokens", authenticateJWT, deviceTokenRoutes);
 
 module.exports = app;

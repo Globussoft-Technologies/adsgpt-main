@@ -18,6 +18,7 @@ const logger = require("../utils/logger");
 
 const Avatar = require("../Module/videoGeneration/avatarModel");
 const modelPricingConfig = require("../config/modelPricingConfig");
+const { notifyUser } = require("../services/push/notifyUser");
 const GeneratedMediaController = require("./generatedMedia.controller");
 
 const getFileName = (extension) => `${Date.now()}${extension}`;
@@ -358,14 +359,19 @@ exports.updateVideoResult = async (req, res) => {
           `prior_status=${priorDoc.status} new_videoStatus=${videoStatus} ` +
           `— skipping credit work to avoid double-charge`,
       );
-      if (global.io && videoStatus === 200) {
-        global.io.to(video?.userId).emit("videoCreated", {
-          _id: video._id,
-          video: {
-            ...video,
-            url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
+      if (videoStatus === 200) {
+        // Re-emit to the socket only — a prior callback already pushed, so
+        // re-pushing would double-buzz the app.
+        await notifyUser(video?.userId, {
+          event: "videoCreated",
+          socketPayload: {
+            _id: video._id,
+            video: {
+              ...video,
+              url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
+            },
+            userId: video?.userId,
           },
-          userId: video?.userId,
         });
       }
       return res.json({ success: true, data: video, duplicate: true });
@@ -430,18 +436,29 @@ exports.updateVideoResult = async (req, res) => {
       await UnifiedCreditController.releaseCredits(sessionId);
     }
 
-    // emit to frontend (using userId room so it works across all tabs/reconnections)
-    // video is lean (plain JS), so spreading is safe — no Mongoose internals leak
-    if (global.io) {
-      global.io.to(video?.userId).emit("videoCreated", {
+    // Notify over websocket (web + foreground app, using the userId room so it
+    // works across all tabs/reconnections) and, on success, FCM push for
+    // backgrounded/closed native apps. video is lean (plain JS), so spreading
+    // is safe — no Mongoose internals leak.
+    const videoSucceeded = videoStatus === 200;
+    await notifyUser(video?.userId, {
+      event: "videoCreated",
+      socketPayload: {
         _id: video._id,
         video: {
           ...video,
           url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
         },
         userId: video?.userId,
-      });
-    }
+      },
+      push: videoSucceeded
+        ? {
+            title: "Video ready 🎬",
+            body: "Your generated video is ready. Tap to view it.",
+            data: { type: "video", id: video._id?.toString() || "" },
+          }
+        : undefined,
+    });
 
     emitCreditStatus(userId);
 

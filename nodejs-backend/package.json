@@ -37,6 +37,7 @@
     "express-session": "^1.18.1",
     "facebook-nodejs-business-sdk": "^24.0.1",
     "file-type": "^21.3.0",
+    "firebase-admin": "^14.1.0",
     "fluent-ffmpeg": "^2.1.3",
     "google-ads-api": "^23.0.0",
     "ioredis": "^5.4.1",
