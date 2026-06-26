@@ -343,7 +343,7 @@ export default function ProfileHome() {
                   href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-[50px] border border-red-500 bg-red-500 px-4 py-1.5 text-xs font-semibold whitespace-nowrap text-white hover:bg-red-600 2xl:text-base"
+                  className="rounded-[50px] cursor-pointer border border-red-500 bg-red-500 px-4 py-1.5 text-xs font-semibold whitespace-nowrap text-white hover:bg-red-600 2xl:text-base"
                 >
                   Cancel Subscription
                 </a>
