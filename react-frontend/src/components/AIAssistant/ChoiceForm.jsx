@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+import toMediaUrl from '@/utils/mediaUrl';
 
 // ─── Normalisation helpers ─────────────────────────────────────────────────
 // The agent emits options as either ["a","b","c"], [1,3], or
@@ -315,7 +316,7 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
         const url = typeof img === 'string' ? img : img.url;
         return (
           <div key={`${url}-${i}`} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10">
-            <img src={url} alt="" className="h-full w-full object-cover" />
+            <img src={toMediaUrl(url)} alt="" className="h-full w-full object-cover" />
             {!disabled && (
               <button
                 type="button"
@@ -366,7 +367,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
               }`}
             >
               <img
-                src={url}
+                src={toMediaUrl(url)}
                 alt=""
                 loading="lazy"
                 className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-75 group-hover:opacity-100'}`}

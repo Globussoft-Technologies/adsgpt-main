@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 
 import Composer from './Composer';
 import Messages from './Messages';
-import { streamChat } from '@/apis/aiAssistant/aiAssistantApi';
+import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   buildMockChoiceForm,
   mockChoiceFormResult,
@@ -19,6 +19,7 @@ import {
   attachAssistantStoryboard,
   failAssistantStream,
   finishAssistantStream,
+  loadConversation,
   pushStep,
   pushUserMessage,
   setSessionId,
@@ -68,6 +69,33 @@ const ChatInterface = () => {
     controllerRef.current?.abort?.();
     controllerRef.current = null;
   }, [abortRequestId]);
+
+  // Rehydrate on refresh: we persist only the sessionId (not the transcript), so
+  // a reload would otherwise show an empty composer while still pointing at the
+  // old conversation — looking like a brand-new chat. If we have a session but no
+  // messages in memory, pull its history back so the refresh resumes it.
+  const rehydratedRef = useRef(false);
+  useEffect(() => {
+    if (rehydratedRef.current) return;
+    rehydratedRef.current = true;
+    if (!sessionId || messages.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const history = await getHistory(sessionId);
+        if (!cancelled && Array.isArray(history) && history.length > 0) {
+          dispatch(loadConversation({ sessionId, messages: history }));
+        }
+      } catch {
+        /* ignore — fall back to an empty chat if history can't be loaded */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: capture the persisted session once on first render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Real network turn — extracted so both `/cascade` follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.

@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Quote, ArrowRight } from 'lucide-react';
+import { Bot, Quote, ArrowRight, Download } from 'lucide-react';
 import { setMySpaceTab, setMySpaceImageSource } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
@@ -12,9 +12,23 @@ import VideoStoryboard from './VideoStoryboard';
 import AdCreativePackage from './AdCreativePackage';
 import ChoiceForm from './ChoiceForm';
 import QuotableText from './QuotableText';
+import ImageLightbox from './ImageLightbox';
 import toMediaUrl from '@/utils/mediaUrl';
+import { handleDownload } from '@/utils/download';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
+
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
+
+// A chat attachment is an image when its file_type or URL/filename says so.
+// Attachments arrive as a string URL, or { url, filename, file_type }.
+const isImageAttachment = (a) => {
+  if (!a) return false;
+  if (typeof a === 'string') return IMAGE_EXT_RE.test(a);
+  const ft = (a.file_type || '').toLowerCase();
+  if (/(png|jpe?g|gif|webp|bmp|svg)/.test(ft)) return true;
+  return IMAGE_EXT_RE.test(a.url || '') || IMAGE_EXT_RE.test(a.filename || '');
+};
 
 // Small "replying to …" block shown above a message that carries a quote.
 const QuotedBlock = ({ quote, align = 'left' }) => {
@@ -45,7 +59,7 @@ const gridColsClass = (n) => {
   return 'grid-cols-3';
 };
 
-const MediaGrid = ({ urls = [] }) => {
+const MediaGrid = ({ urls = [], onOpenImage }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   if (!urls.length) return null;
@@ -80,27 +94,39 @@ const MediaGrid = ({ urls = [] }) => {
             );
           }
           return (
-            <a
+            <div
               key={url}
-              href={src}
-              target="_blank"
-              rel="noreferrer"
-              onClick={isOverflowTile ? (e) => { e.preventDefault(); openMySpace(); } : undefined}
               className="group relative block aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/40"
             >
-              <img
-                src={src}
-                alt="Generated"
-                loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-              />
-              {isOverflowTile && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/65 text-white backdrop-blur-[2px]">
-                  <span className="text-[18px] font-semibold">+{overflow}</span>
-                  <span className="text-[11px] text-white/80">View more</span>
-                </div>
+              <button
+                type="button"
+                onClick={() => (isOverflowTile ? openMySpace() : onOpenImage?.(url))}
+                className="block h-full w-full"
+              >
+                <img
+                  src={src}
+                  alt="Generated"
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                />
+                {isOverflowTile && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/65 text-white backdrop-blur-[2px]">
+                    <span className="text-[18px] font-semibold">+{overflow}</span>
+                    <span className="text-[11px] text-white/80">View more</span>
+                  </div>
+                )}
+              </button>
+              {!isOverflowTile && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleDownload(src); }}
+                  title="Download"
+                  className="absolute top-1.5 right-1.5 hidden h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/80 hover:text-white group-hover:flex"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
               )}
-            </a>
+            </div>
           );
         })}
       </div>
@@ -130,6 +156,7 @@ const Messages = ({
 }) => {
   const endRef = useRef(null);
   const sessionId = useSelector((state) => state.aiAssistant.sessionId);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -152,14 +179,32 @@ const Messages = ({
                   </QuotableText>
                 </div>
                 {m.attachments?.length > 0 && (
-                  <div className="mt-1 flex flex-wrap justify-end gap-1.5">
+                  <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                     {m.attachments.map((a, i) => {
                       const url = typeof a === 'string' ? a : a.url;
-                      const label = typeof a === 'string' ? a : a.filename || a.file_type;
+                      const label = typeof a === 'string' ? a : a.filename || a.file_type || 'file';
+                      if (isImageAttachment(a)) {
+                        return (
+                          <button
+                            key={`${url}-${i}`}
+                            type="button"
+                            onClick={() => setLightboxSrc(url)}
+                            title={label}
+                            className="h-20 w-20 overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                          >
+                            <img
+                              src={toMediaUrl(url)}
+                              alt={label}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        );
+                      }
                       return (
                         <a
                           key={`${url}-${i}`}
-                          href={url}
+                          href={toMediaUrl(url)}
                           target="_blank"
                           rel="noreferrer"
                           className="rounded-full border border-white/10 bg-[#1B1B1B] px-2 py-0.5 text-[10px] text-white/70 hover:text-white"
@@ -244,7 +289,7 @@ const Messages = ({
                 )
               )}
 
-              <MediaGrid urls={m.images || []} />
+              <MediaGrid urls={m.images || []} onOpenImage={setLightboxSrc} />
 
               <CompetitorAdsGrid ads={m.competitorAds || []} />
 
@@ -286,6 +331,8 @@ const Messages = ({
       })}
 
       <div ref={endRef} />
+
+      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
 };

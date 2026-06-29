@@ -96,8 +96,8 @@ const AD_FORM = () => ({
       key: 'platform',
       type: 'segmented',
       label: 'Platform',
-      options: ['Instagram', 'Meta', 'TikTok', 'LinkedIn', 'YouTube', 'Google'],
-      default: 'Instagram',
+      options: ['Meta', 'TikTok', 'LinkedIn', 'YouTube', 'Google'],
+      default: 'Meta',
     },
     {
       key: 'angle',
@@ -225,7 +225,7 @@ export const mockChoiceFormResult = (kind, values) => {
     const angleLabel = v.angle ? `${v.angle} angle` : 'three distinct angles';
     return (
       `On it — three ${angleLabel === 'three distinct angles' ? angleLabel : `variants on the ${angleLabel}`} ` +
-      `for ${v.product || 'your product'} on ${v.platform || 'Instagram'}, ` +
+      `for ${v.product || 'your product'} on ${v.platform || 'Meta'}, ` +
       `${v.aspect_ratio || '1:1'}, via ${v.provider || 'gemini'}. ` +
       `(Demo — no real generation yet.)`
     );

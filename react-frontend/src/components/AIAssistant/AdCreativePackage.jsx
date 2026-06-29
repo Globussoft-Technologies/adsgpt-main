@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Check, Copy, Download, ExternalLink, Sparkles } from 'lucide-react';
+import { Check, Copy, Download, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import toMediaUrl from '@/utils/mediaUrl';
+import { handleDownload } from '@/utils/download';
+import ImageLightbox from './ImageLightbox';
 
 // Color accent per angle. Falls back to a neutral chip for unknown angles.
 const ANGLE_ACCENT = {
@@ -41,7 +43,7 @@ const CopyButton = ({ text, label = 'copy' }) => {
   );
 };
 
-const VariantCard = ({ variant, index }) => {
+const VariantCard = ({ variant, index, onOpenImage }) => {
   const accent = ANGLE_ACCENT[(variant.angle || '').toLowerCase()] || DEFAULT_ACCENT;
   const headline = (variant.headline || '').trim();
   const body = (variant.body || '').trim();
@@ -73,12 +75,11 @@ const VariantCard = ({ variant, index }) => {
 
       {/* Image */}
       {variant.image_url && (
-        <a
-          href={toMediaUrl(variant.image_url)}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 block bg-black"
-          title="Open full-size in a new tab"
+        <button
+          type="button"
+          onClick={() => onOpenImage?.(variant.image_url)}
+          className="mt-3 block w-full bg-black"
+          title="View full-size"
         >
           <img
             src={toMediaUrl(variant.image_url)}
@@ -86,7 +87,7 @@ const VariantCard = ({ variant, index }) => {
             loading="lazy"
             className="block w-full select-none"
           />
-        </a>
+        </button>
       )}
 
       {/* Copy */}
@@ -125,18 +126,15 @@ const VariantCard = ({ variant, index }) => {
           <CopyButton text={fullCopyText} label="all copy" />
         </div>
         {variant.image_url && (
-          <a
-            href={toMediaUrl(variant.image_url)}
-            target="_blank"
-            rel="noreferrer"
-            download
+          <button
+            type="button"
+            onClick={() => handleDownload(toMediaUrl(variant.image_url))}
             className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white/85"
-            title="Open / download image"
+            title="Download image"
           >
             <Download className="h-3 w-3" />
             <span>image</span>
-            <ExternalLink className="h-2.5 w-2.5" />
-          </a>
+          </button>
         )}
       </div>
     </article>
@@ -144,14 +142,21 @@ const VariantCard = ({ variant, index }) => {
 };
 
 const AdCreativePackage = ({ pack }) => {
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   if (!pack || !Array.isArray(pack.variants) || pack.variants.length === 0) return null;
   return (
     <div className="mt-4 w-full">
       <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {pack.variants.map((v, i) => (
-          <VariantCard key={`${v.angle || 'v'}-${i}`} variant={v} index={i} />
+          <VariantCard
+            key={`${v.angle || 'v'}-${i}`}
+            variant={v}
+            index={i}
+            onOpenImage={setLightboxSrc}
+          />
         ))}
       </div>
+      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
 };

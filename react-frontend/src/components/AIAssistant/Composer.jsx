@@ -64,9 +64,7 @@ const Composer = ({
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleFileChange = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
+  const uploadFiles = async (files) => {
     if (!files.length) return;
     setUploading(true);
     try {
@@ -81,6 +79,25 @@ const Composer = ({
       toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    uploadFiles(files);
+  };
+
+  // Let users paste an image straight from the clipboard (screenshots, copied
+  // product photos) instead of only via the attach button.
+  const handlePaste = (e) => {
+    const files = Array.from(e.clipboardData?.items || [])
+      .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter(Boolean);
+    if (files.length) {
+      e.preventDefault();
+      uploadFiles(files);
     }
   };
 
@@ -150,6 +167,7 @@ const Composer = ({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           rows={3}
           disabled={disabled}
