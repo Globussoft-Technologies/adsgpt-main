@@ -2389,6 +2389,54 @@ group("OUTCOME_SALES — destination_type mappings", () => {
   });
 });
 
+group("OUTCOME_SALES/APP — OFFSITE_CONVERSIONS unlock (Meta SDK / Conversions API for App)", () => {
+  // Live-verified 2026-06-26 via Meta UI capture: Sales/App exposes
+  // "Maximise number of app events" goal. The unlock path is Meta SDK +
+  // Conversions API for App — no third-party MMP service required.
+  const cell = getCell("OUTCOME_SALES", "APP");
+
+  test("optimizationGoals includes OFFSITE_CONVERSIONS", () => {
+    assert.ok(
+      cell.adSet.optimizationGoals.includes("OFFSITE_CONVERSIONS"),
+      "Sales/APP must offer OFFSITE_CONVERSIONS after the 2026-06-26 unlock",
+    );
+  });
+
+  test("optimizationGoals also keeps LINK_CLICKS + REACH (fallback delivery goals)", () => {
+    assert.ok(cell.adSet.optimizationGoals.includes("LINK_CLICKS"));
+    assert.ok(cell.adSet.optimizationGoals.includes("REACH"));
+  });
+
+  test("additionalFields does NOT include pixelId (app shape can't carry pixel_id — subcode 1815229)", () => {
+    assert.ok(
+      !cell.adSet.additionalFields.includes("pixelId"),
+      "pixelId removed from Sales/APP additionalFields — dead data on app shape",
+    );
+  });
+
+  test("additionalFields keeps pixelEventType (mapped to custom_event_type on the app shape)", () => {
+    assert.ok(cell.adSet.additionalFields.includes("pixelEventType"));
+  });
+});
+
+group("OUTCOME_SALES/WEBSITE_AND_APP — OFFSITE_CONVERSIONS unlock (multi-source event)", () => {
+  // Live-verified 2026-06-26 via Meta UI capture: Sales/Website-and-app
+  // exposes "Maximise number of conversions" with a "Build event" flow
+  // that creates a multi-source event spanning Pixel + App SDK.
+  const cell = getCell("OUTCOME_SALES", "WEBSITE_AND_APP");
+
+  test("optimizationGoals includes OFFSITE_CONVERSIONS", () => {
+    assert.ok(
+      cell.adSet.optimizationGoals.includes("OFFSITE_CONVERSIONS"),
+      "Sales/WEBSITE_AND_APP must offer OFFSITE_CONVERSIONS after the 2026-06-26 unlock",
+    );
+  });
+
+  test("defaultOptimizationGoal stays LINK_CLICKS (backward compat — OFFSITE is opt-in)", () => {
+    assert.equal(cell.adSet.defaultOptimizationGoal, "LINK_CLICKS");
+  });
+});
+
 group("OUTCOME_SALES/CATALOG — cell shape", () => {
   const cell = getCell("OUTCOME_SALES", "CATALOG");
 

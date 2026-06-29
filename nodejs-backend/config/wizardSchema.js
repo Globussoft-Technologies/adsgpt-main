@@ -1322,6 +1322,15 @@ const CELLS = {
         // Same shape as Leads/WEBSITE_AND_CALLS — Pixel-tracked website
         // conversions + click-to-call from the same creative. Meta
         // optimises per viewer based on their predicted conversion path.
+        //
+        // Pending live verification (2026-06-26): Meta UI captures show the
+        // Performance goal dropdown locked to "Maximise number of conversions"
+        // (= OFFSITE_CONVERSIONS) on Sales/Website-and-calls — LINK_CLICKS
+        // and QUALITY_CALL are NOT exposed in the Meta UI dropdown. They
+        // may still be API-accepted (Meta UI defaults are sometimes more
+        // restrictive than API validity) but if a user picks them here
+        // they may hit subcode 2490408. See SALES_CELLS_SPEC §6f
+        // "Pending live verification" for the test plan.
         optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "QUALITY_CALL"],
         defaultOptimizationGoal: "OFFSITE_CONVERSIONS",
         billingEvents: ["IMPRESSIONS"],
@@ -1348,12 +1357,16 @@ const CELLS = {
     WEBSITE_AND_APP: {
       group: "multiple",
       adSet: {
-        // No OFFSITE_CONVERSIONS at the cell level — same MMP constraint
-        // as Sales/APP. The website leg uses Pixel + LINK_CLICKS; the app
-        // leg uses store URL. With an MMP integration, this could expand
-        // to OFFSITE_CONVERSIONS spanning both. Without one, ship the
-        // delivery-only goals so the cell is at least usable.
-        optimizationGoals: ["LINK_CLICKS", "REACH", "IMPRESSIONS"],
+        // OFFSITE_CONVERSIONS unlocked 2026-06-26 — Meta UI exposes
+        // "Maximise number of conversions" with a "Build event" flow that
+        // creates a multi-source event spanning Pixel (website) + App
+        // SDK / Conversions API for App (app). No third-party MMP needed —
+        // Meta's own SDK + Conversions API is the in-house path. The user
+        // configures the multi-source event in Meta Events Manager and
+        // picks it via the existing pixelEventType field (same custom_event_type
+        // mechanism as Leads/WEBSITE). LINK_CLICKS / REACH / IMPRESSIONS
+        // kept as fallback goals when no event is configured.
+        optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "REACH", "IMPRESSIONS"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
@@ -1430,6 +1443,13 @@ const CELLS = {
     // automatically.
     MESSAGE_DESTINATIONS: {
       adSet: {
+        // Pending live verification (2026-06-26): Meta UI captures show
+        // the Performance goal dropdown locked to "Maximise number of
+        // conversations" (= CONVERSATIONS) on Sales/Message-destinations —
+        // IMPRESSIONS and REACH are NOT exposed in the Meta UI dropdown.
+        // Leaving them in the API cell config until live-verified rejected.
+        // See SALES_CELLS_SPEC §6f "Pending live verification" for the
+        // test plan.
         optimizationGoals: ["CONVERSATIONS", "IMPRESSIONS", "REACH"],
         defaultOptimizationGoal: "CONVERSATIONS",
         billingEvents: ["IMPRESSIONS"],
@@ -1480,10 +1500,22 @@ const CELLS = {
         // Meta demands `custom_event_type` in promoted_object as the "main
         // conversion" for Conversions-family campaigns on App destination
         // (subcode 2446759). The `app` promoted_object shape auto-includes
-        // custom_event_type when the form supplies pixelEventType. Pixel
-        // picker surfaced via additionalFields. pixel_id NOT passed to
-        // adset.promoted_object (Meta rejects with 1815229).
-        optimizationGoals: ["LINK_CLICKS", "REACH"],
+        // custom_event_type when the form supplies pixelEventType. pixel_id
+        // NOT passed to adset.promoted_object (Meta rejects with 1815229).
+        //
+        // OFFSITE_CONVERSIONS unlocked 2026-06-26 — Meta UI labels it
+        // "Maximise number of app events" on Sales/App. The unlock path is
+        // Meta SDK + Conversions API for App (in-house — no third-party MMP
+        // service required). App events come from the Meta SDK integrated
+        // in the app OR the Conversions API for App endpoint; user picks
+        // the event via the existing pixelEventType field (mapped to
+        // custom_event_type on the App-shape promoted_object).
+        //
+        // pixelId field removed from additionalFields — Sales/APP uses
+        // the `app` shape which CANNOT carry pixel_id (subcode 1815229);
+        // it was dead data prior to this change. The Pixel association is
+        // tracked at the Meta SDK integration level, not on the ad set.
+        optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "REACH"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
         defaultBillingEvent: "IMPRESSIONS",
@@ -1492,7 +1524,6 @@ const CELLS = {
           "mobileAppStore",
           "applicationId",
           "objectStoreUrl",
-          "pixelId",
           "pixelEventType",
         ],
       },
@@ -1512,7 +1543,7 @@ const CELLS = {
       },
       identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Drive purchases inside your app. For installs, use OUTCOME_APP_PROMOTION. OFFSITE_CONVERSIONS deferred — needs an MMP.",
+      notes: "Drive purchases inside your app. For installs, use OUTCOME_APP_PROMOTION. OFFSITE_CONVERSIONS supported via Meta SDK or Conversions API for App — no third-party MMP service required.",
     },
 
     CATALOG: {
