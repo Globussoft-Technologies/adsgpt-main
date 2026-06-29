@@ -16,6 +16,7 @@ import {
   generateVideoScene,
   mergeVideoClips,
 } from '@/apis/aiAssistant/aiAssistantApi';
+import toMediaUrl from '@/utils/mediaUrl';
 import {
   setStoryboardFinalVideo,
   updateStoryboardScene,
@@ -168,7 +169,7 @@ const SceneCard = ({ scene, messageId, aspectRatio }) => {
           {scene.clip_url ? (
             <video
               key={scene.clip_url}
-              src={scene.clip_url}
+              src={toMediaUrl(scene.clip_url)}
               controls
               className="mb-3 w-full rounded-xl border border-white/10 bg-black"
             />
@@ -367,12 +368,12 @@ const VideoStoryboard = ({ storyboard, messageId }) => {
               Final video assembled
             </div>
             <video
-              src={storyboard.final_video_url}
+              src={toMediaUrl(storyboard.final_video_url)}
               controls
               className="w-full rounded-xl border border-white/10 bg-black"
             />
             <a
-              href={storyboard.final_video_url}
+              href={toMediaUrl(storyboard.final_video_url)}
               download
               className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-white/70 hover:text-white"
             >

@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { Loader2, Paperclip, Send, X, Quote } from 'lucide-react';
 import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
+import { uploadToS3 } from '@/utils/imageUpload';
+import toMediaUrl from '@/utils/mediaUrl';
 import toast from 'react-hot-toast';
 import BorderGlow from './BorderGlow/BorderGlow';
 import ToolToggles from './ToolToggles';
+
+let _tmpId = 0;
+const nextTmpId = () => `att_${++_tmpId}`;
+const isImageFile = (file) => (file?.type || '').startsWith('image/');
+const extOf = (name) => {
+  const dot = (name || '').lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot).toLowerCase() : '';
+};
 
 // Tweak these to change composer size:
 //   MIN_*  → starting / minimum height
@@ -22,10 +33,16 @@ const Composer = ({
   onClearQuote,
 }) => {
   const [text, setText] = useState('');
+  // Each attachment: { tempId, file_type, filename, url, isImage, preview?, pending }.
+  // Images get an instant local `preview` (object URL) + a spinner while they
+  // upload to S3 in the background — like ChatGPT — so the user never waits on a
+  // blank composer.
   const [attachments, setAttachments] = useState([]);
-  const [uploading, setUploading] = useState(false);
+  const userId = useSelector((s) => s.socket?.userData?.user_id);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  const uploadingCount = attachments.filter((a) => a.pending).length;
 
   const minTextareaPx =
     variant === 'docked' ? MIN_TEXTAREA_PX_DOCKED : MIN_TEXTAREA_PX_CENTERED;
@@ -46,11 +63,20 @@ const Composer = ({
     if (quote?.text) textareaRef.current?.focus();
   }, [quote]);
 
-  const canSend = !disabled && !uploading && (text.trim().length > 0 || attachments.length > 0);
+  const readyAttachments = attachments.filter((a) => !a.pending && a.url);
+  const canSend =
+    !disabled && uploadingCount === 0 && (text.trim().length > 0 || readyAttachments.length > 0);
 
   const handleSend = () => {
     if (!canSend) return;
-    onSend?.(text.trim(), attachments);
+    // Send only the fields the agent needs; drop UI-only preview/pending state.
+    const payload = readyAttachments.map((a) => ({
+      file_type: a.file_type,
+      url: a.url,
+      filename: a.filename,
+    }));
+    attachments.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+    onSend?.(text.trim(), payload);
     setText('');
     setAttachments([]);
   };
@@ -64,28 +90,55 @@ const Composer = ({
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const uploadFiles = async (files) => {
-    if (!files.length) return;
-    setUploading(true);
-    try {
-      const uploaded = await Promise.all(
-        files.map(async (f) => {
-          const res = await uploadFile(f);
-          return { file_type: res.file_type, url: res.url, filename: res.filename };
-        }),
-      );
-      setAttachments((prev) => [...prev, ...uploaded]);
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
+  // Add files with an instant optimistic entry, then upload in the background.
+  // Images go straight to S3 via the shared `uploadToS3` (returns a stored PATH)
+  // and show a local preview meanwhile; other files use the Agent /upload.
+  const addFiles = (files) => {
+    files.forEach((file) => {
+      const isImage = isImageFile(file);
+      const tempId = nextTmpId();
+      const preview = isImage ? URL.createObjectURL(file) : null;
+      setAttachments((prev) => [
+        ...prev,
+        {
+          tempId,
+          file_type: extOf(file.name),
+          filename: file.name,
+          url: '',
+          isImage,
+          preview,
+          pending: true,
+        },
+      ]);
+
+      (async () => {
+        try {
+          let url;
+          let fileType = extOf(file.name);
+          if (isImage) {
+            url = await uploadToS3(file, userId, true); // → S3 path
+            if (!url) throw new Error('Upload failed');
+          } else {
+            const res = await uploadFile(file);
+            url = res.url;
+            fileType = res.file_type || fileType;
+          }
+          setAttachments((prev) =>
+            prev.map((a) => (a.tempId === tempId ? { ...a, url, file_type: fileType, pending: false } : a)),
+          );
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
+          setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+          if (preview) URL.revokeObjectURL(preview);
+        }
+      })();
+    });
   };
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
-    uploadFiles(files);
+    addFiles(files);
   };
 
   // Let users paste an image straight from the clipboard (screenshots, copied
@@ -97,12 +150,16 @@ const Composer = ({
       .filter(Boolean);
     if (files.length) {
       e.preventDefault();
-      uploadFiles(files);
+      addFiles(files);
     }
   };
 
   const removeAttachment = (idx) =>
-    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+    setAttachments((prev) => {
+      const target = prev[idx];
+      if (target?.preview) URL.revokeObjectURL(target.preview);
+      return prev.filter((_, i) => i !== idx);
+    });
 
   const radius = variant === 'centered' ? 28 : 24;
 
@@ -143,22 +200,53 @@ const Composer = ({
 
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {attachments.map((a, i) => (
-              <div
-                key={`${a.url}-${i}`}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/85"
-              >
-                <span className="max-w-[200px] truncate">{a.filename || a.url}</span>
-                <button
-                  type="button"
-                  onClick={() => removeAttachment(i)}
-                  className="text-white/60 hover:text-white"
-                  aria-label="Remove attachment"
+            {attachments.map((a, i) =>
+              a.isImage ? (
+                <div
+                  key={a.tempId}
+                  className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10 bg-black/40"
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  <img
+                    src={a.pending ? a.preview : toMediaUrl(a.url)}
+                    alt={a.filename}
+                    className="h-full w-full object-cover"
+                  />
+                  {a.pending && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    </div>
+                  )}
+                  {!a.pending && (
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(i)}
+                      className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white/80 hover:bg-black hover:text-white"
+                      aria-label="Remove attachment"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  key={a.tempId}
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/85"
+                >
+                  {a.pending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  <span className="max-w-[200px] truncate">{a.filename || a.url}</span>
+                  {!a.pending && (
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(i)}
+                      className="text-white/60 hover:text-white"
+                      aria-label="Remove attachment"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ),
+            )}
           </div>
         )}
 
@@ -183,12 +271,12 @@ const Composer = ({
             <button
               type="button"
               onClick={handleAttachClick}
-              disabled={disabled || uploading}
+              disabled={disabled}
               className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
               aria-label="Attach file"
               title="Attach file"
             >
-              {uploading ? (
+              {uploadingCount > 0 ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Paperclip className="h-4 w-4" />

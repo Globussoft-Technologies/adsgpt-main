@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 
 // ─── Normalisation helpers ─────────────────────────────────────────────────
@@ -289,7 +289,10 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 const ImageUploadField = ({ field, value, onChange, disabled }) => {
   const arr = Array.isArray(value) ? value : value ? [value] : [];
   const [uploading, setUploading] = useState(false);
+  const userId = useSelector((s) => s.socket?.userData?.user_id);
   const maxFiles = field.maxFiles || 5;
+  // Upload straight to S3 via the shared helper (returns a stored PATH) — same
+  // fast path the rest of the app uses; the domain is prefixed for display.
   const onPick = async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
@@ -298,8 +301,9 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
     try {
       const up = await Promise.all(
         files.map(async (f) => {
-          const r = await uploadFile(f);
-          return { url: r.url, filename: r.filename };
+          const url = await uploadToS3(f, userId, true);
+          if (!url) throw new Error('Upload failed');
+          return { url, filename: f.name };
         }),
       );
       onChange([...arr, ...up].slice(0, maxFiles));
