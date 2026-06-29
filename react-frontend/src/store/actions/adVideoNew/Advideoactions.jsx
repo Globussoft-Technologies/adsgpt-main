@@ -7,6 +7,8 @@ import {
   setClonePayload,
   setAllVideos,
   setAvatars,
+  appendAvatars,
+  setAvatarsPagination,
   setAvatarsLoading,
   setAiAdsAnalysisData,
   setAiAdsAnalysisLoading,
@@ -324,22 +326,104 @@ export const downloadMediaZipAction = (urls, kind = 'video') => async () => {
   }
 };
 
-export const getAllAvatars = () => async (dispatch) => {
+// `filter` can be a string (industry, legacy category dropdown) or an object
+// of { field: value | value[] } for the faceted filter rail. Array values are
+// sent as repeated query params so the backend can apply an $in match.
+//
+// Pagination is opt-in via opts.limit: when provided the backend returns a
+// single page (+ hasMore/total) and we store that meta; opts.append controls
+// whether the page replaces the list (page 1 / filter change) or is appended
+// (infinite scroll). Without opts.limit the call returns the full list exactly
+// as before, so existing non-paginated callers are unaffected. Always resolves
+// to the avatar array.
+export const getAllAvatars =
+  (filter, { page, limit, append = false } = {}) =>
+  async (dispatch) => {
+    try {
+      if (!append) dispatch(setAvatarsLoading(true));
+
+      const filterObj =
+        typeof filter === 'string'
+          ? { industry: filter }
+          : filter && typeof filter === 'object'
+            ? filter
+            : {};
+
+      const params = new URLSearchParams();
+      Object.entries(filterObj).forEach(([key, val]) => {
+        if (val === undefined || val === null || val === '') return;
+        if (Array.isArray(val)) {
+          val.forEach((v) => {
+            if (v !== undefined && v !== null && v !== '') params.append(key, v);
+          });
+        } else {
+          params.append(key, val);
+        }
+      });
+
+      if (limit) {
+        params.append('page', String(page || 1));
+        params.append('limit', String(limit));
+      }
+
+      const response = await axios.get(`${BACKEND_HOST}/adsgpt/avatar`, {
+        params,
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = response.data.data || [];
+
+      if (append) dispatch(appendAvatars(data));
+      else dispatch(setAvatars(data));
+
+      if (limit) {
+        dispatch(
+          setAvatarsPagination({
+            page: response.data.page || page || 1,
+            hasMore: !!response.data.hasMore,
+            total: response.data.total ?? data.length,
+          })
+        );
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching avatars:', error);
+      return [];
+    } finally {
+      if (!append) dispatch(setAvatarsLoading(false));
+    }
+  };
+
+export const getAvatarIndustries = () => async () => {
   try {
-    dispatch(setAvatarsLoading(true));
-    const response = await axios.get(`${BACKEND_HOST}/adsgpt/avatar`, {
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/avatar/industries`, {
       headers: {
         Authorization: `Bearer ${getCookies()}`,
         'Content-Type': 'application/json',
       },
     });
-    dispatch(setAvatars(response.data.data || []));
     return response.data.data || [];
   } catch (error) {
-    console.error('Error fetching avatars:', error);
+    console.error('Error fetching avatar categories:', error);
     return [];
-  } finally {
-    dispatch(setAvatarsLoading(false));
+  }
+};
+
+export const getAvatarFilters = () => async () => {
+  try {
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/avatar/filters`, {
+      headers: {
+        Authorization: `Bearer ${getCookies()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data.data || {};
+  } catch (error) {
+    console.error('Error fetching avatar filters:', error);
+    return {};
   }
 };
 

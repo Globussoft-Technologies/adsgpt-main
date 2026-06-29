@@ -38,6 +38,7 @@ const initialState = {
   allVideos: [],
   avatars: [],
   avatarsLoading: false,
+  avatarsPagination: { page: 1, hasMore: false, total: 0 },
   recreateInputs: null,
   currentAvatarStep: 'options',
   currentCloneStep: 'upload',
@@ -105,6 +106,18 @@ const adVideoNewSlice = createSlice({
     },
     setAvatars: (state, action) => {
       state.avatars = action.payload;
+    },
+    // Append the next page for infinite scroll, de-duping by id so an
+    // overlapping/double-fired page never inserts the same avatar twice.
+    appendAvatars: (state, action) => {
+      const seen = new Set(state.avatars.map((a) => a._id || a.id || a.avatar_id));
+      const incoming = (action.payload || []).filter(
+        (a) => !seen.has(a._id || a.id || a.avatar_id)
+      );
+      state.avatars = [...state.avatars, ...incoming];
+    },
+    setAvatarsPagination: (state, action) => {
+      state.avatarsPagination = { ...state.avatarsPagination, ...action.payload };
     },
     setAvatarsLoading: (state, action) => {
       state.avatarsLoading = action.payload;
@@ -274,6 +287,8 @@ export const {
   updateGeneratedVideo,
   resetAdVideoNewSlice,
   setAvatars,
+  appendAvatars,
+  setAvatarsPagination,
   setAvatarsLoading,
   setRecreateInputs,
   setAvatarStep,

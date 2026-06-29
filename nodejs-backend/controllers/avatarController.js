@@ -101,10 +101,42 @@ exports.getAllAvatars = async (req, res) => {
     ];
 
     allowedFilters.forEach((key) => {
-      if (req.query[key]) {
-        filters[key] = req.query[key];
+      const raw = req.query[key];
+      if (raw === undefined || raw === "") return;
+
+      // Support multi-select: ?gender=Male&gender=Female -> { $in: [...] }
+      if (Array.isArray(raw)) {
+        const vals = raw.filter((v) => v !== undefined && v !== "");
+        if (vals.length === 1) filters[key] = vals[0];
+        else if (vals.length > 1) filters[key] = { $in: vals };
+      } else {
+        filters[key] = raw;
       }
     });
+
+    // Opt-in pagination: when `limit` is supplied, return a single page plus
+    // total/hasMore meta (used by the infinite-scroll library). Without it the
+    // full sorted list is returned, exactly as before.
+    const limit = parseInt(req.query.limit, 10);
+    if (Number.isFinite(limit) && limit > 0) {
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const skip = (page - 1) * limit;
+
+      const [avatars, total] = await Promise.all([
+        Avatar.find(filters).sort({ createdAt: -1 }).skip(skip).limit(limit),
+        Avatar.countDocuments(filters),
+      ]);
+
+      return res.json({
+        success: true,
+        count: avatars.length,
+        total,
+        page,
+        limit,
+        hasMore: skip + avatars.length < total,
+        data: avatars,
+      });
+    }
 
     const avatars = await Avatar.find(filters).sort({ createdAt: -1 });
 
@@ -115,6 +147,75 @@ exports.getAllAvatars = async (req, res) => {
     });
   } catch (err) {
     console.error("Error in getAllAvatars:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * @desc Get all distinct avatar categories (industries)
+ * @route GET /video/avatars/industries
+ */
+exports.getAvatarIndustries = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Avatar Management']
+       #swagger.summary = 'Get all distinct avatar categories (industries)'
+       #swagger.description = 'Returns the list of distinct industry values present on saved avatars.'
+    */
+    const industries = await Avatar.distinct("industry");
+    const categories = industries
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    res.json({
+      success: true,
+      count: categories.length,
+      data: categories,
+    });
+  } catch (err) {
+    console.error("Error in getAvatarIndustries:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * @desc Get distinct values for every filterable avatar field
+ * @route GET /video/avatars/filters
+ */
+exports.getAvatarFilters = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Avatar Management']
+       #swagger.summary = 'Get distinct values for every filterable avatar field'
+       #swagger.description = 'Returns { age:[...], gender:[...], ... } built from distinct DB values. aspect_ratio is intentionally excluded.'
+    */
+    const fields = [
+      "age",
+      "gender",
+      "race",
+      "industry",
+      "outfit",
+      "background",
+      "lighting",
+      "camera_distance",
+      "expression",
+      "image_size",
+    ];
+
+    const entries = await Promise.all(
+      fields.map(async (field) => {
+        const values = await Avatar.distinct(field);
+        return [
+          field,
+          values.filter(Boolean).sort((a, b) => String(a).localeCompare(String(b))),
+        ];
+      })
+    );
+
+    res.json({
+      success: true,
+      data: Object.fromEntries(entries),
+    });
+  } catch (err) {
+    console.error("Error in getAvatarFilters:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 };

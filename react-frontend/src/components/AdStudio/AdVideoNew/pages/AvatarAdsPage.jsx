@@ -13,6 +13,8 @@ import {
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import {
   getAllAvatars,
+  getAvatarIndustries,
+  getAvatarFilters,
   generateImageAndScript,
   regenerateScript,
   generateAvatarVideo,
@@ -43,6 +45,8 @@ import {
   ImagePlus,
   Trash2,
   Loader2,
+  PanelLeft,
+  ChevronDown,
 } from 'lucide-react';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
@@ -73,6 +77,7 @@ import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
 import imageCompression from 'browser-image-compression';
 import { vi } from 'date-fns/locale';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
+const AVATAR_ADVANCED_FILTERS = import.meta.env.VITE_FEATURE_AVATAR_FILTERS === 'true';
 
 const AIAvatarCommonDropdown = ({
   options = [],
@@ -81,6 +86,9 @@ const AIAvatarCommonDropdown = ({
   icon = null,
   value = '',
   onChange,
+  triggerClassName = '',
+  contentClassName = '',
+  align,
 }) => {
   const Icon = value?.Icon;
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || placeholder || label;
@@ -89,7 +97,7 @@ const AIAvatarCommonDropdown = ({
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
-        className="prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5"
+        className={`prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5 ${triggerClassName}`}
       >
         <div className="flex items-center gap-1 pr-1 capitalize">
           {Icon ? Icon : <></>}
@@ -99,7 +107,10 @@ const AIAvatarCommonDropdown = ({
         </div>
       </SelectTrigger>
 
-      <SelectContent className="z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent
+        align={align}
+        className={`z-[999999] min-w-fit border backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}
+      >
         {label && (
           <div className="px-2 py-1 text-xs text-[#636363] dark:text-[#D9D9D9]">{label}</div>
         )}
@@ -321,9 +332,38 @@ const AvatarSkeletonGrid = ({ columns = 5, rows = 3 }) => {
 };
 
 const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars = false }) => {
+  const dispatch = useDispatch();
   const safeAvatars = useMemo(() => (Array.isArray(avatars) ? avatars : []), [avatars]);
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const categoryOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All Categories' },
+      ...categories.map((c) => ({ value: c, label: c })),
+    ],
+    [categories]
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    dispatch(getAvatarIndustries()).then((res) => {
+      if (mounted) setCategories(Array.isArray(res) ? res : []);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [dispatch]);
+
+  const handleCategoryChange = useCallback(
+    (val) => {
+      setSelectedCategory(val);
+      dispatch(getAllAvatars(val === 'all' ? undefined : val));
+    },
+    [dispatch]
+  );
 
   const handleSelect = useCallback(
     (url) => {
@@ -397,20 +437,18 @@ const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars
           Select your AI Avatar
         </h3>
 
-        {/* <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex items-center">
-            <input
-              type="text"
-              placeholder='e.g. "beauty products", "inside a car", etc'
-              className="w-72 rounded-full border border-[#3a3a3a] bg-[#1c1c1c] py-2 pr-10 pl-4 text-xs text-white focus:outline-none 2xl:w-96 2xl:py-3 2xl:text-sm"
-            />
-            <Search className="absolute right-4 size-4 text-[#969696] 2xl:size-5" />
-          </div>
-          <button className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-[#1c1c1c] px-4 py-2 text-xs text-[#BEBEBE] hover:bg-[#2c2c2c] 2xl:py-3 2xl:text-sm">
-            Filter
-            <ListFilter className="ml-1 size-4 2xl:size-5" />
-          </button>
-        </div> */}
+        <div className="flex flex-wrap items-center gap-3">
+          <AIAvatarCommonDropdown
+            label="Categories"
+            placeholder="All Categories"
+            options={categoryOptions}
+            value={categoryOptions.find((o) => o.value === selectedCategory)}
+            onChange={handleCategoryChange}
+            align="end"
+            triggerClassName="dark:!border-[#3a3a3a] dark:!bg-[#1c1c1c]"
+            contentClassName="!backdrop-blur-none dark:!border-[#3a3a3a] dark:!bg-[#1c1c1c]"
+          />
+        </div>
       </div>
 
       <div ref={containerRef} className="flex-1" style={{ minHeight: 0 }}>
@@ -434,6 +472,454 @@ const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars
         ) : (
           <AvatarSkeletonGrid columns={5} rows={3} />
         )}
+      </div>
+    </div>
+  );
+};
+
+// DB field -> filter group. `limit` truncates long lists behind "Show more".
+// aspect_ratio is intentionally NOT a filter (per spec).
+const AVATAR_FILTER_GROUPS = [
+  { key: 'gender', label: 'Gender' },
+  { key: 'age', label: 'Age' },
+  { key: 'race', label: 'Ethnicity' },
+  { key: 'industry', label: 'Industry', limit: 5 },
+  { key: 'outfit', label: 'Outfit', limit: 4 },
+  { key: 'background', label: 'Scene', limit: 5 },
+  { key: 'lighting', label: 'Lighting' },
+  { key: 'camera_distance', label: 'Camera distance' },
+  { key: 'expression', label: 'Expression' },
+  { key: 'image_size', label: 'Image size' },
+];
+
+const AVATAR_PAGE_SIZE = 20;
+
+// New faceted-filter library (gated behind VITE_FEATURE_AVATAR_FILTERS).
+// Chips drive a server-side refetch via getAllAvatars({ field: [...] }); the
+// free-text box narrows the returned set client-side. Cards reuse AvatarItem.
+const AvatarLibraryFilters = ({ onBack, onSelect, avatars = [], isLoadingAvatars = false }) => {
+  const dispatch = useDispatch();
+  const safeAvatars = useMemo(() => (Array.isArray(avatars) ? avatars : []), [avatars]);
+
+  const [options, setOptions] = useState({}); // { field: string[] } from backend
+  const [filters, setFilters] = useState({}); // { field: string[] } selected
+  const [expanded, setExpanded] = useState({}); // { field: bool }
+  const [railOpen, setRailOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  // Distinct option lists for every field (full catalog, from /avatar/filters).
+  useEffect(() => {
+    let mounted = true;
+    dispatch(getAvatarFilters()).then((res) => {
+      if (mounted) setOptions(res && typeof res === 'object' ? res : {});
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [dispatch]);
+
+  // Pagination meta (page / hasMore) is set by the paginated fetch below.
+  const { avatarsPagination } = useSelector((state) => state.adVideoNew);
+
+  // Page 1 (replace) on mount and whenever the selected chips change. The first
+  // load fires immediately (skeleton shows at once); chip changes are debounced.
+  const isFirstRun = useRef(true);
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      dispatch(getAllAvatars(filters, { page: 1, limit: AVATAR_PAGE_SIZE }));
+      return;
+    }
+    const t = setTimeout(() => {
+      dispatch(getAllAvatars(filters, { page: 1, limit: AVATAR_PAGE_SIZE }));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [filters, dispatch]);
+
+  // Infinite scroll: append the next page when the sentinel scrolls into view.
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current || isLoadingAvatars || !avatarsPagination?.hasMore) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const next = (avatarsPagination?.page || 1) + 1;
+    dispatch(
+      getAllAvatars(filters, { page: next, limit: AVATAR_PAGE_SIZE, append: true })
+    ).finally(() => {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    });
+  }, [avatarsPagination, filters, dispatch, isLoadingAvatars]);
+
+  const scrollRef = useRef(null);
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { root: scrollRef.current, rootMargin: '300px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMore]);
+
+  const groups = useMemo(
+    () =>
+      AVATAR_FILTER_GROUPS.map((g) => ({ ...g, options: options[g.key] || [] })).filter(
+        (g) => g.options.length > 0
+      ),
+    [options]
+  );
+
+  const toggleChip = (key, val) =>
+    setFilters((prev) => {
+      const cur = prev[key] || [];
+      const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
+      const out = { ...prev, [key]: next };
+      if (!next.length) delete out[key];
+      return out;
+    });
+
+  // Add a facet (used by the search suggestions) — never toggles off.
+  const addFacet = (key, val) =>
+    setFilters((prev) => {
+      const cur = prev[key] || [];
+      if (cur.includes(val)) return prev;
+      return { ...prev, [key]: [...cur, val] };
+    });
+
+  // Applied-filter pills: the inline bar stays short; "+N more" opens a floating
+  // popover with the full list so the grid is never pushed down.
+  const [showAllApplied, setShowAllApplied] = useState(false);
+  const appliedRef = useRef(null);
+
+  const clearAll = () => {
+    setFilters({});
+    setShowAllApplied(false);
+  };
+
+  const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0);
+  const hasFilters = activeCount > 0;
+
+  const appliedFilters = useMemo(
+    () => Object.entries(filters).flatMap(([key, vals]) => vals.map((value) => ({ key, value }))),
+    [filters]
+  );
+  const APPLIED_PILL_LIMIT = 8;
+
+  useEffect(() => {
+    if (!showAllApplied) return;
+    const onDown = (e) => {
+      if (appliedRef.current && !appliedRef.current.contains(e.target)) setShowAllApplied(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setShowAllApplied(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showAllApplied]);
+
+  const renderAppliedPill = ({ key, value }) => (
+    <button
+      key={`${key}:${value}`}
+      onClick={() => toggleChip(key, value)}
+      title="Remove filter"
+      className="flex h-[26px] max-w-[180px] flex-shrink-0 items-center gap-1.5 rounded-full border border-blue-500/60 bg-blue-500/15 pr-1.5 pl-2.5 text-xs text-blue-600 transition-colors hover:bg-blue-500/25 dark:text-white"
+    >
+      <span className="truncate">{value}</span>
+      <X size={12} className="flex-shrink-0 opacity-70" />
+    </button>
+  );
+
+  // C1 search: resolve the typed text to facet values (across all groups). The
+  // chosen facet becomes a chip -> server-side query, so search matches the
+  // whole catalog, not just the loaded pages.
+  const [searchFocused, setSearchFocused] = useState(false);
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out = [];
+    for (const g of AVATAR_FILTER_GROUPS) {
+      for (const value of options[g.key] || []) {
+        if (String(value).toLowerCase().includes(q)) {
+          out.push({
+            groupKey: g.key,
+            groupLabel: g.label,
+            value,
+            active: (filters[g.key] || []).includes(value),
+          });
+          if (out.length >= 10) return out;
+        }
+      }
+    }
+    return out;
+  }, [query, options, filters]);
+
+  const applySuggestion = (s) => {
+    addFacet(s.groupKey, s.value);
+    // Clear the text (this hides the dropdown) but keep focus state true — the
+    // input still holds DOM focus, so onFocus won't fire again on the next
+    // keystroke and the dropdown must be able to reopen from the query alone.
+    setQuery('');
+  };
+
+  return (
+    <div
+      className="flex h-full flex-col gap-4 p-6 2xl:pb-12"
+      style={{ minHeight: 'calc(100svh - 200px)' }}
+    >
+      <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">
+        <button onClick={onBack}>
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+        Select your AI Avatar
+      </h3>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white text-gray-900 dark:border-[#3a3a3a] dark:bg-[#1c1c1c] dark:text-white">
+        {/* ===== FILTER RAIL (width-animated collapse) ===== */}
+        <div
+          className={`flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
+            railOpen ? 'w-[252px]' : 'w-0'
+          }`}
+        >
+          <div className="flex h-full w-[252px] flex-col border-r border-black/10 dark:border-[#3a3a3a]">
+            {/* Sticky rail header */}
+            <div className="flex flex-shrink-0 items-center gap-2 px-[18px] pt-[18px] pb-3">
+              <div className="text-[12.5px] font-semibold text-gray-700 dark:text-[#cfcfd6]">
+                Filters
+              </div>
+              <div className="ml-auto flex items-center gap-2.5">
+                {hasFilters && (
+                  <button
+                    onClick={clearAll}
+                    className="text-[11.5px] text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  title="Collapse filters"
+                  onClick={() => setRailOpen(false)}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[9px] border border-black/10 bg-gray-100 text-gray-600 hover:text-gray-900 dark:border-[#3a3a3a] dark:bg-[#202020] dark:text-[#cfcfd6] dark:hover:text-white"
+                >
+                  <PanelLeft size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrolling filter groups */}
+            <div className="custom-scrollbar flex-1 overflow-x-hidden overflow-y-auto px-[18px] pb-7">
+            {groups.map((g) => {
+              const isOpen = !!expanded[g.key];
+              const visible = g.limit && !isOpen ? g.options.slice(0, g.limit) : g.options;
+              const hasMore = g.limit && g.options.length > g.limit;
+              return (
+                <div key={g.key} className="mb-5">
+                  <div className="mb-2.5 text-[10.5px] tracking-[0.06em] text-gray-500 uppercase dark:text-[#6f6f78]">
+                    {g.label}
+                  </div>
+                  <div className="flex flex-wrap gap-[7px]">
+                    {visible.map((opt) => {
+                      const active = (filters[g.key] || []).includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => toggleChip(g.key, opt)}
+                          className={`rounded-lg border px-3 py-1.5 text-xs leading-[1.1] transition-all ${
+                            active
+                              ? 'border-blue-500/60 bg-blue-500/15 font-medium text-blue-600 dark:text-white'
+                              : 'border-black/10 bg-gray-100 text-gray-600 hover:border-black/20 dark:border-[#3a3a3a] dark:bg-[#202020] dark:text-[#AFAFAF] dark:hover:border-[#4a4a4a]'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                    {hasMore && (
+                      <button
+                        onClick={() => setExpanded((p) => ({ ...p, [g.key]: !p[g.key] }))}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400"
+                      >
+                        {isOpen ? 'Show less' : 'Show more'}
+                        <ChevronDown
+                          size={11}
+                          className="transition-transform"
+                          style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                        />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            </div>
+          </div>
+        </div>
+
+        {/* ===== RIGHT: TOOLBAR + GRID ===== */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-3 border-b border-black/10 px-[22px] py-4 dark:border-[#3a3a3a]">
+            {!railOpen && (
+              <button
+                onClick={() => setRailOpen(true)}
+                className="flex flex-shrink-0 items-center gap-2 rounded-[10px] border border-black/10 bg-gray-100 px-3 py-[9px] text-[13px] text-gray-700 hover:text-gray-900 dark:border-[#3a3a3a] dark:bg-[#202020] dark:text-[#cfcfd6] dark:hover:text-white"
+              >
+                <PanelLeft size={15} />
+                Filters
+                {hasFilters && (
+                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+            )}
+            <div className="relative max-w-[340px] flex-1">
+              <div className="flex items-center gap-[9px] rounded-[10px] border border-black/10 bg-gray-100 px-[13px] py-[9px] dark:border-[#3a3a3a] dark:bg-[#202020]">
+                <Search size={15} className="flex-shrink-0 text-gray-400 dark:text-[#6f6f78]" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 120)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && suggestions[0]) applySuggestion(suggestions[0]);
+                    if (e.key === 'Escape') {
+                      setQuery('');
+                      setSearchFocused(false);
+                    }
+                  }}
+                  placeholder="e.g. female, farmer, golden hour"
+                  className="w-full bg-transparent text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-[#6f6f78]"
+                />
+              </div>
+
+              {/* Facet-resolution suggestions (C1) */}
+              {searchFocused && query.trim() && (
+                <div
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="custom-scrollbar absolute top-full left-0 z-50 mt-1.5 max-h-72 w-full overflow-y-auto rounded-[10px] border border-black/10 bg-white py-1.5 shadow-lg dark:border-[#3a3a3a] dark:bg-[#202020]"
+                >
+                  {suggestions.length > 0 ? (
+                    suggestions.map((s) => (
+                      <button
+                        key={`${s.groupKey}:${s.value}`}
+                        onClick={() => applySuggestion(s)}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-100 dark:text-[#cfcfd6] dark:hover:bg-[#2a2a2a]"
+                      >
+                        <span className="truncate">{s.value}</span>
+                        <span className="flex-shrink-0 text-[10.5px] tracking-[0.04em] text-gray-400 uppercase dark:text-[#6f6f78]">
+                          {s.active ? 'Added' : s.groupLabel}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-[13px] text-gray-400 dark:text-[#6f6f78]">
+                      No matching filters
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Applied filters — removable pills (visible regardless of rail state) */}
+          {hasFilters && (
+            <div
+              ref={appliedRef}
+              className="relative flex h-[47px] flex-shrink-0 items-center gap-3 border-b border-black/10 px-[22px] py-2.5 dark:border-[#3a3a3a]"
+            >
+              <div className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-hidden">
+                {appliedFilters.slice(0, APPLIED_PILL_LIMIT).map(renderAppliedPill)}
+              </div>
+              {appliedFilters.length > APPLIED_PILL_LIMIT && (
+                <button
+                  onClick={() => setShowAllApplied((s) => !s)}
+                  aria-expanded={showAllApplied}
+                  className="flex h-[26px] flex-shrink-0 items-center text-[11.5px] font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  {showAllApplied
+                    ? 'Show less'
+                    : `+${appliedFilters.length - APPLIED_PILL_LIMIT} more`}
+                </button>
+              )}
+              <button
+                onClick={clearAll}
+                className="flex-shrink-0 text-[11.5px] text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Clear all
+              </button>
+              {showAllApplied && (
+                <div className="absolute top-full right-[22px] left-[22px] z-50 mt-2 rounded-xl border border-black/10 bg-white p-3 shadow-xl dark:border-[#3a3a3a] dark:bg-[#202020]">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[11.5px] font-medium text-gray-500 dark:text-[#AFAFAF]">
+                      {activeCount} filters selected
+                    </div>
+                    <button
+                      onClick={() => setShowAllApplied(false)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-black/5 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:bg-white/10 dark:hover:text-white"
+                      title="Close"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="custom-scrollbar flex max-h-[220px] flex-wrap gap-2 overflow-y-auto pr-1">
+                    {appliedFilters.map(renderAppliedPill)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div
+            ref={scrollRef}
+            className="custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[22px] pt-5 pb-[26px]"
+          >
+            {isLoadingAvatars ? (
+              <AvatarSkeletonGrid columns={4} rows={3} />
+            ) : safeAvatars.length > 0 ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {safeAvatars.map((a, i) => (
+                    <AvatarItem key={getAvatarId(a, i)} avatar={a} onSelect={onSelect} />
+                  ))}
+                </div>
+                {/* Infinite-scroll sentinel + "loading more" indicator */}
+                {avatarsPagination?.hasMore && (
+                  <div
+                    ref={sentinelRef}
+                    className="flex items-center justify-center py-6 text-gray-400 dark:text-[#6f6f78]"
+                  >
+                    {loadingMore && <Loader2 className="h-5 w-5 animate-spin" />}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex h-80 flex-col items-center justify-center gap-2.5 text-gray-400 dark:text-[#6f6f78]">
+                <Search size={28} />
+                <div className="text-sm">No avatars match these filters</div>
+                {(hasFilters || query) && (
+                  <button
+                    onClick={() => {
+                      clearAll();
+                      setQuery('');
+                    }}
+                    className="mt-1 rounded-[9px] border border-black/10 bg-gray-100 px-4 py-2 text-[12.5px] text-gray-700 dark:border-[#3a3a3a] dark:bg-[#202020] dark:text-[#cfcfd6]"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2069,7 +2555,9 @@ const AvatarAdsPage = ({ handleGenerate }) => {
             {/* Avatar Library */}
             <button
               onClick={() => {
-                dispatch(getAllAvatars());
+                // The advanced filter rail owns its own paginated load; only the
+                // legacy library needs the full pre-fetch here.
+                if (!AVATAR_ADVANCED_FILTERS) dispatch(getAllAvatars());
                 setAvatarStepLocal('library');
               }}
               className="group relative h-full overflow-hidden rounded-3xl border-2 border-black/10 bg-white transition hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]"
@@ -2109,17 +2597,28 @@ const AvatarAdsPage = ({ handleGenerate }) => {
         </div>
       )}
 
-      {currentAvatarStep === 'library' && (
-        <AvatarLibraryContent
-          avatars={avatars}
-          isLoadingAvatars={avatarsLoading}
-          onBack={() => setAvatarStepLocal('options')}
-          onSelect={(avatar) => {
-            setSelectedAvatar(avatar);
-            setAvatarStepLocal('config');
-          }}
-        />
-      )}
+      {currentAvatarStep === 'library' &&
+        (AVATAR_ADVANCED_FILTERS ? (
+          <AvatarLibraryFilters
+            avatars={avatars}
+            isLoadingAvatars={avatarsLoading}
+            onBack={() => setAvatarStepLocal('options')}
+            onSelect={(avatar) => {
+              setSelectedAvatar(avatar);
+              setAvatarStepLocal('config');
+            }}
+          />
+        ) : (
+          <AvatarLibraryContent
+            avatars={avatars}
+            isLoadingAvatars={avatarsLoading}
+            onBack={() => setAvatarStepLocal('options')}
+            onSelect={(avatar) => {
+              setSelectedAvatar(avatar);
+              setAvatarStepLocal('config');
+            }}
+          />
+        ))}
 
       {currentAvatarStep === 'config' && (
         <AvatarConfigForm
