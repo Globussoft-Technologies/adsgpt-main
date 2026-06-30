@@ -256,7 +256,7 @@ const Composer = ({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={placeholder}
+          placeholder={disabled ? 'adsGPT is responding… hang on a sec' : placeholder}
           rows={3}
           disabled={disabled}
           className="w-full resize-none overflow-y-auto bo2rder-none bg-transparent text-[19px] leading-8 text-white outline-none placeholder:text-white/40 disabled:opacity-60"

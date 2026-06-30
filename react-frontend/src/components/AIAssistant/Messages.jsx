@@ -170,14 +170,19 @@ const Messages = ({
             <div key={m.id} className="group flex flex-col items-end">
               <QuotedBlock quote={m.quote} align="right" />
               <div className="ml-12 min-w-0 max-w-3xl">
-                <div
-                  className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
-                  style={{ borderRadius: '30px 30px 1px 30px' }}
-                >
-                  <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
-                    {m.text}
-                  </QuotableText>
-                </div>
+                {/* Only render the text bubble when there's actual text — a
+                    message with just an attachment (image upload) must not show
+                    an empty grey bubble. */}
+                {m.text?.trim() && (
+                  <div
+                    className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
+                    style={{ borderRadius: '30px 30px 1px 30px' }}
+                  >
+                    <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
+                      {m.text}
+                    </QuotableText>
+                  </div>
+                )}
                 {m.attachments?.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                     {m.attachments.map((a, i) => {
