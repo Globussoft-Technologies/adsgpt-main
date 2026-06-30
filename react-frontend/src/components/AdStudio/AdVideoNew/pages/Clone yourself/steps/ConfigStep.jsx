@@ -211,9 +211,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     }
     const opts = [
       { value: '8s', label: '8s' },
-      { value: '12s', label: '12s' },
-      { value: '16s', label: '16s' },
-      { value: '20s', label: '20s' },
+      { value: '15s', label: '15s' },
     ];
     return hasPlan8 ? opts.slice(0, 1) : opts;
   }, [videoModel, userData]);
