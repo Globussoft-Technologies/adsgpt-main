@@ -239,14 +239,14 @@ const ChatInterface = () => {
   );
 
   return (
-    <div className="relative flex min-h-0 w-full flex-1 flex-col">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       {isEmpty ? (
         <div className="flex flex-1 flex-col items-center px-4 pt-[10vh] sm:pt-[14vh]">
           <h2 className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]">
             {`Hi, ${greeting}`}
           </h2>
           <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
-          <div className="mt-7 w-full max-w-[820px]">
+          <div className="mt-7 w-full max-w-[820px] px-3 sm:px-0">
             <Composer
               onSend={handleSend}
               disabled={pending}
@@ -258,8 +258,8 @@ const ChatInterface = () => {
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="mx-auto w-full max-w-[820px]">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1">
+            <div className="mx-auto w-full min-w-0 max-w-[820px] px-3 sm:px-4">
               <Messages
                 messages={messages}
                 pending={pending}
@@ -271,7 +271,7 @@ const ChatInterface = () => {
               />
             </div>
           </div>
-          <div className="shrink-0 pt-3 pb-4">
+          <div className="shrink-0 px-3 pt-3 pb-4 sm:px-4">
             <div className="mx-auto w-full max-w-[820px]">
               <Composer
                 onSend={handleSend}

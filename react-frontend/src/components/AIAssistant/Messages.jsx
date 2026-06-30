@@ -169,9 +169,9 @@ const Messages = ({
           return (
             <div key={m.id} className="group flex flex-col items-end">
               <QuotedBlock quote={m.quote} align="right" />
-              <div className="ml-12 max-w-3xl">
+              <div className="ml-12 min-w-0 max-w-3xl">
                 <div
-                  className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed backdrop-blur-[100px] 2xl:text-[18px]"
+                  className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
                   style={{ borderRadius: '30px 30px 1px 30px' }}
                 >
                   <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
@@ -263,7 +263,7 @@ const Messages = ({
               {m.text ? (
                 <QuotableText
                   onQuote={(text) => onQuote?.({ text, role: 'assistant', messageId: m.id })}
-                  className="prose prose-invert prose-lg max-w-none break-words [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_li]:text-[17px] [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_code]:text-[15px]"
+                  className="prose prose-invert prose-lg max-w-none break-words [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_li]:text-[17px] [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_code]:text-[15px] [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_a]:break-words [&_img]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
                 >
                   <ReactMarkdown
                     components={{
