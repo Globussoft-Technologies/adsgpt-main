@@ -34,6 +34,17 @@ const {
 } = require("../../config/wizardSchema");
 const { buildPromotedObject } = require("../../utils/promotedObject");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
+const {
+  groupLocationsByType,
+  dropOverlappingIncludes,
+  reverseGeoToLocations,
+  TYPE_TO_META_BUCKET,
+  COUNTRY_CODE_CARRYING_TYPES,
+} = require("../../utils/targetingGeo");
+const {
+  formToFlexibleSpec,
+  flexibleSpecToForm,
+} = require("../../utils/detailedTargeting");
 const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
 const { inferCellForMetaCampaign } = require("./cellInference");
 
@@ -121,59 +132,24 @@ function metaErrorResponse(err, action) {
 // by create-adset + edit-adset so the geo grouping / overlap handling never
 // drifts. Does NOT apply app-cell `user_os` — the caller adds that from the
 // app store (create) or preserves the existing value (edit).
-function buildExplicitTargeting(t) {
-  // Group normalised location entries into Meta's per-type sub-objects.
-  const groupLocationsByType = (items) => {
-    const out = {};
-    for (const l of items) {
-      if (l.type === "country") {
-        out.countries = out.countries || [];
-        out.countries.push(l.key);
-      } else if (l.type === "city") {
-        out.cities = out.cities || [];
-        const city = { key: l.key };
-        if (l.radius != null) {
-          city.radius = l.radius;
-          city.distance_unit = l.distanceUnit || "kilometer";
-        }
-        out.cities.push(city);
-      } else if (l.type === "region") {
-        out.regions = out.regions || [];
-        out.regions.push({ key: l.key });
-      } else if (l.type === "country_group") {
-        out.country_groups = out.country_groups || [];
-        out.country_groups.push(l.key);
-      } else if (l.type === "custom") {
-        out.custom_locations = out.custom_locations || [];
-        out.custom_locations.push({
-          latitude: l.latitude,
-          longitude: l.longitude,
-          radius: l.radius,
-          distance_unit: l.distanceUnit || "kilometer",
-        });
-      }
-    }
-    return out;
-  };
+// Special Ad Categories that block Detailed Targeting entirely. Meta UI
+// hides the picker under these; we mirror by stripping any detailedTargeting
+// payload from the spec at build time (defense-in-depth alongside the
+// frontend hide). Hits subcode 2446007 if we let it through to Meta.
+const SAC_BLOCKING_DETAILED_TARGETING = new Set([
+  "FINANCIAL_PRODUCTS_SERVICES",
+  "CREDIT",
+  "EMPLOYMENT",
+  "HOUSING",
+  "ISSUES_ELECTIONS_POLITICS",
+]);
 
-  // Meta rejects overlapping *included* locations (subcode 1487756). A
-  // city/region inside an included country is redundant — drop it (the
-  // country already covers it). Only applies to includes.
-  const dropOverlappingIncludes = (items) => {
-    const includedCountryCodes = new Set(
-      items
-        .filter((l) => l.type === "country")
-        .map((l) => String(l.key).toUpperCase()),
-    );
-    if (!includedCountryCodes.size) return items;
-    return items.filter((l) => {
-      if (l.type === "city" || l.type === "region") {
-        const cc = String(l.countryCode || "").toUpperCase();
-        if (cc && includedCountryCodes.has(cc)) return false;
-      }
-      return true;
-    });
-  };
+function buildExplicitTargeting(t, opts = {}) {
+  // groupLocationsByType + dropOverlappingIncludes live in
+  // utils/targetingGeo.js (pure module — kept out of this controller's
+  // require chain so the targeting transforms are unit-testable without
+  // pulling Redis / SDK / DB connections at module load).
+  // Same pattern for formToFlexibleSpec (utils/detailedTargeting.js).
 
   let geoLocations;
   let excludedGeo;
@@ -206,6 +182,28 @@ function buildExplicitTargeting(t) {
     spec.publisher_platforms = t.publisherPlatforms;
   }
   if (t.devicePlatforms?.length) spec.device_platforms = t.devicePlatforms;
+
+  // Detailed Targeting — Demographics / Interests / Behaviours. Stripped
+  // entirely when the campaign has a regulated SAC (matches Meta UI's
+  // hide-the-section behaviour). The caller passes the campaign's
+  // specialAdCategories via opts for this check.
+  const sacs = Array.isArray(opts.specialAdCategories) ? opts.specialAdCategories : [];
+  const sacBlocks = sacs.some((c) => SAC_BLOCKING_DETAILED_TARGETING.has(c));
+  if (!sacBlocks && t.detailedTargeting) {
+    const { flexible_spec, exclusions, topLevel } = formToFlexibleSpec(t.detailedTargeting);
+    if (flexible_spec) spec.flexible_spec = flexible_spec;
+    if (exclusions) {
+      // Merge into any existing geo-based exclusions Meta supports on the
+      // same `exclusions` field. Geo excludes go on `excluded_geo_locations`
+      // (set above); the `exclusions` field holds detailed-targeting only.
+      spec.exclusions = exclusions;
+    }
+    // Top-level integer-array classes (education_statuses / relationship_statuses
+    // / interested_in) — Meta wants these at the root of targeting, not
+    // inside flexible_spec. Subcode 1885097 fires if sent the wrong way.
+    if (topLevel) Object.assign(spec, topLevel);
+  }
+
   return spec;
 }
 
@@ -369,6 +367,12 @@ async function createAdSetV2(req, res) {
         "bid_strategy",
         "daily_budget",
         "lifetime_budget",
+        // Needed by buildExplicitTargeting's SAC-detailedTargeting guard —
+        // regulated SACs (Financial / Employment / Housing / Credit /
+        // Issues) require the detailed-targeting block to be stripped from
+        // the spec at launch (Meta UI hides the picker; API rejects with
+        // subcode 2446007 if we send it).
+        "special_ad_categories",
       ]);
       campaignData = campaign?._data || campaign || {};
     } catch (err) {
@@ -413,7 +417,9 @@ async function createAdSetV2(req, res) {
         });
       }
     } else {
-      targetingSpec = buildExplicitTargeting(value.targeting);
+      targetingSpec = buildExplicitTargeting(value.targeting, {
+        specialAdCategories: campaignData.special_ad_categories || [],
+      });
     }
 
     // App-cell OS targeting — Meta rejects every App-promoting ad set with
@@ -1056,68 +1062,31 @@ async function updateCampaignV2(req, res) {
 
 // ─── Ad set edit: reverse-map helpers ─────────────────────────────────────────
 
-// Inverse of buildExplicitTargeting's grouping: turn Meta's
-// geo_locations / excluded_geo_locations sub-objects back into our flat
-// `locations[]` model (names filled in later via resolveLocationNames).
-function reverseGeoToLocations(geo, mode) {
-  const out = [];
-  if (!geo) return out;
-  for (const c of geo.countries || []) {
-    out.push({ type: "country", key: String(c), countryCode: String(c).toUpperCase(), mode });
-  }
-  for (const c of geo.cities || []) {
-    out.push({
-      type: "city",
-      key: String(c.key),
-      radius: c.radius,
-      distanceUnit: c.distance_unit || "kilometer",
-      mode,
-    });
-  }
-  for (const r of geo.regions || []) {
-    out.push({ type: "region", key: String(r.key), mode });
-  }
-  for (const g of geo.country_groups || []) {
-    if (g !== "worldwide") out.push({ type: "country_group", key: String(g), mode });
-  }
-  for (const cl of geo.custom_locations || []) {
-    const lat = Number(cl.latitude);
-    const lng = Number(cl.longitude);
-    out.push({
-      type: "custom",
-      key: `custom:${lat},${lng}`,
-      latitude: lat,
-      longitude: lng,
-      radius: cl.radius,
-      distanceUnit: cl.distance_unit || "kilometer",
-      name: `Pin @ ${lat.toFixed(3)}, ${lng.toFixed(3)}`,
-      mode,
-    });
-  }
-  return out;
-}
+// reverseGeoToLocations lives in utils/targetingGeo.js — imported above
+// alongside groupLocationsByType / dropOverlappingIncludes. Kept pure so
+// it stays unit-testable without pulling the controller's full require
+// chain (Redis / SDK / DB connections at module load).
 
 // Meta's targeting read returns geo KEYS, not names. Resolve friendly names
 // (and city/region country codes) via the adgeolocationmeta lookup so the
 // edit UI shows "India" not "IN", "Bengaluru" not "2295414". Best-effort:
 // any failure leaves the key as the display name. Mutates `locations`.
 async function resolveLocationNames(api, locations) {
-  const byType = { countries: [], cities: [], regions: [], country_groups: [] };
+  // TYPE_TO_META_BUCKET + COUNTRY_CODE_CARRYING_TYPES imported from
+  // utils/targetingGeo.js so the type-routing map stays single-sourced
+  // with buildExplicitTargeting + reverseGeoToLocations.
+  const byBucket = {};
   for (const l of locations) {
-    if (l.type === "country") byType.countries.push(l.key);
-    else if (l.type === "city") byType.cities.push(l.key);
-    else if (l.type === "region") byType.regions.push(l.key);
-    else if (l.type === "country_group") byType.country_groups.push(l.key);
+    const bucket = TYPE_TO_META_BUCKET[l.type];
+    if (!bucket) continue; // custom + unknown skip the lookup
+    (byBucket[bucket] = byBucket[bucket] || []).push(l.key);
   }
   const params = { type: "adgeolocationmeta" };
-  if (byType.countries.length) params.countries = JSON.stringify(byType.countries);
-  if (byType.cities.length) params.cities = JSON.stringify(byType.cities);
-  if (byType.regions.length) params.regions = JSON.stringify(byType.regions);
-  if (byType.country_groups.length) {
-    params.country_groups = JSON.stringify(byType.country_groups);
+  for (const [bucket, keys] of Object.entries(byBucket)) {
+    params[bucket] = JSON.stringify(keys);
   }
   let data = null;
-  if (params.countries || params.cities || params.regions || params.country_groups) {
+  if (Object.keys(params).length > 1) {
     try {
       const raw = await api.call("GET", ["search"], params);
       data = raw?.data || raw?._data?.data || raw?._data || raw || null;
@@ -1127,20 +1096,12 @@ async function resolveLocationNames(api, locations) {
   }
   for (const l of locations) {
     if (l.type === "custom") continue; // already has a coordinate label
-    const bucket =
-      l.type === "country"
-        ? data?.countries
-        : l.type === "city"
-        ? data?.cities
-        : l.type === "region"
-        ? data?.regions
-        : l.type === "country_group"
-        ? data?.country_groups
-        : null;
+    const bucketName = TYPE_TO_META_BUCKET[l.type];
+    const bucket = bucketName ? data?.[bucketName] : null;
     const hit = bucket && (bucket[l.key] || bucket[String(l.key)]);
     if (hit) {
       if (hit.name) l.name = hit.name;
-      if (hit.country_code && (l.type === "city" || l.type === "region")) {
+      if (hit.country_code && COUNTRY_CODE_CARRYING_TYPES.has(l.type)) {
         l.countryCode = hit.country_code;
       }
     }
@@ -1278,6 +1239,11 @@ async function resolveAdSetForEdit(req, res) {
             : "advantage_plus",
         publisherPlatforms: tg.publisher_platforms || [],
         devicePlatforms: tg.device_platforms || [],
+        // Detailed Targeting — reverse-map Meta's flexible_spec + exclusions
+        // back into our form's { include, narrow, exclude }. Also handles
+        // legacy ad sets with flat interests/behaviors arrays (folds them
+        // into Include). See utils/detailedTargeting.js.
+        detailedTargeting: flexibleSpecToForm(tg),
       },
     });
   } catch (err) {
@@ -1322,15 +1288,22 @@ async function updateAdSetV2(req, res) {
       /* non-fatal — proceed without context */
     }
     let campaignIsCbo = false;
+    let campaignSacs = [];
     if (existing.campaign_id) {
       try {
         const c = await new bizSdk.Campaign(existing.campaign_id).get([
           "daily_budget",
           "lifetime_budget",
+          // Needed by buildExplicitTargeting's SAC-detailedTargeting guard
+          // on the edit-adset path (same as create-adset).
+          "special_ad_categories",
         ]);
         const cd = c?._data || c || {};
         campaignIsCbo =
           Number(cd.daily_budget) > 0 || Number(cd.lifetime_budget) > 0;
+        campaignSacs = Array.isArray(cd.special_ad_categories)
+          ? cd.special_ad_categories
+          : [];
       } catch {
         /* non-fatal */
       }
@@ -1353,7 +1326,9 @@ async function updateAdSetV2(req, res) {
       params.end_time = new Date(value.endTime).toISOString();
     }
     if (value.targeting) {
-      const spec = buildExplicitTargeting(value.targeting);
+      const spec = buildExplicitTargeting(value.targeting, {
+        specialAdCategories: campaignSacs,
+      });
       // Preserve app-cell OS targeting — the form doesn't edit user_os, and
       // dropping it triggers Meta's Mobile Targeting Mismatch (subcode 1487678).
       const existingUserOs = existing.targeting?.user_os;
@@ -1567,4 +1542,10 @@ module.exports = {
   resolveAdSetForEdit,
   resolveAdForEdit,
   buildAdCreativeOr400,
+  // Exposed so `metaAdLauncher.reachEstimateForTargeting` can transform
+  // the wizard's form-shaped targeting into Meta's API shape before
+  // calling /act_X/reachestimate. Lazy-required inside that method to
+  // avoid circular import (metaAdLauncherV2 itself requires this file
+  // for initApiForUser etc.).
+  buildExplicitTargeting,
 };

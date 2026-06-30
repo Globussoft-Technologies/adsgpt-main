@@ -25,6 +25,20 @@ const {
   getCell,
   getMetaDestinationType,
 } = require("../../config/wizardSchema");
+// Pure targeting helpers — extracted into utils/targetingGeo.js and
+// utils/detailedTargeting.js so they stay testable without pulling the
+// controller's full require chain (Redis / SDK / DB connections at
+// module load).
+const {
+  groupLocationsByType,
+  dropOverlappingIncludes,
+  reverseGeoToLocations,
+} = require("../../utils/targetingGeo");
+const {
+  formToFlexibleSpec,
+  flexibleSpecToForm,
+  asTargetingValidationList,
+} = require("../../utils/detailedTargeting");
 
 let pass = 0;
 let fail = 0;
@@ -797,10 +811,13 @@ group("buildAdSetSchemaV2 — Traffic / Website", () => {
   });
 
   test("rejects an unknown location type", () => {
+    // `neighborhood` used to be rejected; now it's a real type (added
+    // 2026-06-26 for Meta UI parity). Use a genuinely invalid type to
+    // keep the assertion meaningful.
     const { error } = schema.validate({
       ...validBody,
       targeting: {
-        locations: [{ type: "neighborhood", key: "x", mode: "include" }],
+        locations: [{ type: "alien_planet", key: "x", mode: "include" }],
       },
     });
     assert.ok(error);
@@ -2840,6 +2857,506 @@ group("OUTCOME_AWARENESS — reverse-inference via optimization_goal", () => {
     const out = inferCellForMetaCampaign(campaign, {});
     assert.ok(!out.error, out.error);
     assert.equal(out.conversionLocation, "STANDARD");
+  });
+});
+
+// ─── Geo-type targeting routing (2026-06-26 Meta UI parity sweep) ──────────
+//
+// Verifies that the granular geo types Meta's search now returns
+// (subcity / neighborhood / zip / etc.) route into the correct
+// per-type plural keys on `geo_locations`, AND that an edit-flow read
+// round-trips them back into the wizard's flat locations[] model.
+// Single source-of-truth: the KEYED_LIST_TYPES map in
+// metaAdLauncherV2 + KEYED_LIST_INVERSE in reverseGeoToLocations.
+
+group("groupLocationsByType — granular geo-type routing", () => {
+  test("subcity routes to subcities", () => {
+    const out = groupLocationsByType([{ type: "subcity", key: "1234567" }]);
+    assert.deepEqual(out.subcities, [{ key: "1234567" }]);
+  });
+
+  test("neighborhood routes to neighborhoods", () => {
+    const out = groupLocationsByType([
+      { type: "neighborhood", key: "WHITEFIELD_KA" },
+    ]);
+    assert.deepEqual(out.neighborhoods, [{ key: "WHITEFIELD_KA" }]);
+  });
+
+  test("zip routes to zips", () => {
+    const out = groupLocationsByType([{ type: "zip", key: "US:94103" }]);
+    assert.deepEqual(out.zips, [{ key: "US:94103" }]);
+  });
+
+  test("geo_market routes to geo_markets", () => {
+    const out = groupLocationsByType([{ type: "geo_market", key: "DMA:807" }]);
+    assert.deepEqual(out.geo_markets, [{ key: "DMA:807" }]);
+  });
+
+  test("electoral_district routes to electoral_districts", () => {
+    const out = groupLocationsByType([
+      { type: "electoral_district", key: "UK_E14" },
+    ]);
+    assert.deepEqual(out.electoral_districts, [{ key: "UK_E14" }]);
+  });
+
+  test("subregion routes to regions (shared bucket per Meta schema)", () => {
+    const out = groupLocationsByType([{ type: "subregion", key: "SR_99" }]);
+    assert.deepEqual(out.regions, [{ key: "SR_99" }]);
+  });
+
+  test("mixed types group into the correct plural keys simultaneously", () => {
+    const out = groupLocationsByType([
+      { type: "country", key: "JP" },
+      { type: "city", key: "111", radius: 25, distanceUnit: "kilometer" },
+      { type: "neighborhood", key: "N_22" },
+      { type: "subcity", key: "S_33" },
+    ]);
+    assert.deepEqual(out.countries, ["JP"]);
+    assert.equal(out.cities.length, 1);
+    assert.equal(out.cities[0].radius, 25);
+    assert.deepEqual(out.neighborhoods, [{ key: "N_22" }]);
+    assert.deepEqual(out.subcities, [{ key: "S_33" }]);
+  });
+
+  test("unknown types silently skip — defensive against future Meta additions", () => {
+    const out = groupLocationsByType([
+      { type: "country", key: "JP" },
+      { type: "alien_geo_planet", key: "MARS_TARGETS" },
+    ]);
+    assert.deepEqual(out.countries, ["JP"]);
+    assert.ok(!out.alien_geo_planet);
+  });
+});
+
+group("dropOverlappingIncludes — overlap rule applies to granular types", () => {
+  test("neighborhood inside included country is dropped (subcode 1487756 guard)", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      { type: "neighborhood", key: "N_99", countryCode: "IN", mode: "include" },
+      { type: "zip", key: "IN:560066", countryCode: "IN", mode: "include" },
+    ]);
+    const types = filtered.map((l) => l.type);
+    assert.deepEqual(types, ["country"]);
+  });
+
+  test("granular type with no countryCode is NOT dropped (only explicit overlap)", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      { type: "neighborhood", key: "N_88", mode: "include" },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+
+  test("excluded entries are not affected by overlap rule", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      // Exclude neighborhood inside India — keep it, the exclude is meaningful
+      { type: "neighborhood", key: "N_77", countryCode: "IN", mode: "exclude" },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+});
+
+group("reverseGeoToLocations — granular geo-type round-trip", () => {
+  test("subcities round-trip to type=subcity", () => {
+    const out = reverseGeoToLocations(
+      { subcities: [{ key: "S_1" }, { key: "S_2" }] },
+      "include",
+    );
+    assert.equal(out.length, 2);
+    assert.equal(out[0].type, "subcity");
+    assert.equal(out[0].key, "S_1");
+  });
+
+  test("neighborhoods round-trip to type=neighborhood", () => {
+    const out = reverseGeoToLocations(
+      { neighborhoods: [{ key: "N_1" }] },
+      "include",
+    );
+    assert.equal(out[0].type, "neighborhood");
+    assert.equal(out[0].key, "N_1");
+  });
+
+  test("zips / geo_markets / electoral_districts round-trip", () => {
+    const out = reverseGeoToLocations(
+      {
+        zips: [{ key: "Z_1" }],
+        geo_markets: [{ key: "M_1" }],
+        electoral_districts: [{ key: "E_1" }],
+      },
+      "include",
+    );
+    const byType = Object.fromEntries(out.map((e) => [e.type, e.key]));
+    assert.equal(byType.zip, "Z_1");
+    assert.equal(byType.geo_market, "M_1");
+    assert.equal(byType.electoral_district, "E_1");
+  });
+
+  test("full multi-type round-trip: group → reverse equals original", () => {
+    const original = [
+      { type: "country", key: "JP" },
+      { type: "neighborhood", key: "N_42" },
+      { type: "subcity", key: "S_43" },
+      { type: "zip", key: "Z_44" },
+    ];
+    const grouped = groupLocationsByType(original);
+    const reversed = reverseGeoToLocations(grouped, "include");
+    const keyOf = (l) => `${l.type}:${l.key}`;
+    assert.deepEqual(
+      reversed.map(keyOf).sort(),
+      original.map(keyOf).sort(),
+    );
+  });
+});
+
+// ─── Detailed Targeting transforms (Phase 2 — 2026-06-26) ──────────────────
+//
+// Verifies the pure form ↔ Meta flexible_spec transforms. Single
+// source-of-truth: DETAILED_TARGETING_CLASSES in utils/detailedTargeting.js.
+// Pillar grouping is data-driven from each browse item's `path[0]`, so no
+// PILLAR_BY_CLASS map exists to test. Joi shape lives in meta.v2.validator.js
+// (also tested below via buildAdSetSchemaV2).
+
+// Realistic Meta IDs for object-shape classes are 13-digit opaque numerics
+// (see logs/dt-browse-*.json for samples). Short IDs are reserved for the
+// enum-code classes (education_statuses / relationship_statuses /
+// interested_in) where Meta uses 1–13 etc. Tests must use realistic IDs
+// to exercise the ID-shape routing in `formToFlexibleSpec`.
+const YOGA_ID = "6003107902433";
+const FREQ_TRAVELER_ID = "6018413514983";
+const PARENT_ID = "6002714398372";
+const COFFEE_ID = "6003584163108";
+const TEA_ID = "6003584163109";
+
+group("formToFlexibleSpec — Include only", () => {
+  test("single-class include produces single flexible_spec group", () => {
+    const { flexible_spec, exclusions } = formToFlexibleSpec({
+      include: [{ type: "interests", id: YOGA_ID, name: "Yoga" }],
+    });
+    assert.deepEqual(flexible_spec, [{ interests: [{ id: YOGA_ID, name: "Yoga" }] }]);
+    assert.equal(exclusions, null);
+  });
+
+  test("multi-class include groups within ONE flexible_spec entry (AND semantics)", () => {
+    const { flexible_spec } = formToFlexibleSpec({
+      include: [
+        { type: "interests", id: YOGA_ID, name: "Yoga" },
+        { type: "behaviors", id: FREQ_TRAVELER_ID, name: "Frequent traveler" },
+      ],
+    });
+    assert.equal(flexible_spec.length, 1);
+    assert.ok(flexible_spec[0].interests);
+    assert.ok(flexible_spec[0].behaviors);
+  });
+
+  test("empty include + empty narrow + empty exclude returns nulls", () => {
+    const { flexible_spec, exclusions } = formToFlexibleSpec({
+      include: [],
+      narrow: [],
+      exclude: [],
+    });
+    assert.equal(flexible_spec, null);
+    assert.equal(exclusions, null);
+  });
+});
+
+group("formToFlexibleSpec — Narrow (additional AND groups)", () => {
+  test("each narrow group becomes an additional flexible_spec entry (AND-ed)", () => {
+    const { flexible_spec } = formToFlexibleSpec({
+      include: [{ type: "interests", id: YOGA_ID, name: "Yoga" }],
+      narrow: [
+        [{ type: "behaviors", id: FREQ_TRAVELER_ID, name: "Frequent traveler" }],
+        [{ type: "demographics", id: PARENT_ID, name: "Parent" }],
+      ],
+    });
+    assert.equal(flexible_spec.length, 3);
+    assert.ok(flexible_spec[0].interests);
+    assert.ok(flexible_spec[1].behaviors);
+    assert.ok(flexible_spec[2].demographics);
+  });
+});
+
+group("formToFlexibleSpec — Exclude (OR'd within class)", () => {
+  test("exclude items produce exclusions object, not flexible_spec entry", () => {
+    const { flexible_spec, exclusions } = formToFlexibleSpec({
+      include: [{ type: "interests", id: YOGA_ID, name: "Yoga" }],
+      exclude: [
+        { type: "interests", id: COFFEE_ID, name: "Coffee" },
+        { type: "interests", id: TEA_ID, name: "Tea" },
+      ],
+    });
+    assert.equal(flexible_spec.length, 1);
+    assert.deepEqual(exclusions, {
+      interests: [
+        { id: COFFEE_ID, name: "Coffee" },
+        { id: TEA_ID, name: "Tea" },
+      ],
+    });
+  });
+});
+
+group("formToFlexibleSpec — integer top-level classes (subcode 1885097 fix)", () => {
+  test("education_statuses Include item is hoisted to topLevel as integer array, NOT in flexible_spec", () => {
+    const { flexible_spec, topLevel } = formToFlexibleSpec({
+      include: [{ type: "education_statuses", id: "1", name: "At high school" }],
+    });
+    // Picker's only education item — flexible_spec is fully empty because
+    // the class doesn't belong there at all.
+    assert.equal(flexible_spec, null);
+    assert.deepEqual(topLevel, { education_statuses: [1] });
+  });
+
+  test("relationship_statuses + interested_in route to topLevel; ids coerce to ints", () => {
+    const { flexible_spec, topLevel } = formToFlexibleSpec({
+      include: [
+        { type: "relationship_statuses", id: "3", name: "Married" },
+        { type: "interested_in", id: 1, name: "Men" },
+      ],
+    });
+    assert.equal(flexible_spec, null);
+    assert.deepEqual(topLevel, {
+      relationship_statuses: [3],
+      interested_in: [1],
+    });
+  });
+
+  test("mixed: interests stays in flexible_spec, education_statuses hoists to topLevel", () => {
+    const { flexible_spec, topLevel } = formToFlexibleSpec({
+      include: [
+        { type: "interests", id: YOGA_ID, name: "Yoga" },
+        { type: "education_statuses", id: "1", name: "At high school" },
+        { type: "education_statuses", id: "2", name: "In college" },
+      ],
+    });
+    assert.deepEqual(flexible_spec, [{ interests: [{ id: YOGA_ID, name: "Yoga" }] }]);
+    assert.deepEqual(topLevel, { education_statuses: [1, 2] });
+  });
+
+  test("Narrow-group items of integer class merge into the same topLevel union (deduped)", () => {
+    const { topLevel } = formToFlexibleSpec({
+      include: [{ type: "education_statuses", id: "1", name: "At high school" }],
+      narrow: [
+        [{ type: "education_statuses", id: "2", name: "In college" }],
+        [{ type: "education_statuses", id: "1", name: "At high school (dup)" }],
+      ],
+    });
+    assert.deepEqual(topLevel, { education_statuses: [1, 2] });
+  });
+
+  test("topLevel is null when no enum-code items are present", () => {
+    const { topLevel } = formToFlexibleSpec({
+      include: [{ type: "interests", id: YOGA_ID, name: "Yoga" }],
+    });
+    assert.equal(topLevel, null);
+  });
+
+  test("enum-code items in Exclude are dropped (Meta has no exclusion for these fields)", () => {
+    const { exclusions, topLevel } = formToFlexibleSpec({
+      exclude: [{ type: "education_statuses", id: "1", name: "At high school" }],
+    });
+    // bucketByClass skips enum-code items, so exclusions stays null;
+    // pickTopLevelIntegerFields only walks Include + Narrow, not Exclude.
+    assert.equal(exclusions, null);
+    assert.equal(topLevel, null);
+  });
+});
+
+group("flexibleSpecToForm — integer top-level classes read-back", () => {
+  test("targeting.education_statuses integer array lifts back into Include as form items", () => {
+    const back = flexibleSpecToForm({
+      education_statuses: [1, 2],
+      relationship_statuses: [3],
+    });
+    assert.equal(back.include.length, 3);
+    const byType = back.include.reduce((acc, i) => {
+      (acc[i.type] = acc[i.type] || []).push(i.id);
+      return acc;
+    }, {});
+    assert.deepEqual(byType.education_statuses.sort(), ["1", "2"]);
+    assert.deepEqual(byType.relationship_statuses, ["3"]);
+    // Chip name degrades to integer code on read-back — no hardcoded label
+    // map. Re-search via picker re-attaches the localised name.
+    for (const item of back.include) {
+      assert.equal(item.name, item.id);
+    }
+  });
+
+  test("integer-class round-trip: Form → Meta → Form preserves ids", () => {
+    const original = {
+      include: [
+        { type: "education_statuses", id: "1", name: "At high school" },
+        { type: "interests", id: YOGA_ID, name: "Yoga" },
+      ],
+      narrow: [],
+      exclude: [],
+    };
+    const { flexible_spec, topLevel } = formToFlexibleSpec(original);
+    const merged = { flexible_spec, ...(topLevel || {}) };
+    const back = flexibleSpecToForm(merged);
+    // Interests round-trips with name intact.
+    const interest = back.include.find((i) => i.type === "interests");
+    assert.deepEqual(interest, { type: "interests", id: YOGA_ID, name: "Yoga" });
+    // Education status round-trips with id intact; name degrades to id.
+    const edu = back.include.find((i) => i.type === "education_statuses");
+    assert.deepEqual(edu, { type: "education_statuses", id: "1", name: "1" });
+  });
+});
+
+group("flexibleSpecToForm — reverse roundtrip", () => {
+  test("modern flexible_spec round-trips back to include/narrow/exclude", () => {
+    const original = {
+      include: [{ type: "interests", id: YOGA_ID, name: "Yoga" }],
+      narrow: [[{ type: "behaviors", id: FREQ_TRAVELER_ID, name: "Frequent traveler" }]],
+      exclude: [{ type: "interests", id: COFFEE_ID, name: "Coffee" }],
+    };
+    const { flexible_spec, exclusions } = formToFlexibleSpec(original);
+    const back = flexibleSpecToForm({ flexible_spec, exclusions });
+    assert.deepEqual(back.include, original.include);
+    assert.deepEqual(back.narrow, original.narrow);
+    assert.deepEqual(back.exclude, original.exclude);
+  });
+
+  test("legacy flat-array targeting (no flexible_spec) folds into Include", () => {
+    // Pre-flexible_spec ad sets that Meta still has on the wire — our
+    // wizard should still let the user edit them. After save through our
+    // wizard, the payload migrates to flexible_spec automatically.
+    const legacy = {
+      interests: [{ id: YOGA_ID, name: "Yoga" }],
+      behaviors: [{ id: FREQ_TRAVELER_ID, name: "Frequent traveler" }],
+    };
+    const back = flexibleSpecToForm(legacy);
+    assert.equal(back.include.length, 2);
+    assert.equal(back.narrow.length, 0);
+    assert.equal(back.exclude.length, 0);
+    const types = back.include.map((i) => i.type).sort();
+    assert.deepEqual(types, ["behaviors", "interests"]);
+  });
+
+  test("returns empty form-model when targeting has no detailed-targeting", () => {
+    const back = flexibleSpecToForm({ age_min: 18, age_max: 65 });
+    assert.deepEqual(back, { include: [], narrow: [], exclude: [] });
+  });
+
+  test("returns empty form-model on null / undefined / non-object inputs", () => {
+    assert.deepEqual(flexibleSpecToForm(null), { include: [], narrow: [], exclude: [] });
+    assert.deepEqual(flexibleSpecToForm(undefined), { include: [], narrow: [], exclude: [] });
+    assert.deepEqual(flexibleSpecToForm("oops"), { include: [], narrow: [], exclude: [] });
+  });
+});
+
+group("asTargetingValidationList — bulk-validate payload shape", () => {
+  test("strips bad items + normalises id to string", () => {
+    const list = asTargetingValidationList([
+      { type: "interests", id: 123, name: "Yoga" },
+      { type: "interests", id: "456", name: "Pilates" },
+      { type: "BOGUS_CLASS", id: "789", name: "Should drop" },
+      null,
+      { type: "interests" }, // missing id
+    ]);
+    assert.deepEqual(list, [
+      { type: "interests", id: "123" },
+      { type: "interests", id: "456" },
+    ]);
+  });
+});
+
+group("Joi targetingSchemaV2 — detailedTargeting acceptance", () => {
+  const schema = buildAdSetSchemaV2("OUTCOME_TRAFFIC", "WEBSITE");
+  const validBody = {
+    adAccountId: "act_123",
+    campaignId: "camp_456",
+    pageId: "page_789",
+    name: "Test detailed targeting",
+    objective: "OUTCOME_TRAFFIC",
+    conversionLocation: "WEBSITE",
+    optimizationGoal: "LINK_CLICKS",
+    targeting: {
+      locations: [{ type: "country", key: "IN", mode: "include" }],
+    },
+  };
+
+  test("accepts a body with detailedTargeting Include + Narrow + Exclude", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [{ type: "country", key: "IN", mode: "include" }],
+        detailedTargeting: {
+          include: [{ type: "interests", id: "1", name: "Yoga" }],
+          narrow: [[{ type: "behaviors", id: "2", name: "Frequent traveler" }]],
+          exclude: [{ type: "interests", id: "3", name: "Coffee" }],
+        },
+      },
+    });
+    assert.equal(error, undefined);
+  });
+
+  test("accepts detailed-targeting items with the picker's extra fields (path, audienceSizeUpperBound)", () => {
+    // Picker persists `path[]` for data-driven badge color + both audience
+    // bounds for the chip's Meta-UI range. Validator must allow them.
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [{ type: "country", key: "IN", mode: "include" }],
+        detailedTargeting: {
+          include: [{
+            type: "education_statuses",
+            id: "1",
+            name: "At high school",
+            audienceSize: 6257127,
+            audienceSizeUpperBound: 7358382,
+            path: ["Demographics", "Education", "Education level"],
+          }],
+        },
+      },
+    });
+    assert.equal(error, undefined);
+  });
+
+  test("rejects a body with an unknown detailed-targeting class", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [{ type: "country", key: "IN", mode: "include" }],
+        detailedTargeting: {
+          include: [{ type: "alien_class", id: "1", name: "Nope" }],
+        },
+      },
+    });
+    assert.ok(error);
+    assert.match(error.details[0].message, /detailedTargeting|type/);
+  });
+
+  test("rejects a detailed-targeting item missing id", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [{ type: "country", key: "IN", mode: "include" }],
+        detailedTargeting: {
+          include: [{ type: "interests", name: "No ID" }],
+        },
+      },
+    });
+    assert.ok(error);
+    assert.match(error.details[0].message, /id/);
+  });
+
+  test("accepts an empty detailedTargeting object (default for new ad sets)", () => {
+    const { error } = schema.validate({
+      ...validBody,
+      targeting: {
+        locations: [{ type: "country", key: "IN", mode: "include" }],
+        detailedTargeting: { include: [], narrow: [], exclude: [] },
+      },
+    });
+    assert.equal(error, undefined);
+  });
+
+  test("defaults detailedTargeting to empty when omitted", () => {
+    const { value, error } = schema.validate(validBody);
+    assert.equal(error, undefined);
+    assert.deepEqual(value.targeting.detailedTargeting, {
+      include: [], narrow: [], exclude: [],
+    });
   });
 });
 

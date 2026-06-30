@@ -226,14 +226,65 @@ const updateCampaignSchemaV2 = Joi.object({
 // The audience/targeting object — identical between create-adset and
 // edit-adset (parity rule: one source of truth). See LOCATION_TARGETING_PLAN.md
 // for the `locations[]` model. Each entry maps to one of Meta's
-// `geo_locations.{countries|cities|regions|country_groups|custom_locations}`
-// (or `excluded_geo_locations.*` when mode === 'exclude').
+// `geo_locations.{countries|cities|regions|country_groups|custom_locations|
+// subcities|neighborhoods|subneighborhoods|zips|geo_markets|
+// electoral_districts|*_geo_areas|metro_areas}` (or `excluded_geo_locations.*`
+// when mode === 'exclude'). The valid-type list must stay in sync with
+// the ALLOWED_TYPES set in `metaAdLauncher.searchGeoLocations` and with
+// `KEYED_LIST_TYPES` in `utils/targetingGeo.js` — any type our search
+// returns must be acceptable here, else the wizard's launch step rejects
+// the user's pick.
+
+// Detailed-targeting class enum — kept single-sourced via
+// utils/detailedTargeting.js so additions there propagate here.
+const {
+  DETAILED_TARGETING_CLASSES,
+} = require("../utils/detailedTargeting");
+
+// Factory rather than top-level const so the schema is fresh on each
+// reference (Joi schemas are stateful when reused with .when() or .meta()).
+function detailedTargetingItemSchema() {
+  return Joi.object({
+    type: Joi.string()
+      .valid(...DETAILED_TARGETING_CLASSES)
+      .required(),
+    id: Joi.string().required(),
+    name: Joi.string().allow("").default(""),
+    audienceSize: Joi.number().integer().min(0).optional(),
+    // Upper bound from Meta's audience_size_upper_bound — picker persists
+    // both so the chip + audience-size widget can render the Meta-UI range.
+    audienceSizeUpperBound: Joi.number().integer().min(0).optional(),
+    // Pillar path Meta returns on browse / search items. Picker persists
+    // it so the badge color can read `path[0]` data-driven. Optional —
+    // chips re-rendered without browse context simply fall back to the
+    // class-name convention inside `typeBadge`.
+    path: Joi.array().items(Joi.string()).optional(),
+  });
+}
+
 const targetingSchemaV2 = Joi.object({
   locations: Joi.array()
     .items(
       Joi.object({
         type: Joi.string()
-          .valid("country", "city", "region", "country_group", "custom")
+          .valid(
+            "country",
+            "city",
+            "region",
+            "subregion",
+            "country_group",
+            "subcity",
+            "neighborhood",
+            "subneighborhood",
+            "zip",
+            "geo_market",
+            "electoral_district",
+            "large_geo_area",
+            "medium_geo_area",
+            "small_geo_area",
+            "metro_area",
+            "custom",
+          )
           .required(),
         key: Joi.string().required(),
         name: Joi.string().allow("").optional(),
@@ -264,6 +315,21 @@ const targetingSchemaV2 = Joi.object({
   genders: Joi.array().items(Joi.number().valid(1, 2)).default([]),
   locales: Joi.array().items(Joi.number().integer()).default([]),
   advantageAudience: Joi.boolean().default(true),
+  // Detailed Targeting — Demographics / Interests / Behaviours picker.
+  // Form-model maps to Meta's `flexible_spec` (Include + Narrow groups,
+  // ANDed top-level) + `exclusions` (single object, OR'd within class).
+  // Type enum must stay in sync with DETAILED_TARGETING_CLASSES in
+  // utils/detailedTargeting.js — any class accepted there must validate
+  // here, else the wizard rejects a Meta-returned picker result. Items
+  // carry id + name; `audienceSize` is optional metadata for the chip
+  // (Meta only returns it on search responses, not edit-load).
+  detailedTargeting: Joi.object({
+    include: Joi.array().items(detailedTargetingItemSchema()).default([]),
+    narrow: Joi.array()
+      .items(Joi.array().items(detailedTargetingItemSchema()))
+      .default([]),
+    exclude: Joi.array().items(detailedTargetingItemSchema()).default([]),
+  }).default({ include: [], narrow: [], exclude: [] }),
   placementMode: Joi.string().valid("advantage_plus", "manual").default("advantage_plus"),
   publisherPlatforms: Joi.array()
     .items(Joi.string().valid("facebook", "instagram", "audience_network", "messenger"))

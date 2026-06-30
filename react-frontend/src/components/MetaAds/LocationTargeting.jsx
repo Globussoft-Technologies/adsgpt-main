@@ -58,9 +58,60 @@ const TYPE_BADGE = {
     label: 'Region',
     color: 'bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200',
   },
+  // subregion ≈ county-equivalent — share the region palette (visual
+  // siblings; the user reads "Region" vs "Subregion" off the label).
+  subregion: {
+    label: 'Subregion',
+    color: 'bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200',
+  },
   country_group: {
     label: 'Area',
     color: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+  },
+  // subcity = Meta's "Borough" badge in Ads Manager — boroughs / districts
+  // within a city.
+  subcity: {
+    label: 'Borough',
+    color: 'bg-blue-100 text-blue-700 dark:bg-blue-400/15 dark:text-blue-200',
+  },
+  neighborhood: {
+    label: 'Neighborhood',
+    color: 'bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-200',
+  },
+  subneighborhood: {
+    label: 'Sub-neighborhood',
+    color: 'bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-200',
+  },
+  zip: {
+    label: 'ZIP',
+    color: 'bg-pink-100 text-pink-700 dark:bg-pink-400/15 dark:text-pink-200',
+  },
+  geo_market: {
+    label: 'Market',
+    color: 'bg-orange-100 text-orange-700 dark:bg-orange-400/15 dark:text-orange-200',
+  },
+  // electoral_district — UK constituencies, US districts, etc.
+  electoral_district: {
+    label: 'District',
+    color: 'bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-200',
+  },
+  // Meta's *_geo_area buckets — granular area layers Meta added for
+  // newer geo-targeting; less common but renderable when surfaced.
+  large_geo_area: {
+    label: 'Area',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+  },
+  medium_geo_area: {
+    label: 'Area',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+  },
+  small_geo_area: {
+    label: 'Area',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+  },
+  metro_area: {
+    label: 'Metro',
+    color: 'bg-orange-100 text-orange-700 dark:bg-orange-400/15 dark:text-orange-200',
   },
   custom: {
     label: 'Pin',
@@ -262,9 +313,20 @@ export default function LocationTargeting({
       }
       setQuery('');
       setResults([]);
-      // Auto-pin cities + regions on the map (Meta-style). Countries /
-      // free-trade areas are too broad to pin meaningfully.
-      if (row.type === 'city' || row.type === 'region') {
+      // Auto-pin point-like geo entries on the map (Meta-style).
+      // Countries / country-groups / electoral districts / ZIP regions
+      // are too broad — coordinate-pin would be misleading. Cities,
+      // regions, subcities (boroughs), neighborhoods pin sensibly via
+      // Nominatim's centroid.
+      const PIN_AUTO_TYPES = new Set([
+        'city',
+        'region',
+        'subregion',
+        'subcity',
+        'neighborhood',
+        'subneighborhood',
+      ]);
+      if (PIN_AUTO_TYPES.has(row.type)) {
         setMapDismissed(false);
         geocodeAndPin(row);
       }

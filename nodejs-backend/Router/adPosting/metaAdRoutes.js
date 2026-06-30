@@ -42,6 +42,16 @@ router.get("/geocode", metaAdController.geocodeLocation);
 // land (Meta's UI rejects ocean pins; we mirror that to avoid silent
 // zero-delivery campaigns).
 router.get("/reverse-geocode", metaAdController.reverseGeocodeLocation);
+
+// Detailed Targeting — Meta UI parity picker (Demographics / Interests /
+// Behaviours). All four endpoints proxy + cache Meta's `/search` and
+// `/targetingbrowse` surfaces with appropriate TTLs.
+router.get("/detailed-targeting/search", metaAdController.searchDetailedTargeting);
+router.get("/detailed-targeting/browse", metaAdController.browseDetailedTargeting);
+// POST for suggestions + reach-estimate — body carries a targeting_list /
+// targeting_spec too rich for a query string.
+router.post("/detailed-targeting/suggestions", metaAdController.suggestDetailedTargeting);
+router.post("/detailed-targeting/reach-estimate", metaAdController.reachEstimateForTargeting);
 // Feeds the App Promotion app picker in the V2 wizard. Returns the
 // user's promotable apps with iOS / Play store URLs normalised so the
 // frontend can filter by store and pre-fill objectStoreUrl.

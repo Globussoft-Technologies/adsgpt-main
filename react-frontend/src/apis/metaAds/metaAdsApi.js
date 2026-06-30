@@ -194,6 +194,78 @@ export const reverseGeocodeLocation = async ({ lat, lng } = {}) => {
   return data;
 };
 
+// ─── Detailed Targeting (Demographics / Interests / Behaviours) ─────────────
+//
+// Wraps the four backend endpoints documented at
+// `nodejs-backend/controllers/adPosting/metaAdLauncher.js`'s detailed-targeting
+// section. All four cache server-side via Redis with sensible TTLs.
+
+// Typeahead across all 14 detailed-targeting classes. `classes` is a
+// comma-separated subset; when exactly one class is passed, backend sends
+// it as `limit_type` to narrow Meta's results. Meta's endpoint lives on
+// the ad-account node (`/act_X/targetingsearch`) so `adAccountId` is
+// required — the backend rejects without it.
+// Returns: { results: [{ id, name, type, path, audienceSize, description }] }
+export const searchDetailedTargeting = async ({ adAccountId, q, classes, limit = 25 } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/search`,
+    {
+      params: { adAccountId, q, classes, limit },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
+// Browse tree — Meta's categorical hierarchy of Demographics / Interests /
+// Behaviours. `root` is an item id to expand (omit for the top level).
+// Endpoint: `/act_X/targetingbrowse` — `adAccountId` required.
+// Returns: { tree: [{ id, name, type, path, leaf }] }
+export const browseDetailedTargeting = async ({ adAccountId, root, classes } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/browse`,
+    {
+      params: { adAccountId, root, classes },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
+// Related-item suggestions for a set of already-picked items. POST
+// because `items` is a list of {type, id} objects. Endpoint:
+// `/act_X/targetingsuggestions` — `adAccountId` required.
+// Returns: { suggestions: [{ id, name, type, path, audienceSize }] }
+export const suggestDetailedTargeting = async ({ adAccountId, items = [] } = {}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/suggestions`,
+    { adAccountId, items },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Audience reach estimate for the current targeting spec. POST because
+// the body carries the full targeting object (locations + age range +
+// detailed-targeting flexible_spec + etc.).
+//
+// Returns: { estimate: { lowerBound, upperBound, estimateReady }, degraded?, cachedAt? }
+// `degraded: true` means we're serving a stale cached value because Meta
+// is rate-limiting the live call (their reachestimate endpoint is capped
+// per-account/per-hour). The widget should show a clock icon + tooltip.
+export const reachEstimateForTargeting = async ({
+  adAccountId,
+  targeting,
+  optimizationGoal,
+} = {}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/reach-estimate`,
+    { adAccountId, targeting, optimizationGoal },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 // Apps promotable from THIS ad account — backend queries
 // `act_<adAccountId>/applications` only (matches Meta Ads Manager's own
 // scoping). Apps without a store URL (Instant Games / fb_canvas / web)

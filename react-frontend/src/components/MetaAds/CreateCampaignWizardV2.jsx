@@ -108,6 +108,23 @@ import {
   CAPPED_BID_STRATEGIES,
 } from './wizardValidation';
 import LocationTargeting from './LocationTargeting';
+import DetailedTargeting from './DetailedTargeting';
+import AudienceReachEstimate from './AudienceReachEstimate';
+
+// Special Ad Categories that hide Detailed Targeting entirely (Meta UI
+// rule — regulated categories restrict the picker to a curated, often
+// empty subset). Hide-the-section behaviour is enforced here AND
+// defence-in-depth on the backend (buildExplicitTargeting strips
+// detailedTargeting from the payload under these SACs).
+const SAC_HIDES_DETAILED_TARGETING = new Set([
+  'FINANCIAL_PRODUCTS_SERVICES',
+  'CREDIT',
+  'EMPLOYMENT',
+  'HOUSING',
+  'ISSUES_ELECTIONS_POLITICS',
+]);
+const isDetailedTargetingHidden = (specialAdCategories) =>
+  (specialAdCategories || []).some((c) => SAC_HIDES_DETAILED_TARGETING.has(c));
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -326,6 +343,10 @@ function buildInitialForm(context = null) {
     genders: [],
     locales: [],
     advantageAudience: true,
+    // Detailed Targeting — Demographics / Interests / Behaviours. Hidden
+    // entirely when the campaign carries a regulated SAC (see
+    // SAC_HIDES_DETAILED_TARGETING above). Mirrors backend Joi shape.
+    detailedTargeting: { include: [], narrow: [], exclude: [] },
     // Placements
     placementMode: 'advantage_plus', // 'advantage_plus' | 'manual'
     publisherPlatforms: [], // active when placementMode === 'manual'
@@ -790,6 +811,12 @@ export default function CreateCampaignWizardV2({
             placementMode: form.placementMode,
             publisherPlatforms: form.placementMode === 'manual' ? form.publisherPlatforms : [],
             devicePlatforms: form.devicePlatforms,
+            // Detailed Targeting — Demographics / Interests / Behaviours.
+            // Cleared when the campaign carries a regulated SAC (matches
+            // Meta UI's hide rule; backend also strips defence-in-depth).
+            detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
+              ? { include: [], narrow: [], exclude: [] }
+              : form.detailedTargeting,
           },
           status: 'ACTIVE',
         };
@@ -1034,6 +1061,11 @@ export default function CreateCampaignWizardV2({
             publisherPlatforms:
               form.placementMode === 'manual' ? form.publisherPlatforms : [],
             devicePlatforms: form.devicePlatforms,
+            // Detailed Targeting — same rule as create flow (cleared
+            // under regulated SACs; backend also strips at build time).
+            detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
+              ? { include: [], narrow: [], exclude: [] }
+              : form.detailedTargeting,
           },
         };
         // Budget lives on the ad set only for ABO campaigns.
@@ -1319,6 +1351,9 @@ export default function CreateCampaignWizardV2({
                   const i = steps.findIndex((s) => s.id === id);
                   if (i >= 0) setStepIndex(i);
                 }}
+                currentStepId={currentStep?.id}
+                adAccountId={adAccountId}
+                form={form}
               />
             )}
           </div>
@@ -1455,8 +1490,23 @@ export default function CreateCampaignWizardV2({
 // style) showing the whole-wizard step checklist plus what's left to
 // complete on the current step. A separate column, so it never overlaps
 // or pushes the form content.
-function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToStep }) {
+//
+// On the ad-set step the rail ALSO hosts the Audience definition widget
+// (size estimate + narrow/broad gauge) — Meta Ads Manager places this
+// in its right-hand sidebar too. Subscribes to the assembled targeting
+// blob so it re-estimates whenever any audience field changes.
+function WizardSideRail({
+  steps,
+  stepIndex,
+  stepErrors,
+  allStepErrors,
+  onJumpToStep,
+  currentStepId,
+  adAccountId,
+  form,
+}) {
   const currentMessages = Object.values(stepErrors || {});
+  const showAudienceWidget = currentStepId === 'adSet' && adAccountId && form;
   return (
     <aside className="scrollbar-thin hidden w-64 shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-200 bg-gray-50 px-4 py-5 dark:border-white/8 dark:bg-white/2 md:flex">
       {/* Whole-wizard checklist */}
@@ -1548,6 +1598,40 @@ function WizardSideRail({ steps, stepIndex, stepErrors, allStepErrors, onJumpToS
         <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-11 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/5 dark:text-emerald-200">
           <Check className="h-3 w-3 shrink-0" />
           Step is complete.
+        </div>
+      )}
+
+      {/* Audience definition — Meta UI parity. Shown only on the ad-set
+          step where the audience fields actually matter. Targeting blob
+          is assembled the same way as the inline render used to: SAC-hidden
+          campaigns strip detailedTargeting to keep the estimate consistent
+          with what will actually be sent at launch. */}
+      {showAudienceWidget && (
+        <div>
+          <p className="text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
+            Audience definition
+          </p>
+          <div className="mt-2.5">
+            <AudienceReachEstimate
+              adAccountId={adAccountId}
+              targeting={{
+                worldwide: form.worldwide,
+                locations: form.locations,
+                ageMin: form.ageMin,
+                ageMax: form.ageMax,
+                genders: form.genders,
+                locales: form.locales,
+                advantageAudience: form.advantageAudience,
+                placementMode: form.placementMode,
+                publisherPlatforms: form.placementMode === 'manual' ? form.publisherPlatforms : [],
+                devicePlatforms: form.devicePlatforms,
+                detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
+                  ? { include: [], narrow: [], exclude: [] }
+                  : form.detailedTargeting,
+              }}
+              optimizationGoal={form.optimizationGoal}
+            />
+          </div>
         </div>
       )}
     </aside>
@@ -2396,6 +2480,23 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
               value={form.advantageAudience}
               onChange={(v) => update({ advantageAudience: v })}
             />
+
+            {/* Detailed Targeting — Demographics / Interests / Behaviours.
+                Hidden entirely under regulated SACs (matches Meta UI). When
+                Advantage+ Audience is on, the section relabels to
+                "Audience suggestions" since detailed targeting becomes a
+                suggestion not a constraint. */}
+            {!isDetailedTargetingHidden(form.specialAdCategories) && (
+              <DetailedTargeting
+                adAccountId={adAccountId}
+                value={form.detailedTargeting}
+                onChange={(v) => update({ detailedTargeting: v })}
+                advantageAudienceOn={form.advantageAudience}
+              />
+            )}
+
+            {/* AudienceReachEstimate moved to the wizard sidebar (Meta UI
+                parity) — see WizardSideRail's "Audience definition" block. */}
           </>
         )}
       </div>

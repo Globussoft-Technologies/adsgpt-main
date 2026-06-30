@@ -412,6 +412,19 @@ function leadsToCsv(leads) {
   );
 }
 
+// Normalise a Meta ad account id to the `act_<digits>` form Meta's
+// node-scoped endpoints expect. Accepts either bare digits or already-
+// prefixed strings; rejects anything else by returning null so the
+// caller can 400 the request cleanly.
+function normalizeAdAccountId(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("act_")) {
+    return /^act_\d+$/.test(raw) ? raw : null;
+  }
+  return /^\d+$/.test(raw) ? `act_${raw}` : null;
+}
+
 // Fetch the Page's phone number — needed for click-to-call ads.
 // The `phone` field on the Page node is the number admins set in Page
 // → About → Contact info. Returns the raw string (Meta returns it in
@@ -2836,23 +2849,50 @@ class MetaAdLauncher {
           .status(400)
           .json({ status: false, error: "q (search string) is required" });
       }
+      // Full set of geo-types Meta accepts in adgeolocation search.
+      // Keep this aligned with `groupLocationsByType` in metaAdLauncherV2 —
+      // any type the search returns must also have a payload-routing case
+      // there, else picks vanish silently at launch.
       const ALLOWED_TYPES = new Set([
         "country",
-        "city",
-        "region",
         "country_group",
+        "region",
+        "subregion",
+        "city",
         "subcity",
         "neighborhood",
+        "subneighborhood",
         "zip",
         "geo_market",
+        "electoral_district",
+        "large_geo_area",
+        "medium_geo_area",
+        "small_geo_area",
+        "metro_area",
       ]);
       const requestedTypes = String(req.query.types || "")
         .split(",")
         .map((t) => t.trim())
         .filter((t) => ALLOWED_TYPES.has(t));
+      // Default to the Meta Ads Manager UI's surface set — what their
+      // location autocomplete shows out-of-the-box. Excludes the very-
+      // granular geo_area buckets (large/medium/small) and subneighborhood
+      // to keep the dropdown noise-free; callers can request them
+      // explicitly via the `?types=` query param when needed.
       const locationTypes = requestedTypes.length
         ? requestedTypes
-        : ["country", "city", "region", "country_group"];
+        : [
+            "country",
+            "country_group",
+            "region",
+            "subregion",
+            "city",
+            "subcity",
+            "neighborhood",
+            "zip",
+            "geo_market",
+            "electoral_district",
+          ];
       const limit = Math.min(
         Math.max(parseInt(req.query.limit, 10) || 25, 1),
         50,
@@ -3021,6 +3061,509 @@ class MetaAdLauncher {
       // backend Joi validator + Meta API will still catch wildly invalid
       // coords at launch time.
       return res.status(200).json({ status: true, result: null, degraded: true });
+    }
+  }
+
+  // ─── Detailed Targeting (Demographics / Interests / Behaviours) ────────────
+  //
+  // Drives the V2 wizard's Detailed Targeting picker — Meta's unified
+  // typeahead + Browse tree + related-suggestion + reach-estimate surface.
+  //
+  // Reference: developers.facebook.com/docs/marketing-api/audiences/reference/detailed-targeting
+  //
+  // Four endpoints in this section:
+  //   • searchDetailedTargeting   — typeahead by name across all classes
+  //   • browseDetailedTargeting   — categorical hierarchy for the Browse drawer
+  //   • suggestDetailedTargeting  — Meta's related-item recommendations
+  //   • reachEstimateForTargeting — audience-size + narrow/broad gauge
+  //
+  // All four cache via Redis. Caches skipped on transient failure so a
+  // single hiccup doesn't lock users out (same pattern as getCatalogs).
+  //
+  // SAC interaction: ALL four endpoints return empty / 400 when the
+  // caller's targeting spec includes a regulated SAC, mirroring Meta UI's
+  // hide-the-section behaviour. The wizard frontend also hides the picker
+  // under SAC — this is defence-in-depth.
+
+  // 9c. GET detailed-targeting search results (typeahead).
+  //
+  // Thin proxy over Meta's `/act_<AD_ACCOUNT_ID>/targetingsearch`. Per
+  // Meta's documented contract (developers.facebook.com/documentation/
+  // ads-commerce/marketing-api/audiences/reference/detailed-targeting),
+  // all four detailed-targeting endpoints live on the ad-account node —
+  // NOT the user node (Meta returns "(#100) Tried accessing nonexisting
+  // field" for user-scoped paths).
+  //
+  // Query params:
+  //   adAccountId — required (Meta ad account id, with or without `act_` prefix).
+  //   q           — search string (min 1 char).
+  //   classes     — comma-separated subset of DETAILED_TARGETING_CLASSES.
+  //                 When exactly one class is given, sent as `limit_type`
+  //                 to narrow Meta's results. Multiple / omitted = no filter
+  //                 (search across all 14 classes).
+  //   limit       — max results, 1-50, default 25.
+  //
+  // Returns: { results: [{ id, name, type, path, audienceSize, description }] }
+  async searchDetailedTargeting(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Search Meta detailed-targeting categories (typeahead — interests, behaviors, demographics)'
+    */
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q) {
+        return res
+          .status(400)
+          .json({ status: false, error: "q (search string) is required" });
+      }
+      const adAccountId = normalizeAdAccountId(req.query.adAccountId);
+      if (!adAccountId) {
+        return res.status(400).json({
+          status: false,
+          error: "adAccountId is required (Meta ad account id, with or without 'act_' prefix)",
+        });
+      }
+      const {
+        CLASS_SET,
+      } = require("../../utils/detailedTargeting");
+      const requestedClasses = String(req.query.classes || "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter((c) => CLASS_SET.has(c));
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit, 10) || 25, 1),
+        50,
+      );
+
+      const userId = req.user.user_id;
+      // Cache scoped by ad account — same query on different accounts may
+      // return different results when account region differs.
+      const cacheKey = `metaDTSearch:${userId}:${adAccountId}:${q.toLowerCase()}:${requestedClasses.join(",") || "all"}:${limit}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      // Per Meta docs: `limit_type` is the single-class filter param;
+      // omit to search across all classes. Multiple classes aren't
+      // expressible in one call — for that the frontend would need to
+      // fan out, which we don't do today (the unified single-call default
+      // matches Meta UI's picker behaviour).
+      const params = { q, limit };
+      if (requestedClasses.length === 1) {
+        params.limit_type = requestedClasses[0];
+      }
+      let rows = [];
+      try {
+        const raw = await api.call("GET", [adAccountId, "targetingsearch"], params);
+        rows = raw?.data || raw?._data?.data || [];
+      } catch (apiErr) {
+        logMetaError("searchDetailedTargeting Meta error", apiErr);
+        rows = []; // surface as no results; don't 500
+      }
+
+      // Normalise the Meta response into a stable shape the frontend can
+      // render without knowing Meta's field names. `type` here is the
+      // class (interests / behaviors / etc.); `path[0]` is the pillar.
+      // Frontend derives badge color from the pillar — no class allowlist.
+      const results = (Array.isArray(rows) ? rows : [])
+        .filter((r) => r && r.id)
+        .map((r) => ({
+          id: String(r.id),
+          name: r.name || String(r.id),
+          type: r.type || r.path?.[0] || "interests",
+          path: Array.isArray(r.path) ? r.path : [],
+          audienceSize: r.audience_size_lower_bound != null
+            ? Number(r.audience_size_lower_bound)
+            : null,
+          audienceSizeUpperBound: r.audience_size_upper_bound != null
+            ? Number(r.audience_size_upper_bound)
+            : null,
+          description: r.description || null,
+        }));
+
+      const response = { status: true, results, count: results.length };
+      // 30-min cache — search results don't change within a session.
+      // Skip the cache write on empty results IF the upstream call threw
+      // (we logged it above) — that's a transient failure we shouldn't pin.
+      if (results.length || rows.length === 0) {
+        await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      }
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("searchDetailedTargeting error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to search detailed targeting",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // 9d. GET detailed-targeting browse tree.
+  //
+  // Drives the wizard's "Browse" drawer — Meta's categorical hierarchy of
+  // Demographics / Interests / Behaviours.
+  //
+  // Endpoint per Meta docs: `/act_<AD_ACCOUNT_ID>/targetingbrowse`.
+  // Earlier version hit `/{fb_user_id}/targetingbrowse` and Meta returned
+  // "(#100) Tried accessing nonexisting field" — that path is NOT in the
+  // detailed-targeting docs (developers.facebook.com/documentation/
+  // ads-commerce/marketing-api/audiences/reference/detailed-targeting).
+  //
+  // Query params:
+  //   adAccountId — required.
+  //   root        — optional id of a non-leaf row to expand its children.
+  //                 Omit for the top-level pillar list.
+  //   classes     — optional comma-separated single class for narrowing.
+  //
+  // Returns: { tree: [{ id, name, type, path, leaf }] } where leaf=true
+  // rows can be added directly and non-leaf rows expand via `?root=<id>`.
+  async browseDetailedTargeting(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Browse Meta detailed-targeting categorical hierarchy'
+    */
+    try {
+      const adAccountId = normalizeAdAccountId(req.query.adAccountId);
+      if (!adAccountId) {
+        return res.status(400).json({
+          status: false,
+          error: "adAccountId is required",
+        });
+      }
+      const userId = req.user.user_id;
+      const rootId = String(req.query.root || "").trim() || null;
+      const { CLASS_SET } = require("../../utils/detailedTargeting");
+      const requestedClasses = String(req.query.classes || "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter((c) => CLASS_SET.has(c));
+      const limitType = requestedClasses.length === 1 ? requestedClasses[0] : null;
+
+      const cacheKey = `metaDTBrowse:${userId}:${adAccountId}:${rootId || "ROOT"}:${limitType || "all"}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      // include_headers=false is Meta's recommended setting per the docs
+      // (response is wrapped without the API metadata header otherwise).
+      const params = { include_headers: false, limit: 500 };
+      if (rootId) params.root = rootId;
+      if (limitType) params.limit_type = limitType;
+      let rows = [];
+      try {
+        const raw = await api.call("GET", [adAccountId, "targetingbrowse"], params);
+        rows = raw?.data || raw?._data?.data || [];
+      } catch (apiErr) {
+        logMetaError("browseDetailedTargeting Meta error", apiErr);
+        rows = [];
+      }
+
+      const tree = (Array.isArray(rows) ? rows : [])
+        .filter((r) => r && r.id)
+        .map((r) => ({
+          id: String(r.id),
+          name: r.name || String(r.id),
+          type: r.type || r.path?.[0] || "interests",
+          path: Array.isArray(r.path) ? r.path : [],
+          // Meta tags non-leaf rows with `leaf: false`. Default-true when
+          // missing (older API versions omit the field on leaves).
+          leaf: r.leaf !== false,
+        }));
+
+      const response = { status: true, tree };
+      // 1-hour cache — Meta's hierarchy is essentially static; we just
+      // bust on logout via invalidateAllUserMetaCache.
+      if (tree.length || rows.length === 0) {
+        await redisClient.set(cacheKey, JSON.stringify(response), "EX", 3600);
+      }
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("browseDetailedTargeting error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to browse detailed targeting",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // 9e. POST detailed-targeting related-item suggestions.
+  //
+  // POST (not GET) because Meta's `targeting_list` parameter is an array
+  // of {type, id} objects that we don't want to URL-encode.
+  //
+  // Endpoint per Meta docs: `/act_<AD_ACCOUNT_ID>/targetingsuggestions`.
+  //
+  // Body:
+  //   { adAccountId: '...', items: [{ type: 'interests', id: '600302...' }, ...] }
+  //
+  // Returns: { suggestions: [{ id, name, type, audienceSize }] }
+  // sorted by Meta's relevance score (higher = more related).
+  async suggestDetailedTargeting(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Get Meta-recommended related detailed-targeting items'
+    */
+    try {
+      const adAccountId = normalizeAdAccountId(req.body?.adAccountId);
+      if (!adAccountId) {
+        return res.status(400).json({
+          status: false,
+          error: "adAccountId is required",
+        });
+      }
+      const { asTargetingValidationList } = require("../../utils/detailedTargeting");
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const targetingList = asTargetingValidationList(items);
+      if (!targetingList.length) {
+        return res
+          .status(200)
+          .json({ status: true, suggestions: [] });
+      }
+
+      const userId = req.user.user_id;
+      const sig = targetingList.map((i) => `${i.type}:${i.id}`).sort().join("|");
+      const cacheKey = `metaDTSuggest:${userId}:${adAccountId}:${sig}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      // targeting_list goes URL-encoded per Meta docs — JSON-stringify
+      // serialises to the documented shape.
+      const params = {
+        targeting_list: JSON.stringify(targetingList),
+        limit: 25,
+      };
+      let rows = [];
+      try {
+        const raw = await api.call("GET", [adAccountId, "targetingsuggestions"], params);
+        rows = raw?.data || raw?._data?.data || [];
+      } catch (apiErr) {
+        logMetaError("suggestDetailedTargeting Meta error", apiErr);
+        rows = [];
+      }
+
+      const suggestions = (Array.isArray(rows) ? rows : [])
+        .filter((r) => r && r.id)
+        .map((r) => ({
+          id: String(r.id),
+          name: r.name || String(r.id),
+          type: r.type || r.path?.[0] || "interests",
+          path: Array.isArray(r.path) ? r.path : [],
+          audienceSize: r.audience_size_lower_bound != null
+            ? Number(r.audience_size_lower_bound)
+            : null,
+          // Upper bound too — frontend renders the full Meta-style range
+          // ("12,857 - 15,120") when both are present.
+          audienceSizeUpperBound: r.audience_size_upper_bound != null
+            ? Number(r.audience_size_upper_bound)
+            : null,
+        }));
+
+      const response = { status: true, suggestions };
+      if (suggestions.length || rows.length === 0) {
+        await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
+      }
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("suggestDetailedTargeting error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to load suggestions",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // 9f. POST reach-estimate for a given targeting spec.
+  //
+  // POST because the body carries the full targeting object (locations,
+  // age range, detailed-targeting flexible_spec, etc.) — too much for a
+  // query string.
+  //
+  // Body:
+  //   { adAccountId: 'act_...', targeting: { ... },
+  //     optimizationGoal: 'OFFSITE_CONVERSIONS' (optional) }
+  //
+  // Returns: { estimate: { lowerBound, upperBound, dailyReach, currency } }
+  // plus { degraded: true, cachedAt } when we're serving a stale cached
+  // value due to Meta rate-limiting.
+  //
+  // Meta's `/act_X/reachestimate` is rate-limited PER AD ACCOUNT (Meta
+  // doesn't publish the exact limit but ~30 calls/hour seems empirical).
+  // Our cache is keyed by a stable hash of the targeting spec so identical
+  // configs reuse the same answer.
+  async reachEstimateForTargeting(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Estimate audience reach for a targeting spec'
+    */
+    try {
+      const adAccountId = normalizeAdAccountId(req.body?.adAccountId);
+      const { targeting, optimizationGoal } = req.body || {};
+      if (!adAccountId || !targeting) {
+        return res.status(400).json({
+          status: false,
+          error: "adAccountId (Meta ad account id) and targeting are required",
+        });
+      }
+
+      // Convert the wizard's form-shaped targeting (camelCase, with
+      // ageMin/locations/detailedTargeting/etc.) into Meta's API shape
+      // (snake_case, with geo_locations/flexible_spec/etc.) — the same
+      // transform we use on launch. Lazy require avoids a circular import
+      // between this file and metaAdLauncherV2.js.
+      const {
+        buildExplicitTargeting,
+      } = require("./metaAdLauncherV2");
+      let metaTargeting;
+      try {
+        metaTargeting = buildExplicitTargeting(targeting, {
+          // We don't have the campaign's SAC on this endpoint; the strip
+          // is a safety net for launch, not estimate. Pass empty.
+          specialAdCategories: [],
+        });
+      } catch (transformErr) {
+        return res.status(400).json({
+          status: false,
+          error: "Invalid targeting payload",
+          details: transformErr.message,
+        });
+      }
+
+      const userId = req.user.user_id;
+      // Stable cache key — hash the canonical JSON of the Meta-shaped spec
+      // (post-transform) so identical configs hit the same cached estimate
+      // regardless of key order on the input.
+      const crypto = require("crypto");
+      const targetingHash = crypto
+        .createHash("sha1")
+        .update(JSON.stringify(metaTargeting) + "|" + (optimizationGoal || ""))
+        .digest("hex")
+        .slice(0, 16);
+      const cacheKey = `metaReachEstimate:${userId}:${adAccountId}:${targetingHash}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+      // Fallback cache — last-known estimate per (account, hash) regardless
+      // of TTL. Lets us serve a stale value with `degraded: true` when
+      // Meta returns rate-limit error #17.
+      const fallbackKey = `metaReachEstimateLast:${userId}:${adAccountId}:${targetingHash}`;
+
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+      // Meta v24 /reachestimate accepts only `targeting_spec` (required)
+      // and `currency` (optional). `optimize_for` belongs to the newer
+      // /delivery_estimate endpoint — Meta rejects it here with
+      // "Param optimize_for on field reachestimate: This param is not
+      // valid". The `optimizationGoal` we accept on the request body is
+      // kept in the cache key for future-proofing (delivery_estimate
+      // switch) but not sent.
+      const params = { targeting_spec: JSON.stringify(metaTargeting) };
+
+      let estimate = null;
+      let degraded = false;
+      try {
+        // Direct api.call — bypasses the SDK's `getReachEstimate` helper
+        // which tries to .map() over response.data. Meta returns a single
+        // object on this endpoint (`{ data: { users_lower_bound, ... } }`),
+        // not an array, so the helper throws "response.data.map is not a
+        // function". Calling the path ourselves returns the raw payload.
+        // adAccountId is already prefixed via normalizeAdAccountId above —
+        // omitting the prefix earlier produced `/<bare>/reachestimate` and
+        // Meta rejected with "nonexisting field".
+        const raw = await api.call("GET", [adAccountId, "reachestimate"], params);
+        // Meta's payload shape is `{ data: { users_lower_bound, users_upper_bound,
+        // estimate_ready, ... } }`. The SDK may unwrap `data` for us depending
+        // on version — handle both shapes defensively.
+        const data =
+          raw?.data?.users_lower_bound != null ||
+          raw?.data?.users_upper_bound != null
+            ? raw.data
+            : (raw?._data?.data || raw?._data || raw || {});
+        estimate = {
+          // Meta's response includes users_lower_bound + users_upper_bound;
+          // older accounts return `users` instead. Surface whichever we get.
+          lowerBound: data.users_lower_bound != null
+            ? Number(data.users_lower_bound)
+            : (data.users != null ? Number(data.users) : null),
+          upperBound: data.users_upper_bound != null
+            ? Number(data.users_upper_bound)
+            : (data.users != null ? Number(data.users) : null),
+          estimateReady: data.estimate_ready !== false,
+        };
+      } catch (apiErr) {
+        const m = logMetaError("reachEstimate Meta error", apiErr);
+        // Meta error code 17 = "User request limit reached" (account-level
+        // rate limit on reachestimate). Fall through to the stale cache.
+        const rateLimited = m?.code === 17 || /rate limit/i.test(m?.message || "");
+        if (rateLimited) {
+          const stale = await redisClient.get(fallbackKey);
+          if (stale) {
+            const staleEstimate = JSON.parse(stale);
+            return res.status(200).json({
+              status: true,
+              estimate: staleEstimate.estimate,
+              degraded: true,
+              cachedAt: staleEstimate.timestamp,
+              reason: "rate-limited",
+            });
+          }
+        }
+        // No fallback available — return the error envelope so the UI can
+        // render an "Unavailable" pill instead of pretending we have data.
+        return res.status(503).json({
+          status: false,
+          error: m.title || "Reach estimate unavailable",
+          details: m.message,
+          meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+        });
+      }
+
+      const response = {
+        status: true,
+        estimate,
+        degraded,
+      };
+
+      // Cache: 5min on the hot key, 24h on the fallback key. The hot key
+      // gives quick repeat-load; the fallback survives rate-limit windows.
+      const timestamp = Date.now();
+      await redisClient.set(
+        cacheKey,
+        JSON.stringify(response),
+        "EX",
+        300,
+      );
+      await redisClient.set(
+        fallbackKey,
+        JSON.stringify({ estimate, timestamp }),
+        "EX",
+        86400,
+      );
+
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("reachEstimateForTargeting error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to estimate reach",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
     }
   }
 

@@ -601,6 +601,16 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
           placementMode: r.targeting?.placementMode || 'advantage_plus',
           publisherPlatforms: r.targeting?.publisherPlatforms || [],
           devicePlatforms: r.targeting?.devicePlatforms || [],
+          // Detailed Targeting — reverse-mapped by resolveAdSetForEdit
+          // (handles modern flexible_spec AND legacy flat-array ad sets;
+          // see utils/detailedTargeting.js flexibleSpecToForm). Default
+          // shape preserved so a fresh ad set without detailedTargeting
+          // doesn't undefine the wizard's form slot.
+          detailedTargeting: r.targeting?.detailedTargeting || {
+            include: [],
+            narrow: [],
+            exclude: [],
+          },
           useSavedAudience: false,
           // Awareness/STANDARD — pass-through frequency cap from the
           // backend's resolve handler. null when Meta has no cap set (so
