@@ -51,8 +51,7 @@ import { submitAdVideoRequest } from '@/store/actions/adStudio/adVideoActions';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import ShowLightBox from '../ShowLightBox';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
-import { SiOpenai } from 'react-icons/si';
-import { RiGeminiFill } from 'react-icons/ri';
+import { RiOpenaiFill, RiGeminiFill } from 'react-icons/ri';
 import { toast } from 'react-toastify';
 import { suggestPrompt } from '@/store/actions/adStudio/promptActions';
 import { fetchModelCredits } from '@/utils/fetchModelCredits';
@@ -238,14 +237,14 @@ const AdPromptComponent = () => {
       {
         value: 'ADSGPT-3.0',
         label: 'OpenAI 1.5 (Balanced, Fast)',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        Icon: <RiOpenaiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
         credit: modelCredits?.imageModels?.find((m) => m.label.toLowerCase() === 'openai 1.5')
           ?.value,
       },
       // {
       //   value: 'ADSGPT-3.1',
       //   label: 'OpenAI 2.0 (Photorealistic, Best Quality)',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      //   Icon: <RiOpenaiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
       //   credit: modelCredits?.imageModels?.find((m) => m.label.toLowerCase() === 'openai 2.0')
       //     ?.value,
       // },
@@ -265,7 +264,7 @@ const AdPromptComponent = () => {
       {
         value: 'sora',
         label: 'Sora 2',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        Icon: <RiOpenaiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
       },
       {
@@ -285,14 +284,14 @@ const AdPromptComponent = () => {
       {
         value: 'soraPro',
         label: 'Sora 2 Pro',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        Icon: <RiOpenaiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
           ?.value,
       },
       {
         value: 'soraPro_4k',
         label: 'Sora Pro 4K',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+        Icon: <RiOpenaiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
         credit: modelCredits?.videoModels?.find(
           (m) =>
             m.label.toLowerCase().includes('sora 2 pro 4k') ||
