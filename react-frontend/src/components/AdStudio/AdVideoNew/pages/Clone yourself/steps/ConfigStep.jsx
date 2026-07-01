@@ -37,7 +37,6 @@ import {
   uploadVoice,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { toast } from 'react-toastify';
@@ -170,9 +169,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         label: 'Veo 3.1 Fast (Fast & Social-Ready)',
         tier: 'lower',
         Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) =>
-          m.label.toLowerCase().includes('veo 3.1 fast')
-        )?.value,
+        credit: '9 CREDITS/SECOND',
       },
       // {
       //   value: 'veo',
@@ -498,7 +495,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     { value: '16:9', label: '16:9', icon: RectangleHorizontal },
   ];
 
-  const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
+  const CLONE_CREDITS_PER_SECOND = 9;
+  const est = Math.ceil(CLONE_CREDITS_PER_SECOND * (parseFloat(videoDuration) || 0));
   const enough = availableCredits >= est;
 
   return (
