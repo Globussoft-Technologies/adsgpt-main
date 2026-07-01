@@ -92,28 +92,43 @@ export function typeBadge(typeOrItem) {
 //
 // Both return '' on non-finite input so callers can render nothing
 // without explicit guards.
+// Compact number formatter — keeps row text short in dropdowns / trees
+// where full locale strings (e.g. "999,071,723") waste too much space.
+//   1_234       → "1K"
+//   1_234_567   → "1.2M"
+//   12_345_678  → "12.3M"
+//   999_000_000 → "999M"
+//   1_174_000_000 → "1.2B"
+function formatCompact(n) {
+  if (!Number.isFinite(n)) return '';
+  if (n >= 1_000_000_000) {
+    return `${(n / 1_000_000_000).toFixed(n >= 10_000_000_000 ? 0 : 1)}B`;
+  }
+  if (n >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (n >= 1_000) {
+    return `${Math.round(n / 1_000)}K`;
+  }
+  return String(Math.round(n));
+}
+
 function formatAudienceRange(lower, upper) {
   const lo = Number(lower);
   const hi = Number(upper);
   const haveLo = Number.isFinite(lo);
   const haveHi = Number.isFinite(hi);
   if (!haveLo && !haveHi) return '';
-  // Localised thousand-separators — Meta UI uses the user's locale, but
-  // matching their en-US default is fine for our wizard.
-  const fmt = (n) => Math.round(n).toLocaleString('en-US');
   if (haveLo && haveHi) {
     // Identical bounds → render the single number instead of "X - X".
-    if (lo === hi) return `Size: ${fmt(lo)}`;
-    return `Size: ${fmt(lo)} - ${fmt(hi)}`;
+    if (lo === hi) return `Size: ${formatCompact(lo)}`;
+    return `Size: ${formatCompact(lo)} - ${formatCompact(hi)}`;
   }
-  return `Size: ${fmt(haveLo ? lo : hi)}`;
+  return `Size: ${formatCompact(haveLo ? lo : hi)}`;
 }
 
 function formatAudienceSize(n) {
-  if (!Number.isFinite(n)) return '';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
-  return String(Math.round(n));
+  return formatCompact(n);
 }
 
 export default function DetailedTargetingPicker({
@@ -271,6 +286,11 @@ export default function DetailedTargetingPicker({
                 // class-name convention.
                 const badge = typeBadge(r);
                 const sizeText = formatAudienceRange(r.audienceSize, r.audienceSizeUpperBound);
+                // Full precise audience size for the hover tooltip.
+                const sizeTitle = [r.audienceSize, r.audienceSizeUpperBound]
+                  .filter((n) => Number.isFinite(Number(n)))
+                  .map((n) => Math.round(Number(n)).toLocaleString('en-US'))
+                  .join(' - ');
                 return (
                   <button
                     type="button"
@@ -295,7 +315,10 @@ export default function DetailedTargetingPicker({
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {sizeText && (
-                        <span className="text-11 text-gray-500 dark:text-white/45">
+                        <span
+                          title={sizeTitle || undefined}
+                          className="text-11 text-gray-600 dark:text-white/60"
+                        >
                           {sizeText}
                         </span>
                       )}
