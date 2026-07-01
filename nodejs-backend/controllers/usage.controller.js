@@ -232,10 +232,17 @@ function rowFor(entry) {
 
 // Surface-aware row — adds canonical, numeric credits/sec and the surface's
 // allowed durations + aspect ratios so the frontend can build its pickers.
-function surfaceRowFor(entry, caps) {
-  const credits = creditsFor(entry);
+function surfaceRowFor(entry, caps, media) {
+  let credits = creditsFor(entry);
+  if (media && Array.isArray(entry.extraDeduction)) {
+    const featureDeduction = entry.extraDeduction.find(d => d.type === media);
+    if (featureDeduction) {
+      credits += Number(featureDeduction.deduction) || 0;
+    }
+  }
+  
   const creditField = entry.type === "video" ? "creditsPerSecond" : "creditsPerImage";
-  return {
+  const row = {
     canonical: entry.canonicalKey,
     label: entry.label,
     type: entry.type,
@@ -245,6 +252,8 @@ function surfaceRowFor(entry, caps) {
     durations: caps.durations || [],
     aspectRatios: caps.aspectRatios || [],
   };
+  
+  return row;
 }
 
 const sortByCredits = (a, b) => a.credits - b.credits;
@@ -319,7 +328,7 @@ const getModelCreditDeduction = async (req, res) => {
         if (!entry || entry.enabled === false) continue;
         const isVideo = entry.type === "video";
         if (isVideo ? !wantVideo : !wantImage) continue;
-        (isVideo ? videoModels : imageModels).push(surfaceRowFor(entry, caps));
+        (isVideo ? videoModels : imageModels).push(surfaceRowFor(entry, caps, media));
       }
 
       imageModels.sort(sortByCredits);

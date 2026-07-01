@@ -147,6 +147,7 @@ const MODEL_REGISTRY = [
     aggregationCreditDefault: 4,
     pricing: { per_second: 0.15 },
     enabled: true,
+    extraDeduction: [{type: "clone", deduction: 5}]
   },
   {
     canonicalKey: "veo_4k",

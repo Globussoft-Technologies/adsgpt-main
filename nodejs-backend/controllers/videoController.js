@@ -10,6 +10,7 @@ const {
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
+const { findModel } = require("../config/modelRegistry");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { s3Client } = require("../storage/s3");
 const axios = require("axios");
@@ -2680,9 +2681,12 @@ exports.generateImageAndScriptClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    // Calculate how many credits 1 video takes: duration * model_multiplier
+    const modelData = findModel(selectedModel);
+    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+
+    // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =
-      durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+      durationNum * (UnifiedCreditController.getModelDeduction(selectedModel) + detectionCredit);
 
     const numberOfVideos = inputs.numberOfVideos;
     // Calculate total required credits for the entire batch
@@ -3019,7 +3023,11 @@ exports.generateCloneVideo = async (req, res) => {
 
     const selectedModel = inputs.model;
     const durationNum = Number(inputs.duration.replace("s", "")) || 0;
-    const videoMinCount = durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+    
+    const modelData = findModel(selectedModel);
+    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+    
+    const videoMinCount = durationNum * (UnifiedCreditController.getModelDeduction(selectedModel) + detectionCredit);
     const numberOfVideos = inputs.numberOfVideos;
     // Calculate total required credits for the entire batch
     const totalRequiredCredits = numberOfVideos * videoMinCount;
@@ -3182,9 +3190,12 @@ exports.regenerateFrameClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    // Calculate how many credits 1 video takes: duration * model_multiplier
+    const modelData = findModel(selectedModel);
+    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+
+    // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =
-      durationNum * UnifiedCreditController.getModelDeduction(selectedModel);
+      durationNum * (UnifiedCreditController.getModelDeduction(selectedModel) + detectionCredit);
 
     const numberOfVideos = inputs.numberOfVideos;
     // Calculate total required credits for the entire batch

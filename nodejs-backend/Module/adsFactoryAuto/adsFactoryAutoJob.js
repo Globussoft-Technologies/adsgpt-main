@@ -100,6 +100,21 @@ const MetaTargetSchema = new mongoose.Schema(
 );
 
 
+// ─── GoogleTargetSchema ───────────────────────────────────────────────────────
+
+const GoogleTargetSchema = new mongoose.Schema(
+  {
+    template: {
+      name:               { type: String, required: true, trim: true },
+      objective:          { type: String, default: "" },
+      conversionLocation: { type: String, default: "" },
+      customerId:         { type: String, default: "" },
+      payload:            { type: mongoose.Schema.Types.Mixed, required: true },
+    },
+  },
+  { _id: false }
+);
+
 // ─── AdsFactoryJobSchema ──────────────────────────────────────────────────────
 
 // Root document — one job = one recurring ad-creation + posting task
@@ -121,7 +136,8 @@ const AdsFactoryJobSchema = new mongoose.Schema(
     // Platform-specific placement IDs — template is stored inside each target
     // To add a new platform: create a new *TargetSchema above and add a key here.
     targets: {
-      meta: { type: MetaTargetSchema, default: () => ({}) },
+      meta:   { type: MetaTargetSchema },
+      google: { type: GoogleTargetSchema },
     },
 
     // Lifecycle state of the job

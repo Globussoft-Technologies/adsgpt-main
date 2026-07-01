@@ -38,8 +38,19 @@ const metaTargetSchema = Joi.object({
   }).optional(),
 });
 
+const googleTargetSchema = Joi.object({
+  template: Joi.object({
+    name: Joi.string().trim().required(),
+    objective: Joi.string().allow("", null).optional(),
+    conversionLocation: Joi.string().allow("", null).optional(),
+    customerId: Joi.string().allow("", null).optional(),
+    payload: Joi.object().required(),
+  }).optional(),
+});
+
 const targetsSchema = Joi.object({
-  meta: metaTargetSchema.optional(),
+  meta:   metaTargetSchema.optional(),
+  google: googleTargetSchema.optional(),
 });
 
 // ─── createJobSchema ──────────────────────────────────────────────────────────

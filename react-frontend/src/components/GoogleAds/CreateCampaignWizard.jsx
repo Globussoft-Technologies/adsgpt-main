@@ -2529,7 +2529,17 @@ export default function CreateCampaignWizard({
     const payload = template?.payload || {};
     const templateAccount = payload.adAccountId || null;
     const needsAccountSwitch = templateAccount && templateAccount !== adAccountId;
-    setFormState((f) => ({ ...f, ...payload, adAccountId: undefined }));
+    // Clear account-scoped asset RNs — they are tied to the original account and will fail
+    // if applied to a different account. URLs are kept so previews still show and re-upload happens.
+    setFormState((f) => ({
+      ...f,
+      ...payload,
+      adAccountId: undefined,
+      pmaxImageAssetRN: '',
+      pmaxSquareImageAssetRN: '',
+      pmaxLogoAssetRN: '',
+      assetResourceName: '',
+    }));
     setTouched({});
     setErrors({});
     setStepIndex(0);

@@ -24,6 +24,7 @@ const UnifiedCreditController = require("../../controllers/UnifiedCreditControll
 const { buildObjectStorySpec }                   = require("../../utils/objectStorySpec");
 const { inferCellForMetaCampaign }               = require("../../controllers/adPosting/cellInference");
 const { invalidateAfterCreate }                  = require("../../controllers/adPosting/metaAdLauncher");
+const { invalidateAllUserGoogleCache }           = require("../../controllers/adPosting/googleAdController");
 const { decrypt }                                = require("../../utils/crypto");
 const { uploadImageFromUrl }                     = require("../../controllers/adPosting/adControllerV2");
 
@@ -315,7 +316,223 @@ const PLATFORM_POSTERS = {
       }
 
       logger.info(`[adsFactoryAuto:meta] created ${createdAdIds.length} ad(s).`);
-      return { adId: createdAdIds.join(",") }; // Returns comma separated string for platformAdIds
+      return { adId: createdAdIds.join(",") };
+    },
+  },
+
+  // ─── Google poster ────────────────────────────────────────────────────────
+  // Mirrors the Meta poster pattern exactly:
+  //   1. executeController mocks req/res and calls Google controller fns internally
+  //   2. Campaign → Ad Group → Ads (one per creative)
+  //   3. Cache invalidated after posting
+  google: {
+    isConfigured: (target) => {
+      const validCustomer = !!(
+        target?.template?.payload?.adAccountId ||
+        target?.template?.customerId ||
+        target?.template?.payload?.customerId
+      );
+      return !!(validCustomer && target?.template);
+    },
+
+    post: async (target, job, creatives) => {
+      const { template } = target;
+      if (!template?.payload) {
+        throw new Error("No template configured — targets.google.template is required");
+      }
+
+      const p          = template.payload;
+      const customerId = p.adAccountId || template.customerId || p.customerId;
+      if (!customerId) throw new Error("Google template payload is missing adAccountId / customerId");
+
+      // initGoogleApiForUser looks up GoogleUsers by the full userId (e.g. "GPT-438")
+      // — do NOT strip the prefix here; use the full job.userId as-is.
+      const googleUserId = job.userId;
+      // For invalidateAllUserGoogleCache we use the raw numeric part
+      const rawGoogleUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
+
+      const googleAdController = require("../../controllers/adPosting/googleAdController");
+
+      // Same mock-req/res helper as the Meta poster
+      const executeController = async (controllerFn, body) => {
+        const req = { body, user: { user_id: googleUserId } };
+        let statusCode = 200;
+        let responseData = null;
+        const res = {
+          status: (code) => { statusCode = code; return res; },
+          json:   (data)  => { responseData = data; return res; },
+        };
+        await controllerFn.call(googleAdController, req, res);
+        if (statusCode >= 400) {
+          throw new Error(responseData?.error || responseData?.details || JSON.stringify(responseData));
+        }
+        return responseData;
+      };
+
+      logger.info(`[adsFactoryAuto:google] Template mode — calling Google create APIs internally`);
+
+      // Resolve the effective channel type from the template.
+      // payload.destination is the wizard step-2 value (SEARCH, DISPLAY, PERFORMANCE_MAX, etc.)
+      // payload.objective or template.objective is the step-1 business goal (SALES, LEADS, etc.)
+      // When destination is a raw channel type, use it directly. Otherwise derive from business goal.
+      const destination  = (p.destination || "").toUpperCase();
+      const bizObjective = (template.objective || p.objective || "").toUpperCase();
+
+      // Map business objective → effective channel when no explicit destination set
+      const BIZ_TO_CHANNEL = {
+        SALES: "SEARCH", LEADS: "SEARCH", WEBSITE_TRAFFIC: "SEARCH", LOCAL_STORE: "SEARCH",
+        APP_PROMOTION: "APP_PROMOTION", YOUTUBE_REACH: "YOUTUBE_REACH",
+      };
+      const RAW_CHANNELS = new Set([
+        "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX",
+        "VIDEO", "DEMAND_GEN", "YOUTUBE_REACH", "APP_PROMOTION", "MULTI_CHANNEL",
+      ]);
+      const effectiveChannel = RAW_CHANNELS.has(destination)
+        ? destination
+        : BIZ_TO_CHANNEL[bizObjective] || "SEARCH";
+
+      logger.info(`[adsFactoryAuto:google] effectiveChannel=${effectiveChannel}  destination="${destination}"  bizObjective="${bizObjective}"`);
+
+      // PERFORMANCE_MAX and SHOPPING: campaign-only, no ad group / ad creation.
+      // APP_PROMOTION (MULTI_CHANNEL): campaign-only — app assets handled by Google automatically.
+      const isCampaignOnly = ["PERFORMANCE_MAX", "SHOPPING", "APP_PROMOTION", "MULTI_CHANNEL"].includes(effectiveChannel);
+
+      // ── 1. Create campaign ────────────────────────────────────────────────
+      const CAMPAIGN_FIELDS = [
+        "adAccountId", "customerId", "name", "objective",
+        "dailyBudgetMicros", "lifetimeBudgetMicros", "budgetType", "status", "startTime", "endTime",
+        "targeting", "objectiveExtras", "euPoliticalAds",
+      ];
+      const campaignBase = Object.fromEntries(
+        CAMPAIGN_FIELDS.filter((k) => p[k] !== undefined).map((k) => [k, p[k]])
+      );
+      const campaignPayload = {
+        ...campaignBase,
+        adAccountId: customerId,
+        ...(p.name || p.campaignName ? { name: p.name || p.campaignName } : {}),
+        // Use destination as the objective when it's a raw channel type (e.g. PERFORMANCE_MAX, SHOPPING)
+        // otherwise use the business objective (SALES, LEADS, etc.) — controller maps both correctly
+        ...(destination && RAW_CHANNELS.has(destination)
+          ? { objective: destination }
+          : bizObjective ? { objective: bizObjective } : {}),
+        ...(p.status ? { status: p.status } : {}),
+      };
+
+      const campaignRes = await executeController(googleAdController.createCampaignAPI, campaignPayload);
+      // Controller returns { campaign: { campaignId, ... } }
+      const googleCampaignId = campaignRes?.campaign?.campaignId || campaignRes?.campaign?.id || campaignRes?.campaignId;
+      if (!googleCampaignId) throw new Error("Google campaign creation did not return a campaignId");
+
+      // Campaign-only flow — PERFORMANCE_MAX, SHOPPING, APP_PROMOTION have no ad group / ad step
+      if (isCampaignOnly) {
+        logger.info(`[adsFactoryAuto:google] ${effectiveChannel} campaign created (campaign-only, no ad group/ad step)  campaignId=${googleCampaignId}`);
+        try { await invalidateAllUserGoogleCache(rawGoogleUserId); } catch (e) {
+          logger.warn(`[adsFactoryAuto:google] cache invalidation failed (non-fatal): ${e.message}`);
+        }
+        return { adId: googleCampaignId };
+      }
+
+      // ── 2. Create ad group ────────────────────────────────────────────────
+      const adGroupPayload = {
+        adAccountId: customerId,
+        campaignId:  googleCampaignId,
+        ...(p.adGroupName || p.name ? { name: p.adGroupName || p.name } : {}),
+        ...(p.status          ? { status:          p.status }          : {}),
+        // cpcBid = wizard field (₹/$ amount), cpcBidMicros = already in micros, bidAmount = alias
+        ...(p.cpcBidMicros    ? { cpcBidMicros:    p.cpcBidMicros }    :
+            p.cpcBid          ? { cpcBidMicros:    Math.round(Number(p.cpcBid) * 1_000_000) } :
+            p.bidAmount       ? { cpcBidMicros:    Math.round(Number(p.bidAmount) * 1_000_000) } : {}),
+        ...(p.targeting       ? { targeting:       p.targeting }       : {}),
+        ...(p.keywords        ? { keywords:        p.keywords }        : {}),
+        ...(p.biddingGoal     ? { biddingGoal:     p.biddingGoal }     : {}),
+        ...(p.targetCpaMicros ? { targetCpaMicros: p.targetCpaMicros } : {}),
+        ...(p.targetRoas      ? { targetRoas:      p.targetRoas }      : {}),
+        ...(p.videoFormat     ? { videoFormat:     p.videoFormat }     : {}),
+        ...(p.frequencyCap    ? { frequencyCap:    p.frequencyCap }    : {}),
+      };
+
+      const adGroupRes = await executeController(googleAdController.createAdGroupAPI, adGroupPayload);
+      // Controller returns { adGroup: { adGroupId, ... } }
+      const adGroupId = adGroupRes?.adGroup?.adGroupId || adGroupRes?.adGroup?.id || adGroupRes?.adGroupId;
+      if (!adGroupId) throw new Error("Google ad group creation did not return an adGroupId");
+
+      // ── 3. One ad per creative ────────────────────────────────────────────
+      const creativesToProcess = creatives.filter((c) => c.imageUrl || c.headline);
+      if (creativesToProcess.length === 0) throw new Error("No valid creatives for Google posting");
+
+      // SEARCH: needs arrays of unique headlines (≥3) + descriptions (≥2)
+      // DISPLAY: needs single headline + description + imageUrl
+      // YOUTUBE_REACH / DEMAND_GEN: needs single headline + description + imageUrl
+      //   (autopilot only generates images/text, not video — controller detects channel from campaignId)
+      const isSearch = effectiveChannel === "SEARCH";
+
+      const finalUrl = p.finalUrl || p.linkUrl || "";
+      if (!finalUrl) throw new Error("Google template payload is missing finalUrl / linkUrl — required for ad destination");
+
+      // Deduplicate case-insensitively — Google rejects DUPLICATE_ASSET on search ads
+      const dedup = (arr) => {
+        const seen = new Set();
+        return arr.filter((t) => {
+          if (!t || !String(t).trim()) return false;
+          const k = String(t).trim().toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      };
+
+      const adsArray = creativesToProcess.map((creative) => {
+        const rawHeadline = (creative.headline || "").trim();
+        const rawDesc     = (creative.message || creative.description || "").trim();
+
+        if (isSearch) {
+          // Google requires ≥3 unique headlines (max 30 chars each) and ≥2 unique descriptions (max 90 chars each).
+          // We build 5 candidate headlines and 3 candidate descriptions from the AI text,
+          // then dedup so Google never sees duplicates — even if the AI generated short/identical text.
+          const h1 = rawHeadline.slice(0, 30);
+          const h2 = rawDesc.split(/\s+/).slice(0, 4).join(" ").slice(0, 30);
+          const h3 = rawHeadline.split(/\s+/).slice(0, 3).join(" ").slice(0, 30);
+          const headlineCandidates = dedup([h1, h2, h3, "Learn More", "Discover Now", "Get Started"]);
+
+          const d1 = rawDesc.slice(0, 90);
+          const d2 = rawHeadline.slice(0, 90);
+          const descCandidates = dedup([d1, d2, "Explore our latest offers and get started today."]);
+
+          // Guard: if we still can't meet minimums after dedup, throw a clear error
+          if (headlineCandidates.length < 3) throw new Error(`Search ad requires at least 3 unique headlines — only ${headlineCandidates.length} unique produced from creative "${rawHeadline.slice(0, 40)}"`);
+          if (descCandidates.length < 2)     throw new Error(`Search ad requires at least 2 unique descriptions — only ${descCandidates.length} unique produced`);
+
+          return { headlines: headlineCandidates, descriptions: descCandidates, finalUrl };
+        }
+
+        // DISPLAY / YOUTUBE_REACH / DEMAND_GEN — single headline + description + imageUrl
+        return {
+          ...(rawHeadline               ? { headline:     rawHeadline }                          : {}),
+          ...(rawDesc                   ? { description:  rawDesc }                              : {}),
+          ...(creative.imageUrl         ? { imageUrl:     creative.imageUrl }                   : {}),
+          ...(creative.callToAction || p.callToAction
+                                        ? { callToAction: creative.callToAction || p.callToAction } : {}),
+          finalUrl,
+        };
+      });
+
+      const adRes = await executeController(googleAdController.createAdAPI, {
+        adAccountId: customerId,
+        adGroupId,
+        campaignId:  googleCampaignId,
+        ads:         adsArray,
+      });
+
+      const createdAdIds = (adRes?.ads || []).map((a) => a.adId).filter(Boolean);
+      logger.info(`[adsFactoryAuto:google] created ${createdAdIds.length} ad(s).`);
+
+      try {
+        await invalidateAllUserGoogleCache(rawGoogleUserId);
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto:google] cache invalidation failed (non-fatal): ${e.message}`);
+      }
+
+      return { adId: createdAdIds.join(",") };
     },
   },
 
@@ -683,9 +900,15 @@ async function run(jobId) {
     }
 
     // ── Step 7b: Build creatives ──────────────────────────────────────────────
-    const metaPayload = job.targets?.meta?.template?.payload || {};
-    const ctaList = metaPayload.callToAction ? [metaPayload.callToAction] : [];
-    newCreatives = buildCreativesFromResults(completedCampaign, ctaList, metaPayload.linkUrl || "", pairsPerCycle);
+    const metaPayload   = job.targets?.meta?.template?.payload   || {};
+    const googlePayload = job.targets?.google?.template?.payload || {};
+    // Use the active platform's payload (google wins if google template is set)
+    const activePlatformPayload = job.targets?.google?.template ? googlePayload : metaPayload;
+    const ctaList       = activePlatformPayload.callToAction
+      ? (Array.isArray(activePlatformPayload.callToAction) ? activePlatformPayload.callToAction : [activePlatformPayload.callToAction])
+      : [];
+    const destinationUrl = activePlatformPayload.linkUrl || activePlatformPayload.finalUrl || "";
+    newCreatives = buildCreativesFromResults(completedCampaign, ctaList, destinationUrl, pairsPerCycle);
     rawTexts  = completedCampaign.results?.text?.slice(-pairsPerCycle)  || [];
     rawImages = completedCampaign.results?.image?.slice(-pairsPerCycle) || [];
     logger.info(`[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  withImage=${newCreatives.filter((c) => c.imageUrl).length}`);
@@ -714,27 +937,33 @@ async function run(jobId) {
       `skipped=[${unconfiguredPlatforms.join(",")}]`
     );
 
-    for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
-      const target = targets[platformName];
+    const postTasks = Object.entries(PLATFORM_POSTERS)
+      .filter(([platformName, poster]) => poster.isConfigured(targets[platformName]))
+      .map(([platformName, poster]) => {
+        logger.info(`[adsFactoryAuto][8] posting to ${platformName}  creatives=${newCreatives.length}`);
+        return poster.post(targets[platformName], job, newCreatives, completedCampaign)
+          .then((result) => ({ platformName, adId: result.adId, ok: true }))
+          .catch((platformErr) => {
+            let errMsg = platformErr.message;
+            if (platformName === "meta") {
+              try {
+                const { logMetaError } = require("../../controllers/adPosting/metaAdLauncher");
+                const m = logMetaError(`AutoPilot ${platformName} post failed`, platformErr);
+                errMsg = m.title || errMsg;
+              } catch (_) {}
+            }
+            return { platformName, errMsg, ok: false };
+          });
+      });
 
-      if (!poster.isConfigured(target)) continue; // not configured — skip silently
-
-      logger.info(`[adsFactoryAuto][8] posting to ${platformName}  creatives=${newCreatives.length}`);
-      try {
-        const result = await poster.post(target, job, newCreatives, completedCampaign);
-        postedAdIds[platformName] = result.adId;
-        logger.info(`[adsFactoryAuto][8] ${platformName} ad posted OK  adId="${result.adId}"`);
-      } catch (platformErr) {
-        let errMsg = platformErr.message;
-        if (platformName === "meta") {
-          try {
-            const { logMetaError } = require("../../controllers/adPosting/metaAdLauncher");
-            const m = logMetaError(`AutoPilot ${platformName} post failed`, platformErr);
-            errMsg = m.title || errMsg;
-          } catch (_) {}
-        }
-        logger.error(`[adsFactoryAuto][8] ${platformName} post FAILED: ${errMsg}`);
-        platformErrors.push(`${platformName}: ${errMsg}`);
+    const postResults = await Promise.all(postTasks);
+    for (const r of postResults) {
+      if (r.ok) {
+        postedAdIds[r.platformName] = r.adId;
+        logger.info(`[adsFactoryAuto][8] ${r.platformName} ad posted OK  adId="${r.adId}"`);
+      } else {
+        logger.error(`[adsFactoryAuto][8] ${r.platformName} post FAILED: ${r.errMsg}`);
+        platformErrors.push(`${r.platformName}: ${r.errMsg}`);
       }
     }
 

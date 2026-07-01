@@ -207,7 +207,15 @@ class AdsFactoryAutoController {
       if (value.model          !== undefined) job.model          = value.model;
       if (value.callToAction   !== undefined) job.callToAction   = value.callToAction;
       if (value.destinationUrl !== undefined) job.destinationUrl = value.destinationUrl;
-      if (value.targets        !== undefined) Object.assign(job.targets, value.targets);
+
+      if (value.targets !== undefined) {
+        // Merge the incoming platform targets — both meta and google can be active at once
+        for (const [platform, targetData] of Object.entries(value.targets)) {
+          if (!job.targets[platform]) job.targets[platform] = {};
+          Object.assign(job.targets[platform], targetData);
+        }
+        job.markModified("targets");
+      }
 
       if (value.schedule) {
         const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
@@ -642,16 +650,14 @@ class AdsFactoryAutoController {
         else totalCreativesNotPosted += cLen;
       }
 
-      // Build detailed platforms object
+      // Only show platforms that are currently active (have a template configured)
       const platformDetails = {};
       for (const [platform, config] of Object.entries(job.targets || {})) {
-        if (!config || Object.keys(config).length === 0) continue;
+        if (!config?.template) continue;
         if (platform === "meta" && typeof config.adSetId === "string") {
           config.adSetId = config.adSetId ? [config.adSetId] : [];
         }
-        platformDetails[platform] = {
-          config // includes adAccountId, campaignId, pageId, adSetId
-        };
+        platformDetails[platform] = { config };
       }
 
       const generationHealth = {
@@ -867,24 +873,44 @@ class AdsFactoryAutoController {
           if (p) totalCreativesPosted += cLen; else totalCreativesNotPosted += cLen;
         }
 
+        // Only include platforms that are currently active (have a template configured)
         const platformDetails = {};
         for (const [platform, config] of Object.entries(job.targets || {})) {
-          if (!config || Object.keys(config).length === 0) continue;
+          if (!config?.template) continue; // skip platforms with no active template
           platformDetails[platform] = { config };
         }
 
-        const metaTemplate = job.targets?.meta?.template || null;
-        const templateInputs = metaTemplate ? {
-          objective:          metaTemplate.objective          || null,
-          conversionLocation: metaTemplate.conversionLocation || null,
-          pageId:             metaTemplate.pageId             || metaTemplate.payload?.pageId || null,
-          adAccountId:        metaTemplate.payload?.adAccountId || null,
-          bidStrategy:        metaTemplate.payload?.bidStrategy || null,
-          dailyBudget:        metaTemplate.payload?.dailyBudget || null,
-          lifetimeBudget:     metaTemplate.payload?.lifetimeBudget || null,
-          callToAction:       metaTemplate.payload?.callToAction || null,
-          linkUrl:            metaTemplate.payload?.linkUrl || null,
-          targeting:          metaTemplate.payload?.targeting || null,
+        // templateInputs — show the currently active platform's template, not hardcoded to meta
+        // Preference: google > meta (most recent switch wins display)
+        const activeTemplate =
+          job.targets?.google?.template ||
+          job.targets?.meta?.template   ||
+          null;
+        const activePlatform = job.targets?.google?.template ? "google"
+          : job.targets?.meta?.template ? "meta"
+          : null;
+
+        const templateInputs = activeTemplate ? {
+          platform:           activePlatform,
+          objective:          activeTemplate.objective          || null,
+          conversionLocation: activeTemplate.conversionLocation || null,
+          // meta-specific fields
+          pageId:             activeTemplate.pageId             || activeTemplate.payload?.pageId       || null,
+          adAccountId:        activeTemplate.payload?.adAccountId                                        || null,
+          bidStrategy:        activeTemplate.payload?.bidStrategy                                        || null,
+          dailyBudget:        activeTemplate.payload?.dailyBudget                                        || null,
+          lifetimeBudget:     activeTemplate.payload?.lifetimeBudget                                     || null,
+          callToAction:       activeTemplate.payload?.callToAction                                       || null,
+          linkUrl:            activeTemplate.payload?.linkUrl   || activeTemplate.payload?.finalUrl      || null,
+          targeting:          activeTemplate.payload?.targeting                                          || null,
+          // google-specific fields
+          customerId:         activeTemplate.customerId         || activeTemplate.payload?.adAccountId   || null,
+          destination:        activeTemplate.conversionLocation || activeTemplate.payload?.destination   || null,
+          dailyBudgetMicros:  activeTemplate.payload?.dailyBudgetMicros                                  || null,
+          lifetimeBudgetMicros: activeTemplate.payload?.lifetimeBudgetMicros                             || null,
+          budgetType:         activeTemplate.payload?.budgetType                                         || null,
+          biddingGoal:        activeTemplate.payload?.biddingGoal                                        || null,
+          keywords:           activeTemplate.payload?.keywords                                           || null,
         } : null;
 
         return {
