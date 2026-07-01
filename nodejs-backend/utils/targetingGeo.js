@@ -15,17 +15,35 @@
  *
  * The `subregion` → `regions` mapping is intentional — Meta's payload
  * schema treats subregions as a sub-bucket of the `regions` array.
+ *
+ * Radius-extendable types are the EXCEPTION to the generic KEYED_LIST_TYPES
+ * map — `city` and `zip` each get a dedicated branch in
+ * `groupLocationsByType` / `reverseGeoToLocations` carrying `radius` +
+ * `distance_unit`, because Meta's own Ads Manager supports a radius
+ * extension for exactly these two types (confirmed against live Meta UI
+ * 2026-07-01 — Country/Region: no radius; City/ZIP: radius around the
+ * centroid; Neighborhood/Subcity: radius ONLY when Meta recognises the
+ * pick as a `place`, which our picker converts to a `custom` pin rather
+ * than attaching radius to the original entry — see gotchas.md #1487756).
+ * If Meta adds radius support to another type, mirror the `city`/`zip`
+ * pattern rather than bolting radius onto the generic KEYED_LIST_TYPES path.
  */
 
 // Geo-types that send `{ key }` entries to Meta. Listed in a map so
 // adding a new type is one line.
+//
+// `zip` is NOT here — it gets its own branch in `groupLocationsByType`
+// (like `city`) because Meta's own Ads Manager supports a radius extension
+// around a ZIP's centroid ("Radius can be adjusted around the postal code
+// center") — confirmed against Meta's live UI 2026-07-01. Region does NOT
+// get this treatment: Meta's UI has no radius option for regions (targets
+// the whole administrative area only).
 const KEYED_LIST_TYPES = {
   region: "regions",
   subregion: "regions",
   subcity: "subcities",
   neighborhood: "neighborhoods",
   subneighborhood: "subneighborhoods",
-  zip: "zips",
   geo_market: "geo_markets",
   electoral_district: "electoral_districts",
   large_geo_area: "large_geo_areas",
@@ -37,12 +55,13 @@ const KEYED_LIST_TYPES = {
 // Inverse of KEYED_LIST_TYPES — used on the edit flow to read Meta's
 // payload back into our flat locations model. Note: regions can hold
 // both `region` and `subregion`; on read we default to `region` since
-// we can't distinguish from the response.
+// we can't distinguish from the response. `zips` is handled by its own
+// dedicated block in `reverseGeoToLocations` (radius read-back), same
+// reasoning as KEYED_LIST_TYPES above.
 const KEYED_LIST_INVERSE = {
   subcities: "subcity",
   neighborhoods: "neighborhood",
   subneighborhoods: "subneighborhood",
-  zips: "zip",
   geo_markets: "geo_market",
   electoral_districts: "electoral_district",
   large_geo_areas: "large_geo_area",
@@ -53,8 +72,20 @@ const KEYED_LIST_INVERSE = {
 
 // Sub-country granular types — any of these inside an INCLUDED country
 // is redundant and gets dropped by `dropOverlappingIncludes` to avoid
-// subcode 1487756. Custom (lat/lng) locations are excluded because they
-// may not line up with a country boundary in a way countryCode captures.
+// subcode 1487756.
+//
+// `custom` (lat/lng radius pins) is included: Meta's `adgeolocation`
+// search sometimes surfaces a well-known area (e.g. "Whitefield",
+// "Varthur" in Bangalore) as a `place` (POI) result instead of a formal
+// subcity/neighborhood entity — the frontend converts `place` picks into
+// a `custom` pin (see LocationTargeting.jsx `add()`). Meta's own API
+// unconditionally rejects a same-country pin + country combo with
+// 1487756 regardless of whether the pin's radius could technically cross
+// a border, so dropping on countryCode match mirrors Meta's real
+// behaviour. The frontend now backfills countryCode via reverse-geocode
+// when a pin is placed; the backend's `backfillLocationCountryCodes`
+// covers pins loaded from an existing ad set on edit (Meta's
+// `custom_locations` read-back never includes a country code at all).
 const COUNTRY_REDUNDANT_TYPES = new Set([
   "city",
   "region",
@@ -69,6 +100,7 @@ const COUNTRY_REDUNDANT_TYPES = new Set([
   "medium_geo_area",
   "small_geo_area",
   "metro_area",
+  "custom",
 ]);
 
 // Group our normalised location entries into Meta's per-type sub-objects.
@@ -86,6 +118,18 @@ function groupLocationsByType(items) {
         city.distance_unit = l.distanceUnit || "kilometer";
       }
       out.cities.push(city);
+    } else if (l.type === "zip") {
+      // Radius-extendable, same shape as city — Meta's UI supports
+      // extending a ZIP beyond its own boundary around the postal code
+      // centroid. See KEYED_LIST_TYPES comment for why this isn't in the
+      // generic map.
+      out.zips = out.zips || [];
+      const zip = { key: l.key };
+      if (l.radius != null) {
+        zip.radius = l.radius;
+        zip.distance_unit = l.distanceUnit || "kilometer";
+      }
+      out.zips.push(zip);
     } else if (l.type === "country_group") {
       out.country_groups = out.country_groups || [];
       out.country_groups.push(l.key);
@@ -154,6 +198,15 @@ function reverseGeoToLocations(geo, mode) {
       key: String(c.key),
       radius: c.radius,
       distanceUnit: c.distance_unit || "kilometer",
+      mode,
+    });
+  }
+  for (const z of geo.zips || []) {
+    out.push({
+      type: "zip",
+      key: String(z.key),
+      radius: z.radius,
+      distanceUnit: z.distance_unit || "kilometer",
       mode,
     });
   }

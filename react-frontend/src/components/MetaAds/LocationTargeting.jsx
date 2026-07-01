@@ -5,11 +5,12 @@
  * against `/meta-ads/search-geo` returning countries / cities (with km
  * radius) / regions / free-trade-area country-groups. Each selected
  * location renders as a chip with Include/Exclude switch + remove; cities
- * get a km radius control.
+ * and ZIPs get a km radius control (confirmed against live Meta Ads
+ * Manager 2026-07-01 — Region does NOT support radius, City and ZIP do).
  *
  * Stored on the wizard form as `locations: []`, each entry shaped:
  *   { type, key, name, mode: 'include' | 'exclude',
- *     radius?, distanceUnit?, countryCode? }  // radius/unit on cities.
+ *     radius?, distanceUnit?, countryCode? }  // radius/unit on city + zip.
  *
  * Phase 2 (Browse + bulk) was reverted — a revised plan is pending.
  * Phase 3 will add the map + drop-pin (a new `type: 'custom'`).
@@ -181,11 +182,36 @@ export default function LocationTargeting({
 
   const mapVisible = !mapDismissed && (mapTouched || mapPins.length > 0);
 
-  // Meta rejects overlapping included locations: an included city/region
-  // inside an included country is redundant (the country already covers
-  // it). We drop these server-side (matching Meta Ads Manager, which
-  // combines them) — flag them here so the user sees why their radius
-  // won't apply. Keyed by `type:key`.
+  // Meta rejects overlapping included locations (subcode 1487756) — every
+  // sub-country type inside an included country is redundant (the country
+  // covers it). Backend `dropOverlappingIncludes` in utils/targetingGeo.js
+  // drops these at launch; we flag them here so the user sees why their
+  // radius won't apply. Must stay in lockstep with backend
+  // COUNTRY_REDUNDANT_TYPES — expand together when a new sub-country type
+  // is added to the search endpoint.
+  const SUB_COUNTRY_TYPES = useMemo(
+    () =>
+      new Set([
+        'city',
+        'region',
+        'subregion',
+        'subcity',
+        'neighborhood',
+        'subneighborhood',
+        'zip',
+        'geo_market',
+        'electoral_district',
+        'large_geo_area',
+        'medium_geo_area',
+        'small_geo_area',
+        'metro_area',
+        // Radius pins (from a dropped map pin OR a `place`/POI search pick
+        // like "Whitefield" or "Varthur") are redundant the same way when
+        // their reverse-geocoded countryCode matches an included country.
+        'custom',
+      ]),
+    [],
+  );
   const subsumedKeys = useMemo(() => {
     const includedCountries = new Set(
       value
@@ -197,7 +223,7 @@ export default function LocationTargeting({
     for (const l of value) {
       if (
         l.mode !== 'exclude' &&
-        (l.type === 'city' || l.type === 'region') &&
+        SUB_COUNTRY_TYPES.has(l.type) &&
         l.countryCode &&
         includedCountries.has(String(l.countryCode).toUpperCase())
       ) {
@@ -205,7 +231,7 @@ export default function LocationTargeting({
       }
     }
     return out;
-  }, [value]);
+  }, [value, SUB_COUNTRY_TYPES]);
 
   // Existing-key set for de-dup — both modes (include/exclude) share the
   // namespace, so adding a country that's already excluded just flips
@@ -297,6 +323,13 @@ export default function LocationTargeting({
       if (row.type === 'place') {
         let latitude = row.latitude;
         let longitude = row.longitude;
+        // Places rarely carry a country_code from Meta's search directly;
+        // the geocode round-trip below (when it fires) returns one from
+        // Nominatim's addressdetails. Without either, this pin has no
+        // country info and can't be recognised as redundant with an
+        // included country at launch (Meta subcode 1487756) — the
+        // backend's launch-time reverse-geocode backfill is the fallback.
+        let countryCode = row.countryCode || null;
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
           try {
             const named = [row.name, row.region, row.countryName]
@@ -314,6 +347,7 @@ export default function LocationTargeting({
             ) {
               latitude = r.latitude;
               longitude = r.longitude;
+              if (!countryCode && r.countryCode) countryCode = r.countryCode;
             }
           } catch {
             /* fall through — if geocoding fails we bail below */
@@ -334,6 +368,7 @@ export default function LocationTargeting({
           radius: CITY_RADIUS_DEFAULT_KM,
           distanceUnit: 'kilometer',
           mode: 'include',
+          ...(countryCode && { countryCode }),
         };
         onChange?.([...value, entry]);
         setQuery('');
@@ -356,10 +391,13 @@ export default function LocationTargeting({
       // code in `key`; cities/regions/areas surface it via the search
       // response.
       if (row.countryCode) entry.countryCode = row.countryCode;
-      // Cities default to a 25 km radius — Meta requires a radius when
-      // `distance_unit` is set, and 25 km is a sensible mid-range default
-      // matching Meta's own UI.
-      if (row.type === 'city') {
+      // Cities and ZIPs default to a 25 km radius — Meta requires a radius
+      // when `distance_unit` is set, and 25 km is a sensible mid-range
+      // default matching Meta's own UI. Confirmed against live Meta Ads
+      // Manager 2026-07-01: City and ZIP both support a radius extension
+      // around the centroid; Region does not (whole administrative area
+      // only) and is intentionally excluded here.
+      if (row.type === 'city' || row.type === 'zip') {
         entry.radius = CITY_RADIUS_DEFAULT_KM;
         entry.distanceUnit = 'kilometer';
       }
@@ -373,12 +411,13 @@ export default function LocationTargeting({
       setQuery('');
       setResults([]);
       // Auto-pin point-like geo entries on the map (Meta-style).
-      // Countries / country-groups / electoral districts / ZIP regions
-      // are too broad — coordinate-pin would be misleading. Cities,
-      // regions, subcities (boroughs), neighborhoods pin sensibly via
-      // Nominatim's centroid.
+      // Countries / country-groups / electoral districts are too broad —
+      // coordinate-pin would be misleading. Cities, ZIPs (both
+      // radius-extendable per Meta's UI), regions, subcities (boroughs),
+      // neighborhoods pin sensibly via Nominatim's centroid.
       const PIN_AUTO_TYPES = new Set([
         'city',
+        'zip',
         'region',
         'subregion',
         'subcity',
@@ -432,10 +471,16 @@ export default function LocationTargeting({
       if (value.some((l) => l.key === key)) return; // already dropped here
 
       let displayName = null;
+      // Also captured here — without it, this pin has no country info and
+      // can't be recognised as redundant with an included country at
+      // launch (Meta subcode 1487756). Backend backfills on launch/edit
+      // too, but capturing it now avoids a second network round-trip.
+      let countryCode = null;
       try {
         const r = await reverseGeocodeLocation({ lat: latitude, lng: longitude });
         if (r?.result) {
           displayName = r.result.displayName || null;
+          countryCode = r.result.countryCode || null;
         } else if (!r?.degraded) {
           globalToast.error(
             'Pick a point on land — that location has no addressable audience.',
@@ -460,6 +505,7 @@ export default function LocationTargeting({
           radius: CITY_RADIUS_DEFAULT_KM,
           distanceUnit: 'kilometer',
           mode: 'include',
+          ...(countryCode && { countryCode }),
         },
       ]);
     },
@@ -599,13 +645,15 @@ export default function LocationTargeting({
                     {badge.label}
                   </span>
 
-                  {/* Radius control (km) — cities + map pins. Slider like
-                      Meta, with a live readout. Stays visible when the
-                      location is subsumed by an included country, but is
-                      disabled + dimmed (the note explains it won't apply
-                      until the country is removed) — so it never just
-                      vanishes on the user. */}
-                  {(l.type === 'city' || l.type === 'custom') && (
+                  {/* Radius control (km) — cities, ZIPs + map pins. Slider
+                      like Meta, with a live readout. Confirmed against live
+                      Meta Ads Manager 2026-07-01: City and ZIP both support
+                      a radius extension; Region does not. Stays visible
+                      when the location is subsumed by an included country,
+                      but is disabled + dimmed (the note explains it won't
+                      apply until the country is removed) — so it never
+                      just vanishes on the user. */}
+                  {(l.type === 'city' || l.type === 'zip' || l.type === 'custom') && (
                     <label
                       className={`flex items-center gap-2 text-11 text-gray-500 dark:text-white/55 ${
                         subsumed ? 'opacity-40' : ''

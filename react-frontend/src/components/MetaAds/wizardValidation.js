@@ -230,10 +230,12 @@ function validateAdSet(form, cell, ctx, mode) {
       e.locations =
         'Add at least one location (country, city, region, or area), or enable Worldwide.';
     } else {
-      // Radius must stay inside Meta's accepted band (cities + map pins).
+      // Radius must stay inside Meta's accepted band (cities, ZIPs + map
+      // pins — confirmed against live Meta Ads Manager 2026-07-01 that
+      // City and ZIP both support a radius extension; Region does not).
       // The LocationTargeting input clamps it on edit, but guard anyway.
       for (const l of locations) {
-        if (l && (l.type === 'city' || l.type === 'custom') && l.radius != null) {
+        if (l && (l.type === 'city' || l.type === 'zip' || l.type === 'custom') && l.radius != null) {
           const r = toNumber(l.radius);
           if (!Number.isFinite(r) || r < 1 || r > 80) {
             e.locations = 'Location radius must be between 1 km and 80 km.';

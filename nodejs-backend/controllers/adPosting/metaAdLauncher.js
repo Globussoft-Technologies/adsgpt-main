@@ -479,6 +479,40 @@ async function invalidateAfterCreate(userId, { adAccountId, campaignId, adSetId 
   if (concrete.length) await redisClient.del(...concrete).catch(() => {});
 }
 
+// Reverse-geocode lat/lng → { displayName, countryCode } via Nominatim.
+// Extracted as a standalone helper (not a class method) so it's reusable
+// from both the `reverseGeocodeLocation` HTTP endpoint AND
+// metaAdLauncherV2's launch-time `backfillLocationCountryCodes` — a
+// `custom` (map-pin) location Meta reads back on edit NEVER carries a
+// country code (Meta's targeting.geo_locations.custom_locations only has
+// lat/lng/radius), so the edit-save path needs the same lookup the
+// picker uses when the pin is first dropped. Best-effort: returns null
+// on any failure (ocean, Nominatim outage, bad input) — callers should
+// treat that as "couldn't determine, leave as-is."
+async function reverseGeocodeLatLng(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  try {
+    const { data } = await axios.get(
+      "https://nominatim.openstreetmap.org/reverse",
+      {
+        params: { lat, lon: lng, format: "jsonv2", zoom: 10, addressdetails: 1 },
+        headers: {
+          "User-Agent": "AdsGPT/1.0 (Meta Ads location targeting)",
+          "Accept-Language": "en",
+        },
+        timeout: 8000,
+      },
+    );
+    if (!data || data.error || !data.display_name) return null;
+    return {
+      displayName: data.display_name,
+      countryCode: (data.address?.country_code || "").toUpperCase() || null,
+    };
+  } catch {
+    return null; // fail open — caller treats as "couldn't determine"
+  }
+}
+
 class MetaAdLauncher {
   constructor() {
     this.getAdAccountsList = this.getAdAccountsList.bind(this);
@@ -2973,11 +3007,16 @@ class MetaAdLauncher {
       // Nominatim usage policy requires an identifying User-Agent and a
       // single result is enough for a centroid. countrycodes narrows the
       // match when the caller knows the country (cities/regions do).
+      // addressdetails:1 so we can surface country_code — without it,
+      // a Meta `place` (POI) result converted to a custom radius pin
+      // (see LocationTargeting.jsx `add()`) would have NO country info,
+      // and a same-country pin could never be recognised as redundant
+      // with an included country (Meta subcode 1487756 at launch).
       const params = {
         q,
         format: "jsonv2",
         limit: 1,
-        addressdetails: 0,
+        addressdetails: 1,
       };
       const cc = String(req.query.countryCode || "").trim().toLowerCase();
       if (cc) params.countrycodes = cc;
@@ -3006,6 +3045,7 @@ class MetaAdLauncher {
           latitude: Number(hit.lat),
           longitude: Number(hit.lon),
           displayName: hit.display_name || q,
+          countryCode: (hit.address?.country_code || "").toUpperCase() || null,
         },
       });
     } catch (error) {
@@ -4296,3 +4336,8 @@ module.exports.initApiForUser = initApiForUser;
 // getPagePhone is required by metaAdLauncherV2.js for click-to-call
 // (Calls) ads — phone number comes from the Page, not the wizard form.
 module.exports.getPagePhone = getPagePhone;
+// reverseGeocodeLatLng is required by metaAdLauncherV2.js's launch-time
+// backfillLocationCountryCodes — custom (map-pin) locations Meta reads
+// back on edit never carry a country code, so the launch path needs the
+// same Nominatim lookup the picker uses when a pin is first dropped.
+module.exports.reverseGeocodeLatLng = reverseGeocodeLatLng;

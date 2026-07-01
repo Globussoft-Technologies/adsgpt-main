@@ -2887,6 +2887,23 @@ group("groupLocationsByType — granular geo-type routing", () => {
     assert.deepEqual(out.zips, [{ key: "US:94103" }]);
   });
 
+  test("zip with radius carries radius + distance_unit (Meta UI confirmed 2026-07-01)", () => {
+    // Meta Ads Manager supports a radius extension around a ZIP's centroid
+    // (unlike Region, which has no radius option at all). zip is NOT in
+    // the generic KEYED_LIST_TYPES map — it gets a dedicated branch like
+    // city so radius/distance_unit travel through.
+    const out = groupLocationsByType([
+      { type: "zip", key: "US:94103", radius: 15, distanceUnit: "mile" },
+    ]);
+    assert.deepEqual(out.zips, [{ key: "US:94103", radius: 15, distance_unit: "mile" }]);
+  });
+
+  test("zip without radius omits the field (matches city's optional-radius behavior)", () => {
+    const out = groupLocationsByType([{ type: "zip", key: "US:94103" }]);
+    assert.deepEqual(out.zips, [{ key: "US:94103" }]);
+    assert.ok(!("radius" in out.zips[0]));
+  });
+
   test("geo_market routes to geo_markets", () => {
     const out = groupLocationsByType([{ type: "geo_market", key: "DMA:807" }]);
     assert.deepEqual(out.geo_markets, [{ key: "DMA:807" }]);
@@ -2939,10 +2956,76 @@ group("dropOverlappingIncludes — overlap rule applies to granular types", () =
     assert.deepEqual(types, ["country"]);
   });
 
-  test("granular type with no countryCode is NOT dropped (only explicit overlap)", () => {
+  test("granular type with no countryCode is NOT dropped (pure function needs explicit overlap)", () => {
+    // `dropOverlappingIncludes` is a pure function that trusts countryCode
+    // as the overlap signal. Launch-time flow (createAdSetV2 / updateAdSetV2)
+    // runs `backfillLocationCountryCodes` FIRST — batch adgeolocationmeta
+    // lookup — so this "missing countryCode" state doesn't survive to Meta
+    // in the actual create path. Test guards the pure function's contract;
+    // integration behavior post-backfill is separately covered.
     const filtered = dropOverlappingIncludes([
       { type: "country", key: "IN", mode: "include" },
       { type: "neighborhood", key: "N_88", mode: "include" },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+
+  test("subcity with countryCode matching an included country IS dropped", () => {
+    // Backfill runs adgeolocationmeta lookup then hands this shape to
+    // `dropOverlappingIncludes`, which correctly drops.
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      { type: "subcity", key: "S_2295414", countryCode: "IN", mode: "include" },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type), ["country"]);
+  });
+
+  test("custom (radius pin) with countryCode matching an included country IS dropped", () => {
+    // Regression: user picked India + "Whitefield" (a Bangalore area).
+    // Meta's adgeolocation search surfaced Whitefield as a `place` (POI),
+    // NOT a formal subcity/neighborhood entity — the picker's `add()`
+    // converts any `place` pick into a `custom` lat/lng radius pin. Meta
+    // rejected the launch with subcode 1487756 because the pin sits
+    // inside India. Frontend now captures countryCode via geocode /
+    // reverse-geocode at pick time; backend's `backfillLocationCountryCodes`
+    // reverse-geocodes any custom pin still missing it (e.g. loaded from
+    // an existing ad set on edit, where Meta's read-back never carries a
+    // country code for custom_locations at all).
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      {
+        type: "custom",
+        key: "custom:12.9698,77.7500",
+        countryCode: "IN",
+        mode: "include",
+        latitude: 12.9698,
+        longitude: 77.75,
+        radius: 25,
+      },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type), ["country"]);
+  });
+
+  test("custom pin with no countryCode is NOT dropped (pure function needs explicit overlap)", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      { type: "custom", key: "custom:1,1", mode: "include", latitude: 1, longitude: 1, radius: 10 },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+
+  test("excluded custom pin is not affected by overlap rule", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      {
+        type: "custom",
+        key: "custom:12.9,77.7",
+        countryCode: "IN",
+        mode: "exclude",
+        latitude: 12.9,
+        longitude: 77.7,
+        radius: 10,
+      },
     ]);
     assert.equal(filtered.length, 2);
   });
@@ -3006,6 +3089,26 @@ group("reverseGeoToLocations — granular geo-type round-trip", () => {
       reversed.map(keyOf).sort(),
       original.map(keyOf).sort(),
     );
+  });
+
+  test("zip radius round-trips through group → reverse (Meta UI confirmed 2026-07-01)", () => {
+    const original = [
+      { type: "zip", key: "US:94103", radius: 15, distanceUnit: "mile" },
+    ];
+    const grouped = groupLocationsByType(original);
+    const reversed = reverseGeoToLocations(grouped, "include");
+    assert.equal(reversed.length, 1);
+    assert.equal(reversed[0].type, "zip");
+    assert.equal(reversed[0].key, "US:94103");
+    assert.equal(reversed[0].radius, 15);
+    assert.equal(reversed[0].distanceUnit, "mile");
+  });
+
+  test("zip without radius round-trips with radius undefined (no default injected)", () => {
+    const out = reverseGeoToLocations({ zips: [{ key: "Z_1" }] }, "include");
+    assert.equal(out[0].type, "zip");
+    assert.equal(out[0].radius, undefined);
+    assert.equal(out[0].distanceUnit, "kilometer");
   });
 });
 

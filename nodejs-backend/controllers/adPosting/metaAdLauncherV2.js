@@ -52,7 +52,7 @@ const { inferCellForMetaCampaign } = require("./cellInference");
 // formatMetaError + logMetaError as named exports on its module object.
 // Importing here keeps the SDK / Redis / logging plumbing single-sourced.
 const v1Controller = require("./metaAdLauncher");
-const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone } = v1Controller;
+const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng } = v1Controller;
 const logger = require("../../utils/logger");
 
 const CAPPED_BID_STRATEGIES = new Set([
@@ -417,6 +417,17 @@ async function createAdSetV2(req, res) {
         });
       }
     } else {
+      // Backfill any missing countryCode on sub-country picks before the
+      // drop runs. Meta's adgeolocation search omits country_code on some
+      // smaller subcity / neighborhood rows (e.g. Varthur, a Bangalore
+      // suburb) — without it, `dropOverlappingIncludes` can't tell whether
+      // a granular pick is redundant with an included country and Meta
+      // rejects at launch with subcode 1487756. Best-effort; mutates the
+      // form-model locations in place.
+      if (Array.isArray(value.targeting?.locations) && value.targeting.locations.length) {
+        const api = bizSdk.FacebookAdsApi.getDefaultApi();
+        await backfillLocationCountryCodes(api, value.targeting.locations);
+      }
       targetingSpec = buildExplicitTargeting(value.targeting, {
         specialAdCategories: campaignData.special_ad_categories || [],
       });
@@ -1067,33 +1078,38 @@ async function updateCampaignV2(req, res) {
 // it stays unit-testable without pulling the controller's full require
 // chain (Redis / SDK / DB connections at module load).
 
+// Batch-fetch adgeolocationmeta for a set of locations. Returns the raw
+// response object keyed by Meta bucket (`{ subcities: {'S_1': {name, country_code}}, … }`)
+// or `null` on any failure. `only` restricts to specific bucket types
+// (used by the launch-time countryCode backfill — we only need buckets
+// missing country_code).
+async function fetchAdGeoLocationMeta(api, locations, { only } = {}) {
+  const byBucket = {};
+  for (const l of locations) {
+    const bucket = TYPE_TO_META_BUCKET[l.type];
+    if (!bucket) continue;
+    if (only && !only.has(l.type)) continue;
+    (byBucket[bucket] = byBucket[bucket] || []).push(l.key);
+  }
+  if (!Object.keys(byBucket).length) return null;
+  const params = { type: "adgeolocationmeta" };
+  for (const [bucket, keys] of Object.entries(byBucket)) {
+    params[bucket] = JSON.stringify(keys);
+  }
+  try {
+    const raw = await api.call("GET", ["search"], params);
+    return raw?.data || raw?._data?.data || raw?._data || raw || null;
+  } catch {
+    return null; // best-effort
+  }
+}
+
 // Meta's targeting read returns geo KEYS, not names. Resolve friendly names
 // (and city/region country codes) via the adgeolocationmeta lookup so the
 // edit UI shows "India" not "IN", "Bengaluru" not "2295414". Best-effort:
 // any failure leaves the key as the display name. Mutates `locations`.
 async function resolveLocationNames(api, locations) {
-  // TYPE_TO_META_BUCKET + COUNTRY_CODE_CARRYING_TYPES imported from
-  // utils/targetingGeo.js so the type-routing map stays single-sourced
-  // with buildExplicitTargeting + reverseGeoToLocations.
-  const byBucket = {};
-  for (const l of locations) {
-    const bucket = TYPE_TO_META_BUCKET[l.type];
-    if (!bucket) continue; // custom + unknown skip the lookup
-    (byBucket[bucket] = byBucket[bucket] || []).push(l.key);
-  }
-  const params = { type: "adgeolocationmeta" };
-  for (const [bucket, keys] of Object.entries(byBucket)) {
-    params[bucket] = JSON.stringify(keys);
-  }
-  let data = null;
-  if (Object.keys(params).length > 1) {
-    try {
-      const raw = await api.call("GET", ["search"], params);
-      data = raw?.data || raw?._data?.data || raw?._data || raw || null;
-    } catch {
-      data = null; // best-effort
-    }
-  }
+  const data = await fetchAdGeoLocationMeta(api, locations);
   for (const l of locations) {
     if (l.type === "custom") continue; // already has a coordinate label
     const bucketName = TYPE_TO_META_BUCKET[l.type];
@@ -1106,6 +1122,66 @@ async function resolveLocationNames(api, locations) {
       }
     }
     if (!l.name) l.name = l.key; // fallback to the key
+  }
+}
+
+// Launch-time countryCode backfill. Two distinct gaps this closes, both
+// producing Meta subcode 1487756 ("Some locations conflict with each
+// other") when they slip through:
+//
+//   1. Meta's `adgeolocation` typeahead sometimes omits `country_code` on
+//      smaller sub-city / neighborhood rows.
+//   2. Meta's `adgeolocation` search surfaces some well-known areas (e.g.
+//      "Whitefield", "Varthur" in Bangalore) as a `place` (POI) result
+//      rather than a formal subcity/neighborhood entity. The picker turns
+//      `place` picks into a `custom` lat/lng radius pin (see
+//      LocationTargeting.jsx `add()`) — and Meta's `custom_locations`
+//      read-back on EDIT never includes a country code at all, so an
+//      edited ad set with a pre-existing pin inside an included country
+//      has no client-side signal to fix it either.
+//
+// Both cases: patch in place, then let the normal
+// `dropOverlappingIncludes` run. Best-effort — if a lookup fails, launch
+// proceeds with the current payload (may still 1487756, which is the
+// pre-fix behavior; not worse).
+async function backfillLocationCountryCodes(api, locations) {
+  if (!Array.isArray(locations) || !locations.length) return;
+
+  // Case 1 — sub-country geo types via batch adgeolocationmeta lookup.
+  const needsMeta = locations.filter(
+    (l) =>
+      (l.mode || "include") === "include" &&
+      COUNTRY_CODE_CARRYING_TYPES.has(l.type) &&
+      !l.countryCode,
+  );
+  if (needsMeta.length) {
+    const data = await fetchAdGeoLocationMeta(api, needsMeta, {
+      only: COUNTRY_CODE_CARRYING_TYPES,
+    });
+    if (data) {
+      for (const l of needsMeta) {
+        const bucketName = TYPE_TO_META_BUCKET[l.type];
+        const bucket = bucketName ? data?.[bucketName] : null;
+        const hit = bucket && (bucket[l.key] || bucket[String(l.key)]);
+        if (hit?.country_code) l.countryCode = hit.country_code;
+      }
+    }
+  }
+
+  // Case 2 — custom (lat/lng) pins via reverse-geocode. Sequential, not
+  // parallel: pins are rare (most locations are geo-search picks) and
+  // Nominatim's usage policy expects modest request rates.
+  const needsReverseGeocode = locations.filter(
+    (l) =>
+      (l.mode || "include") === "include" &&
+      l.type === "custom" &&
+      !l.countryCode &&
+      Number.isFinite(l.latitude) &&
+      Number.isFinite(l.longitude),
+  );
+  for (const l of needsReverseGeocode) {
+    const hit = await reverseGeocodeLatLng(l.latitude, l.longitude);
+    if (hit?.countryCode) l.countryCode = hit.countryCode;
   }
 }
 
@@ -1326,6 +1402,13 @@ async function updateAdSetV2(req, res) {
       params.end_time = new Date(value.endTime).toISOString();
     }
     if (value.targeting) {
+      // Backfill missing countryCode on sub-country picks — same rationale
+      // as createAdSetV2. Meta 1487756 fires on edit-save too if a subcity
+      // is added alongside a country during edit.
+      if (Array.isArray(value.targeting.locations) && value.targeting.locations.length) {
+        const api = bizSdk.FacebookAdsApi.getDefaultApi();
+        await backfillLocationCountryCodes(api, value.targeting.locations);
+      }
       const spec = buildExplicitTargeting(value.targeting, {
         specialAdCategories: campaignSacs,
       });
