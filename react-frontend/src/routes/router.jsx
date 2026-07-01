@@ -12,6 +12,7 @@ import LandingPageAnalyzerHome from '@/pages/LandingPageAnalyzer/LandingPageAnal
 import LandingPageAnalyzerResultPage from '@/pages/LandingPageAnalyzer/LandingPageAnalyzerResultPage';
 import MetaAdsPage from '@/pages/MetaAds/MetaAdsPage';
 import GoogleAdsPage from '@/pages/GoogleAds/GoogleAdsPage';
+import TikTokAdsPage from '@/pages/TikTokAds/TikTokAdsPage';
 import AdsManagerPage from '@/pages/AdsManager/AdsManagerPage';
 import AutopilotHomePage from '@/pages/Autopilot/AutopilotHomePage';
 import AutopilotPage from '@/pages/Autopilot/AutopilotPage';
@@ -47,6 +48,10 @@ const router = createBrowserRouter([
       { path: 'ads-manager', element: <AdsManagerPage /> },
       { path: 'meta-ads', element: <MetaAdsPage /> },
       { path: 'google-ads', element: <GoogleAdsPage /> },
+
+      // HIDE-MARK — Landing Page Analyzer routes hidden.
+      { path: 'tiktok-ads', element: <TikTokAdsPage /> },
+
       // Landing Page Analyzer — URL-input home, then the result view by sessionId.
       { path: 'landing-page-analyzer', element: <LandingPageAnalyzerHome /> },
       { path: 'landing-page-analyzer/:id', element: <LandingPageAnalyzerResultPage /> },

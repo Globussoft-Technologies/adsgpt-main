@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { getAdAccounts, getUserAdPostingInfo } from '@/apis/metaAds/metaAdsApi';
+import { checkTiktokAccount } from '@/apis/tikTokAds/tikTokAdsApi';
 import getCookies from '@/utils/getCookies';
 import metaIcon from '@/assets/layouts/appsidebar/meta-icon.svg';
 import googleAdsIcon from '@/assets/layouts/google-ads-icon.png';
@@ -12,10 +13,10 @@ import tiktokIcon from '@/assets/layouts/appsidebar/tiktok-icon.jpg';
 const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
 /**
- * Shared platform picker — three cards (Meta enabled, Google + TikTok
- * "Coming Soon"). Used as the home for both Ads Manager (`/ads-manager`)
- * and Autopilot (`/autopilot`). Caller passes the destination route the
- * Meta card should navigate to once Meta is connected.
+ * Shared platform picker — Meta, Google Ads, and TikTok cards. Used as the
+ * home for both Ads Manager (`/ads-manager`) and Autopilot (`/autopilot`).
+ * Caller passes the destination route the Meta card should navigate to once
+ * Meta is connected.
  *
  * Props
  *   metaDestination  required  Where to send the user when they click the
@@ -31,12 +32,15 @@ const PlatformPicker = ({
   subtitle = 'Select where you want to launch your ads',
   // googleComingSoon = false,
   googleComingSoon = false,
+  tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON === 'false',
 }) => {
   const navigate = useNavigate();
   const [metaConnected, setMetaConnected] = useState(false);
   const [checkingMeta, setCheckingMeta] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
+  const [checkingTiktok, setCheckingTiktok] = useState(true);
   const [hoveredCard, setHoveredCard] = useState(null);
   const { userData } = useSelector((state) => state.socket);
 
@@ -70,6 +74,22 @@ const PlatformPicker = ({
         setCheckingGoogle(false);
       }
     })();
+
+    // TikTok connection check (skip if the card is in "Coming Soon" mode)
+    if (!tiktokComingSoon) {
+      (async () => {
+        try {
+          const res = await checkTiktokAccount();
+          setTiktokConnected(!!(res?.isConnected && res?.hasAccount));
+        } catch {
+          setTiktokConnected(false);
+        } finally {
+          setCheckingTiktok(false);
+        }
+      })();
+    } else {
+      setCheckingTiktok(false);
+    }
   }, [userData?.user_id]);
 
   const handleMetaConnect = () => {
@@ -86,6 +106,13 @@ const PlatformPicker = ({
     window.location.href = `${BASE_URL}/api/auth/google?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
   };
 
+  const handleTiktokConnect = () => {
+    const userId = userData?.user_id;
+    if (!userId) return;
+    const feUrl = window.location.href;
+    window.location.href = `${BASE_URL}/api/auth/tiktok?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
+  };
+
   const handleMetaCardClick = () => {
     if (metaConnected && metaDestination) {
       navigate(metaDestination);
@@ -95,6 +122,12 @@ const PlatformPicker = ({
   const handleGoogleCardClick = () => {
     if (googleConnected) {
       navigate('/google-ads');
+    }
+  };
+
+  const handleTiktokCardClick = () => {
+    if (tiktokConnected) {
+      navigate('/tiktok-ads');
     }
   };
 
@@ -138,7 +171,7 @@ const PlatformPicker = ({
       name: 'TikTok',
       description:
         'Best for turning entertainment into viral demand and purchases',
-      enabled: false,
+      enabled: !tiktokComingSoon,
       logo: (
         <div className="flex items-center gap-3">
           <img src={tiktokIcon} alt="TikTok" className="h-12 w-12 shrink-0" />
@@ -171,14 +204,29 @@ const PlatformPicker = ({
             // When Google is "Coming Soon" (Autopilot), treat it like an
             // inactive card — no connect overlay, no navigation.
             const isGooglePlatform = platform.id === 'google' && !googleComingSoon;
+            const isTiktokPlatform = platform.id === 'tiktok' && !tiktokComingSoon;
             const isHovered = hoveredCard === platform.id;
-            const isConnected = isMetaPlatform ? metaConnected : isGooglePlatform ? googleConnected : false;
-            const isChecking = isMetaPlatform ? checkingMeta : isGooglePlatform ? checkingGoogle : false;
+            const isConnected = isMetaPlatform
+              ? metaConnected
+              : isGooglePlatform
+              ? googleConnected
+              : isTiktokPlatform
+              ? tiktokConnected
+              : false;
+            const isChecking = isMetaPlatform
+              ? checkingMeta
+              : isGooglePlatform
+              ? checkingGoogle
+              : isTiktokPlatform
+              ? checkingTiktok
+              : false;
 
             const handleClick = isMetaPlatform && metaConnected
               ? handleMetaCardClick
               : isGooglePlatform && googleConnected
               ? handleGoogleCardClick
+              : isTiktokPlatform && tiktokConnected
+              ? handleTiktokCardClick
               : undefined;
 
             return (
@@ -201,7 +249,7 @@ const PlatformPicker = ({
                   {platform.logo}
 
                   {/* Connect overlay on hover — for Meta or Google when not connected */}
-                  {(isMetaPlatform || isGooglePlatform) && !isConnected && !isChecking && isHovered && (
+                  {(isMetaPlatform || isGooglePlatform || isTiktokPlatform) && !isConnected && !isChecking && isHovered && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -212,7 +260,9 @@ const PlatformPicker = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          isMetaPlatform ? handleMetaConnect() : handleGoogleConnect();
+                          if (isMetaPlatform) handleMetaConnect();
+                          else if (isGooglePlatform) handleGoogleConnect();
+                          else if (isTiktokPlatform) handleTiktokConnect();
                         }}
                         className="rounded-lg bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg transition-transform duration-150 hover:scale-105"
                       >

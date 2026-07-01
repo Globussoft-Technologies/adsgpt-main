@@ -228,6 +228,7 @@ export default function TopHeader() {
   const hideHeader =
     currentRoute === '/meta-ads' ||
     currentRoute === '/google-ads' ||
+    currentRoute === '/tiktok-ads' ||
     (currentRoute === '/adstudio' &&
       activeAdStudioTabId === 'adVideoNew' &&
       activePage !== 'home') ||

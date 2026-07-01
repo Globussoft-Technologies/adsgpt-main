@@ -20,6 +20,7 @@ const path = require("path");
 const mongoSanitize = require("express-mongo-sanitize");
 const facebookAuthController = require("./controllers/adPosting/authController");
 const googleAuthController = require("./controllers/adPosting/googleAuthController");
+const tiktokAuthController = require("./controllers/adPosting/tiktokAuthController");
 const { pub, sub } = require("./db/redis");
 const connectMongoDB = require("./db/mongo");
 
@@ -154,6 +155,11 @@ async function createServer() {
     const telegram = require("./services/autopilot/telegramBotService");
     App.post(telegram.DEFAULT_WEBHOOK_PATH, telegram.createWebhookHandler());
   }
+  // * 10. TikTok OAuth routes
+  App.get("/api/auth/tiktok", tiktokAuthController.initiateAuth);
+  App.get("/api/auth/tiktok/callback", tiktokAuthController.handleCallback);
+
+
 
   const port = process.env.PORT;
   server.listen(port, () => {
