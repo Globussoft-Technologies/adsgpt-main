@@ -336,11 +336,16 @@ const TikTokAdsDashboard = () => {
 
   const [editWizard, setEditWizard] = useState({ open: false, mode: 'create', context: null });
 
+  const tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON === 'false';
 
   const currency = selectedAccount?.currency || 'USD';
 
-  // ── gate: redirect to picker if TikTok is not connected ──
+  // ── gate: redirect to picker if TikTok is coming soon or not connected ──
   useEffect(() => {
+    if (tiktokComingSoon) {
+      navigate('/ads-manager');
+      return;
+    }
     (async () => {
       try {
         const res = await checkTiktokAccount();
