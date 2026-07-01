@@ -2904,8 +2904,8 @@ class MetaAdLauncher {
 
       const params = {
         type: "adgeolocation",
-        q,
-        location_types: JSON.stringify(locationTypes),
+        qs: JSON.stringify([q]),
+        place_fallback: "true",
         limit,
       };
       const raw = await api.call("GET", ["search"], params);
@@ -2923,16 +2923,24 @@ class MetaAdLauncher {
 
       const results = rows
         .filter((row) => !isBlockedCountry(row) && !isBlockedCityOrRegion(row))
-        .map((row) => ({
-          key: String(row.key),
-          name: row.name,
-          type: row.type,
-          countryCode: row.country_code || null,
-          countryName: row.country_name || null,
-          region: row.region || null,
-          supportsRegion: !!row.supports_region,
-          supportsCity: !!row.supports_city,
-        }));
+        .map((row) => {
+          const loc = row.location || {};
+          return {
+            key: String(row.key),
+            name: row.name,
+            type: row.type,
+            countryCode: row.country_code || null,
+            countryName: row.country_name || null,
+            region: row.region || null,
+            supportsRegion: !!row.supports_region,
+            supportsCity: !!row.supports_city,
+            // Places often come back with a centroid. Surface it so the
+            // picker can turn a place selection into a radius pin without an
+            // extra geocode round-trip.
+            latitude: loc.latitude != null ? Number(loc.latitude) : null,
+            longitude: loc.longitude != null ? Number(loc.longitude) : null,
+          };
+        });
 
       return res.status(200).json({ status: true, results, count: results.length });
     } catch (error) {
@@ -3273,6 +3281,12 @@ class MetaAdLauncher {
           name: r.name || String(r.id),
           type: r.type || r.path?.[0] || "interests",
           path: Array.isArray(r.path) ? r.path : [],
+          audienceSize: r.audience_size_lower_bound != null
+            ? Number(r.audience_size_lower_bound)
+            : null,
+          audienceSizeUpperBound: r.audience_size_upper_bound != null
+            ? Number(r.audience_size_upper_bound)
+            : null,
           // Meta tags non-leaf rows with `leaf: false`. Default-true when
           // missing (older API versions omit the field on leaves).
           leaf: r.leaf !== false,

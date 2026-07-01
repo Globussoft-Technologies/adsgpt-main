@@ -111,8 +111,10 @@ function renderChildren({
   depth,
 }) {
   const childEntries = Array.from(node.children.entries());
-  const indent = `${0.5 + depth * 1.25}rem`;
-
+  // Base 1.5rem so depth-0 children (e.g. "Education" under Demographics)
+  // are clearly indented relative to the pillar header. Each deeper level
+  // steps another 1.5rem.
+  const indent = `${1.5 + depth * 1.5}rem`;
   return (
     <>
       {childEntries.map(([name, child]) => {
@@ -122,12 +124,19 @@ function renderChildren({
         // Count of leaves transitively under this branch — Meta UI shows
         // these as a hint to the right of the row name.
         const leafCount = countLeaves(child);
+        // Depth 0 = immediate child of a pillar (e.g. "Business and industry").
+        // Depth >= 1 = nested sub-categories.
+        const isTopCategory = depth === 0;
         return (
           <div key={pid}>
             <button
               type="button"
               onClick={() => toggleExpand(pid)}
-              className="flex w-full items-center gap-2 border-b border-gray-100 py-2 text-left text-13 text-gray-900 transition-colors hover:bg-gray-50 dark:border-white/5 dark:text-white dark:hover:bg-white/5"
+              className={`flex w-full items-center gap-2 border-b border-gray-100 py-2 text-left transition-colors hover:bg-gray-50 dark:border-white/5 dark:hover:bg-white/5 ${
+                isTopCategory
+                  ? 'text-13 font-semibold text-gray-900 dark:text-white'
+                  : 'text-13 font-medium text-gray-700 dark:text-white/85'
+              }`}
               style={{ paddingLeft: indent, paddingRight: '0.75rem' }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500 dark:text-white/55">
@@ -162,12 +171,16 @@ function renderChildren({
         const k = `${item.type}:${item.id}`;
         const checked = existingKeys.has(k);
         const sizeText = formatAudienceRange(item.audienceSize, item.audienceSizeUpperBound);
+        const sizeTitle = [item.audienceSize, item.audienceSizeUpperBound]
+          .filter((n) => Number.isFinite(Number(n)))
+          .map((n) => Math.round(Number(n)).toLocaleString('en-US'))
+          .join(' - ');
         return (
           <button
             type="button"
             key={`leaf:${k}`}
             onClick={() => onPick(item)}
-            className="flex w-full items-center gap-2 border-b border-gray-100 py-2 text-left transition-colors hover:bg-gray-50 dark:border-white/5 dark:hover:bg-white/5"
+            className="flex w-full items-center gap-2 border-b border-gray-100 py-2 text-left text-13 text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/5 dark:text-white/80 dark:hover:bg-white/5"
             style={{ paddingLeft: indent, paddingRight: '0.75rem' }}
           >
             <span
@@ -179,7 +192,7 @@ function renderChildren({
             >
               {checked && <Check className="h-3 w-3" />}
             </span>
-            <span className="min-w-0 flex-1 truncate text-13 text-gray-900 dark:text-white">
+            <span className="min-w-0 flex-1 truncate">
               {item.name}
             </span>
             {/* Type badge intentionally omitted in the tree view —
@@ -188,7 +201,10 @@ function renderChildren({
                 the picker's search dropdown + selected chips, where
                 the type isn't otherwise obvious. */}
             {sizeText && (
-              <span className="shrink-0 text-11 text-gray-500 dark:text-white/45">
+              <span
+                title={sizeTitle || undefined}
+                className="shrink-0 text-11 text-gray-600 dark:text-white/60"
+              >
                 {sizeText}
               </span>
             )}
@@ -292,7 +308,7 @@ export default function DetailedTargetingPillarTree({
               type="button"
               onClick={() => togglePillar(p.id)}
               disabled={loading && count === 0}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-13 font-medium text-gray-900 transition-colors hover:bg-gray-50 disabled:cursor-wait dark:text-white dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 bg-gray-50/80 px-3 py-2.5 text-left text-13 font-semibold text-gray-900 transition-colors hover:bg-gray-100 disabled:cursor-wait dark:bg-white/[0.05] dark:text-white dark:hover:bg-white/10"
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500 dark:text-white/55">
                 {isOpen ? (
@@ -311,7 +327,7 @@ export default function DetailedTargetingPillarTree({
               )}
             </button>
             {isOpen && (
-              <div className="scrollbar-thin max-h-96 overflow-y-auto bg-gray-50/40 dark:bg-white/2">
+              <div className="scrollbar-thin max-h-96 overflow-y-auto border-t border-gray-100 bg-gray-50/60 dark:border-white/5 dark:bg-white/[0.03]">
                 {renderChildren({
                   node,
                   pathSegments: [p.label],

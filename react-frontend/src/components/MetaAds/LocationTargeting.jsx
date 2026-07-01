@@ -78,6 +78,13 @@ const TYPE_BADGE = {
     label: 'Neighborhood',
     color: 'bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-200',
   },
+  // place = POI-style results surfaced by Meta's place_fallback search
+  // (e.g. "Varthur"). They render like a city/region in the dropdown but
+  // are targeted as a radius pin (custom_location) once selected.
+  place: {
+    label: 'Place',
+    color: 'bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-200',
+  },
   subneighborhood: {
     label: 'Sub-neighborhood',
     color: 'bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-200',
@@ -282,7 +289,59 @@ export default function LocationTargeting({
   );
 
   const add = useCallback(
-    (row) => {
+    async (row) => {
+      // Places (POI results) have no direct `geo_locations.*` bucket in
+      // Meta's targeting spec. We turn them into radius pins
+      // (custom_locations) using the centroid Meta returns, or fall back
+      // to Nominatim geocoding if the search response has no coordinates.
+      if (row.type === 'place') {
+        let latitude = row.latitude;
+        let longitude = row.longitude;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          try {
+            const named = [row.name, row.region, row.countryName]
+              .filter(Boolean)
+              .join(', ');
+            const resp = await geocodeLocation({
+              q: named || row.name,
+              countryCode: row.countryCode || undefined,
+            });
+            const r = resp?.result;
+            if (
+              r &&
+              Number.isFinite(r.latitude) &&
+              Number.isFinite(r.longitude)
+            ) {
+              latitude = r.latitude;
+              longitude = r.longitude;
+            }
+          } catch {
+            /* fall through — if geocoding fails we bail below */
+          }
+        }
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          globalToast.error(
+            'Could not locate that place on the map — try a nearby city.',
+          );
+          return;
+        }
+        const entry = {
+          type: 'custom',
+          key: `custom:${latitude},${longitude}`,
+          name: row.name,
+          latitude,
+          longitude,
+          radius: CITY_RADIUS_DEFAULT_KM,
+          distanceUnit: 'kilometer',
+          mode: 'include',
+        };
+        onChange?.([...value, entry]);
+        setQuery('');
+        setResults([]);
+        setMapDismissed(false);
+        return;
+      }
+
       const k = `${row.type}:${row.key}`;
       const existingIdx = value.findIndex((l) => `${l.type}:${l.key}` === k);
       const entry = {

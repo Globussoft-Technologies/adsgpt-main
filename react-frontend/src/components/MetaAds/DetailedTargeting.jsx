@@ -45,9 +45,7 @@ export default function DetailedTargeting({
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  const sectionTitle = advantageAudienceOn
-    ? 'Audience suggestions'
-    : 'Detailed targeting';
+  const sectionTitle = advantageAudienceOn ? 'Audience suggestions' : 'Detailed targeting';
   const sectionHint = advantageAudienceOn
     ? "Meta's Advantage+ audience will use these as a starting point and may expand beyond them when it improves performance."
     : 'Add demographics, interests or behaviours to define who sees your ad.';
@@ -55,35 +53,10 @@ export default function DetailedTargeting({
   const setSlot = useCallback(
     (slot, updater) => {
       const cur = value || EMPTY;
-      const nextSlot =
-        typeof updater === 'function' ? updater(cur[slot]) : updater;
+      const nextSlot = typeof updater === 'function' ? updater(cur[slot]) : updater;
       onChange?.({ ...cur, [slot]: nextSlot });
     },
-    [value, onChange],
-  );
-
-  const setNarrowGroup = useCallback(
-    (idx, items) => {
-      const cur = value || EMPTY;
-      const narrow = (cur.narrow || []).slice();
-      narrow[idx] = items;
-      onChange?.({ ...cur, narrow });
-    },
-    [value, onChange],
-  );
-
-  const addNarrowGroup = useCallback(() => {
-    const cur = value || EMPTY;
-    onChange?.({ ...cur, narrow: [...(cur.narrow || []), []] });
-  }, [value, onChange]);
-
-  const removeNarrowGroup = useCallback(
-    (idx) => {
-      const cur = value || EMPTY;
-      const narrow = (cur.narrow || []).filter((_, i) => i !== idx);
-      onChange?.({ ...cur, narrow });
-    },
-    [value, onChange],
+    [value, onChange]
   );
 
   // Suggestions — debounced refetch whenever Include or Narrow content
@@ -92,10 +65,7 @@ export default function DetailedTargeting({
   // API doesn't accept exclude-style seeds).
   useEffect(() => {
     const cur = value || EMPTY;
-    const seedItems = [
-      ...cur.include,
-      ...(cur.narrow || []).flat(),
-    ];
+    const seedItems = [...cur.include, ...(cur.narrow || []).flat()];
     if (!seedItems.length || !adAccountId) {
       setSuggestions([]);
       return undefined;
@@ -111,12 +81,10 @@ export default function DetailedTargeting({
         const cur = value || EMPTY;
         const existing = new Set(
           [...cur.include, ...(cur.narrow || []).flat(), ...cur.exclude].map(
-            (i) => `${i.type}:${i.id}`,
-          ),
+            (i) => `${i.type}:${i.id}`
+          )
         );
-        const fresh = (r?.suggestions || []).filter(
-          (s) => !existing.has(`${s.type}:${s.id}`),
-        );
+        const fresh = (r?.suggestions || []).filter((s) => !existing.has(`${s.type}:${s.id}`));
         setSuggestions(fresh);
       } catch {
         setSuggestions([]);
@@ -148,7 +116,7 @@ export default function DetailedTargeting({
         ],
       });
     },
-    [value, onChange],
+    [value, onChange]
   );
 
   const v = value || EMPTY;
@@ -157,17 +125,15 @@ export default function DetailedTargeting({
     <div className="flex flex-col gap-4">
       {/* Section heading */}
       <div>
-        <h4 className="text-14 font-semibold text-gray-900 dark:text-white">
+        <h4 className="text-sm font-medium text-gray-500 2xl:text-base dark:text-[#afafaf]">
           {sectionTitle}
         </h4>
-        <p className="mt-0.5 text-12 text-gray-500 dark:text-white/55">
-          {sectionHint}
-        </p>
+        <p className="text-[11px] text-gray-400 2xl:text-xs dark:text-white/45">{sectionHint}</p>
       </div>
 
       {/* Include section */}
       <div className="rounded-2xl border border-gray-200 p-3 dark:border-white/10">
-        <p className="mb-2 text-12 font-medium text-gray-700 dark:text-white/70">
+        <p className="text-12 mb-2 font-medium text-gray-700 dark:text-white/70">
           Include people who match
         </p>
         <DetailedTargetingPicker
@@ -177,50 +143,6 @@ export default function DetailedTargeting({
           placeholder="Add demographics, interests or behaviours"
           disabled={disabled}
         />
-
-        {/* Narrow groups — additional AND constraints (Meta's "Narrow further") */}
-        {(v.narrow || []).map((group, idx) => (
-          <div
-            key={`narrow-${idx}`}
-            className="mt-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-white/15 dark:bg-white/2"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-11 font-semibold uppercase tracking-wide text-gray-500 dark:text-white/55">
-                AND must also match
-              </p>
-              <button
-                type="button"
-                onClick={() => removeNarrowGroup(idx)}
-                disabled={disabled}
-                className="rounded-full p-1 text-gray-500 hover:bg-gray-200 dark:text-white/55 dark:hover:bg-white/10"
-                aria-label="Remove narrow group"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <DetailedTargetingPicker
-              adAccountId={adAccountId}
-              value={group}
-              onChange={(next) => setNarrowGroup(idx, next)}
-              placeholder="Add criteria that must ALSO match"
-              disabled={disabled}
-            />
-          </div>
-        ))}
-
-        {/* Add-narrow button — only enabled when Include has at least one
-            item (Meta UI's exact rule — narrowing without a base is meaningless). */}
-        {v.include.length > 0 && (
-          <button
-            type="button"
-            onClick={addNarrowGroup}
-            disabled={disabled}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-12 font-medium text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-white/70 dark:hover:border-white/25 dark:hover:bg-white/5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Narrow audience further
-          </button>
-        )}
       </div>
 
       {/* Exclude section removed 2026-06-30 — Meta UI hides it entirely
@@ -237,9 +159,7 @@ export default function DetailedTargeting({
         <div className="rounded-2xl border border-gray-200 p-3 dark:border-white/10">
           <div className="mb-2 flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 text-amber-500 dark:text-amber-300" />
-            <p className="text-12 font-medium text-gray-700 dark:text-white/70">
-              Suggestions
-            </p>
+            <p className="text-12 font-medium text-gray-700 dark:text-white/70">Suggestions</p>
             {loadingSuggestions && (
               <Loader2 className="h-3 w-3 animate-spin text-gray-500 dark:text-white/55" />
             )}
@@ -259,11 +179,11 @@ export default function DetailedTargeting({
                     key={`${s.type}:${s.id}`}
                     onClick={() => addSuggestionToInclude(s)}
                     disabled={disabled}
-                    className="group inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-12 text-gray-900 transition-colors hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/2 dark:text-white dark:hover:border-white/25 dark:hover:bg-white/5"
+                    className="group text-12 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-900 transition-colors hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/2 dark:text-white dark:hover:border-white/25 dark:hover:bg-white/5"
                   >
                     <Plus className="h-3 w-3 text-gray-500 group-hover:text-gray-700 dark:text-white/55 dark:group-hover:text-white" />
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide ${badge.color}`}
+                      className={`text-10 rounded-full px-1.5 py-0.5 font-semibold tracking-wide uppercase ${badge.color}`}
                     >
                       {badge.label}
                     </span>
