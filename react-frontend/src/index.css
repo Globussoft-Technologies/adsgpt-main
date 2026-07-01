@@ -215,7 +215,21 @@ html.theme-changing *::after {
   }
   .scrollbar-white {
     scrollbar-width: thin;
-    scrollbar-color: white rgba(40, 40, 40, 0.4);
+    scrollbar-color: #4b5563 transparent;
+  }
+  .scrollbar-white::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-white::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+    border-radius: 9999px;
+  }
+  .scrollbar-white::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280;
+  }
+  .scrollbar-white::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 

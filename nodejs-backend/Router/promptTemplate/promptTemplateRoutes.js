@@ -13,4 +13,11 @@ router.get(
   promptTemplateController.getPromptTemplatesByType,
 );
 
+// Distinct categories that have templates for a type.
+router.get(
+  "/categories",
+  authenticateJWT,
+  promptTemplateController.getPromptTemplateCategories,
+);
+
 module.exports = router;

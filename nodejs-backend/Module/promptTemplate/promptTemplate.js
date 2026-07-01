@@ -18,6 +18,18 @@ const promptTemplateSchema = new mongoose.Schema(
       enum: PROMPT_TEMPLATE_TYPES,
       index: true,
     },
+    category: {
+      type: String,
+      trim: true,
+      index: true,
+      default: null,
+    },
+    subcategory: {
+      type: String,
+      trim: true,
+      index: true,
+      default: null,
+    },
     title: {
       type: String,
       required: true,

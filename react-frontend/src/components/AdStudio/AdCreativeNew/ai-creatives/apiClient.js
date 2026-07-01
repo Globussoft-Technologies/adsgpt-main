@@ -47,13 +47,21 @@ export async function fetchBrandList(userId, authToken, signal) {
 
 // ── Prompt templates ───────────────────────────────────────────────────────
 
-// GET /adsgpt/prompt-templates?type=<type> — returns the curated prompt list
-// shown in the "Templates" picker next to the Prompt label. `type` is one of
-// lifestyle, product_shot, apps_saas, brand_awareness, ai_custom.
-export async function fetchPromptTemplates(type, signal) {
+// GET /adsgpt/prompt-templates?type=<type>&category=<category>&search=<search>
+// Returns the curated prompt list shown in the "Templates" picker.
+// Omit/empty `category` to get the General prompts (no category/subcategory).
+// `type` is one of lifestyle, product_shot, apps_saas, brand_awareness, ai_custom.
+export async function fetchPromptTemplates(
+  type,
+  { category = '', search = '' } = {},
+  signal,
+) {
   const authToken = getAuthToken();
   if (!authToken) throw new Error('Missing auth token');
-  const url = `${BRAND_API_BASE}/adsgpt/prompt-templates?type=${encodeURIComponent(type)}`;
+  const params = new URLSearchParams({ type });
+  if (category) params.set('category', category);
+  if (search) params.set('search', search);
+  const url = `${BRAND_API_BASE}/adsgpt/prompt-templates?${params.toString()}`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${authToken}`,
@@ -67,6 +75,57 @@ export async function fetchPromptTemplates(type, signal) {
   const json = await res.json();
   const templates = Array.isArray(json?.templates) ? json.templates : [];
   return templates;
+}
+
+// GET /adsgpt/prompt-templates/categories?type=<type>
+// Returns the distinct categories that actually have templates for the type.
+// Falls back to the legacy category list endpoint if the new one is not
+// deployed yet, so the dropdown never stays empty.
+export async function fetchPromptTemplateCategories(type, signal) {
+  const authToken = getAuthToken();
+  if (!authToken) throw new Error('Missing auth token');
+
+  const primaryUrl = `${BRAND_API_BASE}/adsgpt/prompt-templates/categories?type=${encodeURIComponent(type)}`;
+  let res;
+  try {
+    res = await fetch(primaryUrl, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        Accept: 'application/json',
+      },
+      signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
+    // Network or other fetch error — fall through to legacy endpoint.
+    res = null;
+  }
+
+  // If the new endpoint is missing (404) or errors, fall back to the legacy
+  // category list and extract category names from it.
+  if (!res || !res.ok) {
+    const legacyUrl = `${BRAND_API_BASE}/adsgpt/getCategory/list`;
+    const legacyRes = await fetch(legacyUrl, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        Accept: 'application/json',
+      },
+      signal,
+    });
+    if (!legacyRes.ok) {
+      throw new Error(`Failed to load template categories (${legacyRes.status})`);
+    }
+    const legacyJson = await legacyRes.json();
+    const items = Array.isArray(legacyJson?.data) ? legacyJson.data : [];
+    return items
+      .map((item) => item?.category)
+      .filter((c) => typeof c === 'string' && c.trim() !== '')
+      .sort();
+  }
+
+  const json = await res.json();
+  const categories = Array.isArray(json?.categories) ? json.categories : [];
+  return categories;
 }
 
 // ── Autofill ───────────────────────────────────────────────────────────────

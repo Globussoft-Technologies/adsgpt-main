@@ -1,23 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
-import { fetchPromptTemplates } from '../ai-creatives/apiClient';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  fetchPromptTemplates,
+  fetchPromptTemplateCategories,
+} from '../ai-creatives/apiClient';
 
-// Replace {brand} / {target_audience} in a template prompt. Tokens with no
-// value (or only whitespace) stay literal so the user can fill them later.
-//
-// Single-pass regex replace instead of sequential `replaceAll`s — that
-// guarantees a value typed into the brand slot isn't re-interpreted as a
-// target_audience token (and vice-versa). Whitespace is trimmed off the
-// inputs so a user who only types spaces doesn't get a textarea full of
-// hidden gaps.
-function resolveTemplate(prompt, brandName, targetAudience) {
+const GENERAL_CATEGORY = 'General';
+
+// Replace every {placeholder} in a template prompt. Tokens with no value
+// (or only whitespace) are stripped out so the literal placeholder text never
+// reaches the generation call. After stripping, we clean up leftover spaces
+// and punctuation so the prompt still reads naturally.
+function resolveTemplate(prompt, values = {}) {
   if (!prompt) return '';
-  const brand = (brandName || '').trim();
-  const audience = (targetAudience || '').trim();
-  return prompt.replace(/\{brand\}|\{target_audience\}/g, (match) => {
-    if (match === '{brand}' && brand) return brand;
-    if (match === '{target_audience}' && audience) return audience;
-    return match;
+  const resolved = prompt.replace(/\{([^}]+)\}/g, (match, key) => {
+    const value = (values[key] ?? '').trim();
+    return value ? value : '';
   });
+  return cleanupResolvedPrompt(resolved);
+}
+
+// Remove artifacts left behind when empty placeholders are stripped:
+// multiple spaces, spaces before punctuation, and dangling whitespace.
+function cleanupResolvedPrompt(text) {
+  return text
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+$/gm, '')
+    .trim();
 }
 
 // Owns: fetch (lazy on first open), panel open state, previewed vs used
@@ -30,30 +39,37 @@ export function usePromptTemplates({
   currentValue = '',
   onSelect,
   // Fired when the user starts typing into a {brand} / {target_audience}
-  // token in the panel. Per spec the manual entry "wins" over the brand
-  // chip — so we ask the consumer to deselect any active brand so the UI
-  // matches what's actually driving the resolved prompt.
+  // (or any other {placeholder}) token in the panel. Per spec the manual
+  // entry "wins" over the brand chip — so we ask the consumer to deselect
+  // any active brand so the UI matches what's actually driving the resolved
+  // prompt.
   onClearBrand,
 }) {
   const [open, setOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [state, setState] = useState('idle');
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(GENERAL_CATEGORY);
+  // Cache templates by category so switching categories is instant after the
+  // initial prefetch.
+  const [templatesByCategory, setTemplatesByCategory] = useState({});
+  const [loadedCategories, setLoadedCategories] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
   // Which row is currently shown in the right detail panel.
   const [previewedTemplate, setPreviewedTemplate] = useState(null);
   // Which template's text is currently in the textarea (drives the tick on
   // the rail and the live re-resolve when the brand changes).
   const [activeTemplate, setActiveTemplate] = useState(null);
-  // Manual override layer for the {brand} and {target_audience} token
-  // slots. Seeded from the brand props, then becomes the sole source of
-  // truth once the user types — see the sync effect and updateManualValue
-  // handler below.
+  // Manual override layer for every {placeholder} slot. Seeded from the
+  // brand props, then becomes the sole source of truth once the user types.
   const [manualValues, setManualValues] = useState(() => ({
     brand: brandName || '',
-    targetAudience: targetAudience || '',
+    target_audience: targetAudience || '',
   }));
 
-  const abortRef = useRef(null);
+  const categoryAbortRef = useRef(null);
+  const loadedCategoriesRef = useRef(new Set());
   const loadedTypeRef = useRef(null);
   const lastResolvedRef = useRef('');
   const onSelectRef = useRef(onSelect);
@@ -61,31 +77,107 @@ export function usePromptTemplates({
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  // Lazy fetch on first open; refetch when type changes.
+  // Lazy load the distinct categories for this type on first open and on
+  // type change. This fetch is non-blocking — if it fails, the panel still
+  // works with the "General" option and the templates keep loading.
   useEffect(() => {
     if (!open) return undefined;
     if (loadedTypeRef.current === type) return undefined;
 
-    abortRef.current?.abort();
+    categoryAbortRef.current?.abort();
     const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    setState('loading');
-    setError('');
+    categoryAbortRef.current = ctrl;
 
-    fetchPromptTemplates(type, ctrl.signal)
-      .then((items) => {
+    fetchPromptTemplateCategories(type, ctrl.signal)
+      .then((cats) => {
         loadedTypeRef.current = type;
-        setTemplates(items);
-        setState('loaded');
+        setCategories(cats);
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        setError(err.message || 'Failed to load templates');
-        setState('error');
+        // Categories are a nice-to-have; don't break the panel if this
+        // endpoint is missing or errors.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load template categories:', err.message);
       });
 
     return () => ctrl.abort();
   }, [open, type]);
+
+  // Load templates for every category (plus General) incrementally as soon
+  // as the category list is known. Each category is cached independently so
+  // the selected category can render the moment its own fetch completes,
+  // while the rest continue loading in the background. Switching categories
+  // after that is instant.
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const catsToLoad =
+      categories.length > 0
+        ? [GENERAL_CATEGORY, ...categories]
+        : [GENERAL_CATEGORY];
+
+    const controllers = [];
+
+    catsToLoad.forEach((cat) => {
+      // Avoid duplicate in-flight fetches when the effect re-runs.
+      if (loadedCategoriesRef.current.has(cat)) return;
+
+      const ctrl = new AbortController();
+      controllers.push(ctrl);
+      const options = cat === GENERAL_CATEGORY ? {} : { category: cat };
+
+      fetchPromptTemplates(type, options, ctrl.signal)
+        .then((items) => {
+          setTemplatesByCategory((prev) => ({ ...prev, [cat]: items }));
+          setLoadedCategories((prev) => new Set(prev).add(cat));
+          loadedCategoriesRef.current.add(cat);
+        })
+        .catch((err) => {
+          if (err.name === 'AbortError') return;
+          // Per-category failures are soft — show an empty list for that
+          // category rather than breaking the whole panel.
+          setTemplatesByCategory((prev) => ({ ...prev, [cat]: [] }));
+          setLoadedCategories((prev) => new Set(prev).add(cat));
+          loadedCategoriesRef.current.add(cat);
+        });
+    });
+
+    return () => controllers.forEach((c) => c.abort());
+  }, [open, type, categories]);
+
+  // Sync the visible templates + state with the selected category cache.
+  useEffect(() => {
+    if (!open) return;
+    if (loadedCategories.has(selectedCategory)) {
+      setTemplates(templatesByCategory[selectedCategory] || []);
+      setState('loaded');
+    } else {
+      setState('loading');
+    }
+  }, [open, selectedCategory, templatesByCategory, loadedCategories]);
+
+  // Search is applied client-side within the fetched category scope.
+  const filteredTemplates = useMemo(() => {
+    const term = (searchQuery || '').trim().toLowerCase();
+    if (!term) return templates;
+    return templates.filter(
+      (t) =>
+        (t.title || '').toLowerCase().includes(term) ||
+        (t.prompt || '').toLowerCase().includes(term),
+    );
+  }, [templates, searchQuery]);
+
+  // If the active search hides the currently previewed template, clear it so
+  // the defaulting effect can pick a visible one.
+  useEffect(() => {
+    if (
+      previewedTemplate &&
+      !filteredTemplates.some((t) => t._id === previewedTemplate._id)
+    ) {
+      setPreviewedTemplate(null);
+    }
+  }, [filteredTemplates, previewedTemplate]);
 
   // Closing the panel clears the right-side preview so re-open re-defaults.
   useEffect(() => {
@@ -110,15 +202,15 @@ export function usePromptTemplates({
 
   // On open (once templates are loaded), default the preview: the used
   // template if one is set (shown with its tick in the rail), otherwise the
-  // first template in the list. Never leaves the right panel empty.
+  // first filtered template in the list. Never leaves the right panel empty.
   useEffect(() => {
-    if (!open || state !== 'loaded' || templates.length === 0) return;
+    if (!open || state !== 'loaded' || filteredTemplates.length === 0) return;
     if (previewedTemplate) return;
     const used = activeTemplate
-      ? templates.find((t) => t._id === activeTemplate._id)
+      ? filteredTemplates.find((t) => t._id === activeTemplate._id)
       : null;
-    setPreviewedTemplate(used || templates[0]);
-  }, [open, state, templates, previewedTemplate, activeTemplate]);
+    setPreviewedTemplate(used || filteredTemplates[0]);
+  }, [open, state, filteredTemplates, previewedTemplate, activeTemplate]);
 
   // Variant switch invalidates everything — including any manual token
   // entries (they belong to the section the user was just in).
@@ -126,7 +218,16 @@ export function usePromptTemplates({
     setActiveTemplate(null);
     setPreviewedTemplate(null);
     lastResolvedRef.current = '';
-    setManualValues({ brand: brandName || '', targetAudience: targetAudience || '' });
+    setManualValues({
+      brand: brandName || '',
+      target_audience: targetAudience || '',
+    });
+    setSelectedCategory(GENERAL_CATEGORY);
+    setSearchQuery('');
+    setCategories([]);
+    setTemplatesByCategory({});
+    setLoadedCategories(new Set());
+    loadedCategoriesRef.current = new Set();
     // brandName/targetAudience deliberately omitted — we only want this to
     // fire on a real variant switch, not whenever the brand changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,7 +243,11 @@ export function usePromptTemplates({
     const prev = prevBrandForSyncRef.current;
     prevBrandForSyncRef.current = brandName;
     if (brandName && brandName !== prev) {
-      setManualValues({ brand: brandName, targetAudience: targetAudience || '' });
+      setManualValues((prev) => ({
+        ...prev,
+        brand: brandName,
+        target_audience: targetAudience || '',
+      }));
     }
   }, [brandName, targetAudience]);
 
@@ -152,14 +257,10 @@ export function usePromptTemplates({
   // used to).
   useEffect(() => {
     if (!activeTemplate) return;
-    const resolved = resolveTemplate(
-      activeTemplate.prompt,
-      manualValues.brand,
-      manualValues.targetAudience,
-    );
+    const resolved = resolveTemplate(activeTemplate.prompt, manualValues);
     lastResolvedRef.current = resolved;
     onSelectRef.current?.(resolved);
-  }, [activeTemplate, manualValues.brand, manualValues.targetAudience]);
+  }, [activeTemplate, manualValues]);
 
   // Manual-edit detection: parent value drifted from what we last wrote.
   // Depends only on `currentValue` so this doesn't spuriously fire on the
@@ -179,7 +280,12 @@ export function usePromptTemplates({
     }
   }, [currentValue]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      categoryAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const previewTemplate = (t) => setPreviewedTemplate(t);
 
@@ -191,10 +297,10 @@ export function usePromptTemplates({
   };
 
   // Token input handler — called from TokenInput in the panel as the user
-  // types. Only the brand-token edit deselects the brand chip; editing
-  // {target_audience} leaves the chip alone so the user can still keep
-  // (e.g.) WWE's logo and brand images while overriding the audience
-  // text. The sync effect above sees the brand clear (truthy → '') and
+  // types. Only the {brand} token edit deselects the brand chip; editing
+  // any other placeholder leaves the chip alone so the user can still keep
+  // (e.g.) WWE's logo and brand images while overriding audience text.
+  // The sync effect above sees the brand clear (truthy → '') and
   // intentionally does NOT sync, which is what preserves the user's
   // typing into the brand input.
   const updateManualValue = (key, value) => {
@@ -208,14 +314,19 @@ export function usePromptTemplates({
     state,
     error,
     templates,
+    filteredTemplates,
+    categories,
+    selectedCategory,
+    setSelectedCategory,
+    searchQuery,
+    setSearchQuery,
     previewedTemplate,
     activeTemplate,
     previewTemplate,
     useTemplate,
     brandName,
     targetAudience,
-    manualBrand: manualValues.brand,
-    manualTargetAudience: manualValues.targetAudience,
+    manualValues,
     updateManualValue,
   };
 }
