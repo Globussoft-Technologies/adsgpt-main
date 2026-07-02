@@ -43,7 +43,7 @@ const buildDbInputs = (value) => {
         type,
         model: userInputs.Model,
         modelLabel,
-        quality: userInputs.quality || "medium",
+        quality: userInputs.quality || "high",
         numberOfImages: totalImages,
         aspectRatio: userInputs.aspectRatioPerImage[0]?.aspectRatio,
         aspectRatioPerImage: userInputs.aspectRatioPerImage,
@@ -334,6 +334,12 @@ exports.generateImage = async (req, res) => {
             });
         }
         console.log(`[generateImage] Authenticated user: ${userId}`);
+
+        // Quality picker has been removed from every creative surface, so the
+        // client no longer sends a quality choice. Force HIGH here (before both
+        // buildDbInputs and the Python payload) so the DB record and Python
+        // request stay consistent regardless of what — if anything — arrived.
+        value.userInputs.quality = "high";
 
         const selectedModel = value.userInputs.Model;
         const imageCreditCost = UnifiedCreditController.getModelDeduction(selectedModel);

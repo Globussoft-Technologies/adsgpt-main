@@ -64,13 +64,28 @@ const makePendingItem = () => ({
   error: null,
   timestamp: new Date().toISOString(),
 });
-const mergeWithPending = (prevArr, serverArr) => {
+const mergeWithPending = (prevArr, serverArr, minPending = 0) => {
   const expected = Array.isArray(prevArr) ? prevArr.length : 0;
   const completed = Array.isArray(serverArr) ? serverArr : [];
-  const needed = Math.max(0, expected - completed.length);
+  // `expected - completed.length` re-seeds slots the client already knew about
+  // (live socket run). `minPending` re-seeds slots the server still reports as
+  // pending — the only signal available on a cold refresh where the client has
+  // no prior state to pad from.
+  const needed = Math.max(0, expected - completed.length, minPending);
   if (needed === 0) return completed;
   return [...completed, ...Array.from({ length: needed }, makePendingItem)];
 };
+
+// On a cold refresh that lands mid-generation, the client has no prior slots to
+// pad from, so `filterManualResults` strips the server's `status: null`
+// placeholders and the skeletons vanish until a socket event arrives (which, on
+// a fresh load, may have already passed). Count the server's own pending manual
+// (non-jobId, non-final-status) slots so we can re-seed them while the campaign
+// is still in-progress.
+const countServerPending = (arr) =>
+  Array.isArray(arr)
+    ? arr.filter((item) => !item?.jobId && !MEANINGFUL_STATUSES.has(Number(item?.status))).length
+    : 0;
 
 // Each history snapshot under `state.history` carries its own frozen copy of
 // the campaign's results in `previousData.results`. AdCreativeList's History
@@ -423,11 +438,29 @@ const adFactoryNewSlice = createSlice({
         // gets dropped by `updateResults` (no `!status` slot to fill).
         const serverResults = filterManualResults(data.results);
         const prevResults = state.results || {};
+        // Only re-seed the server's pending placeholders while generation is
+        // genuinely running. Once the campaign is done, leftover `status: null`
+        // items are orphaned (partial worker failure) and must stay stripped so
+        // they don't render as forever-"Generating" spheres.
+        const isInProgress =
+          data?.status === 'in-progress' || data?.results?.status === 'in-progress';
         state.results = {
           ...serverResults,
-          text: mergeWithPending(prevResults.text, serverResults.text),
-          image: mergeWithPending(prevResults.image, serverResults.image),
-          video: mergeWithPending(prevResults.video, serverResults.video),
+          text: mergeWithPending(
+            prevResults.text,
+            serverResults.text,
+            isInProgress ? countServerPending(data?.results?.text) : 0
+          ),
+          image: mergeWithPending(
+            prevResults.image,
+            serverResults.image,
+            isInProgress ? countServerPending(data?.results?.image) : 0
+          ),
+          video: mergeWithPending(
+            prevResults.video,
+            serverResults.video,
+            isInProgress ? countServerPending(data?.results?.video) : 0
+          ),
         };
         state.history = filterManualHistory(data.history);
         state.activeCampaign = data;

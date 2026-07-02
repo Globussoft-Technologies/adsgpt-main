@@ -26,7 +26,7 @@ const baseUserInputs = {
     userPrompt: Joi.string().required(),
     aspectRatioPerImage: aspectRatioPerImageSchema,
     Model: Joi.string().required(),
-    quality: Joi.string().valid("low", "medium", "high").default("medium"),
+    quality: Joi.string().valid("low", "medium", "high").default("high"),
 };
 
 // =========================
@@ -142,7 +142,7 @@ const recreateAdsUserInputsSchema = Joi.object({
     ReferenceImages: Joi.array().items(Joi.string()),
     aspectRatioPerImage: aspectRatioPerImageSchema,
     Model: Joi.string().required(),
-    quality: Joi.string().valid("low", "medium", "high").default("medium"),
+    quality: Joi.string().valid("low", "medium", "high").default("high"),
 });
 
 const recreateAdsSchema = Joi.object({

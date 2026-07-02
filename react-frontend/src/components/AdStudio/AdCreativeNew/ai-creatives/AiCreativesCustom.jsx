@@ -98,6 +98,10 @@ const QUALITY_OPTIONS = [
   { value: 'high', label: 'High' },
 ];
 
+// HIDE-MARK — Quality picker hidden platform-wide; quality is forced to "high"
+// in the backend (imageController.generateImage). Flip to true to bring it back.
+const SHOW_QUALITY_PICKER = false;
+
 const ASPECT_LABELS = [
   { key: '1:1', label: '1:1 (square)' },
   { key: '2:3', label: '2:3 (portrait)' },
@@ -1054,8 +1058,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     )}
                   </button>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* Quality picker — sits between the improve-prompt (magic)
-                      button and the model picker. Wires to userInputs.quality. */}
+                  {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
+                  {SHOW_QUALITY_PICKER && (
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <PillButton
                       label={QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
@@ -1093,6 +1097,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       </div>
                     )}
                   </div>
+                  )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
                       icon={<ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />}

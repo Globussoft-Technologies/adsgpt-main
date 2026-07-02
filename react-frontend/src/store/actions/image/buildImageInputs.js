@@ -70,7 +70,8 @@ export function buildImageInputs(variant, form) {
           competitorReferenceImage: form.competitorReferenceImage || '',
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
 
@@ -118,7 +119,8 @@ export function buildImageInputs(variant, form) {
           keyVisuals: Array.isArray(form.keyVisuals) ? form.keyVisuals : [],
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
     }
@@ -152,7 +154,8 @@ export function buildImageInputs(variant, form) {
           productImages: Array.isArray(form.productImages) ? form.productImages : [],
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
 
@@ -177,7 +180,8 @@ export function buildImageInputs(variant, form) {
           productImages: Array.isArray(form.productImages) ? form.productImages : [],
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
 
@@ -203,7 +207,8 @@ export function buildImageInputs(variant, form) {
           productImages: Array.isArray(form.productImages) ? form.productImages : [],
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
 
@@ -235,7 +240,8 @@ export function buildImageInputs(variant, form) {
           competitorReferenceImage: form.competitorReferenceImage || '',
           aspectRatioPerImage: aspectCountsToArray(form.aspectCounts),
           Model: form.model || 'gemini-3.1-flash-image-preview',
-          quality: form.quality || 'medium',
+          // quality intentionally omitted — the picker is hidden platform-wide
+          // and the backend forces quality to "high" for every request.
         },
       };
 

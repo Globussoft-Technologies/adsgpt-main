@@ -33,6 +33,16 @@ const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 // "Post as ad" trigger on MySpace cards.
 const SHOW_POST_AD_NAV = true;
 
+// Display-only model label overrides. The backend registry still labels
+// `seedream-5.0-lite` as "Seedream 5.0 lite", but the picker calls this model
+// "Imagen". Remap on display so the info panel matches the picker — no backend
+// change. Keyed by both the stored label and the raw model id, so old and new
+// records both resolve.
+const MODEL_LABEL_OVERRIDES = {
+  'Seedream 5.0 lite': 'Imagen',
+  'seedream-5.0-lite': 'Imagen',
+};
+
 // Backend `inputs.type` → AdCreativeNewLayout route key. NOTE:
 // `recreate_ads` is intentionally NOT in this map — recreating one of
 // those re-opens the AdLibrary RecreateAdModal (handled separately below).
@@ -341,9 +351,12 @@ export default function ImageCard({
               </p>
               <p>
                 <span className="text-gray-400">Model:</span>{' '}
-                {item?.inputs?.modelLabel || item?.inputs?.model || '-'}
+                {(() => {
+                  const raw = item?.inputs?.modelLabel || item?.inputs?.model || '-';
+                  return MODEL_LABEL_OVERRIDES[raw] || raw;
+                })()}
               </p>
-              {/* //Hidden quality mark from tooltip here */}
+              {/* HIDE-MARK — Quality key hidden from tooltip. Restore this <p> to bring it back.
               <p>
                 <span className="text-gray-400">Quality:</span>{' '}
                 {(() => {
@@ -353,6 +366,7 @@ export default function ImageCard({
                   return q.charAt(0).toUpperCase() + q.slice(1);
                 })()}
               </p>
+              */}
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-400">Brand:</span> {item.inputs.brandName}
