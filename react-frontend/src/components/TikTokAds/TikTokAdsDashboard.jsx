@@ -336,7 +336,7 @@ const TikTokAdsDashboard = () => {
 
   const [editWizard, setEditWizard] = useState({ open: false, mode: 'create', context: null });
 
-  const tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON === 'false';
+  const tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON !== 'true';
 
   const currency = selectedAccount?.currency || 'USD';
 

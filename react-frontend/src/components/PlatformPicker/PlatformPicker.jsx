@@ -32,7 +32,7 @@ const PlatformPicker = ({
   subtitle = 'Select where you want to launch your ads',
   // googleComingSoon = false,
   googleComingSoon = false,
-  tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON === 'false',
+  tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON !== 'true',
 }) => {
   const navigate = useNavigate();
   const [metaConnected, setMetaConnected] = useState(false);
