@@ -16,9 +16,10 @@ import Avatar from "@/components/Avatar.jsx";
 import Badge from "@/components/Badge.jsx";
 import Select from "@/components/Select.jsx";
 import StatCard from "@/components/StatCard.jsx";
-import DateRangePicker, { currentMonthRangeISO } from "@/components/DateRangePicker.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi, analyticsApi } from "@/lib/api";
 import { formatDate, formatNumber, formatUsd } from "@/lib/utils";
+import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
 
 function formatPage(page) {
   if (!page) return "—";
@@ -84,7 +85,7 @@ function planTone(plan) {
 
 export default function UserDetailPage() {
   const { userId } = useParams();
-  const [range, setRange] = useState(() => currentMonthRangeISO());
+  const [range, setRange] = useState(() => getStoredDateRange());
   const [type, setType] = useState("all");
   const [model, setModel] = useState("");
   const [page, setPage] = useState(1);
@@ -186,6 +187,7 @@ export default function UserDetailPage() {
             to={range.to}
             onChange={(r) => {
               setRange(r);
+              setStoredDateRange(r);
               setPage(1);
             }}
           />

@@ -3,10 +3,11 @@ import { Link } from "react-router-dom";
 import { ArrowDownWideNarrow, ChevronRight, Loader2, Search } from "lucide-react";
 import Avatar from "@/components/Avatar.jsx";
 import Badge from "@/components/Badge.jsx";
-import DateRangePicker,{ currentMonthRangeISO } from "@/components/DateRangePicker.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import Select from "@/components/Select.jsx";
 import { adminApi } from "@/lib/api";
 import { formatDate, formatNumber, formatUsd } from "@/lib/utils";
+import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
 
 const SORT_OPTIONS = [
   { value: "cost", label: "Highest cost" },
@@ -25,7 +26,7 @@ function planTone(plan) {
 }
 
 export default function UsersPage() {
-  const [range, setRange] = useState(() => currentMonthRangeISO());
+  const [range, setRange] = useState(() => getStoredDateRange());
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("cost");
   const [page, setPage] = useState(1);
@@ -73,6 +74,7 @@ export default function UsersPage() {
           to={range.to}
           onChange={(r) => {
             setRange(r);
+            setStoredDateRange(r);
             setPage(1);
           }}
         />

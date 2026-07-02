@@ -14,14 +14,15 @@ import {
 } from "recharts";
 import { Activity, DollarSign, Image as ImageIcon, Loader2, Users, Video, Wallet, Zap } from "lucide-react";
 import StatCard from "@/components/StatCard.jsx";
-import DateRangePicker, { currentMonthRangeISO } from "@/components/DateRangePicker.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi } from "@/lib/api";
 import { formatNumber, formatUsd } from "@/lib/utils";
+import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
 
 const MODEL_BAR_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#f43f5e"];
 
 export default function OverviewPage() {
-  const [range, setRange] = useState(() => currentMonthRangeISO());
+  const [range, setRange] = useState(() => getStoredDateRange());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -59,7 +60,14 @@ export default function OverviewPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Overview</h1>
           <p className="text-sm text-slate-500">Generation activity and platform cost.</p>
         </div>
-        <DateRangePicker from={range.from} to={range.to} onChange={setRange} />
+        <DateRangePicker
+          from={range.from}
+          to={range.to}
+          onChange={(r) => {
+            setRange(r);
+            setStoredDateRange(r);
+          }}
+        />
       </header>
 
       {error ? (

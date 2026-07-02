@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { BarChart3, Loader2, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { adminApi } from "@/lib/api";
 import { setAdminToken } from "@/lib/auth";
+import { resetStoredDateRange } from "@/lib/dateRangeStore";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function LoginPage() {
       const token = res?.data?.token;
       if (!token) throw new Error("No token in response");
       setAdminToken(token);
+      resetStoredDateRange();
       navigate("/", { replace: true });
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Login failed";
