@@ -2,7 +2,7 @@ const Usage = require("../Module/usage/usage.model");
 const GeneratedMedia = require("../Module/generatedMedia/generated.media");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
-const { imageEntries, videoEntries, findModel } = require("../config/modelRegistry");
+const { imageEntries, videoEntries, findModel, getExtraDeduction } = require("../config/modelRegistry");
 const { SURFACE_CATALOG, SURFACE_SLUGS } = require("../config/surfaceCatalog");
 
 const createUsage = async (req, res) => {
@@ -235,10 +235,7 @@ function rowFor(entry) {
 function surfaceRowFor(entry, caps, media) {
   let credits = creditsFor(entry);
   if (media && Array.isArray(entry.extraDeduction)) {
-    const featureDeduction = entry.extraDeduction.find(d => d.type === media);
-    if (featureDeduction) {
-      credits += Number(featureDeduction.deduction) || 0;
-    }
+    credits += getExtraDeduction(entry.canonicalKey, media);
   }
   
   const creditField = entry.type === "video" ? "creditsPerSecond" : "creditsPerImage";

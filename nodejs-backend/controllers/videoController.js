@@ -10,7 +10,7 @@ const {
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
-const { findModel } = require("../config/modelRegistry");
+const { getExtraDeduction } = require("../config/modelRegistry");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { s3Client } = require("../storage/s3");
 const axios = require("axios");
@@ -389,7 +389,15 @@ exports.updateVideoResult = async (req, res) => {
         resultData?.model,
       );
 
-      const totalCreditsToDeduct = durationInSeconds * creditPerSecond;
+      // Clone Yourself videos freeze an extra per-second detection surcharge
+      // (see generateCloneVideo) — add it back in here so the settled amount
+      // matches what was frozen instead of silently refunding the surcharge.
+      const detectionCredit =
+        priorDoc.inputs?.type === "clone"
+          ? getExtraDeduction(resultData?.model, "clone")
+          : 0;
+
+      const totalCreditsToDeduct = durationInSeconds * (creditPerSecond + detectionCredit);
 
       // Keep `totalCreditsToDeduct` debited; refund anything the freeze held
       // beyond that (e.g. user requested 30s, Python returned 20s).
@@ -2681,8 +2689,7 @@ exports.generateImageAndScriptClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    const modelData = findModel(selectedModel);
-    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+    const detectionCredit = getExtraDeduction(selectedModel, "clone");
 
     // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =
@@ -3024,8 +3031,7 @@ exports.generateCloneVideo = async (req, res) => {
     const selectedModel = inputs.model;
     const durationNum = Number(inputs.duration.replace("s", "")) || 0;
     
-    const modelData = findModel(selectedModel);
-    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+    const detectionCredit = getExtraDeduction(selectedModel, "clone");
     
     const videoMinCount = durationNum * (UnifiedCreditController.getModelDeduction(selectedModel) + detectionCredit);
     const numberOfVideos = inputs.numberOfVideos;
@@ -3190,8 +3196,7 @@ exports.regenerateFrameClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    const modelData = findModel(selectedModel);
-    const detectionCredit = Array.isArray(modelData?.extraDeduction) ? Number(modelData.extraDeduction.find(d => d.type === "clone")?.deduction) || 0 : 0;
+    const detectionCredit = getExtraDeduction(selectedModel, "clone");
 
     // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =

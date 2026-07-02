@@ -17,6 +17,9 @@
  *                  echo back ("Sora 2", "Nano Banana Pro"), legacy keys.
  *   creditEnvVar   Env var read for credits-per-unit (per image / per video).
  *   creditDefault  Fallback when the env var is unset.
+ *   extraDeduction Optional per-feature surcharges on top of creditEnvVar,
+ *                  e.g. [{ type: "clone", envVar: "...", deduction: 5 }].
+ *                  `envVar` is read first; `deduction` is the fallback.
  *
  *   pricing        IMAGE: { input_per_million, output_per_million, per_image? }
  *                          (per_image, when present, short-circuits token math)
@@ -147,7 +150,7 @@ const MODEL_REGISTRY = [
     aggregationCreditDefault: 4,
     pricing: { per_second: 0.15 },
     enabled: true,
-    extraDeduction: [{type: "clone", deduction: 5}]
+    extraDeduction: [{type: "clone", envVar: "ADSGPT_VEO_3_1_FAST_CLONE_CREDIT_SURCHARGE", deduction: 5}]
   },
   {
     canonicalKey: "veo_4k",
@@ -298,6 +301,15 @@ function getCreditDeduction(model) {
   return Number.isFinite(raw) ? raw : entry.creditDefault;
 }
 
+/** Read a model's extra per-unit surcharge (e.g. clone detection) from env, fall back to registry default. */
+function getExtraDeduction(model, type) {
+  const entry = findModel(model);
+  const extra = entry?.extraDeduction?.find((d) => d.type === type);
+  if (!extra) return 0;
+  const raw = parseFloat(process.env[extra.envVar]);
+  return Number.isFinite(raw) ? raw : extra.deduction;
+}
+
 function imageEntries({ activeOnly = false } = {}) {
   return MODEL_REGISTRY.filter((e) => e.type === "image" && (!activeOnly || e.enabled !== false));
 }
@@ -311,6 +323,7 @@ module.exports = {
   findModel,
   allKeysFor,
   getCreditDeduction,
+  getExtraDeduction,
   imageEntries,
   videoEntries,
 };
