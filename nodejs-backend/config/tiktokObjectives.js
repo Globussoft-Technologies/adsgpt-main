@@ -138,8 +138,18 @@ const TIKTOK_OBJECTIVES = [
     description: "Collect leads via an instant form or your website.",
     hasSubType: true, // instant form vs website
     subTypes: [
-      { key: "INSTANT_FORM", label: "Instant form (TikTok)" },
-      { key: "WEBSITE", label: "Website form" },
+      {
+        key: "INSTANT_FORM",
+        label: "Instant form (TikTok)",
+        promotionTargetType: "INSTANT_PAGE",
+        optimizationGoal: "LEADS",
+      },
+      {
+        key: "WEBSITE",
+        label: "Website form",
+        promotionTargetType: "EXTERNAL_WEBSITE",
+        optimizationGoal: "CONVERT",
+      },
     ],
     // "LEAD" is not valid. Website lead path → CONVERT (needs a pixel + lead
     // event); instant-form path → LEADS (needs a TikTok instant form).

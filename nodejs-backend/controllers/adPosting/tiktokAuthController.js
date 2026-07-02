@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const TiktokUsers = require("../../Module/adPosting/tiktokUsers");
 const { encrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
-const { invalidateAllUserTiktokCache, TIKTOK_API_BASE } = require("../../utils/tiktokHelpers");
+const { invalidateAllUserTiktokCache, TIKTOK_API_BASE, getTiktokProxyAgent } = require("../../utils/tiktokHelpers");
 
 const ALLOWED_REDIRECT_ORIGIN = process.env.FRONTEND_URL;
 
@@ -85,7 +85,6 @@ class TiktokAuthController {
   async handleCallback(req, res) {
     const { auth_code, state } = req.query;
     const fallback = `${ALLOWED_REDIRECT_ORIGIN}?error=tiktok_auth_failed`;
-
     if (!auth_code) {
       return res.redirect(fallback);
     }
@@ -114,6 +113,9 @@ class TiktokAuthController {
         throw new Error("TikTok OAuth credentials not configured");
       }
 
+      const agent = getTiktokProxyAgent();
+      const proxyOpts = agent ? { httpsAgent: agent, proxy: false } : {};
+
       // 1. Exchange auth_code for access_token
       const tokenResponse = await axios.post(
         `${TIKTOK_API_BASE}/oauth2/access_token/`,
@@ -121,7 +123,8 @@ class TiktokAuthController {
           app_id: appId,
           secret: appSecret,
           auth_code,
-        }
+        },
+        proxyOpts
       );
 
       const tokenData = tokenResponse.data?.data || {};
@@ -144,6 +147,7 @@ class TiktokAuthController {
           {
             headers: { "Access-Token": access_token },
             params: { advertiser_ids: JSON.stringify(advertiser_ids || []) },
+            ...proxyOpts,
           }
         );
         advertiserInfo = advertiserResponse.data?.data?.list || [];

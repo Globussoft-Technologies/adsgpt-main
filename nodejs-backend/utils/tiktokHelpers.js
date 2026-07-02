@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { HttpsProxyAgent } = require("https-proxy-agent");
 const { redisClient } = require("../db/redis");
 const TiktokUsers = require("../Module/adPosting/tiktokUsers");
 const { decrypt } = require("./crypto");
@@ -11,6 +12,23 @@ const logger = require("./logger");
 const TIKTOK_API_BASE =
   process.env.TIKTOK_API_BASE || "https://business-api.tiktok.com/open_api/v1.3";
 const REDIS_TTL = 7200;
+
+// If TIKTOK_PROXY_URL is set (e.g. Bright Data ISP proxy to bypass regional
+// blocks), all TikTok API calls are routed through it.
+// Format: http://username:password@host:port
+// Example .env value:
+//   TIKTOK_PROXY_URL=http://brd-customer-xxx:password@brd.superproxy.io:3335
+let _proxyAgent = null;
+function getTiktokProxyAgent() {
+  if (!process.env.TIKTOK_PROXY_URL) return null;
+  if (!_proxyAgent) {
+    _proxyAgent = new HttpsProxyAgent(process.env.TIKTOK_PROXY_URL, {
+      rejectUnauthorized: false,
+    });
+  }
+  return _proxyAgent;
+}
+
 
 // Cache key prefixes. Used for reads; invalidated on writes / disconnect.
 // NOTE: "tiktokAds" + "tiktokInsights" are included here because creating a
@@ -84,6 +102,7 @@ async function getValidAccessToken(userId) {
 
   if (needsRefresh && refreshToken) {
     try {
+      const agent = getTiktokProxyAgent();
       const res = await axios.post(
         `${TIKTOK_API_BASE}/oauth2/refresh_token/`,
         {
@@ -91,7 +110,8 @@ async function getValidAccessToken(userId) {
           secret: process.env.TIKTOK_APP_SECRET,
           refresh_token: refreshToken,
           grant_type: "refresh_token",
-        }
+        },
+        { ...(agent ? { httpsAgent: agent, proxy: false } : {}) }
       );
 
       const tokenData = res.data?.data;
@@ -135,6 +155,7 @@ async function tiktokApiRequest({
     "Content-Type": "application/json",
   };
 
+  const agent = getTiktokProxyAgent();
   let response;
   try {
     response = await axios({
@@ -143,6 +164,7 @@ async function tiktokApiRequest({
       headers,
       params,
       data,
+      ...(agent ? { httpsAgent: agent, proxy: false } : {}),
     });
   } catch (error) {
     throw formatTiktokError(error);
@@ -247,6 +269,7 @@ function formatTiktokBudget(minorAmount, currency = "USD") {
 module.exports = {
   TIKTOK_API_BASE,
   REDIS_TTL,
+  getTiktokProxyAgent,
   STATUS_CACHE_PREFIXES,
   ALL_CACHE_PREFIXES,
   invalidateUserTiktokCache,

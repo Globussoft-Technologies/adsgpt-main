@@ -13,6 +13,7 @@ const {
   invalidateUserTiktokCache,
   REDIS_TTL,
   TIKTOK_API_BASE,
+  getTiktokProxyAgent,
 } = require("../../utils/tiktokHelpers");
 const tiktokObjectivesConfig = require("../../config/tiktokObjectives");
 
@@ -92,6 +93,10 @@ class TiktokAdController {
     this.uploadImage = this.uploadImage.bind(this);
     this.getVideoInfo = this.getVideoInfo.bind(this);
     this.getInterestCategories = this.getInterestCategories.bind(this);
+    this.getPixels = this.getPixels.bind(this);
+    this.createPixel = this.createPixel.bind(this);
+    this.getLeadForms = this.getLeadForms.bind(this);
+    this.getLeads = this.getLeads.bind(this);
   }
 
   /**
@@ -986,10 +991,14 @@ class TiktokAdController {
 
       // Direct axios call (not tiktokApiRequest) so axios sets the multipart
       // boundary header itself; only the Access-Token header is forced.
+      const agent = getTiktokProxyAgent();
       const response = await axios.post(
         `${TIKTOK_API_BASE}/file/video/ad/upload/`,
         form,
-        { headers: { "Access-Token": accessToken } }
+        {
+          headers: { "Access-Token": accessToken },
+          ...(agent ? { httpsAgent: agent, proxy: false } : {}),
+        }
       );
 
       const body = response.data || {};
@@ -1204,10 +1213,14 @@ class TiktokAdController {
         form.append("image_url", imageUrl);
       }
 
+      const agent2 = getTiktokProxyAgent();
       const response = await axios.post(
         `${TIKTOK_API_BASE}/file/image/ad/upload/`,
         form,
-        { headers: { "Access-Token": accessToken } }
+        {
+          headers: { "Access-Token": accessToken },
+          ...(agent2 ? { httpsAgent: agent2, proxy: false } : {}),
+        }
       );
 
       const body = response.data || {};
@@ -1342,6 +1355,212 @@ class TiktokAdController {
       logger.error(`TikTok getInterestCategories error: ${error.message}`);
       return res.status(error.status || 500).json({
         error: error.userMessage || "Failed to fetch TikTok interest categories",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * List TikTok pixels for an ad account.
+   * TikTok API: GET /pixel/list/
+   */
+  async getPixels(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId } = req.query;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/pixel/list/",
+        accessToken,
+        params: { advertiser_id: advertiserId },
+      });
+
+      const pixels = (data?.data?.pixels || data?.data?.list || []).map((p) => ({
+        id: String(p.pixel_id || p.id || ""),
+        name: p.name || p.pixel_name || String(p.pixel_id || p.id),
+        status: p.status || p.pixel_status,
+        raw: p,
+      }));
+
+      return res.json({ status: true, pixels });
+    } catch (error) {
+      logger.error(`TikTok getPixels error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok pixels",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * Create a TikTok pixel for an ad account.
+   * TikTok API: POST /pixel/create/
+   */
+  async createPixel(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, name, pixelType = "TT_WEB_PIXEL" } = req.body;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: "name is required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        method: "POST",
+        endpoint: "/pixel/create/",
+        accessToken,
+        data: {
+          advertiser_id: advertiserId,
+          pixel_name: name.trim(),
+          pixel_type: pixelType,
+        },
+      });
+
+      const p = data?.data || {};
+      return res.status(201).json({
+        status: true,
+        pixel: {
+          id: String(p.pixel_id || p.id || ""),
+          name: p.pixel_name || p.name || name.trim(),
+          status: p.status || p.pixel_status,
+          raw: p,
+        },
+      });
+    } catch (error) {
+      logger.error(`TikTok createPixel error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to create TikTok pixel",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * List TikTok Instant Forms (lead generation forms) for an ad account.
+   *
+   * The Lead Forms API is not part of the public Marketing API SDK, so we call
+   * the community-documented /lead/form/list/ endpoint. If TikTok returns a 404
+   * we surface that clearly so the caller can fall back to entering a Page ID
+   * manually.
+   */
+  async getLeadForms(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, pageId } = req.query;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const params = { advertiser_id: advertiserId };
+      if (pageId) params.page_id = pageId;
+
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/lead/form/list/",
+        accessToken,
+        params,
+      });
+
+      const forms = (data?.data?.list || data?.data?.forms || []).map((f) => ({
+        id: String(f.page_id || f.form_id || f.id || ""),
+        pageId: String(f.page_id || f.form_id || f.id || ""),
+        name: f.page_name || f.form_name || f.name || `Form ${f.page_id || f.id}`,
+        status: f.status || f.form_status,
+        raw: f,
+      }));
+
+      return res.json({ status: true, forms });
+    } catch (error) {
+      logger.error(
+        `TikTok getLeadForms error: ${error.message} | status=${error.status} | tiktokCode=${error.tiktokCode} | raw=${JSON.stringify(
+          error.raw
+        )}`
+      );
+
+      // The Lead Form list endpoint is private/allowlist-only. If TikTok does
+      // not expose it for this app, return an empty list so the wizard falls
+      // back to the manual Page ID input instead of surfacing a 404.
+      if (error.status === 404) {
+        return res.json({
+          status: true,
+          forms: [],
+          available: false,
+          message:
+            "Lead Form list endpoint is not available for this TikTok app or account. Use the manual Page ID fallback.",
+        });
+      }
+
+      return res.status(error.status || 500).json({
+        error:
+          error.userMessage ||
+          "Failed to fetch TikTok lead forms. If this endpoint does not exist for your app, enter the Page ID manually.",
+        tiktokCode: error.tiktokCode,
+        raw: error.raw,
+      });
+    }
+  }
+
+  /**
+   * Retrieve lead submissions for a TikTok Instant Form.
+   * TikTok API: GET /lead/get/
+   */
+  async getLeads(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const {
+        advertiserId,
+        pageId,
+        leadSource = "INSTANT_FORM",
+        startTime,
+        endTime,
+        page = 1,
+        pageSize = 100,
+      } = req.query;
+
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+      if (!pageId) {
+        return res.status(400).json({ error: "pageId is required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const params = {
+        advertiser_id: advertiserId,
+        lead_source: leadSource,
+        page_id: pageId,
+        page,
+        page_size: pageSize,
+      };
+      if (startTime) params.start_time = startTime;
+      if (endTime) params.end_time = endTime;
+
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/lead/get/",
+        accessToken,
+        params,
+      });
+
+      const leads = data?.data?.lead_list || data?.data?.leads || [];
+      return res.json({
+        status: true,
+        leads,
+        pageInfo: data?.data?.page_info || {},
+      });
+    } catch (error) {
+      logger.error(`TikTok getLeads error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok leads",
         tiktokCode: error.tiktokCode,
       });
     }

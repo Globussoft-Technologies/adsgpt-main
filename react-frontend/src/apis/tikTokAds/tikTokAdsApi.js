@@ -123,6 +123,51 @@ export const getTiktokVideoInfo = async (advertiserId, videoIds) => {
   return data;
 };
 
+// ─── Pixel (conversion tracking) ────────────────────────────────────────────────
+
+export const getTiktokPixels = async (advertiserId) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/pixels`, {
+    params: { advertiserId },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
+export const createTiktokPixel = async ({ advertiserId, name, pixelType = 'TT_WEB_PIXEL' }) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/tiktok-ads/pixels`,
+    { advertiserId, name, pixelType },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// ─── Lead Generation ────────────────────────────────────────────────────────────
+
+export const getTiktokLeadForms = async (advertiserId, pageId) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/lead-forms`, {
+    params: { advertiserId, ...(pageId ? { pageId } : {}) },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
+export const getTiktokLeads = async ({
+  advertiserId,
+  pageId,
+  leadSource = 'INSTANT_FORM',
+  startTime,
+  endTime,
+  page = 1,
+  pageSize = 100,
+} = {}) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/leads`, {
+    params: { advertiserId, pageId, leadSource, startTime, endTime, page, pageSize },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
 // ─── Mutations ──────────────────────────────────────────────────────────────────
 
 export const updateTiktokStatus = async ({ advertiserId, level, ids, status }) => {

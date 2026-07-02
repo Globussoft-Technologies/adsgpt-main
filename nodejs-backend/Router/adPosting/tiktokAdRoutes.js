@@ -6,6 +6,14 @@ const tiktokCampaignTemplateController = require("../../controllers/tiktokCampai
 
 const router = express.Router();
 
+// ─── Assets ─────────────────────────────────────────────────────────────────
+router.get("/pixels", tiktokAdController.getPixels);
+router.post("/pixels", tiktokAdController.createPixel);
+
+// ─── Lead Generation ─────────────────────────────────────────────────────────
+router.get("/lead-forms", tiktokAdController.getLeadForms);
+router.get("/leads", tiktokAdController.getLeads);
+
 // 500MB cap, in-memory — we forward the video bytes straight to TikTok.
 const uploadVideo = multer({
   storage: multer.memoryStorage(),

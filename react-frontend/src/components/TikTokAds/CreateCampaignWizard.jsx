@@ -7,6 +7,9 @@ import {
   getTiktokRegions,
   getTiktokIdentities,
   getTiktokInterestCategories,
+  getTiktokPixels,
+  createTiktokPixel,
+  getTiktokLeadForms,
   createTiktokCampaign,
   createTiktokAdGroup,
   createTiktokAd,
@@ -210,19 +213,29 @@ const billingEventForGoal = (goal) => {
   }
 };
 
-// TikTok ad groups need a `promotion_type` describing the destination. Only
-// objectives that drive to an external destination require it; pure
-// awareness / on-TikTok engagement objectives omit it.
+// TikTok ad groups need a `promotion_type` describing the destination for most
+// objectives. Lead Generation uses `promotion_target_type` (INSTANT_PAGE /
+// EXTERNAL_WEBSITE) instead, so it is excluded here.
 const promotionTypeForObjective = (objectiveKey) => {
   switch (objectiveKey) {
     case 'TRAFFIC':
-    case 'LEAD_GENERATION':
     case 'PRODUCT_SALES':
       return 'WEBSITE';
     case 'APP_PROMOTION':
       return 'APP_ANDROID';
     default:
-      return null; // REACH, VIDEO_VIEWS, ENGAGEMENT
+      return null; // REACH, VIDEO_VIEWS, ENGAGEMENT, LEAD_GENERATION
+  }
+};
+
+const promotionTargetTypeForLeadSubType = (subType) => {
+  switch (subType) {
+    case 'INSTANT_FORM':
+      return 'INSTANT_PAGE';
+    case 'WEBSITE':
+      return 'EXTERNAL_WEBSITE';
+    default:
+      return null;
   }
 };
 
@@ -233,8 +246,38 @@ const OBJECTIVE_ASSET_NOTE = {
   APP_PROMOTION:
     'Requires a registered app in TikTok (Assets → App) linked to the TikTok SDK or an MMP.',
   LEAD_GENERATION:
-    'Requires a TikTok Instant Form, or a Pixel with a lead event for the website path.',
+    'Choose Instant Form (needs a TikTok Instant Form Page ID) or Website (needs a Pixel + lead event).',
   PRODUCT_SALES: 'Requires a tracking Pixel with a configured conversion event.',
+};
+
+// Objectives that need a Pixel + optimization event on the ad group.
+const OBJECTIVES_NEEDING_PIXEL = ['PRODUCT_SALES'];
+
+// Lead Generation has two distinct paths. Only the WEBSITE path needs a pixel;
+// INSTANT_FORM uses a TikTok Instant Form referenced by page_id on the creative.
+const LEAD_SUB_TYPES = [
+  { key: 'INSTANT_FORM', label: 'Instant form (TikTok)' },
+  { key: 'WEBSITE', label: 'Website form' },
+];
+
+const isLeadGeneration = (objectiveKey) => objectiveKey === 'LEAD_GENERATION';
+const leadSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
+const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
+
+const PIXEL_EVENTS_BY_OBJECTIVE = {
+  PRODUCT_SALES: [
+    { value: 'COMPLETE_PAYMENT', label: 'Complete payment' },
+    { value: 'PURCHASE', label: 'Purchase' },
+    { value: 'INITIATE_CHECKOUT', label: 'Initiate checkout' },
+    { value: 'ADD_TO_CART', label: 'Add to cart' },
+    { value: 'VIEW_CONTENT', label: 'View content' },
+  ],
+  LEAD_GENERATION: [
+    { value: 'SUBMIT_FORM', label: 'Submit form' },
+    { value: 'COMPLETE_REGISTRATION', label: 'Complete registration' },
+    { value: 'CONTACT', label: 'Contact' },
+    { value: 'DOWNLOAD', label: 'Download' },
+  ],
 };
 
 // Convert a TikTok "YYYY-MM-DD HH:MM:SS" account-time string into the
@@ -319,9 +362,15 @@ function StepRail({ currentIndex }) {
 
 function getStepIssues(step, form, selectedObjective) {
   const issues = [];
+  const stepNeedsPixel =
+    OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey) ||
+    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType));
   switch (step) {
     case 0: // Objective
       if (!form.objectiveKey) issues.push('Select an objective');
+      if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
+        issues.push('Select a lead generation path (Instant Form or Website)');
+      }
       break;
     case 1: // Campaign
       if (!form.campaignName.trim()) issues.push('Campaign name is required');
@@ -336,6 +385,13 @@ function getStepIssues(step, form, selectedObjective) {
       if (!form.locationIds.length) issues.push('Select at least one location');
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
         issues.push('Enter a valid bid price');
+      }
+      if (stepNeedsPixel) {
+        if (!form.pixelId) issues.push('Select a TikTok Pixel');
+        if (!form.optimizationEvent) issues.push('Select a conversion event');
+      }
+      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
+        issues.push('Select or enter a TikTok Instant Form Page ID');
       }
       break;
     case 3: // Ad
@@ -702,6 +758,15 @@ const CreateCampaignWizard = ({
         bidType: raw.bid_type || 'BID_TYPE_NO_BID',
         bidPrice: raw.bid != null ? String(raw.bid) : '',
         scheduleEndTime: toDatetimeLocal(raw.schedule_end_time),
+        pixelId: raw.pixel_id || '',
+        optimizationEvent: raw.optimization_event || '',
+        pageId: raw.page_id || '',
+        leadGenSubType:
+          raw.promotion_target_type === 'INSTANT_PAGE'
+            ? 'INSTANT_FORM'
+            : raw.promotion_target_type === 'EXTERNAL_WEBSITE'
+            ? 'WEBSITE'
+            : '',
       };
     }
     if (isEditAd) {
@@ -725,6 +790,13 @@ const CreateCampaignWizard = ({
   const [regions, setRegions] = useState([]);
   const [identities, setIdentities] = useState([]);
   const [interestCategories, setInterestCategories] = useState([]);
+  const [pixels, setPixels] = useState([]);
+  const [loadingPixels, setLoadingPixels] = useState(false);
+  const [newPixelName, setNewPixelName] = useState('');
+  const [creatingPixel, setCreatingPixel] = useState(false);
+  const [leadForms, setLeadForms] = useState([]);
+  const [loadingLeadForms, setLoadingLeadForms] = useState(false);
+  const [manualPageId, setManualPageId] = useState('');
   const [launching, setLaunching] = useState(false);
   const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, adId}
   const [error, setError] = useState(null);
@@ -748,6 +820,10 @@ const CreateCampaignWizard = ({
     bidType: 'BID_TYPE_NO_BID',
     bidPrice: '',
     scheduleEndTime: '',
+    pixelId: '',
+    optimizationEvent: '',
+    leadGenSubType: '',
+    pageId: '',
     identityId: '',
     mediaType: 'video',
     videoUrl: '',
@@ -819,6 +895,69 @@ const CreateCampaignWizard = ({
       .catch(() => setInterestCategories([]));
   }, [advertiserId, form.objectiveType]);
 
+  // Fetch pixels when the selected objective/path needs one. Reset pixel state
+  // when the objective changes away from a pixel-requiring objective.
+  const needsPixel =
+    OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey) ||
+    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType));
+
+  useEffect(() => {
+    if (!advertiserId || !needsPixel) {
+      setPixels([]);
+      return;
+    }
+    setLoadingPixels(true);
+    getTiktokPixels(advertiserId)
+      .then((r) => setPixels(r.pixels || []))
+      .catch(() => {
+        setPixels([]);
+        toast.error('Could not load TikTok pixels. Make sure the Pixel permission is granted.');
+      })
+      .finally(() => setLoadingPixels(false));
+  }, [advertiserId, needsPixel]);
+
+  // Fetch TikTok Instant Forms when the user picks the in-app lead path.
+  useEffect(() => {
+    if (!advertiserId || !isLeadGeneration(form.objectiveKey) || !leadSubTypeNeedsForm(form.leadGenSubType)) {
+      setLeadForms([]);
+      return;
+    }
+    setLoadingLeadForms(true);
+    getTiktokLeadForms(advertiserId)
+      .then((r) => setLeadForms(r.forms || []))
+      .catch(() => {
+        setLeadForms([]);
+        // Don't block the user — the list endpoint is not always available; they
+        // can still paste a Page ID manually.
+      })
+      .finally(() => setLoadingLeadForms(false));
+  }, [advertiserId, form.objectiveKey, form.leadGenSubType]);
+
+  useEffect(() => {
+    if (!OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey)) {
+      update({ pixelId: '', optimizationEvent: '' });
+    }
+    if (!isLeadGeneration(form.objectiveKey)) {
+      update({ leadGenSubType: '', pageId: '' });
+    }
+  }, [form.objectiveKey]);
+
+  // Reset path-specific fields when the Lead Generation sub-type changes.
+  useEffect(() => {
+    if (!isLeadGeneration(form.objectiveKey)) return;
+    update({
+      pixelId: leadSubTypeNeedsPixel(form.leadGenSubType) ? form.pixelId : '',
+      optimizationEvent: leadSubTypeNeedsPixel(form.leadGenSubType) ? form.optimizationEvent : '',
+      pageId: leadSubTypeNeedsForm(form.leadGenSubType) ? form.pageId : '',
+      optimizationGoal:
+        form.leadGenSubType === 'INSTANT_FORM'
+          ? 'LEADS'
+          : form.leadGenSubType === 'WEBSITE'
+          ? 'CONVERT'
+          : form.optimizationGoal,
+    });
+  }, [form.leadGenSubType]);
+
   const selectedObjective = useMemo(
     () => schema?.objectives?.find((o) => o.key === form.objectiveKey),
     [schema, form.objectiveKey]
@@ -856,6 +995,10 @@ const CreateCampaignWizard = ({
       objectiveKey: o.key,
       objectiveType: o.objectiveType,
       optimizationGoal: o.optimizationGoals?.[0] || '',
+      leadGenSubType: '',
+      pageId: '',
+      pixelId: '',
+      optimizationEvent: '',
     });
 
   // ── validation per step ──
@@ -863,6 +1006,9 @@ const CreateCampaignWizard = ({
     const errs = {};
     if (targetStep === 0) {
       if (!form.objectiveKey) errs.objectiveKey = 'Select an objective';
+      if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
+        errs.leadGenSubType = 'Select a lead generation path';
+      }
     }
     if (targetStep === 1) {
       if (!form.campaignName.trim()) errs.campaignName = 'Campaign name is required';
@@ -879,6 +1025,13 @@ const CreateCampaignWizard = ({
       if (!form.locationIds.length) errs.locationIds = 'Select at least one location';
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
         errs.bidPrice = 'Bid price is required';
+      }
+      if (needsPixel) {
+        if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
+        if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
+      }
+      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
+        errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
       }
     }
     if (targetStep === 3) {
@@ -957,10 +1110,15 @@ const CreateCampaignWizard = ({
           budget: Number(form.adgroupBudget),
           budget_mode: 'BUDGET_MODE_DAY',
           optimization_goal: form.optimizationGoal,
+          ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
+            ? { promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType) }
+            : {}),
           bid_type: form.bidType,
           ...(form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice
             ? { bid: Number(form.bidPrice) }
             : {}),
+          ...(form.pixelId ? { pixel_id: String(form.pixelId) } : {}),
+          ...(form.optimizationEvent ? { optimization_event: form.optimizationEvent } : {}),
           ...scheduleEndPayload(),
           ...(form.optimizationGoal === 'REACH'
             ? {
@@ -984,7 +1142,9 @@ const CreateCampaignWizard = ({
               ad_name: form.adName,
               ad_text: form.adText,
               call_to_action: form.cta,
-              landing_page_url: form.landingPageUrl,
+              ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+                ? { page_id: Number(form.pageId) }
+                : { landing_page_url: form.landingPageUrl }),
             },
           ],
         });
@@ -1039,6 +1199,11 @@ const CreateCampaignWizard = ({
           ...(promotionTypeForObjective(form.objectiveKey)
             ? { promotion_type: promotionTypeForObjective(form.objectiveKey) }
             : {}),
+          ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
+            ? {
+                promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType),
+              }
+            : {}),
           budget_mode: form.budgetMode,
           budget: Number(form.adgroupBudget),
           schedule_type: 'SCHEDULE_FROM_NOW',
@@ -1049,6 +1214,8 @@ const CreateCampaignWizard = ({
           ...(form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice
             ? { bid_price: Number(form.bidPrice) }
             : {}),
+          ...(form.pixelId ? { pixel_id: String(form.pixelId) } : {}),
+          ...(form.optimizationEvent ? { optimization_event: form.optimizationEvent } : {}),
           pacing: 'PACING_MODE_SMOOTH',
           operation_status: 'ENABLE',
           // REACH requires a frequency cap: show the ad at most `frequency`
@@ -1104,7 +1271,9 @@ const CreateCampaignWizard = ({
           identity_type: 'CUSTOMIZED_USER',
           ad_text: form.adText,
           call_to_action: form.cta,
-          landing_page_url: form.landingPageUrl,
+          ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+            ? { page_id: Number(form.pageId) }
+            : { landing_page_url: form.landingPageUrl }),
         };
 
         if (form.mediaType === 'video' && videoId) {
@@ -1133,6 +1302,29 @@ const CreateCampaignWizard = ({
       toast.error(msg);
     } finally {
       setLaunching(false);
+    }
+  };
+
+  // Create a new TikTok pixel from the ad-group step and auto-select it.
+  const handleCreatePixel = async () => {
+    const name = newPixelName.trim();
+    if (!name || !advertiserId) return;
+    setCreatingPixel(true);
+    try {
+      const res = await createTiktokPixel({ advertiserId, name, pixelType: 'TT_WEB_PIXEL' });
+      const createdPixel = res?.pixel;
+      if (createdPixel?.id) {
+        setPixels((prev) => [...prev, createdPixel]);
+        update({ pixelId: String(createdPixel.id) });
+        setNewPixelName('');
+        toast.success(`Pixel "${createdPixel.name || name}" created`);
+      } else {
+        throw new Error('Pixel creation did not return an ID');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to create pixel');
+    } finally {
+      setCreatingPixel(false);
     }
   };
 
@@ -1166,6 +1358,36 @@ const CreateCampaignWizard = ({
             ))}
             {errors.objectiveKey && (
               <p className="text-xs text-red-500">{errors.objectiveKey}</p>
+            )}
+            {isLeadGeneration(form.objectiveKey) && (
+              <div className="space-y-2 rounded-xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 p-3 dark:bg-[#15DCFF]/5">
+                <p className="text-xs font-semibold text-[#15DCFF]">Lead generation path</p>
+                <div className="flex flex-wrap gap-2">
+                  {LEAD_SUB_TYPES.map((st) => (
+                    <button
+                      key={st.key}
+                      type="button"
+                      onClick={() =>
+                        update({
+                          leadGenSubType: st.key,
+                          optimizationGoal: st.key === 'INSTANT_FORM' ? 'LEADS' : 'CONVERT',
+                          pageId: '',
+                          pixelId: '',
+                          optimizationEvent: '',
+                        })
+                      }
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        form.leadGenSubType === st.key
+                          ? 'bg-[#15DCFF] text-white'
+                          : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                {errors.leadGenSubType && <p className="text-xs text-red-500">{errors.leadGenSubType}</p>}
+              </div>
             )}
             {OBJECTIVE_ASSET_NOTE[form.objectiveKey] && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
@@ -1223,13 +1445,136 @@ const CreateCampaignWizard = ({
               label="Optimization goal"
               value={form.optimizationGoal}
               onChange={(v) => update({ optimizationGoal: v })}
-              options={(currentObjective?.optimizationGoals || [form.optimizationGoal || 'CLICK']).map((g) => ({
-                value: g,
-                label: g,
-              }))}
+              options={(currentObjective?.optimizationGoals || [form.optimizationGoal || 'CLICK'])
+                .filter(
+                  (g) =>
+                    !isLeadGeneration(form.objectiveKey) ||
+                    !form.leadGenSubType ||
+                    g === LEAD_SUB_TYPES.find((s) => s.key === form.leadGenSubType)?.optimizationGoal
+                )
+                .map((g) => ({
+                  value: g,
+                  label: g,
+                }))}
               required
               error={errors.optimizationGoal}
             />
+
+            {needsPixel && (
+              <div className="space-y-3 rounded-xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 p-3 dark:bg-[#15DCFF]/5">
+                <p className="text-xs font-semibold text-[#15DCFF]">Conversion tracking</p>
+                {loadingPixels ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading pixels…
+                  </div>
+                ) : (
+                  <>
+                    {pixels.length > 0 ? (
+                      <SelectField
+                        label="TikTok Pixel"
+                        value={form.pixelId}
+                        onChange={(v) => update({ pixelId: v })}
+                        options={[
+                          { value: '', label: '— select pixel —' },
+                          ...pixels.map((p) => ({ value: String(p.id), label: p.name || String(p.id) })),
+                        ]}
+                        required
+                        error={errors.pixelId}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                        No pixels found for this ad account. Create one below or set up in TikTok Ads Manager.
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newPixelName}
+                        onChange={(e) => setNewPixelName(e.target.value)}
+                        placeholder="New pixel name"
+                        className="flex-1 rounded-full border border-gray-300 bg-gray-100 px-3 py-1.5 text-xs text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreatePixel}
+                        disabled={creatingPixel || !newPixelName.trim()}
+                        className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black"
+                      >
+                        {creatingPixel ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Create pixel'}
+                      </button>
+                    </div>
+                    <SelectField
+                      label="Optimization event"
+                      value={form.optimizationEvent}
+                      onChange={(v) => update({ optimizationEvent: v })}
+                      options={[
+                        { value: '', label: '— select event —' },
+                        ...(PIXEL_EVENTS_BY_OBJECTIVE[form.objectiveKey] || []),
+                      ]}
+                      required
+                      error={errors.optimizationEvent}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && (
+              <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 dark:bg-purple-500/5">
+                <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                  TikTok Instant Form
+                </p>
+                {loadingLeadForms ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading forms…
+                  </div>
+                ) : (
+                  <>
+                    {leadForms.length > 0 ? (
+                      <SelectField
+                        label="Instant form"
+                        value={form.pageId}
+                        onChange={(v) => update({ pageId: v })}
+                        options={[
+                          { value: '', label: '— select form —' },
+                          ...leadForms.map((f) => ({ value: String(f.pageId), label: f.name || String(f.pageId) })),
+                        ]}
+                        required
+                        error={errors.pageId}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                        No forms loaded. Paste the Page ID from TikTok Ads Manager (Tools → Leads → Instant Forms).
+                      </div>
+                    )}
+                    <TextField
+                      label="Or enter Page ID manually"
+                      value={manualPageId}
+                      onChange={(v) => setManualPageId(v)}
+                      placeholder="e.g. 123456789"
+                      hint="Enter the ID and click Use to select it."
+                    />
+                    {manualPageId.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => update({ pageId: manualPageId.trim() })}
+                        className="rounded-full bg-purple-600 px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                      >
+                        Use {manualPageId.trim()}
+                      </button>
+                    )}
+                    {form.pageId && (
+                      <p className="text-xs text-gray-600 dark:text-white/60">
+                        Selected Page ID: <span className="font-mono font-medium">{form.pageId}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <SelectField
               label="Budget mode"
               value={form.budgetMode}
@@ -1545,6 +1890,12 @@ const CreateCampaignWizard = ({
                 <ReviewSection title="Objective">
                   <ReviewField label="Objective" value={selectedObjective?.label} />
                   <ReviewField label="Conversion location" value={form.objectiveType} />
+                  {isLeadGeneration(form.objectiveKey) && (
+                    <ReviewField
+                      label="Lead path"
+                      value={LEAD_SUB_TYPES.find((s) => s.key === form.leadGenSubType)?.label}
+                    />
+                  )}
                   <ReviewField label="Optimization goal" value={form.optimizationGoal} />
                 </ReviewSection>
 
@@ -1578,6 +1929,21 @@ const CreateCampaignWizard = ({
                       value={`${form.frequency} time(s) per ${form.frequencySchedule} day(s)`}
                     />
                   )}
+                  {form.pixelId && (
+                    <ReviewField
+                      label="TikTok Pixel"
+                      value={pixels.find((p) => String(p.id) === String(form.pixelId))?.name || form.pixelId}
+                    />
+                  )}
+                  {form.optimizationEvent && (
+                    <ReviewField label="Optimization event" value={form.optimizationEvent} />
+                  )}
+                  {form.pageId && (
+                    <ReviewField
+                      label="Instant Form Page ID"
+                      value={leadForms.find((f) => String(f.pageId) === String(form.pageId))?.name || form.pageId}
+                    />
+                  )}
                 </ReviewSection>
 
                 <ReviewSection title="Ad" wide>
@@ -1589,7 +1955,11 @@ const CreateCampaignWizard = ({
                       <ReviewField label="Media" value={mediaSource} />
                       <ReviewField label="Ad text" value={form.adText} />
                       <ReviewField label="CTA" value={form.cta} />
-                      <ReviewField label="Landing page URL" value={form.landingPageUrl} />
+                      {form.pageId ? (
+                        <ReviewField label="Instant Form Page ID" value={form.pageId} />
+                      ) : (
+                        <ReviewField label="Landing page URL" value={form.landingPageUrl} />
+                      )}
                     </>
                   ) : (
                     <div className="px-4 py-6 text-center text-sm text-gray-500 dark:text-white/50">
