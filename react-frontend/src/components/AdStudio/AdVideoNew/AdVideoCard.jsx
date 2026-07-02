@@ -1,15 +1,25 @@
 import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
-import { ChevronRight } from 'lucide-react';
-import { useRef } from 'react';
-import { useDispatch } from 'react-redux';
+import { ChevronRight, Lock } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
 
-const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
+const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
+
+const AdVideoCard = ({ title, desc, img, gif, type, comingSoon, premium }) => {
   const dispatch = useDispatch();
+  const { userData } = useSelector((state) => state.socket);
   const imgUrl = import.meta.env.VITE_S3_BASE_URL + img;
   const gifUrl = import.meta.env.VITE_S3_BASE_URL + gif;
 
+  // Plan "8" is the free plan; premium-only features are locked for these users.
+  const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
+  const isLocked = premium && hasPlan8;
+
   const handleClick = () => {
     if (comingSoon) return;
+    if (isLocked) {
+      window.open(SIGNUP_URL, '_blank', 'noopener,noreferrer');
+      return;
+    }
     dispatch(setActivePage(type));
   };
 
@@ -41,6 +51,14 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon }) => {
       {comingSoon && (
         <div className="absolute top-3 right-3 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md 2xl:text-xs">
           Coming Soon
+        </div>
+      )}
+
+      {/* Premium / locked badge */}
+      {!comingSoon && isLocked && (
+        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md 2xl:text-xs">
+          <Lock className="h-3 w-3" />
+          Premium
         </div>
       )}
 

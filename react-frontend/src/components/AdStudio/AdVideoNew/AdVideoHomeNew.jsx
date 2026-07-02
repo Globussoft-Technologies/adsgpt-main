@@ -44,6 +44,7 @@ const cards = [
     img: '/static/adVideo/clone-yourself-photo.jpg',
     gif: '/static/adVideo/clone-yourself-gif.gif',
     type: 'clone',
+    premium: true,
   },
 ];
 
