@@ -10,7 +10,10 @@ const {
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
-const { getExtraDeduction } = require("../config/modelRegistry");
+const {
+  getExtraDeduction,
+  getExtraCostPerSecond,
+} = require("../config/modelRegistry");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { s3Client } = require("../storage/s3");
 const axios = require("axios");
@@ -421,11 +424,19 @@ exports.updateVideoResult = async (req, res) => {
         );
       }
 
-      // Store in mongo for admin analytics and user history
-      const actualVideoCost = modelPricingConfig.getVideoCost(
+      // Store in mongo for admin analytics and user history.
+      // Clone flow costs more at the provider level than the base model;
+      // add the per-second USD surcharge from the registry so admin
+      // dashboards don't under-report clone spend.
+      const baseVideoCost = modelPricingConfig.getVideoCost(
         resultData?.model,
         durationInSeconds,
       );
+      const extraCostPerSec =
+        priorDoc.inputs?.type === "clone"
+          ? getExtraCostPerSecond(resultData?.model, "clone")
+          : 0;
+      const actualVideoCost = baseVideoCost + extraCostPerSec * durationInSeconds;
 
       GeneratedMediaController.saveGeneratedMedia({
         userId: userId,

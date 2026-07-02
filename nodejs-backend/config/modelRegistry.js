@@ -150,7 +150,12 @@ const MODEL_REGISTRY = [
     aggregationCreditDefault: 4,
     pricing: { per_second: 0.15 },
     enabled: true,
-    extraDeduction: [{type: "clone", envVar: "ADSGPT_VEO_3_1_FAST_CLONE_CREDIT_SURCHARGE", deduction: 5}]
+    // Clone flow (face-detection + veo) costs more at the provider level than
+    // plain veo-3.1-fast — reflect that in BOTH credits and USD reporting:
+    //   deduction:      extra credits/sec charged to the user (5)
+    //   costPerSecond:  extra USD/sec captured in GeneratedMedia.cost (0.21,
+    //                   so total = base 0.15 + surcharge 0.21 = 0.36)
+    extraDeduction: [{type: "clone", envVar: "ADSGPT_VEO_3_1_FAST_CLONE_CREDIT_SURCHARGE", deduction: 5, costPerSecond: 0.21}]
   },
   {
     canonicalKey: "veo_4k",
@@ -310,6 +315,18 @@ function getExtraDeduction(model, type) {
   return Number.isFinite(raw) ? raw : extra.deduction;
 }
 
+/**
+ * Read a model's extra USD/sec surcharge for a specific flow (e.g. "clone").
+ * Returns 0 if the model has no surcharge for that type. Used to keep the
+ * cost we save on GeneratedMedia.cost aligned with what the provider actually
+ * bills — otherwise admin dashboards under-report clone spend.
+ */
+function getExtraCostPerSecond(model, type) {
+  const entry = findModel(model);
+  const extra = entry?.extraDeduction?.find((d) => d.type === type);
+  return Number(extra?.costPerSecond) || 0;
+}
+
 function imageEntries({ activeOnly = false } = {}) {
   return MODEL_REGISTRY.filter((e) => e.type === "image" && (!activeOnly || e.enabled !== false));
 }
@@ -324,6 +341,7 @@ module.exports = {
   allKeysFor,
   getCreditDeduction,
   getExtraDeduction,
+  getExtraCostPerSecond,
   imageEntries,
   videoEntries,
 };
