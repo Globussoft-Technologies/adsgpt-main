@@ -22,6 +22,7 @@ import UserProfilePage from '@/pages/Profile/UserProfilePage';
 import AuthWrapper from '@/utils/AuthWrapper';
 import DevAuthPage from '@/pages/DevAuth/DevAuthPage';
 import RunBackLog from '@/utils/RunBackLog';
+import { IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 const REDIRECT_TO_LOGOUT = import.meta.env.VITE_AMEMBER_URL;
 
@@ -48,20 +49,24 @@ const router = createBrowserRouter([
       { path: 'ads-manager', element: <AdsManagerPage /> },
       { path: 'meta-ads', element: <MetaAdsPage /> },
       { path: 'google-ads', element: <GoogleAdsPage /> },
-
-      // HIDE-MARK — Landing Page Analyzer routes hidden.
       { path: 'tiktok-ads', element: <TikTokAdsPage /> },
 
-      // Landing Page Analyzer — URL-input home, then the result view by sessionId.
-      { path: 'landing-page-analyzer', element: <LandingPageAnalyzerHome /> },
-      { path: 'landing-page-analyzer/:id', element: <LandingPageAnalyzerResultPage /> },
+      // Landing Page Analyzer — URL-input home, then the result view by
+      // sessionId. Gated by VITE_FEATURE_LANDING_ANALYZER (off in prod → routes
+      // are not registered, so direct navigation 404s).
+      ...(IS_LANDING_ANALYZER_ENABLED
+        ? [
+            { path: 'landing-page-analyzer', element: <LandingPageAnalyzerHome /> },
+            { path: 'landing-page-analyzer/:id', element: <LandingPageAnalyzerResultPage /> },
+          ]
+        : []),
       // Autopilot has the same picker-then-dashboard structure as Ads
       // Manager: `/autopilot` is the platform picker home, `/autopilot/meta`
       // is the actual dashboard for Meta. Google/TikTok land on the picker
       // home once those integrations exist.
       { path: 'autopilot', element: <AutopilotHomePage /> },
       { path: 'autopilot/meta', element: <AutopilotPage /> },
-      { path: 'assistant', element: <AIAssistantPage /> },
+      // { path: 'assistant', element: <AIAssistantPage /> },
       { path: '/profile', element: <UserProfilePage /> },
       { path: 'onboarding', element: <UserOnBoardPage /> },
       // { path: 'adfactory-demo', element: <AdFactoryWorkflowDarkReal2 /> },

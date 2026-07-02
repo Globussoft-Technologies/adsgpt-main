@@ -3,6 +3,7 @@ import {
   fetchPromptTemplates,
   fetchPromptTemplateCategories,
 } from '../ai-creatives/apiClient';
+import { IS_PROMPT_CATEGORIES_ENABLED } from '@/utils/featureFlags';
 
 const GENERAL_CATEGORY = 'General';
 
@@ -78,9 +79,10 @@ export function usePromptTemplates({
   }, [onSelect]);
 
   // Lazy load the distinct categories for this type on first open and on
-  // type change. This fetch is non-blocking — if it fails, the panel still
-  // works with the "General" option and the templates keep loading.
+  // type change. Skipped when IS_PROMPT_CATEGORIES_ENABLED is off — categories
+  // stays empty, so only General templates load (prod behaviour).
   useEffect(() => {
+    if (!IS_PROMPT_CATEGORIES_ENABLED) return undefined;
     if (!open) return undefined;
     if (loadedTypeRef.current === type) return undefined;
 
@@ -95,8 +97,6 @@ export function usePromptTemplates({
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        // Categories are a nice-to-have; don't break the panel if this
-        // endpoint is missing or errors.
         // eslint-disable-next-line no-console
         console.warn('Failed to load template categories:', err.message);
       });

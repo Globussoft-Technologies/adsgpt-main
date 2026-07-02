@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { IS_PROMPT_CATEGORIES_ENABLED } from '@/utils/featureFlags';
 import {
   Tooltip,
   TooltipContent,
@@ -292,8 +293,9 @@ export function TemplatesPanel({ controller }) {
             )}
 
             {state === 'loaded' && templates.length > 0 && (
-              <div className="flex h-[320px] flex-col">
-                {/* Filter bar — category dropdown + search */}
+              <div className={`flex flex-col ${IS_PROMPT_CATEGORIES_ENABLED ? 'h-[320px]' : 'h-[279px]'}`}>
+                {/* Filter bar — category dropdown + search (hidden until VITE_FEATURE_PROMPT_CATEGORIES=true) */}
+                {IS_PROMPT_CATEGORIES_ENABLED && (
                 <div className="flex shrink-0 items-center gap-3 border-b border-black/10 px-3 py-2 dark:border-white/10">
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                     <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-black/10 bg-white pr-2 pl-3 text-[12px] text-gray-700 ring-1 ring-black/10 outline-none focus:ring-cyan-400/60 dark:border-white/10 dark:bg-[#202020]/50 dark:text-[#AFAFAF] dark:focus:ring-cyan-400/60 [&>svg]:text-gray-500 [&>svg]:dark:text-white/50">
@@ -335,6 +337,7 @@ export function TemplatesPanel({ controller }) {
                     />
                   </div>
                 </div>
+                )}
 
                 {/* Two-column content area — fills remaining height */}
                 <div className="min-h-0 flex-1 flex">
@@ -439,7 +442,7 @@ export function TemplatesPanel({ controller }) {
                                   Use this prompt →
                                 </button>
                               </div>
-                              {skippedPlaceholders.length > 0 && (
+                              {IS_PROMPT_CATEGORIES_ENABLED && skippedPlaceholders.length > 0 && (
                                 <span className="text-right text-[10px] leading-tight text-amber-600 break-words dark:text-amber-300">
                                   {skippedText}
                                 </span>

@@ -31,7 +31,7 @@ const PlatformPicker = ({
   title = 'Choose Your Ad Platform',
   subtitle = 'Select where you want to launch your ads',
   // googleComingSoon = false,
-  googleComingSoon = false,
+  googleComingSoon = true,
   tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON !== 'true',
 }) => {
   const navigate = useNavigate();

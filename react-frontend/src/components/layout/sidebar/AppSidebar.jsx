@@ -43,6 +43,7 @@ import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { resetAdFactorNewSlice } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+import { IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 
 const navigationItems = [
   {
@@ -52,12 +53,12 @@ const navigationItems = [
     label: 'Ad Factory',
     link: '/adfactory',
   },
-  {
-    id: 'ai',
-    label: 'AI',
-    link: '/assistant',
-    lucideIcon: Bot,
-  },
+  // {
+  //   id: 'ai',
+  //   label: 'AI',
+  //   link: '/assistant',
+  //   lucideIcon: Bot,
+  // },
   {
     id: 'adstudio',
     icon: adStudioDarkLogo,
@@ -80,7 +81,9 @@ const navigationItems = [
     label: 'BrandIQ',
     link: '/brandiq',
   },
-  {
+  // Landing Page Analyzer — gated by VITE_FEATURE_LANDING_ANALYZER (hidden in
+  // prod). Falsy entry is filtered out below.
+  IS_LANDING_ANALYZER_ENABLED && {
     id: 'landing-analyzer',
     label: 'Analyzer',
     link: '/landing-page-analyzer',
@@ -119,7 +122,7 @@ const navigationItems = [
   //   label: 'Ad Factory',
   //   link: '/adfactory-demo',
   // },
-];
+].filter(Boolean);
 
 const AppSidebar = () => {
   const {

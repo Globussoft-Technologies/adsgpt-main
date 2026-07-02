@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { AutoSizer, List } from 'react-virtualized';
 import axios from 'axios';
 import {
   setActivePage,
@@ -13,7 +12,6 @@ import {
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import {
   getAllAvatars,
-  getAvatarIndustries,
   getAvatarFilters,
   generateImageAndScript,
   regenerateScript,
@@ -77,7 +75,6 @@ import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
 import imageCompression from 'browser-image-compression';
 import { vi } from 'date-fns/locale';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
-const AVATAR_ADVANCED_FILTERS = import.meta.env.VITE_FEATURE_AVATAR_FILTERS === 'true';
 
 const AIAvatarCommonDropdown = ({
   options = [],
@@ -331,152 +328,6 @@ const AvatarSkeletonGrid = ({ columns = 5, rows = 3 }) => {
   );
 };
 
-const AvatarLibraryContent = ({ onBack, onSelect, avatars = [], isLoadingAvatars = false }) => {
-  const dispatch = useDispatch();
-  const safeAvatars = useMemo(() => (Array.isArray(avatars) ? avatars : []), [avatars]);
-  const containerRef = useRef(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-
-  const categoryOptions = useMemo(
-    () => [
-      { value: 'all', label: 'All Categories' },
-      ...categories.map((c) => ({ value: c, label: c })),
-    ],
-    [categories]
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    dispatch(getAvatarIndustries()).then((res) => {
-      if (mounted) setCategories(Array.isArray(res) ? res : []);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [dispatch]);
-
-  const handleCategoryChange = useCallback(
-    (val) => {
-      setSelectedCategory(val);
-      dispatch(getAllAvatars(val === 'all' ? undefined : val));
-    },
-    [dispatch]
-  );
-
-  const handleSelect = useCallback(
-    (url) => {
-      if (onSelect) onSelect(url);
-    },
-    [onSelect]
-  );
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setContainerSize({ width, height });
-      }
-    });
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const getColumnCount = (width) => {
-    if (width >= 800) return 5;
-    if (width >= 600) return 4;
-    if (width >= 580) return 3;
-    return 2;
-  };
-
-  const getRowHeight = (width) => {
-    if (width >= 800) return 260 + 8;
-    return 280 + 8;
-  };
-
-  const columnCount = getColumnCount(containerSize.width);
-  const rowCount = Math.ceil(safeAvatars.length / columnCount);
-
-  const rowRenderer = useCallback(
-    ({ index, key, style }) => {
-      const startIndex = index * columnCount;
-      const rowAvatars = safeAvatars.slice(startIndex, startIndex + columnCount);
-
-      return (
-        <div key={key} style={style} className="flex gap-2">
-          {rowAvatars.map((avatar, colIndex) => (
-            <div
-              key={getAvatarId(avatar, startIndex + colIndex)}
-              style={{ width: `calc((100% - ${(columnCount - 1) * 8}px) / ${columnCount})` }}
-              className="flex-shrink-0"
-            >
-              <AvatarItem avatar={avatar} onSelect={handleSelect} />
-            </div>
-          ))}
-        </div>
-      );
-    },
-    [safeAvatars, columnCount, handleSelect]
-  );
-
-  return (
-    <div
-      className="flex h-full flex-col gap-6 p-6 2xl:pb-12"
-      style={{ minHeight: 'calc(100svh - 200px)' }}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">
-          <button onClick={onBack}>
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          Select your AI Avatar
-        </h3>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <AIAvatarCommonDropdown
-            label="Categories"
-            placeholder="All Categories"
-            options={categoryOptions}
-            value={categoryOptions.find((o) => o.value === selectedCategory)}
-            onChange={handleCategoryChange}
-            align="end"
-            triggerClassName="dark:!border-[#3a3a3a] dark:!bg-[#1c1c1c]"
-            contentClassName="!backdrop-blur-none dark:!border-[#3a3a3a] dark:!bg-[#1c1c1c]"
-          />
-        </div>
-      </div>
-
-      <div ref={containerRef} className="flex-1" style={{ minHeight: 0 }}>
-        {isLoadingAvatars || (safeAvatars.length === 0 && containerSize.width === 0) ? (
-          <AvatarSkeletonGrid columns={5} rows={3} />
-        ) : safeAvatars.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-white/40">
-            No avatars available
-          </div>
-        ) : containerSize.width > 0 && containerSize.height > 0 ? (
-          <List
-            width={containerSize.width}
-            height={containerSize.height}
-            rowCount={rowCount}
-            rowHeight={getRowHeight(containerSize.width)}
-            rowRenderer={rowRenderer}
-            overscanRowCount={2}
-            className="custom-scrollbar max-h-[75vh]"
-            style={{ outline: 'none' }}
-          />
-        ) : (
-          <AvatarSkeletonGrid columns={5} rows={3} />
-        )}
-      </div>
-    </div>
-  );
-};
-
 // DB field -> filter group. `limit` truncates long lists behind "Show more".
 // aspect_ratio is intentionally NOT a filter (per spec).
 const AVATAR_FILTER_GROUPS = [
@@ -494,7 +345,7 @@ const AVATAR_FILTER_GROUPS = [
 
 const AVATAR_PAGE_SIZE = 20;
 
-// New faceted-filter library (gated behind VITE_FEATURE_AVATAR_FILTERS).
+// Faceted-filter avatar library.
 // Chips drive a server-side refetch via getAllAvatars({ field: [...] }); the
 // free-text box narrows the returned set client-side. Cards reuse AvatarItem.
 const AvatarLibraryFilters = ({ onBack, onSelect, avatars = [], isLoadingAvatars = false }) => {
@@ -886,7 +737,11 @@ const AvatarLibraryFilters = ({ onBack, onSelect, avatars = [], isLoadingAvatars
               <AvatarSkeletonGrid columns={4} rows={3} />
             ) : safeAvatars.length > 0 ? (
               <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                <div
+                  className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${
+                    railOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-4'
+                  }`}
+                >
                   {safeAvatars.map((a, i) => (
                     <AvatarItem key={getAvatarId(a, i)} avatar={a} onSelect={onSelect} />
                   ))}
@@ -2555,9 +2410,8 @@ const AvatarAdsPage = ({ handleGenerate }) => {
             {/* Avatar Library */}
             <button
               onClick={() => {
-                // The advanced filter rail owns its own paginated load; only the
-                // legacy library needs the full pre-fetch here.
-                if (!AVATAR_ADVANCED_FILTERS) dispatch(getAllAvatars());
+                // The advanced filter rail owns its own paginated load, so no
+                // full pre-fetch is needed here.
                 setAvatarStepLocal('library');
               }}
               className="group relative h-full overflow-hidden rounded-3xl border-2 border-black/10 bg-white transition hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]"
@@ -2597,28 +2451,17 @@ const AvatarAdsPage = ({ handleGenerate }) => {
         </div>
       )}
 
-      {currentAvatarStep === 'library' &&
-        (AVATAR_ADVANCED_FILTERS ? (
-          <AvatarLibraryFilters
-            avatars={avatars}
-            isLoadingAvatars={avatarsLoading}
-            onBack={() => setAvatarStepLocal('options')}
-            onSelect={(avatar) => {
-              setSelectedAvatar(avatar);
-              setAvatarStepLocal('config');
-            }}
-          />
-        ) : (
-          <AvatarLibraryContent
-            avatars={avatars}
-            isLoadingAvatars={avatarsLoading}
-            onBack={() => setAvatarStepLocal('options')}
-            onSelect={(avatar) => {
-              setSelectedAvatar(avatar);
-              setAvatarStepLocal('config');
-            }}
-          />
-        ))}
+      {currentAvatarStep === 'library' && (
+        <AvatarLibraryFilters
+          avatars={avatars}
+          isLoadingAvatars={avatarsLoading}
+          onBack={() => setAvatarStepLocal('options')}
+          onSelect={(avatar) => {
+            setSelectedAvatar(avatar);
+            setAvatarStepLocal('config');
+          }}
+        />
+      )}
 
       {currentAvatarStep === 'config' && (
         <AvatarConfigForm
