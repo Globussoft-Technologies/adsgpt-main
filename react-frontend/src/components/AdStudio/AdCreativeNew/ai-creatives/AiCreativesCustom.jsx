@@ -931,8 +931,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
             </div>
           )}
 
-          <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <div className="flex h-full flex-col">
+          <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
+            <div className="flex min-h-0 flex-col">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[16px] font-medium text-gray-900 dark:text-white">
                   Prompt<span>*</span>
@@ -1223,18 +1223,20 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     Attach your Brand Voice
                   </p>
                   <div className="flex items-center gap-2">
-                    <div ref={brandIqPickerWrapperRef} className="relative shrink-0">
+                    <div ref={brandIqPickerWrapperRef} className="relative min-w-0">
                       <button
                         type="button"
                         onClick={openBrandIqPicker}
-                        className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
+                        className={`flex min-w-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
                           brandSource.kind === 'list'
                             ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/20'
                             : 'bg-gray-100 text-gray-600 ring-black/10 hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]'
                         }`}
                       >
                         <img src={brandIqIcon} alt="" className="h-4 w-4" />
-                        {brandSource.kind === 'list' ? brandSource.item.name : 'Brand IQ'}
+                        <span className="min-w-0 max-w-[165px] 2xl:max-w-[200px] truncate">
+                          {brandSource.kind === 'list' ? brandSource.item.name : 'Brand IQ'}
+                        </span>
                         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
                       </button>
                       {showBrandIqPicker && (
@@ -2090,7 +2092,7 @@ function CompetitorImageCard({ image, isSelected, onSelect, onPreview }) {
 }
 
 const inputCls = `
-  h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4  text-[13px] font-light text-gray-900 dark:text-white
+  h-[39px] min-w-full max-w-full flex-1 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4  text-[13px] font-light text-gray-900 dark:text-white
   outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]
   focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20
 `;

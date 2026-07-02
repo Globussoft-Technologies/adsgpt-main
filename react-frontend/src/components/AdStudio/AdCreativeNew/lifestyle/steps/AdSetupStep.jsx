@@ -915,22 +915,24 @@ export function AdSetupStep({
                   URL autofills the form below. */}
               <div ref={brandIqWrapperRef} className="relative lg:mr-3">
                 <FieldLabel>Attach your Brand Voice</FieldLabel>
-                <div className="mt-3 flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 p-1 ring-1 ring-black/10 dark:ring-white/5">
+                <div className="mt-3 flex min-w-0 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 p-1 ring-1 ring-black/10 dark:ring-white/5">
                   <button
                     type="button"
                     onClick={handleBrandIqOpen}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-colors ${
+                    className={`flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-colors ${
                       brandSource.kind === 'list' || brandSource.kind === 'autofill'
                         ? 'bg-black/5 dark:bg-white/15 ring-1 ring-black/10 dark:ring-white/20'
                         : 'bg-white dark:bg-[#303030] hover:bg-black/5 dark:hover:bg-[#3a3a3a]'
                     }`}
                   >
                     <img src={brandIqIcon} alt="" className="h-3.5 w-3.5" />
-                    {brandSource.kind === 'list'
-                      ? brandSource.item.name
-                      : brandSource.kind === 'autofill'
-                        ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
-                        : 'Brand IQ'}
+                    <span className="min-w-0 max-w-[200px] truncate">
+                      {brandSource.kind === 'list'
+                        ? brandSource.item.name
+                        : brandSource.kind === 'autofill'
+                          ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
+                          : 'Brand IQ'}
+                    </span>
                     <ChevronDown
                       size={12}
                       className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`}
@@ -955,7 +957,7 @@ export function AdSetupStep({
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+                    className="min-w-0 flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
                   />
                   <button
                     type="button"
