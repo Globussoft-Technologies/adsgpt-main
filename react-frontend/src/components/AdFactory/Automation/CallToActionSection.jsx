@@ -169,6 +169,21 @@ export default function CallToActionSection({
 const MENU_MAX_HEIGHT_PX = 288;
 const PLACEMENT_GAP_PX = 8;
 
+// Find the nearest ancestor that clips or scrolls its overflow. The dropdown
+// is absolutely positioned inside this tree, so its usable space is bounded
+// by that ancestor's visible rectangle — not the full viewport.
+function getClippingAncestor(node) {
+  if (!node) return null;
+  let el = node.parentElement;
+  while (el && el !== document.body) {
+    const style = window.getComputedStyle(el);
+    const overflow = style.overflow + style.overflowY + style.overflowX;
+    if (/auto|scroll|hidden|clip/.test(overflow)) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function ToggleableCtaDropdown({
   options,
   value,
@@ -191,8 +206,15 @@ function ToggleableCtaDropdown({
     const node = triggerRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
+    const clipper = getClippingAncestor(node);
+    const clipRect = clipper ? clipper.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+
+    // Usable space is the distance from the trigger to the clipping ancestor's
+    // visible edges. This matters when the dropdown lives inside a modal with
+    // overflow-y-auto: the window may have room, but the modal body doesn't.
+    const spaceBelow = clipRect.bottom - rect.bottom;
+    const spaceAbove = rect.top - clipRect.top;
+
     // Flip up only when below truly can't fit AND above has more room. This
     // avoids flipping in cases where both sides are tight (we'd rather scroll
     // the menu than render upside-down with nowhere to go).
@@ -215,14 +237,18 @@ function ToggleableCtaDropdown({
     if (open) computePlacement();
   }, [open]);
 
-  // Keep placement honest while the menu is open: viewport resize can shrink
-  // the available space underneath. We don't listen to scroll because the
-  // menu closes on outside interaction anyway.
+  // Keep placement honest while the menu is open: viewport resize or modal
+  // body scroll can shrink the available space underneath.
   useEffect(() => {
     if (!open) return undefined;
     const handle = () => computePlacement();
     window.addEventListener('resize', handle);
-    return () => window.removeEventListener('resize', handle);
+    const clipper = triggerRef.current ? getClippingAncestor(triggerRef.current) : null;
+    if (clipper) clipper.addEventListener('scroll', handle, { passive: true });
+    return () => {
+      window.removeEventListener('resize', handle);
+      if (clipper) clipper.removeEventListener('scroll', handle);
+    };
   }, [open]);
 
   // Close on outside click.

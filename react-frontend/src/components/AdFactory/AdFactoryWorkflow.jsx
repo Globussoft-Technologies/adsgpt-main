@@ -895,6 +895,7 @@ export default function AdFactoryWorkflowDarkReal() {
           id: AUTOMATION_RESULT_NODE_ID,
           title: 'Automation Result',
           subtitle: 'Preview your published Ads',
+          infoMessage: 'Preview the ads published by your automation runs.',
           type: 'action',
           icon: ServicesIcon,
           status: 'idle',

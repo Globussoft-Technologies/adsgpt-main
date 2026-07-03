@@ -90,20 +90,24 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
   const isSubmitting = loading;
 
   // --- Automation mode gating ----------------------------------------------
-  // Show the "Run on Schedule" option only when Meta is one of the selected
-  // platforms. Other providers (Google, etc.) are not yet supported by the
-  // automation cycle backend.
-  const hasMeta = Array.isArray(distribution?.platforms)
-    ? distribution.platforms.some(
-        (p) => String(p?.platformName || '').toLowerCase() === 'meta'
-      )
-    : false;
+  // Show the "Run on Schedule" option when Meta OR Google is selected. The
+  // autopilot backend supports both providers under one job
+  // (targets.meta + targets.google can both be filled). Picking one of them
+  // is enough to unlock the schedule UI; the form itself only renders the
+  // template pickers for the platforms that ARE picked.
+  const hasPlatform = (key) =>
+    Array.isArray(distribution?.platforms) &&
+    distribution.platforms.some(
+      (p) => String(p?.platformName || '').toLowerCase() === key,
+    );
+  const hasMeta = hasPlatform('meta');
+  const hasGoogle = hasPlatform('google');
 
   // Single gate for every automation-related UI branch in this form. When the
   // VITE_FEATURE_AUTOMATION flag is off the whole feature is invisible — no
   // toggle, no pill, no schedule-mode form — and the component behaves like
   // it did before the automation work landed.
-  const automationAvailable = IS_AUTOMATION_ENABLED && hasMeta;
+  const automationAvailable = IS_AUTOMATION_ENABLED && (hasMeta || hasGoogle);
 
   // 'once' = existing manual generation flow.
   // 'schedule' = inline AutomationForm rendered in the body.
@@ -848,15 +852,6 @@ function ModeToggle({ mode, onChange, disabled }) {
         <span className="text-xs font-medium tracking-wide text-gray-500 dark:text-[#AFAFAF] uppercase">
           Generation mode
         </span>
-        {mode === 'schedule' && (
-          <motion.span
-            initial={{ opacity: 0, x: 4 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="inline-flex items-center gap-1 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-2.5 py-0.5 text-10 font-medium text-[#15DCFF]"
-          >
-            <Sparkles className="size-3" /> Meta automation
-          </motion.span>
-        )}
       </div>
 
       <div

@@ -7,19 +7,17 @@ import {
   fetchAutomation,
   saveAutomation,
   updateAutomation,
-  fetchCtaOptions,
   fetchAutomationSummary,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 import {
   selectAutomationEntry,
   selectAutomationSaving,
-  selectCtaOptionsForObjective,
-  selectCtaOptionsLoading,
   selectAutomationSummary,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
 import { AUTOMATION_STATUS } from '@/store/reducers/adFactoryAutomation/constants';
 import {
   checkFbUser,
+  checkGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
 import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
 
@@ -27,10 +25,14 @@ import FrequencySection from './FrequencySection';
 import { getBrowserTimezone } from './TimezoneSelect';
 import PairsPerCycleSection from './PairsPerCycleSection';
 import { MODEL_OPTIONS } from './imageModels';
-import CallToActionSection, { isValidCtaUrl, isValidCtaButton } from './CallToActionSection';
+import { isValidCtaUrl } from './CallToActionSection';
 import TemplatePicker from './TemplatePicker';
 import SummarySection from './SummarySection';
 import MetaStatusPill from './MetaStatusPill';
+import GoogleStatusPill from './GoogleStatusPill';
+import { Info } from 'lucide-react';
+import { FaFacebookF } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
 
 // ----------------------------------------------------------------------------
 // AutomationForm — INLINE form rendered inside ServicesForm when the user
@@ -44,10 +46,9 @@ import MetaStatusPill from './MetaStatusPill';
 //   1. Meta connection banner
 //   2. Frequency
 //   3. Pairs per cycle
-//   4. Target picker (Where to post)
-//   5. Call-to-Action button — gated on the target being complete, since the
-//      CTA only makes sense once a destination is known.
-//   6. Live cycle / credit summary
+//   4. Target picker (Where to post) — each platform card now contains its own
+//      Call-to-Action section, so there is no shared CTA below the cards.
+//   5. Live cycle / credit summary
 // ----------------------------------------------------------------------------
 
 // Today's date as YYYY-MM-DD in the given IANA timezone. Falls back to the
@@ -108,51 +109,142 @@ const defaultFormValues = () => {
     // Image model provider — same enum + default as ServicesForm so the
     // backend can reuse the existing image-generation worker contract.
     imageModelProvider: 'google',
-    callToAction: { button: null, url: '' },
     // Meta Ads V2 template the autopilot job will attach to. id = picked,
-    // dailyBudgetOverride / campaignName = inline edits, objective = mirrored
-    // from the resolved template so CallToActionSection can fetch CTA options
-    // without a second round-trip.
+    // dailyBudgetOverride / campaignName / callToAction = inline edits,
+    // objective = mirrored from the resolved template.
     template: {
       id: null,
       dailyBudgetOverride: null,
       campaignName: null,
       objective: null,
+      callToAction: { button: null, url: '' },
+      // `enabled` drives the per-platform toggle in TemplatePicker. Defaults
+      // to true so both platforms light up on form open (matching today's
+      // behaviour where both pickers were always visible). The user flips it
+      // off to skip that platform for this activation.
+      enabled: true,
+    },
+    // Google Ads template — same shape as Meta, lives alongside it so a
+    // single job can target both platforms simultaneously
+    // (targets.meta + targets.google). Only populated when Google is one of
+    // the selected platforms; otherwise the payload builder skips it.
+    googleTemplate: {
+      id: null,
+      dailyBudgetOverride: null,
+      campaignName: null,
+      objective: null,
+      callToAction: { button: null, url: '' },
+      enabled: true,
     },
   };
 };
 
 // Deep-merge a persisted config over the defaults. Top-level scalars and
 // `imageModelProvider` are taken from source; the nested `frequency`,
-// `callToAction`, and `target` objects are merged field-by-field so partial
-// saves don't blow away unspecified defaults.
+// `callToAction`, and platform template objects are merged field-by-field so
+// partial saves don't blow away unspecified defaults.
 function mergeConfig(target, source) {
   if (!source) return target;
+  const mergeCta = (base, override) => ({
+    button: override?.button ?? base.button,
+    url: override?.url ?? base.url,
+  });
+  const mergeTemplate = (base, override) => ({
+    ...base,
+    ...override,
+    callToAction: mergeCta(base.callToAction, override?.callToAction),
+  });
   return {
     ...target,
     ...source,
     frequency: { ...target.frequency, ...(source.frequency || {}) },
-    callToAction: { ...target.callToAction, ...(source.callToAction || {}) },
-    template: { ...target.template, ...(source.template || {}) },
+    // Legacy top-level callToAction is migrated into platform CTAs below.
+    template: mergeTemplate(target.template, source.template || {}),
+    googleTemplate: mergeTemplate(target.googleTemplate, source.googleTemplate || {}),
   };
 }
 
 const REOPEN_AFTER_FB_KEY = 'adsgpt:reopen-automation-for';
+
+// Backward compatibility: older saved configs stored a single shared CTA at
+// the top level. When a platform's own callToAction is missing, seed it from
+// that legacy value so the user doesn't lose their button + URL on edit.
+function migrateLegacyCallToAction(config) {
+  const legacy = config?.callToAction;
+  if (!legacy || (legacy.button == null && !legacy.url)) return config;
+
+  const patchPlatform = (platformCta) => {
+    if (!platformCta) return legacy;
+    const hasButton = platformCta.button != null;
+    const hasUrl = typeof platformCta.url === 'string' && platformCta.url.length > 0;
+    if (hasButton || hasUrl) return platformCta;
+    return legacy;
+  };
+
+  return {
+    ...config,
+    template: {
+      ...config.template,
+      callToAction: patchPlatform(config.template?.callToAction),
+    },
+    googleTemplate: {
+      ...config.googleTemplate,
+      callToAction: patchPlatform(config.googleTemplate?.callToAction),
+    },
+  };
+}
 
 export default function AutomationForm({ onActivated, onActionsChange }) {
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const campaignId = searchParams.get('campaignId');
 
-  const { fbUser } = useSelector((state) => state.adFactoryNew);
+  const { fbUser, googleUser, distribution } = useSelector((state) => state.adFactoryNew);
   const { userData, credits } = useSelector((state) => state.socket);
   const saving = useSelector(selectAutomationSaving);
   const entry = useSelector((state) => selectAutomationEntry(state, campaignId));
-  // CTA options cache keyed by the picked campaign's objective. Populated by
-  // the dispatch effect below.
-  const ctaOptionsLoading = useSelector(selectCtaOptionsLoading);
 
   const isMetaConnected = !!fbUser?.facebookId;
+  const isGoogleConnected =
+    !!(googleUser?.email || googleUser?.googleId || googleUser?.sub);
+
+  // Which providers does this campaign target? Drives which template pickers
+  // render, which status pills show, and which connection gates the activate
+  // button. Reads from distribution.platforms — the same source that gates
+  // the parent ServicesForm's "Run on Schedule" tab.
+  const hasMetaSelected = React.useMemo(
+    () =>
+      Array.isArray(distribution?.platforms) &&
+      distribution.platforms.some(
+        (p) => String(p?.platformName || '').toLowerCase() === 'meta',
+      ),
+    [distribution?.platforms],
+  );
+  const hasGoogleSelected = React.useMemo(
+    () =>
+      Array.isArray(distribution?.platforms) &&
+      distribution.platforms.some(
+        (p) => String(p?.platformName || '').toLowerCase() === 'google',
+      ),
+    [distribution?.platforms],
+  );
+
+  // Connection gating — split into two distinct concepts so the form can be
+  // useful before the user has finished connecting both providers.
+  //
+  //   anyPlatformConnected → at least one SELECTED platform is OAuth'd in.
+  //     Drives the shared sections (Schedule / Pairs / CTA / Summary). The
+  //     idea: if you're connected to even one provider, you should be able
+  //     to fill out the form details. The picker for the un-connected
+  //     provider stays individually locked (see TemplatePicker disabled
+  //     props in the JSX below).
+  //
+  // Per-platform `isXxxConnected` flags still gate that platform's own
+  // TemplatePicker. So the user can browse the templates of providers they
+  // actually have access to, while the schedule/CTA stays editable.
+  const anyPlatformConnected =
+    (hasMetaSelected && isMetaConnected) ||
+    (hasGoogleSelected && isGoogleConnected);
 
   // Synchronous hydration on first render — if the slice already has the
   // saved entry (typically true because AdFactoryWorkflow's mount effect
@@ -164,7 +256,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     const initial = defaultFormValues();
     if (entry?.config?.frequency) {
       entryHydrated.current = true;
-      return mergeConfig(initial, entry.config);
+      return migrateLegacyCallToAction(mergeConfig(initial, entry.config));
     }
     return initial;
   });
@@ -180,7 +272,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   useEffect(() => {
     if (entryHydrated.current) return;
     if (entry?.config?.frequency) {
-      setValues((prev) => mergeConfig(prev, entry.config));
+      setValues((prev) => migrateLegacyCallToAction(mergeConfig(prev, entry.config)));
       entryHydrated.current = true;
     }
   }, [entry]);
@@ -192,6 +284,15 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       dispatch(checkFbUser(userData.user_id));
     }
   }, [dispatch, userData?.user_id]);
+
+  // Mirror for Google. Only kicks when Google is one of the platforms — no
+  // sense pinging the Google /users endpoint for a Meta-only campaign.
+  useEffect(() => {
+    if (!hasGoogleSelected) return;
+    if (userData?.user_id) {
+      dispatch(checkGoogleUser(userData.user_id));
+    }
+  }, [dispatch, userData?.user_id, hasGoogleSelected]);
 
   // Resolve the credit cost for the currently picked image model. The form
   // stores the backend's provider key (e.g. 'google'); the shared hook
@@ -205,6 +306,24 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   );
   const creditsPerImage = useImageCreditsForModel(selectedModelLabel);
 
+  // Per-platform CTA validators. Each platform is validated independently and
+  // only when it is actually ready to post, because the CTA section lives
+  // inside each platform card and an unready platform is skipped by the payload
+  // builder.
+  const validatePlatformCta = (cta, label) => {
+    const errs = [];
+    // The dropdown only emits valid platform-specific enum values, so we only
+    // need to confirm the user actually picked one. Requiring a hardcoded list
+    // here breaks Google CTAs like BOOK_NOW that aren't in Meta's fallback set.
+    if (!cta?.button) {
+      errs.push(`${label} CTA button is required`);
+    }
+    if (!isValidCtaUrl(cta?.url || '')) {
+      errs.push(`${label} destination URL is required`);
+    }
+    return errs;
+  };
+
   // After an OAuth redirect, AdFactoryPage sets this flag so we know to
   // reopen the Services modal in Schedule mode. The flag is consumed in
   // ServicesForm — here we just clean it up once the form has mounted.
@@ -216,50 +335,26 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
 
   const updateValues = (patch) => setValues((prev) => ({ ...prev, ...patch }));
 
-  // Target reduces to "is a Meta Ads template picked?" — the template carries
-  // adAccountId / pageId / ad set targeting inside its payload. The CTA
-  // section overrides the template's callToAction + linkUrl, so it still
-  // requires a template to be picked first.
-  const isTargetComplete = !!values?.template?.id;
-
-  // Whatever objective the picked template carries. AutomationForm watches
-  // this and (a) dispatches fetchCtaOptions, (b) clears the stale CTA button
-  // on a real change (not on hydration).
-  const campaignObjective = values?.template?.objective || null;
-  const ctaCache = useSelector((state) =>
-    selectCtaOptionsForObjective(state, campaignObjective)
-  );
-  const ctaOptions = ctaCache?.status === 'ok' ? ctaCache.options : null;
-  const ctaUnsupported = ctaCache?.status === 'unsupported';
-
-  // First-sighting guard so hydration ("Edit" path) doesn't trigger a clear.
-  const objectiveInitialized = useRef(false);
-  const lastSeenObjective = useRef(campaignObjective);
-
-  useEffect(() => {
-    // Always (re)fetch when we have an objective — the thunk is cache-aware,
-    // so subsequent calls for the same objective are free.
-    if (campaignObjective) {
-      dispatch(fetchCtaOptions(campaignObjective));
-    }
-
-    if (!objectiveInitialized.current) {
-      // Initial mount / hydration — record the seen objective without clearing.
-      objectiveInitialized.current = true;
-      lastSeenObjective.current = campaignObjective;
-      return;
-    }
-
-    if (campaignObjective !== lastSeenObjective.current) {
-      // Genuine user-driven campaign change → clear stale CTA button so the
-      // user has to pick again from the new objective's option set.
-      setValues((prev) => ({
-        ...prev,
-        callToAction: { ...prev.callToAction, button: null },
-      }));
-      lastSeenObjective.current = campaignObjective;
-    }
-  }, [campaignObjective, dispatch]);
+  // Target readiness: each platform card carries its own CTA section that
+  // overrides the template's callToAction + linkUrl/finalUrl, so a platform
+  // still requires a template to be picked first. With Google support, the
+  // gate is "at least ONE platform is fully ready" — connected AND template
+  // picked. Activation submits with only the ready platform's targets
+  // populated; the other selected-but-not-ready platform is skipped this
+  // round (user can edit later to add it).
+  const metaTemplatePicked = !!values?.template?.id;
+  const googleTemplatePicked = !!values?.googleTemplate?.id;
+  // `enabled` is the toggle inside each TemplatePicker. Defaults to true on
+  // open; user flips it off to skip that platform without un-picking the
+  // template. A platform that's off is excluded from "ready" so the
+  // payload builder skips it AND the "Posting to" pill hides it.
+  const metaEnabled = values?.template?.enabled !== false;
+  const googleEnabled = values?.googleTemplate?.enabled !== false;
+  const metaReady =
+    hasMetaSelected && isMetaConnected && metaEnabled && metaTemplatePicked;
+  const googleReady =
+    hasGoogleSelected && isGoogleConnected && googleEnabled && googleTemplatePicked;
+  const anyPlatformReady = metaReady || googleReady;
 
   // Template-resolved objective patches into the form value from inside
   // TemplatePicker once GET /templates/:id resolves — no longer derived from
@@ -268,43 +363,61 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // ----- Activation validation ---------------------------------------------
   const validationErrors = useMemo(() => {
     const errs = [];
-    if (!isMetaConnected) errs.push('Connect Meta first');
+    // Need SOMETHING selected on the Platforms node.
+    if (!hasMetaSelected && !hasGoogleSelected) {
+      errs.push('Select Meta or Google in the Platforms node first');
+    }
+    // At least one selected provider has to be OAuth'd in. We don't push
+    // separate "Connect Meta" / "Connect Google" errors — those are surfaced
+    // by the connection pills above the form. The single rollup message
+    // below is cleaner than two parallel errors.
+    if (
+      (hasMetaSelected || hasGoogleSelected) &&
+      !isMetaConnected &&
+      !isGoogleConnected
+    ) {
+      errs.push('Connect Meta or Google to activate');
+    }
     if (!values.frequency?.preset) errs.push('Pick a frequency');
     if (!values.frequency?.startDate) errs.push('Pick a start date');
     const pairs = Number(values.pairsPerCycle) || 0;
     if (pairs < 1) errs.push('Pairs per cycle must be at least 1');
-    if (!values.template?.id) errs.push('Pick an ad template');
-    // CTA validation depends on the live options (per objective). When the
-    // objective is unsupported, no button choice is valid — bail with a clear
-    // message instead of asking the user to "pick" from an empty list.
-    if (ctaUnsupported) {
-      errs.push("Selected campaign's objective doesn't support a Call-to-Action button");
-    } else if (!isValidCtaButton(values.callToAction?.button, ctaOptions)) {
-      errs.push('Pick a Call-to-Action button');
-    }
-    if (!isValidCtaUrl(values.callToAction?.url || '')) errs.push('Enter a valid destination URL');
+    // At least one platform must be "fully ready" = its OAuth in + its
+    // template picked. The payload builders only emit targets.<platform>
+    // for the platforms whose template is set, so an unfilled side is
+    // automatically skipped this activation.
+    if (!anyPlatformReady) errs.push('Pick a template for Meta or Google');
+    // Per-platform CTA validation. A platform that is not ready is skipped by
+    // the payload builder, so we don't block activation on its CTA fields.
+    if (metaReady) errs.push(...validatePlatformCta(values.template?.callToAction, 'Meta'));
+    if (googleReady) errs.push(...validatePlatformCta(values.googleTemplate?.callToAction, 'Google'));
     // Daily-budget override bounds — empty (null) means "use template
     // default" and is fine. Otherwise must be a positive integer in
-    // [100, 1_000_000]. Mirrors the inline bounds in TemplatePicker.
-    const dbo = values.template?.dailyBudgetOverride;
-    if (dbo != null) {
+    // [100, 1_000_000]. Same bounds apply to both platforms; for Google the
+    // value here is whole rupees (TemplatePicker stores units, not micros).
+    const checkBudget = (dbo, who) => {
+      if (dbo == null) return;
       if (!Number.isInteger(dbo) || dbo < 100) {
-        errs.push('Minimum daily budget is 100');
+        errs.push(`${who} daily budget minimum is 100`);
       } else if (dbo > 1_000_000) {
-        errs.push('Maximum daily budget is 10 lakhs');
+        errs.push(`${who} daily budget maximum is 10 lakhs`);
       }
-    }
+    };
+    if (hasMetaSelected) checkBudget(values.template?.dailyBudgetOverride, 'Meta');
+    if (hasGoogleSelected) checkBudget(values.googleTemplate?.dailyBudgetOverride, 'Google');
     // Campaign-name override — null means "use template default" (fine).
-    // Otherwise must be 2–120 chars after trim, matching the Meta wizard.
-    const rawName = values.template?.campaignName;
-    if (rawName != null) {
-      const trimmed = String(rawName).trim();
+    // Otherwise must be 2–120 chars after trim.
+    const checkName = (raw, who) => {
+      if (raw == null) return;
+      const trimmed = String(raw).trim();
       if (trimmed.length > 0 && trimmed.length < 2) {
-        errs.push('Campaign name must be at least 2 characters');
+        errs.push(`${who} campaign name must be at least 2 characters`);
       } else if (trimmed.length > 120) {
-        errs.push('Campaign name must be 120 characters or fewer');
+        errs.push(`${who} campaign name must be 120 characters or fewer`);
       }
-    }
+    };
+    if (hasMetaSelected) checkName(values.template?.campaignName, 'Meta');
+    if (hasGoogleSelected) checkName(values.googleTemplate?.campaignName, 'Google');
     // Block activation if the user has picked today as start date but the
     // hour they last selected has slipped into the past while the form was
     // open. FrequencySection auto-bumps as long as a future hour exists; if
@@ -321,7 +434,14 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       }
     }
     return errs;
-  }, [isMetaConnected, values, ctaUnsupported, ctaOptions]);
+  }, [
+    isMetaConnected,
+    isGoogleConnected,
+    hasMetaSelected,
+    hasGoogleSelected,
+    anyPlatformReady,
+    values,
+  ]);
   const canActivate = validationErrors.length === 0;
 
   // Edit mode = we already have an active backend job for this campaign.
@@ -411,12 +531,21 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
 
   return (
     <div className="flex flex-col gap-2.5 2xl:gap-3">
-      <MetaStatusPill />
+      {/* Connection pills — render only for platforms that are actually
+          selected on the campaign's Platforms node. A Meta-only campaign
+          sees just the Meta pill; a Google-only one sees just Google; both
+          selected → both pills stack. */}
+      {(hasMetaSelected || hasGoogleSelected) && (
+        <div className="flex flex-wrap gap-2">
+          {hasMetaSelected && <MetaStatusPill />}
+          {hasGoogleSelected && <GoogleStatusPill />}
+        </div>
+      )}
 
       <FrequencySection
         value={values.frequency}
         onChange={(frequency) => updateValues({ frequency })}
-        disabled={!isMetaConnected}
+        disabled={!anyPlatformConnected}
       />
 
       <PairsPerCycleSection
@@ -425,32 +554,47 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         model={values.imageModelProvider}
         onModelChange={(imageModelProvider) => updateValues({ imageModelProvider })}
         creditsPerImage={creditsPerImage}
-        disabled={!isMetaConnected}
+        disabled={!anyPlatformConnected}
       />
 
-      <TemplatePicker
-        value={values.template}
-        onChange={(template) => updateValues({ template })}
-        disabled={!isMetaConnected}
-      />
-
-      <CallToActionSection
-        value={values.callToAction}
-        onChange={(callToAction) => updateValues({ callToAction })}
-        disabled={!isMetaConnected}
-        locked={!isTargetComplete || ctaUnsupported}
-        loading={!!campaignObjective && ctaOptionsLoading && !ctaCache}
-        options={ctaOptions}
-        onLockedInteraction={() => {
-          if (!isTargetComplete) {
-            toast.error('Where to Post section is required for Call to Action');
-          } else if (ctaUnsupported) {
-            toast.error(
-              `Campaign objective "${campaignObjective}" doesn't support a Call-to-Action button`
-            );
-          }
-        }}
-      />
+      {/* Where to post — per-platform toggle cards inside a labelled
+          wrapper. The wrapper owns the heading, the helper line, and the
+          live "Posting to" summary. Each TemplatePicker renders its own
+          toggle so the user can flip a platform off without un-picking the
+          template (the id stays in state, just isn't shipped on activate). */}
+      <WhereToPostSection
+        metaActive={metaReady}
+        googleActive={googleReady}
+        hasMetaSelected={hasMetaSelected}
+        hasGoogleSelected={hasGoogleSelected}
+      >
+        {hasMetaSelected && (
+          <TemplatePicker
+            platform="meta"
+            value={values.template}
+            onChange={(template) => updateValues({ template })}
+            enabled={values.template?.enabled !== false}
+            onToggleEnabled={(next) =>
+              updateValues({ template: { ...values.template, enabled: next } })
+            }
+            disabled={!isMetaConnected}
+          />
+        )}
+        {hasGoogleSelected && (
+          <TemplatePicker
+            platform="google"
+            value={values.googleTemplate}
+            onChange={(googleTemplate) => updateValues({ googleTemplate })}
+            enabled={values.googleTemplate?.enabled !== false}
+            onToggleEnabled={(next) =>
+              updateValues({
+                googleTemplate: { ...values.googleTemplate, enabled: next },
+              })
+            }
+            disabled={!isGoogleConnected}
+          />
+        )}
+      </WhereToPostSection>
 
       <SummarySection
         frequency={values.frequency}
@@ -462,5 +606,76 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         disabled={!canActivate}
       />
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// WhereToPostSection — labelled wrapper around the per-platform
+// TemplatePicker cards. Owns the heading, the helper line, and the live
+// "Posting to:" pill summary. The pickers themselves render their own
+// toggles; this section just frames them.
+//
+// Receives metaActive / googleActive booleans (= toggled-on AND template
+// picked) so the summary stays in sync without re-deriving the readiness
+// rules a second time.
+// ----------------------------------------------------------------------------
+function WhereToPostSection({
+  children,
+  metaActive,
+  googleActive,
+  hasMetaSelected,
+  hasGoogleSelected,
+}) {
+  const anyActive = metaActive || googleActive;
+  // No platforms selected on the Platforms node = nothing to show in this
+  // section. The parent already validates against this state; the empty
+  // render keeps the form quiet rather than displaying a hollow heading.
+  if (!hasMetaSelected && !hasGoogleSelected) return null;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex size-6 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+            anyActive ? 'bg-emerald-400/20 text-emerald-400' : 'bg-white/10 text-[#cfcfd4]'
+          }`}
+        >
+          {anyActive ? '✓' : '4'}
+        </span>
+        <h2 className="text-[15px] font-semibold text-white">Where to post</h2>
+      </div>
+
+      <div className="flex items-start gap-2.5 rounded-xl border border-[#15DCFF]/15 bg-[#15DCFF]/5 px-3 py-2.5">
+        <Info className="mt-px size-3.5 shrink-0 text-[#15DCFF]" />
+        <p className="text-[12.5px] leading-relaxed text-[#b9d9e0]">
+          Turn on <b className="text-white">at least one</b> platform and choose its template.
+          Your ad runs <b className="text-white">only</b> on the platforms you turn on.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#8a8a90]">
+        <span className="font-medium">Posting to:</span>
+        {metaActive && <DestPill platform="meta" />}
+        {googleActive && <DestPill platform="google" />}
+        {!anyActive && (
+          <span className="text-xs italic text-[#6a6a70]">
+            nothing yet — turn on a platform below
+          </span>
+        )}
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function DestPill({ platform }) {
+  const Icon = platform === 'google' ? FcGoogle : FaFacebookF;
+  const label = platform === 'google' ? 'Google' : 'Meta';
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
+      <Icon className={platform === 'meta' ? 'size-3 text-[#1877F2]' : 'size-3.5'} />
+      {label}
+    </span>
   );
 }

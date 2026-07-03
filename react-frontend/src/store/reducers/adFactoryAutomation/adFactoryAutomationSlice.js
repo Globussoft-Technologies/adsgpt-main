@@ -11,11 +11,14 @@ import {
   resumeAutomation,
   deleteAutomation,
   fetchCtaOptions,
+  fetchGoogleCtaOptions,
   fetchActivity,
   fetchAutomationStats,
   fetchAutomationSummary,
   fetchMetaAdsTemplates,
   fetchMetaAdsTemplateById,
+  fetchGoogleAdsTemplates,
+  fetchGoogleAdsTemplateById,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 
 export { AUTOMATION_STATUS };
@@ -99,13 +102,19 @@ const initialState = {
   // creates a new job but the user sees one continuous trace).
   //   { [campaignId]: { loading, error, runs, total, generationHealth, campaign } }
   activityByCampaign: {},
-  // CTA option cache, keyed by Meta campaign objective enum.
+  // Meta CTA option cache, keyed by Meta campaign objective enum.
   //   { OUTCOME_TRAFFIC: { status: 'ok', options: [{value,label}, ...] },
   //     OUTCOME_SALES:   { status: 'unsupported' } }
   // Missing key = not fetched yet.
   ctaOptionsByObjective: {},
   ctaOptionsLoading: false,
   ctaOptionsError: null,
+  // Google CTA option cache, keyed by Google Ads objective enum.
+  // Same shape as Meta cache; Google objectives are short names (LEADS, SALES,
+  // SEARCH, ...) so the key space does not overlap with OUTCOME_* keys.
+  googleCtaOptionsByObjective: {},
+  googleCtaOptionsLoading: false,
+  googleCtaOptionsError: null,
   // Live summary panel data — POST /jobs/summary response. Keyed by
   // campaignId so multiple campaign tabs don't stomp each other. Only
   // populated once the form is valid enough to be Activate-able.
@@ -118,6 +127,14 @@ const initialState = {
   // Full per-template cache keyed by id, populated when the user picks a row.
   //   { [id]: { template, loading, error } }
   metaTemplatesById: {},
+  // Google Ads templates — mirror of the Meta cache. Separate keying so a
+  // campaign that targets both platforms can show two pickers without their
+  // caches colliding (Meta and Google template IDs are independently
+  // generated and could theoretically collide).
+  googleTemplatesList: [],
+  googleTemplatesLoading: false,
+  googleTemplatesError: null,
+  googleTemplatesById: {},
 };
 
 const adFactoryAutomationSlice = createSlice({
@@ -358,7 +375,7 @@ const adFactoryAutomationSlice = createSlice({
         };
       })
 
-      // -- CTA options (real backend) --
+      // -- Meta CTA options (real backend) --
       .addCase(fetchCtaOptions.pending, (state) => {
         state.ctaOptionsLoading = true;
         state.ctaOptionsError = null;
@@ -372,6 +389,22 @@ const adFactoryAutomationSlice = createSlice({
       .addCase(fetchCtaOptions.rejected, (state, action) => {
         state.ctaOptionsLoading = false;
         state.ctaOptionsError = action.payload?.message || 'Failed to load CTA options';
+      })
+
+      // -- Google CTA options (real backend) --
+      .addCase(fetchGoogleCtaOptions.pending, (state) => {
+        state.googleCtaOptionsLoading = true;
+        state.googleCtaOptionsError = null;
+      })
+      .addCase(fetchGoogleCtaOptions.fulfilled, (state, action) => {
+        state.googleCtaOptionsLoading = false;
+        const { objective, payload, cached } = action.payload || {};
+        if (!objective || cached) return; // no-op for cache hits / missing objective
+        state.googleCtaOptionsByObjective[objective] = payload;
+      })
+      .addCase(fetchGoogleCtaOptions.rejected, (state, action) => {
+        state.googleCtaOptionsLoading = false;
+        state.googleCtaOptionsError = action.payload?.message || 'Failed to load Google CTA options';
       })
 
       // -- Summary panel (POST /jobs/summary) --
@@ -454,6 +487,55 @@ const adFactoryAutomationSlice = createSlice({
           template: previous.template || null,
           loading: false,
           error: action.payload?.message || 'Failed to load template',
+        };
+      })
+
+      // -- Google Ads templates (mirror of Meta cases above) --
+      .addCase(fetchGoogleAdsTemplates.pending, (state) => {
+        state.googleTemplatesLoading = true;
+        state.googleTemplatesError = null;
+      })
+      .addCase(fetchGoogleAdsTemplates.fulfilled, (state, action) => {
+        state.googleTemplatesLoading = false;
+        state.googleTemplatesList = action.payload?.templates || [];
+      })
+      .addCase(fetchGoogleAdsTemplates.rejected, (state, action) => {
+        state.googleTemplatesLoading = false;
+        state.googleTemplatesError = action.payload?.message || 'Failed to load Google templates';
+      })
+
+      .addCase(fetchGoogleAdsTemplateById.pending, (state, action) => {
+        const templateId = action.meta?.arg;
+        if (!templateId) return;
+        const previous = state.googleTemplatesById[templateId] || {};
+        state.googleTemplatesById[templateId] = {
+          template: previous.template || null,
+          loading: true,
+          error: null,
+        };
+      })
+      .addCase(fetchGoogleAdsTemplateById.fulfilled, (state, action) => {
+        const { templateId, template, cached } = action.payload || {};
+        if (!templateId) return;
+        if (cached) {
+          state.googleTemplatesById[templateId].loading = false;
+          state.googleTemplatesById[templateId].error = null;
+          return;
+        }
+        state.googleTemplatesById[templateId] = {
+          template,
+          loading: false,
+          error: null,
+        };
+      })
+      .addCase(fetchGoogleAdsTemplateById.rejected, (state, action) => {
+        const templateId = action.meta?.arg;
+        if (!templateId) return;
+        const previous = state.googleTemplatesById[templateId] || {};
+        state.googleTemplatesById[templateId] = {
+          template: previous.template || null,
+          loading: false,
+          error: action.payload?.message || 'Failed to load Google template',
         };
       });
   },
@@ -617,7 +699,26 @@ const emptyTemplateBucket = { template: null, loading: false, error: null };
 export const selectMetaAdsTemplateById = (state, templateId) =>
   (templateId && state.adFactoryAutomation.metaTemplatesById[templateId]) ||
   emptyTemplateBucket;
+
+// Google Ads templates — same shape, separate cache.
+export const selectGoogleAdsTemplates = (state) =>
+  state.adFactoryAutomation.googleTemplatesList || [];
+export const selectGoogleAdsTemplatesLoading = (state) =>
+  state.adFactoryAutomation.googleTemplatesLoading;
+export const selectGoogleAdsTemplatesError = (state) =>
+  state.adFactoryAutomation.googleTemplatesError;
+export const selectGoogleAdsTemplateById = (state, templateId) =>
+  (templateId && state.adFactoryAutomation.googleTemplatesById[templateId]) ||
+  emptyTemplateBucket;
 export const selectCtaOptionsLoading = (state) => state.adFactoryAutomation.ctaOptionsLoading;
 export const selectCtaOptionsError = (state) => state.adFactoryAutomation.ctaOptionsError;
+
+// Google CTA option cache selectors. Same semantics as Meta selectors above.
+export const selectGoogleCtaOptionsForObjective = (state, objective) =>
+  objective ? state.adFactoryAutomation.googleCtaOptionsByObjective[objective] : undefined;
+export const selectGoogleCtaOptionsLoading = (state) =>
+  state.adFactoryAutomation.googleCtaOptionsLoading;
+export const selectGoogleCtaOptionsError = (state) =>
+  state.adFactoryAutomation.googleCtaOptionsError;
 
 export default adFactoryAutomationSlice.reducer;

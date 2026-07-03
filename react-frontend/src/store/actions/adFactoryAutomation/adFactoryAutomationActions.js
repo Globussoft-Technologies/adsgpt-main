@@ -1,6 +1,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import getCookies from '@/utils/getCookies';
+import { getGoogleCtaOptions } from '@/apis/googleAds/googleAdsApi';
 import {
   AUTOMATION_STATUS,
   mapApiStatusToLocal,
@@ -14,6 +15,11 @@ const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
 // Meta Ads V2 templates — saved snapshots of the wizard form used as the
 // `targets.meta.template` payload on autopilot job creation.
 const META_TEMPLATES_BASE = `${BACKEND_HOST}/adsgpt/meta-ads/v2/templates`;
+
+// Google Ads templates — saved snapshots of the Google wizard form used as
+// the `targets.google.template` payload on autopilot job creation. Same
+// list/detail/cache pattern as Meta, just a different base.
+const GOOGLE_TEMPLATES_BASE = `${BACKEND_HOST}/adsgpt/google-ads/templates`;
 
 // ----------------------------------------------------------------------------
 // Form ↔ API payload mapping
@@ -43,9 +49,10 @@ function dayOfWeekNumberToName(n) {
 // daily-budget override + CTA/URL overrides on top of the template's saved
 // payload (everything else passes through verbatim). Returns null when no
 // template is picked or its full payload hasn't been fetched yet.
-function buildMetaTemplateForJob(formTemplate, fullTemplate, callToAction) {
+function buildMetaTemplateForJob(formTemplate, fullTemplate) {
   if (!formTemplate?.id || !fullTemplate || !fullTemplate.payload) return null;
   const basePayload = fullTemplate.payload || {};
+  const callToAction = formTemplate.callToAction || {};
 
   // Apply user overrides on top of the saved template payload. Only fields
   // the form lets the user edit are touched; the rest pass through as-is.
@@ -71,21 +78,73 @@ function buildMetaTemplateForJob(formTemplate, fullTemplate, callToAction) {
     objective: fullTemplate.objective,
     conversionLocation: fullTemplate.conversionLocation,
     pageId: basePayload.pageId || null,
-    payload: { ...basePayload, ...overlay },
+    // Store the template id inside the payload so edit mode can re-select the
+    // saved template from the dropdown. The backend echoes payload as-is.
+    payload: { ...basePayload, templateId: fullTemplate.id, ...overlay },
+  };
+}
+
+// Mirror of buildMetaTemplateForJob for Google. Two real differences:
+//   1. Budget field is `dailyBudgetMicros` (1_000_000 = ₹1). The form stores
+//      whole currency, so we multiply on the way out.
+//   2. Top-level identity field is `customerId` (Google Ads customer id),
+//      not `pageId`. Read from the cached payload.
+// Everything else (campaign-name override, CTA, linkUrl) matches Meta.
+function buildGoogleTemplateForJob(formTemplate, fullTemplate) {
+  if (!formTemplate?.id || !fullTemplate || !fullTemplate.payload) return null;
+  const basePayload = fullTemplate.payload || {};
+  const callToAction = formTemplate.callToAction || {};
+
+  const overlay = {};
+  if (
+    formTemplate.dailyBudgetOverride != null &&
+    !Number.isNaN(Number(formTemplate.dailyBudgetOverride))
+  ) {
+    // Whole rupees → micros for the Google Ads API.
+    overlay.dailyBudgetMicros = Math.round(
+      Number(formTemplate.dailyBudgetOverride) * 1_000_000,
+    );
+  }
+  if (typeof formTemplate.campaignName === 'string') {
+    const trimmedName = formTemplate.campaignName.trim();
+    if (trimmedName) {
+      // The Google wizard stores the campaign label under BOTH `name` and
+      // `campaignName` (see saved template examples). Set both so the
+      // backend's `name || campaignName` fallback hits whatever it reads.
+      overlay.name = trimmedName;
+      overlay.campaignName = trimmedName;
+    }
+  }
+  if (callToAction?.button) overlay.callToAction = callToAction.button;
+  if (callToAction?.url) {
+    // Google's wizard uses `finalUrl`; some saved payloads also carry
+    // `linkUrl` as an alias. Write both so neither path stales.
+    overlay.finalUrl = callToAction.url;
+    overlay.linkUrl = callToAction.url;
+  }
+
+  return {
+    name: fullTemplate.name,
+    objective: fullTemplate.objective,
+    conversionLocation: fullTemplate.conversionLocation,
+    customerId: basePayload.customerId || basePayload.adAccountId || null,
+    // Store the template id inside the payload so edit mode can re-select the
+    // saved template from the dropdown. The backend echoes payload as-is.
+    payload: { ...basePayload, templateId: fullTemplate.id, ...overlay },
   };
 }
 
 // Builds the POST /jobs request body from the form's values + the slice's
 // cached full template document. `fullTemplate` is looked up by the calling
 // thunk from `metaTemplatesById[template.id].template`.
-function buildJobPayload(adsgptCampaignId, config, fullTemplate) {
+function buildJobPayload(adsgptCampaignId, config, fullTemplate, fullGoogleTemplate) {
   if (!config) return null;
   const {
     frequency = {},
     pairsPerCycle = 1,
     imageModelProvider,
-    callToAction = {},
     template = {},
+    googleTemplate = {},
   } = config;
 
   const schedule = {
@@ -121,11 +180,27 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate) {
   };
   if (imageModelProvider) payload.model = imageModelProvider;
 
-  // Attach the Meta Ads V2 template + user overrides. Skip the whole targets
-  // block when no template is picked / its full payload isn't cached yet —
-  // the activation thunk shouldn't have fired anyway (canActivate guards it).
-  const metaTemplate = buildMetaTemplateForJob(template, fullTemplate, callToAction);
-  if (metaTemplate) payload.targets = { meta: { template: metaTemplate } };
+  // Attach platform templates. The backend job schema supports BOTH
+  // `targets.meta` and `targets.google` populated on a single job, so a
+  // campaign that targets both providers makes one job that posts to both
+  // per cycle. A platform is skipped entirely when:
+  //   - its `enabled` flag is false (user toggled it off in the picker), OR
+  //   - no template is picked.
+  // Toggling off keeps the template id in form state for instant restore on
+  // re-toggle, but we still need to gate the send so a turned-off platform
+  // never reaches the backend.
+  const metaTemplate =
+    template?.enabled !== false
+      ? buildMetaTemplateForJob(template, fullTemplate)
+      : null;
+  const googleTemplateBlock =
+    googleTemplate?.enabled !== false
+      ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
+      : null;
+  const targets = {};
+  if (metaTemplate) targets.meta = { template: metaTemplate };
+  if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
+  if (Object.keys(targets).length > 0) payload.targets = targets;
 
   return payload;
 }
@@ -135,14 +210,14 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate) {
 // whatever the form has. Backend will accept or reject the diff. Matches
 // buildJobPayload's meta-targets handling for consistency.
 // ----------------------------------------------------------------------------
-function buildJobUpdatePayload(config, fullTemplate) {
+function buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate) {
   if (!config) return null;
   const {
     frequency = {},
     pairsPerCycle = 1,
     imageModelProvider,
-    callToAction = {},
     template = {},
+    googleTemplate = {},
   } = config;
 
   const schedule = {
@@ -170,11 +245,24 @@ function buildJobUpdatePayload(config, fullTemplate) {
   };
   if (imageModelProvider) payload.model = imageModelProvider;
 
-  // Same template-attachment as buildJobPayload. Always re-send the template
-  // on update — partial diffs of payload sub-objects don't compose well
-  // server-side, so we ship the full overlay each time.
-  const metaTemplate = buildMetaTemplateForJob(template, fullTemplate, callToAction);
-  if (metaTemplate) payload.targets = { meta: { template: metaTemplate } };
+  // Same template-attachment + enable-gating as buildJobPayload. Always
+  // re-send the picked templates on update — partial diffs of payload sub-
+  // objects don't compose well server-side, so we ship the full overlay
+  // each time. A platform toggled OFF is dropped from the payload, so the
+  // backend learns it should stop posting there (the PATCH effectively
+  // unsets that targets.<platform> key).
+  const metaTemplate =
+    template?.enabled !== false
+      ? buildMetaTemplateForJob(template, fullTemplate)
+      : null;
+  const googleTemplateBlock =
+    googleTemplate?.enabled !== false
+      ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
+      : null;
+  const targets = {};
+  if (metaTemplate) targets.meta = { template: metaTemplate };
+  if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
+  if (Object.keys(targets).length > 0) payload.targets = targets;
 
   return payload;
 }
@@ -227,21 +315,29 @@ function toDateInputValue(input) {
 function mapJobToEntry(job, previous) {
   if (!job) return null;
   const meta = job?.targets?.meta || {};
-  // New API shape attaches the Meta Ads V2 template inside meta.template.
-  // The job response echoes the template's id back at meta.template.id (or
-  // sometimes templateId — handle both for safety) so Edit mode can re-pick
-  // it from the picker without forcing the user to choose again.
+  const google = job?.targets?.google || {};
+  // New API shape attaches each platform's template inside its own
+  // `targets.<platform>.template`. The job response echoes the template's id
+  // back so Edit mode can re-pick it from the right picker without forcing
+  // the user to choose again.
   const apiTemplate = meta.template || {};
+  const apiGoogleTemplate = google.template || {};
   const schedule = job?.schedule || {};
   const pairsPerCycle = Number(job?.pairsPerCycle) || 1;
   const totalRuns = Number(job?.totalRuns) || 0;
   const failedRuns = Number(job?.failedRuns) || 0;
   const successfulRuns = Math.max(0, totalRuns - failedRuns);
 
+  // The backend echoes the template payload but not its id. We still want to
+  // preserve the locally-known id so re-enabling a platform keeps the picked
+  // template, but `enabled` must reflect whether the saved job actually has
+  // this platform — otherwise a stale previous id can turn the switch back on.
+  const hasApiMetaTemplate = !!(apiTemplate.name || apiTemplate.payload);
   const templateId =
     apiTemplate.id ||
     apiTemplate.templateId ||
     apiTemplate._id ||
+    apiTemplate?.payload?.templateId ||
     previous?.config?.template?.id ||
     null;
   const apiObjective =
@@ -260,6 +356,34 @@ function mapJobToEntry(job, previous) {
     apiTemplate?.payload?.campaignName || apiTemplate?.payload?.name || null;
   const campaignName =
     apiCampaignName || previous?.config?.template?.campaignName || null;
+
+  // Google template round-trip — same shape as Meta, two differences:
+  //   1. Budget is dailyBudgetMicros → divide by 1_000_000 to get whole ₹
+  //      back into the form (the form stores units, not micros).
+  //   2. Both `name` and `campaignName` may be present (we wrote both); fall
+  //      back to either.
+  const hasApiGoogleTemplate = !!(apiGoogleTemplate.name || apiGoogleTemplate.payload);
+  const googleTemplateId =
+    apiGoogleTemplate.id ||
+    apiGoogleTemplate.templateId ||
+    apiGoogleTemplate._id ||
+    apiGoogleTemplate?.payload?.templateId ||
+    previous?.config?.googleTemplate?.id ||
+    null;
+  const googleObjective =
+    apiGoogleTemplate.objective || previous?.config?.googleTemplate?.objective || null;
+  const apiGoogleDailyBudgetMicros = apiGoogleTemplate?.payload?.dailyBudgetMicros;
+  const previousGoogleOverride = previous?.config?.googleTemplate?.dailyBudgetOverride;
+  const googleDailyBudgetOverride =
+    apiGoogleDailyBudgetMicros != null
+      ? Number(apiGoogleDailyBudgetMicros) / 1_000_000
+      : previousGoogleOverride ?? null;
+  const apiGoogleCampaignName =
+    apiGoogleTemplate?.payload?.campaignName ||
+    apiGoogleTemplate?.payload?.name ||
+    null;
+  const googleCampaignName =
+    apiGoogleCampaignName || previous?.config?.googleTemplate?.campaignName || null;
 
   return {
     status: mapApiStatusToLocal(job?.status),
@@ -291,9 +415,10 @@ function mapJobToEntry(job, previous) {
       },
       pairsPerCycle,
       imageModelProvider: job?.model || previous?.config?.imageModelProvider || 'google',
+      // Legacy top-level CTA — only used as a fallback when the backend job
+      // was created before per-platform CTAs were introduced. Copied into both
+      // platform CTAs below when platform-specific values are absent.
       callToAction: {
-        // Backend echoes the override under template.payload.callToAction;
-        // fall back to the top-level callToAction array for backward compat.
         button:
           apiTemplate?.payload?.callToAction ||
           (Array.isArray(job?.callToAction) ? job.callToAction[0] : null) ||
@@ -305,6 +430,28 @@ function mapJobToEntry(job, previous) {
         objective: apiObjective,
         dailyBudgetOverride,
         campaignName,
+        // A platform is considered "enabled" on Edit only when the saved job
+        // actually includes its template. The id may be preserved from local
+        // state for re-enabling, but the switch must match the API response.
+        enabled: hasApiMetaTemplate,
+        callToAction: {
+          button: apiTemplate?.payload?.callToAction || null,
+          url: apiTemplate?.payload?.linkUrl || '',
+        },
+      },
+      googleTemplate: {
+        id: googleTemplateId,
+        objective: googleObjective,
+        dailyBudgetOverride: googleDailyBudgetOverride,
+        campaignName: googleCampaignName,
+        enabled: hasApiGoogleTemplate,
+        callToAction: {
+          button: apiGoogleTemplate?.payload?.callToAction || null,
+          url:
+            apiGoogleTemplate?.payload?.finalUrl ||
+            apiGoogleTemplate?.payload?.linkUrl ||
+            '',
+        },
       },
     },
     stats: {
@@ -411,7 +558,12 @@ export const saveAutomation = createAsyncThunk(
     const fullTemplate =
       (templateId && getState().adFactoryAutomation?.metaTemplatesById?.[templateId]?.template) ||
       null;
-    const payload = buildJobPayload(campaignId, config, fullTemplate);
+    const googleTemplateId = config?.googleTemplate?.id;
+    const fullGoogleTemplate =
+      (googleTemplateId &&
+        getState().adFactoryAutomation?.googleTemplatesById?.[googleTemplateId]?.template) ||
+      null;
+    const payload = buildJobPayload(campaignId, config, fullTemplate, fullGoogleTemplate);
     const token = getCookies();
 
     let job = null;
@@ -504,7 +656,12 @@ export const updateAutomation = createAsyncThunk(
     const fullTemplate =
       (templateId && getState().adFactoryAutomation?.metaTemplatesById?.[templateId]?.template) ||
       null;
-    const payload = buildJobUpdatePayload(config, fullTemplate);
+    const googleTemplateId = config?.googleTemplate?.id;
+    const fullGoogleTemplate =
+      (googleTemplateId &&
+        getState().adFactoryAutomation?.googleTemplatesById?.[googleTemplateId]?.template) ||
+      null;
+    const payload = buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate);
 
     let job = null;
     try {
@@ -969,6 +1126,60 @@ export const fetchCtaOptions = createAsyncThunk(
 );
 
 // ----------------------------------------------------------------------------
+// fetchGoogleCtaOptions — real backend call for Google Ads CTA values.
+//
+// GET /adsgpt/google-ads/cta-options?objective=<GOOGLE_OBJECTIVE>
+//
+// The Google controller expects raw Google objective/channel names (LEADS,
+// SALES, SEARCH, DISPLAY, PERFORMANCE_MAX, ...). It returns 400 for unknown
+// objectives, which we cache as { status: 'unsupported' } the same way we do
+// for Meta 404s. Cache lives in the slice under googleCtaOptionsByObjective.
+// ----------------------------------------------------------------------------
+export const fetchGoogleCtaOptions = createAsyncThunk(
+  'adFactoryAutomation/fetchGoogleCtaOptions',
+  async (objective, { getState, rejectWithValue }) => {
+    if (!objective) {
+      return { objective: null, cached: true };
+    }
+
+    // Cache hit — skip the network and let the reducer no-op.
+    const cached =
+      getState().adFactoryAutomation?.googleCtaOptionsByObjective?.[objective];
+    if (cached) {
+      return { objective, cached: true, payload: cached };
+    }
+
+    try {
+      const res = await getGoogleCtaOptions(objective);
+      const options = Array.isArray(res?.data) ? res.data : [];
+      return {
+        objective,
+        cached: false,
+        payload: { status: 'ok', options },
+      };
+    } catch (err) {
+      const code = err?.response?.status;
+      if (code === 400) {
+        // Permanent for this objective — cache the sentinel so we stop asking.
+        return {
+          objective,
+          cached: false,
+          payload: { status: 'unsupported' },
+        };
+      }
+      return rejectWithValue({
+        objective,
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load Google CTA options',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
 // fetchAutomationSummary — POST /ads-factory/autopilot/jobs/summary
 //
 // Returns the live summary numbers (next run, cycles scheduled, credits per
@@ -1112,6 +1323,77 @@ export const fetchMetaAdsTemplateById = createAsyncThunk(
           err?.response?.data?.message ||
           err?.message ||
           'Failed to load template',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
+// fetchGoogleAdsTemplates — GET /google-ads/templates
+//
+// Slim list of saved Google templates (no payload). Mirrors fetchMetaAds-
+// Templates for parity; the picker UI is platform-agnostic and just routes
+// to whichever thunk matches the `platform` prop it was rendered with.
+// ----------------------------------------------------------------------------
+export const fetchGoogleAdsTemplates = createAsyncThunk(
+  'adFactoryAutomation/fetchGoogleAdsTemplates',
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(GOOGLE_TEMPLATES_BASE, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const templates = Array.isArray(res?.data?.templates) ? res.data.templates : [];
+      return { templates };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load Google templates',
+      });
+    }
+  }
+);
+
+// ----------------------------------------------------------------------------
+// fetchGoogleAdsTemplateById — GET /google-ads/templates/:id
+//
+// Fetches the full Google template (with payload) so we can attach it to
+// the autopilot job. Cached per-id, same as the Meta variant.
+// ----------------------------------------------------------------------------
+export const fetchGoogleAdsTemplateById = createAsyncThunk(
+  'adFactoryAutomation/fetchGoogleAdsTemplateById',
+  async (templateId, { getState, rejectWithValue }) => {
+    if (!templateId) {
+      return rejectWithValue({ message: 'templateId is required' });
+    }
+    const cached = getState().adFactoryAutomation?.googleTemplatesById?.[templateId];
+    if (cached?.template) {
+      return { templateId, template: cached.template, cached: true };
+    }
+    try {
+      const res = await axios.get(`${GOOGLE_TEMPLATES_BASE}/${templateId}`, {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const template = res?.data?.template || null;
+      if (!template) {
+        return rejectWithValue({ message: 'Template not found' });
+      }
+      return { templateId, template, cached: false };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load Google template',
       });
     }
   }

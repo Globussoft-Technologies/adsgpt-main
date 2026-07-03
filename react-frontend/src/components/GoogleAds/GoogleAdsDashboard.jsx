@@ -16,7 +16,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getGoogleAdAccounts,
   getGoogleCampaigns,
@@ -37,6 +37,7 @@ const GOOGLE_BLUE = '#4285F4';
 export default function GoogleAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [adAccounts, setAdAccounts]       = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -62,6 +63,23 @@ export default function GoogleAdsDashboard() {
 
   const openWizard  = (mode, context = null) => setWizard({ open: true, mode, context });
   const closeWizard = () => setWizard((w) => ({ ...w, open: false }));
+
+  // Deep-link entry: callers (e.g. the TemplatePicker empty-state in
+  // AdFactory Automation) navigate here with `?openWizard=create-full` to
+  // jump straight into the New Campaign flow. Switch to the Campaigns tab
+  // so the wizard's "Campaigns refreshed" outcome lands on the right view,
+  // open the wizard, then strip the query param so a refresh / back-nav
+  // doesn't keep re-opening it. Mirrors the same flow on MetaAdsDashboard.
+  const autoOpenWizardMode = searchParams.get('openWizard');
+  useEffect(() => {
+    if (!autoOpenWizardMode) return;
+    setActiveTab('campaigns');
+    openWizard(autoOpenWizardMode);
+    const next = new URLSearchParams(searchParams);
+    next.delete('openWizard');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenWizardMode]);
 
   const [noAccountReason, setNoAccountReason] = useState(null);
 
