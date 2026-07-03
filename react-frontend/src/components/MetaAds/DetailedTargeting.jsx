@@ -187,7 +187,7 @@ export default function DetailedTargeting({
                     >
                       {badge.label}
                     </span>
-                    <span className="max-w-[20ch] truncate">{s.name}</span>
+                    <span className="max-w-[20ch] truncate" title={s.name}>{s.name}</span>
                   </button>
                 );
               })}

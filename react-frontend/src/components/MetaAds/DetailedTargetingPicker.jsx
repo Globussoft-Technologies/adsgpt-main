@@ -304,11 +304,14 @@ export default function DetailedTargetingPicker({
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-13 font-medium text-gray-900 dark:text-white">
+                      <p className="truncate text-13 font-medium text-gray-900 dark:text-white" title={r.name}>
                         {r.name}
                       </p>
                       {Array.isArray(r.path) && r.path.length > 0 && (
-                        <p className="truncate text-11 text-gray-500 dark:text-white/45">
+                        <p
+                          className="truncate text-11 text-gray-500 dark:text-white/45"
+                          title={r.path.join(' > ')}
+                        >
                           {r.path.join(' > ')}
                         </p>
                       )}
@@ -355,7 +358,7 @@ export default function DetailedTargetingPicker({
                 >
                   {badge.label}
                 </span>
-                <span className="max-w-[20ch] truncate">{item.name}</span>
+                <span className="max-w-[20ch] truncate" title={item.name}>{item.name}</span>
                 {!disabled && (
                   <button
                     type="button"

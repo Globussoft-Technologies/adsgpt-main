@@ -146,7 +146,7 @@ function renderChildren({
                   <ChevronRight className="h-4 w-4" />
                 )}
               </span>
-              <span className="min-w-0 flex-1 truncate">{name}</span>
+              <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
               <span className="shrink-0 text-11 text-gray-500 dark:text-white/45">
                 {leafCount}
               </span>
@@ -192,7 +192,7 @@ function renderChildren({
             >
               {checked && <Check className="h-3 w-3" />}
             </span>
-            <span className="min-w-0 flex-1 truncate">
+            <span className="min-w-0 flex-1 truncate" title={item.name}>
               {item.name}
             </span>
             {/* Type badge intentionally omitted in the tree view —
