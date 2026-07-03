@@ -181,6 +181,30 @@ const BID_TYPES = [
   { value: 'BID_TYPE_CUSTOM', label: 'Custom bid' },
 ];
 
+// TikTok language targeting — ISO 639-1 codes accepted by the ad group API.
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'fr', label: 'French' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'de', label: 'German' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'ms', label: 'Malay' },
+  { value: 'th', label: 'Thai' },
+  { value: 'vi', label: 'Vietnamese' },
+  { value: 'tr', label: 'Turkish' },
+  { value: 'it', label: 'Italian' },
+  { value: 'nl', label: 'Dutch' },
+  { value: 'pl', label: 'Polish' },
+  { value: 'sv', label: 'Swedish' },
+];
+
 const BUDGET_MODES = [
   { value: 'BUDGET_MODE_DAY', label: 'Daily budget' },
   { value: 'BUDGET_MODE_TOTAL', label: 'Lifetime budget' },
@@ -757,7 +781,10 @@ const CreateCampaignWizard = ({
         frequencySchedule: raw.frequency_schedule || 7,
         bidType: raw.bid_type || 'BID_TYPE_NO_BID',
         bidPrice: raw.bid != null ? String(raw.bid) : '',
+        scheduleStartTime: toDatetimeLocal(raw.schedule_start_time),
         scheduleEndTime: toDatetimeLocal(raw.schedule_end_time),
+        languages: raw.languages || [],
+        spendingPower: raw.spending_power || 'ALL',
         pixelId: raw.pixel_id || '',
         optimizationEvent: raw.optimization_event || '',
         pageId: raw.page_id || '',
@@ -778,6 +805,8 @@ const CreateCampaignWizard = ({
         landingPageUrl: raw.landing_page_url || raw.creative?.landing_page_url || '',
         identityId: raw.identity_id || raw.creative?.identity_id || '',
         mediaType: raw.ad_format === 'SINGLE_IMAGE' ? 'image' : 'video',
+        impressionTrackingUrl: raw.impression_tracking_url || raw.creative?.impression_tracking_url || '',
+        clickTrackingUrl: raw.click_tracking_url || raw.creative?.click_tracking_url || '',
       };
     }
     return {};
@@ -819,7 +848,12 @@ const CreateCampaignWizard = ({
     frequencySchedule: 7,
     bidType: 'BID_TYPE_NO_BID',
     bidPrice: '',
+    scheduleStartTime: '',
     scheduleEndTime: '',
+    languages: [],
+    spendingPower: 'ALL',
+    impressionTrackingUrl: '',
+    clickTrackingUrl: '',
     pixelId: '',
     optimizationEvent: '',
     leadGenSubType: '',
@@ -990,7 +1024,8 @@ const CreateCampaignWizard = ({
     return selectedObjective;
   }, [schema, form.objectiveKey, form.objectiveType, selectedObjective]);
 
-  const pickObjective = (o) =>
+  const pickObjective = (o) => {
+    const ts = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '').replace('-', '').replace('-', '');
     update({
       objectiveKey: o.key,
       objectiveType: o.objectiveType,
@@ -999,7 +1034,9 @@ const CreateCampaignWizard = ({
       pageId: '',
       pixelId: '',
       optimizationEvent: '',
+      adName: `Ad name${ts}`,
     });
+  };
 
   // ── validation per step ──
   const validateStep = (targetStep = step) => {
@@ -1032,6 +1069,11 @@ const CreateCampaignWizard = ({
       }
       if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
         errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
+      }
+      if (form.scheduleStartTime && form.scheduleEndTime) {
+        if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
+          errs.scheduleEndTime = 'End time must be after start time';
+        }
       }
     }
     if (targetStep === 3) {
@@ -1073,16 +1115,23 @@ const CreateCampaignWizard = ({
   }, [form, step]);
 
   const scheduleEndPayload = () => {
-    if (!form.scheduleEndTime) return {};
     // TikTok expects "YYYY-MM-DD HH:MM:SS" in the account timezone.
-    const d = new Date(form.scheduleEndTime);
-    if (isNaN(d.getTime())) return {};
     const pad = (n) => String(n).padStart(2, '0');
-    return {
-      schedule_end_time: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-        d.getHours()
-      )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+    const fmt = (val) => {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
+    const result = {};
+    if (form.scheduleStartTime) {
+      const v = fmt(form.scheduleStartTime);
+      if (v) result.schedule_start_time = v;
+    }
+    if (form.scheduleEndTime) {
+      const v = fmt(form.scheduleEndTime);
+      if (v) result.schedule_end_time = v;
+    }
+    return result;
   };
 
   // ── edit save ──
@@ -1107,6 +1156,10 @@ const CreateCampaignWizard = ({
           age_groups: form.ageGroups,
           gender: form.gender,
           interest_category_ids: form.interestCategoryIds,
+          ...(form.languages.length ? { languages: form.languages } : {}),
+          ...(form.spendingPower && form.spendingPower !== 'ALL'
+            ? { spending_power: form.spendingPower }
+            : {}),
           budget: Number(form.adgroupBudget),
           budget_mode: 'BUDGET_MODE_DAY',
           optimization_goal: form.optimizationGoal,
@@ -1145,6 +1198,8 @@ const CreateCampaignWizard = ({
               ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
                 ? { page_id: Number(form.pageId) }
                 : { landing_page_url: form.landingPageUrl }),
+              ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
+              ...(form.clickTrackingUrl ? { click_tracking_url: form.clickTrackingUrl } : {}),
             },
           ],
         });
@@ -1196,6 +1251,10 @@ const CreateCampaignWizard = ({
           ...(form.interestCategoryIds.length
             ? { interest_category_ids: form.interestCategoryIds }
             : {}),
+          ...(form.languages.length ? { languages: form.languages } : {}),
+          ...(form.spendingPower && form.spendingPower !== 'ALL'
+            ? { spending_power: form.spendingPower }
+            : {}),
           ...(promotionTypeForObjective(form.objectiveKey)
             ? { promotion_type: promotionTypeForObjective(form.objectiveKey) }
             : {}),
@@ -1206,7 +1265,7 @@ const CreateCampaignWizard = ({
             : {}),
           budget_mode: form.budgetMode,
           budget: Number(form.adgroupBudget),
-          schedule_type: 'SCHEDULE_FROM_NOW',
+          schedule_type: form.scheduleStartTime ? 'SCHEDULE_START_END' : 'SCHEDULE_FROM_NOW',
           ...scheduleEndPayload(),
           optimization_goal: form.optimizationGoal,
           billing_event: billingEventForGoal(form.optimizationGoal),
@@ -1274,6 +1333,8 @@ const CreateCampaignWizard = ({
           ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
             ? { page_id: Number(form.pageId) }
             : { landing_page_url: form.landingPageUrl }),
+          ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
+          ...(form.clickTrackingUrl ? { click_tracking_url: form.clickTrackingUrl } : {}),
         };
 
         if (form.mediaType === 'video' && videoId) {
@@ -1646,6 +1707,30 @@ const CreateCampaignWizard = ({
               }))}
               maxHeight="max-h-72"
             />
+            <MultiSelectField
+              label="Languages (optional)"
+              values={form.languages}
+              onChange={(v) => update({ languages: v })}
+              options={LANGUAGES}
+            />
+            <FieldShell label="Spending power">
+              <div className="flex gap-2">
+                {[{ value: 'ALL', label: 'All' }, { value: 'HIGH', label: 'High spending power' }].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => update({ spendingPower: opt.value })}
+                    className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                      form.spendingPower === opt.value
+                        ? 'bg-[#15DCFF] text-white'
+                        : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </FieldShell>
             <SelectField
               label="Bid type"
               value={form.bidType}
@@ -1663,11 +1748,34 @@ const CreateCampaignWizard = ({
                 error={errors.bidPrice}
               />
             )}
-            <FieldShell label="Schedule end time (optional)" hint="Leave empty to run indefinitely.">
+            <FieldShell label="Schedule start time (optional)" hint="Leave empty to start immediately.">
               <input
                 type="datetime-local"
                 className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
                 style={{ colorScheme: 'dark' }}
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                value={form.scheduleStartTime}
+                onChange={(e) => {
+                  update({ scheduleStartTime: e.target.value, scheduleEndTime: '' });
+                }}
+              />
+            </FieldShell>
+            <FieldShell
+              label="Schedule end time (optional)"
+              hint="Leave empty to run indefinitely."
+              error={errors.scheduleEndTime}
+            >
+              <input
+                type="datetime-local"
+                className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:bg-[#909294]/15 dark:text-white ${
+                  errors.scheduleEndTime ? 'border-red-500' : 'border-gray-300 dark:border-white/5'
+                }`}
+                style={{ colorScheme: 'dark' }}
+                min={
+                  form.scheduleStartTime
+                    ? new Date(new Date(form.scheduleStartTime).getTime() + 60000).toISOString().slice(0, 16)
+                    : new Date(Date.now() + 60000).toISOString().slice(0, 16)
+                }
                 value={form.scheduleEndTime}
                 onChange={(e) => update({ scheduleEndTime: e.target.value })}
               />
@@ -1678,6 +1786,13 @@ const CreateCampaignWizard = ({
       case 3: // Ad
         return (
           <div className="space-y-4">
+            <TextField
+              label="Ad name"
+              value={form.adName}
+              onChange={(v) => update({ adName: v })}
+              placeholder={`Ad name${new Date().toISOString().slice(0, 16).replace('T', ' ')}`}
+              hint="Used to identify this ad in your dashboard. Not shown to the audience."
+            />
             {identities.length === 0 && (
               <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
                 No TikTok identity found. Link a TikTok account to your ad account to create ads. You
@@ -1803,6 +1918,20 @@ const CreateCampaignWizard = ({
                 placeholder="https://example.com"
               />
             </div>
+            <TextField
+              label="Impression tracking URL (optional)"
+              value={form.impressionTrackingUrl}
+              onChange={(v) => update({ impressionTrackingUrl: v })}
+              placeholder="https://tracking.example.com/impression"
+              hint="Third-party impression tracking pixel URL."
+            />
+            <TextField
+              label="Click tracking URL (optional)"
+              value={form.clickTrackingUrl}
+              onChange={(v) => update({ clickTrackingUrl: v })}
+              placeholder="https://tracking.example.com/click"
+              hint="Third-party click tracking URL."
+            />
           </div>
         );
 
@@ -1912,11 +2041,26 @@ const CreateCampaignWizard = ({
                   <ReviewField label="Age groups" value={ageGroupLabels} />
                   <ReviewField label="Gender" value={genderLabel} />
                   <ReviewField label="Interests" value={interestNames} />
+                  {form.languages.length > 0 && (
+                    <ReviewField
+                      label="Languages"
+                      value={form.languages.map((l) => LANGUAGES.find((lang) => lang.value === l)?.label || l).join(', ')}
+                    />
+                  )}
+                  {form.spendingPower && form.spendingPower !== 'ALL' && (
+                    <ReviewField label="Spending power" value="High spending power" />
+                  )}
                   <ReviewField label="Budget mode" value={budgetModeLabel} />
                   <ReviewField label="Budget" value={`${form.adgroupBudget} ${currency}`} />
                   <ReviewField label="Bid type" value={bidTypeLabel} />
                   {form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice && (
                     <ReviewField label="Bid price" value={`${form.bidPrice} ${currency}`} />
+                  )}
+                  {form.scheduleStartTime && (
+                    <ReviewField
+                      label="Schedule start"
+                      value={new Date(form.scheduleStartTime).toLocaleString()}
+                    />
                   )}
                   {form.scheduleEndTime && (
                     <ReviewField
@@ -1960,6 +2104,12 @@ const CreateCampaignWizard = ({
                         <ReviewField label="Instant Form Page ID" value={form.pageId} />
                       ) : (
                         <ReviewField label="Landing page URL" value={form.landingPageUrl} />
+                      )}
+                      {form.impressionTrackingUrl && (
+                        <ReviewField label="Impression tracking URL" value={form.impressionTrackingUrl} />
+                      )}
+                      {form.clickTrackingUrl && (
+                        <ReviewField label="Click tracking URL" value={form.clickTrackingUrl} />
                       )}
                     </>
                   ) : (
