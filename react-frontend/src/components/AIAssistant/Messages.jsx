@@ -116,7 +116,10 @@ const MediaGrid = ({ urls = [], onOpenImage }) => {
                 )}
               </button>
               {!isOverflowTile && (
-                <div className="absolute top-1.5 right-1.5 hidden group-hover:block">
+                // Keep the trigger laid out (opacity, not `hidden`) so Radix can
+                // measure its position — a display:none trigger makes the dropdown
+                // jump to the top-left corner when the menu opens / hover is lost.
+                <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                   <DownloadMenu url={src} variant="icon" />
                 </div>
               )}
