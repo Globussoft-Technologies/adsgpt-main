@@ -382,7 +382,7 @@ function getStepIssues(step, form, selectedObjective) {
       if (!form.adgroupName.trim()) issues.push('Ad group name is required');
       if (!form.optimizationGoal) issues.push('Select an optimization goal');
       if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) issues.push('Enter a valid daily budget');
-      if (!form.locationIds.length) issues.push('Select at least one location');
+      // locationIds empty = all locations (same as Meta Ads Manager behaviour)
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
         issues.push('Enter a valid bid price');
       }
@@ -1022,7 +1022,7 @@ const CreateCampaignWizard = ({
       if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
         errs.adgroupBudget = 'Daily budget is required';
       }
-      if (!form.locationIds.length) errs.locationIds = 'Select at least one location';
+      // locationIds empty = all locations selected — no validation error needed
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
         errs.bidPrice = 'Bid price is required';
       }
@@ -1103,7 +1103,7 @@ const CreateCampaignWizard = ({
           advertiser_id: advertiserId,
           adgroup_id: context.id,
           adgroup_name: form.adgroupName,
-          location_ids: form.locationIds,
+          location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
           age_groups: form.ageGroups,
           gender: form.gender,
           interest_category_ids: form.interestCategoryIds,
@@ -1190,7 +1190,7 @@ const CreateCampaignWizard = ({
           adgroup_name: form.adgroupName,
           placement_type: 'PLACEMENT_TYPE_NORMAL',
           placements: ['PLACEMENT_TIKTOK'],
-          location_ids: form.locationIds,
+          location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
           ...(form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
           ...(form.gender && form.gender !== 'GENDER_UNLIMITED' ? { gender: form.gender } : {}),
           ...(form.interestCategoryIds.length
@@ -1617,10 +1617,10 @@ const CreateCampaignWizard = ({
             )}
             <ScrollableMultiSelectField
               label="Locations"
+              hint={form.locationIds.length === 0 ? 'No selection = All locations targeted' : undefined}
               values={form.locationIds}
               onChange={(v) => update({ locationIds: v })}
               options={regions.map((r) => ({ value: r.id, label: r.name }))}
-              required
               error={errors.locationIds}
               maxHeight="max-h-72"
             />
@@ -1667,6 +1667,7 @@ const CreateCampaignWizard = ({
               <input
                 type="datetime-local"
                 className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
+                style={{ colorScheme: 'dark' }}
                 value={form.scheduleEndTime}
                 onChange={(e) => update({ scheduleEndTime: e.target.value })}
               />
