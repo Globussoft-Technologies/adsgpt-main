@@ -45,13 +45,23 @@ export const handleDownload = async (fileUrl) => {
   }
 };
 
-// format: 'webp' | 'jpeg'
-export const handleDownloadAs = async (fileUrl, format = 'webp') => {
+// Convert + download a (possibly .webp) image in the chosen format, client-side
+// via a canvas. format: 'png' | 'jpg' | 'jpeg' | 'webp'.
+const _FORMAT_MIME = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
+
+export const handleDownloadAs = async (fileUrl, format = 'png') => {
   if (!fileUrl) return console.error('No file URL provided.');
 
+  const fmt = (format || 'png').toLowerCase();
+  const mimeType = _FORMAT_MIME[fmt] || 'image/png';
+  const ext = fmt === 'jpeg' ? 'jpg' : fmt;
   const proxyUrl = `${HOST}/adsgpt/img/preview?url=${fileUrl}`;
-  const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/webp';
-  const toastId = toast.loading(`Downloading Image`);
+  const toastId = toast.loading(`Downloading ${ext.toUpperCase()}…`);
 
   try {
     const response = await fetch(proxyUrl, {
@@ -67,7 +77,8 @@ export const handleDownloadAs = async (fileUrl, format = 'webp') => {
     canvas.height = imageBitmap.height;
     const ctx = canvas.getContext('2d');
 
-    if (format === 'jpeg') {
+    // JPG has no alpha — flatten transparency onto white so it doesn't turn black.
+    if (mimeType === 'image/jpeg') {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -76,23 +87,27 @@ export const handleDownloadAs = async (fileUrl, format = 'webp') => {
 
     canvas.toBlob(
       (convertedBlob) => {
+        if (!convertedBlob) {
+          toast.error('Download failed ❌', { id: toastId });
+          return;
+        }
         const blobUrl = URL.createObjectURL(convertedBlob);
         const urlWithoutQuery = fileUrl.split('?')[0];
         const baseName = urlWithoutQuery.split('/').pop().split('.')[0] || 'download';
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `${baseName}.${format}`;
+        link.download = `${baseName}.${ext}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(blobUrl);
-        toast.success(`Image downloaded successfully`, { id: toastId });
+        toast.success(`Downloaded ${ext.toUpperCase()} 🎉`, { id: toastId });
       },
       mimeType,
-      format === 'jpeg' ? 0.92 : undefined,
+      mimeType === 'image/jpeg' ? 0.92 : undefined,
     );
   } catch (error) {
-    console.error(`Error downloading as ${format}:`, error);
+    console.error(`Error downloading as ${fmt}:`, error);
     toast.error('Download failed ❌', { id: toastId });
   }
 };

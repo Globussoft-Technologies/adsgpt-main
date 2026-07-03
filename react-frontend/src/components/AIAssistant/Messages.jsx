@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Quote, ArrowRight, Download, PanelRightOpen, Sparkles, Check } from 'lucide-react';
+import { Bot, Quote, ArrowRight, PanelRightOpen, Sparkles, Check } from 'lucide-react';
 import { setMySpaceTab, setMySpaceImageSource } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
@@ -10,10 +10,10 @@ import MessageActions from './MessageActions';
 import CompetitorAdsGrid from './CompetitorAdsGrid';
 import VideoStoryboard from './VideoStoryboard';
 import ConceptCards from './ConceptCards';
+import DownloadMenu from './DownloadMenu';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
 import toMediaUrl from '@/utils/mediaUrl';
-import { handleDownload } from '@/utils/download';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
 
@@ -116,14 +116,9 @@ const MediaGrid = ({ urls = [], onOpenImage }) => {
                 )}
               </button>
               {!isOverflowTile && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleDownload(src); }}
-                  title="Download"
-                  className="absolute top-1.5 right-1.5 hidden h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/80 hover:text-white group-hover:flex"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
+                <div className="absolute top-1.5 right-1.5 hidden group-hover:block">
+                  <DownloadMenu url={src} variant="icon" />
+                </div>
               )}
             </div>
           );

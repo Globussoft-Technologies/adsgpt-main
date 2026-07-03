@@ -1,7 +1,7 @@
-import { Download, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { handleDownload } from '@/utils/download';
+import DownloadMenu from './DownloadMenu';
 import toMediaUrl from '@/utils/mediaUrl';
 
 // In-app full-size image viewer with a download action. Clicking a generated /
@@ -20,14 +20,7 @@ const ImageLightbox = ({ src, alt = '', onClose }) => {
         {resolved && (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => handleDownload(resolved)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3 text-[12.5px] font-medium text-white/85 transition-colors hover:bg-white/[0.12]"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download
-              </button>
+              <DownloadMenu url={resolved} variant="button" />
               <button
                 type="button"
                 onClick={() => onClose?.()}
