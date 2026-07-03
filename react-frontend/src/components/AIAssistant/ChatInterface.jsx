@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 
 import Composer from './Composer';
 import Messages from './Messages';
+import GenCanvas from './GenCanvas';
 import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   buildMockChoiceForm,
@@ -12,9 +13,9 @@ import {
 } from './mockChoiceForms';
 import {
   appendAssistantText,
-  attachAssistantAdCreative,
   attachAssistantAds,
   attachAssistantChoiceForm,
+  attachAssistantConceptCards,
   attachAssistantImage,
   attachAssistantStoryboard,
   failAssistantStream,
@@ -22,6 +23,7 @@ import {
   loadConversation,
   pushStep,
   pushUserMessage,
+  selectConcept,
   setSessionId,
   startAssistantStream,
 } from '@/store/reducers/aiAssistant/aiAssistantSlice';
@@ -100,7 +102,7 @@ const ChatInterface = () => {
   // Real network turn — extracted so both `/cascade` follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.
   const runStreamingTurn = useCallback(
-    ({ text, attachments, formResponse, quote: turnQuote }) => {
+    ({ text, attachments, formResponse, conceptResponse, quote: turnQuote }) => {
       const controller = streamChat({
         sessionId,
         message: text,
@@ -109,6 +111,7 @@ const ChatInterface = () => {
           : null,
         enabledTools,
         formResponse: formResponse || null,
+        conceptResponse: conceptResponse || null,
         quote: turnQuote || null,
         onEvent: (event, data) => {
           switch (event) {
@@ -134,14 +137,14 @@ const ChatInterface = () => {
                 dispatch(attachAssistantStoryboard(data.storyboard));
               }
               break;
-            case 'ad_creative':
-              if (data.pack && Array.isArray(data.pack.variants) && data.pack.variants.length > 0) {
-                dispatch(attachAssistantAdCreative(data.pack));
-              }
-              break;
             case 'choice_form':
               if (data.form_id && Array.isArray(data.fields)) {
                 dispatch(attachAssistantChoiceForm(data));
+              }
+              break;
+            case 'concept_cards':
+              if (Array.isArray(data.concepts) && data.concepts.length > 0) {
+                dispatch(attachAssistantConceptCards(data));
               }
               break;
             case 'done':
@@ -238,8 +241,49 @@ const ChatInterface = () => {
     [dispatch, pending, runStreamingTurn],
   );
 
+  // Called by ConceptCards when the user picks a concept. Marks the chosen card,
+  // then sends a `concept_response` turn — the agent replies with a creative
+  // brief (genCard) pre-filled from that concept, which auto-opens the canvas.
+  const handleConceptSelect = useCallback(
+    ({ messageId, concept }) => {
+      if (pending || !concept) return;
+      dispatch(selectConcept({ messageId, conceptId: concept.id }));
+      dispatch(startAssistantStream());
+      runStreamingTurn({ text: '', attachments: null, conceptResponse: concept });
+    },
+    [dispatch, pending, runStreamingTurn],
+  );
+
+  // ── Right-side canvas (genCards / creative briefs) ──────────────────────────
+  // The genCards are every assistant message carrying a choiceForm. The canvas
+  // shows one at a time; auto-opens to the newest when a fresh brief arrives.
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const genCards = useMemo(
+    () => messages.filter((m) => m.role === 'assistant' && m.choiceForm),
+    [messages],
+  );
+  const prevGenCountRef = useRef(0);
+  useEffect(() => {
+    if (genCards.length > prevGenCountRef.current) {
+      setActiveCardIndex(genCards.length - 1);
+      setCanvasOpen(true);
+    }
+    prevGenCountRef.current = genCards.length;
+  }, [genCards.length]);
+
+  const handleOpenCanvas = useCallback(
+    (messageId) => {
+      const i = genCards.findIndex((m) => m.id === messageId);
+      if (i >= 0) setActiveCardIndex(i);
+      setCanvasOpen(true);
+    },
+    [genCards],
+  );
+
   return (
-    <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {isEmpty ? (
         <div className="flex flex-1 flex-col items-center px-4 pt-[10vh] sm:pt-[14vh]">
           <h2 className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]">
@@ -267,6 +311,8 @@ const ChatInterface = () => {
                 pendingDoneLabels={pendingDoneLabels}
                 completedLabel={completedLabel}
                 onChoiceFormSubmit={handleChoiceFormSubmit}
+                onConceptSelect={handleConceptSelect}
+                onOpenCanvas={handleOpenCanvas}
                 onQuote={handleQuote}
               />
             </div>
@@ -285,6 +331,18 @@ const ChatInterface = () => {
           </div>
         </>
       )}
+      </div>
+
+      <GenCanvas
+        open={canvasOpen}
+        cards={genCards}
+        activeIndex={activeCardIndex}
+        onPrev={() => setActiveCardIndex((i) => Math.max(0, i - 1))}
+        onNext={() => setActiveCardIndex((i) => Math.min(genCards.length - 1, i + 1))}
+        onClose={() => setCanvasOpen(false)}
+        onChoiceFormSubmit={handleChoiceFormSubmit}
+        pending={pending}
+      />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Quote, ArrowRight, Download } from 'lucide-react';
+import { Bot, Quote, ArrowRight, Download, PanelRightOpen, Sparkles, Check } from 'lucide-react';
 import { setMySpaceTab, setMySpaceImageSource } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
@@ -9,8 +9,7 @@ import StepsIndicator from './StepsIndicator';
 import MessageActions from './MessageActions';
 import CompetitorAdsGrid from './CompetitorAdsGrid';
 import VideoStoryboard from './VideoStoryboard';
-import AdCreativePackage from './AdCreativePackage';
-import ChoiceForm from './ChoiceForm';
+import ConceptCards from './ConceptCards';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
 import toMediaUrl from '@/utils/mediaUrl';
@@ -152,6 +151,8 @@ const Messages = ({
   pendingDoneLabels,
   completedLabel,
   onChoiceFormSubmit,
+  onConceptSelect,
+  onOpenCanvas,
   onQuote,
 }) => {
   const endRef = useRef(null);
@@ -298,20 +299,42 @@ const Messages = ({
 
               <CompetitorAdsGrid ads={m.competitorAds || []} />
 
-              {m.adCreative &&
-                Array.isArray(m.adCreative.variants) &&
-                m.adCreative.variants.length > 0 && (
-                  <AdCreativePackage pack={m.adCreative} />
-                )}
-
-              {m.choiceForm && (
-                <ChoiceForm
-                  form={m.choiceForm}
+              {m.conceptCards && Array.isArray(m.conceptCards.concepts) && (
+                <ConceptCards
+                  cards={m.conceptCards}
                   messageId={m.id}
-                  result={m.choiceFormResult}
-                  onSubmit={onChoiceFormSubmit}
+                  result={m.conceptResult}
+                  onSelect={onConceptSelect}
                   disabled={pending && isLast}
                 />
+              )}
+
+              {/* Creative brief (genCard) — opens in the right-side canvas. */}
+              {m.choiceForm && (
+                <button
+                  type="button"
+                  onClick={() => onOpenCanvas?.(m.id)}
+                  className="mt-3 flex w-full items-center gap-3 rounded-xl border border-white/[0.08] bg-[#0F0F0F] px-4 py-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.04]"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#15DCFF]/20 to-[#5E66F5]/20">
+                    <Sparkles className="h-4 w-4 text-[#15DCFF]" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-white/90">
+                      {m.choiceForm.title || 'Creative brief'}
+                    </span>
+                    <span className="block text-[11.5px] text-white/50">
+                      {m.choiceFormResult ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Submitted — reopen to edit &amp; regenerate
+                        </span>
+                      ) : (
+                        'Open to review and generate'
+                      )}
+                    </span>
+                  </span>
+                  <PanelRightOpen className="h-4 w-4 shrink-0 text-white/45" />
+                </button>
               )}
 
               {m.storyboard && Array.isArray(m.storyboard.scenes) && (

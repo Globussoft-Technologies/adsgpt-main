@@ -46,6 +46,7 @@ export const streamChat = ({
   attachments,
   enabledTools,
   formResponse,
+  conceptResponse,
   quote,
   onEvent,
 }) => {

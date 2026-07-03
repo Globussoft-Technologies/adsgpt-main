@@ -6,12 +6,18 @@ const ENABLED_TOOLS_KEY = 'aia1_enabled_tools';
 // Names MUST match the package names the Agent registers in chat.py
 // `_TOOL_PACKAGES`. The Agent uses the same keys to expand each toggle into
 // the full tool list for the system-message hint.
+//
+// Video generation is disabled behind a flag ("as of now") — the Video chip is
+// hidden unless VITE_VIDEO_ENABLED === 'true', mirroring the backend's
+// AGENTIC_VIDEO_ENABLED flag. Keep both in sync when restoring video.
+const VIDEO_ENABLED = import.meta.env.VITE_VIDEO_ENABLED === 'true';
+
 export const TOGGLEABLE_TOOLS = [
   'searchTheWeb',
   'searchTheAdLibrary',
   'adCopyGenerator',
   'adCreativeGenerator',
-  'adVideoGenerator',
+  ...(VIDEO_ENABLED ? ['adVideoGenerator'] : []),
 ];
 
 const loadSessionId = () => {
@@ -125,6 +131,8 @@ const aiAssistantSlice = createSlice({
           adCreative: null,
           choiceForm: null,
           choiceFormResult: null,
+          conceptCards: null,
+          conceptResult: null,
           complete: false,
         },
       }),
@@ -180,6 +188,22 @@ const aiAssistantSlice = createSlice({
       if (msg && msg.role === 'assistant') {
         msg.choiceForm = form;
       }
+    },
+    attachAssistantConceptCards: (state, action) => {
+      const cards = action.payload;
+      if (!cards || !Array.isArray(cards.concepts) || cards.concepts.length === 0) return;
+      const msg = state.messages[state.messages.length - 1];
+      if (msg && msg.role === 'assistant') {
+        msg.conceptCards = cards;
+      }
+    },
+    // Records which concept the user picked (so the card can show a chosen state).
+    selectConcept: (state, action) => {
+      const { messageId, conceptId } = action.payload || {};
+      if (!messageId || !conceptId) return;
+      const msg = state.messages.find((m) => m.id === messageId);
+      if (!msg || !msg.conceptCards) return;
+      msg.conceptResult = { conceptId, selected_at: Date.now() };
     },
     submitAssistantChoiceForm: (state, action) => {
       const { messageId, values } = action.payload || {};
@@ -290,6 +314,11 @@ const aiAssistantSlice = createSlice({
             ? m.choiceForm
             : null,
         choiceFormResult: m.choiceFormResult || null,
+        conceptCards:
+          m.conceptCards && Array.isArray(m.conceptCards.concepts) && m.conceptCards.concepts.length > 0
+            ? m.conceptCards
+            : null,
+        conceptResult: m.conceptResult || null,
       }));
       state.pending = false;
       state.pendingActiveLabel = null;
@@ -331,6 +360,8 @@ export const {
   attachAssistantAdCreative,
   attachAssistantStoryboard,
   attachAssistantChoiceForm,
+  attachAssistantConceptCards,
+  selectConcept,
   submitAssistantChoiceForm,
   updateStoryboardScene,
   setStoryboardFinalVideo,
