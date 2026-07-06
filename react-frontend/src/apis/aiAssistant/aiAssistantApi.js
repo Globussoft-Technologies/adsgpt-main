@@ -108,41 +108,118 @@ export const streamChat = ({
     const EVENT_SEP = /\r?\n\r?\n/;
     const LINE_SEP = /\r?\n/;
     let buffer = '';
+    let terminalSeen = false; // saw a `done` or `error` event
+    let receivedAny = false; // parsed at least one event of any kind
+
+    // Parse one SSE event block and dispatch it. Records whether we've seen any
+    // event and whether it was a terminal (`done`/`error`) one — the caller
+    // relies on exactly one terminal event to clear its `pending` state.
+    const emitBlock = (block) => {
+      if (!block.trim()) return;
+      let event = 'message';
+      let data = '';
+      for (const line of block.split(LINE_SEP)) {
+        if (line.startsWith(':')) continue;
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        // Per the SSE spec, strip only ONE leading space after `data:` and join
+        // multiple data lines with `\n` (the old `+=`/`.trim()` concatenated
+        // them with no separator, corrupting any multi-line payload).
+        else if (line.startsWith('data:')) {
+          const chunk = line.slice(5).replace(/^ /, '');
+          data = data ? `${data}\n${chunk}` : chunk;
+        }
+      }
+      if (!data) return;
+
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        parsed = { raw: data };
+      }
+      receivedAny = true;
+      if (event === 'done' || event === 'error') terminalSeen = true;
+      onEvent(event, parsed);
+    };
+
+    // Drain every COMPLETE event currently in the buffer (i.e. every block
+    // followed by a blank-line separator). A trailing partial block is left in
+    // `buffer` for the next chunk / the post-loop flush.
+    const drainBuffer = () => {
+      let m;
+      while ((m = EVENT_SEP.exec(buffer)) !== null) {
+        const block = buffer.slice(0, m.index);
+        buffer = buffer.slice(m.index + m[0].length);
+        emitBlock(block);
+      }
+    };
+
+    // Idle watchdog — a genuinely dead connection (proxy half-open, dropped
+    // socket) leaves `reader.read()` pending forever and would hang the UI on
+    // `pending: true`. If NO bytes arrive for this long we abort and surface a
+    // timeout. It must be well above the longest legitimate silent gap (a single
+    // image-generation tool can run ~60s with no intervening SSE event), so 3
+    // minutes of total silence is the "connection is dead" threshold.
+    const IDLE_TIMEOUT_MS = 180000;
+    let watchdogFired = false;
+    let idleTimer = null;
+    const armWatchdog = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        watchdogFired = true;
+        try {
+          controller.abort();
+        } catch {
+          /* noop */
+        }
+      }, IDLE_TIMEOUT_MS);
+    };
+    const disarmWatchdog = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = null;
+    };
 
     try {
+      armWatchdog();
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        armWatchdog(); // reset the silence timer on every chunk
         buffer += decoder.decode(value, { stream: true });
-
-        let m;
-        while ((m = EVENT_SEP.exec(buffer)) !== null) {
-          const block = buffer.slice(0, m.index);
-          buffer = buffer.slice(m.index + m[0].length);
-          if (!block.trim()) continue;
-
-          let event = 'message';
-          let data = '';
-          for (const line of block.split(LINE_SEP)) {
-            if (line.startsWith(':')) continue;
-            if (line.startsWith('event:')) event = line.slice(6).trim();
-            else if (line.startsWith('data:')) data += line.slice(5).trim();
-          }
-          if (!data) continue;
-
-          let parsed;
-          try {
-            parsed = JSON.parse(data);
-          } catch {
-            parsed = { raw: data };
-          }
-          onEvent(event, parsed);
-        }
+        drainBuffer();
+      }
+      // Flush: emit any bytes still held by the decoder, then drain any complete
+      // events, then the final trailing block that arrived WITHOUT a blank line
+      // (a `done` sent as the last bytes with no terminator was being dropped).
+      buffer += decoder.decode();
+      drainBuffer();
+      if (buffer.trim()) {
+        emitBlock(buffer);
+        buffer = '';
       }
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      if (watchdogFired) {
+        if (!terminalSeen) onEvent('error', { detail: 'the connection timed out' });
+        terminalSeen = true;
+      } else if (err.name !== 'AbortError') {
         onEvent('error', { detail: err?.message || 'stream interrupted' });
+        terminalSeen = true;
+      } else {
+        // User-initiated abort (New Chat / history load). State is already reset
+        // by the caller — do NOT emit a terminal event that could revive a dead
+        // session's last message.
+        terminalSeen = true;
       }
+    } finally {
+      disarmWatchdog();
+    }
+
+    // Terminal-state guarantee: the caller's `pending` flag is only cleared by a
+    // `done`/`error` event. If the stream ended without one (clean EOF, truncated
+    // response, dropped proxy), synthesize a terminal event so the UI never hangs.
+    if (!terminalSeen) {
+      if (receivedAny) onEvent('done', {}); // got content but no `done` — finish gracefully
+      else onEvent('error', { detail: 'the assistant did not respond' });
     }
   })();
 
