@@ -104,6 +104,22 @@ class TiktokAdController {
    * modes. No TikTok token needed; drives the create-campaign wizard dropdowns.
    */
   getWizardSchema(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get create-campaign wizard schema'
+       #swagger.description = 'Static config that drives the TikTok create-campaign wizard dropdowns — objectives grouped by funnel stage, funnel group labels, call-to-action values, and budget modes. No TikTok token required.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.responses[200] = {
+         description: "Wizard schema",
+         schema: {
+           objectives: [{ key: "TRAFFIC", label: "Traffic", group: "Consideration", objectiveType: "TRAFFIC", optimizationGoals: ["CLICK"], billingEvents: ["CPC", "CPM"], requiresCta: true, defaultBudgetMode: "BUDGET_MODE_DAY" }],
+           objectivesByGroup: { Awareness: [], Consideration: [], Conversion: [] },
+           funnelGroups: { AWARENESS: "Awareness", CONSIDERATION: "Consideration", CONVERSION: "Conversion" },
+           ctas: ["LEARN_MORE", "SHOP_NOW", "SIGN_UP", "DOWNLOAD_NOW"],
+           budgetModes: { DAILY: "BUDGET_MODE_DAY", LIFETIME: "BUDGET_MODE_TOTAL", INFINITE: "BUDGET_MODE_INFINITE" }
+         }
+       }
+       #swagger.responses[500] = { description: "Failed to load TikTok wizard schema" }
+    */
     try {
       return res.json({
         objectives: tiktokObjectivesConfig.TIKTOK_OBJECTIVES,
@@ -125,6 +141,22 @@ class TiktokAdController {
    * Used by the frontend PlatformPicker to decide whether to show the dashboard.
    */
   async checkAccount(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Check TikTok connection status'
+       #swagger.description = 'Checks whether the authenticated user has a connected, active TikTok account with at least one accessible advertiser (ad) account. Used by the frontend PlatformPicker/dashboard gate before allowing any other TikTok call.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.responses[200] = {
+         description: "Connection status",
+         schema: {
+           isConnected: true,
+           hasAccount: true,
+           advertiserIds: ["7012345678901234567"],
+           advertiserInfo: [{ advertiserId: "7012345678901234567", name: "My Brand Ads", currency: "USD", timezone: "America/Los_Angeles", status: "STATUS_ENABLE" }]
+         }
+       }
+       #swagger.responses[401] = { description: "Unauthorized" }
+       #swagger.responses[500] = { description: "Failed to check TikTok account" }
+    */
     try {
       const userId = req.user?.user_id;
       if (!userId) {
@@ -157,6 +189,20 @@ class TiktokAdController {
    * List connected TikTok ad accounts. Refreshes advertiser info from TikTok API.
    */
   async getAdAccountsList(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List TikTok ad accounts'
+       #swagger.description = 'Lists the advertiser (ad) accounts connected during OAuth, refreshed from TikTok. Proxies TikTok Marketing API GET /advertiser/info/. Cached for REDIS_TTL (2h) unless refresh=true is passed.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['refresh'] = { in: 'query', description: 'Pass "true" to bypass the cache and refetch from TikTok', type: 'string', example: 'true' }
+       #swagger.responses[200] = {
+         description: "Ad accounts",
+         schema: {
+           accounts: [{ id: "7012345678901234567", name: "My Brand Ads", currency: "USD", timezone: "America/Los_Angeles", status: "ACTIVE" }]
+         }
+       }
+       #swagger.responses[401] = { description: "Unauthorized / TikTok token expired" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok ad accounts" }
+    */
     try {
       const userId = req.user?.user_id;
       const { refresh } = req.query;
@@ -218,6 +264,23 @@ class TiktokAdController {
    * List campaigns for an advertiser account.
    */
   async getCampaigns(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List campaigns'
+       #swagger.description = 'Lists campaigns for an advertiser account. Proxies TikTok Marketing API GET /campaign/get/. Cached for REDIS_TTL (2h) per advertiser.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Campaigns",
+         schema: {
+           campaigns: [{ id: "1789012345678901", name: "Summer Sale", status: "ACTIVE", objective: "TRAFFIC", budget: 100, budgetMode: "BUDGET_MODE_DAY", createTime: "2026-06-01 10:00:00", modifyTime: "2026-06-02 09:00:00" }],
+           pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok campaigns" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, page = 1, pageSize = 100 } = req.query;
@@ -273,6 +336,24 @@ class TiktokAdController {
    * List ad groups for an advertiser account, optionally filtered by campaign.
    */
   async getAdGroups(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List ad groups'
+       #swagger.description = 'Lists ad groups for an advertiser account, optionally filtered by campaign. Proxies TikTok Marketing API GET /adgroup/get/. Cached for REDIS_TTL (2h).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['campaignId'] = { in: 'query', description: 'Filter to ad groups under this campaign', type: 'string', example: '1789012345678901' }
+       #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Ad groups",
+         schema: {
+           adGroups: [{ id: "1789012345678902", name: "US - 18-34", campaignId: "1789012345678901", campaignName: "Summer Sale", status: "ACTIVE", budget: 50, budgetMode: "BUDGET_MODE_DAY", bid: 1.2, optimizationGoal: "CLICK", createTime: "2026-06-01 10:05:00", modifyTime: "2026-06-02 09:00:00" }],
+           pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok ad groups" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, campaignId, page = 1, pageSize = 100 } = req.query;
@@ -339,6 +420,24 @@ class TiktokAdController {
    * List ads for an advertiser account, optionally filtered by ad group.
    */
   async getAds(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List ads'
+       #swagger.description = 'Lists ads for an advertiser account, optionally filtered by ad group. Proxies TikTok Marketing API GET /ad/get/. Cached for REDIS_TTL (2h).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['adgroupId'] = { in: 'query', description: 'Filter to ads under this ad group', type: 'string', example: '1789012345678902' }
+       #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Ads",
+         schema: {
+           ads: [{ id: "1789012345678903", name: "Ad Creative 1", adgroupId: "1789012345678902", adgroupName: "US - 18-34", campaignId: "1789012345678901", campaignName: "Summer Sale", status: "ACTIVE", createTime: "2026-06-01 10:10:00", modifyTime: "2026-06-02 09:00:00" }],
+           pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok ads" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, adgroupId, page = 1, pageSize = 100 } = req.query;
@@ -410,6 +509,20 @@ class TiktokAdController {
    * TikTok API: GET /identity/get/
    */
   async getIdentities(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List identities'
+       #swagger.description = 'Lists the advertiser Identities (the TikTok account an ad publishes as). TikTok requires one to create any ad — no Meta/Google equivalent. Feeds the "post as" picker in the create-ad step. Proxies TikTok Marketing API GET /identity/get/. Cached for REDIS_TTL (2h).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.responses[200] = {
+         description: "Identities",
+         schema: {
+           identities: [{ identityId: "70123456789ID001", identityType: "CUSTOMIZED_USER", displayName: "My Brand", profileImage: "https://p16-sign-va.tiktokcdn.com/example.jpeg" }]
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok identities" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId } = req.query;
@@ -454,6 +567,22 @@ class TiktokAdController {
    * TikTok API: GET /tool/region/
    */
   async getRegions(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List geo/location targeting options'
+       #swagger.description = 'Lists valid geo/location targeting IDs for the advertiser, used to build an ad group location_ids field — these IDs cannot be hardcoded and must be fetched per objective/placement. Proxies TikTok Marketing API GET /tool/region/. Cached for REDIS_TTL (2h) per placement+objectiveType.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['placement'] = { in: 'query', description: 'TikTok placement', type: 'string', example: 'PLACEMENT_TIKTOK' }
+       #swagger.parameters['objectiveType'] = { in: 'query', description: 'TikTok campaign objective type — refetch when the objective changes', type: 'string', example: 'TRAFFIC' }
+       #swagger.responses[200] = {
+         description: "Regions",
+         schema: {
+           regions: [{ id: "6252001", name: "United States", level: "COUNTRY", parentId: null }]
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok regions" }
+    */
     try {
       const userId = req.user?.user_id;
       const {
@@ -513,6 +642,30 @@ class TiktokAdController {
    * TikTok API: GET /report/integrated/get/
    */
   async getInsights(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get per-entity performance insights'
+       #swagger.description = 'Per-entity performance rows for the chosen level (account/campaign/adgroup/ad) over a date range. Drives drill-down performance views. Proxies TikTok Marketing API GET /report/integrated/get/. Spend/CPC/CPM values are already in the account main currency unit (do NOT divide by 100). Cached for REPORT_TTL (15m).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['level'] = { in: 'query', description: 'Reporting level', type: 'string', example: 'campaign', schema: { type: 'string', enum: ['account', 'campaign', 'adgroup', 'ad'] } }
+       #swagger.parameters['startDate'] = { in: 'query', description: 'Start date (YYYY-MM-DD). Defaults to 7 days ago.', type: 'string', example: '2026-06-30' }
+       #swagger.parameters['endDate'] = { in: 'query', description: 'End date (YYYY-MM-DD). Defaults to today.', type: 'string', example: '2026-07-06' }
+       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass "true" to query lifetime totals instead of a date range', type: 'string', example: 'false' }
+       #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Insights rows",
+         schema: {
+           level: "campaign",
+           startDate: "2026-06-30",
+           endDate: "2026-07-06",
+           rows: [{ id: "1789012345678901", metrics: { spend: "125.40", impressions: "10234", clicks: "310", ctr: "3.03", cpc: "0.40", cpm: "12.25", conversion: "12", cost_per_conversion: "10.45" }, dimensions: { campaign_id: "1789012345678901" } }],
+           pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok insights" }
+    */
     try {
       const userId = req.user?.user_id;
       const {
@@ -609,6 +762,26 @@ class TiktokAdController {
    * TikTok API: GET /report/integrated/get/ (segmented by stat_time_day)
    */
   async getDashboardData(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get dashboard KPI totals and daily chart series'
+       #swagger.description = 'Account-level KPI totals (spend, impressions, clicks, conversions, CTR, CPC, CPM, CPA) plus a daily time series for the dashboard chart. Proxies TikTok Marketing API GET /report/integrated/get/ segmented by stat_time_day. Values are in the account main currency unit. Cached for REPORT_TTL (15m).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['startDate'] = { in: 'query', description: 'Start date (YYYY-MM-DD). Defaults to 7 days ago.', type: 'string', example: '2026-06-30' }
+       #swagger.parameters['endDate'] = { in: 'query', description: 'End date (YYYY-MM-DD). Defaults to today.', type: 'string', example: '2026-07-06' }
+       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass "true" to query lifetime totals instead of a date range', type: 'string', example: 'false' }
+       #swagger.responses[200] = {
+         description: "Dashboard stats + chart data",
+         schema: {
+           stats: { totalSpend: 452.8, totalImpressions: 38210, totalClicks: 980, totalConversions: 41, ctr: 2.56, cpc: 0.46, cpm: 11.85, cpa: 11.04 },
+           chartData: [{ date: "2026-07-01", spend: 60.1, impressions: 5100, clicks: 130, conversions: 5 }],
+           startDate: "2026-06-30",
+           endDate: "2026-07-06"
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok dashboard data" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, startDate, endDate, lifetime } = req.query;
@@ -701,6 +874,35 @@ class TiktokAdController {
    * TikTok API: POST /{level}/status/update/
    */
   async updateStatus(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Enable/pause/delete campaigns, ad groups, or ads'
+       #swagger.description = 'Enables, pauses, or deletes one or more campaigns, ad groups, or ads. Maps the friendly status (ACTIVE/PAUSED/DELETED) to the TikTok operation_status enum (ENABLE/DISABLE/DELETE). Proxies TikTok Marketing API POST /{level}/status/update/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "level", "status"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 level: { type: "string", example: "campaign", description: "campaign | adgroup | ad" },
+                 ids: { type: "array", items: { type: "string" }, example: ["1789012345678901"] },
+                 id: { type: "string", description: "Single-ID convenience alias for ids", example: "1789012345678901" },
+                 status: { type: "string", example: "PAUSED", description: "ACTIVE | PAUSED | DELETED" }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Status updated",
+         schema: { success: true, level: "campaign", ids: ["1789012345678901"], status: "PAUSED", data: {} }
+       }
+       #swagger.responses[400] = { description: "advertiserId / ids / status missing, or invalid level" }
+       #swagger.responses[500] = { description: "Failed to update TikTok status" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, level, status } = req.body;
@@ -768,6 +970,38 @@ class TiktokAdController {
    * TikTok API: POST /campaign/create/
    */
   async createCampaign(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Create a campaign'
+       #swagger.description = 'Creates a TikTok campaign. `payload` lets the wizard pass any extra raw TikTok fields verbatim, merged on top of the mapped fields. Proxies TikTok Marketing API POST /campaign/create/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "campaignName", "objectiveType"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 campaignName: { type: "string", example: "Summer Sale" },
+                 objectiveType: { type: "string", example: "TRAFFIC", description: "One of TikTok's objective_type enum values, e.g. REACH, TRAFFIC, VIDEO_VIEWS, ENGAGEMENT, APP_PROMOTION, LEAD_GENERATION, PRODUCT_SALES" },
+                 budgetMode: { type: "string", example: "BUDGET_MODE_INFINITE", description: "BUDGET_MODE_DAY | BUDGET_MODE_TOTAL | BUDGET_MODE_INFINITE" },
+                 budget: { type: "number", example: 100, description: "Required unless budgetMode is BUDGET_MODE_INFINITE" },
+                 budgetOptimizeOn: { type: "boolean", example: false },
+                 specialIndustries: { type: "array", items: { type: "string" }, example: [] },
+                 payload: { type: "object", description: "Raw extra TikTok /campaign/create/ fields merged verbatim", example: {} }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Campaign created",
+         schema: { success: true, campaignId: "1789012345678901", data: { campaign_id: "1789012345678901" } }
+       }
+       #swagger.responses[400] = { description: "advertiserId / campaignName / objectiveType is required" }
+       #swagger.responses[500] = { description: "Failed to create TikTok campaign" }
+    */
     try {
       const userId = req.user?.user_id;
       const {
@@ -836,6 +1070,49 @@ class TiktokAdController {
    * TikTok API: POST /adgroup/create/
    */
   async createAdGroup(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Create an ad group'
+       #swagger.description = 'Creates an ad group under a campaign. Most fields (placement, targeting, budget, schedule, optimization goal, bid, billing event) are passed through `payload` since TikTok ad-group shape is large and objective-dependent. Defaults schedule_start_time to ~5 minutes from now in the ad account timezone if not supplied. Proxies TikTok Marketing API POST /adgroup/create/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "campaignId", "adgroupName"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 campaignId: { type: "string", example: "1789012345678901" },
+                 adgroupName: { type: "string", example: "US - 18-34" },
+                 payload: {
+                   type: "object",
+                   description: "Raw TikTok /adgroup/create/ fields — placement, location_ids, age, gender, budget, budget_mode, schedule_type, schedule_start_time, schedule_end_time, optimization_goal, billing_event, bid_price",
+                   example: {
+                     placement_type: "PLACEMENT_TYPE_AUTOMATIC",
+                     location_ids: ["6252001"],
+                     age_groups: ["AGE_18_24", "AGE_25_34"],
+                     gender: "GENDER_UNLIMITED",
+                     budget_mode: "BUDGET_MODE_DAY",
+                     budget: 50,
+                     schedule_type: "SCHEDULE_FROM_NOW",
+                     optimization_goal: "CLICK",
+                     billing_event: "CPC",
+                     bid_price: 1.2
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Ad group created",
+         schema: { success: true, adgroupId: "1789012345678902", data: { adgroup_id: "1789012345678902" } }
+       }
+       #swagger.responses[400] = { description: "advertiserId / campaignId / adgroupName is required" }
+       #swagger.responses[500] = { description: "Failed to create TikTok ad group" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, campaignId, adgroupName } = req.body;
@@ -904,6 +1181,51 @@ class TiktokAdController {
    * TikTok API: POST /ad/create/
    */
   async createAd(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Create one or more ads'
+       #swagger.description = 'Creates one or more ads under an ad group. `creatives` is an array of TikTok creative objects (each needs identity_id, ad_format, video_id/image_ids, ad_text, call_to_action, etc). Proxies TikTok Marketing API POST /ad/create/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "adgroupId", "creatives"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 adgroupId: { type: "string", example: "1789012345678902" },
+                 creatives: {
+                   type: "array",
+                   minItems: 1,
+                   items: {
+                     type: "object",
+                     properties: {
+                       ad_name: { type: "string", example: "Ad Creative 1" },
+                       ad_format: { type: "string", example: "SINGLE_VIDEO" },
+                       identity_id: { type: "string", example: "70123456789ID001" },
+                       identity_type: { type: "string", example: "CUSTOMIZED_USER" },
+                       video_id: { type: "string", example: "v1023abc456def" },
+                       image_ids: { type: "array", items: { type: "string" }, example: ["i1023abc456def"] },
+                       ad_text: { type: "string", example: "Shop the summer sale now!" },
+                       call_to_action: { type: "string", example: "SHOP_NOW" },
+                       landing_page_url: { type: "string", example: "https://example.com/summer-sale" }
+                     }
+                   }
+                 },
+                 payload: { type: "object", description: "Raw extra TikTok /ad/create/ fields merged verbatim", example: {} }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Ads created",
+         schema: { success: true, adIds: ["1789012345678903"], creatives: [{ ad_id: "1789012345678903" }], data: {} }
+       }
+       #swagger.responses[400] = { description: "advertiserId / adgroupId is required, or creatives is missing/empty" }
+       #swagger.responses[500] = { description: "Failed to create TikTok ad" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, adgroupId, creatives } = req.body;
@@ -958,6 +1280,33 @@ class TiktokAdController {
    * TikTok API: POST /file/video/ad/upload/
    */
   async uploadVideo(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Upload a video creative'
+       #swagger.description = 'Uploads a video creative via multipart file (field "video") or a remote URL (videoUrl). Computes an MD5 signature of the file bytes as TikTok requires. Returns the TikTok video_id(s) used by createAd. Proxies TikTok Marketing API POST /file/video/ad/upload/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "multipart/form-data": {
+             schema: {
+               type: "object",
+               required: ["advertiserId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 videoUrl: { type: "string", example: "https://example.com/video.mp4", description: "Used instead of a file upload — TikTok fetches it by URL" },
+                 video: { type: "string", format: "binary", description: "Video file (multipart), max 500MB" }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Video uploaded",
+         schema: { success: true, videos: [{ videoId: "v1023abc456def", coverUrl: "https://p16.tiktokcdn.com/cover.jpeg", url: "", width: 1080, height: 1920, duration: 15.2 }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required, or neither a file nor videoUrl was provided" }
+       #swagger.responses[500] = { description: "Failed to upload TikTok video" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, videoUrl } = req.body;
@@ -1047,6 +1396,36 @@ class TiktokAdController {
    * TikTok API: POST /campaign/update/
    */
   async updateCampaign(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Update a campaign'
+       #swagger.description = 'Updates a campaign name, budget, and/or budget mode. Extra raw TikTok fields can be passed via `payload`. Proxies TikTok Marketing API POST /campaign/update/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "campaignId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 campaignId: { type: "string", example: "1789012345678901" },
+                 campaignName: { type: "string", example: "Summer Sale - Updated" },
+                 budget: { type: "number", example: 150 },
+                 budgetMode: { type: "string", example: "BUDGET_MODE_DAY" },
+                 payload: { type: "object", description: "Raw extra TikTok /campaign/update/ fields merged verbatim", example: {} }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Campaign updated",
+         schema: { success: true, campaignId: "1789012345678901", data: {} }
+       }
+       #swagger.responses[400] = { description: "advertiserId / campaignId is required" }
+       #swagger.responses[500] = { description: "Failed to update TikTok campaign" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, campaignId, campaignName, budget, budgetMode } = req.body;
@@ -1094,6 +1473,36 @@ class TiktokAdController {
    * TikTok API: POST /adgroup/update/
    */
   async updateAdGroup(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Update an ad group'
+       #swagger.description = 'Updates an ad group name, budget, and/or budget mode (or any field via `payload`). Proxies TikTok Marketing API POST /adgroup/update/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "adgroupId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 adgroupId: { type: "string", example: "1789012345678902" },
+                 adgroupName: { type: "string", example: "US - 18-34 - Updated" },
+                 budget: { type: "number", example: 75 },
+                 budgetMode: { type: "string", example: "BUDGET_MODE_DAY" },
+                 payload: { type: "object", description: "Raw extra TikTok /adgroup/update/ fields merged verbatim", example: {} }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Ad group updated",
+         schema: { success: true, adgroupId: "1789012345678902", data: {} }
+       }
+       #swagger.responses[400] = { description: "advertiserId / adgroupId is required" }
+       #swagger.responses[500] = { description: "Failed to update TikTok ad group" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, adgroupId, adgroupName, budget, budgetMode } = req.body;
@@ -1143,6 +1552,46 @@ class TiktokAdController {
    * TikTok API: POST /ad/update/
    */
   async updateAd(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Update an ad'
+       #swagger.description = 'Updates one or more ads. TikTok updates ads via the `creatives` array (each entry carries the ad_id plus fields to change). Extra fields can go in `payload`. Proxies TikTok Marketing API POST /ad/update/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 adgroupId: { type: "string", example: "1789012345678902" },
+                 creatives: {
+                   type: "array",
+                   items: {
+                     type: "object",
+                     required: ["ad_id"],
+                     properties: {
+                       ad_id: { type: "string", example: "1789012345678903" },
+                       ad_name: { type: "string", example: "Ad Creative 1 - Updated" },
+                       ad_text: { type: "string", example: "Updated ad copy" },
+                       call_to_action: { type: "string", example: "SHOP_NOW" }
+                     }
+                   }
+                 },
+                 payload: { type: "object", description: "Raw extra TikTok /ad/update/ fields merged verbatim", example: {} }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Ad updated",
+         schema: { success: true, data: {} }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required, or neither creatives nor payload was provided" }
+       #swagger.responses[500] = { description: "Failed to update TikTok ad" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, adgroupId, creatives } = req.body;
@@ -1187,6 +1636,33 @@ class TiktokAdController {
    * TikTok API: POST /file/image/ad/upload/
    */
   async uploadImage(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Upload an image creative'
+       #swagger.description = 'Uploads an image creative (cover / carousel) via multipart file (field "image") or a remote URL (imageUrl). Computes an MD5 signature of the file bytes as TikTok requires. Returns image_id(s). Proxies TikTok Marketing API POST /file/image/ad/upload/. Busts the user status caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "multipart/form-data": {
+             schema: {
+               type: "object",
+               required: ["advertiserId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 imageUrl: { type: "string", example: "https://example.com/cover.jpg", description: "Used instead of a file upload — TikTok fetches it by URL" },
+                 image: { type: "string", format: "binary", description: "Image file (multipart), max 10MB" }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Image uploaded",
+         schema: { success: true, images: [{ imageId: "i1023abc456def", url: "https://p16.tiktokcdn.com/image.jpeg", width: 1200, height: 628 }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required, or neither a file nor imageUrl was provided" }
+       #swagger.responses[500] = { description: "Failed to upload TikTok image" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, imageUrl } = req.body;
@@ -1261,6 +1737,21 @@ class TiktokAdController {
    * TikTok API: GET /file/video/ad/info/
    */
   async getVideoInfo(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get uploaded video info/status'
+       #swagger.description = 'Gets info/status for one or more uploaded videos, used to poll until a video is "ready" before attaching it to an ad. Not cached — status moves. Proxies TikTok Marketing API GET /file/video/ad/info/.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['videoIds'] = { in: 'query', required: true, description: 'Comma-separated video IDs (or repeated array param)', type: 'string', example: 'v1023abc456def,v1023abc456ghi' }
+       #swagger.responses[200] = {
+         description: "Video info",
+         schema: {
+           videos: [{ videoId: "v1023abc456def", materialId: "m1023abc456def", width: 1080, height: 1920, duration: 15.2, coverUrl: "https://p16.tiktokcdn.com/cover.jpeg", url: "", format: "mp4", allowedPlacements: ["PLACEMENT_TIKTOK"] }]
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId / videoIds is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok video info" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, videoIds } = req.query;
@@ -1315,6 +1806,22 @@ class TiktokAdController {
    * TikTok API: GET /tool/interest_category/
    */
   async getInterestCategories(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List interest-category targeting options'
+       #swagger.description = 'Lists interest-category targeting options for the ad-group targeting step. Proxies TikTok Marketing API GET /tool/interest_category/. Cached for REDIS_TTL (2h) per placement+objectiveType — refetch when the objective changes.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['placement'] = { in: 'query', description: 'TikTok placement', type: 'string', example: 'PLACEMENT_TIKTOK' }
+       #swagger.parameters['objectiveType'] = { in: 'query', description: 'TikTok campaign objective type', type: 'string', example: 'TRAFFIC' }
+       #swagger.responses[200] = {
+         description: "Interest categories",
+         schema: {
+           categories: [{ id: "10000595", name: "Food & Beverage", level: 1, parentId: null }]
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok interest categories" }
+    */
     try {
       const userId = req.user?.user_id;
       const {
@@ -1371,6 +1878,18 @@ class TiktokAdController {
    * TikTok API: GET /pixel/list/
    */
   async getPixels(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List pixels'
+       #swagger.description = 'Lists TikTok pixels for an ad account, used to power conversion-tracking / optimization-event pickers in the wizard. Proxies TikTok Marketing API GET /pixel/list/.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.responses[200] = {
+         description: "Pixels",
+         schema: { status: true, pixels: [{ id: "PIXEL0001", name: "Website Pixel", status: "PIXEL_STATUS_ACTIVE" }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok pixels" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId } = req.query;
@@ -1408,6 +1927,33 @@ class TiktokAdController {
    * TikTok API: POST /pixel/create/
    */
   async createPixel(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Create a pixel'
+       #swagger.description = 'Creates a TikTok pixel for an ad account so the wizard can offer it immediately for conversion-event optimization. Proxies TikTok Marketing API POST /pixel/create/.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "name"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 name: { type: "string", example: "Website Pixel" },
+                 pixelType: { type: "string", example: "TT_WEB_PIXEL", description: "Defaults to TT_WEB_PIXEL" }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[201] = {
+         description: "Pixel created",
+         schema: { status: true, pixel: { id: "PIXEL0001", name: "Website Pixel", status: "PIXEL_STATUS_ACTIVE" } }
+       }
+       #swagger.responses[400] = { description: "advertiserId / name is required" }
+       #swagger.responses[500] = { description: "Failed to create TikTok pixel" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, name, pixelType = "TT_WEB_PIXEL" } = req.body;
@@ -1458,6 +2004,19 @@ class TiktokAdController {
    * manually.
    */
   async getLeadForms(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List Instant Forms (lead generation)'
+       #swagger.description = 'Lists TikTok Instant Forms for an ad account, used by the Lead Generation objective in the wizard. Not part of the public Marketing API SDK — calls the community-documented /lead/form/list/ endpoint. If TikTok returns 404 (endpoint not allowlisted for this app), responds 200 with an empty list and available:false so the frontend falls back to a manual Page ID input instead of erroring.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['pageId'] = { in: 'query', description: 'Filter to forms on this TikTok Page', type: 'string', example: '70123456789PAGE1' }
+       #swagger.responses[200] = {
+         description: "Lead forms (or empty list w/ available:false if TikTok returns 404)",
+         schema: { status: true, forms: [{ id: "70123456789PAGE1", pageId: "70123456789PAGE1", name: "Contact Us Form", status: "ENABLE" }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok lead forms" }
+    */
     try {
       const userId = req.user?.user_id;
       const { advertiserId, pageId } = req.query;
@@ -1520,6 +2079,28 @@ class TiktokAdController {
    * TikTok API: GET /lead/get/
    */
   async getLeads(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get lead submissions'
+       #swagger.description = 'Retrieves lead submissions for a TikTok Instant Form (or website lead source). Proxies TikTok Marketing API GET /lead/get/.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['pageId'] = { in: 'query', required: true, description: 'TikTok Page ID the Instant Form belongs to', type: 'string', example: '70123456789PAGE1' }
+       #swagger.parameters['leadSource'] = { in: 'query', description: 'Lead source', type: 'string', example: 'INSTANT_FORM' }
+       #swagger.parameters['startTime'] = { in: 'query', description: 'Start of the lead submission time range', type: 'string', example: '2026-06-30 00:00:00' }
+       #swagger.parameters['endTime'] = { in: 'query', description: 'End of the lead submission time range', type: 'string', example: '2026-07-06 23:59:59' }
+       #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Leads",
+         schema: {
+           status: true,
+           leads: [{ lead_id: "LEAD0001", create_time: "2026-07-01 12:00:00", field_data: [{ name: "email", value: "jane@example.com" }] }],
+           pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId / pageId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok leads" }
+    */
     try {
       const userId = req.user?.user_id;
       const {

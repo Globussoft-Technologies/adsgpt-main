@@ -32,18 +32,27 @@ const BUDGET_MODES = {
 // Standard TikTok call-to-action values used on ad creatives.
 const TIKTOK_CTAS = [
   "LEARN_MORE",
+  "DOWNLOAD_NOW",
   "SHOP_NOW",
   "SIGN_UP",
-  "DOWNLOAD_NOW",
   "CONTACT_US",
   "APPLY_NOW",
   "BOOK_NOW",
-  "GET_QUOTE",
-  "SUBSCRIBE",
+  "PLAY_GAME",
   "WATCH_NOW",
+  "READ_MORE",
   "VIEW_NOW",
+  "GET_QUOTE",
   "ORDER_NOW",
   "INSTALL_NOW",
+  "GET_SHOWTIMES",
+  "LISTEN_NOW",
+  "INTERESTED",
+  "SUBSCRIBE",
+  "GET_TICKETS_NOW",
+  "EXPERIENCE_NOW",
+  "PRE_ORDER_NOW",
+  "VISIT_STORE",
 ];
 
 /**
@@ -98,6 +107,9 @@ const TIKTOK_OBJECTIVES = [
     billingEvents: ["CPV", "CPM"],
     requiresCta: true,
     defaultBudgetMode: BUDGET_MODES.DAILY,
+    // TikTok Ads Manager only shows "Add videos" for this objective — no
+    // image upload option (confirmed in the live UI).
+    videoOnly: true,
   },
   {
     key: "ENGAGEMENT",
@@ -106,6 +118,9 @@ const TIKTOK_OBJECTIVES = [
     objectiveType: "ENGAGEMENT",
     description: "Get more followers and engagement on your TikTok account.",
     hasSubType: false,
+    // Community Interaction runs only via Spark Ads (boosting an existing
+    // organic TikTok video post), which structurally excludes images.
+    videoOnly: true,
     // Live API enum is "PROFILE_VIEWS" (plural); both use OCPM billing.
     optimizationGoals: ["FOLLOWERS", "PROFILE_VIEWS"],
     billingEvents: ["OCPM"],

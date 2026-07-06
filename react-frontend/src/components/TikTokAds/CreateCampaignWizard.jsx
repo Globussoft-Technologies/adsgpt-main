@@ -229,6 +229,13 @@ const DEVICE_TYPES = [
   { value: 'DEVICE_IOS', label: 'iOS' },
 ];
 
+const BRAND_SAFETY_TYPES = [
+  { value: 'NO_BRAND_SAFETY', label: 'None (default)' },
+  { value: 'STANDARD_INVENTORY', label: 'Standard inventory' },
+  { value: 'EXPANDED_INVENTORY', label: 'Expanded inventory' },
+  { value: 'LIMITED_INVENTORY', label: 'Limited inventory' },
+];
+
 // TikTok requires the ad group's billing_event to match its optimization goal
 // (e.g. REACH → CPM, video views → CPV, conversions → OCPM). Sending the wrong
 // pairing is rejected with errors like "Only CPM is supported".
@@ -306,6 +313,14 @@ const isLeadGeneration = (objectiveKey) => objectiveKey === 'LEAD_GENERATION';
 const leadSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
 const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
 
+// Whether the ad requires a destination website URL. TRAFFIC is the only
+// objective that requires it on the ad itself — every other objective either
+// has no external destination (Reach, Engagement, App promotion, Video
+// views), captures leads via a TikTok page or pixel (Lead generation), or
+// drives to a product/catalog destination configured elsewhere (Product
+// sales), not a standalone landing page URL on the ad.
+const objectiveNeedsLandingUrl = (objectiveKey) => objectiveKey === 'TRAFFIC';
+
 const PIXEL_EVENTS_BY_OBJECTIVE = {
   PRODUCT_SALES: [
     { value: 'COMPLETE_PAYMENT', label: 'Complete payment' },
@@ -360,6 +375,182 @@ function stripUnsavable(form) {
     ...rest
   } = form || {};
   return rest;
+}
+
+// ── TikTok phone ad preview ──────────────────────────────────────────────────
+function PhoneMockup({ mediaSrc, mediaType, displayName, adText, ctaLabel, size = 'sm' }) {
+  const isSm = size === 'sm';
+  const borderRadius = isSm ? 'rounded-[22px]' : 'rounded-[32px]';
+  const innerRadius = isSm ? 'rounded-[16px]' : 'rounded-[26px]';
+  const borderWidth = isSm ? 'border-[5px]' : 'border-[8px]';
+  const statusFs = isSm ? '8px' : '11px';
+  const fypFs = isSm ? '8px' : '11px';
+  const actionIconFs = isSm ? '14px' : '20px';
+  const actionCountFs = isSm ? '7px' : '10px';
+  const nameFs = isSm ? '8px' : '11px';
+  const textFs = isSm ? '7px' : '10px';
+  const notchH = isSm ? 'h-2 w-8' : 'h-2.5 w-14';
+  const avatarSz = isSm ? 'h-6 w-6' : 'h-9 w-9';
+  const plusSz = isSm ? 'h-3.5 w-3.5' : 'h-5 w-5';
+  const plusFs = isSm ? '7px' : '10px';
+  const navIconSz = isSm ? 'h-3 w-3' : 'h-4 w-4';
+  const placeholderSz = isSm ? 36 : 56;
+
+  return (
+    <div className={`relative ${borderRadius} ${borderWidth} border-gray-800 bg-black shadow-2xl`} style={{ aspectRatio: '9/16', width: '100%' }}>
+      {/* notch */}
+      <div className={`absolute left-1/2 top-1 z-20 ${notchH} -translate-x-1/2 rounded-full bg-gray-800`} />
+      {/* status bar */}
+      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 pt-3 pb-1 font-semibold text-white" style={{ fontSize: statusFs }}>
+        <span>9:41</span>
+        <div className="flex items-center gap-1">
+          <svg width="10" height="7" viewBox="0 0 10 7" fill="white"><rect x="0" y="2" width="2" height="5" rx="0.5"/><rect x="2.5" y="1" width="2" height="6" rx="0.5"/><rect x="5" y="0" width="2" height="7" rx="0.5"/><rect x="7.5" y="0" width="2" height="7" rx="0.5" opacity="0.3"/></svg>
+          <svg width="9" height="7" viewBox="0 0 9 7" fill="white"><path d="M4.5 1.5C6 1.5 7.3 2.2 8.1 3.3L9 2.4C7.9 1 6.3 0 4.5 0S1.1 1 0 2.4l.9.9C1.7 2.2 3 1.5 4.5 1.5z"/><path d="M4.5 3C5.5 3 6.4 3.4 7 4.1l.9-.9C7 2.4 5.8 1.8 4.5 1.8S2 2.4 1.1 3.2l.9.9C2.6 3.4 3.5 3 4.5 3z"/><circle cx="4.5" cy="5.5" r="1"/></svg>
+          <svg width="14" height="7" viewBox="0 0 14 7" fill="none"><rect x="0.5" y="0.5" width="11" height="6" rx="1.5" stroke="white" strokeOpacity="0.4"/><rect x="1" y="1" width="8" height="5" rx="1" fill="white"/><path d="M12.5 2.5v2c.8-.3.8-1.7 0-2z" fill="white" opacity="0.4"/></svg>
+        </div>
+      </div>
+      {/* FYP tabs */}
+      <div className="absolute left-0 right-0 top-7 z-10 flex justify-center gap-4 font-semibold text-white/70" style={{ fontSize: fypFs }}>
+        <span>Following</span>
+        <span className="border-b border-white pb-px text-white">For You</span>
+      </div>
+      {/* media area */}
+      <div className={`absolute inset-0 overflow-hidden ${innerRadius} bg-gray-900`}>
+        {mediaSrc ? (
+          mediaType === 'video' ? (
+            <video src={mediaSrc} className="h-full w-full object-cover" muted loop autoPlay playsInline />
+          ) : (
+            <img src={mediaSrc} className="h-full w-full object-cover" alt="ad preview" />
+          )
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <svg width={placeholderSz} height={placeholderSz} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5">
+              <rect x="2" y="2" width="20" height="20" rx="3"/><path d="M9 10l5 3-5 3V10z"/>
+            </svg>
+          </div>
+        )}
+      </div>
+      {/* right action bar */}
+      <div className="absolute bottom-16 right-1.5 z-10 flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center">
+          <div className={`${avatarSz} rounded-full bg-linear-to-br from-[#15DCFF] to-[#6b72f8] ring-1 ring-white`} />
+          <div className={`-mt-1 flex ${plusSz} items-center justify-center rounded-full bg-[#FE2C55] text-white font-bold`} style={{ fontSize: plusFs }}>+</div>
+        </div>
+        {[['❤️','991K'],['💬','3456'],['🔖','810'],['↗️','1256']].map(([icon, count]) => (
+          <div key={count} className="flex flex-col items-center">
+            <span style={{ fontSize: actionIconFs }}>{icon}</span>
+            <span className="text-white font-medium" style={{ fontSize: actionCountFs }}>{count}</span>
+          </div>
+        ))}
+      </div>
+      {/* bottom identity + text + sponsored */}
+      <div className="absolute bottom-8 left-2 right-10 z-10">
+        <p className="font-bold text-white drop-shadow" style={{ fontSize: nameFs }}>{displayName}</p>
+        <p className="mt-0.5 leading-tight text-white/80 drop-shadow line-clamp-2" style={{ fontSize: textFs }}>{adText}</p>
+        <p className="mt-1 text-white/50" style={{ fontSize: textFs }}>Sponsored</p>
+      </div>
+      {/* CTA button */}
+      <div className="absolute bottom-3 left-2 z-10">
+        <div className="rounded-sm bg-white/20 px-2 py-0.5 backdrop-blur-sm">
+          <span className="font-semibold text-white" style={{ fontSize: textFs }}>{ctaLabel} ›</span>
+        </div>
+      </div>
+      {/* bottom nav */}
+      <div className={`absolute bottom-0 left-0 right-0 z-10 flex items-center justify-around ${innerRadius.replace('rounded-[', 'rounded-b-[')} bg-black/60 py-1.5 backdrop-blur-sm`}>
+        {['Home','Friends','+','Inbox','Me'].map((label) => (
+          <div key={label} className="flex flex-col items-center gap-px">
+            {label === '+' ? (
+              <div className="flex h-4 w-6 items-center justify-center rounded-sm bg-[#FE2C55] text-white text-10 font-bold">+</div>
+            ) : (
+              <div className={`${navIconSz} rounded-sm bg-white/30`} />
+            )}
+            {label !== '+' && <span className="text-white/60" style={{ fontSize: '6px' }}>{label}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TikTokAdPreview({ form, identityName }) {
+  const [mediaObjectUrl, setMediaObjectUrl] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    let url = null;
+    if (form.mediaType === 'video' && form.videoFile) {
+      url = URL.createObjectURL(form.videoFile);
+      setMediaObjectUrl(url);
+    } else if (form.mediaType === 'image' && form.imageFile) {
+      url = URL.createObjectURL(form.imageFile);
+      setMediaObjectUrl(url);
+    } else {
+      setMediaObjectUrl(null);
+    }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [form.videoFile, form.imageFile, form.mediaType]);
+
+  const mediaSrc = mediaObjectUrl
+    || (form.mediaType === 'video' ? form.videoUrl : form.imageUrl)
+    || null;
+
+  const displayName = identityName || 'Your identity';
+  const adText = form.adText || 'Your text will be shown here';
+  const ctaLabel = (form.cta || 'LEARN_MORE').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const mockupProps = { mediaSrc, mediaType: form.mediaType, displayName, adText, ctaLabel };
+
+  return (
+    <>
+      <div className="flex flex-col items-center gap-2 p-3">
+        <div className="flex w-full items-center justify-between px-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-white/40">Ad Preview</p>
+          <button
+            onClick={() => setExpanded(true)}
+            title="Expand preview"
+            className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-white/50 dark:hover:bg-white/10"
+          >
+            {/* expand icon: four corners pointing out */}
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8"/>
+            </svg>
+          </button>
+        </div>
+        {/* small phone */}
+        <div className="w-45">
+          <PhoneMockup {...mockupProps} size="sm" />
+        </div>
+        <p className="text-10 text-gray-400 dark:text-white/30">In feed · TikTok</p>
+      </div>
+
+      {/* fullscreen modal */}
+      {expanded && (
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setExpanded(false)}
+        >
+          <div className="flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+            {/* top bar */}
+            <div className="flex w-full items-center justify-between rounded-t-xl bg-white px-4 py-2 dark:bg-[#1a1a1a]">
+              <span className="text-sm font-medium text-gray-700 dark:text-white/70">Ad Preview</span>
+              <button
+                onClick={() => setExpanded(false)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-white/10 dark:text-white/50 dark:hover:bg-white/10"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M4 1v3H1M11 4H8V1M8 11V8h3M1 8h3v3"/>
+                </svg>
+              </button>
+            </div>
+            {/* large phone */}
+            <div style={{ width: '320px' }}>
+              <PhoneMockup {...mockupProps} size="lg" />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function StepRail({ currentIndex }) {
@@ -761,6 +952,7 @@ function ReviewField({ label, value }) {
 const CreateCampaignWizard = ({
   advertiserId,
   currency = 'USD',
+  timezone = '',
   mode = 'create',
   context = null,
   onClose,
@@ -798,7 +990,7 @@ const CreateCampaignWizard = ({
         interestCategoryIds: (raw.interest_category_ids || []).map(String),
         adgroupBudget: context.budget != null ? Number(context.budget) : 20,
         budgetMode: context.budgetMode || raw.budget_mode || 'BUDGET_MODE_DAY',
-        frequency: raw.frequency || 1,
+        frequency: raw.frequency || 3,
         frequencySchedule: raw.frequency_schedule || 7,
         bidType: raw.bid_type || 'BID_TYPE_NO_BID',
         bidPrice: raw.bid != null ? String(raw.bid) : '',
@@ -808,6 +1000,7 @@ const CreateCampaignWizard = ({
         scheduleEndTime: toDatetimeLocal(raw.schedule_end_time),
         languages: raw.languages || [],
         spendingPower: raw.spending_power || 'ALL',
+        // brandSafetyType: raw.brand_safety_type || 'NO_BRAND_SAFETY',
         pixelId: raw.pixel_id || '',
         optimizationEvent: raw.optimization_event || '',
         pageId: raw.page_id || '',
@@ -871,7 +1064,7 @@ const CreateCampaignWizard = ({
     gender: 'GENDER_UNLIMITED',
     interestCategoryIds: [],
     adgroupBudget: 20,
-    frequency: 1,
+    frequency: 3,
     frequencySchedule: 7,
     bidType: 'BID_TYPE_NO_BID',
     bidPrice: '',
@@ -879,6 +1072,7 @@ const CreateCampaignWizard = ({
     scheduleEndTime: '',
     languages: [],
     spendingPower: 'ALL',
+    // brandSafetyType: 'NO_BRAND_SAFETY',
     impressionTrackingUrl: '',
     clickTrackingUrl: '',
     pixelId: '',
@@ -1051,6 +1245,15 @@ const CreateCampaignWizard = ({
     return selectedObjective;
   }, [schema, form.objectiveKey, form.objectiveType, selectedObjective]);
 
+  // Video-only objectives (Video Views, Community Interaction) don't offer an
+  // image option on TikTok — force the media type back to video if a prior
+  // objective left it set to image.
+  useEffect(() => {
+    if (currentObjective?.videoOnly && form.mediaType !== 'video') {
+      update({ mediaType: 'video' });
+    }
+  }, [currentObjective?.videoOnly]);
+
   const pickObjective = (o) => {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '').replace('-', '').replace('-', '');
     update({
@@ -1085,6 +1288,8 @@ const CreateCampaignWizard = ({
       if (!form.optimizationGoal) errs.optimizationGoal = 'Optimization goal is required';
       if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
         errs.adgroupBudget = 'Daily budget is required';
+      } else if (form.budgetMode !== 'BUDGET_MODE_INFINITE' && Number(form.adgroupBudget) < 20) {
+        errs.adgroupBudget = `Minimum budget is 20 ${currency}`;
       }
       // locationIds empty = all locations selected — no validation error needed
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
@@ -1104,14 +1309,36 @@ const CreateCampaignWizard = ({
       }
     }
     if (targetStep === 3) {
-      // Ad creation is optional, but if an identity is chosen we need media.
-      if (form.identityId) {
-        if (form.mediaType === 'video' && !form.videoUrl && !form.videoFile) {
-          errs.video = 'Provide a video URL or upload a file';
-        }
-        if (form.mediaType === 'image' && !form.imageUrl && !form.imageFile) {
-          errs.image = 'Provide an image URL or upload a file';
-        }
+      // TikTok requires a complete ad to publish a campaign — identity,
+      // creative, ad text, and (for destination objectives) a landing page.
+      // This mirrors TikTok Ads Manager, which blocks publish otherwise, and
+      // prevents a prod /ad/create/ API failure that would leave a campaign +
+      // ad group with no ad.
+      const videoOnly = currentObjective?.videoOnly;
+      const effectiveMediaType = videoOnly ? 'video' : form.mediaType;
+
+      if (!form.identityId) {
+        errs.identityId = 'Select a TikTok identity to publish the ad';
+      }
+      if (!form.adName.trim()) {
+        errs.adName = 'Ad name is required';
+      }
+      if (effectiveMediaType === 'video' && !form.videoUrl && !form.videoFile) {
+        errs.video = 'Upload a video or provide a video URL';
+      }
+      if (effectiveMediaType === 'image' && !form.imageUrl && !form.imageFile) {
+        errs.image = 'Upload an image or provide an image URL';
+      }
+      // Ad text is only mandatory for Video Views — every other objective
+      // treats it as optional on the ad.
+      if (form.objectiveKey === 'VIDEO_VIEWS' && !form.adText.trim()) {
+        errs.adText = 'Ad text is required';
+      }
+      if (
+        objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) &&
+        !form.landingPageUrl.trim()
+      ) {
+        errs.landingPageUrl = 'Destination URL is required';
       }
     }
     return errs;
@@ -1189,6 +1416,9 @@ const CreateCampaignWizard = ({
           ...(form.spendingPower && form.spendingPower !== 'ALL'
             ? { spending_power: form.spendingPower }
             : {}),
+          // ...(form.brandSafetyType && form.brandSafetyType !== 'NO_BRAND_SAFETY'
+          //   ? { brand_safety_type: form.brandSafetyType }
+          //   : {}),
           budget: Number(form.adgroupBudget),
           budget_mode: 'BUDGET_MODE_DAY',
           optimization_goal: form.optimizationGoal,
@@ -1224,9 +1454,11 @@ const CreateCampaignWizard = ({
               ad_name: form.adName,
               ad_text: form.adText,
               call_to_action: form.cta,
-              ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+              ...(isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
                 ? { page_id: Number(form.pageId) }
-                : { landing_page_url: form.landingPageUrl }),
+                : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
+                ? { landing_page_url: form.landingPageUrl }
+                : {}),
               ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
               ...(form.clickTrackingUrl ? { click_tracking_url: form.clickTrackingUrl } : {}),
             },
@@ -1287,6 +1519,9 @@ const CreateCampaignWizard = ({
           ...(form.spendingPower && form.spendingPower !== 'ALL'
             ? { spending_power: form.spendingPower }
             : {}),
+          // ...(form.brandSafetyType && form.brandSafetyType !== 'NO_BRAND_SAFETY'
+          //   ? { brand_safety_type: form.brandSafetyType }
+          //   : {}),
           ...(promotionTypeForObjective(form.objectiveKey)
             ? { promotion_type: promotionTypeForObjective(form.objectiveKey) }
             : {}),
@@ -1362,9 +1597,14 @@ const CreateCampaignWizard = ({
           identity_type: 'CUSTOMIZED_USER',
           ad_text: form.adText,
           call_to_action: form.cta,
-          ...(leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+          // Lead-gen instant-form ads route to a TikTok page; objectives that
+          // drive to a website send the landing URL; Engagement / App promotion
+          // take neither.
+          ...(isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
             ? { page_id: Number(form.pageId) }
-            : { landing_page_url: form.landingPageUrl }),
+            : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
+            ? { landing_page_url: form.landingPageUrl }
+            : {}),
           ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
           ...(form.clickTrackingUrl ? { click_tracking_url: form.clickTrackingUrl } : {}),
         };
@@ -1749,29 +1989,73 @@ const CreateCampaignWizard = ({
                 min={20}
                 required
                 error={errors.adgroupBudget}
-                hint="TikTok requires at least 20 USD/day at the ad-group level."
+                hint={`TikTok requires at least 20 ${currency}/day at the ad-group level.`}
               />
             )}
             {form.optimizationGoal === 'REACH' && (
-              <FieldShell label="Frequency cap (required for Reach)">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Show at most</span>
-                  <input
-                    type="number"
-                    className="w-20 rounded-full border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
-                    value={form.frequency}
-                    onChange={(e) => update({ frequency: e.target.value })}
-                    min={1}
-                  />
-                  <span className="text-xs text-gray-500">times every</span>
-                  <input
-                    type="number"
-                    className="w-20 rounded-full border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
-                    value={form.frequencySchedule}
-                    onChange={(e) => update({ frequencySchedule: e.target.value })}
-                    min={1}
-                  />
-                  <span className="text-xs text-gray-500">days</span>
+              <FieldShell
+                label="Frequency cap (required for Reach)"
+                hint="Controls how often the same person sees your ad."
+              >
+                <div className="space-y-3">
+                  {[
+                    { label: 'Show ads no more than 2 times every 7 days', frequency: 2, frequencySchedule: 7 },
+                    { label: 'Show ads no more than 3 times every 7 days', frequency: 3, frequencySchedule: 7 },
+                    { label: 'Show ads no more than 4 times every 7 days', frequency: 4, frequencySchedule: 7 },
+                    { label: 'Custom frequency cap', frequency: null, frequencySchedule: null },
+                  ].map((opt) => {
+                    const isCustom = opt.frequency === null;
+                    const isSelected = isCustom
+                      ? ![2, 3, 4].includes(Number(form.frequency)) || Number(form.frequencySchedule) !== 7
+                      : Number(form.frequency) === opt.frequency && Number(form.frequencySchedule) === opt.frequencySchedule;
+                    return (
+                      <label key={opt.label} className="flex cursor-pointer items-center gap-2.5">
+                        <div
+                          onClick={() => {
+                            if (!isCustom) update({ frequency: opt.frequency, frequencySchedule: opt.frequencySchedule });
+                            else update({ frequency: 1, frequencySchedule: 1 });
+                          }}
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                            isSelected
+                              ? 'border-[#15DCFF] bg-[#15DCFF]'
+                              : 'border-gray-300 dark:border-white/20'
+                          }`}
+                        >
+                          {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                        </div>
+                        <span
+                          className="text-xs text-gray-700 dark:text-white/80"
+                          onClick={() => {
+                            if (!isCustom) update({ frequency: opt.frequency, frequencySchedule: opt.frequencySchedule });
+                            else update({ frequency: 1, frequencySchedule: 1 });
+                          }}
+                        >
+                          {opt.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {(![2, 3, 4].includes(Number(form.frequency)) || Number(form.frequencySchedule) !== 7) && (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-xs text-gray-500">Show at most</span>
+                      <input
+                        type="number"
+                        className="w-16 rounded-full border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
+                        value={form.frequency}
+                        onChange={(e) => update({ frequency: e.target.value })}
+                        min={1}
+                      />
+                      <span className="text-xs text-gray-500">times every</span>
+                      <input
+                        type="number"
+                        className="w-16 rounded-full border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
+                        value={form.frequencySchedule}
+                        onChange={(e) => update({ frequencySchedule: e.target.value })}
+                        min={1}
+                      />
+                      <span className="text-xs text-gray-500">days</span>
+                    </div>
+                  )}
                 </div>
               </FieldShell>
             )}
@@ -1832,6 +2116,13 @@ const CreateCampaignWizard = ({
                 ))}
               </div>
             </FieldShell>
+            {/* <SelectField
+              label="Brand safety and suitability"
+              hint="Controls what type of content your TikTok in-feed ads can appear next to."
+              value={form.brandSafetyType}
+              onChange={(v) => update({ brandSafetyType: v })}
+              options={BRAND_SAFETY_TYPES}
+            /> */}
             <SelectField
               label="Bid type"
               value={form.bidType}
@@ -1860,6 +2151,11 @@ const CreateCampaignWizard = ({
                   update({ scheduleStartTime: e.target.value, scheduleEndTime: '' });
                 }}
               />
+              {timezone && (
+                <p className="mt-1.5 text-xs text-gray-400 dark:text-white/35">
+                  Time zone: {timezone}
+                </p>
+              )}
             </FieldShell>
             <FieldShell
               label="Schedule end time (optional)"
@@ -1893,35 +2189,46 @@ const CreateCampaignWizard = ({
               onChange={(v) => update({ adName: v })}
               placeholder={`Ad name${new Date().toISOString().slice(0, 16).replace('T', ' ')}`}
               hint="Used to identify this ad in your dashboard. Not shown to the audience."
+              required
+              error={errors.adName}
             />
             {identities.length === 0 && (
               <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
-                No TikTok identity found. Link a TikTok account to your ad account to create ads. You
-                can still create the campaign + ad group without this step.
+                No TikTok identity found. Link a TikTok account to your ad account to create ads.
               </div>
             )}
             <SelectField
               label="Identity (post as)"
               value={form.identityId}
               onChange={(v) => update({ identityId: v })}
+              required
+              error={errors.identityId}
               options={[
                 { value: '', label: '— none —' },
                 ...identities.map((i) => ({ value: i.identityId, label: i.displayName || i.identityId })),
               ]}
             />
 
-            <FieldShell label="Media type">
-              <SegGroup
-                value={form.mediaType}
-                onChange={(v) => update({ mediaType: v })}
-                options={[
-                  { value: 'video', label: 'Video' },
-                  { value: 'image', label: 'Image' },
-                ]}
-              />
-            </FieldShell>
+            {currentObjective?.videoOnly ? (
+              <FieldShell label="Media type" hint="This objective only supports video ads on TikTok.">
+                <div className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-600 dark:bg-[#1d1d1d] dark:text-white/70">
+                  Video
+                </div>
+              </FieldShell>
+            ) : (
+              <FieldShell label="Media type">
+                <SegGroup
+                  value={form.mediaType}
+                  onChange={(v) => update({ mediaType: v })}
+                  options={[
+                    { value: 'video', label: 'Video' },
+                    { value: 'image', label: 'Image' },
+                  ]}
+                />
+              </FieldShell>
+            )}
 
-            {form.mediaType === 'video' ? (
+            {(currentObjective?.videoOnly ? true : form.mediaType === 'video') ? (
               <>
                 {form.videoFile || form.videoUrl ? (
                   <FieldShell label="Selected video">
@@ -2004,20 +2311,29 @@ const CreateCampaignWizard = ({
               value={form.adText}
               onChange={(v) => update({ adText: v })}
               placeholder="Check out our product!"
+              required={form.objectiveKey === 'VIDEO_VIEWS'}
+              error={errors.adText}
             />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <SelectField
                 label="Call to action"
                 value={form.cta}
                 onChange={(v) => update({ cta: v })}
-                options={(schema?.ctas || ['LEARN_MORE']).map((c) => ({ value: c, label: c }))}
+                options={(schema?.ctas || ['LEARN_MORE']).map((c) => {
+                  const label = c.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+                  return { value: c, label: c === 'LEARN_MORE' ? `${label} (Recommended)` : label };
+                })}
               />
-              <TextField
-                label="Landing page URL"
-                value={form.landingPageUrl}
-                onChange={(v) => update({ landingPageUrl: v })}
-                placeholder="https://example.com"
-              />
+              {objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && (
+                <TextField
+                  label="Landing page URL"
+                  value={form.landingPageUrl}
+                  onChange={(v) => update({ landingPageUrl: v })}
+                  placeholder="https://example.com"
+                  required
+                  error={errors.landingPageUrl}
+                />
+              )}
             </div>
             <TextField
               label="Impression tracking URL (optional)"
@@ -2170,6 +2486,12 @@ const CreateCampaignWizard = ({
                   {form.spendingPower && form.spendingPower !== 'ALL' && (
                     <ReviewField label="Spending power" value="High spending power" />
                   )}
+                  {/* {form.brandSafetyType && form.brandSafetyType !== 'NO_BRAND_SAFETY' && (
+                    <ReviewField
+                      label="Brand safety"
+                      value={BRAND_SAFETY_TYPES.find((b) => b.value === form.brandSafetyType)?.label || form.brandSafetyType}
+                    />
+                  )} */}
                   <ReviewField label="Budget mode" value={budgetModeLabel} />
                   <ReviewField label="Budget" value={`${form.adgroupBudget} ${currency}`} />
                   <ReviewField label="Bid type" value={bidTypeLabel} />
@@ -2191,7 +2513,7 @@ const CreateCampaignWizard = ({
                   {form.optimizationGoal === 'REACH' && (
                     <ReviewField
                       label="Frequency cap"
-                      value={`${form.frequency} time(s) per ${form.frequencySchedule} day(s)`}
+                      value={`Show ads no more than ${form.frequency} time(s) every ${form.frequencySchedule} day(s)`}
                     />
                   )}
                   {form.pixelId && (
@@ -2310,14 +2632,23 @@ const CreateCampaignWizard = ({
                 </div>
               )}
             </div>
-            {isCreate && (
+            {isCreate && step === 3 ? (
+              <div className="w-56 shrink-0 overflow-y-auto border-l border-gray-100 bg-gray-50/50 dark:border-white/8 dark:bg-white/2">
+                <TikTokAdPreview
+                  form={form}
+                  identityName={
+                    identities.find((i) => String(i.identityId) === String(form.identityId))?.displayName || ''
+                  }
+                />
+              </div>
+            ) : isCreate ? (
               <CampaignSetupSidebar
                 currentStep={step}
                 form={form}
                 selectedObjective={selectedObjective}
                 onStepClick={setStep}
               />
-            )}
+            ) : null}
           </div>
 
           {/* footer */}

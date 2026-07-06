@@ -228,6 +228,25 @@ class TiktokAuthController {
    * Get connected TikTok user (without tokens).
    */
   async getCurrentUser(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get connected TikTok user'
+       #swagger.description = 'Gets the connected TikTok user record (tokens excluded) for the given userId path param, plus a tokenExpiringSoon flag (true if the stored token expires within 24 hours).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['id'] = { in: 'path', required: true, description: 'AdsGPT userId (e.g. GPT-123 or PAS-123)', type: 'string', example: 'GPT-123456' }
+       #swagger.responses[200] = {
+         description: "TikTok user",
+         schema: {
+           userId: "GPT-123456",
+           advertiserIds: ["7012345678901234567"],
+           advertiserInfo: [{ advertiserId: "7012345678901234567", name: "My Brand Ads", currency: "USD", timezone: "America/Los_Angeles", status: "STATUS_ENABLE" }],
+           isActive: true,
+           tokenExpiresAt: "2026-07-07T10:00:00.000Z",
+           tokenExpiringSoon: false
+         }
+       }
+       #swagger.responses[404] = { description: "User not found. Please connect your TikTok account." }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok user" }
+    */
     try {
       const user = await TiktokUsers.findOne({
         userId: req.params.id,
@@ -258,6 +277,17 @@ class TiktokAuthController {
    * Disconnect TikTok user and clear cache.
    */
   async disconnectUser(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Disconnect TikTok user'
+       #swagger.description = 'Marks the TikTok user record inactive (soft delete — tokens are kept but isActive is set to false) and invalidates all cached TikTok data for the user.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['id'] = { in: 'path', required: true, description: 'AdsGPT userId (e.g. GPT-123 or PAS-123)', type: 'string', example: 'GPT-123456' }
+       #swagger.responses[200] = {
+         description: "Disconnected",
+         schema: { success: true, message: "TikTok account disconnected" }
+       }
+       #swagger.responses[500] = { description: "Failed to disconnect TikTok account" }
+    */
     try {
       const { id } = req.params;
       await TiktokUsers.findOneAndUpdate(

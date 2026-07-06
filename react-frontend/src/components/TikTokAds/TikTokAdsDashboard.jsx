@@ -1016,6 +1016,7 @@ const TikTokAdsDashboard = () => {
         <CreateCampaignWizard
           advertiserId={selectedAccount.id}
           currency={currency}
+          timezone={selectedAccount.timezone}
           onClose={() => setShowWizard(false)}
           onCreated={() => loadCampaigns(selectedAccount)}
           onChangeAccount={(id) => {
@@ -1030,6 +1031,7 @@ const TikTokAdsDashboard = () => {
         <CreateCampaignWizard
           advertiserId={selectedAccount.id}
           currency={currency}
+          timezone={selectedAccount.timezone}
           mode={editWizard.mode}
           context={editWizard.context}
           onClose={closeEditWizard}

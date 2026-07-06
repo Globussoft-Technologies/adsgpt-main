@@ -15,6 +15,20 @@ const logger = require("../utils/logger");
 // the picker (id, name, objective, conversionLocation, createdAt). The full
 // payload comes back via GET /:id when the user applies one.
 async function listTemplates(req, res) {
+  /* #swagger.tags = ['TikTok Ads']
+     #swagger.summary = 'List campaign templates'
+     #swagger.description = 'Returns the authenticated user\'s saved TikTok wizard templates, newest first — a slim projection (id, name, objective, conversionLocation, timestamps) for the template picker. Fetch the full payload via GET /templates/{id} when applying one.'
+     #swagger.security = [{ "BearerAuth": [] }]
+     #swagger.responses[200] = {
+       description: "Templates",
+       schema: {
+         status: true,
+         templates: [{ id: "665f1a2b3c4d5e6f7a8b9c0d", name: "US Traffic Template", objective: "TRAFFIC", conversionLocation: "WEBSITE", createdAt: "2026-07-01T10:00:00.000Z", updatedAt: "2026-07-01T10:00:00.000Z" }],
+         count: 1
+       }
+     }
+     #swagger.responses[500] = { description: "Failed to load templates" }
+  */
   try {
     const userId = req.user.user_id;
     const rows = await TiktokCampaignTemplate.find({ userId })
@@ -44,6 +58,29 @@ async function listTemplates(req, res) {
 
 // GET /tiktok-ads/templates/:id — full payload for applying a template.
 async function getTemplate(req, res) {
+  /* #swagger.tags = ['TikTok Ads']
+     #swagger.summary = 'Get a campaign template'
+     #swagger.description = 'Returns the full saved wizard `form` payload for one template, scoped to the authenticated user, used to re-hydrate the create-campaign wizard when the user applies a saved template.'
+     #swagger.security = [{ "BearerAuth": [] }]
+     #swagger.parameters['id'] = { in: 'path', required: true, description: 'Template Mongo _id', type: 'string', example: '665f1a2b3c4d5e6f7a8b9c0d' }
+     #swagger.responses[200] = {
+       description: "Template",
+       schema: {
+         status: true,
+         template: {
+           id: "665f1a2b3c4d5e6f7a8b9c0d",
+           name: "US Traffic Template",
+           objective: "TRAFFIC",
+           conversionLocation: "WEBSITE",
+           payload: { objectiveKey: "TRAFFIC", objectiveType: "TRAFFIC", budgetMode: "BUDGET_MODE_DAY", budget: 50 },
+           createdAt: "2026-07-01T10:00:00.000Z",
+           updatedAt: "2026-07-01T10:00:00.000Z"
+         }
+       }
+     }
+     #swagger.responses[404] = { description: "Template not found" }
+     #swagger.responses[500] = { description: "Failed to load template" }
+  */
   try {
     const userId = req.user.user_id;
     const { id } = req.params;
@@ -76,6 +113,37 @@ async function getTemplate(req, res) {
 
 // POST /tiktok-ads/templates — save the current wizard form as a template.
 async function createTemplate(req, res) {
+  /* #swagger.tags = ['TikTok Ads']
+     #swagger.summary = 'Save a campaign template'
+     #swagger.description = 'Saves the current create-campaign wizard `form` state as a reusable template for the authenticated user. `objective`/`conversionLocation` are denormalized from `payload` for picker display when not passed explicitly. `payload` is stored as-is (Mixed schema) so the wizard shape can evolve without migrations.'
+     #swagger.security = [{ "BearerAuth": [] }]
+     #swagger.requestBody = {
+       required: true,
+       content: {
+         "application/json": {
+           schema: {
+             type: "object",
+             required: ["name", "payload"],
+             properties: {
+               name: { type: "string", example: "US Traffic Template" },
+               objective: { type: "string", example: "TRAFFIC", description: "Optional — denormalized from payload.objectiveKey if omitted" },
+               conversionLocation: { type: "string", example: "WEBSITE", description: "Optional — denormalized from payload.objectiveType / objectiveKey if omitted" },
+               payload: { type: "object", description: "The full wizard form state to snapshot", example: { objectiveKey: "TRAFFIC", objectiveType: "TRAFFIC", budgetMode: "BUDGET_MODE_DAY", budget: 50 } }
+             }
+           }
+         }
+       }
+     }
+     #swagger.responses[201] = {
+       description: "Template saved",
+       schema: {
+         status: true,
+         template: { id: "665f1a2b3c4d5e6f7a8b9c0d", name: "US Traffic Template", objective: "TRAFFIC", conversionLocation: "WEBSITE", createdAt: "2026-07-01T10:00:00.000Z" }
+       }
+     }
+     #swagger.responses[400] = { description: "Validation error (e.g. missing name/payload)" }
+     #swagger.responses[500] = { description: "Failed to save template" }
+  */
   const { error, value } = createTemplateSchema.validate(req.body);
   if (error) {
     return res.status(400).json({
@@ -122,6 +190,18 @@ async function createTemplate(req, res) {
 
 // DELETE /tiktok-ads/templates/:id
 async function deleteTemplate(req, res) {
+  /* #swagger.tags = ['TikTok Ads']
+     #swagger.summary = 'Delete a campaign template'
+     #swagger.description = 'Deletes a saved TikTok wizard template, scoped to the authenticated user.'
+     #swagger.security = [{ "BearerAuth": [] }]
+     #swagger.parameters['id'] = { in: 'path', required: true, description: 'Template Mongo _id', type: 'string', example: '665f1a2b3c4d5e6f7a8b9c0d' }
+     #swagger.responses[200] = {
+       description: "Deleted",
+       schema: { status: true, message: "Template deleted" }
+     }
+     #swagger.responses[404] = { description: "Template not found" }
+     #swagger.responses[500] = { description: "Failed to delete template" }
+  */
   try {
     const userId = req.user.user_id;
     const { id } = req.params;

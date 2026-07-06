@@ -87,6 +87,10 @@ const doc = {
       description: "Google Ads account, campaign, ad group and ad management",
     },
     {
+      name: "TikTok Ads",
+      description: "TikTok Ads Manager — account connection, campaign/ad group/ad CRUD, wizard config, targeting pickers, reporting, and campaign templates",
+    },
+    {
       name: "Ads Factory Autopilot",
       description: "Autopilot job management — schedule, pause, resume, and monitor automated ad generation jobs",
     },
