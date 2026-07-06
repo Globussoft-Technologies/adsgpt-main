@@ -776,6 +776,8 @@ class TiktokAdController {
         objectiveType,
         budgetMode = "BUDGET_MODE_INFINITE",
         budget,
+        budgetOptimizeOn,
+        specialIndustries,
       } = req.body;
 
       if (!advertiserId) {
@@ -795,6 +797,10 @@ class TiktokAdController {
         budget_mode: budgetMode,
         ...(budget != null && budgetMode !== "BUDGET_MODE_INFINITE"
           ? { budget: Number(budget) }
+          : {}),
+        ...(budgetOptimizeOn ? { budget_optimize_on: true } : {}),
+        ...(Array.isArray(specialIndustries) && specialIndustries.length
+          ? { special_industries: specialIndustries }
           : {}),
         ...(req.body.payload || {}),
       };

@@ -211,6 +211,24 @@ const BUDGET_MODES = [
   { value: 'BUDGET_MODE_INFINITE', label: 'No limit' },
 ];
 
+const SPECIAL_INDUSTRIES = [
+  { value: 'HOUSING', label: 'Housing' },
+  { value: 'EMPLOYMENT', label: 'Employment' },
+  { value: 'CREDIT', label: 'Credit' },
+  { value: 'POLITICS', label: 'Politics' },
+];
+
+const PLACEMENTS = [
+  { value: 'PLACEMENT_TIKTOK', label: 'TikTok' },
+  { value: 'PLACEMENT_PANGLE', label: 'Pangle' },
+  { value: 'PLACEMENT_GLOBAL_APP_BUNDLE', label: 'Global App Bundle' },
+];
+
+const DEVICE_TYPES = [
+  { value: 'DEVICE_ANDROID', label: 'Android' },
+  { value: 'DEVICE_IOS', label: 'iOS' },
+];
+
 // TikTok requires the ad group's billing_event to match its optimization goal
 // (e.g. REACH → CPM, video views → CPV, conversions → OCPM). Sending the wrong
 // pairing is rejected with errors like "Only CPM is supported".
@@ -759,10 +777,13 @@ const CreateCampaignWizard = ({
   const buildInitialForm = () => {
     if (!context) return {};
     if (isEditCampaign) {
+      const raw = context.raw || {};
       return {
         campaignName: context.name || '',
         budgetMode: context.budgetMode || 'BUDGET_MODE_DAY',
         budget: context.budget != null ? Number(context.budget) : 50,
+        budgetOptimizeOn: raw.budget_optimize_on || false,
+        specialIndustries: raw.special_industries || [],
       };
     }
     if (isEditAdGroup) {
@@ -781,6 +802,8 @@ const CreateCampaignWizard = ({
         frequencySchedule: raw.frequency_schedule || 7,
         bidType: raw.bid_type || 'BID_TYPE_NO_BID',
         bidPrice: raw.bid != null ? String(raw.bid) : '',
+        placements: raw.placements?.length ? raw.placements : ['PLACEMENT_TIKTOK'],
+        deviceTypes: raw.device_type || [],
         scheduleStartTime: toDatetimeLocal(raw.schedule_start_time),
         scheduleEndTime: toDatetimeLocal(raw.schedule_end_time),
         languages: raw.languages || [],
@@ -838,7 +861,11 @@ const CreateCampaignWizard = ({
     campaignName: '',
     budgetMode: 'BUDGET_MODE_DAY',
     budget: 50,
+    budgetOptimizeOn: false,
+    specialIndustries: [],
     adgroupName: '',
+    placements: ['PLACEMENT_TIKTOK'],
+    deviceTypes: [],
     locationIds: [],
     ageGroups: [],
     gender: 'GENDER_UNLIMITED',
@@ -1152,6 +1179,8 @@ const CreateCampaignWizard = ({
           advertiser_id: advertiserId,
           adgroup_id: context.id,
           adgroup_name: form.adgroupName,
+          placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
+          ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
           location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
           age_groups: form.ageGroups,
           gender: form.gender,
@@ -1231,6 +1260,8 @@ const CreateCampaignWizard = ({
           objectiveType: form.objectiveType,
           budgetMode: form.budgetMode,
           budget: Number(form.budget),
+          budgetOptimizeOn: form.budgetOptimizeOn,
+          specialIndustries: form.specialIndustries,
         });
         campaignId = res.campaignId;
         setCreated((c) => ({ ...c, campaignId }));
@@ -1244,7 +1275,8 @@ const CreateCampaignWizard = ({
           campaign_id: campaignId,
           adgroup_name: form.adgroupName,
           placement_type: 'PLACEMENT_TYPE_NORMAL',
-          placements: ['PLACEMENT_TIKTOK'],
+          placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
+          ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
           location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
           ...(form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
           ...(form.gender && form.gender !== 'GENDER_UNLIMITED' ? { gender: form.gender } : {}),
@@ -1471,6 +1503,59 @@ const CreateCampaignWizard = ({
               required
               error={errors.campaignName}
             />
+            <FieldShell
+              label="Special ad categories"
+              hint="Select if your ad is related to housing, employment, credit, or politics. Leave empty for standard ads."
+            >
+              <div className="flex flex-wrap gap-2">
+                {SPECIAL_INDUSTRIES.map((opt) => {
+                  const active = form.specialIndustries.includes(opt.value);
+                  return (
+                    <div
+                      key={opt.value}
+                      className={`rounded-full p-[1px] transition-all ${
+                        active
+                          ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
+                          : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = active
+                            ? form.specialIndustries.filter((v) => v !== opt.value)
+                            : [...form.specialIndustries, opt.value];
+                          update({ specialIndustries: next });
+                        }}
+                        className={`flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium transition-all dark:bg-[#1d1d1d] ${
+                          active ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/55'
+                        }`}
+                      >
+                        {active && <Check className="h-3 w-3" />}
+                        {opt.label}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </FieldShell>
+            <FieldShell
+              label="Campaign budget optimization"
+              hint="Let TikTok automatically distribute your campaign budget across ad groups for the best results."
+            >
+              <button
+                type="button"
+                onClick={() => update({ budgetOptimizeOn: !form.budgetOptimizeOn })}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                  form.budgetOptimizeOn
+                    ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
+                    : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                }`}
+              >
+                {form.budgetOptimizeOn ? <Check className="h-3 w-3" /> : null}
+                {form.budgetOptimizeOn ? 'Enabled' : 'Disabled'}
+              </button>
+            </FieldShell>
             <SelectField
               label="Budget mode"
               value={form.budgetMode}
@@ -1636,6 +1721,20 @@ const CreateCampaignWizard = ({
               </div>
             )}
 
+            <MultiSelectField
+              label="Placements (optional)"
+              hint="Leave empty or select TikTok only for standard campaigns."
+              values={form.placements}
+              onChange={(v) => update({ placements: v.length ? v : ['PLACEMENT_TIKTOK'] })}
+              options={PLACEMENTS}
+            />
+            <MultiSelectField
+              label="Device type (optional)"
+              hint="Leave empty to target all devices."
+              values={form.deviceTypes}
+              onChange={(v) => update({ deviceTypes: v })}
+              options={DEVICE_TYPES}
+            />
             <SelectField
               label="Budget mode"
               value={form.budgetMode}
@@ -1707,11 +1806,13 @@ const CreateCampaignWizard = ({
               }))}
               maxHeight="max-h-72"
             />
-            <MultiSelectField
+            <ScrollableMultiSelectField
               label="Languages (optional)"
+              hint="Leave empty to target all languages"
               values={form.languages}
               onChange={(v) => update({ languages: v })}
               options={LANGUAGES}
+              maxHeight="max-h-40"
             />
             <FieldShell label="Spending power">
               <div className="flex gap-2">
@@ -2033,10 +2134,29 @@ const CreateCampaignWizard = ({
                   <ReviewField label="Name" value={form.campaignName} />
                   <ReviewField label="Budget mode" value={budgetModeLabel} />
                   <ReviewField label="Budget" value={`${form.budget} ${currency}`} />
+                  {form.budgetOptimizeOn && (
+                    <ReviewField label="Budget optimization" value="Enabled (CBO)" />
+                  )}
+                  {form.specialIndustries.length > 0 && (
+                    <ReviewField
+                      label="Special categories"
+                      value={form.specialIndustries.map((s) => SPECIAL_INDUSTRIES.find((i) => i.value === s)?.label || s).join(', ')}
+                    />
+                  )}
                 </ReviewSection>
 
                 <ReviewSection title="Ad Group">
                   <ReviewField label="Name" value={form.adgroupName} />
+                  <ReviewField
+                    label="Placements"
+                    value={form.placements.map((p) => PLACEMENTS.find((pl) => pl.value === p)?.label || p).join(', ')}
+                  />
+                  {form.deviceTypes.length > 0 && (
+                    <ReviewField
+                      label="Devices"
+                      value={form.deviceTypes.map((d) => DEVICE_TYPES.find((dt) => dt.value === d)?.label || d).join(', ')}
+                    />
+                  )}
                   <ReviewField label="Locations" value={locationNames} />
                   <ReviewField label="Age groups" value={ageGroupLabels} />
                   <ReviewField label="Gender" value={genderLabel} />
