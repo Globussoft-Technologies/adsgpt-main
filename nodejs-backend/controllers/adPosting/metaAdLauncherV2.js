@@ -894,6 +894,40 @@ async function createAdV2(req, res) {
   }
 }
 
+// Resolve an ad set's Facebook Page. `promoted_object.page_id` only exists
+// for the "page" promotedObjectShape (Traffic/Leads-style cells) — cells
+// shaped "pixel" (Leads/Sales Website, Multiple cells) never carry page_id
+// there at all, since Page association for those lives on the ad's
+// CREATIVE (`object_story_spec.page_id` — every objectStorySpecShape sets
+// this, see utils/objectStorySpec.js's `base = {page_id: ...}`), not the
+// ad set. Falls back to reading an existing ad's creative when the
+// promoted_object comes up empty. Used by both resolveCellForAdSet (Add Ad)
+// and resolveAdSetForEdit (Edit Ad Set) — extracted 2026-07-06 after the
+// Edit Ad Set flow shipped WITHOUT this fallback (only resolveCellForAdSet
+// had it), silently blanking the Facebook Page field — required, but with
+// nothing to select — for every ad set under a "pixel"-shape cell.
+async function resolvePageIdForAdSet(adSetId, promotedObject) {
+  let pageId = promotedObject?.page_id || null;
+  if (pageId) return pageId;
+  try {
+    const ads = await new bizSdk.AdSet(adSetId).getAds(
+      ["creative{object_story_spec,effective_object_story_id}"],
+      { limit: 1 },
+    );
+    const firstAd = (ads || [])[0];
+    const adData = firstAd?._data || firstAd || {};
+    const oss = adData.creative?.object_story_spec;
+    pageId = oss?.page_id || null;
+    if (!pageId && adData.creative?.effective_object_story_id) {
+      // Format: "<pageId>_<postId>".
+      pageId = String(adData.creative.effective_object_story_id).split("_")[0] || null;
+    }
+  } catch {
+    /* no readable ad — leave null; caller's page picker stays empty/required */
+  }
+  return pageId;
+}
+
 // ─── resolveCellForAdSet ──────────────────────────────────────────────────────
 
 /**
@@ -955,30 +989,7 @@ async function resolveCellForAdSet(req, res) {
 
     // Resolve the ad set's Facebook Page so the Add-Ad flow inherits it
     // (the Lead Form step needs it, and the ad creative is page-scoped).
-    // 1) promoted_object.page_id — Leads / Messenger / WhatsApp / Calls.
-    // 2) fall back to an existing ad's creative page (covers cells whose
-    //    promoted_object has no page_id, e.g. the "Multiple" Leads cells).
-    let pageId = adSetData.promoted_object?.page_id || null;
-    if (!pageId) {
-      try {
-        const ads = await new bizSdk.AdSet(adSetId).getAds(
-          ["creative{object_story_spec,effective_object_story_id}"],
-          { limit: 1 },
-        );
-        const firstAd = (ads || [])[0];
-        const adData = firstAd?._data || firstAd || {};
-        const oss = adData.creative?.object_story_spec;
-        pageId = oss?.page_id || null;
-        if (!pageId && adData.creative?.effective_object_story_id) {
-          // Format: "<pageId>_<postId>".
-          pageId =
-            String(adData.creative.effective_object_story_id).split("_")[0] ||
-            null;
-        }
-      } catch {
-        /* no readable ad — leave null; the Add-Ad step shows a page picker */
-      }
-    }
+    const pageId = await resolvePageIdForAdSet(adSetId, adSetData.promoted_object);
 
     return res.status(200).json({
       status: true,
@@ -1035,6 +1046,32 @@ async function resolveCampaignForAdd(req, res) {
       return res.status(400).json(metaErrorResponse(err, "load campaign", req));
     }
 
+    // Real trigger (2026-07-06, subcode 1885760 "Optimisation for ad
+    // delivery selections must be the same"): Meta requires every ad set
+    // in a campaign to share the SAME optimization_goal whenever the
+    // effective bid strategy is a "lowest cost" (auto-bid) family — which
+    // is BOTH bid strategies our wizard offers (LOWEST_COST_WITHOUT_CAP,
+    // LOWEST_COST_WITH_BID_CAP), so this applies to every Add-Ad-Set onto
+    // an existing, non-empty campaign, CBO or ABO. We had no visibility
+    // into the existing ad set's goal at all, so a user could freely pick
+    // a mismatched Performance goal and only find out at publish, with an
+    // opaque error and no indication which field to fix. Best-effort: a
+    // failure here degrades to `existingOptimizationGoal: null` (treated
+    // as "no constraint known") rather than blocking campaign load.
+    let existingOptimizationGoal = null;
+    try {
+      const adSets = await new bizSdk.Campaign(campaignId).getAdSets(
+        ["optimization_goal"],
+        { limit: 1 },
+      );
+      const first = Array.isArray(adSets) ? adSets[0] : null;
+      existingOptimizationGoal = first?._data?.optimization_goal || first?.optimization_goal || null;
+    } catch (err) {
+      logger.warn(
+        `resolveCampaignForAdd: failed to read existing ad sets for ${campaignId}: ${err.message}`,
+      );
+    }
+
     const dailyBudget = Number(d.daily_budget) || 0;
     const lifetimeBudget = Number(d.lifetime_budget) || 0;
     const spendCap = Number(d.spend_cap) || 0;
@@ -1054,6 +1091,9 @@ async function resolveCampaignForAdd(req, res) {
       dailyBudget,
       lifetimeBudget,
       spendCap,
+      // null when the campaign has no ad sets yet (nothing to match) or
+      // the read failed — frontend treats null as "no lock needed".
+      existingOptimizationGoal,
     });
   } catch (err) {
     return res.status(500).json(metaErrorResponse(err, "resolve campaign", req));
@@ -1195,15 +1235,14 @@ async function resolveLocationNames(api, locations) {
 // run. Best-effort — if a lookup fails, launch proceeds with the current
 // payload (may still 1487756, which is the pre-fix behavior; not worse).
 //
-// Known residual gap: a `custom` pin missing regionId gets NO backend
-// backfill for region (only countryCode, via reverse-geocode). Nominatim
-// has no concept of Meta's internal region-id ontology, so there's no
-// reverse lat/lng → Meta region_id lookup available. The frontend closes
-// this at pick-time instead — a `place` search result already carries
-// Meta's own `region_id` in the same row, captured onto the pin with zero
-// extra network calls (see LocationTargeting.jsx `add()`). Only a pin
-// dropped via manual map-click (no search row) or loaded pre-fix from an
-// existing ad set stays exposed.
+// Former "known residual gap," CLOSED 2026-07-06: a `custom` pin missing
+// regionId used to get no backfill for it — Nominatim (the reverse-geocode
+// fallback) has no concept of Meta's region-id ontology. Turns out Meta's
+// OWN `adgeolocationmeta` endpoint reverse-geocodes a bare lat/lng pair via
+// its `custom_locations` bucket and returns `region_id` directly (captured
+// live from Meta Ads Manager's network traffic) — `reverseGeocodeLatLng`
+// now tries that first, Nominatim only as fallback. See its docblock in
+// metaAdLauncher.js for the full mechanism.
 async function backfillLocationCountryCodes(api, locations) {
   if (!Array.isArray(locations) || !locations.length) return;
 
@@ -1230,20 +1269,21 @@ async function backfillLocationCountryCodes(api, locations) {
   }
 
   // Case 2 — custom (lat/lng) pins via reverse-geocode. Sequential, not
-  // parallel: pins are rare (most locations are geo-search picks) and
-  // Nominatim's usage policy expects modest request rates. countryCode
-  // only — see the regionId gap note above.
+  // parallel: pins are rare (most locations are geo-search picks) and the
+  // Nominatim fallback's usage policy expects modest request rates. Now
+  // captures regionId too (Meta's own adgeolocationmeta path — see above).
   const needsReverseGeocode = locations.filter(
     (l) =>
       (l.mode || "include") === "include" &&
       l.type === "custom" &&
-      !l.countryCode &&
+      (!l.countryCode || !l.regionId) &&
       Number.isFinite(l.latitude) &&
       Number.isFinite(l.longitude),
   );
   for (const l of needsReverseGeocode) {
-    const hit = await reverseGeocodeLatLng(l.latitude, l.longitude);
-    if (hit?.countryCode) l.countryCode = hit.countryCode;
+    const hit = await reverseGeocodeLatLng(l.latitude, l.longitude, api);
+    if (!l.countryCode && hit?.countryCode) l.countryCode = hit.countryCode;
+    if (!l.regionId && hit?.regionId) l.regionId = hit.regionId;
   }
 }
 
@@ -1323,6 +1363,13 @@ async function resolveAdSetForEdit(req, res) {
       Number(campaignData.daily_budget) > 0 ||
       Number(campaignData.lifetime_budget) > 0;
 
+    // Real trigger (2026-07-06): Edit Ad Set showed a blank, still-required
+    // Facebook Page field for every "pixel"-shape cell (Leads/Sales Website,
+    // Multiple cells) — promoted_object.page_id only exists for "page"-shape
+    // cells. Same fallback resolveCellForAdSet already used for the Add-Ad
+    // flow, extracted into resolvePageIdForAdSet so both stay in sync.
+    const pageId = await resolvePageIdForAdSet(adSetId, adSetData.promoted_object);
+
     return res.status(200).json({
       status: true,
       adSetId: adSetData.id,
@@ -1340,7 +1387,7 @@ async function resolveAdSetForEdit(req, res) {
       billingEvent: adSetData.billing_event || "",
       startTime: adSetData.start_time || "",
       endTime: adSetData.end_time || "",
-      pageId: adSetData.promoted_object?.page_id || null,
+      pageId,
       pixelId: adSetData.promoted_object?.pixel_id || null,
       pixelEventType: adSetData.promoted_object?.custom_event_type || null,
       applicationId: adSetData.promoted_object?.application_id || null,

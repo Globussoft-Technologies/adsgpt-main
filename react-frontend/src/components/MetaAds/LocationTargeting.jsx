@@ -559,11 +559,15 @@ export default function LocationTargeting({
   // Drop a pin → add a `custom` location (radius around the point).
   // First reverse-geocodes the click to make sure it's on LAND — Meta's
   // own Ads Manager won't let you pin in water, and a custom location in
-  // the middle of the ocean delivers to nobody. The backend's Nominatim
-  // proxy returns `result: null` for ocean / no-match; we surface that
-  // to the user and bail. If Nominatim is down the backend marks the
-  // response `degraded: true` and we fail open (let the user drop the
-  // pin) — better than blocking work over a transient outage.
+  // the middle of the ocean delivers to nobody. The backend tries Meta's
+  // OWN reverse-geocode first (adgeolocationmeta's custom_locations bucket
+  // — the same mechanism Meta Ads Manager itself uses when you drop a pin,
+  // captured from their network traffic 2026-07-06), Nominatim only as
+  // fallback — see reverseGeocodeLatLng in metaAdLauncher.js. `result: null`
+  // means ocean / no-match; we surface that to the user and bail. If both
+  // services are down the backend marks the response `degraded: true` and
+  // we fail open (let the user drop the pin) — better than blocking work
+  // over a transient outage.
   const addPin = useCallback(
     async (lat, lng) => {
       const latitude = Number(lat.toFixed(6));
@@ -577,11 +581,18 @@ export default function LocationTargeting({
       // launch (Meta subcode 1487756). Backend backfills on launch/edit
       // too, but capturing it now avoids a second network round-trip.
       let countryCode = null;
+      // regionId now comes back too when Meta's own reverse-geocode hits
+      // (previously only backend-side backfill could ever get this for a
+      // manually-dropped pin, and only via a search pick, never a bare
+      // map click — see the "Former known residual gap" note in
+      // backfillLocationCountryCodes, metaAdLauncherV2.js).
+      let regionId = null;
       try {
         const r = await reverseGeocodeLocation({ lat: latitude, lng: longitude });
         if (r?.result) {
           displayName = r.result.displayName || null;
           countryCode = r.result.countryCode || null;
+          regionId = r.result.regionId || null;
         } else if (!r?.degraded) {
           globalToast.error(
             'Pick a point on land — that location has no addressable audience.',
@@ -607,6 +618,7 @@ export default function LocationTargeting({
           distanceUnit: 'kilometer',
           mode: 'include',
           ...(countryCode && { countryCode }),
+          ...(regionId && { regionId }),
         },
       ]);
     },

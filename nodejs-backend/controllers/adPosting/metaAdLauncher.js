@@ -479,18 +479,55 @@ async function invalidateAfterCreate(userId, { adAccountId, campaignId, adSetId 
   if (concrete.length) await redisClient.del(...concrete).catch(() => {});
 }
 
-// Reverse-geocode lat/lng → { displayName, countryCode } via Nominatim.
+// Reverse-geocode lat/lng → { displayName, countryCode, regionId, primaryCity }.
 // Extracted as a standalone helper (not a class method) so it's reusable
 // from both the `reverseGeocodeLocation` HTTP endpoint AND
 // metaAdLauncherV2's launch-time `backfillLocationCountryCodes` — a
 // `custom` (map-pin) location Meta reads back on edit NEVER carries a
 // country code (Meta's targeting.geo_locations.custom_locations only has
 // lat/lng/radius), so the edit-save path needs the same lookup the
-// picker uses when the pin is first dropped. Best-effort: returns null
-// on any failure (ocean, Nominatim outage, bad input) — callers should
-// treat that as "couldn't determine, leave as-is."
-async function reverseGeocodeLatLng(lat, lng) {
+// picker uses when the pin is first dropped.
+//
+// Tries Meta's OWN reverse-geocode FIRST (added 2026-07-06, captured live
+// from Meta Ads Manager's network traffic: dropping a map pin calls
+// `GET /search?type=adgeolocationmeta&custom_locations=["(lat, lng)"]` —
+// the SAME generic `/search` node as `adgeolocation`/the place-coordinate
+// resolve flow, just a different bucket keyed by the raw coordinate string
+// instead of an id). This returns `region_id` directly for a bare
+// coordinate pair — closing a gap previously written off as unfixable
+// (see the removed "known residual gap" note in backfillLocationCountryCodes
+// — Nominatim structurally can't know Meta's region-id ontology; Meta's own
+// endpoint doesn't have that limitation). Falls back to Nominatim only when
+// Meta's call fails or has no hit (e.g. the account's Meta API access has
+// an issue) — Nominatim is the ONLY source for a friendly place name in
+// that fallback case, since Meta's own `name`/`address_string` for a custom
+// location is just the coordinate pair re-stringified, not an address.
+//
+// `api` is optional — pass Meta's default API instance when the caller
+// already has one initialized (both current callers do). Best-effort:
+// returns null on total failure (ocean, both services down, bad input) —
+// callers should treat that as "couldn't determine, leave as-is."
+async function reverseGeocodeLatLng(lat, lng, api) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  if (api) {
+    try {
+      const { parseCustomLocationHit } = require("../../utils/targetingGeo");
+      const key = `(${lat}, ${lng})`;
+      const raw = await api.call("GET", ["search"], {
+        type: "adgeolocationmeta",
+        custom_locations: JSON.stringify([key]),
+        include_headers: false,
+      });
+      const data = raw?.data || raw?._data?.data || raw?._data || raw;
+      const hit = data?.custom_locations?.[key];
+      const parsed = parseCustomLocationHit(hit);
+      if (parsed?.countryCode || parsed?.regionId) return parsed;
+    } catch {
+      /* fall through to Nominatim below */
+    }
+  }
+
   try {
     const { data } = await axios.get(
       "https://nominatim.openstreetmap.org/reverse",
@@ -507,6 +544,8 @@ async function reverseGeocodeLatLng(lat, lng) {
     return {
       displayName: data.display_name,
       countryCode: (data.address?.country_code || "").toUpperCase() || null,
+      regionId: null,
+      primaryCity: null,
     };
   } catch {
     return null; // fail open — caller treats as "couldn't determine"
@@ -3203,17 +3242,26 @@ class MetaAdLauncher {
     }
   }
 
-  // Reverse-geocode lat/lng → { displayName, countryCode } via Nominatim.
+  // Reverse-geocode lat/lng → { displayName, countryCode, regionId, primaryCity }.
   // Used by the wizard's map-pin picker to reject ocean / uninhabited
   // clicks (Meta's own Ads Manager won't let you pin in water; mirroring
-  // that here avoids "campaign delivers to nobody" surprises).
+  // that here avoids "campaign delivers to nobody" surprises) AND to
+  // capture Meta's own countryCode/regionId for the pin immediately.
+  //
+  // CORRECTED 2026-07-06: this previously duplicated a Nominatim-only call
+  // inline instead of using the shared `reverseGeocodeLatLng` helper below
+  // (which existed specifically to be shared — see its docblock) — the two
+  // had already drifted apart. Now delegates to it, which tries Meta's own
+  // `adgeolocationmeta` (custom_locations bucket) first and only falls back
+  // to Nominatim on failure/no-hit. See reverseGeocodeLatLng for the full
+  // rationale (captured from Meta Ads Manager's own network traffic).
   //
   // Response shape:
-  //   { status: true, result: { displayName, countryCode } }  → land
-  //   { status: true, result: null }                          → ocean / no match
+  //   { status: true, result: { displayName, countryCode, regionId, primaryCity } }  → land
+  //   { status: true, result: null }                                                 → ocean / no match
   async reverseGeocodeLocation(req, res) {
     /* #swagger.tags = ['Meta Ads Launcher']
-       #swagger.description = 'Reverse-geocode lat/lng (OpenStreetMap Nominatim) to verify a map pin lies on land'
+       #swagger.description = 'Reverse-geocode lat/lng (Meta adgeolocationmeta, Nominatim fallback) to verify a map pin lies on land'
     */
     try {
       const lat = Number(req.query.lat);
@@ -3223,32 +3271,17 @@ class MetaAdLauncher {
           .status(400)
           .json({ status: false, error: "lat and lng query params are required" });
       }
-      // zoom=10 is a sensible middle: high enough to find a settlement
-      // around most coastal pins, low enough that Nominatim doesn't
-      // demand a specific address. Pure-ocean coords return
-      // `{ error: "Unable to geocode" }` at any zoom.
-      const { data } = await axios.get(
-        "https://nominatim.openstreetmap.org/reverse",
-        {
-          params: { lat, lon: lng, format: "jsonv2", zoom: 10, addressdetails: 1 },
-          headers: {
-            "User-Agent": "AdsGPT/1.0 (Meta Ads location targeting)",
-            "Accept-Language": "en",
-          },
-          timeout: 8000,
-        },
-      );
-
-      if (!data || data.error || !data.display_name) {
-        return res.status(200).json({ status: true, result: null });
+      let api = null;
+      try {
+        const userId = req.user.user_id;
+        await initApiForUser(userId);
+        api = bizSdk.FacebookAdsApi.getDefaultApi();
+      } catch {
+        /* Meta init failed — reverseGeocodeLatLng falls back to Nominatim
+           when api is null, so this isn't fatal to the request. */
       }
-      return res.status(200).json({
-        status: true,
-        result: {
-          displayName: data.display_name,
-          countryCode: (data.address?.country_code || "").toUpperCase() || null,
-        },
-      });
+      const result = await reverseGeocodeLatLng(lat, lng, api);
+      return res.status(200).json({ status: true, result });
     } catch (error) {
       console.error("reverseGeocodeLocation error:", error?.message || error);
       // Fail open — if Nominatim is down, don't block the user. The
@@ -3297,7 +3330,7 @@ class MetaAdLauncher {
   //   classes     — comma-separated subset of DETAILED_TARGETING_CLASSES.
   //                 When exactly one class is given, sent as `limit_type`
   //                 to narrow Meta's results. Multiple / omitted = no filter
-  //                 (search across all 14 classes).
+  //                 (search across all 15 classes).
   //   limit       — max results, 1-50, default 25.
   //
   // Returns: { results: [{ id, name, type, path, audienceSize, description }] }

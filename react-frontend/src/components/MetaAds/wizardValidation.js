@@ -178,6 +178,23 @@ function validateAdSet(form, cell, ctx, mode) {
   if (isBlank(form.optimizationGoal)) e.optimizationGoal = 'Select a performance goal.';
   if (isBlank(form.billingEvent)) e.billingEvent = 'Select a billing event.';
 
+  // Subcode 1885760 — Meta requires every ad set in a campaign to share one
+  // optimization_goal under "lowest cost" bidding. Add-Ad-Set locks the
+  // field to match when the destination supports it (AdSetStep), but if
+  // the picked destination doesn't offer the existing goal at all, there's
+  // no valid value to snap to — block here rather than letting a guaranteed
+  // publish-time rejection through.
+  if (
+    mode === 'create-adset' &&
+    form.existingOptimizationGoal &&
+    !isBlank(form.optimizationGoal) &&
+    Array.isArray(cell?.adSet?.optimizationGoals) &&
+    !cell.adSet.optimizationGoals.includes(form.existingOptimizationGoal)
+  ) {
+    e.optimizationGoal =
+      "This destination doesn't support this campaign's existing performance goal — pick a different destination or create a new campaign.";
+  }
+
   // Bid strategy ↔ bid amount — validated in BOTH directions.
   if (CAPPED_BID_STRATEGIES.has(form.bidStrategy)) {
     if (isBlank(form.bidAmount)) {

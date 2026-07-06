@@ -315,6 +315,36 @@ const COUNTRY_CODE_CARRYING_TYPES = new Set([
   "metro_area",
 ]);
 
+// Meta's own reverse-geocode for a raw lat/lng pair — the `custom_locations`
+// bucket on `adgeolocationmeta` (captured live from Meta Ads Manager's
+// network traffic 2026-07-06: dropping a map pin calls
+// `GET /search?type=adgeolocationmeta&custom_locations=["(lat, lng)"]`).
+// This closes a gap we'd previously documented as unfixable — Nominatim
+// (the OSM-based fallback) has no concept of Meta's region-id ontology, so
+// a manually-dropped pin's regionId could never be backfilled server-side.
+// Meta's OWN mechanism returns `region_id` directly for a bare coordinate
+// pair, no search pick required.
+//
+// `hit` is one value from the response's `data.custom_locations` map
+// (keyed by the same `"(lat, lng)"` string sent in the request), e.g.:
+//   { primary_city: "Pallikonda", region: "Tamil Nadu", region_id: 1744,
+//     country_code: "IN", country_name: "India", address_string: "(12.8758, 78.9638)" }
+// Returns null when `hit` is falsy (no match — e.g. open ocean).
+function parseCustomLocationHit(hit) {
+  if (!hit) return null;
+  const displayName =
+    [hit.primary_city, hit.region, hit.country_name].filter(Boolean).join(", ") ||
+    hit.address_string ||
+    hit.name ||
+    null;
+  return {
+    displayName,
+    countryCode: hit.country_code ? String(hit.country_code).toUpperCase() : null,
+    regionId: hit.region_id != null ? String(hit.region_id) : null,
+    primaryCity: hit.primary_city || null,
+  };
+}
+
 module.exports = {
   KEYED_LIST_TYPES,
   KEYED_LIST_INVERSE,
@@ -324,4 +354,5 @@ module.exports = {
   groupLocationsByType,
   dropOverlappingIncludes,
   reverseGeoToLocations,
+  parseCustomLocationHit,
 };

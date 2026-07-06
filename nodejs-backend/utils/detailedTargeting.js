@@ -70,6 +70,21 @@ const DETAILED_TARGETING_CLASSES = [
   "education_majors",
   "education_statuses",
   "relationship_statuses",
+  // Added 2026-07-06 — confirmed against Meta's live "Detailed Targeting"
+  // reference doc's `limit_type` enum AND the `targetingvalidation` edge's
+  // `targeting_list.type` enum (both fetched live, cross-checked against
+  // each other). Was missing entirely: browse/search return `college_years`
+  // items with no class-list gate (browseDetailedTargeting doesn't filter
+  // by CLASS_SET), so a user COULD pick one in the UI, but bucketByClass /
+  // pickTopLevelIntegerFields both gate on CLASS_SET.has(item.type) — the
+  // pick would silently vanish from the actual flexible_spec / top-level
+  // targeting payload at launch with no error, no warning, just a broader
+  // audience than the user configured. No live sample of the ID shape
+  // Meta returns for this class, but the routing doesn't need one — it's
+  // ID-shape-driven (isEnumCodeId), not class-driven, so whichever shape
+  // Meta sends is handled automatically once the class itself is allowed
+  // through the gate.
+  "college_years",
 ];
 
 const CLASS_SET = new Set(DETAILED_TARGETING_CLASSES);

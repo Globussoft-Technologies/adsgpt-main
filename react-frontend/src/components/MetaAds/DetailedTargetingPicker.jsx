@@ -12,7 +12,7 @@
  *
  * The component is value/onChange controlled — parent owns state. Item shape:
  *
- *   { type: 'interests' | 'behaviors' | 'demographics' | ...,  // 14 classes
+ *   { type: 'interests' | 'behaviors' | 'demographics' | ...,  // 15 classes
  *     id: string,
  *     name: string,
  *     audienceSize?: number,                                   // when known

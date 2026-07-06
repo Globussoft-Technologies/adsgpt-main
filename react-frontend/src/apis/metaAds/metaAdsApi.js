@@ -220,7 +220,7 @@ export const reverseGeocodeLocation = async ({ lat, lng } = {}) => {
 // `nodejs-backend/controllers/adPosting/metaAdLauncher.js`'s detailed-targeting
 // section. All four cache server-side via Redis with sensible TTLs.
 
-// Typeahead across all 14 detailed-targeting classes. `classes` is a
+// Typeahead across all 15 detailed-targeting classes. `classes` is a
 // comma-separated subset; when exactly one class is passed, backend sends
 // it as `limit_type` to narrow Meta's results. Meta's endpoint lives on
 // the ad-account node (`/act_X/targetingsearch`) so `adAccountId` is
@@ -740,7 +740,13 @@ export const resolveCellForAdSet = async ({ adSetId, campaignId } = {}) => {
 // cached, so this live read ensures the wizard knows the campaign's bid
 // strategy (a capped CBO campaign needs a per-ad-set bid cap), CBO state,
 // and special ad categories. Returns { objective, cbo, campaignBudgetType,
-// bidStrategy, specialAdCategories }.
+// bidStrategy, specialAdCategories, existingOptimizationGoal }.
+// `existingOptimizationGoal` (added 2026-07-06, subcode 1885760 fix): the
+// optimization_goal of an existing ad set in this campaign, or null if the
+// campaign has none yet. Meta requires every ad set in a campaign to share
+// the same optimization_goal under "lowest cost" bidding — both bid
+// strategies this wizard offers — so Add Ad Set uses this to lock the
+// Performance goal field instead of letting a mismatch reach publish.
 export const resolveCampaignForAdd = async ({ campaignId } = {}) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/v2/resolve-campaign`,

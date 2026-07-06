@@ -552,6 +552,11 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
         campaignBudgetType: r.campaignBudgetType || ctx.campaignBudgetType,
         bidStrategy: r.bidStrategy || undefined,
         specialAdCategories: r.specialAdCategories || [],
+        // Subcode 1885760 fix — locks the new ad set's Performance goal to
+        // match the campaign's existing ad set(s) (Meta requires this
+        // under "lowest cost" bidding). null when the campaign has no ad
+        // sets yet.
+        existingOptimizationGoal: r.existingOptimizationGoal || null,
         parentLabel: campaign.name,
       };
     } catch {

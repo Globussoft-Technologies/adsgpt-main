@@ -418,6 +418,12 @@ function buildInitialForm(context = null) {
     // special categories drive the targeting restrictions. A capped
     // strategy here makes CAPPED_BID_STRATEGIES require bidAmount inline.
     if (context.bidStrategy) base.bidStrategy = context.bidStrategy;
+    // Subcode 1885760 fix — the campaign's existing ad set's optimization
+    // goal (from resolveCampaignForAdd), used by AdSetStep to lock the
+    // Performance goal field. null when the campaign has no ad sets yet.
+    if (context.existingOptimizationGoal) {
+      base.existingOptimizationGoal = context.existingOptimizationGoal;
+    }
     if (Array.isArray(context.specialAdCategories)) {
       base.specialAdCategories = context.specialAdCategories;
     }
@@ -2008,6 +2014,36 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
   // CBO campaigns own the bid strategy at the campaign level — when adding
   // an ad set to one (or editing one under CBO), the strategy is inherited.
   const lockBidStrategy = (mode === 'create-adset' && form.cbo) || editing;
+  // Subcode 1885760 fix ("Optimisation for ad delivery selections must be
+  // the same") — Meta requires every ad set in a campaign to share one
+  // optimization_goal whenever bidding is "lowest cost" (both bid
+  // strategies this wizard offers), so adding a second ad set with a
+  // different Performance goal always fails at publish with no indication
+  // which field caused it. `form.existingOptimizationGoal` comes from
+  // resolveCampaignForAdd reading the campaign's existing ad sets — null
+  // means the campaign has none yet (nothing to match) or the read failed
+  // (best-effort; falls through to no lock rather than blocking the wizard).
+  const lockOptimizationGoal =
+    mode === 'create-adset' &&
+    !!form.existingOptimizationGoal &&
+    !!cell?.adSet?.optimizationGoals?.includes(form.existingOptimizationGoal);
+  // The existing goal isn't even offered by the destination/cell the user
+  // picked — Meta will reject this combination no matter what goal is
+  // chosen. Surfaced as a blocking banner rather than a silent-fail lock,
+  // since there's no valid value to snap to.
+  const optimizationGoalIncompatible =
+    mode === 'create-adset' &&
+    !!form.existingOptimizationGoal &&
+    !cell?.adSet?.optimizationGoals?.includes(form.existingOptimizationGoal);
+  // Keep the field snapped to the required value — same auto-snap pattern
+  // as the billing/bid-strategy narrowing below (user can't drift it via
+  // stale state after a cell/mode change).
+  useEffect(() => {
+    if (!lockOptimizationGoal) return;
+    if (form.optimizationGoal !== form.existingOptimizationGoal) {
+      update({ optimizationGoal: form.existingOptimizationGoal });
+    }
+  }, [lockOptimizationGoal, form.existingOptimizationGoal, form.optimizationGoal, update]);
   // Performance-goal labels — match Meta Ads Manager wording. Per-cell
   // overrides (e.g. Leads/App relabels OFFSITE_CONVERSIONS to "app events")
   // take precedence over the global `schema.labels.optimizationGoal` map.
@@ -2177,6 +2213,20 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
         />
       )}
 
+      {optimizationGoalIncompatible && (
+        <LaunchErrorBanner
+          error={{
+            title: "This destination can't be added to this campaign",
+            details:
+              `Meta requires every ad set in a campaign to use the same performance goal once ` +
+              `"lowest cost" bidding is in use. This campaign's existing ad set(s) use ` +
+              `"${cellLabels[form.existingOptimizationGoal] || globalLabels[form.existingOptimizationGoal] || form.existingOptimizationGoal}", ` +
+              `which isn't available for this destination. Pick a different destination that supports it, ` +
+              `or create a new campaign instead.`,
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SelectField
           label="Performance goal"
@@ -2184,8 +2234,14 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
           value={form.optimizationGoal}
           onChange={(v) => update({ optimizationGoal: v })}
           options={optimisationOptions}
-          disabled={editing}
-          hint={editing ? "Can't be changed after creation" : undefined}
+          disabled={editing || lockOptimizationGoal}
+          hint={
+            editing
+              ? "Can't be changed after creation"
+              : lockOptimizationGoal
+              ? "Locked — must match this campaign's existing ad set(s)"
+              : undefined
+          }
           error={errors.optimizationGoal}
         />
         <SelectField

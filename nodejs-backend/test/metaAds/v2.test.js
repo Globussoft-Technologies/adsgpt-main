@@ -34,12 +34,15 @@ const {
   dropOverlappingIncludes,
   reverseGeoToLocations,
   TYPE_TO_META_BUCKET,
+  parseCustomLocationHit,
 } = require("../../utils/targetingGeo");
 const {
   formToFlexibleSpec,
   flexibleSpecToForm,
   asTargetingValidationList,
   diffInvalidTargetingItems,
+  DETAILED_TARGETING_CLASSES,
+  CLASS_SET,
 } = require("../../utils/detailedTargeting");
 
 let pass = 0;
@@ -3143,6 +3146,70 @@ group("TYPE_TO_META_BUCKET — place routing (resolveLocationCoordinates fix)", 
   });
 });
 
+group("parseCustomLocationHit — Meta's own reverse-geocode for a map pin (2026-07-06)", () => {
+  // Real capture from Meta Ads Manager's network traffic: dropping a pin
+  // calls GET /search?type=adgeolocationmeta&custom_locations=["(lat, lng)"]
+  // and gets back a hit shaped like this — proving Meta's own reverse-geocode
+  // returns region_id for a bare coordinate pair, closing a gap previously
+  // documented as unfixable (Nominatim has no concept of Meta's region-id
+  // ontology; Meta's own endpoint has no such limitation).
+  const REAL_HIT = {
+    key: "(12.875847051290595, 78.9638327434659)",
+    type: "custom_location",
+    name: "(12.8758, 78.9638)",
+    address_string: "(12.8758, 78.9638)",
+    latitude: "12.875847",
+    longitude: "78.963833",
+    primary_city_id: 1038165,
+    primary_city: "Pallikonda",
+    region_id: 1744,
+    region: "Tamil Nadu",
+    country_code: "IN",
+    country_name: "India",
+    supports_city: true,
+    supports_region: true,
+  };
+
+  test("null hit (no match — e.g. open ocean) returns null", () => {
+    assert.equal(parseCustomLocationHit(null), null);
+    assert.equal(parseCustomLocationHit(undefined), null);
+  });
+
+  test("real Meta hit parses countryCode + regionId + primaryCity", () => {
+    const parsed = parseCustomLocationHit(REAL_HIT);
+    assert.equal(parsed.countryCode, "IN");
+    assert.equal(parsed.regionId, "1744");
+    assert.equal(parsed.primaryCity, "Pallikonda");
+  });
+
+  test("displayName builds from primary_city + region + country_name, not the bare coordinate name/address_string", () => {
+    const parsed = parseCustomLocationHit(REAL_HIT);
+    assert.equal(parsed.displayName, "Pallikonda, Tamil Nadu, India");
+  });
+
+  test("regionId is coerced to a string (Meta sends a number)", () => {
+    const parsed = parseCustomLocationHit({ region_id: 1744 });
+    assert.equal(parsed.regionId, "1744");
+    assert.equal(typeof parsed.regionId, "string");
+  });
+
+  test("countryCode is uppercased", () => {
+    const parsed = parseCustomLocationHit({ country_code: "in" });
+    assert.equal(parsed.countryCode, "IN");
+  });
+
+  test("falls back to address_string when no city/region/country_name present", () => {
+    const parsed = parseCustomLocationHit({ address_string: "(1.0, 2.0)" });
+    assert.equal(parsed.displayName, "(1.0, 2.0)");
+  });
+
+  test("missing region_id/country_code both come back null, not throwing", () => {
+    const parsed = parseCustomLocationHit({ primary_city: "Nowhere" });
+    assert.equal(parsed.countryCode, null);
+    assert.equal(parsed.regionId, null);
+  });
+});
+
 group("reverseGeoToLocations — granular geo-type round-trip", () => {
   test("subcities round-trip to type=subcity", () => {
     const out = reverseGeoToLocations(
@@ -3364,6 +3431,43 @@ group("formToFlexibleSpec — integer top-level classes (subcode 1885097 fix)", 
     // pickTopLevelIntegerFields only walks Include + Narrow, not Exclude.
     assert.equal(exclusions, null);
     assert.equal(topLevel, null);
+  });
+});
+
+group("DETAILED_TARGETING_CLASSES — college_years gap (2026-07-06 doc audit)", () => {
+  // Confirmed against Meta's live "Detailed Targeting" reference doc's
+  // `limit_type` enum AND the `targetingvalidation` edge's
+  // `targeting_list.type` enum — college_years was missing entirely.
+  // Real consequence, not just a search-filter gap: browseDetailedTargeting
+  // doesn't gate its tree by CLASS_SET, so a college_years item could
+  // already be picked in the UI, but bucketByClass / pickTopLevelIntegerFields
+  // both gate on CLASS_SET.has(item.type) — the pick would silently vanish
+  // from the actual launch payload with no error.
+  test("college_years is in the class list", () => {
+    assert.ok(DETAILED_TARGETING_CLASSES.includes("college_years"));
+    assert.ok(CLASS_SET.has("college_years"));
+  });
+
+  test("college_years Include item with an opaque object-id shape lands in flexible_spec, not dropped", () => {
+    const { flexible_spec, topLevel } = formToFlexibleSpec({
+      include: [{ type: "college_years", id: "6003139266461", name: "Freshman" }],
+    });
+    assert.deepEqual(flexible_spec, [
+      { college_years: [{ id: "6003139266461", name: "Freshman" }] },
+    ]);
+    assert.equal(topLevel, null);
+  });
+
+  test("college_years Include item with a small enum-code id shape hoists to topLevel, not dropped", () => {
+    // Real ID shape unconfirmed live — this proves the ID-shape-driven
+    // routing (isEnumCodeId) handles either shape once the class itself
+    // is let through the CLASS_SET gate, without needing to know which
+    // shape Meta actually uses ahead of time.
+    const { flexible_spec, topLevel } = formToFlexibleSpec({
+      include: [{ type: "college_years", id: "2", name: "Sophomore" }],
+    });
+    assert.equal(flexible_spec, null);
+    assert.deepEqual(topLevel, { college_years: [2] });
   });
 });
 
