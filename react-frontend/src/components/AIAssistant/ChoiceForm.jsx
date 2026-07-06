@@ -24,8 +24,29 @@ const normaliseOptions = (options) => {
 // Field types whose value is an array.
 const ARRAY_TYPES = new Set(['checkbox', 'color_chips', 'image_upload']);
 
+// ─── image_upload item helpers ──────────────────────────────────────────────
+// image_upload values are [{ url, filename, selected }]. Only `selected` items
+// feed generation; the first image is selected by default. Items may arrive as
+// bare URL strings or {url} objects (server backfill), so normalise on the way in.
+const asImgItem = (x) => (typeof x === 'string' ? { url: x } : { ...(x || {}) });
+const isImgSelected = (x) => !!(x && typeof x === 'object' && x.selected);
+// Normalise a raw image list → [{...item, selected}], defaulting the first to
+// selected when nothing is explicitly selected yet (preserves an existing
+// selection when re-seeding an edited form).
+const withImgSelection = (arr) => {
+  const items = (Array.isArray(arr) ? arr : arr ? [arr] : []).map(asImgItem).filter((it) => it.url);
+  if (!items.length) return items;
+  // Single-select: exactly ONE image feeds generation. Keep the first
+  // explicitly-selected image, else default to the first image.
+  let sel = items.findIndex(isImgSelected);
+  if (sel < 0) sel = 0;
+  return items.map((it, i) => ({ ...it, selected: i === sel }));
+};
+
 const initialValueForField = (field) => {
   if (field.default !== undefined && field.default !== null) {
+    // image_upload: normalise + default the first image to selected.
+    if (field.type === 'image_upload') return withImgSelection(field.default);
     // Coerce array-type defaults that arrived as a single value / CSV string.
     if (ARRAY_TYPES.has(field.type)) {
       if (Array.isArray(field.default)) return field.default;
@@ -51,7 +72,7 @@ const formatValueLabel = (field, value) => {
     return match ? match.label : String(value ?? '');
   }
   if (field.type === 'image_upload') {
-    const n = Array.isArray(value) ? value.length : 0;
+    const n = Array.isArray(value) ? value.filter(isImgSelected).length : 0;
     return n ? `${n} image${n > 1 ? 's' : ''}` : '—';
   }
   if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
@@ -128,7 +149,7 @@ const TextareaField = ({ field, value, onChange, disabled }) => (
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
     rows={field.rows || 3}
-    className="w-full resize-y rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-[13px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+    className="subtle-scroll w-full resize-y rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-[13px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
   />
 );
 
@@ -285,12 +306,15 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 };
 
 // Reference-image / logo uploader. Reuses the existing /upload endpoint and
-// stores [{url, filename}] so the agent can pass the URLs straight through.
+// stores [{url, filename, selected}] — the user clicks to pick which images
+// actually feed generation (selected = bordered); the first is selected by
+// default. Broken/unreachable images are dropped so only good ones show or ship.
 const ImageUploadField = ({ field, value, onChange, disabled }) => {
-  const arr = Array.isArray(value) ? value : value ? [value] : [];
+  const arr = Array.isArray(value) ? value.map(asImgItem) : value ? [asImgItem(value)] : [];
   const [uploading, setUploading] = useState(false);
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const maxFiles = field.maxFiles || 5;
+  const selectedCount = arr.filter(isImgSelected).length;
   // Upload straight to S3 via the shared helper (returns a stored PATH) — same
   // fast path the rest of the app uses; the domain is prefixed for display.
   const onPick = async (e) => {
@@ -306,39 +330,95 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
           return { url, filename: f.name };
         }),
       );
-      onChange([...arr, ...up].slice(0, maxFiles));
+      // A freshly uploaded image becomes THE selected one (the user added it to
+      // use it) — single-select, so clear any prior selection.
+      const next = [...arr, ...up].slice(0, maxFiles);
+      const firstNew = next.findIndex((it) => up.some((u) => u.url === it.url));
+      onChange(next.map((it, idx) => ({ ...it, selected: idx === firstNew })));
     } catch (err) {
       toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
   };
-  const remove = (i) => onChange(arr.filter((_, idx) => idx !== i));
+
+  const toggle = (i) => {
+    if (disabled) return;
+    // Single-select: choosing an image selects only it; clicking the currently
+    // selected image clears it (generate with no reference).
+    onChange(arr.map((it, idx) => ({ ...it, selected: idx === i ? !it.selected : false })));
+  };
+
+  const removeAt = (i, wasSelected) => {
+    let next = arr.filter((_, idx) => idx !== i);
+    // If we dropped the only selected image, promote the first remaining one so
+    // there's still a default in play (matches "keep the first on default").
+    if (wasSelected && next.length && !next.some(isImgSelected)) {
+      next = next.map((it, idx) => (idx === 0 ? { ...it, selected: true } : it));
+    }
+    onChange(next);
+  };
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {arr.map((img, i) => {
-        const url = typeof img === 'string' ? img : img.url;
-        return (
-          <div key={`${url}-${i}`} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10">
-            <img src={toMediaUrl(url)} alt="" className="h-full w-full object-cover" />
-            {!disabled && (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        {arr.map((img, i) => {
+          const url = img.url;
+          const on = !!img.selected;
+          return (
+            <div key={`${url}-${i}`} className="relative h-16 w-16">
               <button
                 type="button"
-                onClick={() => remove(i)}
-                className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white/80 hover:bg-black hover:text-white"
+                onClick={() => toggle(i)}
+                disabled={disabled}
+                title={on ? 'Selected — click to deselect' : 'Click to use this image'}
+                className={`group h-full w-full overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
+                  on ? 'border-white' : 'border-transparent hover:border-white/30'
+                }`}
               >
-                <X className="h-2.5 w-2.5" />
+                <img
+                  src={toMediaUrl(url)}
+                  alt=""
+                  loading="lazy"
+                  // Broken/unreachable image → drop it entirely (never shown, never sent).
+                  onError={() => removeAt(i, on)}
+                  className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-60 group-hover:opacity-90'}`}
+                />
+                {on && (
+                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-black shadow">
+                    <Check className="h-3 w-3" />
+                  </span>
+                )}
               </button>
-            )}
-          </div>
-        );
-      })}
-      {!disabled && arr.length < maxFiles && (
-        <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40/60 hover:text-white/70">
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          <span className="text-[9px]">{uploading ? 'Uploading' : 'Add'}</span>
-          <input type="file" accept="image/*" multiple={maxFiles > 1} onChange={onPick} className="hidden" />
-        </label>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => removeAt(i, on)}
+                  title="Remove"
+                  className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/80 ring-1 ring-white/20 hover:bg-black hover:text-white"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {!disabled && arr.length < maxFiles && (
+          <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40 hover:text-white/70">
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            <span className="text-[9px]">{uploading ? 'Uploading' : 'Add'}</span>
+            <input type="file" accept="image/*" multiple={maxFiles > 1} onChange={onPick} className="hidden" />
+          </label>
+        )}
+      </div>
+      {arr.length > 0 && (
+        <span
+          className={`text-[11px] font-medium ${selectedCount ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
+        >
+          {selectedCount
+            ? 'Using the highlighted image — click another to switch'
+            : 'Click an image to use it in generation'}
+        </span>
       )}
     </div>
   );
@@ -442,6 +522,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     for (const f of form.fields || []) {
       if (!f.required) continue;
       const v = values[f.key];
+      // A required image field needs at least one SELECTED image (having images
+      // present but none picked would silently generate without a reference).
+      if (f.type === 'image_upload') {
+        if (!(Array.isArray(v) && v.some(isImgSelected))) return `${f.label || f.key} is required`;
+        continue;
+      }
       const isEmpty =
         v == null ||
         (typeof v === 'string' && v.trim() === '') ||
@@ -482,7 +568,9 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     setSubmitting(true);
     try {
       // Fold any picked website_images into reference_images (the field the
-      // agent maps to product_images), then drop the UI-only picker key.
+      // agent maps to product_images), then drop the UI-only picker key. Picked
+      // website images are marked selected so they survive the selected-only
+      // filter below.
       const submitValues = { ...values };
       const picked = Array.isArray(submitValues.website_images) ? submitValues.website_images : [];
       if (picked.length) {
@@ -492,15 +580,30 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         const seen = new Set(existing.map((x) => (typeof x === 'string' ? x : x?.url)));
         submitValues.reference_images = [
           ...existing,
-          ...picked.filter((u) => !seen.has(u)).map((u) => ({ url: u })),
+          ...picked.filter((u) => !seen.has(u)).map((u) => ({ url: u, selected: true })),
         ];
       }
       delete submitValues.website_images;
 
+      // The card keeps the FULL image list (with selection flags) so the summary
+      // and a later "Edit & regenerate" still show every candidate. Generation,
+      // however, only gets the SELECTED images (flag stripped) — nothing the user
+      // didn't pick is ever sent.
+      const agentValues = { ...submitValues };
+      for (const f of form.fields || []) {
+        if (f.type !== 'image_upload') continue;
+        const items = Array.isArray(agentValues[f.key]) ? agentValues[f.key] : [];
+        agentValues[f.key] = items.filter(isImgSelected).map((it) => {
+          const copy = { ...it };
+          delete copy.selected;
+          return copy;
+        });
+      }
+
       dispatch(submitAssistantChoiceForm({ messageId, values: submitValues }));
-      // Hand the values back to the parent (ChatInterface) which decides
-      // whether to fire a real streamChat turn or a mocked one.
-      await onSubmit?.({ formId: form.form_id, values: submitValues });
+      // Hand the selected-only values back to the parent (ChatInterface) which
+      // decides whether to fire a real streamChat turn or a mocked one.
+      await onSubmit?.({ formId: form.form_id, values: agentValues });
       setEditing(false); // collapse back to the summary after a (re)generation
     } finally {
       setSubmitting(false);

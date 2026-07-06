@@ -80,7 +80,7 @@ const GenCanvas = ({
           </div>
 
           {/* Body — the active genCard */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <div className="subtle-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4">
             {active?.choiceForm && (
               <ChoiceForm
                 key={active.id}

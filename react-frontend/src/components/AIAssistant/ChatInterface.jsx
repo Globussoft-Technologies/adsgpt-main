@@ -302,7 +302,7 @@ const ChatInterface = () => {
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1">
+          <div className="subtle-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1">
             <div className="mx-auto w-full min-w-0 max-w-[820px] px-3 pt-5 sm:px-4 sm:pt-6">
               <Messages
                 messages={messages}
