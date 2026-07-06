@@ -2146,7 +2146,6 @@ const CreateCampaignWizard = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-        onClick={onClose}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.96, y: 10 }}
@@ -2184,7 +2183,12 @@ const CreateCampaignWizard = ({
           {/* body: form + sidebar */}
           <div className="flex flex-1 overflow-hidden">
             <div className="flex-1 overflow-auto px-5 py-4">
-              {schema ? renderStep() : <p className="text-sm text-gray-400">Loading…</p>}
+              {schema ? renderStep() : (
+                <div className="flex flex-col items-center justify-center gap-3 py-24">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#747c7c]" />
+                  <p className="text-sm font-medium text-gray-500 dark:text-white/40">Loading wizard schema…</p>
+                </div>
+              )}
             </div>
             {isCreate && (
               <CampaignSetupSidebar
