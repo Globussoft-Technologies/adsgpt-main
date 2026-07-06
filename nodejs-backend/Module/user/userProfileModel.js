@@ -48,6 +48,14 @@ const userProfileSchema = new mongoose.Schema(
 
     // === Metadata ===
     plan_metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    // === Soft delete ===
+    // Set when a user self-deletes. The aMember account is hard-deleted, but we
+    // keep this document (and all related data) for audit/history. Because the
+    // aMember delete revokes access, login is blocked without needing a guard.
+    is_deleted: { type: Boolean, default: false },
+    deleted_at: { type: Date, default: null },
+    delete_reason: { type: String, default: "" },
   },
   { timestamps: true },
 );

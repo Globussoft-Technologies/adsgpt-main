@@ -3,6 +3,7 @@ const axios = require('axios');
 const dayjs = require('dayjs');
 const { v4: uuidv4 } = require('uuid'); // make sure to run: npm install uuid
 const { getFromAmemberUserDetails, fetchUserDataByName, fetchUserDataByName_Email } = require('./authController');
+const UserProfile = require('../../Module/user/userProfileModel');
 
 const APIKEY = process.env.AMEMBER_API_KEY;
 const AMEMBER_URL = process.env.AMEMBER_BASE_API_URL;
@@ -421,6 +422,141 @@ const getUsersStats = async (req,res) => {
     }
 }
 
+// ─── DELETE /adsgpt/amember/delete-account ───────────────────────────────────
+// Self-service account deletion. Identity comes from the verified JWT (req.user),
+// never from the request body, so a user can only delete their own account.
+//
+// Flow:
+//   1. Hard-delete the user in aMember (authoritative). This permanently revokes
+//      access — check-access returns not-ok afterward, which is what blocks any
+//      future login. If it fails we abort and leave the local profile untouched
+//      so the two systems never disagree.
+//   2. Soft-delete the local Mongo profile (keep the document + related data for
+//      audit; just mark is_deleted / deleted_at / delete_reason).
+const deleteUserAccount = async (req, res) => {
+    /*  #swagger.tags = ['User Management']
+        #swagger.summary = 'Delete own account (self-service)'
+        #swagger.description = 'Hard-deletes the callers aMember account, then soft-deletes the local profile (sets is_deleted, deleted_at, delete_reason). Identity is taken from the JWT, never the request body. If the aMember delete fails, no local changes are made.'
+        #swagger.security = [{ "BearerAuth": [] }]
+        #swagger.requestBody = {
+            required: false,
+            content: {
+                "application/json": {
+                    schema: {
+                        type: "object",
+                        properties: {
+                            reason: { type: "string", example: "No longer needed" }
+                        }
+                    }
+                }
+            }
+        }
+        #swagger.responses[200] = { description: 'Account deleted in aMember and soft-deleted locally' }
+        #swagger.responses[401] = { description: 'Missing Authorization token' }
+        #swagger.responses[403] = { description: 'Invalid or expired token' }
+        #swagger.responses[502] = { description: 'aMember delete failed; no local changes made' }
+    */
+    try {
+        // authenticateJWT has already prefixed user_id to "GPT-<id>".
+        const mongoKey = req.user?.user_id;
+        const amemberId = String(mongoKey || "").replace(/^GPT-/, "");
+        const reason = (req.body?.reason || "").toString().trim().slice(0, 500);
+
+        if (!mongoKey || !amemberId) {
+            return res.status(400).json({
+                success: false,
+                message: "Could not resolve user from token",
+            });
+        }
+
+        // 1. Hard-delete in aMember (authoritative step).
+        let amemberData;
+        try {
+            const amemberResp = await axios.delete(
+                `${AMEMBER_URL}/users/${amemberId}?_key=${APIKEY}`,
+            );
+            amemberData = amemberResp.data;
+            console.log(
+                `[delete-account] aMember DELETE /users/${amemberId} →`,
+                amemberResp.status,
+                JSON.stringify(amemberData),
+            );
+        } catch (amemberErr) {
+            const errMsg = amemberErr?.response?.data || amemberErr.message;
+            console.error(
+                `[delete-account] aMember delete threw for user ${amemberId}:`,
+                errMsg,
+            );
+            return res.status(502).json({
+                success: false,
+                message: "Failed to delete account in aMember. No changes were made.",
+                error: errMsg,
+            });
+        }
+
+        // aMember can return HTTP 200 with an error IN THE BODY (e.g. bad _key,
+        // or "record not found"). axios doesn't throw on that, so detect it here
+        // and abort — otherwise we'd soft-delete locally while aMember still has
+        // the user, and login would keep working.
+        const amemberErrored =
+            amemberData?.error === true ||
+            amemberData?.ok === false ||
+            (typeof amemberData === "string" && /error/i.test(amemberData));
+        if (amemberErrored) {
+            console.error(
+                `[delete-account] aMember returned an error body for ${amemberId}:`,
+                JSON.stringify(amemberData),
+            );
+            return res.status(502).json({
+                success: false,
+                message:
+                    "aMember reported an error deleting the user. No local changes made.",
+                amember: amemberData,
+            });
+        }
+
+        // 2. Soft-delete the local profile (audit trail).
+        const profile = await UserProfile.findOneAndUpdate(
+            { user_id: mongoKey },
+            {
+                $set: {
+                    is_deleted: true,
+                    deleted_at: new Date(),
+                    delete_reason: reason,
+                },
+            },
+            { new: true },
+        );
+
+        if (!profile) {
+            // aMember user was deleted but there was no local mirror (e.g. user
+            // never completed a login that created the profile). Not an error.
+            console.warn(
+                `[delete-account] no local profile for ${mongoKey}; aMember user deleted anyway`,
+            );
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Account deleted successfully.",
+            user_id: mongoKey,
+            amember_deleted: true,
+            soft_deleted: Boolean(profile),
+            deleted_at: profile?.deleted_at || null,
+        });
+    } catch (error) {
+        console.error(
+            "[delete-account] error:",
+            error?.response?.data || error.message,
+        );
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete account",
+            error: error.message,
+        });
+    }
+};
+
 module.exports = {
     updateUserDetails,
     createUserDetails,
@@ -428,5 +564,6 @@ module.exports = {
     getAllUsers,
     getProducts,
     getUsersStats,
-    createUser
+    createUser,
+    deleteUserAccount
 };
