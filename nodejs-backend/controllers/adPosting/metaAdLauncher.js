@@ -4329,6 +4329,11 @@ module.exports.invalidateAllUserMetaCache = invalidateAllUserMetaCache;
 module.exports.invalidateAfterCreate = invalidateAfterCreate;
 module.exports.formatMetaError = formatMetaError;
 module.exports.logMetaError = logMetaError;
+// rawErrorDump is required by metaAdLauncherV2.js's metaErrorResponse to
+// persist a MetaLaunchTrace record — the same raw dump already written to
+// the server log, captured alongside the request that produced it so a
+// failed launch can be reproduced without re-deriving it from log files.
+module.exports.rawErrorDump = rawErrorDump;
 // initApiForUser is required by metaAdLauncherV2.js (the V2 wizard
 // controller). Exporting keeps that file decoupled from this one's
 // internals.

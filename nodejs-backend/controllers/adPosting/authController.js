@@ -77,22 +77,16 @@ class AuthController {
       "pages_manage_ads",
       // Required for the Sales/CATALOG (Dynamic Product Ads) cell — lists
       // product catalogs accessible to the user's Business Manager + lists
-      // product sets within a catalog. Without it, getCatalogs returns
-      // empty even with the Business-node traversal fix. Admin/Developer/
-      // Tester roles on the Facebook App get this under standard access;
-      // production users (the public) need Meta App Review. Submission:
-      // App Review → Permissions and Features → catalog_management,
-      // include a screencast of the wizard's catalog-picker flow.
-      "catalog_management",
-      // DORMANT — required to read captured Lead Form submissions (the
-      // dashboard's Leads tab: /get-form-leads + /export-form-leads).
-      // Kept commented out because the Facebook App does not yet have
-      // this permission enabled, so Meta rejects the OAuth dialog with
-      // "Invalid Scopes: leads_retrieval". To activate the Leads tab:
-      //   1. Enable `leads_retrieval` on the Meta App Dashboard
-      //      (App Review → Permissions and Features / Lead Ads use case).
-      //   2. Uncomment the line below.
-      //   3. Users re-connect Facebook so the new token carries the scope.
+      // product sets within a catalog. Approved via Meta App Review
+      // 2026-07-01 (App Review → Permissions and Features → catalog_management).
+      // "catalog_management",
+      // Required to read captured Lead Form submissions (the dashboard's
+      // Leads tab: /get-form-leads + /export-form-leads). Approved via Meta
+      // App Review 2026-07-01 alongside catalog_management (Lead Ads use
+      // case). Already-connected users need to re-connect Facebook once
+      // (auth_type=rerequest below handles this) so their token picks up
+      // the new scope — until then, /get-form-leads returns Meta's
+      // permission-denied error for their existing token.
       "leads_retrieval",
     ].join(",");
 

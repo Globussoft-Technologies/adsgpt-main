@@ -1198,7 +1198,7 @@ const CELLS = {
       // works). Page always required as the FB-side identity.
       identity: { required: ["page"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Drive profile visits on Instagram or Facebook. Meta delivers to whichever surface the viewer is more likely to engage on. PAGE_LIKES is the API enum behind the 'Facebook Page visits' UI label (Meta relabelled but didn't rename).",
+      notes: "Drive profile visits on Instagram or Facebook. Meta delivers to whichever surface the viewer is more likely to engage on.",
     },
 
     // ─── DEFERRED — Engagement Phase 3 follow-up cells ────────────────────
@@ -1393,7 +1393,13 @@ const CELLS = {
       },
       identity: { required: ["page", "pixel", "linkedApp"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Drive purchases on both your website and your app. Meta auto-routes per viewer. OFFSITE_CONVERSIONS deferred — needs an MMP to forward in-app events (same constraint as Sales/APP).",
+      // In-app purchase tracking for this combined destination needs a
+      // third-party app-measurement partner to forward events — same
+      // constraint as the standalone Sales/App cell. Not yet supported,
+      // so keep that limitation out of the user-facing `notes` (it's not
+      // actionable for them) rather than naming the internal Meta
+      // objective this maps to.
+      notes: "Drive purchases on both your website and your app. Meta auto-routes per viewer to whichever is more likely to convert.",
     },
 
     // ─── Single (one destination) ─────────────────────────────────────────
@@ -1543,7 +1549,7 @@ const CELLS = {
       },
       identity: { required: ["page", "linkedApp"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Drive purchases inside your app. For installs, use OUTCOME_APP_PROMOTION. OFFSITE_CONVERSIONS supported via Meta SDK or Conversions API for App — no third-party MMP service required.",
+      notes: "Drive purchases inside your app. For app installs instead, use the App Promotion objective. In-app events are tracked directly through Meta's SDK or Conversions API — no third-party measurement partner needed.",
     },
 
     CATALOG: {
@@ -1649,7 +1655,7 @@ const CELLS = {
       },
       identity: { required: ["page"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Brand awareness — reach, impressions, or ad recall lift. linkUrl is optional (pure brand campaigns use NO_BUTTON CTA + no destination). Frequency cap appears on the AdSet step when the picked goal is REACH.",
+      notes: "Brand awareness — reach, impressions, or ad recall lift. A website link is optional; pure brand campaigns can run with no button and no destination. A frequency cap option appears on the Ad Set step when you pick the Reach goal.",
     },
 
     VIDEO_VIEWS: {
@@ -1685,7 +1691,7 @@ const CELLS = {
       },
       identity: { required: ["page"], optional: ["instagram"] },
       additionalSteps: [],
-      notes: "Video views — ThruPlay (15s or full play) or 2-second continuous. Video-only cell (Meta rejects image creatives on these ad sets, subcode 1815869). linkUrl optional — videos that drive plays without a click destination are common.",
+      notes: "Video views — counted at 15 seconds (or full play, whichever comes first) or after 2 continuous seconds. This format only accepts video creative; a click destination is optional since many video-view campaigns don't need one.",
     },
   },
 };

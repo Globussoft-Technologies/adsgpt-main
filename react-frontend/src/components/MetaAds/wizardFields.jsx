@@ -1285,6 +1285,24 @@ export function LaunchErrorBanner({ error, onDismiss, className = '' }) {
                 fbtrace {error.fbtraceId}
               </span>
             )}
+            {/* Our own reference code (NOT Meta's fbtrace) — the backend
+                stored the exact request + full Meta error under this ID,
+                so support can look up and reproduce the failure from the
+                code alone. Click-to-copy since it's meant to be pasted
+                into a support message, not read character-by-character. */}
+            {error.traceId && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(error.traceId);
+                  globalToast.success('Reference code copied');
+                }}
+                className="rounded border border-red-300 bg-red-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-200 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100 dark:hover:bg-red-400/20 2xl:text-xs"
+                title="Copy this code when reporting the issue — support can look up exactly what happened."
+              >
+                Ref {error.traceId} · Copy
+              </button>
+            )}
           </div>
         </div>
       </div>

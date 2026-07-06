@@ -47,12 +47,14 @@ const {
 } = require("../../utils/detailedTargeting");
 const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
 const { inferCellForMetaCampaign } = require("./cellInference");
+const crypto = require("crypto");
+const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 
 // V1 controller exposes initApiForUser + invalidateAfterCreate +
 // formatMetaError + logMetaError as named exports on its module object.
 // Importing here keeps the SDK / Redis / logging plumbing single-sourced.
 const v1Controller = require("./metaAdLauncher");
-const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng } = v1Controller;
+const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng, rawErrorDump } = v1Controller;
 const logger = require("../../utils/logger");
 
 const CAPPED_BID_STRATEGIES = new Set([
@@ -111,10 +113,48 @@ function resolveCellOr400(req) {
   return { ok: true, cell: getCell(objective, conversionLocation) };
 }
 
+// Short, human-shareable reference code — the kind a user can read off an
+// error banner and paste into a support message. 8 hex chars keeps it
+// short without a charset-exclusion library; collision odds are
+// irrelevant at our volume (Mongo's unique index catches the freak case
+// and the write just fails silently, same as any other trace-persist
+// failure — see the .catch() below).
+function generateTraceId() {
+  return `LX-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
 // Format a Meta SDK error into the project's standard error envelope.
-// Identical shape to V1 so the frontend handler works for both.
-function metaErrorResponse(err, action) {
+// Identical shape to V1 so the frontend handler works for both, PLUS a
+// `traceId` — every failure gets a MetaLaunchTrace record (best-effort,
+// fire-and-forget) capturing the exact request body + Meta's full error,
+// so a user-reported issue can be reproduced from the trace ID alone
+// instead of asking them to describe what they clicked. See
+// Module/adPosting/metaLaunchTrace.js.
+function metaErrorResponse(err, action, req) {
   const m = logMetaError(`${action} error`, err);
+  const traceId = generateTraceId();
+
+  // Fire-and-forget — a Mongo hiccup must never compound the original
+  // Meta error by making the response itself fail or hang.
+  MetaLaunchTrace.create({
+    traceId,
+    userId: req?.user?.user_id,
+    adAccountId: req?.body?.adAccountId,
+    action,
+    requestBody: req?.body,
+    metaError: {
+      code: m.code,
+      subcode: m.subcode,
+      message: m.message,
+      title: m.title,
+      fbtraceId: m.fbtraceId,
+      data: m.data,
+    },
+    rawErrorDump: rawErrorDump(err),
+  }).catch((traceErr) => {
+    logger.warn(`metaErrorResponse: failed to persist launch trace ${traceId}: ${traceErr.message}`);
+  });
+
   return {
     status: false,
     error: m.title || `Failed to ${action}`,
@@ -124,6 +164,7 @@ function metaErrorResponse(err, action) {
       subcode: m.subcode,
       fbtraceId: m.fbtraceId,
       data: m.data,
+      traceId,
     },
   };
 }
@@ -314,7 +355,7 @@ async function createCampaignV2(req, res) {
       },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "create campaign"));
+    return res.status(500).json(metaErrorResponse(err, "create campaign", req));
   }
 }
 
@@ -691,7 +732,7 @@ async function createAdSetV2(req, res) {
       },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "create ad set"));
+    return res.status(500).json(metaErrorResponse(err, "create ad set", req));
   }
 }
 
@@ -849,7 +890,7 @@ async function createAdV2(req, res) {
       creative: { id: creative.id },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "create ad"));
+    return res.status(500).json(metaErrorResponse(err, "create ad", req));
   }
 }
 
@@ -904,7 +945,7 @@ async function resolveCellForAdSet(req, res) {
       ]);
       campaignData = campaign?._data || campaign || {};
     } catch (err) {
-      return res.status(400).json(metaErrorResponse(err, "load ad set"));
+      return res.status(400).json(metaErrorResponse(err, "load ad set", req));
     }
 
     const cellInfo = inferCellForMetaCampaign(campaignData, adSetData);
@@ -948,7 +989,7 @@ async function resolveCellForAdSet(req, res) {
       pageId,
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "resolve cell"));
+    return res.status(500).json(metaErrorResponse(err, "resolve cell", req));
   }
 }
 
@@ -991,7 +1032,7 @@ async function resolveCampaignForAdd(req, res) {
       ]);
       d = campaign?._data || campaign || {};
     } catch (err) {
-      return res.status(400).json(metaErrorResponse(err, "load campaign"));
+      return res.status(400).json(metaErrorResponse(err, "load campaign", req));
     }
 
     const dailyBudget = Number(d.daily_budget) || 0;
@@ -1015,7 +1056,7 @@ async function resolveCampaignForAdd(req, res) {
       spendCap,
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "resolve campaign"));
+    return res.status(500).json(metaErrorResponse(err, "resolve campaign", req));
   }
 }
 
@@ -1067,7 +1108,7 @@ async function updateCampaignV2(req, res) {
       campaign: { id: value.campaignId },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "update campaign"));
+    return res.status(500).json(metaErrorResponse(err, "update campaign", req));
   }
 }
 
@@ -1236,7 +1277,7 @@ async function resolveAdSetForEdit(req, res) {
       ]);
       campaignData = campaign?._data || campaign || {};
     } catch (err) {
-      return res.status(400).json(metaErrorResponse(err, "load ad set"));
+      return res.status(400).json(metaErrorResponse(err, "load ad set", req));
     }
 
     const cellInfo = inferCellForMetaCampaign(campaignData, adSetData);
@@ -1323,7 +1364,7 @@ async function resolveAdSetForEdit(req, res) {
       },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "resolve ad set"));
+    return res.status(500).json(metaErrorResponse(err, "resolve ad set", req));
   }
 }
 
@@ -1453,7 +1494,7 @@ async function updateAdSetV2(req, res) {
       adSet: { id: value.adSetId },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "update ad set"));
+    return res.status(500).json(metaErrorResponse(err, "update ad set", req));
   }
 }
 
@@ -1502,7 +1543,7 @@ async function resolveAdForEdit(req, res) {
       ]);
       campaignData = campaign?._data || campaign || {};
     } catch (err) {
-      return res.status(400).json(metaErrorResponse(err, "load ad"));
+      return res.status(400).json(metaErrorResponse(err, "load ad", req));
     }
 
     const cellInfo = inferCellForMetaCampaign(campaignData, adSetData);
@@ -1546,7 +1587,7 @@ async function resolveAdForEdit(req, res) {
       previewUrl: isVideo ? video.image_url || null : link.picture || null,
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "resolve ad"));
+    return res.status(500).json(metaErrorResponse(err, "resolve ad", req));
   }
 }
 
@@ -1609,7 +1650,7 @@ async function updateAdV2(req, res) {
       creative: { id: built.creative.id },
     });
   } catch (err) {
-    return res.status(500).json(metaErrorResponse(err, "update ad"));
+    return res.status(500).json(metaErrorResponse(err, "update ad", req));
   }
 }
 

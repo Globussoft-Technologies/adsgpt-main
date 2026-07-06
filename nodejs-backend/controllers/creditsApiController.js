@@ -396,7 +396,7 @@ exports.getModels = async (req, res) => {
          in: 'query',
          required: false,
          type: 'string',
-         description: 'Pass "1" to include entries with enabled=false. Default omits them.'
+         description: 'Pass 1 to include entries with enabled=false. Default omits them.'
      }
      #swagger.responses[200] = {
          description: 'Returns either an array of models or a single model object when ?model= is used.',

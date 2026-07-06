@@ -10,5 +10,8 @@ router.get("/me", requireAdmin, adminAuth.me);
 router.get("/overview", requireAdmin, adminDashboard.overview);
 router.get("/users", requireAdmin, adminDashboard.usersList);
 router.get("/users/:userId", requireAdmin, adminDashboard.userDetail);
+// Look up a failed Meta launch by its reference code (see wizard error
+// banner) — returns the exact request body + full Meta error for reproduction.
+router.get("/meta-launch-trace/:traceId", requireAdmin, adminDashboard.getMetaLaunchTrace);
 
 module.exports = router;

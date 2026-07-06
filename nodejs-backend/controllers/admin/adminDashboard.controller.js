@@ -2,6 +2,7 @@ const GeneratedMedia = require("../../Module/generatedMedia/generated.media");
 const UserProfile = require("../../Module/user/userProfileModel");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { buildEffectiveCostStages } = require("../../config/modelAggregation");
+const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 
 // Date strings of the form "YYYY-MM-DD" represent a whole calendar day. Treat
 // `from` as start-of-day UTC and `to` as end-of-day UTC, otherwise a request
@@ -328,6 +329,34 @@ exports.userDetail = async (req, res) => {
     });
   } catch (error) {
     console.error("Admin user detail error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+};
+
+// GET /admin/meta-launch-trace/:traceId
+//
+// Look up the exact request body + full Meta error for a failed V2 wizard
+// mutation (create/update campaign, ad set, or ad) by the reference code
+// shown in the wizard's error banner ("Ref LX-XXXXXXXX · Copy"). Lets
+// support reproduce a user-reported launch failure from the code alone —
+// see metaAdLauncherV2.js `metaErrorResponse` for the write path and
+// Module/adPosting/metaLaunchTrace.js for the schema + 90-day TTL.
+exports.getMetaLaunchTrace = async (req, res) => {
+  try {
+    const { traceId } = req.params;
+    if (!traceId) {
+      return res.status(400).json({ success: false, message: "traceId is required" });
+    }
+    const trace = await MetaLaunchTrace.findOne({ traceId }).lean();
+    if (!trace) {
+      return res.status(404).json({
+        success: false,
+        message: "No trace found for this reference code — it may have expired (90-day retention) or the code was mistyped.",
+      });
+    }
+    return res.status(200).json({ success: true, trace });
+  } catch (error) {
+    console.error("Admin meta-launch-trace lookup error:", error);
     return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 };

@@ -1000,9 +1000,12 @@ export default function CreateCampaignWizardV2({
       onClose?.();
     } catch (e) {
       // Preserve the WHOLE backend payload (error, details, meta.code/
-      // subcode/fbtraceId) so the banner can show diagnostic info. Falls
-      // back to a plain string when the error wasn't a structured HTTP
-      // response (network failure, etc.).
+      // subcode/fbtraceId/traceId) so the banner can show diagnostic info.
+      // traceId is our own reference (not Meta's fbtraceId) — the backend
+      // persisted the exact request + Meta error under this ID so a
+      // reported issue can be reproduced without asking the user to
+      // describe what they clicked. Falls back to a plain string when the
+      // error wasn't a structured HTTP response (network failure, etc.).
       const data = e?.response?.data;
       if (data && typeof data === 'object') {
         setLaunchError({
@@ -1011,6 +1014,7 @@ export default function CreateCampaignWizardV2({
           code: data.meta?.code,
           subcode: data.meta?.subcode,
           fbtraceId: data.meta?.fbtraceId,
+          traceId: data.meta?.traceId,
         });
       } else {
         setLaunchError({
@@ -1154,6 +1158,7 @@ export default function CreateCampaignWizardV2({
           code: data.meta?.code,
           subcode: data.meta?.subcode,
           fbtraceId: data.meta?.fbtraceId,
+          traceId: data.meta?.traceId,
         });
       } else {
         setLaunchError({
@@ -1296,6 +1301,7 @@ export default function CreateCampaignWizardV2({
                               ? `${launchError.details} (Meta subcode ${launchError.subcode})`
                               : launchError.details,
                             fbtraceId: launchError.fbtraceId,
+                            traceId: launchError.traceId,
                           }
                     }
                     onDismiss={() => setLaunchError(null)}
@@ -4055,7 +4061,10 @@ function ReviewStep({
   const showCampaign = mode === 'create-full';
   const showAdSet = mode === 'create-full' || mode === 'create-adset';
   // launchError can be a plain string (legacy) OR a structured object
-  // {title, details, code, subcode, fbtraceId}. Normalise for the banner.
+  // {title, details, code, subcode, fbtraceId, traceId}. Normalise for
+  // the banner. traceId is our own launch-trace reference (see
+  // metaAdLauncherV2.js metaErrorResponse) — distinct from Meta's
+  // fbtraceId.
   // Subcode-aware hints: Meta sometimes wraps a real cause in a generic
   // "Something went wrong" message; the subcode is the truth. When we
   // recognise one, replace `details` with an actionable hint so the user
@@ -4083,6 +4092,7 @@ function ReviewStep({
           title: launchError.title || 'Launch failed',
           details: detail,
           fbtraceId: launchError.fbtraceId,
+          traceId: launchError.traceId,
         };
       })();
 
