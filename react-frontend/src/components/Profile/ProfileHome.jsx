@@ -346,7 +346,7 @@ export default function ProfileHome() {
                   rel="noreferrer"
                   className="rounded-[50px] cursor-pointer border border-red-500 px-4 py-1.5 text-xs font-medium whitespace-nowrap text-red-500 transition-colors hover:bg-red-50 2xl:text-base dark:border-red-400 dark:text-red-400 dark:hover:bg-red-900/20"
                 >
-                  Cancel Subscription
+                  Cancel
                 </a>
               )}
             </div>
