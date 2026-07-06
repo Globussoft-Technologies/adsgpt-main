@@ -296,6 +296,11 @@ const targetingSchemaV2 = Joi.object({
           .when("type", { is: "custom", then: Joi.required() }),
         distanceUnit: Joi.string().valid("kilometer", "mile").default("kilometer"),
         countryCode: Joi.string().length(2).uppercase().optional(),
+        // Meta's own numeric region id (same value as `regions[].key`) —
+        // lets dropOverlappingIncludes detect region-covers-granular-pick
+        // overlap (subcode 1487756) even when no country entry is present.
+        // See utils/targetingGeo.js.
+        regionId: Joi.string().optional(),
         latitude: Joi.number()
           .min(-90)
           .max(90)

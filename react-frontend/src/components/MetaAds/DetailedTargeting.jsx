@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, X, Sparkles, Loader2 } from 'lucide-react';
 import DetailedTargetingPicker, { typeBadge } from './DetailedTargetingPicker';
-import { suggestDetailedTargeting } from '@/apis/metaAds/metaAdsApi';
+import { suggestDetailedTargeting, validateDetailedTargeting } from '@/apis/metaAds/metaAdsApi';
 
 const EMPTY = { include: [], narrow: [], exclude: [] };
 
@@ -44,6 +44,10 @@ export default function DetailedTargeting({
   // Suggestions — fetched whenever Include or Narrow changes (debounced).
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  // Items Meta has discontinued since the user picked them (subcode
+  // 1870211 at publish otherwise, with no indication of which item is
+  // stale). Keyed "type:id" for O(1) lookup in the picker's chip render.
+  const [invalidKeys, setInvalidKeys] = useState(() => new Set());
 
   const sectionTitle = advantageAudienceOn ? 'Audience suggestions' : 'Detailed targeting';
   const sectionHint = advantageAudienceOn
@@ -97,6 +101,34 @@ export default function DetailedTargeting({
     // on it alone is correct here.
   }, [adAccountId, value]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Discontinued-item check — debounced refetch whenever ANY section's
+  // content changes (include + narrow + exclude, unlike suggestions which
+  // skips exclude). Catches subcode 1870211 ahead of Launch instead of
+  // only at publish time, when Meta doesn't say which item is stale.
+  useEffect(() => {
+    const cur = value || EMPTY;
+    const allItems = [...cur.include, ...(cur.narrow || []).flat(), ...cur.exclude];
+    if (!allItems.length || !adAccountId) {
+      setInvalidKeys(new Set());
+      return undefined;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const r = await validateDetailedTargeting({
+          adAccountId,
+          items: allItems.map((i) => ({ type: i.type, id: i.id })),
+        });
+        const keys = new Set((r?.invalid || []).map((i) => `${i.type}:${i.id}`));
+        setInvalidKeys(keys);
+      } catch {
+        // Best-effort — if the check itself fails, don't flag anything.
+        // The SUBCODE_HINTS message on publish is the fallback.
+        setInvalidKeys(new Set());
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [adAccountId, value]);
+
   const addSuggestionToInclude = useCallback(
     (s) => {
       const cur = value || EMPTY;
@@ -142,6 +174,7 @@ export default function DetailedTargeting({
           onChange={(next) => setSlot('include', next)}
           placeholder="Add demographics, interests or behaviours"
           disabled={disabled}
+          invalidKeys={invalidKeys}
         />
       </div>
 

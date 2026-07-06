@@ -305,11 +305,13 @@ function flexibleSpecToForm(targeting) {
 /**
  * Helper for the search-validation flow on edit-load. Given a flat list
  * of items, returns the `targeting_list` payload shape Meta's
- * /search?type=adTargetingValidation endpoint expects so we can confirm
- * the user's previously-saved targeting items are still valid (Meta
- * removes interest IDs sometimes — silently — and a stale ID at launch
- * is an opaque rejection). Frontend can pass the result to the picker
- * with a "removed by Meta" tag on dead items.
+ * /act_<AD_ACCOUNT_ID>/targetingvalidation edge expects (corrected
+ * 2026-07-06 — originally documented as a `/search?type=
+ * adTargetingValidation` call, which doesn't exist and errored on every
+ * request) so we can confirm the user's previously-saved targeting items
+ * are still valid (Meta removes interest IDs sometimes — silently — and
+ * a stale ID at launch is an opaque rejection). Frontend can pass the
+ * result to the picker with a "removed by Meta" tag on dead items.
  */
 function asTargetingValidationList(items) {
   if (!Array.isArray(items)) return [];
@@ -318,12 +320,38 @@ function asTargetingValidationList(items) {
     .map((i) => ({ type: i.type, id: String(i.id) }));
 }
 
+/**
+ * Diff a `targeting_list` payload against Meta's `targetingvalidation`
+ * response rows to find items Meta has since discontinued (real trigger:
+ * subcode 1870211 "Some detailed targeting options are being
+ * discontinued" — Meta rejects publish but doesn't say WHICH item is
+ * stale). Pure diff by presence rather than trusting an explicit
+ * "invalid" flag from Meta: we don't have a live-confirmed response shape
+ * for a discontinued item, but "the input id simply isn't in Meta's
+ * output" is the one signal guaranteed to work regardless of shape.
+ *
+ * @param {{type: string, id: string}[]} targetingList - from asTargetingValidationList
+ * @param {{type: string, id: string|number}[]} validRows - Meta's targetingvalidation response rows
+ * @returns {{type: string, id: string}[]} items from targetingList Meta did NOT confirm as live
+ */
+function diffInvalidTargetingItems(targetingList, validRows) {
+  const validKeys = new Set(
+    (Array.isArray(validRows) ? validRows : [])
+      .filter((r) => r && r.id)
+      .map((r) => `${r.type}:${String(r.id)}`),
+  );
+  return (Array.isArray(targetingList) ? targetingList : []).filter(
+    (i) => i && !validKeys.has(`${i.type}:${i.id}`),
+  );
+}
+
 module.exports = {
   DETAILED_TARGETING_CLASSES,
   CLASS_SET,
   formToFlexibleSpec,
   flexibleSpecToForm,
   asTargetingValidationList,
+  diffInvalidTargetingItems,
   // Exported for direct testing
   isEnumCodeId,
   bucketByClass,

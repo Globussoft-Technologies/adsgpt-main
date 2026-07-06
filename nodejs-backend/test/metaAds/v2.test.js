@@ -33,11 +33,13 @@ const {
   groupLocationsByType,
   dropOverlappingIncludes,
   reverseGeoToLocations,
+  TYPE_TO_META_BUCKET,
 } = require("../../utils/targetingGeo");
 const {
   formToFlexibleSpec,
   flexibleSpecToForm,
   asTargetingValidationList,
+  diffInvalidTargetingItems,
 } = require("../../utils/detailedTargeting");
 
 let pass = 0;
@@ -2424,11 +2426,20 @@ group("OUTCOME_SALES/APP — OFFSITE_CONVERSIONS unlock (Meta SDK / Conversions 
     assert.ok(cell.adSet.optimizationGoals.includes("REACH"));
   });
 
-  test("additionalFields does NOT include pixelId (app shape can't carry pixel_id — subcode 1815229)", () => {
-    assert.ok(
-      !cell.adSet.additionalFields.includes("pixelId"),
-      "pixelId removed from Sales/APP additionalFields — dead data on app shape",
-    );
+  // Reversed 2026-07-06: an earlier pass dropped pixelId here as "dead
+  // data" since the app shape's adset.promoted_object can't carry pixel_id
+  // (subcode 1815229) — true, but pixelId in additionalFields does two
+  // OTHER things that removal silently broke: (1) it's what gates the
+  // whole PixelEventPicker UI block in CreateCampaignWizardV2.jsx, which is
+  // also the only place pixelEventType gets collected — dropping it left
+  // pixelEventType required with no field to set it, permanently blocking
+  // launch on "Select a conversion event" (real hit, Sales/App); (2) the
+  // campaign.update promoted_object step in metaAdLauncherV2.js (2446759
+  // fix) is gated on `value.pixelId` being truthy, so it silently never ran
+  // once the form stopped collecting it. Leads/APP and Engagement/APP keep
+  // pixelId in additionalFields for the identical reason.
+  test("additionalFields includes pixelId (gates the PixelEventPicker UI + the campaign-level promoted_object update; still excluded from adset.promoted_object itself)", () => {
+    assert.ok(cell.adSet.additionalFields.includes("pixelId"));
   });
 
   test("additionalFields keeps pixelEventType (mapped to custom_event_type on the app shape)", () => {
@@ -3040,6 +3051,98 @@ group("dropOverlappingIncludes — overlap rule applies to granular types", () =
   });
 });
 
+group("dropOverlappingIncludes — region overlap (no country entry present)", () => {
+  // Real-world regression 2026-07-06: user included "Karnataka" (region)
+  // plus several granular `place`-derived custom pins inside it (Varthur,
+  // Whitefield Railway Station, etc.) with NO country entry anywhere in
+  // the audience. The country-only check found nothing to match against
+  // and every pin passed straight through to Meta, which rejected the
+  // whole ad set with subcode 1487756.
+  test("custom pin with regionId matching an included region IS dropped — no country entry needed", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "region", key: "1738", mode: "include" }, // Karnataka
+      {
+        type: "custom",
+        key: "custom:12.9698,77.75",
+        regionId: "1738",
+        mode: "include",
+        latitude: 12.9698,
+        longitude: 77.75,
+        radius: 25,
+      },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type), ["region"]);
+  });
+
+  test("subcity with regionId matching an included region IS dropped", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "region", key: "1738", mode: "include" },
+      { type: "subcity", key: "S_2295414", regionId: "1738", mode: "include" },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type), ["region"]);
+  });
+
+  test("an included subregion ALSO covers a granular pick inside it", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "subregion", key: "SR_99", mode: "include" },
+      { type: "neighborhood", key: "N_1", regionId: "SR_99", mode: "include" },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type), ["subregion"]);
+  });
+
+  test("granular pick with a DIFFERENT regionId than the included region is NOT dropped", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "region", key: "1738", mode: "include" }, // Karnataka
+      { type: "custom", key: "custom:1,1", regionId: "9999", mode: "include", latitude: 1, longitude: 1, radius: 10 },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+
+  test("region overlap works even when a country entry is ALSO present (both signals checked)", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "country", key: "IN", mode: "include" },
+      { type: "region", key: "1738", mode: "include" },
+      { type: "custom", key: "custom:1,1", regionId: "1738", mode: "include", latitude: 1, longitude: 1, radius: 10 },
+    ]);
+    assert.deepEqual(filtered.map((l) => l.type).sort(), ["country", "region"]);
+  });
+
+  test("excluded region does not create a covers-set entry", () => {
+    const filtered = dropOverlappingIncludes([
+      { type: "region", key: "1738", mode: "exclude" },
+      { type: "custom", key: "custom:1,1", regionId: "1738", mode: "include", latitude: 1, longitude: 1, radius: 10 },
+    ]);
+    assert.equal(filtered.length, 2);
+  });
+});
+
+group("TYPE_TO_META_BUCKET — place routing (resolveLocationCoordinates fix)", () => {
+  // Real-world regression 2026-07-06: resolveLocationCoordinates
+  // (metaAdLauncher.js) hardcoded the `places` bucket regardless of the
+  // picked item's actual type, which would silently mis-resolve a
+  // neighborhood/city/etc. pick sitting in the same search dropdown as a
+  // place pick ("Gunjur Village" [neighborhood] next to "Gunjur Roller
+  // Sports Academy" [place]). This locks in that `place` routes to the
+  // correct Meta adgeolocationmeta bucket alongside every other type.
+  test("place routes to the places bucket", () => {
+    assert.equal(TYPE_TO_META_BUCKET.place, "places");
+  });
+
+  test("every type resolveLocationCoordinates might receive has a bucket, except custom (which never needs one)", () => {
+    const typesWithNoLookupNeeded = new Set(["custom", "country_group"]);
+    const searchableTypes = [
+      "country", "city", "region", "subregion", "subcity", "neighborhood",
+      "subneighborhood", "zip", "geo_market", "electoral_district",
+      "large_geo_area", "medium_geo_area", "small_geo_area", "metro_area",
+      "place",
+    ];
+    for (const t of searchableTypes) {
+      if (typesWithNoLookupNeeded.has(t)) continue;
+      assert.ok(TYPE_TO_META_BUCKET[t], `type '${t}' missing a TYPE_TO_META_BUCKET entry`);
+    }
+  });
+});
+
 group("reverseGeoToLocations — granular geo-type round-trip", () => {
   test("subcities round-trip to type=subcity", () => {
     const out = reverseGeoToLocations(
@@ -3360,6 +3463,58 @@ group("asTargetingValidationList — bulk-validate payload shape", () => {
       { type: "interests", id: "123" },
       { type: "interests", id: "456" },
     ]);
+  });
+});
+
+group("diffInvalidTargetingItems — subcode 1870211 discontinued-item detection", () => {
+  // Real trigger (2026-07-06): Meta rejected an ad set with subcode
+  // 1870211 "Some detailed targeting options are being discontinued" but
+  // gave no indication of WHICH picked item was stale. This diff — by
+  // presence in Meta's targetingvalidation response, not an explicit
+  // flag — is the only signal guaranteed to work regardless of Meta's
+  // exact response shape for a discontinued item.
+  test("item present in Meta's response is valid — not flagged", () => {
+    const invalid = diffInvalidTargetingItems(
+      [{ type: "interests", id: "1" }],
+      [{ type: "interests", id: "1", name: "Yoga" }],
+    );
+    assert.deepEqual(invalid, []);
+  });
+
+  test("item ABSENT from Meta's response is flagged as invalid", () => {
+    const invalid = diffInvalidTargetingItems(
+      [
+        { type: "interests", id: "1" },
+        { type: "behaviors", id: "2" },
+      ],
+      [{ type: "interests", id: "1", name: "Yoga" }], // behaviors:2 discontinued
+    );
+    assert.deepEqual(invalid, [{ type: "behaviors", id: "2" }]);
+  });
+
+  test("id type mismatch (number vs string) still matches — ids normalised to string", () => {
+    const invalid = diffInvalidTargetingItems(
+      [{ type: "interests", id: "1" }],
+      [{ type: "interests", id: 1, name: "Yoga" }], // Meta returns numeric id
+    );
+    assert.deepEqual(invalid, []);
+  });
+
+  test("empty Meta response flags every input item as invalid", () => {
+    const invalid = diffInvalidTargetingItems(
+      [{ type: "interests", id: "1" }, { type: "behaviors", id: "2" }],
+      [],
+    );
+    assert.equal(invalid.length, 2);
+  });
+
+  test("null/non-array Meta response degrades to flagging everything (fail-safe, not fail-open)", () => {
+    const invalid = diffInvalidTargetingItems([{ type: "interests", id: "1" }], null);
+    assert.deepEqual(invalid, [{ type: "interests", id: "1" }]);
+  });
+
+  test("empty input list returns empty regardless of Meta's response", () => {
+    assert.deepEqual(diffInvalidTargetingItems([], [{ type: "interests", id: "1" }]), []);
   });
 });
 

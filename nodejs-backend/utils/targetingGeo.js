@@ -160,19 +160,42 @@ function groupLocationsByType(items) {
 // Callers typically pass includes-only (the pipeline filters by mode
 // before calling), but the explicit mode check makes the function safe
 // against mixed-mode inputs.
+//
+// Checks TWO independent "covers" signals, either of which drops a
+// granular pick:
+//   1. countryCode — an included country covers any included sub-country
+//      pick inside it (the original 1487756 fix).
+//   2. regionId — an included region/subregion ALSO covers any included
+//      sub-country pick inside it, even with no country entry present at
+//      all. Real-world hit (2026-07-06): a user picked "Karnataka"
+//      (region) + several local `place` picks inside it (Varthur,
+//      Whitefield Railway Station, etc., converted to `custom` pins) with
+//      NO country entry in the audience — the country-only check found
+//      nothing to drop against and every pin passed straight through to
+//      Meta, which rejected the whole ad set. `regionId` is Meta's own
+//      numeric region id (the same value Meta uses as `regions[].key`),
+//      captured from the search/browse response's `region_id` field —
+//      see `searchGeoLocations` + `backfillLocationCountryCodes`.
 function dropOverlappingIncludes(items) {
+  const isInclude = (l) => (l.mode || "include") === "include";
   const includedCountryCodes = new Set(
     items
-      .filter((l) => l.type === "country" && (l.mode || "include") === "include")
+      .filter((l) => l.type === "country" && isInclude(l))
       .map((l) => String(l.key).toUpperCase()),
   );
-  if (!includedCountryCodes.size) return items;
+  const includedRegionIds = new Set(
+    items
+      .filter((l) => (l.type === "region" || l.type === "subregion") && isInclude(l))
+      .map((l) => String(l.key)),
+  );
+  if (!includedCountryCodes.size && !includedRegionIds.size) return items;
   return items.filter((l) => {
-    if ((l.mode || "include") !== "include") return true; // never drop excludes
-    if (COUNTRY_REDUNDANT_TYPES.has(l.type)) {
-      const cc = String(l.countryCode || "").toUpperCase();
-      if (cc && includedCountryCodes.has(cc)) return false;
-    }
+    if (!isInclude(l)) return true; // never drop excludes
+    if (!COUNTRY_REDUNDANT_TYPES.has(l.type)) return true;
+    const cc = String(l.countryCode || "").toUpperCase();
+    if (cc && includedCountryCodes.has(cc)) return false;
+    const rid = l.regionId != null ? String(l.regionId) : "";
+    if (rid && includedRegionIds.has(rid)) return false;
     return true;
   });
 }
@@ -241,9 +264,19 @@ function reverseGeoToLocations(geo, mode) {
 }
 
 // Type → Meta `adgeolocationmeta` plural param / response bucket.
-// Used by the controller's `resolveLocationNames` to fetch friendly
-// names + country_code on the edit flow. Exported here so the mapping
-// stays single-sourced with the routing maps above.
+// Used by the controller's `resolveLocationNames` (edit-flow name/
+// country_code backfill) AND `resolveLocationCoordinates` (picker's
+// live coordinate resolution — see metaAdLauncher.js). Exported here so
+// the mapping stays single-sourced with the routing maps above.
+//
+// `place` routes to `places` — confirmed against the literal curl Meta's
+// own Ads Manager makes when resolving a place pick's coordinates
+// (2026-07-06): `GET /search?type=adgeolocationmeta&places=["<key>"]`.
+// Unlike the other entries here, a `place` item never persists as
+// `type: 'place'` in our saved-locations model (LocationTargeting.jsx
+// converts it to `type: 'custom'` immediately on add), so this entry is
+// consumed ONLY by the picker's live resolve call, never by the
+// launch-time `resolveLocationNames` backfill.
 const TYPE_TO_META_BUCKET = {
   country: "countries",
   city: "cities",
@@ -260,6 +293,7 @@ const TYPE_TO_META_BUCKET = {
   medium_geo_area: "medium_geo_areas",
   small_geo_area: "small_geo_areas",
   metro_area: "metro_areas",
+  place: "places",
 };
 
 // Types whose Meta response carries a `country_code` worth caching on

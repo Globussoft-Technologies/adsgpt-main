@@ -2955,9 +2955,18 @@ class MetaAdLauncher {
         (row?.type === "city" || row?.type === "region") &&
         (row.country_code === "TW" || row.country_code === "SG");
 
+      const { TYPE_TO_META_BUCKET } = require("../../utils/targetingGeo");
       const results = rows
         .filter((row) => !isBlockedCountry(row) && !isBlockedCityOrRegion(row))
         .map((row) => {
+          // Meta returns latitude/longitude as TOP-LEVEL string fields on
+          // the row itself (e.g. "12.920430") — NOT nested under a
+          // `location` sub-object. Confirmed 2026-07-06 by comparing our
+          // raw response against Meta's own Ads Manager network capture
+          // for the identical place ("Gunjur Roller Sports Academy",
+          // key 105843676490251) — Meta's UI drops a precise pin because
+          // it reads these fields; we never did. `row.location` kept as a
+          // defensive fallback in case some API version nests it instead.
           const loc = row.location || {};
           return {
             key: String(row.key),
@@ -2966,13 +2975,46 @@ class MetaAdLauncher {
             countryCode: row.country_code || null,
             countryName: row.country_name || null,
             region: row.region || null,
+            // Meta's own numeric region id — the SAME value used as
+            // `regions[].key` when a region is targeted directly. Lets the
+            // picker detect "this pick is inside an already-included
+            // region" even when there's no country entry at all (see
+            // dropOverlappingIncludes in utils/targetingGeo.js). Present on
+            // city/region/subcity/neighborhood/zip/place rows; absent on
+            // country/country_group/geo_market/electoral_district.
+            regionId: row.region_id != null ? String(row.region_id) : null,
+            // The city Meta associates with a `place` row (e.g. a small
+            // business's linked city) — present even when the place itself
+            // has no coordinates. Lets the picker retry geocoding with a
+            // broader, more Nominatim-friendly query ("Bangalore, Karnataka,
+            // India") when the exact business name comes back with no
+            // match — Nominatim rarely has small businesses but usually has
+            // the city they're in. See LocationTargeting.jsx `add()`.
+            primaryCity: row.primary_city || null,
+            // Meta's `adgeolocationmeta` bucket parameter name for this
+            // item's type — e.g. type 'city' → 'cities', type 'place' →
+            // 'places'. Computed ONCE here (single source of truth:
+            // TYPE_TO_META_BUCKET in utils/targetingGeo.js) and passed
+            // straight through by the picker when it needs to resolve
+            // this item's coordinates (resolveLocationCoordinates), so
+            // that endpoint doesn't need its own copy of this mapping —
+            // it just uses whatever bucket the search step already
+            // determined. `null` for types with no adgeolocationmeta
+            // lookup (e.g. `custom` never applies here — pins never come
+            // from search results).
+            metaBucket: TYPE_TO_META_BUCKET[row.type] || null,
             supportsRegion: !!row.supports_region,
             supportsCity: !!row.supports_city,
             // Places often come back with a centroid. Surface it so the
             // picker can turn a place selection into a radius pin without an
-            // extra geocode round-trip.
-            latitude: loc.latitude != null ? Number(loc.latitude) : null,
-            longitude: loc.longitude != null ? Number(loc.longitude) : null,
+            // extra geocode round-trip. Top-level fields are Meta's actual
+            // shape (see comment above); `loc.*` is the defensive fallback.
+            latitude: row.latitude != null
+              ? Number(row.latitude)
+              : (loc.latitude != null ? Number(loc.latitude) : null),
+            longitude: row.longitude != null
+              ? Number(row.longitude)
+              : (loc.longitude != null ? Number(loc.longitude) : null),
           };
         });
 
@@ -2982,6 +3024,110 @@ class MetaAdLauncher {
       return res.status(500).json({
         status: false,
         error: m.title || "Failed to search locations",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // Resolve ANY adgeolocation pick's coordinates via Meta's OWN resolution
+  // mechanism — NOT a guess, NOT hardcoded to one type. Captured directly
+  // from Meta Ads Manager's network traffic (2026-07-06): when a user
+  // clicks a search result, Meta's own client calls a SEPARATE follow-up
+  // endpoint, routing to the bucket matching the PICKED ITEM'S TYPE:
+  //   GET /search?type=adgeolocationmeta&places=["<key>"]        (place)
+  //   GET /search?type=adgeolocationmeta&neighborhoods=["<key>"] (neighborhood)
+  //   GET /search?type=adgeolocationmeta&cities=["<key>"]        (city)
+  //   ...etc, one bucket per type.
+  //
+  // Coordinates are never inline in the `adgeolocation` search response
+  // for ANY type — Meta's own UI doesn't expect them there either, which
+  // is why our raw search dumps never showed lat/lng despite Meta clearly
+  // having the data (proven live: Meta's UI drops a precise pin for the
+  // exact same key our search returns with no coordinates).
+  //
+  // `bucket` (not `type`) is the caller's input — the type→bucket
+  // translation (TYPE_TO_META_BUCKET in utils/targetingGeo.js) happens
+  // ONCE in `searchGeoLocations`, attached to each result row as
+  // `metaBucket`. This endpoint just uses whatever bucket it's given
+  // rather than re-deriving it, so the mapping isn't maintained in two
+  // places. Real hit 2026-07-06: "Gunjur Village" (type=neighborhood)
+  // sitting in the SAME dropdown as "Gunjur Roller Sports Academy"
+  // (type=place) — an earlier version hardcoded the `places` bucket
+  // regardless of the picked item's actual type.
+  //
+  // Query: bucket (Meta's plural param name, e.g. 'places' | 'neighborhoods' | 'cities' — from the search row's `metaBucket` field), key (Meta's `key` from the adgeolocation search row)
+  // Returns: { status: true, result: { latitude, longitude, countryCode, regionId } | null }
+  // `result: null` means Meta has no location on file for this item
+  // (some small-business Pages never set one) — NOT an error; caller
+  // should fall through to the Nominatim-based fallbacks.
+  async resolveLocationCoordinates(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = "Resolve a search pick's coordinates via Meta's adgeolocationmeta (same call Meta Ads Manager itself makes)"
+    */
+    try {
+      const bucket = String(req.query.bucket || "").trim();
+      const key = String(req.query.key || "").trim();
+      if (!bucket || !key) {
+        // Not an error — a row with no `metaBucket` (e.g. `custom` pins,
+        // which never come from search) has nothing to resolve. Caller
+        // falls through to Nominatim.
+        return res.status(200).json({ status: true, result: null });
+      }
+      // Safety allowlist — `bucket` is client-supplied (echoed back from
+      // what searchGeoLocations attached earlier), so validate it against
+      // Meta's known bucket names before splicing it into the API call as
+      // a dynamic param key. Prevents an arbitrary string from landing as
+      // an unexpected parameter name in the Meta request.
+      const { TYPE_TO_META_BUCKET } = require("../../utils/targetingGeo");
+      if (!Object.values(TYPE_TO_META_BUCKET).includes(bucket)) {
+        return res.status(400).json({ status: false, error: "Unrecognised bucket" });
+      }
+
+      const userId = req.user.user_id;
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      let data;
+      try {
+        const raw = await api.call("GET", ["search"], {
+          type: "adgeolocationmeta",
+          [bucket]: JSON.stringify([key]),
+          include_headers: false,
+        });
+        data = raw?.data || raw?._data?.data || raw?._data || raw;
+      } catch (apiErr) {
+        // Best-effort — an invalid/inaccessible key shouldn't 500 the
+        // picker. Fall through to result: null so the caller retries via
+        // Nominatim instead.
+        logMetaError("resolveLocationCoordinates Meta error", apiErr);
+        return res.status(200).json({ status: true, result: null });
+      }
+
+      const hit = data?.[bucket]?.[key] || data?.[bucket]?.[String(key)];
+      // Defensive on shape — check both top-level and nested `location`,
+      // same uncertainty as the adgeolocation search response (see the
+      // field-path bug this endpoint's sibling fix corrected earlier).
+      const loc = hit?.location || {};
+      const lat = hit?.latitude ?? loc.latitude;
+      const lng = hit?.longitude ?? loc.longitude;
+      if (!hit || lat == null || lng == null) {
+        return res.status(200).json({ status: true, result: null });
+      }
+      return res.status(200).json({
+        status: true,
+        result: {
+          latitude: Number(lat),
+          longitude: Number(lng),
+          countryCode: hit.country_code ? String(hit.country_code).toUpperCase() : null,
+          regionId: hit.region_id != null ? String(hit.region_id) : null,
+        },
+      });
+    } catch (error) {
+      const m = logMetaError("resolveLocationCoordinates error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to resolve location coordinates",
         details: m.message,
         meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
       });
@@ -3119,14 +3265,17 @@ class MetaAdLauncher {
   //
   // Reference: developers.facebook.com/docs/marketing-api/audiences/reference/detailed-targeting
   //
-  // Four endpoints in this section:
-  //   • searchDetailedTargeting   — typeahead by name across all classes
-  //   • browseDetailedTargeting   — categorical hierarchy for the Browse drawer
-  //   • suggestDetailedTargeting  — Meta's related-item recommendations
-  //   • reachEstimateForTargeting — audience-size + narrow/broad gauge
+  // Five endpoints in this section:
+  //   • searchDetailedTargeting     — typeahead by name across all classes
+  //   • browseDetailedTargeting     — categorical hierarchy for the Browse drawer
+  //   • suggestDetailedTargeting    — Meta's related-item recommendations
+  //   • reachEstimateForTargeting   — audience-size + narrow/broad gauge
+  //   • validateDetailedTargeting   — flags picks Meta has since discontinued
   //
-  // All four cache via Redis. Caches skipped on transient failure so a
-  // single hiccup doesn't lock users out (same pattern as getCatalogs).
+  // The first four cache via Redis; validate does not (results should
+  // reflect Meta's current discontinuation state, not a stale cache).
+  // Caches skipped on transient failure so a single hiccup doesn't lock
+  // users out (same pattern as getCatalogs).
   //
   // SAC interaction: ALL four endpoints return empty / 400 when the
   // caller's targeting spec includes a regulated SAC, mirroring Meta UI's
@@ -3290,8 +3439,20 @@ class MetaAdLauncher {
         .map((c) => c.trim())
         .filter((c) => CLASS_SET.has(c));
       const limitType = requestedClasses.length === 1 ? requestedClasses[0] : null;
+      // Meta drops items that are no longer eligible for EXCLUDE targeting
+      // (e.g. `Divorced` under relationship-status demographics — confirmed
+      // live 2026-07-06) when this is set, on top of Meta's broader,
+      // ongoing sunset of detailed-targeting exclusions (started March
+      // 2025). It does NOT signal general discontinuation — an item can
+      // still be missing under `is_exclusion=true` while remaining valid
+      // for Include/Narrow, so this only matters when browsing FOR an
+      // exclude bucket. No call site passes this yet (the wizard's Exclude
+      // section was removed 2026-06-30 — see DetailedTargeting.jsx), but
+      // the endpoint accepts it now so re-enabling Exclude for a future
+      // cell doesn't also require a backend change.
+      const isExclusion = String(req.query.isExclusion || "").trim() === "true";
 
-      const cacheKey = `metaDTBrowse:${userId}:${adAccountId}:${rootId || "ROOT"}:${limitType || "all"}`;
+      const cacheKey = `metaDTBrowse:${userId}:${adAccountId}:${rootId || "ROOT"}:${limitType || "all"}:${isExclusion ? "excl" : "incl"}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         return res.status(200).json(JSON.parse(cached));
@@ -3305,6 +3466,7 @@ class MetaAdLauncher {
       const params = { include_headers: false, limit: 500 };
       if (rootId) params.root = rootId;
       if (limitType) params.limit_type = limitType;
+      if (isExclusion) params.is_exclusion = true;
       let rows = [];
       try {
         const raw = await api.call("GET", [adAccountId, "targetingbrowse"], params);
@@ -3615,6 +3777,88 @@ class MetaAdLauncher {
       return res.status(500).json({
         status: false,
         error: m.title || "Failed to estimate reach",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
+  // 9g. POST validate detailed-targeting items are still live on Meta.
+  //
+  // Real-world trigger (2026-07-06): Meta discontinued a detailed-
+  // targeting option (subcode 1870211, "Some detailed targeting options
+  // are being discontinued") — the option was still returned by
+  // targetingsearch/targetingsuggestions, so nothing warned the user
+  // until the ad set was rejected at publish time. Meta's error doesn't
+  // say WHICH item is stale, so the only way to catch it ahead of launch
+  // is to re-check every picked item against Meta's own validation type.
+  //
+  // Endpoint: `/act_<AD_ACCOUNT_ID>/targetingvalidation` — an ACT-SCOPED
+  // edge, same family as `targetingsearch`/`targetingbrowse`/
+  // `targetingsuggestions`, NOT the generic (non-act-scoped) `/search`
+  // node used for `adgeolocation`/`adgeolocationmeta` elsewhere in this
+  // file. CORRECTED 2026-07-06: shipped originally as `/search?type=
+  // adTargetingValidation`, which doesn't exist — Meta rejected every
+  // call with "Unsupported get request" (code 100, subcode 33) and the
+  // best-effort catch below silently degraded to `invalid: []` every
+  // single time, so the feature never actually validated anything from
+  // day one. Confirmed against Meta's own edge reference doc
+  // (`ad-account/targetingvalidation`) before this fix — `targeting_list`
+  // is the correct param name and shape on the real edge too, so no
+  // change needed there; only the URL path was wrong.
+  //
+  // Body: { adAccountId: '...', items: [{ type: 'interests', id: '600...' }, ...] }
+  // Returns: { status: true, invalid: [{ type, id }, ...] } — items from
+  // the input that Meta's validation did NOT return as live. Diffing
+  // (rather than trusting an explicit "invalid" flag from Meta) is
+  // deliberate: we don't know Meta's exact response shape for a
+  // discontinued item ahead of a live failure, so "the input id simply
+  // isn't in the output" is the one signal guaranteed to work regardless.
+  async validateDetailedTargeting(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Check which Detailed Targeting picks are still valid on Meta'
+    */
+    try {
+      const adAccountId = normalizeAdAccountId(req.body?.adAccountId);
+      if (!adAccountId) {
+        return res.status(400).json({
+          status: false,
+          error: "adAccountId is required",
+        });
+      }
+      const { asTargetingValidationList, diffInvalidTargetingItems } = require("../../utils/detailedTargeting");
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const targetingList = asTargetingValidationList(items);
+      if (!targetingList.length) {
+        return res.status(200).json({ status: true, invalid: [] });
+      }
+
+      const userId = req.user.user_id;
+      await initApiForUser(userId);
+      const api = bizSdk.FacebookAdsApi.getDefaultApi();
+
+      let rows = [];
+      try {
+        const raw = await api.call("GET", [adAccountId, "targetingvalidation"], {
+          targeting_list: JSON.stringify(targetingList),
+        });
+        rows = raw?.data || raw?._data?.data || [];
+      } catch (apiErr) {
+        // Best-effort — if the validation call itself fails, don't block
+        // the wizard on it. The publish-time 1870211 error (with the
+        // SUBCODE_HINTS message) is still the fallback safety net.
+        logMetaError("validateDetailedTargeting Meta error", apiErr);
+        return res.status(200).json({ status: true, invalid: [], degraded: true });
+      }
+
+      const invalid = diffInvalidTargetingItems(targetingList, rows);
+
+      return res.status(200).json({ status: true, invalid });
+    } catch (error) {
+      const m = logMetaError("validateDetailedTargeting error", error);
+      return res.status(500).json({
+        status: false,
+        error: m.title || "Failed to validate detailed targeting",
         details: m.message,
         meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
       });

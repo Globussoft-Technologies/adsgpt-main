@@ -164,6 +164,26 @@ export const searchGeoLocations = async ({ q, types, limit } = {}) => {
   return data;
 };
 
+// Resolve ANY search pick's coordinates via Meta's OWN mechanism
+// (adgeolocationmeta) — the same follow-up call Meta Ads Manager itself
+// makes when a user clicks a result (captured directly from their network
+// traffic 2026-07-06). Pass the `metaBucket` value already attached to
+// the search result row (see searchGeoLocations) — the backend doesn't
+// re-derive the type→bucket mapping, it just uses what it's given. Try
+// this BEFORE the Nominatim fallbacks — it's Meta's own precise data,
+// not a name-based guess.
+// Returns: { result: { latitude, longitude, countryCode, regionId } | null }
+export const resolveLocationCoordinates = async ({ bucket, key } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/resolve-location-coordinates`,
+    {
+      params: { bucket, key },
+      headers: getAuthHeaders(),
+    },
+  );
+  return data;
+};
+
 // Geocode a place name → { latitude, longitude, displayName } via the
 // backend's OpenStreetMap Nominatim proxy. Meta's search typeahead has no
 // coordinates, so the wizard calls this to auto-pin a selected city/region
@@ -219,13 +239,19 @@ export const searchDetailedTargeting = async ({ adAccountId, q, classes, limit =
 
 // Browse tree — Meta's categorical hierarchy of Demographics / Interests /
 // Behaviours. `root` is an item id to expand (omit for the top level).
+// `isExclusion: true` forwards Meta's `is_exclusion` param, which filters
+// out items no longer eligible for exclude-context targeting (e.g.
+// relationship-status demographics like Divorced) — NOT a general
+// discontinued-item filter, only relevant when browsing for an Exclude
+// bucket. No current call site (Exclude is removed from the wizard, see
+// DetailedTargeting.jsx) — pass it if/when that section comes back.
 // Endpoint: `/act_X/targetingbrowse` — `adAccountId` required.
 // Returns: { tree: [{ id, name, type, path, leaf }] }
-export const browseDetailedTargeting = async ({ adAccountId, root, classes } = {}) => {
+export const browseDetailedTargeting = async ({ adAccountId, root, classes, isExclusion } = {}) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/browse`,
     {
-      params: { adAccountId, root, classes },
+      params: { adAccountId, root, classes, isExclusion: isExclusion ? "true" : undefined },
       headers: getAuthHeaders(),
     },
   );
@@ -261,6 +287,20 @@ export const reachEstimateForTargeting = async ({
   const { data } = await axios.post(
     `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/reach-estimate`,
     { adAccountId, targeting, optimizationGoal },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Checks which already-picked Detailed Targeting items Meta has since
+// discontinued (subcode 1870211 at publish otherwise, with no indication
+// of which item is stale). Not cached server-side — call sparingly (Ad
+// Set step mount + right before Launch), not on every keystroke.
+// Returns: { invalid: [{ type, id }, ...], degraded? }
+export const validateDetailedTargeting = async ({ adAccountId, items = [] } = {}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/detailed-targeting/validate`,
+    { adAccountId, items },
     { headers: getAuthHeaders() },
   );
   return data;

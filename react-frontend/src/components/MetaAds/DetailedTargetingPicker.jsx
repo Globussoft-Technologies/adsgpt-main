@@ -54,6 +54,11 @@ const PILLAR_COLOR_RULES = [
 ];
 const FALLBACK_COLOR = 'bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-white/70';
 
+// Stable empty-Set default for the `invalidKeys` prop — a fresh `new
+// Set()` literal as a default value would change identity every render
+// and defeat memoization on any consumer that depends on it.
+const EMPTY_SET = new Set();
+
 // snake_case → "Title case" — derives a display label from the class
 // (e.g. `education_statuses` → "Education statuses", `interests` →
 // "Interests"). Plain string transform — no per-class allowlist.
@@ -143,6 +148,12 @@ export default function DetailedTargetingPicker({
   // subset of classes. Default = all 14. (Meta UI uses one picker across
   // all classes; this is here for future Phase-3+ specialisations.)
   classes,
+  // Set of "type:id" keys Meta has discontinued since the user picked
+  // them (see DetailedTargeting.jsx's validateDetailedTargeting effect).
+  // Flagged chips render in red with a "Discontinued" tag so the user
+  // knows to remove them before Launch, instead of finding out from
+  // Meta's opaque subcode 1870211 at publish time.
+  invalidKeys = EMPTY_SET,
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -348,22 +359,47 @@ export default function DetailedTargetingPicker({
             // get pillar-accurate colors. Chips lacking `path` fall back to
             // the convention inside `typeBadge`.
             const badge = typeBadge(item);
+            const isInvalid = invalidKeys.has(`${item.type}:${item.id}`);
             return (
               <span
                 key={`${item.type}:${item.id}`}
-                className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-12 text-gray-900 dark:bg-white/5 dark:text-white"
+                className={
+                  isInvalid
+                    ? 'inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-2.5 py-1 text-12 text-red-700 dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-200'
+                    : 'inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-12 text-gray-900 dark:bg-white/5 dark:text-white'
+                }
+                title={
+                  isInvalid
+                    ? 'Discontinued by Meta — remove this before launching, Meta will reject the ad set otherwise.'
+                    : undefined
+                }
               >
+                {isInvalid ? (
+                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide text-white dark:bg-red-500">
+                    Discontinued
+                  </span>
+                ) : (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide ${badge.color}`}
+                  >
+                    {badge.label}
+                  </span>
+                )}
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-10 font-semibold uppercase tracking-wide ${badge.color}`}
+                  className={`max-w-[20ch] truncate ${isInvalid ? 'line-through decoration-red-400' : ''}`}
+                  title={item.name}
                 >
-                  {badge.label}
+                  {item.name}
                 </span>
-                <span className="max-w-[20ch] truncate" title={item.name}>{item.name}</span>
                 {!disabled && (
                   <button
                     type="button"
                     onClick={() => remove(idx)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white"
+                    className={
+                      isInvalid
+                        ? 'text-red-500 hover:text-red-700 dark:text-red-300 dark:hover:text-red-100'
+                        : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white'
+                    }
                     aria-label={`Remove ${item.name}`}
                   >
                     <X className="h-3.5 w-3.5" />

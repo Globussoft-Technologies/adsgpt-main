@@ -26,7 +26,7 @@ import React, {
   useState,
 } from 'react';
 import { Search, X, Loader2, MapPin } from 'lucide-react';
-import { searchGeoLocations, geocodeLocation, reverseGeocodeLocation } from '@/apis/metaAds/metaAdsApi';
+import { searchGeoLocations, resolveLocationCoordinates, geocodeLocation, reverseGeocodeLocation } from '@/apis/metaAds/metaAdsApi';
 import { FieldShell } from './wizardFields';
 import { globalToast } from '@/utils/globalToast';
 
@@ -218,15 +218,23 @@ export default function LocationTargeting({
         .filter((l) => l.type === 'country' && l.mode !== 'exclude')
         .map((l) => String(l.key).toUpperCase()),
     );
+    // Region/subregion also "covers" the same way a country does — even
+    // with NO country entry present at all (real hit 2026-07-06:
+    // "Karnataka" region + several granular picks inside it, no country
+    // in the audience). Mirrors backend `dropOverlappingIncludes`.
+    const includedRegions = new Set(
+      value
+        .filter((l) => (l.type === 'region' || l.type === 'subregion') && l.mode !== 'exclude')
+        .map((l) => String(l.key)),
+    );
     const out = new Set();
-    if (!includedCountries.size) return out;
+    if (!includedCountries.size && !includedRegions.size) return out;
     for (const l of value) {
-      if (
-        l.mode !== 'exclude' &&
-        SUB_COUNTRY_TYPES.has(l.type) &&
-        l.countryCode &&
-        includedCountries.has(String(l.countryCode).toUpperCase())
-      ) {
+      if (l.mode === 'exclude' || !SUB_COUNTRY_TYPES.has(l.type)) continue;
+      const coveredByCountry =
+        l.countryCode && includedCountries.has(String(l.countryCode).toUpperCase());
+      const coveredByRegion = l.regionId && includedRegions.has(String(l.regionId));
+      if (coveredByCountry || coveredByRegion) {
         out.add(`${l.type}:${l.key}`);
       }
     }
@@ -290,11 +298,28 @@ export default function LocationTargeting({
     [onChange],
   );
 
-  // Meta's search has no coordinates, so geocode a chosen city/region and
-  // drop it on the map. Best-effort: a failure just leaves it unpinned (it
-  // still targets correctly — radius rides on cities[].radius).
+  // Meta's search has no coordinates inline, so pin a chosen city/region
+  // on the map via a follow-up lookup. Try Meta's OWN resolution first
+  // (adgeolocationmeta — the same mechanism Meta Ads Manager itself uses;
+  // see resolveLocationCoordinates in metaAdLauncher.js). `row.metaBucket`
+  // is attached server-side by searchGeoLocations from the item's type —
+  // we just pass it through, no client-side type→bucket translation.
+  // Falls back to Nominatim by-name geocoding only if Meta has nothing on
+  // file. Best-effort throughout: a failure just leaves it unpinned (it
+  // still targets correctly — radius rides on cities[].radius / the
+  // type's own Meta payload, not the map pin).
   const geocodeAndPin = useCallback(
     async (row) => {
+      try {
+        const meta = await resolveLocationCoordinates({ bucket: row.metaBucket, key: row.key });
+        const m = meta?.result;
+        if (m && Number.isFinite(m.latitude) && Number.isFinite(m.longitude)) {
+          patchCoords(`${row.type}:${row.key}`, m.latitude, m.longitude);
+          return;
+        }
+      } catch {
+        /* fall through to Nominatim below */
+      }
       try {
         const named = [row.name, row.region, row.countryName]
           .filter(Boolean)
@@ -330,6 +355,37 @@ export default function LocationTargeting({
         // included country at launch (Meta subcode 1487756) — the
         // backend's launch-time reverse-geocode backfill is the fallback.
         let countryCode = row.countryCode || null;
+        // regionId (Meta's own numeric region id) DOES reliably come back
+        // on `place` search rows — capture it directly, no geocode needed.
+        // Nominatim has no equivalent (it doesn't know Meta's region-id
+        // ontology), so unlike countryCode there's no fallback path if
+        // Meta's row omits it — see backfillLocationCountryCodes's
+        // "known residual gap" note in metaAdLauncherV2.js.
+        let regionId = row.regionId || null;
+        // Try Meta's OWN resolution first — the exact follow-up call Meta
+        // Ads Manager itself makes when a user clicks a search result
+        // (captured directly from their network traffic 2026-07-06):
+        // GET /search?type=adgeolocationmeta&places=["<key>"] for a place
+        // pick specifically. `row.metaBucket` is attached server-side by
+        // searchGeoLocations from the item's type (see
+        // resolveLocationCoordinates in metaAdLauncher.js) — we just pass
+        // it through. This is precise, authoritative data straight from
+        // Meta, not a name-based guess — try it before ever touching
+        // Nominatim.
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          try {
+            const resp = await resolveLocationCoordinates({ bucket: row.metaBucket, key: row.key });
+            const r = resp?.result;
+            if (r && Number.isFinite(r.latitude) && Number.isFinite(r.longitude)) {
+              latitude = r.latitude;
+              longitude = r.longitude;
+              if (!countryCode && r.countryCode) countryCode = r.countryCode;
+              if (!regionId && r.regionId) regionId = r.regionId;
+            }
+          } catch {
+            /* fall through to Nominatim below */
+          }
+        }
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
           try {
             const named = [row.name, row.region, row.countryName]
@@ -353,6 +409,40 @@ export default function LocationTargeting({
             /* fall through — if geocoding fails we bail below */
           }
         }
+        // Broader-query fallback: Nominatim (OpenStreetMap) rarely has
+        // small businesses ("Gunjur Roller Sports Academy") but usually
+        // has the surrounding city/area. Retry with Meta's own linked
+        // city for this place (or the raw text the user searched, if
+        // Meta didn't give us one) — a much more geocodable string than
+        // the exact business name. Real hit 2026-07-06: every "Gunjur"
+        // place result had no coordinates AND the exact-name geocode
+        // failed; the area itself ("Gunjur, Karnataka, India") should
+        // resolve even when the specific business doesn't.
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          try {
+            const broad = [row.primaryCity || query.trim(), row.region, row.countryName]
+              .filter(Boolean)
+              .join(', ');
+            if (broad) {
+              const resp = await geocodeLocation({
+                q: broad,
+                countryCode: row.countryCode || undefined,
+              });
+              const r = resp?.result;
+              if (
+                r &&
+                Number.isFinite(r.latitude) &&
+                Number.isFinite(r.longitude)
+              ) {
+                latitude = r.latitude;
+                longitude = r.longitude;
+                if (!countryCode && r.countryCode) countryCode = r.countryCode;
+              }
+            }
+          } catch {
+            /* fall through — if this also fails we bail below */
+          }
+        }
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
           globalToast.error(
             'Could not locate that place on the map — try a nearby city.',
@@ -369,6 +459,7 @@ export default function LocationTargeting({
           distanceUnit: 'kilometer',
           mode: 'include',
           ...(countryCode && { countryCode }),
+          ...(regionId && { regionId }),
         };
         onChange?.([...value, entry]);
         setQuery('');
@@ -391,6 +482,12 @@ export default function LocationTargeting({
       // code in `key`; cities/regions/areas surface it via the search
       // response.
       if (row.countryCode) entry.countryCode = row.countryCode;
+      // Persist regionId too — lets dropOverlappingIncludes drop this pick
+      // when it's redundant with an already-included region, even when
+      // there's no country entry in the audience at all (real hit
+      // 2026-07-06: Karnataka region + several granular picks inside it,
+      // no country present — see utils/targetingGeo.js).
+      if (row.regionId) entry.regionId = row.regionId;
       // Cities and ZIPs default to a 25 km radius — Meta requires a radius
       // when `distance_unit` is set, and 25 km is a sensible mid-range
       // default matching Meta's own UI. Confirmed against live Meta Ads
@@ -429,7 +526,11 @@ export default function LocationTargeting({
         geocodeAndPin(row);
       }
     },
-    [value, onChange, geocodeAndPin],
+    // `query` is read by the broader-query geocode fallback above — must
+    // be a dep, or this closure goes stale and always retries with
+    // whatever text was in the box when `add` was first created (not what
+    // the user actually searched for this specific pick).
+    [value, onChange, geocodeAndPin, query],
   );
 
   const remove = useCallback(
@@ -634,8 +735,8 @@ export default function LocationTargeting({
                     </p>
                     {subsumed && (
                       <p className="truncate text-11 text-amber-600 dark:text-amber-300/80">
-                        Already covered by a country you’ve added — radius
-                        won’t apply.
+                        Already covered by a country or region you’ve added —
+                        radius won’t apply.
                       </p>
                     )}
                   </div>

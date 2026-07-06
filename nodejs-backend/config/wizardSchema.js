@@ -1517,10 +1517,25 @@ const CELLS = {
         // the event via the existing pixelEventType field (mapped to
         // custom_event_type on the App-shape promoted_object).
         //
-        // pixelId field removed from additionalFields — Sales/APP uses
-        // the `app` shape which CANNOT carry pixel_id (subcode 1815229);
-        // it was dead data prior to this change. The Pixel association is
-        // tracked at the Meta SDK integration level, not on the ad set.
+        // pixelId KEPT in additionalFields (2026-07-06 fix — a prior pass
+        // removed it as "dead data" and broke two things at once):
+        //  1. `additional.includes('pixelId')` is what gates the WHOLE
+        //     PixelEventPicker block in CreateCampaignWizardV2.jsx — the
+        //     ONLY UI that renders the pixelEventType dropdown too. Drop
+        //     pixelId here and the picker never mounts, so a user has no
+        //     way to satisfy the still-required pixelEventType field —
+        //     surfaced as a permanently-blocking "Select a conversion
+        //     event" with no visible field to fix it (real hit, Sales/App,
+        //     2026-07-06). Leads/APP and Engagement/APP already keep
+        //     pixelId in additionalFields for exactly this reason, even
+        //     though neither sends pixel_id on adset.promoted_object either.
+        //  2. It's genuinely NOT dead on the backend: metaAdLauncherV2.js's
+        //     campaign.update promoted_object step (the 2446759-DIAG path,
+        //     `objective === "OUTCOME_SALES" && value.pixelId &&
+        //     value.pixelEventType`) sets { pixel_id, custom_event_type }
+        //     on the CAMPAIGN, not the ad set — it's gated on `value.pixelId`
+        //     being truthy, which can only happen if the form collected it.
+        //     Removing pixelId from here silently skipped that entire branch.
         optimizationGoals: ["OFFSITE_CONVERSIONS", "LINK_CLICKS", "REACH"],
         defaultOptimizationGoal: "LINK_CLICKS",
         billingEvents: ["IMPRESSIONS"],
@@ -1530,6 +1545,7 @@ const CELLS = {
           "mobileAppStore",
           "applicationId",
           "objectStoreUrl",
+          "pixelId",
           "pixelEventType",
         ],
       },

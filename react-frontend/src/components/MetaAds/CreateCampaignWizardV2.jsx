@@ -4074,6 +4074,14 @@ function ReviewStep({
     // happens when the Page changes after the Lead Form was chosen.
     1487390:
       'The lead form belongs to a different Page than the one on this ad. Go back to the Lead Form step and pick a form from the current Page.',
+    // Meta periodically discontinues specific interests/behaviors for
+    // privacy or policy reasons, but doesn't purge the stale IDs from
+    // search/suggestions results — so a user can still pick one that's
+    // no longer valid at publish time. Meta's error doesn't say WHICH
+    // pick is bad, so the hint is the best we can do without the
+    // proactive validation check (see DetailedTargeting.jsx).
+    1870211:
+      "One of your Detailed Targeting selections (an interest, behavior, or demographic) was discontinued by Meta and can no longer be used. Go back to the Audience section, remove each Detailed Targeting pick one at a time, and re-add it from search — Meta will simply not find the discontinued one anymore.",
   };
   const errorForBanner = !launchError
     ? null

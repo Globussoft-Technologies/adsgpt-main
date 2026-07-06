@@ -520,26 +520,26 @@ async function createAdSetV2(req, res) {
     // Logs the exact resolved values + final ad set payload Meta receives.
     // Read alongside the Meta error response to diff against a successful
     // Meta UI launch's network capture.
-    logger.info(
-      `[2446759-DIAG] Pre-create snapshot: ` +
-        JSON.stringify({
-          campaignId: value.campaignId,
-          objective,
-          conversionLocation,
-          // Compute inline — the local `metaDestinationType` const is
-          // declared further down (the original control flow); referencing
-          // it here would be a temporal-dead-zone error.
-          destinationType: getMetaDestinationType(objective, conversionLocation),
-          optimizationGoal: value.optimizationGoal,
-          billingEvent: value.billingEvent,
-          promotedObjectShape: cell.adSet.promotedObjectShape,
-          formPixelId: value.pixelId || null,
-          formPixelEventType: value.pixelEventType || null,
-          formApplicationId: value.applicationId || null,
-          formObjectStoreUrl: value.objectStoreUrl || null,
-          builtPromotedObject: promotedObject || null,
-        }),
-    );
+    // logger.info(
+    //   `[2446759-DIAG] Pre-create snapshot: ` +
+    //     JSON.stringify({
+    //       campaignId: value.campaignId,
+    //       objective,
+    //       conversionLocation,
+    //       // Compute inline — the local `metaDestinationType` const is
+    //       // declared further down (the original control flow); referencing
+    //       // it here would be a temporal-dead-zone error.
+    //       destinationType: getMetaDestinationType(objective, conversionLocation),
+    //       optimizationGoal: value.optimizationGoal,
+    //       billingEvent: value.billingEvent,
+    //       promotedObjectShape: cell.adSet.promotedObjectShape,
+    //       formPixelId: value.pixelId || null,
+    //       formPixelEventType: value.pixelEventType || null,
+    //       formApplicationId: value.applicationId || null,
+    //       formObjectStoreUrl: value.objectStoreUrl || null,
+    //       builtPromotedObject: promotedObject || null,
+    //     }),
+    // );
 
     // For Conversions-family objectives (Leads / Sales) with App
     // destination, attempt to set campaign.promoted_object with
@@ -709,10 +709,10 @@ async function createAdSetV2(req, res) {
     // includes everything set above (destination_type, budget, attribution,
     // schedule, frequency_control_specs, DSA, etc.). Used to diff against
     // a successful Meta UI launch's network capture.
-    logger.info(
-      `[2446759-DIAG] FINAL adSetParams sent to Meta create-adset: ` +
-        JSON.stringify(adSetParams, null, 2),
-    );
+    // logger.info(
+    //   `[2446759-DIAG] FINAL adSetParams sent to Meta create-adset: ` +
+    //     JSON.stringify(adSetParams, null, 2),
+    // );
 
     const adSet = await account.createAdSet([], adSetParams);
 
@@ -1146,9 +1146,11 @@ async function fetchAdGeoLocationMeta(api, locations, { only } = {}) {
 }
 
 // Meta's targeting read returns geo KEYS, not names. Resolve friendly names
-// (and city/region country codes) via the adgeolocationmeta lookup so the
-// edit UI shows "India" not "IN", "Bengaluru" not "2295414". Best-effort:
-// any failure leaves the key as the display name. Mutates `locations`.
+// (and city/region country codes + region ids) via the adgeolocationmeta
+// lookup so the edit UI shows "India" not "IN", "Bengaluru" not "2295414",
+// and region-overlap detection (dropOverlappingIncludes) has what it needs
+// on read-back too. Best-effort: any failure leaves the key as the display
+// name. Mutates `locations`.
 async function resolveLocationNames(api, locations) {
   const data = await fetchAdGeoLocationMeta(api, locations);
   for (const l of locations) {
@@ -1161,30 +1163,47 @@ async function resolveLocationNames(api, locations) {
       if (hit.country_code && COUNTRY_CODE_CARRYING_TYPES.has(l.type)) {
         l.countryCode = hit.country_code;
       }
+      if (hit.region_id != null && COUNTRY_CODE_CARRYING_TYPES.has(l.type)) {
+        l.regionId = String(hit.region_id);
+      }
     }
     if (!l.name) l.name = l.key; // fallback to the key
   }
 }
 
-// Launch-time countryCode backfill. Two distinct gaps this closes, both
-// producing Meta subcode 1487756 ("Some locations conflict with each
-// other") when they slip through:
+// Launch-time countryCode + regionId backfill. Three distinct gaps this
+// closes, all producing Meta subcode 1487756 ("Some locations conflict
+// with each other") when they slip through:
 //
-//   1. Meta's `adgeolocation` typeahead sometimes omits `country_code` on
-//      smaller sub-city / neighborhood rows.
+//   1. Meta's `adgeolocation` typeahead sometimes omits `country_code` /
+//      `region_id` on smaller sub-city / neighborhood rows.
 //   2. Meta's `adgeolocation` search surfaces some well-known areas (e.g.
 //      "Whitefield", "Varthur" in Bangalore) as a `place` (POI) result
 //      rather than a formal subcity/neighborhood entity. The picker turns
 //      `place` picks into a `custom` lat/lng radius pin (see
 //      LocationTargeting.jsx `add()`) — and Meta's `custom_locations`
-//      read-back on EDIT never includes a country code at all, so an
-//      edited ad set with a pre-existing pin inside an included country
-//      has no client-side signal to fix it either.
+//      read-back on EDIT never includes a country code (or region id) at
+//      all, so an edited ad set with a pre-existing pin inside an
+//      included country/region has no client-side signal to fix it.
+//   3. Real-world hit (2026-07-06): a user included a REGION ("Karnataka")
+//      plus several granular picks inside it with NO country entry at
+//      all. The country-only check has nothing to match against in that
+//      shape, so region-covers-granular-pick needs the exact same
+//      backfill treatment as country-covers-granular-pick.
 //
-// Both cases: patch in place, then let the normal
-// `dropOverlappingIncludes` run. Best-effort — if a lookup fails, launch
-// proceeds with the current payload (may still 1487756, which is the
-// pre-fix behavior; not worse).
+// All cases: patch in place, then let the normal `dropOverlappingIncludes`
+// run. Best-effort — if a lookup fails, launch proceeds with the current
+// payload (may still 1487756, which is the pre-fix behavior; not worse).
+//
+// Known residual gap: a `custom` pin missing regionId gets NO backend
+// backfill for region (only countryCode, via reverse-geocode). Nominatim
+// has no concept of Meta's internal region-id ontology, so there's no
+// reverse lat/lng → Meta region_id lookup available. The frontend closes
+// this at pick-time instead — a `place` search result already carries
+// Meta's own `region_id` in the same row, captured onto the pin with zero
+// extra network calls (see LocationTargeting.jsx `add()`). Only a pin
+// dropped via manual map-click (no search row) or loaded pre-fix from an
+// existing ad set stays exposed.
 async function backfillLocationCountryCodes(api, locations) {
   if (!Array.isArray(locations) || !locations.length) return;
 
@@ -1193,7 +1212,7 @@ async function backfillLocationCountryCodes(api, locations) {
     (l) =>
       (l.mode || "include") === "include" &&
       COUNTRY_CODE_CARRYING_TYPES.has(l.type) &&
-      !l.countryCode,
+      (!l.countryCode || !l.regionId),
   );
   if (needsMeta.length) {
     const data = await fetchAdGeoLocationMeta(api, needsMeta, {
@@ -1204,14 +1223,16 @@ async function backfillLocationCountryCodes(api, locations) {
         const bucketName = TYPE_TO_META_BUCKET[l.type];
         const bucket = bucketName ? data?.[bucketName] : null;
         const hit = bucket && (bucket[l.key] || bucket[String(l.key)]);
-        if (hit?.country_code) l.countryCode = hit.country_code;
+        if (!l.countryCode && hit?.country_code) l.countryCode = hit.country_code;
+        if (!l.regionId && hit?.region_id != null) l.regionId = String(hit.region_id);
       }
     }
   }
 
   // Case 2 — custom (lat/lng) pins via reverse-geocode. Sequential, not
   // parallel: pins are rare (most locations are geo-search picks) and
-  // Nominatim's usage policy expects modest request rates.
+  // Nominatim's usage policy expects modest request rates. countryCode
+  // only — see the regionId gap note above.
   const needsReverseGeocode = locations.filter(
     (l) =>
       (l.mode || "include") === "include" &&

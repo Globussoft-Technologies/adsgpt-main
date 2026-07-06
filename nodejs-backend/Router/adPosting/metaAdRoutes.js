@@ -34,6 +34,13 @@ router.get("/get-saved-audiences", metaAdController.getSavedAudiences);
 // Geo-location typeahead — drives the V2 wizard's Location Targeting
 // picker (countries / cities with radius / regions / free-trade groups).
 router.get("/search-geo", metaAdController.searchGeoLocations);
+// Resolve ANY search pick's coordinates via Meta's OWN mechanism
+// (adgeolocationmeta) — the same follow-up call Meta Ads Manager itself
+// makes when a user clicks a result. Caller passes the `metaBucket`
+// value already attached to the search row (see searchGeoLocations) —
+// this endpoint doesn't re-derive the type→bucket mapping itself. Tried
+// BEFORE the Nominatim fallbacks below since it's Meta's own precise data.
+router.get("/resolve-location-coordinates", metaAdController.resolveLocationCoordinates);
 // Geocode a selected place → coordinates (OpenStreetMap Nominatim) so the
 // wizard can auto-pin a chosen city/region on the map. Meta's search API
 // doesn't return coordinates; radius still goes to Meta via cities[].radius.
@@ -44,14 +51,22 @@ router.get("/geocode", metaAdController.geocodeLocation);
 router.get("/reverse-geocode", metaAdController.reverseGeocodeLocation);
 
 // Detailed Targeting — Meta UI parity picker (Demographics / Interests /
-// Behaviours). All four endpoints proxy + cache Meta's `/search` and
+// Behaviours). Endpoints proxy + cache Meta's `/search` and
 // `/targetingbrowse` surfaces with appropriate TTLs.
 router.get("/detailed-targeting/search", metaAdController.searchDetailedTargeting);
+// isExclusion=true forwards Meta's is_exclusion param — filters items no
+// longer eligible for exclude-context targeting (e.g. relationship-status
+// demographics like Divorced). No current call site (Exclude section is
+// removed from the wizard, see DetailedTargeting.jsx), wired for when it
+// comes back.
 router.get("/detailed-targeting/browse", metaAdController.browseDetailedTargeting);
-// POST for suggestions + reach-estimate — body carries a targeting_list /
-// targeting_spec too rich for a query string.
+// POST for suggestions + reach-estimate + validate — body carries a
+// targeting_list / targeting_spec too rich for a query string.
 router.post("/detailed-targeting/suggestions", metaAdController.suggestDetailedTargeting);
 router.post("/detailed-targeting/reach-estimate", metaAdController.reachEstimateForTargeting);
+// Flags previously-picked items Meta has since discontinued (subcode
+// 1870211 at publish time otherwise) — not cached, see controller comment.
+router.post("/detailed-targeting/validate", metaAdController.validateDetailedTargeting);
 // Feeds the App Promotion app picker in the V2 wizard. Returns the
 // user's promotable apps with iOS / Play store URLs normalised so the
 // frontend can filter by store and pre-fill objectStoreUrl.
