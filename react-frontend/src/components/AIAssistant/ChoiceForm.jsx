@@ -35,12 +35,10 @@ const isImgSelected = (x) => !!(x && typeof x === 'object' && x.selected);
 // selection when re-seeding an edited form).
 const withImgSelection = (arr) => {
   const items = (Array.isArray(arr) ? arr : arr ? [arr] : []).map(asImgItem).filter((it) => it.url);
-  if (!items.length) return items;
-  // Single-select: exactly ONE image feeds generation. Keep the first
-  // explicitly-selected image, else default to the first image.
-  let sel = items.findIndex(isImgSelected);
-  if (sel < 0) sel = 0;
-  return items.map((it, i) => ({ ...it, selected: i === sel }));
+  // Multi-select: any number of images can feed generation. Preserve existing
+  // selections; when nothing is selected yet, default the first image on.
+  const anySelected = items.some(isImgSelected);
+  return items.map((it, i) => ({ ...it, selected: it.selected === true || (!anySelected && i === 0) }));
 };
 
 const initialValueForField = (field) => {
@@ -327,14 +325,11 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
         files.map(async (f) => {
           const url = await uploadToS3(f, userId, true);
           if (!url) throw new Error('Upload failed');
-          return { url, filename: f.name };
+          // A freshly uploaded image is selected — the user added it to use it.
+          return { url, filename: f.name, selected: true };
         }),
       );
-      // A freshly uploaded image becomes THE selected one (the user added it to
-      // use it) — single-select, so clear any prior selection.
-      const next = [...arr, ...up].slice(0, maxFiles);
-      const firstNew = next.findIndex((it) => up.some((u) => u.url === it.url));
-      onChange(next.map((it, idx) => ({ ...it, selected: idx === firstNew })));
+      onChange([...arr, ...up].slice(0, maxFiles));
     } catch (err) {
       toast.error(err?.response?.data?.detail || err?.message || 'Upload failed');
     } finally {
@@ -344,9 +339,8 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
 
   const toggle = (i) => {
     if (disabled) return;
-    // Single-select: choosing an image selects only it; clicking the currently
-    // selected image clears it (generate with no reference).
-    onChange(arr.map((it, idx) => ({ ...it, selected: idx === i ? !it.selected : false })));
+    // Multi-select: toggle just this image; any number can be used together.
+    onChange(arr.map((it, idx) => (idx === i ? { ...it, selected: !it.selected } : it)));
   };
 
   const removeAt = (i, wasSelected) => {
@@ -416,8 +410,8 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
           className={`text-[11px] font-medium ${selectedCount ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
         >
           {selectedCount
-            ? 'Using the highlighted image — click another to switch'
-            : 'Click an image to use it in generation'}
+            ? `${selectedCount} of ${arr.length} used in generation — click to add or remove`
+            : 'Click the images you want to use in generation'}
         </span>
       )}
     </div>
