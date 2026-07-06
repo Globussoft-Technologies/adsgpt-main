@@ -413,6 +413,13 @@ function buildInitialForm(context = null) {
     if (typeof context.cbo === 'boolean') base.cbo = context.cbo;
     if (context.campaignBudgetType) base.campaignBudgetType = context.campaignBudgetType;
     if (context.pageId) base.pageId = context.pageId;
+    // Add-Ad fix — "app" promotedObjectShape cells need applicationId +
+    // objectStoreUrl to build the ad's app_link creative, but Add Ad skips
+    // the Ad Set step entirely (the ad set already exists), so nothing else
+    // in this flow ever collects them. resolveCellForAdSet reads them off
+    // the existing ad set's promoted_object. No-op for non-app cells.
+    if (context.applicationId) base.applicationId = context.applicationId;
+    if (context.objectStoreUrl) base.objectStoreUrl = context.objectStoreUrl;
     // Inherited from the parent campaign (add-ad-set flow): the bid
     // strategy decides whether the Ad Set step requires a bid cap, and
     // special categories drive the targeting restrictions. A capped

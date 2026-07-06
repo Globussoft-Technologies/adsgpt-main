@@ -991,6 +991,22 @@ async function resolveCellForAdSet(req, res) {
     // (the Lead Form step needs it, and the ad creative is page-scoped).
     const pageId = await resolvePageIdForAdSet(adSetId, adSetData.promoted_object);
 
+    // Real trigger (2026-07-06, Sales/App — but the gap is generic to EVERY
+    // "app" promotedObjectShape cell: App Promotion, Traffic/App, Leads/App,
+    // Engagement/App, Sales/App, Sales/WEBSITE_AND_APP): Add Ad never
+    // collected applicationId/objectStoreUrl at all — those are normally
+    // gathered on the Ad SET step, which "Add Ad" skips entirely since the
+    // ad set already exists. The Ad's creative still needs them to build
+    // its app_link object_story_spec (`data.link = objectStoreUrl`,
+    // `value.application = applicationId` on the CTA), so createAdV2
+    // rejected with "objectStoreUrl is not allowed to be empty" — Joi
+    // correctly caught a value that was never collected anywhere in this
+    // flow. resolveAdSetForEdit and resolveAdForEdit already read these
+    // same two fields off promoted_object for their own flows; this was the
+    // one resolve endpoint of the three that hadn't inherited the fix.
+    const applicationId = adSetData.promoted_object?.application_id || null;
+    const objectStoreUrl = adSetData.promoted_object?.object_store_url || null;
+
     return res.status(200).json({
       status: true,
       objective: cellInfo.objective,
@@ -998,6 +1014,8 @@ async function resolveCellForAdSet(req, res) {
       campaignId: campaignData.id,
       adSetId: adSetData.id,
       pageId,
+      applicationId,
+      objectStoreUrl,
     });
   } catch (err) {
     return res.status(500).json(metaErrorResponse(err, "resolve cell", req));
@@ -1193,8 +1211,28 @@ async function fetchAdGeoLocationMeta(api, locations, { only } = {}) {
 // name. Mutates `locations`.
 async function resolveLocationNames(api, locations) {
   const data = await fetchAdGeoLocationMeta(api, locations);
+  // `custom` pins (real hit 2026-07-06): `reverseGeoToLocations` gives every
+  // pin read back from Meta a `Pin @ lat, lng` PLACEHOLDER name — Meta's
+  // `custom_locations` targeting field only ever stores lat/lng/radius, no
+  // name, so whatever friendly name `addPin` resolved at drop-time is gone
+  // by the time the ad set is saved and re-opened for editing. This used to
+  // be skipped entirely here ("already has a coordinate label") on the
+  // assumption nothing could improve on it — now that `reverseGeocodeLatLng`
+  // tries Meta's own `adgeolocationmeta`/`custom_locations` reverse-geocode
+  // first (see its docblock in metaAdLauncher.js), the exact same lookup
+  // `addPin` uses is available here too. Sequential, not parallel — pins
+  // are rare and this mirrors `backfillLocationCountryCodes`'s existing
+  // rate-limit caution.
   for (const l of locations) {
-    if (l.type === "custom") continue; // already has a coordinate label
+    if (l.type !== "custom") continue;
+    if (!Number.isFinite(l.latitude) || !Number.isFinite(l.longitude)) continue;
+    const hit = await reverseGeocodeLatLng(l.latitude, l.longitude, api);
+    if (hit?.displayName) l.name = hit.displayName;
+    if (!l.countryCode && hit?.countryCode) l.countryCode = hit.countryCode;
+    if (!l.regionId && hit?.regionId) l.regionId = hit.regionId;
+  }
+  for (const l of locations) {
+    if (l.type === "custom") continue; // handled above
     const bucketName = TYPE_TO_META_BUCKET[l.type];
     const bucket = bucketName ? data?.[bucketName] : null;
     const hit = bucket && (bucket[l.key] || bucket[String(l.key)]);

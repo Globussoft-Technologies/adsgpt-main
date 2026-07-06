@@ -1076,6 +1076,12 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
         objective: r.objective,
         conversionLocation: r.conversionLocation,
         pageId: r.pageId || '',
+        // App-cell creative inputs — Add Ad skips the Ad Set step (the ad
+        // set already exists), so these are never collected anywhere else
+        // in this flow. Only relevant for "app" promotedObjectShape cells;
+        // harmless empty strings for every other cell.
+        applicationId: r.applicationId || '',
+        objectStoreUrl: r.objectStoreUrl || '',
         parentLabel: adSet.name,
       });
     } catch (err) {
