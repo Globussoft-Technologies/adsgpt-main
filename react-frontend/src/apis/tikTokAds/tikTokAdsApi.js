@@ -46,6 +46,31 @@ export const getTiktokAds = async (advertiserId, adgroupId) => {
   return data;
 };
 
+export const getTiktokAdGroupReviewInfo = async (advertiserId, adgroupIds) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/adgroup-review-info`, {
+    params: { advertiserId, adgroupIds: Array.isArray(adgroupIds) ? adgroupIds.join(',') : adgroupIds },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
+export const getTiktokAdReviewInfo = async (advertiserId, adIds) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/ad-review-info`, {
+    params: { advertiserId, adIds: Array.isArray(adIds) ? adIds.join(',') : adIds },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
+export const appealTiktokAdGroup = async ({ advertiserId, adgroupId, adId, appealReason, attachmentList }) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/tiktok-ads/adgroup-appeal`,
+    { advertiserId, adgroupId, adId, appealReason, attachmentList },
+    { headers: getAuthHeaders() }
+  );
+  return data;
+};
+
 export const disconnectTiktokUser = async (userId) => {
   const { data } = await axios.delete(`${BASE_URL}/adsgpt/tiktok-ads/users/${userId}`, {
     headers: getAuthHeaders(),

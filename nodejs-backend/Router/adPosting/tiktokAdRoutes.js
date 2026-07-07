@@ -41,6 +41,11 @@ router.get("/get-ads", tiktokAdController.getAds);
 router.get("/get-insights", tiktokAdController.getInsights);
 router.get("/get-dashboard-data", tiktokAdController.getDashboardData);
 
+// ─── Ad review ──────────────────────────────────────────────────────────────
+router.get("/adgroup-review-info", tiktokAdController.getAdGroupReviewInfo);
+router.get("/ad-review-info", tiktokAdController.getAdReviewInfo);
+router.post("/adgroup-appeal", tiktokAdController.appealAdGroup);
+
 // ─── Wizard config + pickers ─────────────────────────────────────────────────
 router.get("/wizard-schema", tiktokAdController.getWizardSchema);
 router.get("/get-identities", tiktokAdController.getIdentities);

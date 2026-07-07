@@ -334,6 +334,7 @@ const billingEventForGoal = (goal) => {
     case 'CLICK':
     case 'TRAFFIC':
     case 'LANDING_PAGE':
+    case 'PAGE_VISIT':
     default:
       return 'CPC';
   }
@@ -390,6 +391,36 @@ const isLeadGeneration = (objectiveKey) => objectiveKey === 'LEAD_GENERATION';
 const leadSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
 const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
 
+// App Promotion requires a campaign-level app_promotion_type (confirmed via
+// TikTok's official "App promotion" doc) — App Pre-Registration is left out
+// since it's allowlist-only.
+const isAppPromotion = (objectiveKey) => objectiveKey === 'APP_PROMOTION';
+const APP_PROMOTION_TYPES = [
+  { key: 'APP_INSTALL', label: 'App install' },
+  { key: 'APP_RETARGETING', label: 'App retargeting' },
+];
+
+// Minimum daily ad-group budget per currency, confirmed via TikTok's official
+// "Budget verification ratio and value range for each currency" doc — this is
+// base minimum (20) × that currency's verification ratio. Only currencies
+// with a ratio other than 1 need a distinct entry; anything not listed here
+// (USD, EUR, GBP, AUD, CAD, SGD, CHF, ARS, BRL, ILS, MYR, NZD, PEN, QAR, RON,
+// SAR, AED, etc.) keeps the base minimum of 20 since their ratio is 1.
+const AD_GROUP_MIN_BUDGET_BY_CURRENCY = {
+  JPY: 2000, HKD: 200, RUB: 2000, ZAR: 200, KRW: 20000, PLN: 80,
+  DKK: 200, SEK: 200, NOK: 200, TRY: 200, MXN: 200, THB: 200, CNY: 200,
+  DZD: 2000, BDT: 2000, BOB: 200, CLP: 20000, COP: 20000, CRC: 20000,
+  CZK: 200, EGP: 200, GTQ: 200, HNL: 200, ISK: 2000, INR: 2000,
+  IDR: 200000, KES: 2000, MOP: 200, TWD: 200, NIO: 200, NGN: 2000,
+  PKR: 2000, PYG: 200000, PHP: 1000, UAH: 200, UYU: 200, VEF: 2000000,
+  VND: 200000, HUF: 20,
+};
+const adGroupMinBudget = (currency) => AD_GROUP_MIN_BUDGET_BY_CURRENCY[currency] || 20;
+// Campaign-level minimum is base 50 (vs. the ad group's base 20) × the same
+// per-currency ratio — i.e. exactly 2.5x the ad group minimum for every
+// currency, per TikTok's daily budget value range tables.
+const campaignMinBudget = (currency) => adGroupMinBudget(currency) * 2.5;
+
 // Whether the ad requires a destination website URL. TRAFFIC is the only
 // objective that requires it on the ad itself — every other objective either
 // has no external destination (Reach, Engagement, App promotion, Video
@@ -397,6 +428,23 @@ const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
 // drives to a product/catalog destination configured elsewhere (Product
 // sales), not a standalone landing page URL on the ad.
 const objectiveNeedsLandingUrl = (objectiveKey) => objectiveKey === 'TRAFFIC';
+
+// Community Interaction has two ad-group optimization goals with very
+// different ad-level destination requirements (confirmed via TikTok's
+// official "Create Community Interaction ads" doc):
+//   • FOLLOWERS  → destination is always the TikTok profile, no extra fields
+//   • PAGE_VISIT → advertiser picks one of 3 destinations via
+//                  tiktok_page_category: PROFILE_PAGE (none), OTHER_TIKTOK_PAGE
+//                  (landing_page_url = a TikTok page URL), or TIKTOK_INSTANT_PAGE
+//                  (page_id, same field Lead Gen's Instant Form uses)
+const isEngagementPageVisit = (objectiveKey, optimizationGoal) =>
+  objectiveKey === 'ENGAGEMENT' && optimizationGoal === 'PAGE_VISIT';
+
+const TIKTOK_PAGE_CATEGORIES = [
+  { value: 'PROFILE_PAGE', label: 'Account profile' },
+  { value: 'OTHER_TIKTOK_PAGE', label: 'Other TikTok page (Playlist, Hashtag, Music, Branded Effect)' },
+  { value: 'TIKTOK_INSTANT_PAGE', label: 'TikTok Instant Page' },
+];
 
 // TikTok caps ad text at 100 characters — but if it contains any CJK
 // (Chinese, Japanese, Korean) fullwidth character, the cap drops to 50,
@@ -411,6 +459,14 @@ const adTextMaxLength = (text) => (CJK_FULLWIDTH_RE.test(text) ? 50 : 100);
 const AD_TEXT_LENGTH_ERROR =
   'Text must be between 1 and 100 characters. (For Chinese, Japanese or Korean: 1-50 fullwidth characters or 1-100 halfwidth)';
 
+// These are TikTok's "Standard Events" names (ads.tiktok.com/help/article/
+// standard-events-parameters), which is what /adgroup/create/'s
+// optimization_event field expects. Do NOT source this list from
+// pixel_event_create.yml's PixelEventType enum — that enum belongs to the
+// unrelated /pixel/event/create/ endpoint (server-side event reporting), not
+// ad group creation. The SDK's AdgroupCreateBody model has no enum constraint
+// on optimization_event (plain string), so the Standard Events doc is the
+// authoritative source here.
 const PIXEL_EVENTS_BY_OBJECTIVE = {
   PRODUCT_SALES: [
     { value: 'COMPLETE_PAYMENT', label: 'Complete payment' },
@@ -1066,6 +1122,7 @@ const CreateCampaignWizard = ({
         budget: context.budget != null ? Number(context.budget) : 50,
         budgetOptimizeOn: raw.budget_optimize_on || false,
         specialIndustries: raw.special_industries || [],
+        appPromotionType: raw.app_promotion_type || 'APP_INSTALL',
       };
     }
     if (isEditAdGroup) {
@@ -1169,7 +1226,9 @@ const CreateCampaignWizard = ({
     pixelId: '',
     optimizationEvent: '',
     leadGenSubType: '',
+    appPromotionType: 'APP_INSTALL',
     pageId: '',
+    tiktokPageCategory: 'PROFILE_PAGE',
     identityId: '',
     mediaType: 'video',
     videoUrl: '',
@@ -1419,6 +1478,7 @@ const CreateCampaignWizard = ({
       objectiveType: o.objectiveType,
       optimizationGoal: o.optimizationGoals?.[0] || '',
       leadGenSubType: '',
+      appPromotionType: 'APP_INSTALL',
       pageId: '',
       pixelId: '',
       optimizationEvent: '',
@@ -1437,8 +1497,13 @@ const CreateCampaignWizard = ({
     }
     if (targetStep === 1) {
       if (!form.campaignName.trim()) errs.campaignName = 'Campaign name is required';
-      if (form.budgetMode !== 'BUDGET_MODE_INFINITE' && (!form.budget || Number(form.budget) <= 0)) {
-        errs.budget = 'Enter a valid budget';
+      if (!form.budget || Number(form.budget) <= 0) {
+        if (form.budgetMode !== 'BUDGET_MODE_INFINITE') errs.budget = 'Enter a valid budget';
+      } else if (
+        form.budgetMode !== 'BUDGET_MODE_INFINITE' &&
+        Number(form.budget) < campaignMinBudget(currency)
+      ) {
+        errs.budget = `Minimum budget is ${campaignMinBudget(currency)} ${currency}`;
       }
     }
     if (targetStep === 2) {
@@ -1446,8 +1511,11 @@ const CreateCampaignWizard = ({
       if (!form.optimizationGoal) errs.optimizationGoal = 'Optimization goal is required';
       if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
         errs.adgroupBudget = 'Daily budget is required';
-      } else if (form.budgetMode !== 'BUDGET_MODE_INFINITE' && Number(form.adgroupBudget) < 20) {
-        errs.adgroupBudget = `Minimum budget is 20 ${currency}`;
+      } else if (
+        form.budgetMode !== 'BUDGET_MODE_INFINITE' &&
+        Number(form.adgroupBudget) < adGroupMinBudget(currency)
+      ) {
+        errs.adgroupBudget = `Minimum budget is ${adGroupMinBudget(currency)} ${currency}`;
       }
       // locationIds empty = all locations selected — no validation error needed
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
@@ -1456,9 +1524,6 @@ const CreateCampaignWizard = ({
       if (needsPixel) {
         if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
         if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
-      }
-      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
-        errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
       }
       if (form.scheduleStartTime && form.scheduleEndTime) {
         if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
@@ -1503,6 +1568,21 @@ const CreateCampaignWizard = ({
         !form.landingPageUrl.trim()
       ) {
         errs.landingPageUrl = 'Destination URL is required';
+      }
+      // Lead Generation's Instant Form path routes through a TikTok page
+      // instead of a landing URL — that page reference is mandatory too.
+      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
+        errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
+      }
+      // Community Interaction with the "TikTok page visits" goal requires a
+      // destination pick, and (except for Account profile) a value for it.
+      if (isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)) {
+        if (form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && !form.landingPageUrl.trim()) {
+          errs.landingPageUrl = 'Enter the TikTok page URL';
+        }
+        if (form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && !form.pageId) {
+          errs.pageId = 'Enter the TikTok Instant Page ID';
+        }
       }
     }
     return errs;
@@ -1617,8 +1697,20 @@ const CreateCampaignWizard = ({
               ad_id: context.id,
               ad_name: form.adName,
               ad_text: form.adText,
-              call_to_action: form.cta,
-              ...(isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+              ...(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS'
+                ? {}
+                : { call_to_action: form.cta }),
+              ...(isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)
+                ? {
+                    tiktok_page_category: form.tiktokPageCategory,
+                    ...(form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && form.landingPageUrl
+                      ? { landing_page_url: form.landingPageUrl }
+                      : {}),
+                    ...(form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && form.pageId
+                      ? { page_id: Number(form.pageId) }
+                      : {}),
+                  }
+                : isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
                 ? { page_id: Number(form.pageId) }
                 : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
                 ? { landing_page_url: form.landingPageUrl }
@@ -1658,6 +1750,7 @@ const CreateCampaignWizard = ({
           budget: Number(form.budget),
           budgetOptimizeOn: form.budgetOptimizeOn,
           specialIndustries: form.specialIndustries,
+          ...(isAppPromotion(form.objectiveKey) ? { appPromotionType: form.appPromotionType } : {}),
         });
         campaignId = res.campaignId;
         setCreated((c) => ({ ...c, campaignId }));
@@ -1760,11 +1853,26 @@ const CreateCampaignWizard = ({
           identity_id: form.identityId,
           identity_type: 'CUSTOMIZED_USER',
           ad_text: form.adText,
-          call_to_action: form.cta,
-          // Lead-gen instant-form ads route to a TikTok page; objectives that
-          // drive to a website send the landing URL; Engagement / App promotion
-          // take neither.
-          ...(isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
+          // Community Interaction's Follow goal disallows call_to_action
+          // entirely (destination is fixed to the TikTok profile).
+          ...(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS'
+            ? {}
+            : { call_to_action: form.cta }),
+          // Community Interaction's "TikTok page visits" goal picks one of 3
+          // destinations; Lead-gen instant-form ads route to a TikTok page;
+          // objectives that drive to a website send the landing URL;
+          // Engagement/Follow and App promotion take neither.
+          ...(isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)
+            ? {
+                tiktok_page_category: form.tiktokPageCategory,
+                ...(form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && form.landingPageUrl
+                  ? { landing_page_url: form.landingPageUrl }
+                  : {}),
+                ...(form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && form.pageId
+                  ? { page_id: Number(form.pageId) }
+                  : {}),
+              }
+            : isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
             ? { page_id: Number(form.pageId) }
             : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
             ? { landing_page_url: form.landingPageUrl }
@@ -1886,6 +1994,28 @@ const CreateCampaignWizard = ({
                 {errors.leadGenSubType && <p className="text-xs text-red-500">{errors.leadGenSubType}</p>}
               </div>
             )}
+            {isAppPromotion(form.objectiveKey) && (
+              <div className="space-y-2 rounded-xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 p-3 dark:bg-[#15DCFF]/5">
+                <p className="text-xs font-semibold text-[#15DCFF]">App promotion type</p>
+                <div className="flex flex-wrap gap-2">
+                  {APP_PROMOTION_TYPES.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => update({ appPromotionType: t.key })}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        form.appPromotionType === t.key
+                          ? 'bg-[#15DCFF] text-white'
+                          : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {errors.appPromotionType && <p className="text-xs text-red-500">{errors.appPromotionType}</p>}
+              </div>
+            )}
             {OBJECTIVE_ASSET_NOTE[form.objectiveKey] && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
                 <span className="font-semibold">Heads up:</span>{' '}
@@ -1971,10 +2101,10 @@ const CreateCampaignWizard = ({
                 label={`Budget (${currency})`}
                 value={form.budget}
                 onChange={(v) => update({ budget: v })}
-                min={50}
+                min={campaignMinBudget(currency)}
                 required
                 error={errors.budget}
-                hint="TikTok requires at least 50 USD/day at the campaign level."
+                hint={`TikTok requires at least ${campaignMinBudget(currency)} ${currency}/day at the campaign level.`}
               />
             )}
           </div>
@@ -2070,61 +2200,6 @@ const CreateCampaignWizard = ({
               </div>
             )}
 
-            {isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && (
-              <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 dark:bg-purple-500/5">
-                <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
-                  TikTok Instant Form
-                </p>
-                {loadingLeadForms ? (
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Loading forms…
-                  </div>
-                ) : (
-                  <>
-                    {leadForms.length > 0 ? (
-                      <SelectField
-                        label="Instant form"
-                        value={form.pageId}
-                        onChange={(v) => update({ pageId: v })}
-                        options={[
-                          { value: '', label: '— select form —' },
-                          ...leadForms.map((f) => ({ value: String(f.pageId), label: f.name || String(f.pageId) })),
-                        ]}
-                        required
-                        error={errors.pageId}
-                      />
-                    ) : (
-                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-                        No forms loaded. Paste the Page ID from TikTok Ads Manager (Tools → Leads → Instant Forms).
-                      </div>
-                    )}
-                    <TextField
-                      label="Or enter Page ID manually"
-                      value={manualPageId}
-                      onChange={(v) => setManualPageId(v)}
-                      placeholder="e.g. 123456789"
-                      hint="Enter the ID and click Use to select it."
-                    />
-                    {manualPageId.trim() && (
-                      <button
-                        type="button"
-                        onClick={() => update({ pageId: manualPageId.trim() })}
-                        className="rounded-full bg-purple-600 px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
-                      >
-                        Use {manualPageId.trim()}
-                      </button>
-                    )}
-                    {form.pageId && (
-                      <p className="text-xs text-gray-600 dark:text-white/60">
-                        Selected Page ID: <span className="font-mono font-medium">{form.pageId}</span>
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
             <MultiSelectField
               label="Placements (optional)"
               hint="Leave empty or select TikTok only for standard campaigns."
@@ -2150,10 +2225,10 @@ const CreateCampaignWizard = ({
                 label={`${form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
                 value={form.adgroupBudget}
                 onChange={(v) => update({ adgroupBudget: v })}
-                min={20}
+                min={adGroupMinBudget(currency)}
                 required
                 error={errors.adgroupBudget}
-                hint={`TikTok requires at least 20 ${currency}/day at the ad-group level.`}
+                hint={`TikTok requires at least ${adGroupMinBudget(currency)} ${currency}/day at the ad-group level.`}
               />
             )}
             {form.optimizationGoal === 'REACH' && (
@@ -2486,15 +2561,17 @@ const CreateCampaignWizard = ({
               hint={`${form.adText.length}/${adTextMaxLength(form.adText)} characters`}
             />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <SelectField
-                label="Call to action"
-                value={form.cta}
-                onChange={(v) => update({ cta: v })}
-                options={(schema?.ctas || ['LEARN_MORE']).map((c) => {
-                  const label = c.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-                  return { value: c, label: c === 'LEARN_MORE' ? `${label} (Recommended)` : label };
-                })}
-              />
+              {!(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS') && (
+                <SelectField
+                  label="Call to action"
+                  value={form.cta}
+                  onChange={(v) => update({ cta: v })}
+                  options={(schema?.ctas || ['LEARN_MORE']).map((c) => {
+                    const label = c.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+                    return { value: c, label: c === 'LEARN_MORE' ? `${label} (Recommended)` : label };
+                  })}
+                />
+              )}
               {objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && (
                 <TextField
                   label="Landing page URL"
@@ -2506,6 +2583,96 @@ const CreateCampaignWizard = ({
                 />
               )}
             </div>
+
+            {isEngagementPageVisit(form.objectiveKey, form.optimizationGoal) && (
+              <div className="space-y-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 dark:bg-blue-500/5">
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Destination</p>
+                <SelectField
+                  label="TikTok page"
+                  value={form.tiktokPageCategory}
+                  onChange={(v) => update({ tiktokPageCategory: v })}
+                  options={TIKTOK_PAGE_CATEGORIES}
+                />
+                {form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && (
+                  <TextField
+                    label="TikTok page URL"
+                    value={form.landingPageUrl}
+                    onChange={(v) => update({ landingPageUrl: v })}
+                    placeholder="https://www.tiktok.com/..."
+                    hint="Copy this from a Playlist, Hashtag, Music, or Branded Effect page in the TikTok app (top-right menu → copy URL)."
+                    required
+                    error={errors.landingPageUrl}
+                  />
+                )}
+                {form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && (
+                  <TextField
+                    label="TikTok Instant Page ID"
+                    value={form.pageId}
+                    onChange={(v) => update({ pageId: v })}
+                    placeholder="e.g. 123456789"
+                    hint="Get this from TikTok Ads Manager's Instant Page editor, or from an existing page loaded above."
+                    required
+                    error={errors.pageId}
+                  />
+                )}
+              </div>
+            )}
+
+            {isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && (
+              <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 dark:bg-purple-500/5">
+                <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                  TikTok Instant Form
+                </p>
+                {loadingLeadForms ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading forms…
+                  </div>
+                ) : (
+                  <>
+                    {leadForms.length > 0 ? (
+                      <SelectField
+                        label="Instant form"
+                        value={form.pageId}
+                        onChange={(v) => update({ pageId: v })}
+                        options={[
+                          { value: '', label: '— select form —' },
+                          ...leadForms.map((f) => ({ value: String(f.pageId), label: f.name || String(f.pageId) })),
+                        ]}
+                        required
+                        error={errors.pageId}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                        No forms loaded. Paste the Page ID from TikTok Ads Manager (Tools → Leads → Instant Forms).
+                      </div>
+                    )}
+                    <TextField
+                      label="Or enter Page ID manually"
+                      value={manualPageId}
+                      onChange={(v) => setManualPageId(v)}
+                      placeholder="e.g. 123456789"
+                      hint="Enter the ID and click Use to select it."
+                    />
+                    {manualPageId.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => update({ pageId: manualPageId.trim() })}
+                        className="rounded-full bg-purple-600 px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                      >
+                        Use {manualPageId.trim()}
+                      </button>
+                    )}
+                    {form.pageId && (
+                      <p className="text-xs text-gray-600 dark:text-white/60">
+                        Selected Page ID: <span className="font-mono font-medium">{form.pageId}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <TextField
               label="Impression tracking URL (optional)"
               value={form.impressionTrackingUrl}
@@ -2612,6 +2779,12 @@ const CreateCampaignWizard = ({
                     <ReviewField
                       label="Lead path"
                       value={LEAD_SUB_TYPES.find((s) => s.key === form.leadGenSubType)?.label}
+                    />
+                  )}
+                  {isAppPromotion(form.objectiveKey) && (
+                    <ReviewField
+                      label="App promotion type"
+                      value={APP_PROMOTION_TYPES.find((t) => t.key === form.appPromotionType)?.label}
                     />
                   )}
                   <ReviewField label="Optimization goal" value={form.optimizationGoal} />

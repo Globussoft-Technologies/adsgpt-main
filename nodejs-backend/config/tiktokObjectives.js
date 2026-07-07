@@ -121,9 +121,11 @@ const TIKTOK_OBJECTIVES = [
     // Community Interaction runs only via Spark Ads (boosting an existing
     // organic TikTok video post), which structurally excludes images.
     videoOnly: true,
-    // Live API enum is "PROFILE_VIEWS" (plural); both use OCPM billing.
-    optimizationGoals: ["FOLLOWERS", "PROFILE_VIEWS"],
-    billingEvents: ["OCPM"],
+    // Confirmed via TikTok's official "Create Community Interaction ads" doc:
+    // FOLLOWERS (Follow, billed OCPM) and PAGE_VISIT (TikTok page visits,
+    // billed CPC) are the only two valid ad-group optimization goals.
+    optimizationGoals: ["FOLLOWERS", "PAGE_VISIT"],
+    billingEvents: ["OCPM", "CPC"],
     requiresCta: true,
     defaultBudgetMode: BUDGET_MODES.DAILY,
   },

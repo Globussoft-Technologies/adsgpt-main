@@ -33,6 +33,7 @@ import {
   Layers,
   Pencil,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import { FaTiktok } from 'react-icons/fa6';
 import CreateCampaignWizard from './CreateCampaignWizard';
@@ -46,6 +47,8 @@ import {
   updateTiktokStatus,
   disconnectTiktokUser,
   checkTiktokAccount,
+  getTiktokAdGroupReviewInfo,
+  getTiktokAdReviewInfo,
 } from '@/apis/tikTokAds/tikTokAdsApi';
 import toast from 'react-hot-toast';
 
@@ -252,6 +255,54 @@ const StatusBadge = ({ status }) => {
       }`}
     >
       {status || '—'}
+    </span>
+  );
+};
+
+// Shows why TikTok's review rejected (or partially rejected) an ad group/ad —
+// only rendered when reviewInfo indicates a problem, so it stays invisible
+// for normal paused-by-choice rows.
+const RejectionWarning = ({ reviewInfo }) => {
+  const [open, setOpen] = useState(false);
+  if (!reviewInfo || reviewInfo.isApproved !== false) return null;
+
+  const reasons = (reviewInfo.rejectInfo || []).flatMap((r) => r.reasons || []);
+  const suggestion = reviewInfo.rejectInfo?.[0]?.suggestion;
+  const forbidden = [
+    reviewInfo.forbiddenPlacements?.length && `Placements: ${reviewInfo.forbiddenPlacements.join(', ')}`,
+    reviewInfo.forbiddenLocations?.length && `Locations: ${reviewInfo.forbiddenLocations.join(', ')}`,
+    reviewInfo.forbiddenAges?.length && `Ages: ${reviewInfo.forbiddenAges.join(', ')}`,
+  ].filter(Boolean);
+
+  return (
+    <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        title="Review rejected — click for details"
+        className="flex h-5 w-5 items-center justify-center rounded-full text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+      >
+        <AlertTriangle className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-6 z-20 w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg dark:border-white/10 dark:bg-[#1A1A1A]">
+          <p className="mb-1 font-semibold text-amber-600 dark:text-amber-400">
+            {reviewInfo.reviewStatus === 'UNAVAILABLE' ? 'Rejected — cannot deliver' : 'Partially rejected'}
+          </p>
+          {reasons.length > 0 && (
+            <ul className="mb-1.5 list-disc space-y-0.5 pl-4 text-gray-600 dark:text-white/70">
+              {reasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          )}
+          {forbidden.length > 0 && (
+            <p className="mb-1.5 text-gray-500 dark:text-white/50">{forbidden.join(' · ')}</p>
+          )}
+          {suggestion && <p className="text-gray-500 dark:text-white/50">{suggestion}</p>}
+        </div>
+      )}
     </span>
   );
 };
@@ -475,12 +526,42 @@ const TikTokAdsDashboard = () => {
       } catch {
         // Reporting permission may not be granted yet.
       }
-      setRows(mergeInsights(res.adGroups || [], insightsRows).filter((r) => r.status !== 'DELETED'));
+      const merged = mergeInsights(res.adGroups || [], insightsRows).filter((r) => r.status !== 'DELETED');
+      setRows(merged);
+      attachAdGroupReviewInfo(merged);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to load ad groups');
       setRows([]);
     } finally {
       setLoadingRows(false);
+    }
+  };
+
+  // Paused ad groups are frequently paused because TikTok's review rejected
+  // them (fully or partially) — fetch the reason so users don't have to guess
+  // why delivery stopped. Best-effort: silently skip if the call fails.
+  const attachAdGroupReviewInfo = async (rowsToCheck) => {
+    const pausedIds = rowsToCheck.filter((r) => r.status === 'PAUSED').map((r) => r.id).slice(0, 20);
+    if (!pausedIds.length) return;
+    try {
+      const res = await getTiktokAdGroupReviewInfo(selectedAccount.id, pausedIds);
+      const byId = new Map((res.adGroups || []).map((info) => [info.adgroupId, info]));
+      setRows((prev) => prev.map((r) => (byId.has(r.id) ? { ...r, reviewInfo: byId.get(r.id) } : r)));
+    } catch {
+      // Review info is a nice-to-have — don't block the row list on it.
+    }
+  };
+
+  // Same idea at the ad level.
+  const attachAdReviewInfo = async (rowsToCheck) => {
+    const pausedIds = rowsToCheck.filter((r) => r.status === 'PAUSED').map((r) => r.id).slice(0, 100);
+    if (!pausedIds.length) return;
+    try {
+      const res = await getTiktokAdReviewInfo(selectedAccount.id, pausedIds);
+      const byId = new Map((res.ads || []).map((info) => [info.adId, info]));
+      setRows((prev) => prev.map((r) => (byId.has(r.id) ? { ...r, reviewInfo: byId.get(r.id) } : r)));
+    } catch {
+      // Review info is a nice-to-have — don't block the row list on it.
     }
   };
 
@@ -504,7 +585,9 @@ const TikTokAdsDashboard = () => {
       } catch {
         // Reporting permission may not be granted yet.
       }
-      setRows(mergeInsights(res.ads || [], insightsRows).filter((r) => r.status !== 'DELETED'));
+      const merged = mergeInsights(res.ads || [], insightsRows).filter((r) => r.status !== 'DELETED');
+      setRows(merged);
+      attachAdReviewInfo(merged);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to load ads');
       setRows([]);
@@ -953,6 +1036,7 @@ const TikTokAdsDashboard = () => {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <StatusBadge status={row.status} />
+                            <RejectionWarning reviewInfo={row.reviewInfo} />
                             <ToggleSwitch status={row.status} onToggle={(e) => toggleStatus(e, row)} disabled={row.status === 'DELETED'} />
                           </div>
                         </td>

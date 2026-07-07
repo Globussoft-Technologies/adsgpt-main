@@ -97,6 +97,9 @@ class TiktokAdController {
     this.createPixel = this.createPixel.bind(this);
     this.getLeadForms = this.getLeadForms.bind(this);
     this.getLeads = this.getLeads.bind(this);
+    this.getAdGroupReviewInfo = this.getAdGroupReviewInfo.bind(this);
+    this.getAdReviewInfo = this.getAdReviewInfo.bind(this);
+    this.appealAdGroup = this.appealAdGroup.bind(this);
   }
 
   /**
@@ -390,11 +393,11 @@ class TiktokAdController {
         name: g.adgroup_name,
         campaignId: String(g.campaign_id),
         campaignName: g.campaign_name,
-        status: mapTiktokStatus(g.operation_status || g.status),
+        status: mapTiktokStatus(g.operation_status || g.secondary_status),
         budget: g.budget,
         budgetMode: g.budget_mode,
-        bid: g.bid,
-        optimizationGoal: g.optimize_goal,
+        bid: g.bid_price,
+        optimizationGoal: g.optimization_goal,
         createTime: g.create_time,
         modifyTime: g.modify_time,
         raw: g,
@@ -411,6 +414,237 @@ class TiktokAdController {
       logger.error(`TikTok getAdGroups error: ${error.message}`);
       return res.status(error.status || 500).json({
         error: error.userMessage || "Failed to fetch TikTok ad groups",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * Get review status + rejection reasons for up to 20 ad groups (and their
+   * ads) in one call. Surfaces WHY a rejected ad group/ad can't deliver —
+   * forbidden placements/ages/locations, content-specific reject reasons and
+   * fix suggestions — so the wizard can show actionable feedback instead of
+   * just a generic "rejected" status.
+   */
+  async getAdGroupReviewInfo(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get ad group + ad review info'
+       #swagger.description = 'Proxies TikTok Marketing API GET /adgroup/review_info/. Returns review status and rejection reasons for up to 20 ad groups, plus a per-ad breakdown for ads within them (ad_review_map + ad_group_review_map).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['adgroupIds'] = { in: 'query', required: true, description: 'Comma-separated ad group IDs (max 20)', type: 'string', example: '1789012345678902,1789012345678903' }
+       #swagger.responses[200] = {
+         description: "Review info",
+         schema: {
+           status: true,
+           adGroups: [{ adgroupId: "1789012345678902", isApproved: false, reviewStatus: "PART_AVAILABLE", containsRejectedAds: true, forbiddenPlacements: ["PLACEMENT_TIKTOK"], forbiddenAges: [], forbiddenLocations: ["RU"], rejectInfo: [{ suggestion: "Please add background audio...", reasons: ["The ad or video has no background audio..."] }] }],
+           ads: [{ adId: "1789012345678999", adgroupId: "1789012345678902", isApproved: true, reviewStatus: "PART_AVAILABLE", forbiddenPlacements: [], rejectInfo: [] }]
+         }
+       }
+       #swagger.responses[400] = { description: "advertiserId and adgroupIds are required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok ad group review info" }
+    */
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, adgroupIds } = req.query;
+      if (!advertiserId || !adgroupIds) {
+        return res.status(400).json({ error: "advertiserId and adgroupIds are required" });
+      }
+
+      const ids = String(adgroupIds)
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/adgroup/review_info/",
+        accessToken,
+        params: {
+          advertiser_id: advertiserId,
+          adgroup_ids: JSON.stringify(ids),
+        },
+      });
+
+      const adGroupReviewMap = data?.data?.ad_group_review_map || {};
+      const adReviewMap = data?.data?.ad_review_map || {};
+
+      const adGroups = Object.entries(adGroupReviewMap).map(([adgroupId, info]) => ({
+        adgroupId,
+        isApproved: info.is_approved,
+        reviewStatus: info.review_status,
+        appealStatus: info.appeal_status,
+        containsRejectedAds: info.contains_rejected_ads || info.contain_rejected_ads,
+        forbiddenPlacements: info.forbidden_placements || [],
+        forbiddenAges: info.forbidden_ages || [],
+        forbiddenLocations: info.forbidden_locations || [],
+        forbiddenOperatingSystems: info.forbidden_operation_systems || [],
+        lastAuditTime: info.last_audit_time,
+        rejectInfo: (info.reject_info || []).map((r) => ({
+          suggestion: r.suggestion,
+          reasons: r.reasons || [],
+          forbiddenAges: r.forbidden_ages || [],
+          forbiddenLocations: r.forbidden_locations || [],
+          forbiddenPlacements: r.forbidden_placements || [],
+        })),
+      }));
+
+      const ads = [];
+      Object.entries(adReviewMap).forEach(([adgroupId, adsInGroup]) => {
+        Object.entries(adsInGroup || {}).forEach(([adId, info]) => {
+          ads.push({
+            adId,
+            adgroupId,
+            isApproved: info.is_approved,
+            reviewStatus: info.review_status,
+            forbiddenPlacements: info.forbidden_placements || [],
+            forbiddenAges: info.forbidden_ages || [],
+            forbiddenLocations: info.forbidden_locations || [],
+            forbiddenOperatingSystems: info.forbidden_operation_systems || [],
+            rejectInfo: (info.reject_info || []).map((r) => ({
+              suggestion: r.suggestion,
+              reasons: r.reasons || [],
+            })),
+          });
+        });
+      });
+
+      return res.json({ status: true, adGroups, ads });
+    } catch (error) {
+      logger.error(`TikTok getAdGroupReviewInfo error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok ad group review info",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * Get review status + rejection reasons for up to 100 ads in one call.
+   */
+  async getAdReviewInfo(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Get ad review info'
+       #swagger.description = 'Proxies TikTok Marketing API GET /ad/review_info/. Returns review status and rejection reasons (with fix suggestions) for up to 100 ads.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['adIds'] = { in: 'query', required: true, description: 'Comma-separated ad IDs (max 100)', type: 'string', example: '1789012345678999' }
+       #swagger.responses[200] = {
+         description: "Ad review info",
+         schema: { status: true, ads: [{ adId: "1789012345678999", isApproved: true, reviewStatus: "PART_AVAILABLE", forbiddenPlacements: ["PLACEMENT_HELO"], rejectInfo: [{ suggestion: "Please add background audio...", reasons: ["The ad or video has no background audio..."] }] }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId and adIds are required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok ad review info" }
+    */
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, adIds } = req.query;
+      if (!advertiserId || !adIds) {
+        return res.status(400).json({ error: "advertiserId and adIds are required" });
+      }
+
+      const ids = String(adIds)
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .slice(0, 100);
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/ad/review_info/",
+        accessToken,
+        params: {
+          advertiser_id: advertiserId,
+          ad_ids: JSON.stringify(ids),
+        },
+      });
+
+      const adReviewMap = data?.data?.ad_review_map || {};
+      const ads = Object.entries(adReviewMap).map(([adId, info]) => ({
+        adId,
+        isApproved: info.is_approved,
+        reviewStatus: info.review_status,
+        forbiddenPlacements: info.forbidden_placements || [],
+        forbiddenAges: info.forbidden_ages || [],
+        forbiddenLocations: info.forbidden_locations || [],
+        forbiddenOperatingSystems: info.forbidden_operation_systems || [],
+        rejectInfo: (info.reject_info || []).map((r) => ({
+          suggestion: r.suggestion,
+          reasons: r.reasons || [],
+        })),
+      }));
+
+      return res.json({ status: true, ads });
+    } catch (error) {
+      logger.error(`TikTok getAdReviewInfo error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok ad review info",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * Appeal a rejected ad group's review decision.
+   */
+  async appealAdGroup(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Appeal an ad group rejection'
+       #swagger.description = 'Proxies TikTok Marketing API POST /adgroup/appeal/. Requests re-evaluation of a rejected ad group. After appealing, poll GET /adgroup/review_info/ to see the updated appeal_status.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "application/json": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "adgroupId"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 adgroupId: { type: "string", example: "1789012345678902" },
+                 adId: { type: "string", example: "1789012345678999", description: "Optional — scope the appeal to a specific ad" },
+                 appealReason: { type: "string", example: "The flagged audio issue has been fixed in the re-uploaded video." },
+                 attachmentList: { type: "array", items: { type: "string" }, example: ["https://example.com/proof.png"] }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = { description: "Appeal submitted", schema: { status: true } }
+       #swagger.responses[400] = { description: "advertiserId and adgroupId are required" }
+       #swagger.responses[500] = { description: "Failed to submit TikTok ad group appeal" }
+    */
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, adgroupId, adId, appealReason, attachmentList } = req.body;
+      if (!advertiserId || !adgroupId) {
+        return res.status(400).json({ error: "advertiserId and adgroupId are required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      await tiktokApiRequest({
+        method: "POST",
+        endpoint: "/adgroup/appeal/",
+        accessToken,
+        data: {
+          advertiser_id: advertiserId,
+          adgroup_id: adgroupId,
+          ...(adId ? { ad_id: adId } : {}),
+          ...(appealReason ? { appeal_reason: appealReason } : {}),
+          ...(Array.isArray(attachmentList) && attachmentList.length
+            ? { attachment_list: attachmentList }
+            : {}),
+        },
+      });
+
+      return res.json({ status: true });
+    } catch (error) {
+      logger.error(`TikTok appealAdGroup error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to submit TikTok ad group appeal",
         tiktokCode: error.tiktokCode,
       });
     }
@@ -989,6 +1223,7 @@ class TiktokAdController {
                  budget: { type: "number", example: 100, description: "Required unless budgetMode is BUDGET_MODE_INFINITE" },
                  budgetOptimizeOn: { type: "boolean", example: false },
                  specialIndustries: { type: "array", items: { type: "string" }, example: [] },
+                 appPromotionType: { type: "string", example: "APP_INSTALL", description: "Required when objectiveType is APP_PROMOTION. APP_INSTALL | APP_RETARGETING" },
                  payload: { type: "object", description: "Raw extra TikTok /campaign/create/ fields merged verbatim", example: {} }
                }
              }
@@ -1012,6 +1247,7 @@ class TiktokAdController {
         budget,
         budgetOptimizeOn,
         specialIndustries,
+        appPromotionType,
       } = req.body;
 
       if (!advertiserId) {
@@ -1035,6 +1271,11 @@ class TiktokAdController {
         ...(budgetOptimizeOn ? { budget_optimize_on: true } : {}),
         ...(Array.isArray(specialIndustries) && specialIndustries.length
           ? { special_industries: specialIndustries }
+          : {}),
+        // Required by TikTok's Marketing API when objective_type is
+        // APP_PROMOTION (App install vs App retargeting).
+        ...(objectiveType === "APP_PROMOTION" && appPromotionType
+          ? { app_promotion_type: appPromotionType }
           : {}),
         ...(req.body.payload || {}),
       };
@@ -1998,15 +2239,18 @@ class TiktokAdController {
   /**
    * List TikTok Instant Forms (lead generation forms) for an ad account.
    *
-   * The Lead Forms API is not part of the public Marketing API SDK, so we call
-   * the community-documented /lead/form/list/ endpoint. If TikTok returns a 404
-   * we surface that clearly so the caller can fall back to entering a Page ID
-   * manually.
+   * Confirmed via TikTok's official Marketing API docs ("Create a Lead
+   * Generation ad with optimization location as Instant Form"): call
+   * /page/get/ with business_type=LEAD_GEN to obtain Instant Form page IDs.
+   * The form's CONTENT still has to be authored in TikTok's Instant Page
+   * Editor (no public API exists for that) — this only discovers/reads pages
+   * that already exist. If the account has none yet, or the call fails, fall
+   * back to a manual Page ID input instead of erroring.
    */
   async getLeadForms(req, res) {
     /* #swagger.tags = ['TikTok Ads']
        #swagger.summary = 'List Instant Forms (lead generation)'
-       #swagger.description = 'Lists TikTok Instant Forms for an ad account, used by the Lead Generation objective in the wizard. Not part of the public Marketing API SDK — calls the community-documented /lead/form/list/ endpoint. If TikTok returns 404 (endpoint not allowlisted for this app), responds 200 with an empty list and available:false so the frontend falls back to a manual Page ID input instead of erroring.'
+       #swagger.description = 'Lists TikTok Instant Forms for an ad account, used by the Lead Generation objective in the wizard. Calls the official Marketing API GET /page/get/ endpoint with business_type=LEAD_GEN. The form content itself must still be authored in TikTok Instant Page Editor — no public API exists for creating/editing form content — this only reads existing pages. If TikTok returns 404 or an empty list, responds 200 with an empty list and available:false so the frontend falls back to a manual Page ID input.'
        #swagger.security = [{ "BearerAuth": [] }]
        #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
        #swagger.parameters['pageId'] = { in: 'query', description: 'Filter to forms on this TikTok Page', type: 'string', example: '70123456789PAGE1' }
@@ -2025,21 +2269,21 @@ class TiktokAdController {
       }
 
       const accessToken = await getValidAccessToken(userId);
-      const params = { advertiser_id: advertiserId };
+      const params = { advertiser_id: advertiserId, business_type: "LEAD_GEN" };
       if (pageId) params.page_id = pageId;
 
       const data = await tiktokApiRequest({
         method: "GET",
-        endpoint: "/lead/form/list/",
+        endpoint: "/page/get/",
         accessToken,
         params,
       });
 
-      const forms = (data?.data?.list || data?.data?.forms || []).map((f) => ({
+      const forms = (data?.data?.list || data?.data?.pages || data?.data?.forms || []).map((f) => ({
         id: String(f.page_id || f.form_id || f.id || ""),
         pageId: String(f.page_id || f.form_id || f.id || ""),
         name: f.page_name || f.form_name || f.name || `Form ${f.page_id || f.id}`,
-        status: f.status || f.form_status,
+        status: f.status || f.form_status || f.page_status,
         raw: f,
       }));
 
@@ -2051,16 +2295,17 @@ class TiktokAdController {
         )}`
       );
 
-      // The Lead Form list endpoint is private/allowlist-only. If TikTok does
-      // not expose it for this app, return an empty list so the wizard falls
-      // back to the manual Page ID input instead of surfacing a 404.
+      // /page/get/ may 404 for accounts with no Instant Forms yet, or if the
+      // app doesn't have this scope enabled. Fall back to the manual Page ID
+      // input rather than erroring — the user can still paste an ID created
+      // directly in TikTok Ads Manager's Instant Page Editor.
       if (error.status === 404) {
         return res.json({
           status: true,
           forms: [],
           available: false,
           message:
-            "Lead Form list endpoint is not available for this TikTok app or account. Use the manual Page ID fallback.",
+            "No Instant Forms found via /page/get/ for this ad account. Create one in TikTok Ads Manager, then use the manual Page ID fallback.",
         });
       }
 
