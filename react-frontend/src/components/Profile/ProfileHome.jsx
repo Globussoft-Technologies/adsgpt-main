@@ -3,11 +3,17 @@ import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2, MoreVertical } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import getCookies from '@/utils/getCookies';
 import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
@@ -338,16 +344,30 @@ export default function ProfileHome() {
                   </button>
                 </div>
               )}
-              {/* cancel button */}
+              {/* more options (cancel subscription) */}
               {subscriptionType !== '8' && (
-                <a
-                  href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-[50px] cursor-pointer border border-red-500 px-4 py-1.5 text-xs font-medium whitespace-nowrap text-red-500 transition-colors hover:bg-red-50 2xl:text-base dark:border-red-400 dark:text-red-400 dark:hover:bg-red-900/20"
-                >
-                  Cancel
-                </a>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-40">
+                    <DropdownMenuItem asChild>
+                      <a
+                        href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-red-500 cursor-pointer dark:text-red-400"
+                      >
+                        Cancel subscription
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
 
