@@ -1076,6 +1076,11 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
         objective: r.objective,
         conversionLocation: r.conversionLocation,
         pageId: r.pageId || '',
+        // instagramUserId (2026-07-07 fix): only ever set via the Page
+        // picker's onPickPage handler on the Ad Set step, which Add Ad
+        // skips — with no other UI control for it, this silently dropped
+        // the ad's Instagram identity even when the Page has one linked.
+        instagramUserId: r.instagramUserId || '',
         // App-cell creative inputs — Add Ad skips the Ad Set step (the ad
         // set already exists), so these are never collected anywhere else
         // in this flow. Only relevant for "app" promotedObjectShape cells;
@@ -1120,6 +1125,10 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
           leadFormId: r.leadFormId || '',
           objectStoreUrl: r.objectStoreUrl || '',
           applicationId: r.applicationId || '',
+          // Real gap (2026-07-07): missing here meant every Edit Ad save
+          // silently dropped the ad's existing Instagram identity — see
+          // resolveAdForEdit's instagramUserId comment in metaAdLauncherV2.js.
+          instagramUserId: r.instagramUserId || '',
           mediaType: r.mediaType || 'image',
           imageHash: r.imageHash || null,
           videoId: r.videoId || null,

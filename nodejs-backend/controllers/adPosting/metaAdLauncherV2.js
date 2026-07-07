@@ -928,6 +928,135 @@ async function resolvePageIdForAdSet(adSetId, promotedObject) {
   return pageId;
 }
 
+// Resolve pageId + instagramUserId together for the Add-Ad flow specifically
+// (resolveCellForAdSet). Real gap (2026-07-07, found during a proactive
+// audit of Edit Ad Set / Edit Ad / Add Ad / Add Ad Set — not a user report):
+// `instagramUserId` is ONLY ever set via the Page picker's `onPickPage`
+// handler on the Ad Set step (auto-derived from the Page's linked
+// instagram_business_account — see CreateCampaignWizardV2.jsx). Add Ad
+// skips the Ad Set step entirely (the ad set already exists) and there's no
+// other UI control for this field ("the wizard no longer surfaces a
+// (read-only) IG field for it"), so every ad added via Add Ad silently lost
+// its Instagram identity even when the Page has one linked and the ad
+// set's OTHER ads already carry it — not a hard Meta rejection (IG is
+// optional; Meta falls back to a shadow account), but a silent behavior
+// regression the user never asked for.
+//
+// `instagram_user_id` is never on `promoted_object` (same shape gap as
+// `page_id` for non-"page" cells) — it only lives on an ad's creative
+// object_story_spec, set by `buildObjectStorySpec`'s
+// `if (params.instagramUserId) base.instagram_user_id = ...`. Reuses the
+// SAME existing-ad-creative fetch `resolvePageIdForAdSet` already makes for
+// its own fallback, just also reads instagram_user_id off the same
+// response — kept as a separate function (not merged into
+// resolvePageIdForAdSet) so `resolveAdSetForEdit` — which doesn't need
+// instagramUserId at all — doesn't pay for an extra fetch when
+// promoted_object.page_id is already present.
+async function resolveIdentityForAddAd(adSetId, promotedObject) {
+  let pageId = promotedObject?.page_id || null;
+  let instagramUserId = null;
+  try {
+    const ads = await new bizSdk.AdSet(adSetId).getAds(
+      ["creative{object_story_spec,effective_object_story_id}"],
+      { limit: 1 },
+    );
+    const firstAd = (ads || [])[0];
+    const adData = firstAd?._data || firstAd || {};
+    const oss = adData.creative?.object_story_spec;
+    if (!pageId) {
+      pageId = oss?.page_id || null;
+      if (!pageId && adData.creative?.effective_object_story_id) {
+        pageId = String(adData.creative.effective_object_story_id).split("_")[0] || null;
+      }
+    }
+    instagramUserId = oss?.instagram_user_id || null;
+  } catch {
+    /* no readable ad — leave both null; caller's pickers stay empty/optional */
+  }
+  return { pageId, instagramUserId };
+}
+
+// Re-derive a trustworthy objectStoreUrl for an app-shape cell instead of
+// blindly trusting a stored value (subcode 1885270 "Should load matching
+// digital store object" — the app ID and link must resolve to the SAME
+// Meta digital store object). Real trigger (2026-07-07): Add Ad on an
+// existing App Promotion ad set failed with this subcode even though
+// applicationId + objectStoreUrl were both non-empty — audited every
+// interactive picker (AppLinkagePicker keeps both atomic at pick time, no
+// bug found there), so the mismatch most likely originates from an ad set
+// created outside our own wizard flow (this account's userId pattern,
+// e.g. "GPT-435", suggests API/agent-driven creation exists alongside it).
+//
+// Pass 1 (shipped, deployed, re-tested — NO CHANGE): inferred platform from
+// `targeting.user_os`. Didn't help: `user_os` almost certainly isn't set
+// the way `createAdSetV2` sets it on an externally-created ad set, so
+// platform inference silently returned null and the whole re-derivation
+// was skipped with no signal that anything had gone wrong.
+//
+// Pass 2 (current): infers platform from the STORED url's own domain
+// first (`itunes.apple.com`/`apps.apple.com` → ios, `play.google.com` →
+// android) — a signal that exists regardless of how the ad set was
+// created, since Meta already accepted SOME url on it. `userOs` is only a
+// fallback for when the stored url is empty/unparseable. Logs at every
+// branch so a recurrence gives real diagnostic data instead of another
+// silent no-op — see the three log lines below.
+//
+// Used by BOTH `resolveCellForAdSet` (Add Ad — reads applicationId +
+// objectStoreUrl from the ad set's promoted_object) and `resolveAdForEdit`
+// (Edit Ad — mixes applicationId from the ad SET's promoted_object with
+// objectStoreUrl from the AD's own creative link, an even more likely
+// mismatch source since the two values come from genuinely different
+// objects). Extracted as shared from the start this time, rather than
+// waiting for a second endpoint to drift — see the `additionalFields`/
+// resolvePageIdForAdSet gotchas for why that pattern recurred three times
+// this session when NOT done proactively.
+async function resolveObjectStoreUrlForApp(applicationId, storedUrl, userOs, callerLabel) {
+  if (!applicationId) return storedUrl || null;
+  let objectStoreUrl = storedUrl || null;
+  try {
+    const inferPlatformFromUrl = (url) => {
+      if (!url) return null;
+      const u = String(url).toLowerCase();
+      if (u.includes("itunes.apple.com") || u.includes("apps.apple.com")) return "ios";
+      if (u.includes("play.google.com")) return "android";
+      return null;
+    };
+    const os = userOs || [];
+    const platform =
+      inferPlatformFromUrl(objectStoreUrl) ||
+      (os.includes("Android") ? "android" : os.includes("iOS") ? "ios" : null);
+    if (!platform) {
+      logger.warn(
+        `${callerLabel}: couldn't infer platform for application ${applicationId} ` +
+          `(storedUrl=${objectStoreUrl}, user_os=${JSON.stringify(os)}) — keeping stored objectStoreUrl unchanged`,
+      );
+      return objectStoreUrl;
+    }
+    const api = bizSdk.FacebookAdsApi.getDefaultApi();
+    const app = await api.call("GET", [applicationId], { fields: "object_store_urls" });
+    const appData = app?._data || app || {};
+    const liveUrl = pickAppStoreUrl(appData.object_store_urls, platform);
+    if (liveUrl && liveUrl !== objectStoreUrl) {
+      logger.info(
+        `${callerLabel}: objectStoreUrl mismatch for application ${applicationId} ` +
+          `(platform=${platform}) — stored="${objectStoreUrl}", live="${liveUrl}". Using live value.`,
+      );
+      objectStoreUrl = liveUrl;
+    } else if (!liveUrl) {
+      logger.warn(
+        `${callerLabel}: application ${applicationId} has NO live object_store_urls entry ` +
+          `for platform=${platform} (object_store_urls=${JSON.stringify(appData.object_store_urls)}) — ` +
+          `keeping stored objectStoreUrl="${objectStoreUrl}" unchanged, this will likely still fail with subcode 1885270`,
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      `${callerLabel}: failed to re-resolve objectStoreUrl for application ${applicationId}: ${err.message}`,
+    );
+  }
+  return objectStoreUrl;
+}
+
 // ─── resolveCellForAdSet ──────────────────────────────────────────────────────
 
 /**
@@ -988,9 +1117,15 @@ async function resolveCellForAdSet(req, res) {
       return res.status(422).json({ status: false, error: cellInfo.error });
     }
 
-    // Resolve the ad set's Facebook Page so the Add-Ad flow inherits it
-    // (the Lead Form step needs it, and the ad creative is page-scoped).
-    const pageId = await resolvePageIdForAdSet(adSetId, adSetData.promoted_object);
+    // Resolve the ad set's Facebook Page + Instagram identity so the
+    // Add-Ad flow inherits both (the Lead Form step needs the page, the ad
+    // creative is page-scoped, and instagramUserId — see
+    // resolveIdentityForAddAd's docblock — has no other way to reach this
+    // flow at all since Add Ad skips the Page-picker-bearing Ad Set step).
+    const { pageId, instagramUserId } = await resolveIdentityForAddAd(
+      adSetId,
+      adSetData.promoted_object,
+    );
 
     // Real trigger (2026-07-06, Sales/App — but the gap is generic to EVERY
     // "app" promotedObjectShape cell: App Promotion, Traffic/App, Leads/App,
@@ -1005,83 +1140,15 @@ async function resolveCellForAdSet(req, res) {
     // flow. resolveAdSetForEdit and resolveAdForEdit already read these
     // same two fields off promoted_object for their own flows; this was the
     // one resolve endpoint of the three that hadn't inherited the fix.
+    // objectStoreUrl re-derived live rather than trusted verbatim — subcode
+    // 1885270 fix, see resolveObjectStoreUrlForApp's docblock above.
     const applicationId = adSetData.promoted_object?.application_id || null;
-    let objectStoreUrl = adSetData.promoted_object?.object_store_url || null;
-
-    // Real trigger (2026-07-07, subcode 1885270 "Should load matching
-    // digital store object" — "the app ID and link should be resolved to
-    // the same digital store object"): trusting promoted_object's STORED
-    // object_store_url as-is isn't safe. The wizard's own app picker keeps
-    // applicationId + objectStoreUrl atomic at pick time (AppLinkagePicker
-    // sets both from the SAME app record — verified, no bug there), but
-    // this ad set's Add-Ad request still failed with a mismatch, meaning
-    // either the app's store URL changed on Meta's side since the ad set
-    // was created, or the pair was wrong from the start via some other
-    // caller (this account's userId pattern suggests API/agent-driven
-    // creation, not just the interactive wizard, which may not have gone
-    // through AppLinkagePicker's atomic pick at all).
-    //
-    // CORRECTED same day: first attempt inferred platform from
-    // `targeting.user_os`, on the assumption every ad set sets it the way
-    // `createAdSetV2` does. Deployed, re-tested — NO change in outcome,
-    // meaning `user_os` almost certainly ISN'T set in the expected shape on
-    // this particular ad set (consistent with it being created outside our
-    // own create-adset flow). Switched to inferring platform from the
-    // STORED objectStoreUrl's own domain instead — a signal that exists
-    // regardless of how the ad set was created, since Meta accepted SOME
-    // object_store_url on it already. Falls back to targeting.user_os only
-    // if the stored URL is empty/unparseable.
-    //
-    // Also: previously, a live fetch that found NO matching URL for the
-    // inferred platform silently kept the (apparently wrong) stored value
-    // — indistinguishable from "nothing needed fixing." Now logged
-    // explicitly at every branch so a recurrence gives us real diagnostic
-    // data instead of another silent no-op.
-    if (applicationId) {
-      try {
-        const inferPlatformFromUrl = (url) => {
-          if (!url) return null;
-          const u = String(url).toLowerCase();
-          if (u.includes("itunes.apple.com") || u.includes("apps.apple.com")) return "ios";
-          if (u.includes("play.google.com")) return "android";
-          return null;
-        };
-        const userOs = adSetData.targeting?.user_os || [];
-        const platform =
-          inferPlatformFromUrl(objectStoreUrl) ||
-          (userOs.includes("Android") ? "android" : userOs.includes("iOS") ? "ios" : null);
-        if (!platform) {
-          logger.warn(
-            `resolveCellForAdSet: couldn't infer platform for application ${applicationId} ` +
-              `(storedUrl=${objectStoreUrl}, user_os=${JSON.stringify(userOs)}) — keeping stored objectStoreUrl unchanged`,
-          );
-        } else {
-          const api = bizSdk.FacebookAdsApi.getDefaultApi();
-          const app = await api.call("GET", [applicationId], {
-            fields: "object_store_urls",
-          });
-          const appData = app?._data || app || {};
-          const liveUrl = pickAppStoreUrl(appData.object_store_urls, platform);
-          if (liveUrl && liveUrl !== objectStoreUrl) {
-            logger.info(
-              `resolveCellForAdSet: objectStoreUrl mismatch for application ${applicationId} ` +
-                `(platform=${platform}) — stored="${objectStoreUrl}", live="${liveUrl}". Using live value.`,
-            );
-            objectStoreUrl = liveUrl;
-          } else if (!liveUrl) {
-            logger.warn(
-              `resolveCellForAdSet: application ${applicationId} has NO live object_store_urls entry ` +
-                `for platform=${platform} (object_store_urls=${JSON.stringify(appData.object_store_urls)}) — ` +
-                `keeping stored objectStoreUrl="${objectStoreUrl}" unchanged, Add-Ad will likely still fail with subcode 1885270`,
-            );
-          }
-        }
-      } catch (err) {
-        logger.warn(
-          `resolveCellForAdSet: failed to re-resolve objectStoreUrl for application ${applicationId}: ${err.message}`,
-        );
-      }
-    }
+    const objectStoreUrl = await resolveObjectStoreUrlForApp(
+      applicationId,
+      adSetData.promoted_object?.object_store_url || null,
+      adSetData.targeting?.user_os,
+      "resolveCellForAdSet",
+    );
 
     return res.status(200).json({
       status: true,
@@ -1090,6 +1157,7 @@ async function resolveCellForAdSet(req, res) {
       campaignId: campaignData.id,
       adSetId: adSetData.id,
       pageId,
+      instagramUserId,
       applicationId,
       objectStoreUrl,
     });
@@ -1717,6 +1785,7 @@ async function resolveAdForEdit(req, res) {
         "campaign_id",
         "destination_type",
         "promoted_object",
+        "targeting",
       ]);
       adSetData = adSet?._data || adSet || {};
       const campaign = await new bizSdk.Campaign(adSetData.campaign_id).get([
@@ -1740,6 +1809,28 @@ async function resolveAdForEdit(req, res) {
     const cta = link.call_to_action || video.call_to_action || {};
     const isVideo = !!video.video_id;
 
+    // Subcode 1885270 fix ("app ID and link should resolve to the same
+    // digital store object") — same class of bug as resolveCellForAdSet's,
+    // but this endpoint had an EXTRA way to get it wrong: it mixed
+    // applicationId from the ad SET's promoted_object with objectStoreUrl
+    // from the AD's OWN creative link — two genuinely different Meta
+    // objects, not guaranteed consistent with each other. Prefer the ad's
+    // OWN CTA `value.application` first — it was set atomically with
+    // `link.link` by `buildAppLinkData` when THIS ad was created (same
+    // atomicity guarantee as AppLinkagePicker), so the two are guaranteed
+    // to match each other regardless of what the ad set's promoted_object
+    // says. Only fall back to the ad-set level value for older ads / CTA
+    // types that don't carry `value.application`. Then still re-derive
+    // live as a backstop (resolveObjectStoreUrlForApp) in case even the
+    // ad's own historical pairing has since gone stale.
+    const editApplicationId = cta?.value?.application || adSetData.promoted_object?.application_id || null;
+    const editObjectStoreUrl = await resolveObjectStoreUrlForApp(
+      editApplicationId,
+      link.link || null,
+      adSetData.targeting?.user_os,
+      "resolveAdForEdit",
+    );
+
     return res.status(200).json({
       status: true,
       adId: adData.id,
@@ -1748,6 +1839,15 @@ async function resolveAdForEdit(req, res) {
       objective: cellInfo.objective,
       conversionLocation: cellInfo.conversionLocation,
       pageId: oss.page_id || adSetData.promoted_object?.page_id || null,
+      // Real gap (2026-07-07, found in the same proactive audit as
+      // resolveIdentityForAddAd): instagramUserId was never returned here
+      // at all, even though it's already sitting on `oss` from the SAME
+      // fetch — every Edit Ad save would silently DROP an ad's existing
+      // Instagram identity (buildObjectStorySpec only sets
+      // instagram_user_id when the form explicitly carries one; an empty
+      // form.instagramUserId means the rebuilt creative omits it). No
+      // extra API call needed; the data was already in hand.
+      instagramUserId: oss.instagram_user_id || null,
       name: adData.name || "",
       headline: link.name || video.title || "",
       primaryText: link.message || video.message || "",
@@ -1758,8 +1858,8 @@ async function resolveAdForEdit(req, res) {
       leadFormId: cta?.value?.lead_gen_form_id || "",
       // App-cell creative inputs (App Promotion ads) — needed to rebuild the
       // app_link creative on save. Harmless for non-app cells.
-      objectStoreUrl: link.link || "",
-      applicationId: adSetData.promoted_object?.application_id || "",
+      objectStoreUrl: editObjectStoreUrl || "",
+      applicationId: editApplicationId || "",
       // Existing media — reused on save (v1 doesn't swap media).
       mediaType: isVideo ? "video" : "image",
       imageHash: link.image_hash || null,

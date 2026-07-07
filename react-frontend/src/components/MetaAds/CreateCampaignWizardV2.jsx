@@ -413,6 +413,13 @@ function buildInitialForm(context = null) {
     if (typeof context.cbo === 'boolean') base.cbo = context.cbo;
     if (context.campaignBudgetType) base.campaignBudgetType = context.campaignBudgetType;
     if (context.pageId) base.pageId = context.pageId;
+    // Add-Ad fix (2026-07-07) — instagramUserId is normally auto-derived
+    // from the Page picker's onPickPage handler on the Ad Set step, which
+    // Add Ad skips entirely (no other UI sets this field). Without this,
+    // every ad added via Add Ad silently lost its Instagram identity even
+    // when the Page has one linked. resolveCellForAdSet resolves it from
+    // an existing ad's creative (see resolveIdentityForAddAd).
+    if (context.instagramUserId) base.instagramUserId = context.instagramUserId;
     // Add-Ad fix — "app" promotedObjectShape cells need applicationId +
     // objectStoreUrl to build the ad's app_link creative, but Add Ad skips
     // the Ad Set step entirely (the ad set already exists), so nothing else
