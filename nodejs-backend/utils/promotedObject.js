@@ -20,7 +20,8 @@
  *   - page:        { pageId }
  *   - app:         { applicationId, objectStoreUrl }
  *   - pixel:       { pixelId, pixelEventType }
- *   - product_set: { pixelId, productSetId }
+ *   - product_set: { productSetId, pixelEventType? } (pixelId is NOT sent
+ *     to Meta on this shape — see the case's docblock)
  * @returns {object|undefined} the promoted_object payload, or undefined to
  *   signal "omit this field". Callers should `if (po) params.promoted_object
  *   = po;`.
@@ -85,22 +86,29 @@ function buildPromotedObject(shape, params) {
     }
 
     case "product_set": {
-      // Sales/CATALOG (Dynamic Product Ads). Meta pairs the Pixel with a
-      // specific Product Set inside a Catalog — the Pixel identifies the
-      // visitor/conversion stream and the product_set scopes which items
-      // are eligible for display. Both are required by Meta; without
-      // product_set_id the creative falls back to whole-catalog display
-      // which the user didn't intend.
-      const { pixelId, productSetId } = params || {};
-      if (!pixelId || !productSetId) {
+      // Sales/CATALOG (Dynamic Product Ads). Real hit (2026-07-07,
+      // subcode 1885014 "Promoted Object Invalid — invalid combination of
+      // parameters"): the previous shape sent `{ pixel_id, product_set_id }`
+      // on the (incorrect, never-verified-live) assumption that Meta pairs
+      // the Pixel directly with the product_set here. Meta's own
+      // `promoted_object` reference documents exactly two valid
+      // combinations for PRODUCT_CATALOG_SALES: `product_set_id` alone, or
+      // `product_set_id` + `custom_event_type` — `pixel_id` isn't a valid
+      // field on this shape at all. Conversion tracking for DPA comes from
+      // the Catalog's own connected pixel (set up in Commerce Manager),
+      // not from an ad-set-level `promoted_object.pixel_id`. We still
+      // collect `pixelId` from the wizard's Catalog step (it's what
+      // populates the pixelEventType picker via getPixelEvents), but never
+      // forward it to Meta here.
+      const { productSetId, pixelEventType } = params || {};
+      if (!productSetId) {
         throw new Error(
-          "buildPromotedObject('product_set'): pixelId + productSetId are both required",
+          "buildPromotedObject('product_set'): productSetId is required",
         );
       }
-      return {
-        pixel_id: pixelId,
-        product_set_id: productSetId,
-      };
+      const obj = { product_set_id: productSetId };
+      if (pixelEventType) obj.custom_event_type = pixelEventType;
+      return obj;
     }
 
     default:

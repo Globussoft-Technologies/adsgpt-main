@@ -953,13 +953,27 @@ export default function CreateCampaignWizardV2({
       // cached after a successful upload so a re-launch only re-runs the
       // failing step. Branches strictly on mediaType so we never upload
       // both.
+      //
+      // Sales/CATALOG (`template_data` shape) sources images per-product
+      // from the catalog feed — Meta rejects an explicit imageHash/videoId
+      // on this shape (see buildObjectStorySpec), and the AdStep UI
+      // already hides the upload picker for it (`isCatalog` there). Real
+      // hit (2026-07-07): this block ran unconditionally regardless of
+      // cell shape, so a Catalog launch always fell into the image branch
+      // with no file/URL ever collected and failed at
+      // "Provide either an 'image' file or an 'imageUrl'" — before ever
+      // reaching the (already-guarded) backend rejection for sending
+      // media on this shape.
       let imageHash = created.imageHash;
       let videoId = created.videoId;
       // Prefer the auto-thumbnail Meta extracted during upload over a
       // form value that's only set if the user manually overrode it.
       // Falls back to whatever the user typed.
       let videoThumb = form.videoThumbnailUrl || null;
-      if (form.mediaType === 'video') {
+      if (cell.ad.objectStorySpecShape === 'template_data') {
+        imageHash = undefined;
+        videoId = undefined;
+      } else if (form.mediaType === 'video') {
         if (!videoId) {
           const r = await uploadMetaAdVideo({
             adAccountId,
@@ -1014,7 +1028,11 @@ export default function CreateCampaignWizardV2({
         callToAction: form.callToAction,
         status: 'ACTIVE',
       };
-      if (form.mediaType === 'video') {
+      if (cell.ad.objectStorySpecShape === 'template_data') {
+        // Sales/CATALOG — Meta sources images per-product from the
+        // catalog feed; sending imageHash/videoId here is rejected by
+        // the backend's template_data builder.
+      } else if (form.mediaType === 'video') {
         adPayload.videoId = videoId;
         adPayload.videoThumbnailUrl = videoThumb;
       } else {
@@ -3529,29 +3547,6 @@ function LeadFormStep({ form, update, mode = 'create-full', pages = [] }) {
 
 // ─── Step: Ad ───────────────────────────────────────────────────────────────
 
-// Insert-chip toolbar shown above each placeholder-friendly copy field on
-// Sales/CATALOG ads. Click a chip to append `{{product.X}}` to the
-// associated field. Cheap UX nudge so users don't have to remember the
-// exact placeholder syntax Meta documents for Dynamic Product Ads.
-function PlaceholderToolbar({ onInsert, placeholders }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-600 dark:text-white/60">
-      <span className="text-gray-400 dark:text-white/40">Insert:</span>
-      {placeholders.map((p) => (
-        <button
-          key={p.token}
-          type="button"
-          onClick={() => onInsert(p.token)}
-          className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-100 dark:border-white/15 dark:bg-white/5 dark:text-white/75 dark:hover:bg-white/10"
-          title={p.token}
-        >
-          {p.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full', pages = [] }) {
   const requiredFields = new Set(cell?.ad?.requiredFields || []);
   const optionalFields = new Set(cell?.ad?.optionalFields || []);
@@ -3573,24 +3568,20 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
   const isLeadGen =
     cell?.ad?.objectStorySpecShape === 'lead_gen_form' ||
     cell?.ad?.objectStorySpecShape === 'lead_gen_form_with_pixel';
-  // Sales/CATALOG (Dynamic Product Ads). Media comes from the catalog
-  // feed per product, so the upload UI is hidden. Copy fields accept
-  // {{product.X}} placeholders that Meta resolves per product at
-  // delivery; the standard 40/125/30 char caps don't apply (backend Joi
-  // also skips them for template_data). An insert-chip toolbar above
-  // each copy field nudges users toward the right placeholder syntax.
+  // Sales/CATALOG (Dynamic Product Ads). Media comes from the catalog feed
+  // per product, so the upload UI is hidden — that part is genuinely true
+  // (Meta sources images per product regardless of copy). The `{{product.X}}`
+  // placeholder/insert-chip feature that used to live here was REMOVED
+  // 2026-07-07: it was never verified against Meta's real product, and a
+  // direct check of Meta Ads Manager's own Catalog-ad creation flow found
+  // no such feature there at all. Two of the five offered tokens had
+  // already been proven live-broken ({{product.url}}, subcode 2061006;
+  // {{product.description}}, subcode 1487844) before the whole premise
+  // was reconsidered — see gotchas.md for the retrospective. Ad copy for
+  // this cell is now plain literal text like every other cell, with the
+  // same standard 40/125/30 character caps (also reverted in
+  // meta.v2.validator.js).
   const isCatalog = cell?.ad?.objectStorySpecShape === 'template_data';
-  const PRODUCT_PLACEHOLDERS = [
-    { token: '{{product.name}}', label: 'Name' },
-    { token: '{{product.price}}', label: 'Price' },
-    { token: '{{product.current_price}}', label: 'Current price' },
-    { token: '{{product.brand}}', label: 'Brand' },
-    { token: '{{product.description}}', label: 'Description' },
-    { token: '{{product.url}}', label: 'URL' },
-  ];
-  const insertPlaceholder = (fieldKey, token) => {
-    update({ [fieldKey]: `${form[fieldKey] || ''}${token}` });
-  };
 
   // Media source — default to the generated-media library (the primary
   // AdsGPT path). ON shows the combined image+video picker; OFF shows the
@@ -3790,27 +3781,21 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           Ads Manager's own counters and prevents copy that nobody will
           read in full. Carousel variants (Phase 3) will need their own
           shorter caps (~18-char headline). Mirrors the .max() values in
-          buildAdSchemaV2 (meta.v2.validator.js).
-
-          Sales/CATALOG (isCatalog) — placeholder syntax ({{product.X}})
-          expands per product at delivery, so the static caps don't
-          apply. Skip maxLength + show insert-chip toolbar instead. */}
+          buildAdSchemaV2 (meta.v2.validator.js). Applies to Sales/CATALOG
+          too — see isCatalog's docblock above for why the caps are no
+          longer skipped there. */}
       {requiredFields.has('headline') && (
         <div className="flex flex-col gap-1.5">
-          {isCatalog && <PlaceholderToolbar onInsert={(t) => insertPlaceholder('headline', t)} placeholders={PRODUCT_PLACEHOLDERS} />}
           <TextField
             label="Headline"
             required
             value={form.headline}
             onChange={(v) => update({ headline: v })}
-            maxLength={isCatalog ? undefined : 40}
-            placeholder={isCatalog ? 'e.g. Shop {{product.name}}' : 'Short, punchy'}
+            maxLength={40}
+            placeholder="Short, punchy"
             error={errors.headline}
           />
         </div>
-      )}
-      {isCatalog && requiredFields.has('primaryText') && (
-        <PlaceholderToolbar onInsert={(t) => insertPlaceholder('primaryText', t)} placeholders={PRODUCT_PLACEHOLDERS} />
       )}
       {requiredFields.has('primaryText') && (
         <TextAreaField
@@ -3818,37 +3803,34 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           required
           value={form.primaryText}
           onChange={(v) => update({ primaryText: v })}
-          maxLength={isCatalog ? undefined : 125}
+          maxLength={125}
           rows={3}
-          placeholder={isCatalog ? 'e.g. Buy {{product.name}} from {{product.brand}} starting at {{product.current_price}}' : 'The main body copy'}
+          placeholder="The main body copy"
           error={errors.primaryText}
         />
-      )}
-      {isCatalog && (
-        <PlaceholderToolbar onInsert={(t) => insertPlaceholder('description', t)} placeholders={PRODUCT_PLACEHOLDERS} />
       )}
       <TextField
         label="Description"
         value={form.description}
         onChange={(v) => update({ description: v })}
-        maxLength={isCatalog ? undefined : 30}
-        placeholder={isCatalog ? 'Optional · placeholders allowed' : 'Optional secondary copy'}
+        maxLength={30}
+        placeholder="Optional secondary copy"
       />
       {showLinkUrl && (
         <TextField
-          label={isLeadGen ? 'Website URL (fallback)' : isCatalog ? 'Destination URL (placeholder OK)' : 'Destination URL'}
+          label={isLeadGen ? 'Website URL' : isCatalog ? 'Destination URL' : 'Destination URL'}
           hint={
             isLeadGen
               ? 'Meta requires a real website URL on lead ads, but the ad opens your form — this link is only a fallback, not where the button goes.'
               : isCatalog
-              ? 'Use {{product.url}} to send viewers to each product page; or a literal URL to send everyone to one landing page.'
+              ? "Meta sends shoppers to each product's own page automatically. Enter a real URL here as the fallback — usually your store's homepage."
               : undefined
           }
           required={requiredFields.has('linkUrl')}
-          type={isCatalog ? 'text' : 'url'}
+          type="url"
           value={form.linkUrl}
           onChange={(v) => update({ linkUrl: v })}
-          placeholder={isCatalog ? '{{product.url}}' : 'https://example.com/landing'}
+          placeholder="https://example.com/landing"
           error={errors.linkUrl}
         />
       )}

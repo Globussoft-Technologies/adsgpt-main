@@ -702,47 +702,41 @@ function buildAdSchemaV2(objective, conversionLocation) {
     // when those cells land. Mirror these in the wizard's TextField
     // maxLength props (CreateCampaignWizardV2.jsx Ad step).
     //
-    // Sales/CATALOG (template_data shape) is exempt — copy fields hold
-    // {{product.X}} placeholders that Meta resolves per product at
-    // delivery. The pre-render string can be way under 40 chars while
-    // the resolved string is much longer; conversely a literal-only
-    // template might be over 40. Meta handles per-product truncation, so
-    // we just enforce min-1 to avoid empty fields.
-    ...(cell.ad.objectStorySpecShape === "template_data"
-      ? {
-          headline: Joi.string().min(1).required(),
-          primaryText: Joi.string().min(1).required(),
-          description: Joi.string().allow("").default(""),
-        }
-      : {
-          headline: req.has("headline")
-            ? Joi.string().min(1).max(40).required()
-            : Joi.string().allow("").max(40).default(""),
-          primaryText: req.has("primaryText")
-            ? Joi.string().min(1).max(125).required()
-            : Joi.string().allow("").max(125).default(""),
-          description: req.has("description")
-            ? Joi.string().min(1).max(30).required()
-            : Joi.string().allow("").max(30).default(""),
-        }),
+    // Sales/CATALOG (template_data shape) is NOT exempt from these caps —
+    // reverted 2026-07-07. It previously skipped them on the assumption
+    // that copy fields hold `{{product.X}}` placeholders Meta expands per
+    // product at delivery; that whole feature was removed after a direct
+    // check of Meta Ads Manager's own Catalog-ad creation flow found no
+    // such placeholder affordance there at all (see gotchas.md). Catalog
+    // ad copy is plain literal text like every other cell now.
+    headline: req.has("headline")
+      ? Joi.string().min(1).max(40).required()
+      : Joi.string().allow("").max(40).default(""),
+    primaryText: req.has("primaryText")
+      ? Joi.string().min(1).max(125).required()
+      : Joi.string().allow("").max(125).default(""),
+    description: req.has("description")
+      ? Joi.string().min(1).max(30).required()
+      : Joi.string().allow("").max(30).default(""),
 
     // `.trim()` before `.uri()` so a stray space from a paste doesn't
      // sink launch with "must be a valid uri" — Joi rejects on
     // surrounding whitespace by default. Frontend's isHttpUrl already
     // trims; this keeps the two in sync.
     //
-    // Sales/CATALOG (template_data) exempts the URI check — the user can
-    // type a literal URL OR a `{{product.url}}` placeholder that Meta
-    // resolves per product. Keep the trim + required-ness; drop only the
-    // .uri() so placeholders pass through unchanged.
-    linkUrl:
-      cell.ad.objectStorySpecShape === "template_data"
-        ? req.has("linkUrl")
-          ? Joi.string().trim().min(1).required()
-          : Joi.string().trim().optional().allow("")
-        : req.has("linkUrl")
-          ? Joi.string().trim().uri().required()
-          : Joi.string().trim().uri().optional().allow(""),
+    // Sales/CATALOG (template_data) is NOT exempt from the URI check —
+    // corrected 2026-07-07 (subcode 2061006 "URL can't be used", Meta's
+    // blame_field_specs pointed straight at `link`). `{{product.url}}` was
+    // assumed to be a valid per-product macro here, same as the copy
+    // fields — it isn't. Meta auto-derives each product's own click
+    // destination from the catalog feed at delivery; `link` is an ad-level
+    // fallback and must always be a real URL. Unlike headline/primaryText/
+    // description (confirmed live: Meta validated `{{product.name}}` etc.
+    // without complaint on the SAME request, only `link` was blamed),
+    // there is no placeholder exemption for this field.
+    linkUrl: req.has("linkUrl")
+      ? Joi.string().trim().uri().required()
+      : Joi.string().trim().uri().optional().allow(""),
     // URL parameters appended to the destination link (Meta `url_tags`).
     // Format: `utm_source=fb&utm_campaign=spring` — key=value pairs joined
     // by &. Reject a leading ? or & (Meta adds the separator automatically;

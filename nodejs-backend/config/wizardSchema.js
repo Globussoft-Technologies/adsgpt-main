@@ -81,8 +81,11 @@ const CONVERSION_LOCATION_LABELS = {
   VIDEO_VIEWS: "Video views",
   POST_ENGAGEMENT: "Post engagement",
   // Sales-specific catalogue cell — Meta's "Catalog sales" destination
-  // (Dynamic Product Ads). promoted_object = product_set (NEW shape),
-  // object_story_spec = template_data (NEW shape with placeholders).
+  // (Dynamic Product Ads). promoted_object = product_set, object_story_spec
+  // = template_data — both real Meta shapes, but the copy fields are
+  // plain literal text (a {{product.X}} macro feature was tried here and
+  // removed 2026-07-07 — see gotchas.md; Meta Ads Manager's own UI has no
+  // such affordance for Catalog ads).
   CATALOG: "Catalog sales",
   // Awareness-specific. Meta UI has no destination dropdown for Awareness —
   // the cell split mirrors Meta's Performance Goal groups: STANDARD covers
@@ -1582,18 +1585,21 @@ const CELLS = {
         defaultBillingEvent: "IMPRESSIONS",
         promotedObjectShape: "product_set",
         // catalogId + productSetId picked on the new Catalog wizard step
-        // (additionalSteps: ["catalog"] below). pixelId + pixelEventType
-        // still required — Meta needs the Pixel for visitor tracking AND
-        // the product_set for ad-content scoping.
+        // (additionalSteps: ["catalog"] below). pixelEventType (via
+        // pixelId, which also drives the pixelEventType picker's
+        // getPixelEvents lookup) becomes promoted_object.custom_event_type
+        // — pixelId itself is NOT sent to Meta for this shape (corrected
+        // 2026-07-07, subcode 1885014 — see promotedObject.js).
         additionalFields: ["pixelId", "pixelEventType", "catalogId", "productSetId"],
       },
       ad: {
         // No media field required — Meta sources images per product from
         // the catalog feed. Headline / primaryText / description / linkUrl
-        // accept placeholder syntax ({{product.name}}, {{product.price}},
-        // etc.); the AdStep surfaces an insert-chip toolbar and the
-        // validator skips the standard 40/125/30 char caps for this cell
-        // (templates expand per product at delivery; Meta truncates).
+        // are plain literal text like every other cell, with the standard
+        // 40/125/30 char caps — a {{product.X}} placeholder feature was
+        // tried here and removed 2026-07-07 (never verified against
+        // Meta's real product; Meta Ads Manager's own Catalog-ad UI has no
+        // such affordance). See gotchas.md for the full retrospective.
         requiredFields: ["headline", "primaryText", "linkUrl"],
         optionalFields: ["description"],
         objectStorySpecShape: "template_data",

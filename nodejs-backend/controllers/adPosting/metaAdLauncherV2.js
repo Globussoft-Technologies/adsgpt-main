@@ -621,6 +621,35 @@ async function createAdSetV2(req, res) {
       }
     }
 
+    // Sales/CATALOG (Dynamic Product Ads) needs the CAMPAIGN itself bound
+    // to a Product Catalog via `promoted_object.product_catalog_id` — a
+    // SEPARATE requirement from the ad set's own `promoted_object.
+    // product_set_id` built below. Real hit (2026-07-07, subcode 1885032
+    // "The 'promoted_object' field is required for the specified
+    // objective"): the ad set's own promoted_object was correctly shaped
+    // (`{product_set_id, custom_event_type}`, per the product_set fix
+    // above), but Meta still rejected ad-set creation because the parent
+    // CAMPAIGN never declared a catalog — confirmed against Meta's own
+    // Dynamic Ads / Catalog Sales reference doc: the campaign needs
+    // `promoted_object: {product_catalog_id}`, distinct from the ad set's
+    // `product_set_id`. Unlike the diagnostic app-shape block above, this
+    // is NOT best-effort — without it every ad set under this campaign
+    // fails identically, so a failure here is surfaced as a real error
+    // rather than logged-and-continued. Idempotent (a bare `update`, same
+    // as the campaign-budget retry-sync fix elsewhere in this file) — safe
+    // to call on every ad set created under the same campaign.
+    if (cell.adSet.promotedObjectShape === "product_set" && value.catalogId) {
+      try {
+        await new bizSdk.Campaign(value.campaignId).update([], {
+          promoted_object: { product_catalog_id: value.catalogId },
+        });
+      } catch (e) {
+        return res
+          .status(500)
+          .json(metaErrorResponse(e, "bind campaign to product catalog", req));
+      }
+    }
+
     // (FINAL adSetParams logging moved to immediately before
     //  account.createAdSet() — see below — so the snapshot includes
     //  every field that gets set after this point: destination_type,
@@ -788,6 +817,41 @@ async function buildAdCreativeOr400(account, cell, value) {
     }
   }
 
+  // Sales/CATALOG (Dynamic Product Ads) — the AdCreative itself needs a
+  // TOP-LEVEL `product_set_id` field, separate from and in addition to
+  // `object_story_spec.template_data`. Real hit (2026-07-07, subcode
+  // 1487891 "Invalid creative for objective"): the creative built fine
+  // (template_data shape was correct) but Meta rejected the AD anyway,
+  // because the creative object itself never declared which product set
+  // it draws from — confirmed against Meta's own `ad-creative` reference
+  // doc. The wizard's Ad step never collects productSetId (it was already
+  // picked on the earlier Ad Set step's Catalog sub-step and isn't part
+  // of `buildAdSchemaV2`), so we re-derive it from the ad set's own
+  // `promoted_object.product_set_id` — same "resolve from the ad set"
+  // pattern already used for pageId (see resolvePageIdForAdSet above).
+  let productSetId;
+  if (cell.ad.objectStorySpecShape === "template_data") {
+    try {
+      const adSetData = await new bizSdk.AdSet(value.adSetId).get(["promoted_object"]);
+      const data = adSetData?._data || adSetData || {};
+      productSetId = data.promoted_object?.product_set_id || null;
+    } catch {
+      productSetId = null;
+    }
+    if (!productSetId) {
+      return {
+        ok: false,
+        status: 400,
+        body: {
+          status: false,
+          error: "Could not resolve the Product Set for this ad set",
+          details:
+            "This ad set's promoted_object has no product_set_id on Meta's side — it may not have been created through the Catalog wizard step.",
+        },
+      };
+    }
+  }
+
   // object_story_spec — driven by the cell's shape key.
   const objectStorySpec = buildObjectStorySpec(cell.ad.objectStorySpecShape, {
     pageId: value.pageId,
@@ -813,6 +877,7 @@ async function buildAdCreativeOr400(account, cell, value) {
     name: `${value.name} — creative`,
     object_story_spec: objectStorySpec,
   };
+  if (productSetId) creativeParams.product_set_id = productSetId;
   if (value.urlTags) creativeParams.url_tags = value.urlTags.replace(/^\?/, "");
 
   // Auto-translate ad copy across viewers' locales. Meta moved the setting

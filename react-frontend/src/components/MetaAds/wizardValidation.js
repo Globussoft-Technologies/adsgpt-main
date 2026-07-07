@@ -416,9 +416,10 @@ function validateAd(form, cell, mode) {
   }
 
   // Sales/CATALOG (template_data shape) — images come from the catalog
-  // feed per product, and linkUrl can be a {{product.url}} placeholder
-  // instead of a literal URL. Skip the media check + relax the linkUrl
-  // URI check below. (Joi enforces the same on the backend.)
+  // feed per product, so there's no upload field to satisfy. Used below
+  // ONLY to skip the media check; linkUrl and copy-field caps are the
+  // same as every other cell (the {{product.X}} placeholder feature this
+  // comment used to describe was removed 2026-07-07 — see gotchas.md).
   const isCatalog = cell?.ad?.objectStorySpecShape === 'template_data';
 
   // Media — exactly one of image / video must be provided. Skipped in
@@ -452,10 +453,15 @@ function validateAd(form, cell, mode) {
     if (field === 'linkUrl') {
       if (isBlank(form.linkUrl)) {
         e.linkUrl = 'Destination URL is required.';
-      } else if (!isCatalog && !isHttpUrl(form.linkUrl)) {
-        // Sales/CATALOG accepts {{product.url}} placeholders alongside
-        // literal URLs — skip the URL syntax check there. Backend Joi
-        // does the same.
+      } else if (!isHttpUrl(form.linkUrl)) {
+        // Real hit (2026-07-07, subcode 2061006): Sales/CATALOG was briefly
+        // exempted from this check on the assumption that a per-product
+        // placeholder was valid here — it wasn't, and that whole feature
+        // (see isCatalog in CreateCampaignWizardV2.jsx) was later removed
+        // entirely after a direct check of Meta Ads Manager's own
+        // Catalog-ad UI found no such feature. Destination URL is always a
+        // real, literal URL now, same as every other cell. Backend Joi
+        // (meta.v2.validator.js) matches.
         e.linkUrl = 'Enter a valid URL (https://…).';
       }
     } else if (field === 'leadFormId') {

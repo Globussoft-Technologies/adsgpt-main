@@ -91,11 +91,11 @@ function buildObjectStorySpec(shape, params) {
       return buildPair(buildLinkData(params));
 
     case "template_data":
-      // Sales/CATALOG — Meta resolves {{product.X}} placeholders per
-      // product at delivery. The link_data-style block holds the
-      // placeholder strings; Meta substitutes per-product images, prices,
-      // names. The outer key is `template_data` (not `link_data`) but
-      // the inner fields mirror link_data semantics.
+      // Sales/CATALOG — plain literal copy (see buildTemplateData's
+      // docblock for why the {{product.X}} placeholder feature this used
+      // to describe was removed). Images come from the bound product_set;
+      // the outer key `template_data` (not `link_data`) is what tells
+      // Meta that.
       return buildPair(buildTemplateData(params));
 
     case "lead_gen_form":
@@ -426,35 +426,38 @@ function buildClickToCallLinkData(p) {
 }
 
 // ─── template_data — Sales/CATALOG (Dynamic Product Ads) ────────────────────
-// Meta resolves {{product.X}} placeholders per product at delivery. Copy
-// fields look like link_data (message / title / description / call_to_action)
-// but the outer key is `template_data` (set by the dispatcher above) — Meta
-// uses that key to know to substitute per product from the bound
-// product_set. No image_hash / video_id (catalog provides images).
+// Copy fields look like link_data (message / title / description /
+// call_to_action) but the outer key is `template_data` (set by the
+// dispatcher above) — this is the key that tells Meta the creative is
+// bound to a product_set (see promoted_object) rather than a single fixed
+// image/video. No image_hash / video_id (catalog provides images).
 //
-// Supported placeholders (Meta-documented):
-//   {{product.name}}, {{product.price}}, {{product.current_price}},
-//   {{product.brand}}, {{product.description}}, {{product.url}}
-//
-// The wizard's AdStep surfaces an insert-chip toolbar for these; the
-// builder treats them as opaque strings — Meta does the substitution.
+// REMOVED 2026-07-07: a `{{product.X}}` placeholder/macro feature used to
+// live here, on the assumption that Meta resolves per-product tokens
+// inside this text at delivery. That assumption was never verified
+// against Meta's real product before shipping. Two of the offered tokens
+// were proven live-broken ({{product.url}} — subcode 2061006;
+// {{product.description}} — subcode 1487844) before a direct check of
+// Meta Ads Manager's own Catalog-ad creation flow found no placeholder
+// affordance there AT ALL — the whole feature was speculative. Copy
+// fields here are now plain literal text, same as every other cell,
+// including the standard 40/125/30 character caps (meta.v2.validator.js).
+// See gotchas.md for the full retrospective.
 function buildTemplateData(p) {
   if (!p.linkUrl) throw new Error("template_data: linkUrl is required");
   const data = {};
   // Meta DPA convention: `message` = primary text above the carousel of
   // products; `name` = headline on each product card; `description` =
-  // subline under the price on each card. Same field names as link_data;
-  // Meta interprets them differently inside template_data because
-  // placeholders are resolved per product.
+  // subline under the price on each card. Same field names as link_data.
   if (p.primaryText) data.message = p.primaryText;
   if (p.headline) data.name = p.headline;
   if (p.description) data.description = p.description;
-  // Link can be a literal URL OR `{{product.url}}` — Meta substitutes.
+  // Real URL — validated as a URI at the Joi boundary
+  // (meta.v2.validator.js); this builder just passes it through.
   data.link = p.linkUrl;
   if (p.callToAction && p.callToAction !== "NO_BUTTON") {
     data.call_to_action = {
       type: p.callToAction,
-      // value.link supports the same placeholder substitution as data.link.
       value: { link: p.linkUrl },
     };
   }

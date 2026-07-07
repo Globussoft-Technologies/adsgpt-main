@@ -1367,7 +1367,7 @@ function adSetBody(objective, conversionLocation, cell) {
 // fields + app fields when the shape needs them. mediaKind drives the
 // media field (Engagement/VIDEO_VIEWS is video-only; rest accept either).
 // Sales/CATALOG (template_data shape) is the catalog exception — no
-// media, placeholder-safe linkUrl.
+// media (catalog feed provides it).
 function adBody(objective, conversionLocation, cell) {
   const req = new Set(cell.ad.requiredFields);
   const isCatalog = cell.ad.objectStorySpecShape === "template_data";
@@ -1392,7 +1392,7 @@ function adBody(objective, conversionLocation, cell) {
     }
   }
   if (req.has("linkUrl") || cell.ad.optionalFields.includes("linkUrl")) {
-    body.linkUrl = isCatalog ? "{{product.url}}" : "https://example.com/landing";
+    body.linkUrl = "https://example.com/landing";
   }
   if (req.has("leadFormId")) body.leadFormId = "form_1";
   if (cell.ad.objectStorySpecShape === "app_link") {
@@ -2390,8 +2390,9 @@ group("OUTCOME_ENGAGEMENT — Phase 2 Joi factories accept valid bodies", () => 
 // The auto-sweep covers Joi happy paths + promoted_object + object_story_spec
 // builds for every Sales cell. These tests pin down the Sales-specific
 // edges the auto-sweep can't infer: CATALOG's new shapes, the no-media
-// contract, the placeholder-friendly copy/linkUrl, and reverse-inference
-// via product_set_id presence.
+// contract, plain literal copy/linkUrl (see gotchas.md — the {{product.X}}
+// placeholder feature this used to test was removed 2026-07-07), and
+// reverse-inference via product_set_id presence.
 
 group("OUTCOME_SALES — registered + cells live", () => {
   test("listObjectives includes OUTCOME_SALES", () => {
@@ -2524,34 +2525,52 @@ group("OUTCOME_SALES/CATALOG — cell shape", () => {
 });
 
 group("OUTCOME_SALES/CATALOG — product_set promoted_object builder", () => {
-  test("returns { pixel_id, product_set_id }", () => {
+  // Real hit (2026-07-07, subcode 1885014 "Promoted Object Invalid"):
+  // Meta's promoted_object reference documents exactly two valid
+  // PRODUCT_CATALOG_SALES combinations — `product_set_id` alone, or
+  // `product_set_id` + `custom_event_type`. `pixel_id` is not a valid
+  // field on this shape at all; sending it triggers the invalid-
+  // combination rejection.
+  test("returns { product_set_id, custom_event_type } when pixelEventType is given", () => {
     const po = buildPromotedObject("product_set", {
-      pixelId: "px_123",
       productSetId: "ps_456",
+      pixelEventType: "PURCHASE",
     });
-    assert.deepEqual(po, { pixel_id: "px_123", product_set_id: "ps_456" });
+    assert.deepEqual(po, { product_set_id: "ps_456", custom_event_type: "PURCHASE" });
   });
-  test("throws without pixelId", () => {
-    assert.throws(
-      () => buildPromotedObject("product_set", { productSetId: "ps_456" }),
-      /pixelId \+ productSetId/,
-    );
+  test("returns { product_set_id } alone when pixelEventType is omitted", () => {
+    const po = buildPromotedObject("product_set", { productSetId: "ps_456" });
+    assert.deepEqual(po, { product_set_id: "ps_456" });
+  });
+  test("never includes pixel_id even when pixelId is passed (Meta rejects it on this shape)", () => {
+    const po = buildPromotedObject("product_set", {
+      productSetId: "ps_456",
+      pixelId: "px_123",
+      pixelEventType: "PURCHASE",
+    });
+    assert.equal(po.pixel_id, undefined);
+    assert.deepEqual(po, { product_set_id: "ps_456", custom_event_type: "PURCHASE" });
   });
   test("throws without productSetId", () => {
     assert.throws(
-      () => buildPromotedObject("product_set", { pixelId: "px_123" }),
-      /pixelId \+ productSetId/,
+      () => buildPromotedObject("product_set", { pixelEventType: "PURCHASE" }),
+      /productSetId is required/,
     );
   });
 });
 
 group("OUTCOME_SALES/CATALOG — template_data object_story_spec builder", () => {
+  // Plain literal copy — the {{product.X}} placeholder feature these
+  // fixtures used to exercise was removed 2026-07-07 (never verified
+  // against Meta's real product; a direct check of Meta Ads Manager's own
+  // Catalog-ad creation flow found no such affordance at all). See
+  // gotchas.md for the retrospective.
   const params = {
     pageId: "page_1",
-    headline: "Shop {{product.name}}",
-    primaryText: "Best price on {{product.brand}}",
-    description: "{{product.price}}",
-    linkUrl: "{{product.url}}",
+    headline: "Shop the sale",
+    primaryText: "Best prices on our top brands",
+    description: "Limited time only",
+    linkUrl: "https://example.com/shop",
     callToAction: "SHOP_NOW",
   };
 
@@ -2561,13 +2580,13 @@ group("OUTCOME_SALES/CATALOG — template_data object_story_spec builder", () =>
     assert.ok(!oss.link_data, "no link_data on template_data shape");
     assert.ok(!oss.video_data, "no video_data on template_data shape");
   });
-  test("preserves placeholders unchanged", () => {
+  test("maps copy fields to Meta's DPA field names", () => {
     const oss = buildObjectStorySpec("template_data", params);
-    assert.equal(oss.template_data.name, "Shop {{product.name}}");
-    assert.equal(oss.template_data.message, "Best price on {{product.brand}}");
-    assert.equal(oss.template_data.description, "{{product.price}}");
-    assert.equal(oss.template_data.link, "{{product.url}}");
-    assert.equal(oss.template_data.call_to_action.value.link, "{{product.url}}");
+    assert.equal(oss.template_data.name, "Shop the sale");
+    assert.equal(oss.template_data.message, "Best prices on our top brands");
+    assert.equal(oss.template_data.description, "Limited time only");
+    assert.equal(oss.template_data.link, "https://example.com/shop");
+    assert.equal(oss.template_data.call_to_action.value.link, "https://example.com/shop");
   });
   test("rejects imageHash (catalog feed provides media)", () => {
     assert.throws(
@@ -2640,20 +2659,31 @@ group("OUTCOME_SALES/CATALOG — Joi factories", () => {
     name: "Catalog ad",
     objective: "OUTCOME_SALES",
     conversionLocation: "CATALOG",
-    headline: "Shop {{product.name}}",
-    primaryText: "Best deals on {{product.brand}} — starting at {{product.current_price}}",
-    linkUrl: "{{product.url}}",
+    headline: "Shop the sale",
+    primaryText: "Best deals on our top brands, starting today",
+    linkUrl: "https://example.com/shop",
     callToAction: "SHOP_NOW",
   };
 
-  test("CATALOG ad accepts placeholder copy longer than the standard 40-char cap", () => {
-    const longHeadline = "Free shipping on {{product.name}} from {{product.brand}} — limited stock!";
-    const { error } = adSchema.validate({ ...validAdBody, headline: longHeadline });
-    assert.ok(!error, error && error.message);
-  });
-  test("CATALOG ad accepts {{product.url}} as linkUrl (no URI check)", () => {
+  // The {{product.X}} placeholder feature (and its char-cap exemption)
+  // was removed 2026-07-07 — Catalog ad copy now follows the SAME
+  // standard 40/125/30 caps as every other cell. See gotchas.md.
+  test("CATALOG ad accepts a valid body within the standard caps", () => {
     const { error } = adSchema.validate(validAdBody);
     assert.ok(!error, error && error.message);
+  });
+  test("CATALOG ad rejects a headline over the standard 40-char cap (no more placeholder exemption)", () => {
+    const longHeadline = "Free shipping on every single item in our entire online store today";
+    const { error } = adSchema.validate({ ...validAdBody, headline: longHeadline });
+    assert.ok(error);
+  });
+  test("CATALOG ad accepts a real URL as linkUrl", () => {
+    const { error } = adSchema.validate(validAdBody);
+    assert.ok(!error, error && error.message);
+  });
+  test("CATALOG ad REJECTS {{product.url}} as linkUrl (subcode 2061006 — not a valid macro for this field)", () => {
+    const { error } = adSchema.validate({ ...validAdBody, linkUrl: "{{product.url}}" });
+    assert.ok(error);
   });
   test("CATALOG ad rejects imageHash (catalog provides images)", () => {
     const { error } = adSchema.validate({ ...validAdBody, imageHash: "h_x" });
