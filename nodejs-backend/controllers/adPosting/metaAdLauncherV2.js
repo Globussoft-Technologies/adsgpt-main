@@ -54,7 +54,7 @@ const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 // formatMetaError + logMetaError as named exports on its module object.
 // Importing here keeps the SDK / Redis / logging plumbing single-sourced.
 const v1Controller = require("./metaAdLauncher");
-const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng, rawErrorDump } = v1Controller;
+const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng, pickAppStoreUrl, rawErrorDump } = v1Controller;
 const logger = require("../../utils/logger");
 
 const CAPPED_BID_STRATEGIES = new Set([
@@ -961,6 +961,7 @@ async function resolveCellForAdSet(req, res) {
         "destination_type",
         "promoted_object",
         "optimization_goal",
+        "targeting",
       ]);
       adSetData = adSet?._data || adSet || {};
       const campaignId =
@@ -1005,7 +1006,51 @@ async function resolveCellForAdSet(req, res) {
     // same two fields off promoted_object for their own flows; this was the
     // one resolve endpoint of the three that hadn't inherited the fix.
     const applicationId = adSetData.promoted_object?.application_id || null;
-    const objectStoreUrl = adSetData.promoted_object?.object_store_url || null;
+    let objectStoreUrl = adSetData.promoted_object?.object_store_url || null;
+
+    // Real trigger (2026-07-07, subcode 1885270 "Should load matching
+    // digital store object" — "the app ID and link should be resolved to
+    // the same digital store object"): trusting promoted_object's STORED
+    // object_store_url as-is isn't safe. The wizard's own app picker keeps
+    // applicationId + objectStoreUrl atomic at pick time (AppLinkagePicker
+    // sets both from the SAME app record — verified, no bug there), but
+    // this ad set's Add-Ad request still failed with a mismatch, meaning
+    // either the app's store URL changed on Meta's side since the ad set
+    // was created, or the pair was wrong from the start via some other
+    // caller (this account's userId pattern suggests API/agent-driven
+    // creation, not just the interactive wizard, which may not have gone
+    // through AppLinkagePicker's atomic pick at all). Re-resolve
+    // objectStoreUrl FRESH from the application's live object_store_urls,
+    // matched to the ad set's actual target platform (targeting.user_os —
+    // set from the same mobileAppStore choice at creation time, see
+    // createAdSetV2's `targetingSpec.user_os` block), rather than trusting
+    // whatever's stored. Best-effort: falls back to the stored value if the
+    // live app fetch fails or the app has no URL for that platform, so a
+    // transient Meta API hiccup doesn't newly break Add-Ad for cells this
+    // never affected.
+    if (applicationId) {
+      try {
+        const userOs = adSetData.targeting?.user_os || [];
+        const platform = userOs.includes("Android")
+          ? "android"
+          : userOs.includes("iOS")
+          ? "ios"
+          : null;
+        if (platform) {
+          const api = bizSdk.FacebookAdsApi.getDefaultApi();
+          const app = await api.call("GET", [applicationId], {
+            fields: "object_store_urls",
+          });
+          const appData = app?._data || app || {};
+          const liveUrl = pickAppStoreUrl(appData.object_store_urls, platform);
+          if (liveUrl) objectStoreUrl = liveUrl;
+        }
+      } catch (err) {
+        logger.warn(
+          `resolveCellForAdSet: failed to re-resolve objectStoreUrl for application ${applicationId}: ${err.message}`,
+        );
+      }
+    }
 
     return res.status(200).json({
       status: true,

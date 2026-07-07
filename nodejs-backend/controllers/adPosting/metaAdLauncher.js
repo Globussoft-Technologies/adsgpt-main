@@ -552,6 +552,27 @@ async function reverseGeocodeLatLng(lat, lng, api) {
   }
 }
 
+// Pick the store URL for one platform out of Meta's `object_store_urls`
+// field on an Application node. Field names have varied across API
+// versions/app configs — seen in the wild: `{itunes: "..."}`,
+// `{ios_app_store: "..."}`, `{apple_app_store: "..."}` for iOS, and
+// `{google_play: "..."}` / `{android: "..."}` for Android. Extracted
+// (2026-07-07) from `getPromotableApps`'s inline normaliser so
+// `resolveCellForAdSet` can reuse the SAME field-name fallback logic when
+// re-deriving a fresh objectStoreUrl for the Add-Ad flow — see that
+// function's docblock for why trusting the ad set's stored
+// promoted_object.object_store_url isn't safe on its own.
+function pickAppStoreUrl(objectStoreUrls, platform) {
+  const osu = objectStoreUrls || {};
+  if (platform === "ios") {
+    return osu.itunes || osu.ios_app_store || osu.apple_app_store || null;
+  }
+  if (platform === "android") {
+    return osu.google_play || osu.android || null;
+  }
+  return null;
+}
+
 class MetaAdLauncher {
   constructor() {
     this.getAdAccountsList = this.getAdAccountsList.bind(this);
@@ -1622,30 +1643,19 @@ class MetaAdLauncher {
       }
 
       // Normalise into a shape the frontend can consume directly.
-      // object_store_urls examples seen across versions:
-      //   { itunes: "...", google_play: "..." }
-      //   { ios_app_store: "...", google_play: "..." }
-      //   { apple_app_store: "...", google_play: "..." }
-      const pickIos = (osu) =>
-        osu?.itunes || osu?.ios_app_store || osu?.apple_app_store || null;
-      const pickAndroid = (osu) => osu?.google_play || osu?.android || null;
-
       // Drop apps that don't have ANY store URL — those are Instant Games,
       // fb_canvas, or web-only apps that can't run App Promotion campaigns.
       // The frontend filters further by selected store; this just removes
       // the noise so the picker only ever shows mobile apps.
       const normalised = rawApps
-        .map((a) => {
-          const osu = a.object_store_urls || {};
-          return {
-            id: a.id,
-            name: a.name,
-            category: a.category || null,
-            supportedPlatforms: a.supported_platforms || [],
-            appleAppStoreUrl: pickIos(osu),
-            googlePlayUrl: pickAndroid(osu),
-          };
-        })
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          category: a.category || null,
+          supportedPlatforms: a.supported_platforms || [],
+          appleAppStoreUrl: pickAppStoreUrl(a.object_store_urls, "ios"),
+          googlePlayUrl: pickAppStoreUrl(a.object_store_urls, "android"),
+        }))
         .filter((a) => a.appleAppStoreUrl || a.googlePlayUrl);
 
       logger.info(
@@ -4623,3 +4633,8 @@ module.exports.getPagePhone = getPagePhone;
 // back on edit never carry a country code, so the launch path needs the
 // same Nominatim lookup the picker uses when a pin is first dropped.
 module.exports.reverseGeocodeLatLng = reverseGeocodeLatLng;
+// pickAppStoreUrl is required by metaAdLauncherV2.js's resolveCellForAdSet
+// — re-derives a fresh, platform-matched objectStoreUrl for the Add-Ad flow
+// instead of trusting the ad set's possibly-stale/mismatched
+// promoted_object.object_store_url (subcode 1885270 fix).
+module.exports.pickAppStoreUrl = pickAppStoreUrl;

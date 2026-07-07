@@ -205,12 +205,22 @@ function validateAdSet(form, cell, ctx, mode) {
       // A per-bid amount above ₹1cr is almost certainly a typo.
       e.bidAmount = `That bid is too high — max we accept is ${formatMoney(MAX_DAILY_BUDGET_MAJOR, ctx.currency)}.`;
     }
-  } else if (!isBlank(form.bidAmount) && toNumber(form.bidAmount) > 0) {
+  } else if (!editing && !isBlank(form.bidAmount) && toNumber(form.bidAmount) > 0) {
     // Treat bidAmount==0 as "not set" — Meta returns 0 for ad sets that
     // never had a cap, which `resolveAdSetForEdit` echoes back into the
-    // form. Without this guard the validator fires on every edit-mode
-    // open of an autobid ad set, blocking Save even though the bid
-    // strategy is locked and the user has nothing to fix.
+    // form. That guard alone wasn't enough: real hit (2026-07-06) — Meta
+    // can retain a POSITIVE leftover bid_amount from before an ad set was
+    // switched to an automatic bid strategy, and `resolveAdSetForEdit`
+    // faithfully echoes that non-zero value back too. In edit mode,
+    // `bidStrategy` is immutable (disabled dropdown) and the bid-amount
+    // CurrencyField only renders for CAPPED_BID_STRATEGIES — so an autobid
+    // ad set with a stray positive `bid_amount` on Meta's side had this
+    // error permanently blocking Save with NO visible field to fix it
+    // (same "required but unreachable" dead-end as the Sales/App
+    // pixelEventType and Edit-Ad-Set Facebook Page bugs earlier this
+    // session). Skip in edit mode entirely — the user can't act on this
+    // regardless of the stored value, and the field never gets sent to
+    // Meta for an uncapped bid strategy either way.
     e.bidAmount = 'Bid amount can’t be set for an automatic bid strategy.';
   }
 
