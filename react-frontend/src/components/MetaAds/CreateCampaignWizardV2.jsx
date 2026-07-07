@@ -823,6 +823,23 @@ export default function CreateCampaignWizardV2({
         const r = await createMetaCampaignV2(campPayload);
         campaignId = r.campaign.id;
         setCreated((p) => ({ ...p, campaignId }));
+      } else if (form.cbo) {
+        // Retry re-runs only the failing step, so a campaign created on a
+        // prior attempt keeps its ORIGINAL budget even if the user edits it
+        // before retrying (subcode 2446149 "Budget is too low"). Re-sync on
+        // every retry — idempotent, so an unchanged value is a no-op.
+        try {
+          const budget = majorToMinor(form.campaignBudget);
+          const syncPayload = { adAccountId, campaignId };
+          if (form.campaignBudgetType === 'daily') syncPayload.dailyBudget = budget;
+          else syncPayload.lifetimeBudget = budget;
+          if (form.spendCap) syncPayload.spendCap = majorToMinor(form.spendCap);
+          await updateMetaCampaignV2(syncPayload);
+        } catch {
+          // Best-effort — if the sync fails, fall through to ad-set
+          // creation anyway; Meta's own budget-too-low error (if it
+          // recurs) is still a safety net, just without this fix's benefit.
+        }
       }
 
       // ── Ad Set ──
@@ -1603,45 +1620,36 @@ function WizardSideRail({
         </ul>
       </div>
 
-      {/* Current-step status — tinted card. A single pending item renders
-          as one line (no shouty heading + lone bullet); multiple items
-          get a quiet count headline + a bulleted list. Text sized to
-          match the step-checklist labels above so the card doesn't read
-          louder than the list it sits under. */}
+      {/* Current-step status — tinted card. Always a quiet count headline +
+          bulleted list, even for a single item — text sized to match the
+          step-checklist labels above so the card doesn't read louder than
+          the list it sits under. */}
       {currentMessages.length > 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-400/20 dark:bg-amber-400/5">
           <div className="flex items-start gap-1.5">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600 dark:text-amber-300" />
             <div className="min-w-0 flex-1">
-              {currentMessages.length === 1 ? (
-                <p className="text-11 leading-snug text-amber-700 dark:text-amber-100">
-                  {currentMessages[0]}
-                </p>
-              ) : (
-                <>
-                  <p className="text-10 font-semibold text-amber-700 dark:text-amber-200">
-                    {currentMessages.length} things left on this step
-                  </p>
-                  {/* Plain <div>s — not <ul>/<li> — so browser/global
-                      list-style can't double-up the bullet next to our
-                      manual one. */}
-                  <div className="mt-1 flex flex-col gap-0.5">
-                    {currentMessages.map((m) => (
-                      <div
-                        key={m}
-                        className="text-10 leading-snug text-amber-700/85 dark:text-amber-100/85"
-                      >
-                        • {m}
-                      </div>
-                    ))}
+              <p className="text-10 font-semibold text-amber-700 dark:text-amber-200">
+                {currentMessages.length} {currentMessages.length === 1 ? 'thing' : 'things'} left on this step
+              </p>
+              {/* Plain <div>s — not <ul>/<li> — so browser/global
+                  list-style can't double-up the bullet next to our
+                  manual one. */}
+              <div className="mt-1 flex flex-col gap-0.5">
+                {currentMessages.map((m) => (
+                  <div
+                    key={m}
+                    className="text-10 leading-snug text-amber-700/85 dark:text-amber-100/85"
+                  >
+                    • {m}
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-11 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/5 dark:text-emerald-200">
+        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-10 font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/5 dark:text-emerald-200">
           <Check className="h-3 w-3 shrink-0" />
           Step is complete.
         </div>

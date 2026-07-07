@@ -506,13 +506,19 @@ async function createAdSetV2(req, res) {
 
     // promoted_object — built from the cell's shape key. Null shape ⇒
     // field omitted. Pixel-using cells (Leads/Website + Multiple) pass
-    // pixelId + pixelEventType for the `pixel` shape.
+    // pixelId + pixelEventType for the `pixel` shape. Sales/CATALOG's
+    // `product_set` shape additionally needs productSetId — omitting it
+    // here (real hit 2026-07-07) throws "pixelId + productSetId are both
+    // required" even when value.productSetId passed Joi validation fine,
+    // since buildPromotedObject only sees whatever this params object
+    // hands it, not the full `value`.
     const promotedObject = buildPromotedObject(cell.adSet.promotedObjectShape, {
       pageId: value.pageId,
       applicationId: value.applicationId,
       objectStoreUrl: value.objectStoreUrl,
       pixelId: value.pixelId,
       pixelEventType: value.pixelEventType,
+      productSetId: value.productSetId,
     });
     if (promotedObject) adSetParams.promoted_object = promotedObject;
 

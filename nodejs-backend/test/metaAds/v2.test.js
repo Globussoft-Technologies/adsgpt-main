@@ -329,6 +329,34 @@ group("buildObjectStorySpec — click-to-message / call", () => {
     assert.equal(oss.link_data.call_to_action.value.app_destination, "WHATSAPP");
   });
 
+  test("whatsapp_click_to_message does NOT include a `page` field on the CTA value (subcode 1856030)", () => {
+    // Real hit (2026-07-07): Meta rejects "Invalid value field page for
+    // CTA type: WHATSAPP_MESSAGE." Unlike Messenger's CTA (which accepts
+    // `page` to point at a different Facebook Page), WhatsApp has no
+    // cross-page concept — the number comes from the ad's own connected
+    // Page. `page` must never appear in this CTA's value object.
+    const oss = buildObjectStorySpec("whatsapp_click_to_message", {
+      pageId: "page_123",
+      imageHash: "hash_abc",
+      callToAction: "WHATSAPP_MESSAGE",
+    });
+    assert.equal(oss.link_data.call_to_action.value.page, undefined);
+    assert.deepEqual(Object.keys(oss.link_data.call_to_action.value), ["app_destination"]);
+  });
+
+  test("whatsapp_click_to_message includes whatsapp_number_id when provided, still no `page`", () => {
+    const oss = buildObjectStorySpec("whatsapp_click_to_message", {
+      pageId: "page_123",
+      imageHash: "hash_abc",
+      callToAction: "WHATSAPP_MESSAGE",
+      whatsappNumberId: "wa_number_456",
+    });
+    assert.deepEqual(oss.link_data.call_to_action.value, {
+      app_destination: "WHATSAPP",
+      whatsapp_number_id: "wa_number_456",
+    });
+  });
+
   test("click_to_call uses linkUrl as link_data.link and tel: on the CTA", () => {
     const oss = buildObjectStorySpec("click_to_call", {
       pageId: "page_123",
@@ -3573,10 +3601,10 @@ group("asTargetingValidationList — bulk-validate payload shape", () => {
 group("diffInvalidTargetingItems — subcode 1870211 discontinued-item detection", () => {
   // Real trigger (2026-07-06): Meta rejected an ad set with subcode
   // 1870211 "Some detailed targeting options are being discontinued" but
-  // gave no indication of WHICH picked item was stale. This diff — by
-  // presence in Meta's targetingvalidation response, not an explicit
-  // flag — is the only signal guaranteed to work regardless of Meta's
-  // exact response shape for a discontinued item.
+  // gave no indication of WHICH picked item was stale. Two signals are
+  // checked: absence from Meta's targetingvalidation response, AND (per
+  // Meta's own edge reference doc, confirmed 2026-07-07) an explicit
+  // `valid: false` field on a row that's still present.
   test("item present in Meta's response is valid — not flagged", () => {
     const invalid = diffInvalidTargetingItems(
       [{ type: "interests", id: "1" }],
@@ -3594,6 +3622,28 @@ group("diffInvalidTargetingItems — subcode 1870211 discontinued-item detection
       [{ type: "interests", id: "1", name: "Yoga" }], // behaviors:2 discontinued
     );
     assert.deepEqual(invalid, [{ type: "behaviors", id: "2" }]);
+  });
+
+  test("item present but valid:false is flagged as invalid (per Meta's documented `valid` field)", () => {
+    const invalid = diffInvalidTargetingItems(
+      [
+        { type: "interests", id: "1" },
+        { type: "relationship_statuses", id: "100" },
+      ],
+      [
+        { type: "interests", id: "1", name: "Yoga", valid: true },
+        { type: "relationship_statuses", id: "100", name: "Divorced", valid: false },
+      ],
+    );
+    assert.deepEqual(invalid, [{ type: "relationship_statuses", id: "100" }]);
+  });
+
+  test("row missing the valid field entirely is still treated as confirmed live (defensive default)", () => {
+    const invalid = diffInvalidTargetingItems(
+      [{ type: "interests", id: "1" }],
+      [{ type: "interests", id: "1", name: "Yoga" }], // no `valid` key at all
+    );
+    assert.deepEqual(invalid, []);
   });
 
   test("id type mismatch (number vs string) still matches — ids normalised to string", () => {

@@ -340,19 +340,27 @@ function asTargetingValidationList(items) {
  * response rows to find items Meta has since discontinued (real trigger:
  * subcode 1870211 "Some detailed targeting options are being
  * discontinued" — Meta rejects publish but doesn't say WHICH item is
- * stale). Pure diff by presence rather than trusting an explicit
- * "invalid" flag from Meta: we don't have a live-confirmed response shape
- * for a discontinued item, but "the input id simply isn't in Meta's
- * output" is the one signal guaranteed to work regardless of shape.
+ * stale).
+ *
+ * Meta's own reference doc for this edge (confirmed 2026-07-07) documents
+ * an explicit `valid: boolean` field on EVERY returned row, in addition to
+ * the standard Detailed Targeting fields — i.e. a discontinued item can
+ * come back present in the response with `valid: false`, not just be
+ * dropped outright. A row is only treated as "confirmed live" when
+ * `valid` is `true` OR absent (defensive: older/partial responses may
+ * omit the field entirely, in which case presence is still the best
+ * available signal). Absence from the response at all is ALSO treated as
+ * invalid — covers the case where Meta drops a row rather than flagging
+ * it, which was our only known signal before the doc confirmed `valid`.
  *
  * @param {{type: string, id: string}[]} targetingList - from asTargetingValidationList
- * @param {{type: string, id: string|number}[]} validRows - Meta's targetingvalidation response rows
+ * @param {{type: string, id: string|number, valid?: boolean}[]} validRows - Meta's targetingvalidation response rows
  * @returns {{type: string, id: string}[]} items from targetingList Meta did NOT confirm as live
  */
 function diffInvalidTargetingItems(targetingList, validRows) {
   const validKeys = new Set(
     (Array.isArray(validRows) ? validRows : [])
-      .filter((r) => r && r.id)
+      .filter((r) => r && r.id && r.valid !== false)
       .map((r) => `${r.type}:${String(r.id)}`),
   );
   return (Array.isArray(targetingList) ? targetingList : []).filter(

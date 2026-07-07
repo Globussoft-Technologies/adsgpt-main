@@ -3506,7 +3506,7 @@ class MetaAdLauncher {
 
       // include_headers=false is Meta's recommended setting per the docs
       // (response is wrapped without the API metadata header otherwise).
-      const params = { include_headers: false, limit: 500 };
+      const params = { include_headers: false, limit: 1000 };
       if (rootId) params.root = rootId;
       if (limitType) params.limit_type = limitType;
       if (isExclusion) params.is_exclusion = true;

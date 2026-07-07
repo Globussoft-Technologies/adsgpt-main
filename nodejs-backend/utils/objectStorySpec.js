@@ -357,11 +357,19 @@ function buildWhatsappLinkData(p) {
   }
   let data = { ...mediaFields(p) };
   data = attachCopy(data, p);
+  // Real hit (2026-07-07, subcode 1856030): "Invalid value field page for
+  // CTA type: WHATSAPP_MESSAGE." Unlike `app_destination: "MESSENGER"`
+  // (buildMessengerLinkData above), which accepts — and can even need —
+  // a `page` field so the CTA can point at a DIFFERENT Facebook Page than
+  // the ad's own, WhatsApp has no such cross-page concept: the chat opens
+  // against whichever WhatsApp Business number is connected to THIS ad's
+  // own Page (already set via `object_story_spec.page_id`). Meta rejects
+  // `page` outright for this CTA type — don't add it back by copy-pasting
+  // the Messenger shape.
   data.call_to_action = {
     type: p.callToAction || "WHATSAPP_MESSAGE",
     value: {
       app_destination: "WHATSAPP",
-      page: p.pageId,
       ...(p.whatsappNumberId ? { whatsapp_number_id: p.whatsappNumberId } : {}),
     },
   };
