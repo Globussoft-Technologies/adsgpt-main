@@ -25,7 +25,7 @@ import {
   selectIsAutomationActive,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
 import AutomationForm from '@/components/AdFactory/Automation/AutomationForm';
-import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
+import { IS_AUTOMATION_ENABLED, IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import {
   initializeResults,
   updateProductionAndServices,
@@ -101,7 +101,11 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
       (p) => String(p?.platformName || '').toLowerCase() === key,
     );
   const hasMeta = hasPlatform('meta');
-  const hasGoogle = hasPlatform('google');
+  // Google automation is env-gated. When VITE_FEATURE_GOOGLE_AUTOMATION is off
+  // we treat Google as "not selected" for automation purposes, so a Google-only
+  // campaign never unlocks the Run-on-Schedule tab (automationAvailable stays
+  // false below) and the schedule form never renders any Google UI.
+  const hasGoogle = IS_GOOGLE_AUTOMATION_ENABLED && hasPlatform('google');
 
   // Single gate for every automation-related UI branch in this form. When the
   // VITE_FEATURE_AUTOMATION flag is off the whole feature is invisible — no

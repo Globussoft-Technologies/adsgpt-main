@@ -7,6 +7,7 @@ import {
   mapApiStatusToLocal,
 } from '@/store/reducers/adFactoryAutomation/constants';
 import { computeNextRunAt } from '@/store/reducers/adFactoryAutomation/nextRun';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
@@ -193,8 +194,11 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate, fullGoogleTempl
     template?.enabled !== false
       ? buildMetaTemplateForJob(template, fullTemplate)
       : null;
+  // Google automation is env-gated. When disabled, never emit targets.google —
+  // even if a stale googleTemplate leaked into config (e.g. hydrated from an
+  // old job), so no Google target can ever reach the backend from a build.
   const googleTemplateBlock =
-    googleTemplate?.enabled !== false
+    IS_GOOGLE_AUTOMATION_ENABLED && googleTemplate?.enabled !== false
       ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
       : null;
   const targets = {};
@@ -255,8 +259,11 @@ function buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate) {
     template?.enabled !== false
       ? buildMetaTemplateForJob(template, fullTemplate)
       : null;
+  // Google automation is env-gated. When disabled, never emit targets.google —
+  // even if a stale googleTemplate leaked into config (e.g. hydrated from an
+  // old job), so no Google target can ever reach the backend from a build.
   const googleTemplateBlock =
-    googleTemplate?.enabled !== false
+    IS_GOOGLE_AUTOMATION_ENABLED && googleTemplate?.enabled !== false
       ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
       : null;
   const targets = {};

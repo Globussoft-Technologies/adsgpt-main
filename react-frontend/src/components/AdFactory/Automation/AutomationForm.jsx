@@ -20,6 +20,7 @@ import {
   checkGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
 import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 import FrequencySection from './FrequencySection';
 import { getBrowserTimezone } from './TimezoneSelect';
@@ -220,7 +221,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       ),
     [distribution?.platforms],
   );
-  const hasGoogleSelected = React.useMemo(
+  const googleSelectedInDistribution = React.useMemo(
     () =>
       Array.isArray(distribution?.platforms) &&
       distribution.platforms.some(
@@ -228,6 +229,12 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       ),
     [distribution?.platforms],
   );
+  // Env gate for Google automation. When VITE_FEATURE_GOOGLE_AUTOMATION is off
+  // we force "not selected", which single-handedly collapses every Google
+  // branch in this form: the GoogleStatusPill, the Google TemplatePicker, the
+  // checkGoogleUser poll, googleReady, and all Google validation/CTA/budget
+  // checks. The useMemo above stays unconditional to respect the rules of hooks.
+  const hasGoogleSelected = IS_GOOGLE_AUTOMATION_ENABLED && googleSelectedInDistribution;
 
   // Connection gating — split into two distinct concepts so the form can be
   // useful before the user has finished connecting both providers.
