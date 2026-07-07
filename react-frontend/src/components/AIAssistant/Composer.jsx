@@ -19,9 +19,9 @@ const extOf = (name) => {
 // Tweak these to change composer size:
 //   MIN_*  → starting / minimum height
 //   MAX_*  → cap before the textarea starts scrolling internally
-const MIN_TEXTAREA_PX_CENTERED = 84;
+const MIN_TEXTAREA_PX_CENTERED = 130;
 const MAX_TEXTAREA_PX_CENTERED = 200;
-const MIN_TEXTAREA_PX_DOCKED = 48;
+const MIN_TEXTAREA_PX_DOCKED = 56;
 const MAX_TEXTAREA_PX_DOCKED = 140;
 
 const Composer = ({
@@ -31,7 +31,6 @@ const Composer = ({
   placeholder = 'Ask Anything...',
   quote = null, // { text, role, messageId } the user is replying to
   onClearQuote,
-  seed = null, // { text, nonce } — a picked prompt suggestion to prefill
 }) => {
   const [text, setText] = useState('');
   // Each attachment: { tempId, file_type, filename, url, isImage, preview?, pending }.
@@ -63,22 +62,6 @@ const Composer = ({
   useEffect(() => {
     if (quote?.text) textareaRef.current?.focus();
   }, [quote]);
-
-  // Prefill from a picked prompt suggestion, then focus with the caret at the
-  // end so the user can edit before sending. Keyed on `nonce` so picking the
-  // same suggestion twice still re-seeds.
-  useEffect(() => {
-    if (seed?.text == null) return;
-    setText(seed.text);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (el) {
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed?.nonce]);
 
   const readyAttachments = attachments.filter((a) => !a.pending && a.url);
   const canSend =
@@ -274,9 +257,9 @@ const Composer = ({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={disabled ? 'adsGPT is responding… hang on a sec' : placeholder}
-          rows={variant === 'docked' ? 2 : 3}
+          rows={3}
           disabled={disabled}
-          className="w-full resize-none overflow-y-auto border-0 bg-transparent text-[15.5px] leading-7 text-white outline-none placeholder:text-white/40 disabled:opacity-60"
+          className="w-full resize-none overflow-y-auto border-0 bg-transparent text-[19px] leading-8 text-white outline-none placeholder:text-white/40 disabled:opacity-60"
           style={{ minHeight: `${minTextareaPx}px`, maxHeight: `${maxTextareaPx}px` }}
         />
 

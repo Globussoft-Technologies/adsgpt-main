@@ -10,6 +10,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import TourGuide from '@/components/layout/TourGuide';
 import AdBlockerModal from '@/components/layout/AdBlockerModal';
+import bottomEffectImage from '@/assets/layouts/ad-factory/bottom-effect.svg';
 import toast, { Toaster } from 'react-hot-toast';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
 import { useEffect, useRef } from 'react';
@@ -111,7 +112,20 @@ const Layout = () => {
       {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
         <div className="fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-70 blur-[100px] 2xl:blur-[160px] dark:opacity-100"></div>
       )}
-      {location.pathname === '/assistant' && <div className="fixed inset-0 z-[-1] bg-black"></div>}
+      {location.pathname === '/assistant' && (
+        <>
+          {/* Match the Ad Factory background exactly (same as AdFactoryBgEffect):
+              dark base + the blue glow orb top-right + the bottom-effect image.
+              Kept at z-[-1] so it stays behind the chat UI. */}
+          <div className="fixed inset-0 z-[-1] bg-black"></div>
+          <div className="fixed -top-[40%] right-[2vw] z-[-1] h-[19vw] w-[19vw] rounded-full bg-[linear-gradient(90deg,_#0975F0_0%,_#28BCFC_27%,_#8FC8FB_51%,_#28BCFC_72%,_#0975F0_100%)] opacity-100 blur-[100px]"></div>
+          <img
+            src={bottomEffectImage}
+            alt=""
+            className="pointer-events-none fixed bottom-0 left-1/2 z-[-1] w-[120vw] -translate-x-1/2 opacity-100 xl:top-[28%] xl:bottom-auto"
+          />
+        </>
+      )}
 
       <Toaster position="top-center" reverseOrder={false} />
       {/* <AdBlockerModal /> */}
