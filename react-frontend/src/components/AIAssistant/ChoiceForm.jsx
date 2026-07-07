@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
+import Tip from './Tip';
 
 // ─── Normalisation helpers ─────────────────────────────────────────────────
 // The agent emits options as either ["a","b","c"], [1,3], or
@@ -129,6 +131,66 @@ const SelectField = ({ field, value, onChange, disabled }) => {
   );
 };
 
+// Friendly model picker: instead of a cramped native <select>, each model is a
+// selectable row showing its per-image credit cost inline (a badge) AND on hover
+// (a tooltip) — so users can compare what each model costs before choosing.
+// `creditCosts` is the form's { model: creditsPerImage, auto: … } map.
+const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => {
+  const opts = normaliseOptions(field.options);
+  const costFor = (v) => {
+    if (!creditCosts) return null;
+    return creditCosts[v] != null ? creditCosts[v] : creditCosts.auto ?? null;
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      {opts.map((o) => {
+        const isOn = value === o.value;
+        const cost = costFor(o.value);
+        const row = (
+          <button
+            type="button"
+            onClick={() => onChange(o.value)}
+            disabled={disabled}
+            className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-all ${
+              isOn
+                ? 'border-white/40 bg-white/[0.10] shadow-[0_0_0_1px_#ffffff30]'
+                : 'border-white/10 bg-transparent hover:border-white/25'
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                  isOn ? 'border-white' : 'border-white/30'
+                }`}
+              >
+                {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+              </span>
+              <span className="truncate text-[13px] text-white/90">{o.label}</span>
+            </span>
+            {cost != null && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
+                <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
+                {cost} cr/img
+              </span>
+            )}
+          </button>
+        );
+        return cost != null ? (
+          <Tip
+            key={String(o.value)}
+            side="left"
+            content={`${o.label}: ${cost} credit${cost === 1 ? '' : 's'} per image`}
+          >
+            {row}
+          </Tip>
+        ) : (
+          <div key={String(o.value)}>{row}</div>
+        );
+      })}
+    </div>
+  );
+};
+
 const TextField = ({ field, value, onChange, disabled }) => (
   <input
     type="text"
@@ -243,11 +305,24 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
       ? value.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
   const [draft, setDraft] = useState('');
+  // The native <input type="color"> fires onChange continuously while the user
+  // drags through the picker, so committing on every change added a whole trail
+  // of intermediate colors. We debounce instead: the picker only updates a live
+  // draft, and we commit the single FINAL value ~300ms after the user settles.
+  const commitTimer = useRef(null);
+  const HEX6 = /^#[0-9a-fA-F]{6}$/;
   const add = (c) => {
+    clearTimeout(commitTimer.current);
     const color = (c || '').trim();
     if (color && !arr.includes(color)) onChange([...arr, color]);
     setDraft('');
   };
+  const pickColor = (val) => {
+    setDraft(val);
+    clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => add(val), 300);
+  };
+  useEffect(() => () => clearTimeout(commitTimer.current), []);
   const remove = (c) => onChange(arr.filter((x) => x !== c));
   return (
     <div className="flex flex-col gap-2">
@@ -286,7 +361,8 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
           />
           <input
             type="color"
-            onChange={(e) => add(e.target.value)}
+            value={HEX6.test(draft) ? draft : '#000000'}
+            onChange={(e) => pickColor(e.target.value)}
             className="h-8 w-8 cursor-pointer rounded-lg border border-white/10 bg-[#111] p-0.5"
             title="Pick a color"
           />
@@ -483,9 +559,93 @@ const FIELD_RENDERERS = {
   image_picker: ImagePickerField,
 };
 
-// Fields that always span both grid columns (their controls are wide).
+// The model/provider picker gets the richer ModelSelectField (credit-aware rows).
+const isModelField = (field) =>
+  field.type === 'select' && (field.key === 'model' || field.key === 'provider');
+
+// Fields that always span both grid columns (their controls are wide). The model
+// picker is a list of rows, so it reads better full-width too.
 const FULL_WIDTH_TYPES = new Set(['textarea', 'image_upload', 'image_picker']);
-const isFullWidth = (field) => !!field.fullWidth || FULL_WIDTH_TYPES.has(field.type);
+const isFullWidth = (field) =>
+  !!field.fullWidth || FULL_WIDTH_TYPES.has(field.type) || isModelField(field);
+
+// ─── Brand picker ────────────────────────────────────────────────────────────
+// The brief's brand fields (description / logo / colors) were pre-filled by the
+// agent from the *newest* Brand IQ brand regardless of what the user is working
+// on. This picker lets the user choose the correct brand; selecting it hydrates
+// whichever brand fields the form actually contains from that brand's data.
+const BRAND_FIELD_KEYS = new Set([
+  'brand_name',
+  'brand_description',
+  'brand_logo',
+  'brand_colors',
+]);
+const formHasBrandFields = (form) =>
+  (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
+
+const BrandPicker = ({ form, values, onPick, disabled }) => {
+  const dispatch = useDispatch();
+  const userId = useSelector((s) => s.socket?.userData?.user_id);
+  const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
+
+  // Load the user's brands once if we don't have them yet — the assistant can
+  // be opened without ever visiting Brand IQ (where they're normally fetched).
+  useEffect(() => {
+    if (userId && brands.length === 0) dispatch(fetchBrands(userId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  if (!brands.length) return null;
+
+  const fieldKeys = new Set((form.fields || []).map((f) => f.key));
+  const selectedId =
+    brands.find((b) => (b?.name || '') === (values.brand_name || ''))?.id ?? '';
+
+  const handle = (e) => {
+    const b = brands.find((x) => String(x?.id) === String(e.target.value));
+    if (!b) return;
+    const patch = {};
+    if (fieldKeys.has('brand_name')) patch.brand_name = b.name || '';
+    if (fieldKeys.has('brand_description')) patch.brand_description = b.description || '';
+    if (fieldKeys.has('brand_logo')) {
+      const logo = (Array.isArray(b.logoUrls) && b.logoUrls[0]) || b.logo || b.iconUrl || '';
+      patch.brand_logo = logo ? [{ url: logo, filename: 'logo', selected: true }] : [];
+    }
+    if (fieldKeys.has('brand_colors')) {
+      const colors = b.colors || b.brandColors || b.palette;
+      if (Array.isArray(colors) && colors.length) patch.brand_colors = colors;
+    }
+    onPick(patch);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 sm:col-span-2">
+      <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
+        Brand
+        <Tip content="Pick the brand this creative is for — its description, logo and colors fill in below.">
+          <span className="cursor-help text-white/35 hover:text-white/70">
+            <Info className="h-3 w-3" />
+          </span>
+        </Tip>
+      </label>
+      <select
+        value={selectedId}
+        onChange={handle}
+        disabled={disabled}
+        className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <option value="" className="bg-[#111]">
+          Select a brand…
+        </option>
+        {brands.map((b) => (
+          <option key={b?.id} value={b?.id} className="bg-[#111]">
+            {b?.name || 'Untitled brand'}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 // ─── Top-level form ────────────────────────────────────────────────────────
 const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
@@ -624,25 +784,21 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </p>
           )}
         </div>
-        {creditInfo.totalCredits != null && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-white/85"
-            title={
-              creditInfo.perImage != null
-                ? `${creditInfo.perImage} credits/image × ${creditInfo.totalImages} image${creditInfo.totalImages > 1 ? 's' : ''}`
-                : 'Estimated credit cost'
-            }
-          >
-            <Sparkles className="h-3 w-3 text-[#15DCFF]" />
-            ~{creditInfo.totalCredits}
-          </span>
-        )}
       </div>
 
       {/* Fields — two-column grid; wide controls span both columns. */}
       <div className="grid grid-cols-1 gap-x-3 gap-y-3.5 px-4 py-4 sm:grid-cols-2">
+        {formHasBrandFields(form) && (
+          <BrandPicker
+            form={form}
+            values={values}
+            disabled={isLocked}
+            onPick={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
+          />
+        )}
         {(form.fields || []).map((field) => {
-          const Renderer = FIELD_RENDERERS[field.type] || TextField;
+          const model = isModelField(field);
+          const Renderer = model ? ModelSelectField : FIELD_RENDERERS[field.type] || TextField;
           const full = isFullWidth(field);
           return (
             <div
@@ -656,9 +812,11 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                     {field.required && <span className="ml-0.5 text-white/50">*</span>}
                   </span>
                   {field.tooltip && (
-                    <span title={field.tooltip} className="cursor-help text-white/35 hover:text-white/70">
-                      <Info className="h-3 w-3" />
-                    </span>
+                    <Tip content={field.tooltip}>
+                      <span className="cursor-help text-white/35 hover:text-white/70">
+                        <Info className="h-3 w-3" />
+                      </span>
+                    </Tip>
                   )}
                 </label>
                 {field.description && (
@@ -670,6 +828,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 value={values[field.key]}
                 onChange={(v) => setField(field.key, v)}
                 disabled={isLocked}
+                creditCosts={model ? form.credit_costs : undefined}
               />
             </div>
           );
@@ -722,14 +881,35 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] text-white/40">
-              {validationError
-                ? validationError
-                : isSubmitted
-                  ? 'Tweak anything, then regenerate.'
-                  : 'You can change anything before submitting.'}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="flex min-w-0 flex-col gap-1">
+              {/* Credit + image-count summary lives here (next to Generate) so the
+                  user can confirm exactly what they'll spend — and on how many
+                  images across how many ratios — right before firing. */}
+              {creditInfo.totalCredits != null && (
+                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11.5px]">
+                  <span className="inline-flex items-center gap-1 font-semibold text-white/90">
+                    <Sparkles className="h-3.5 w-3.5 text-[#15DCFF]" />
+                    ~{creditInfo.totalCredits} credits
+                  </span>
+                  <span className="text-white/45">
+                    · {creditInfo.totalImages} image{creditInfo.totalImages > 1 ? 's' : ''}
+                    {creditInfo.isPack
+                      ? ` (3 variants × ${creditInfo.ratios} ratio${creditInfo.ratios > 1 ? 's' : ''})`
+                      : ` (${creditInfo.perRatio}/ratio × ${creditInfo.ratios} ratio${creditInfo.ratios > 1 ? 's' : ''})`}
+                  </span>
+                </span>
+              )}
+              <span
+                className={`text-[11px] ${validationError ? 'text-amber-400/90' : 'text-white/40'}`}
+              >
+                {validationError
+                  ? validationError
+                  : isSubmitted
+                    ? 'Tweak anything, then regenerate.'
+                    : 'You can change anything before submitting.'}
+              </span>
+            </div>
             <button
               type="button"
               onClick={handleSubmit}

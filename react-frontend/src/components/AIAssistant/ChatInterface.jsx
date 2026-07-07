@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import Composer from './Composer';
 import Messages from './Messages';
 import GenCanvas from './GenCanvas';
+import PromptSuggestions from './PromptSuggestions';
 import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   buildMockChoiceForm,
@@ -49,6 +50,15 @@ const ChatInterface = () => {
   // The message/selection the user is replying to, if any: { text, role, messageId }.
   // Set by the Reply button and the highlight-to-quote popover; cleared on send.
   const [quote, setQuote] = useState(null);
+
+  // A picked starter-prompt suggestion to seed into the composer. `nonce` makes
+  // re-picking the same suggestion re-seed.
+  const [seed, setSeed] = useState(null);
+  const seedNonce = useRef(0);
+  const handlePickSuggestion = useCallback((text) => {
+    seedNonce.current += 1;
+    setSeed({ text, nonce: seedNonce.current });
+  }, []);
   const handleQuote = useCallback((q) => {
     if (q && q.text && q.text.trim()) setQuote({ ...q, text: q.text.trim() });
   }, []);
@@ -290,20 +300,22 @@ const ChatInterface = () => {
             {`Hi, ${greeting}`}
           </h2>
           <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
-          <div className="mt-7 w-full max-w-[820px] px-3 sm:px-0">
+          <div className="mt-7 w-full max-w-[1040px] px-3 sm:px-0">
             <Composer
               onSend={handleSend}
               disabled={pending}
               variant="centered"
               quote={quote}
               onClearQuote={() => setQuote(null)}
+              seed={seed}
             />
           </div>
+          <PromptSuggestions onPick={handlePickSuggestion} />
         </div>
       ) : (
         <>
           <div className="subtle-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1">
-            <div className="mx-auto w-full min-w-0 max-w-[820px] px-3 pt-5 sm:px-4 sm:pt-6">
+            <div className="mx-auto w-full min-w-0 max-w-[1040px] px-3 pt-5 sm:px-4 sm:pt-6">
               <Messages
                 messages={messages}
                 pending={pending}
@@ -318,7 +330,7 @@ const ChatInterface = () => {
             </div>
           </div>
           <div className="shrink-0 px-3 pt-3 pb-4 sm:px-4">
-            <div className="mx-auto w-full max-w-[820px]">
+            <div className="mx-auto w-full max-w-[1040px]">
               <Composer
                 onSend={handleSend}
                 disabled={pending}

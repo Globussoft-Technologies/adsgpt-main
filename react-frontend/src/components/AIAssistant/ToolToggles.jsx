@@ -1,6 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { Globe, LibraryBig, PenLine, Image as ImageIcon, Film, X } from 'lucide-react';
 import { toggleTool, TOGGLEABLE_TOOLS } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+import Tip from './Tip';
 
 // Order matches the chip rail order below. Keys MUST match TOGGLEABLE_TOOLS
 // in the slice (which match the Agent's _TOOL_PACKAGES keys).
@@ -63,28 +64,28 @@ const ToolToggles = () => {
           : undefined;
 
         return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => dispatch(toggleTool(key))}
-            title={title}
-            aria-pressed={isOn}
-            style={activeStyle}
-            className={`group inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-medium transition-all duration-150 ${
-              isOn
-                ? 'text-white'
-                : 'border-white/10 bg-transparent text-white/50 hover:border-white/20 hover:text-white/80'
-            }`}
-          >
-            <Icon className="h-3 w-3" style={isOn ? { color: accent } : undefined} />
-            <span>{label}</span>
-            {isOn && (
-              <X
-                className="h-3 w-3 text-white/70 transition-colors group-hover:text-white"
-                aria-hidden="true"
-              />
-            )}
-          </button>
+          <Tip key={key} content={title}>
+            <button
+              type="button"
+              onClick={() => dispatch(toggleTool(key))}
+              aria-pressed={isOn}
+              style={activeStyle}
+              className={`group inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-medium transition-all duration-150 ${
+                isOn
+                  ? 'text-white'
+                  : 'border-white/10 bg-transparent text-white/50 hover:border-white/20 hover:text-white/80'
+              }`}
+            >
+              <Icon className="h-3 w-3" style={isOn ? { color: accent } : undefined} />
+              <span>{label}</span>
+              {isOn && (
+                <X
+                  className="h-3 w-3 text-white/70 transition-colors group-hover:text-white"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+          </Tip>
         );
       })}
     </div>
