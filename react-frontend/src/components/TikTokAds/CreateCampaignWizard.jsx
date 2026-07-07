@@ -42,9 +42,26 @@ const MAX_VIDEO_DURATION_SECONDS = 600;
 const MIN_VIDEO_WIDTH = 960;
 const MIN_VIDEO_HEIGHT = 540;
 
-// Note: TikTok also enforces a minimum bitrate (350 Kbps), but bitrate isn't
-// reliably readable client-side without decoding the container — that check
-// is left to TikTok's own upload API response rather than approximated here.
+// TikTok requires a minimum average bitrate of 350 Kbps. The browser has no
+// API that reports a file's real (video-track-only) bitrate without parsing
+// the container, so we approximate: total file size / duration. This mixes
+// in audio + container overhead, which can make a genuinely low-bitrate
+// video read as passing — so this is a soft warning only, never a hard
+// block. TikTok's own upload API is the real gatekeeper for this rule.
+const MIN_VIDEO_BITRATE_KBPS = 350;
+const estimateBitrateKbps = (fileSizeBytes, durationSeconds) =>
+  durationSeconds > 0 ? (fileSizeBytes * 8) / durationSeconds / 1000 : null;
+
+// TikTok requires in-feed video ads to be one of these three aspect ratios
+// (16:9 landscape, 1:1 square, 9:16 vertical) — confirmed via the live
+// Ads Manager "technical issues" upload check (applies platform-wide, not
+// just to a specific placement).
+const SUPPORTED_VIDEO_RATIOS = [16 / 9, 1, 9 / 16];
+const ASPECT_RATIO_TOLERANCE = 0.02;
+const isSupportedAspectRatio = (width, height) => {
+  const ratio = width / height;
+  return SUPPORTED_VIDEO_RATIOS.some((r) => Math.abs(ratio - r) <= ASPECT_RATIO_TOLERANCE);
+};
 
 // TikTok rejects images larger than 2340px on the longer side or 1242px on
 // the shorter side (confirmed via the live Ads Manager upload error).
@@ -1119,6 +1136,7 @@ const CreateCampaignWizard = ({
   const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, adId}
   const [error, setError] = useState(null);
   const [errors, setErrors] = useState({}); // field-level validation errors
+  const [videoWarning, setVideoWarning] = useState(''); // non-blocking advisory (e.g. estimated low bitrate)
 
   const [form, setForm] = useState({
     objectiveKey: '',
@@ -1175,6 +1193,7 @@ const CreateCampaignWizard = ({
   const handleVideoFileSelect = async (file) => {
     if (!file) {
       update({ videoFile: null });
+      setVideoWarning('');
       return;
     }
     const { duration, width, height } = await readVideoMetadata(file);
@@ -1193,7 +1212,20 @@ const CreateCampaignWizard = ({
       }));
       return;
     }
+    if (width != null && height != null && !isSupportedAspectRatio(width, height)) {
+      setErrors((e) => ({
+        ...e,
+        video: 'Cannot be delivered to TikTok: Video ratio must be 16:9/1:1/9:16.',
+      }));
+      return;
+    }
     setErrors((e) => ({ ...e, video: undefined }));
+    const estimatedBitrate = duration ? estimateBitrateKbps(file.size, duration) : null;
+    setVideoWarning(
+      estimatedBitrate != null && estimatedBitrate < MIN_VIDEO_BITRATE_KBPS
+        ? `Estimated bitrate (~${Math.round(estimatedBitrate)} Kbps) looks low — TikTok requires at least ${MIN_VIDEO_BITRATE_KBPS} Kbps. This is an approximation; TikTok will give the final answer on upload.`
+        : ''
+    );
     update({ videoFile: file });
   };
 
@@ -2368,9 +2400,15 @@ const CreateCampaignWizard = ({
                       file={form.videoFile}
                       url={form.videoUrl}
                       type="video"
-                      onRemove={() => update({ videoFile: null, videoUrl: '' })}
+                      onRemove={() => {
+                        update({ videoFile: null, videoUrl: '' });
+                        setVideoWarning('');
+                      }}
                     />
                     {errors.video && <p className="mt-1 text-xs text-red-500">{errors.video}</p>}
+                    {!errors.video && videoWarning && (
+                      <p className="mt-1 text-xs text-amber-500">{videoWarning}</p>
+                    )}
                   </FieldShell>
                 ) : (
                   <>
