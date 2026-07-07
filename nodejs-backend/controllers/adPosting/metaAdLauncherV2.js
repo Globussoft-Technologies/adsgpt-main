@@ -1707,6 +1707,23 @@ async function updateAdSetV2(req, res) {
       // dropping it triggers Meta's Mobile Targeting Mismatch (subcode 1487678).
       const existingUserOs = existing.targeting?.user_os;
       if (existingUserOs) spec.user_os = existingUserOs;
+      // Found in the 2026-07-07 proactive audit, SAME bug as user_os above
+      // but silent: createAdSetV2 force-sets `device_platforms: ["mobile"]`
+      // for every "app" promotedObjectShape cell (App Promotion, Traffic/App,
+      // Leads/App, Engagement/App, Sales/App) — the Edit Ad Set form never
+      // collects devicePlatforms for these cells either, so
+      // buildExplicitTargeting's output OMITS device_platforms entirely
+      // (see its `if (t.devicePlatforms?.length) spec.device_platforms = ...`
+      // guard). Meta's `targeting` field is a full replace, not a merge —
+      // confirmed by user_os needing this exact preservation pattern
+      // already — so editing ANY targeting field (locations, age, gender,
+      // placements) on an app-shape ad set would silently DROP the
+      // mobile-only restriction and let the campaign start delivering to
+      // desktop too. Unlike user_os, Meta does NOT reject this — there's no
+      // subcode to catch it, which is why it went unnoticed until a
+      // deliberate audit compared this block against its create-time twin.
+      const existingDevicePlatforms = existing.targeting?.device_platforms;
+      if (existingDevicePlatforms) spec.device_platforms = existingDevicePlatforms;
       params.targeting = spec;
     }
     // Awareness/STANDARD frequency cap. Three states:
