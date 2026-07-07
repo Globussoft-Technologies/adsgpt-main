@@ -1019,31 +1019,62 @@ async function resolveCellForAdSet(req, res) {
     // was created, or the pair was wrong from the start via some other
     // caller (this account's userId pattern suggests API/agent-driven
     // creation, not just the interactive wizard, which may not have gone
-    // through AppLinkagePicker's atomic pick at all). Re-resolve
-    // objectStoreUrl FRESH from the application's live object_store_urls,
-    // matched to the ad set's actual target platform (targeting.user_os —
-    // set from the same mobileAppStore choice at creation time, see
-    // createAdSetV2's `targetingSpec.user_os` block), rather than trusting
-    // whatever's stored. Best-effort: falls back to the stored value if the
-    // live app fetch fails or the app has no URL for that platform, so a
-    // transient Meta API hiccup doesn't newly break Add-Ad for cells this
-    // never affected.
+    // through AppLinkagePicker's atomic pick at all).
+    //
+    // CORRECTED same day: first attempt inferred platform from
+    // `targeting.user_os`, on the assumption every ad set sets it the way
+    // `createAdSetV2` does. Deployed, re-tested — NO change in outcome,
+    // meaning `user_os` almost certainly ISN'T set in the expected shape on
+    // this particular ad set (consistent with it being created outside our
+    // own create-adset flow). Switched to inferring platform from the
+    // STORED objectStoreUrl's own domain instead — a signal that exists
+    // regardless of how the ad set was created, since Meta accepted SOME
+    // object_store_url on it already. Falls back to targeting.user_os only
+    // if the stored URL is empty/unparseable.
+    //
+    // Also: previously, a live fetch that found NO matching URL for the
+    // inferred platform silently kept the (apparently wrong) stored value
+    // — indistinguishable from "nothing needed fixing." Now logged
+    // explicitly at every branch so a recurrence gives us real diagnostic
+    // data instead of another silent no-op.
     if (applicationId) {
       try {
+        const inferPlatformFromUrl = (url) => {
+          if (!url) return null;
+          const u = String(url).toLowerCase();
+          if (u.includes("itunes.apple.com") || u.includes("apps.apple.com")) return "ios";
+          if (u.includes("play.google.com")) return "android";
+          return null;
+        };
         const userOs = adSetData.targeting?.user_os || [];
-        const platform = userOs.includes("Android")
-          ? "android"
-          : userOs.includes("iOS")
-          ? "ios"
-          : null;
-        if (platform) {
+        const platform =
+          inferPlatformFromUrl(objectStoreUrl) ||
+          (userOs.includes("Android") ? "android" : userOs.includes("iOS") ? "ios" : null);
+        if (!platform) {
+          logger.warn(
+            `resolveCellForAdSet: couldn't infer platform for application ${applicationId} ` +
+              `(storedUrl=${objectStoreUrl}, user_os=${JSON.stringify(userOs)}) — keeping stored objectStoreUrl unchanged`,
+          );
+        } else {
           const api = bizSdk.FacebookAdsApi.getDefaultApi();
           const app = await api.call("GET", [applicationId], {
             fields: "object_store_urls",
           });
           const appData = app?._data || app || {};
           const liveUrl = pickAppStoreUrl(appData.object_store_urls, platform);
-          if (liveUrl) objectStoreUrl = liveUrl;
+          if (liveUrl && liveUrl !== objectStoreUrl) {
+            logger.info(
+              `resolveCellForAdSet: objectStoreUrl mismatch for application ${applicationId} ` +
+                `(platform=${platform}) — stored="${objectStoreUrl}", live="${liveUrl}". Using live value.`,
+            );
+            objectStoreUrl = liveUrl;
+          } else if (!liveUrl) {
+            logger.warn(
+              `resolveCellForAdSet: application ${applicationId} has NO live object_store_urls entry ` +
+                `for platform=${platform} (object_store_urls=${JSON.stringify(appData.object_store_urls)}) — ` +
+                `keeping stored objectStoreUrl="${objectStoreUrl}" unchanged, Add-Ad will likely still fail with subcode 1885270`,
+            );
+          }
         }
       } catch (err) {
         logger.warn(
