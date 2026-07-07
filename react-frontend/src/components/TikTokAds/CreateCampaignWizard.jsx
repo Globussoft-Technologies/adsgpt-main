@@ -32,6 +32,66 @@ import {
   SegGroup,
 } from '@/components/MetaAds/wizardFields';
 
+// TikTok requires in-feed video ads to be at least 5 seconds, up to a
+// 10-minute maximum for standard (non-Spark) ads.
+const MIN_VIDEO_DURATION_SECONDS = 5;
+const MAX_VIDEO_DURATION_SECONDS = 600;
+
+// TikTok rejects videos below 960x540 resolution (confirmed via the live
+// Ads Manager "technical issues" upload check).
+const MIN_VIDEO_WIDTH = 960;
+const MIN_VIDEO_HEIGHT = 540;
+
+// Note: TikTok also enforces a minimum bitrate (350 Kbps), but bitrate isn't
+// reliably readable client-side without decoding the container — that check
+// is left to TikTok's own upload API response rather than approximated here.
+
+// TikTok rejects images larger than 2340px on the longer side or 1242px on
+// the shorter side (confirmed via the live Ads Manager upload error).
+const MAX_IMAGE_LONG_SIDE = 2340;
+const MAX_IMAGE_SHORT_SIDE = 1242;
+
+// Reads a video file's duration + pixel dimensions client-side via a
+// throwaway <video> element, without uploading it. Resolves null fields if
+// the browser can't read metadata.
+function readVideoMetadata(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve({
+        duration: Number.isFinite(video.duration) ? video.duration : null,
+        width: video.videoWidth || null,
+        height: video.videoHeight || null,
+      });
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ duration: null, width: null, height: null });
+    };
+    video.src = url;
+  });
+}
+
+// Reads an image file's pixel dimensions client-side via a throwaway Image.
+function readImageDimensions(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
 function MediaPreview({ file, url, type, onRemove }) {
   const [src, setSrc] = useState(null);
 
@@ -320,6 +380,19 @@ const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
 // drives to a product/catalog destination configured elsewhere (Product
 // sales), not a standalone landing page URL on the ad.
 const objectiveNeedsLandingUrl = (objectiveKey) => objectiveKey === 'TRAFFIC';
+
+// TikTok caps ad text at 100 characters — but if it contains any CJK
+// (Chinese, Japanese, Korean) fullwidth character, the cap drops to 50,
+// since each fullwidth glyph is ~2x the visual width of a Latin character.
+// Ranges expressed as \u{XXXX} code point escapes (not literal glyphs) to
+// avoid embedding irregular/fullwidth characters directly in source.
+const CJK_FULLWIDTH_RE = new RegExp(
+  '[\u{3000}-\u{303F}\u{3040}-\u{30FF}\u{3400}-\u{4DBF}\u{4E00}-\u{9FFF}\u{AC00}-\u{D7A3}\u{F900}-\u{FAFF}\u{FF00}-\u{FFEF}]',
+  'u'
+);
+const adTextMaxLength = (text) => (CJK_FULLWIDTH_RE.test(text) ? 50 : 100);
+const AD_TEXT_LENGTH_ERROR =
+  'Text must be between 1 and 100 characters. (For Chinese, Japanese or Korean: 1-50 fullwidth characters or 1-100 halfwidth)';
 
 const PIXEL_EVENTS_BY_OBJECTIVE = {
   PRODUCT_SALES: [
@@ -1094,6 +1167,59 @@ const CreateCampaignWizard = ({
 
   const update = (patch) => setForm((f) => ({ ...f, ...patch }));
 
+  // Pre-check a video file client-side before it's set on the form, so an
+  // obviously-oversized file (>10 min, TikTok's documented max for standard
+  // in-feed ads) is rejected instantly instead of after a slow upload. Any
+  // TikTok-side rule we haven't confirmed still surfaces via the real API
+  // error at launch — this is a fast-fail, not the source of truth.
+  const handleVideoFileSelect = async (file) => {
+    if (!file) {
+      update({ videoFile: null });
+      return;
+    }
+    const { duration, width, height } = await readVideoMetadata(file);
+    if (duration != null && duration < MIN_VIDEO_DURATION_SECONDS) {
+      setErrors((e) => ({ ...e, video: 'Video must be at least 5 seconds long.' }));
+      return;
+    }
+    if (duration != null && duration > MAX_VIDEO_DURATION_SECONDS) {
+      setErrors((e) => ({ ...e, video: 'Video must be 10 minutes or shorter.' }));
+      return;
+    }
+    if (width != null && height != null && (width < MIN_VIDEO_WIDTH || height < MIN_VIDEO_HEIGHT)) {
+      setErrors((e) => ({
+        ...e,
+        video: `Cannot be delivered to TikTok: Resolution must be at least ${MIN_VIDEO_WIDTH}x${MIN_VIDEO_HEIGHT}.`,
+      }));
+      return;
+    }
+    setErrors((e) => ({ ...e, video: undefined }));
+    update({ videoFile: file });
+  };
+
+  // Same idea for images — TikTok rejects images over 2340px (longer side) /
+  // 1242px (shorter side), confirmed via a live upload error.
+  const handleImageFileSelect = async (file) => {
+    if (!file) {
+      update({ imageFile: null });
+      return;
+    }
+    const dims = await readImageDimensions(file);
+    if (dims) {
+      const longer = Math.max(dims.width, dims.height);
+      const shorter = Math.min(dims.width, dims.height);
+      if (longer > MAX_IMAGE_LONG_SIDE || shorter > MAX_IMAGE_SHORT_SIDE) {
+        setErrors((e) => ({
+          ...e,
+          image: `Not supported by TikTok. The longer side must be ${MAX_IMAGE_LONG_SIDE} or less, and the shorter side must be ${MAX_IMAGE_SHORT_SIDE} or less.`,
+        }));
+        return;
+      }
+    }
+    setErrors((e) => ({ ...e, image: undefined }));
+    update({ imageFile: file });
+  };
+
   // Apply a saved campaign template — merge its payload over the current form,
   // strip runtime-only state, and ask the dashboard to switch advertiser accounts
   // if the template was saved against a different one.
@@ -1330,9 +1456,15 @@ const CreateCampaignWizard = ({
         errs.image = 'Upload an image or provide an image URL';
       }
       // Ad text is only mandatory for Video Views — every other objective
-      // treats it as optional on the ad.
-      if (form.objectiveKey === 'VIDEO_VIEWS' && !form.adText.trim()) {
-        errs.adText = 'Ad text is required';
+      // treats it as optional on the ad. When it is required, TikTok's
+      // length rule applies (1-100 chars, or 1-50 for CJK fullwidth text).
+      if (form.objectiveKey === 'VIDEO_VIEWS') {
+        const adText = form.adText.trim();
+        if (!adText) {
+          errs.adText = 'Ad text is required';
+        } else if (adText.length > adTextMaxLength(adText)) {
+          errs.adText = AD_TEXT_LENGTH_ERROR;
+        }
       }
       if (
         objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) &&
@@ -2255,7 +2387,7 @@ const CreateCampaignWizard = ({
                           <input
                             type="file"
                             accept="video/mp4,video/quicktime,video/webm"
-                            onChange={(e) => update({ videoFile: e.target.files?.[0] || null })}
+                            onChange={(e) => handleVideoFileSelect(e.target.files?.[0] || null)}
                             className="hidden"
                           />
                         </label>
@@ -2293,7 +2425,7 @@ const CreateCampaignWizard = ({
                           <input
                             type="file"
                             accept="image/jpeg,image/png"
-                            onChange={(e) => update({ imageFile: e.target.files?.[0] || null })}
+                            onChange={(e) => handleImageFileSelect(e.target.files?.[0] || null)}
                             className="hidden"
                           />
                         </label>
@@ -2313,6 +2445,7 @@ const CreateCampaignWizard = ({
               placeholder="Check out our product!"
               required={form.objectiveKey === 'VIDEO_VIEWS'}
               error={errors.adText}
+              hint={`${form.adText.length}/${adTextMaxLength(form.adText)} characters`}
             />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <SelectField
