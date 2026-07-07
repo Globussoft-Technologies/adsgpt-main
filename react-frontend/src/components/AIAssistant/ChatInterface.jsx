@@ -14,6 +14,7 @@ import {
 } from './mockChoiceForms';
 import {
   appendAssistantText,
+  resetAssistantText,
   attachAssistantAds,
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
@@ -133,6 +134,11 @@ const ChatInterface = () => {
               break;
             case 'token':
               if (data.delta) dispatch(appendAssistantText(data.delta));
+              break;
+            case 'token_reset':
+              // Server dropped pre-tool preamble; clear it so the final reply
+              // isn't appended onto repeated between-tool chatter.
+              dispatch(resetAssistantText());
               break;
             case 'image':
               if (data.url) dispatch(attachAssistantImage(data.url));

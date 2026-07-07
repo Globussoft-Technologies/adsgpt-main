@@ -143,6 +143,14 @@ const aiAssistantSlice = createSlice({
         msg.text += action.payload || '';
       }
     },
+    // Drop text streamed before a tool call (preamble between graph loops) so the
+    // final reply isn't concatenated onto it — see the `token_reset` SSE event.
+    resetAssistantText: (state) => {
+      const msg = state.messages[state.messages.length - 1];
+      if (msg && msg.role === 'assistant') {
+        msg.text = '';
+      }
+    },
     pushStep: (state, action) => {
       const label = action.payload;
       if (!label) return;
@@ -354,6 +362,7 @@ export const {
   pushUserMessage,
   startAssistantStream,
   appendAssistantText,
+  resetAssistantText,
   pushStep,
   attachAssistantImage,
   attachAssistantAds,
