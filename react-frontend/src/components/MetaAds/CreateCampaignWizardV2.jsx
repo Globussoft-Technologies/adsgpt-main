@@ -610,10 +610,30 @@ export default function CreateCampaignWizardV2({
         billingEvent: cell.adSet?.defaultBillingEvent || '',
         callToAction: cell.ctas?.default || '',
       };
-      // App Promotion: applicationId comes from server config (env var),
-      // not from the user. Always overwrite — if config changes, the
-      // wizard picks it up on next open.
-      if (cell.adSet?.additionalFields?.includes('applicationId')) {
+      // App Promotion (+ every other "app"-shape cell): applicationId
+      // normally comes from server config (env var) — see schemaDefaults'
+      // docblock in metaAdLauncher.js (getWizardSchema). Skip the override
+      // when `context` already inherited a specific applicationId (Add Ad
+      // — the ad set already exists and was created under WHATEVER config
+      // value was live AT ITS CREATION TIME).
+      //
+      // ROOT CAUSE of subcode 1885270's repeated recurrence (2026-07-07):
+      // this effect used to run UNCONDITIONALLY for every non-edit mode,
+      // including 'create-ad'. `objectStoreUrl` stayed correct across
+      // repeated Add-Ad attempts on the same ad set (it's inherited via
+      // context, untouched here) while `applicationId` kept getting
+      // silently overwritten with the server's CURRENT config value on
+      // every wizard mount — completely independent of `resolveCellForAdSet`
+      // correctly resolving the ad set's ACTUAL app moments earlier. Two
+      // full rounds of backend "re-derive objectStoreUrl live" fixes had
+      // zero effect because the real bug was never in the backend
+      // resolution at all — it was this frontend effect clobbering the
+      // correctly-resolved value immediately after. If the server's env
+      // var (META_APP_PROMOTION_APP_ID) is EVER updated after an ad set is
+      // created, every subsequent Add-Ad on that ad set was guaranteed to
+      // mismatch, with no code-level bug to find by staring at
+      // resolveCellForAdSet harder — the mismatch lived here.
+      if (cell.adSet?.additionalFields?.includes('applicationId') && !context?.applicationId) {
         next.applicationId = schemaDefaults?.appPromotion?.applicationId || '';
       }
       // Cell media-kind lock — Engagement/VIDEO_VIEWS sets
@@ -632,7 +652,7 @@ export default function CreateCampaignWizardV2({
       }
       return next;
     });
-  }, [cell, schemaDefaults, mode]);
+  }, [cell, schemaDefaults, mode, context]);
 
   const steps = useMemo(() => buildSteps(cell, mode), [cell, mode]);
   const currentStep = steps[stepIndex];
