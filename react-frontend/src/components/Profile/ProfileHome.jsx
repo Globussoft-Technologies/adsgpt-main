@@ -347,7 +347,7 @@ export default function ProfileHome() {
                 </div>
               )}
               {/* more options (cancel subscription) */}
-              {subscriptionType !== '8' && (
+              {import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true' && subscriptionType !== '8' && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -566,7 +566,9 @@ export default function ProfileHome() {
               )}
             </div>
 
-            {/* ── Google ── */}
+            {/* ── Google ── gated behind the same env switch as the Google
+                posting / Ads Manager flows (VITE_ENABLE_GOOGLE_POSTING). */}
+            {import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true' && (
             <div className="flex items-center justify-between gap-3 py-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-[#232323]">
@@ -607,6 +609,7 @@ export default function ProfileHome() {
                 </div>
               )}
             </div>
+            )}
 
             {/* ── Canva ── */}
             {CANVA_ENABLED && isCanvaAllowedUser(userData?.user_id) && (

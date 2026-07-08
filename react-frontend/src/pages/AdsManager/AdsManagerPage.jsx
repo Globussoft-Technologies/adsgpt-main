@@ -11,6 +11,10 @@ const AdsManagerPage = () => (
     metaDestination="/meta-ads"
     title="Choose Your Ad Platform"
     subtitle="Select where you want to manage your ads"
+    // Gate the Google Ads card behind the same env switch used across the
+    // Google posting flows. When VITE_ENABLE_GOOGLE_POSTING !== 'true' the card
+    // falls back to "Coming Soon" / inactive, just like Autopilot.
+    googleComingSoon={import.meta.env.VITE_ENABLE_GOOGLE_POSTING !== 'true'}
   />
 );
 
