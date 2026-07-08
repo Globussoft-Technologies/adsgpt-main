@@ -139,3 +139,12 @@
   overflow: auto;
   z-index: 1;
 }
+
+/* Border-only glow (glass composer): the ::before/::after mesh-gradient layers
+   mask their interior with --card-bg, so a translucent (glass) card lets the
+   colored mesh bleed into the interior. Drop them entirely — the outer
+   .edge-light glow + the 1px border still give a clean border glow. */
+.border-glow-card.glow-edge-only::before,
+.border-glow-card.glow-edge-only::after {
+  display: none;
+}
