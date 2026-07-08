@@ -261,6 +261,69 @@ group("non-placeholder cell consistency", () => {
   }
 });
 
+// ─── CTA_LABELS keys must be real Meta call_to_action enum values ──────────
+//
+// Real hit (2026-07-08, trace LX-B76D5CE2): "GET_DETAILS" was a made-up key
+// (whoever wrote CTA_LABELS used the display LABEL's wording — "See
+// details" — as the key, instead of Meta's actual API constant, which is
+// `SEE_DETAILS`). It shipped with a correct label, was internally
+// consistent everywhere it was used, and passed the "every CTA has a
+// label" test above forever — because that test only checks
+// self-consistency (does the label map have SOME entry for this key), not
+// ground truth (is this key a value Meta's API actually accepts). Cross-
+// checking every CTA_LABELS key the same day found a SECOND instance of
+// the identical mistake: "VIEW_MENU" (real value: `SEE_MENU`).
+//
+// META_VALID_CTAS below is Meta's own enumeration of every value it
+// accepts for `call_to_action[type]`, copied VERBATIM from a live 400
+// response body (not hand-typed, not from docs) — see the trace above.
+// This is the single most authoritative source available: it's Meta's
+// actual validation code talking, for the exact field this schema feeds.
+group("CTA_LABELS keys are real Meta call_to_action enum values", () => {
+  const META_VALID_CTAS = new Set([
+    "BOOK_TRAVEL", "CONTACT_US", "DONATE", "DONATE_NOW", "DOWNLOAD",
+    "GET_DIRECTIONS", "GO_LIVE", "INTERESTED", "LEARN_MORE", "SEE_DETAILS",
+    "LIKE_PAGE", "MESSAGE_PAGE", "RAISE_MONEY", "SAVE", "SEND_TIP",
+    "SHOP_NOW", "SIGN_UP", "VIEW_INSTAGRAM_PROFILE", "INSTAGRAM_MESSAGE",
+    "LOYALTY_LEARN_MORE", "PURCHASE_GIFT_CARDS", "PAY_TO_ACCESS", "SEE_MORE",
+    "TRY_IN_CAMERA", "WHATSAPP_LINK", "GET_IN_TOUCH", "TRY_NOW",
+    "ASK_A_QUESTION", "START_A_CHAT", "CHAT_NOW", "ASK_US", "CHAT_WITH_US",
+    "BOOK_NOW", "CHECK_AVAILABILITY", "ORDER_NOW", "WHATSAPP_MESSAGE",
+    "GET_MOBILE_APP", "INSTALL_MOBILE_APP", "USE_MOBILE_APP", "INSTALL_APP",
+    "USE_APP", "PLAY_GAME", "TRY_DEMO", "WATCH_VIDEO", "WATCH_MORE",
+    "OPEN_LINK", "NO_BUTTON", "LISTEN_MUSIC", "MOBILE_DOWNLOAD", "GET_OFFER",
+    "GET_OFFER_VIEW", "BUY_NOW", "BUY_TICKETS", "UPDATE_APP", "BET_NOW",
+    "ADD_TO_CART", "SELL_NOW", "GET_SHOWTIMES", "LISTEN_NOW",
+    "GET_EVENT_TICKETS", "REMIND_ME", "SEARCH_MORE", "PRE_REGISTER",
+    "SWIPE_UP_PRODUCT", "SWIPE_UP_SHOP", "PLAY_GAME_ON_FACEBOOK",
+    "VISIT_WORLD", "OPEN_INSTANT_APP", "JOIN_GROUP", "GET_PROMOTIONS",
+    "SEND_UPDATES", "INQUIRE_NOW", "VISIT_PROFILE", "CHAT_ON_WHATSAPP",
+    "EXPLORE_MORE", "CONFIRM", "JOIN_CHANNEL", "MAKE_AN_APPOINTMENT",
+    "ASK_ABOUT_SERVICES", "BOOK_A_CONSULTATION", "GET_A_QUOTE",
+    "BUY_VIA_MESSAGE", "ASK_FOR_MORE_INFO", "VIEW_PRODUCT", "VIEW_CHANNEL",
+    "WATCH_LIVE_VIDEO", "JOIN_LIVE_VIDEO", "IMAGINE", "CALL", "MISSED_CALL",
+    "CALL_NOW", "CALL_ME", "APPLY_NOW", "BUY", "GET_QUOTE", "SUBSCRIBE",
+    "RECORD_NOW", "VOTE_NOW", "GIVE_FREE_RIDES", "REGISTER_NOW",
+    "OPEN_MESSENGER_EXT", "EVENT_RSVP", "CIVIC_ACTION", "SEND_INVITES",
+    "REFER_FRIENDS", "REQUEST_TIME", "SEE_MENU", "SEARCH", "TRY_IT",
+    "TRY_ON", "LINK_CARD", "DIAL_CODE", "FIND_YOUR_GROUPS", "START_ORDER",
+  ]);
+
+  for (const key of Object.keys(CTA_LABELS)) {
+    test(`CTA_LABELS key "${key}" is a real Meta enum value`, () => {
+      assert.ok(
+        META_VALID_CTAS.has(key),
+        `"${key}" is not in Meta's documented call_to_action enum — likely a ` +
+          `made-up key (check whether the LABEL text was used as the key by ` +
+          `mistake, as happened with GET_DETAILS→SEE_DETAILS and ` +
+          `VIEW_MENU→SEE_MENU). If Meta genuinely added a new CTA this list ` +
+          `doesn't know about yet, add it to META_VALID_CTAS above with a ` +
+          `note on where it was confirmed.`,
+      );
+    });
+  }
+});
+
 // ─── Cell implementation status ─────────────────────────────────────────────
 
 group("cell implementation status", () => {

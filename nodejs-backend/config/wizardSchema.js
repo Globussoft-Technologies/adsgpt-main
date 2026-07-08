@@ -231,14 +231,26 @@ const CTA_LABELS = {
   GET_QUOTE: "Get quote",
   APPLY_NOW: "Apply now",
   GET_OFFER: "Get offer",
-  GET_DETAILS: "See details",
+  // Real hit (2026-07-08, trace LX-B76D5CE2): this key used to be
+  // "GET_DETAILS" — NOT a real Meta call_to_action enum value at all.
+  // Meta's live rejection lists the full valid set and it isn't in it; the
+  // real value is `SEE_DETAILS` (matches the display label below, which
+  // was always correct). Whoever wrote this enum used the display LABEL's
+  // wording as the key instead of Meta's actual API constant, and the wrong
+  // key had propagated into ~7 cells' `ctas.allowed` lists across this
+  // file before anyone actually picked it as a launch CTA.
+  SEE_DETAILS: "See details",
   GET_SHOWTIMES: "Get showtimes",
   ORDER_NOW: "Order now",
   WATCH_MORE: "Watch more",
   LISTEN_NOW: "Listen now",
   PLAY_GAME: "Play game",
   REQUEST_TIME: "Request time",
-  VIEW_MENU: "See menu",
+  // Same class of bug as SEE_DETAILS above, found in the same pass by
+  // cross-checking every CTA_LABELS key against Meta's live enum list
+  // (2026-07-08) — this key used to be "VIEW_MENU", which isn't a real
+  // Meta enum; the real value is SEE_MENU.
+  SEE_MENU: "See menu",
   INQUIRE_NOW: "Enquire now",
   SEND_UPDATES: "Get updates",
   GET_PROMOTIONS: "Get promotions",
@@ -636,9 +648,9 @@ const CELLS = {
       ctas: {
         allowed: [
           "NO_BUTTON", "APPLY_NOW", "BOOK_NOW", "CONTACT_US", "DOWNLOAD",
-          "GET_OFFER", "GET_QUOTE", "GET_SHOWTIMES", "GET_DETAILS",
+          "GET_OFFER", "GET_QUOTE", "GET_SHOWTIMES", "SEE_DETAILS",
           "LEARN_MORE", "LISTEN_NOW", "ORDER_NOW", "PLAY_GAME",
-          "REQUEST_TIME", "VIEW_MENU", "SHOP_NOW", "SIGN_UP",
+          "REQUEST_TIME", "SEE_MENU", "SHOP_NOW", "SIGN_UP",
           "SUBSCRIBE", "WATCH_MORE",
         ],
         default: "LEARN_MORE",
@@ -671,7 +683,7 @@ const CELLS = {
       // button copy.
       ctas: {
         allowed: [
-          "GET_DETAILS", "LEARN_MORE", "SUBSCRIBE", "BOOK_NOW", "SIGN_UP",
+          "SEE_DETAILS", "LEARN_MORE", "SUBSCRIBE", "BOOK_NOW", "SIGN_UP",
           "APPLY_NOW", "DOWNLOAD", "GET_OFFER", "GET_QUOTE",
         ],
         default: "SIGN_UP",
@@ -709,7 +721,7 @@ const CELLS = {
       // CTA list verified against Meta Ads Manager for Leads / Website.
       ctas: {
         allowed: [
-          "GET_DETAILS", "LEARN_MORE", "SUBSCRIBE", "BOOK_NOW", "SIGN_UP",
+          "SEE_DETAILS", "LEARN_MORE", "SUBSCRIBE", "BOOK_NOW", "SIGN_UP",
           "APPLY_NOW", "DOWNLOAD", "GET_OFFER", "GET_QUOTE",
         ],
         default: "SIGN_UP",
@@ -760,7 +772,7 @@ const CELLS = {
       // CTA list verified against Meta Ads Manager for Leads / Messenger.
       ctas: {
         allowed: [
-          "CONTACT_US", "GET_QUOTE", "INQUIRE_NOW", "GET_DETAILS",
+          "CONTACT_US", "GET_QUOTE", "INQUIRE_NOW", "SEE_DETAILS",
           "LEARN_MORE", "MESSAGE_PAGE", "ORDER_NOW", "SEND_UPDATES",
           "SHOP_NOW", "SIGN_UP", "SUBSCRIBE", "GET_PROMOTIONS",
           "APPLY_NOW", "BOOK_NOW",
@@ -792,7 +804,7 @@ const CELLS = {
       // CTA; VIEW_INSTAGRAM_PROFILE is NOT offered for this Leads cell.
       ctas: {
         allowed: [
-          "GET_OFFER", "GET_QUOTE", "INSTAGRAM_MESSAGE", "GET_DETAILS",
+          "GET_OFFER", "GET_QUOTE", "INSTAGRAM_MESSAGE", "SEE_DETAILS",
           "LEARN_MORE", "SIGN_UP", "SUBSCRIBE", "APPLY_NOW", "BOOK_NOW",
         ],
         default: "INSTAGRAM_MESSAGE",
@@ -896,10 +908,10 @@ const CELLS = {
       ctas: {
         allowed: [
           "USE_MOBILE_APP", "NO_BUTTON", "CONTACT_US", "GET_OFFER",
-          "GET_QUOTE", "GET_DETAILS", "LEARN_MORE", "ORDER_NOW",
+          "GET_QUOTE", "SEE_DETAILS", "LEARN_MORE", "ORDER_NOW",
           "DOWNLOAD", "SHOP_NOW", "GET_SHOWTIMES", "SIGN_UP",
           "LISTEN_NOW", "PLAY_GAME", "SUBSCRIBE", "REQUEST_TIME",
-          "VIEW_MENU", "WATCH_MORE", "APPLY_NOW", "BOOK_NOW",
+          "SEE_MENU", "WATCH_MORE", "APPLY_NOW", "BOOK_NOW",
         ],
         default: "USE_MOBILE_APP",
       },
@@ -1277,7 +1289,7 @@ const CELLS = {
       // correct enum is confirmed.
       ctas: {
         allowed: [
-          "GET_DETAILS", "LEARN_MORE", "ORDER_NOW", "DOWNLOAD",
+          "SEE_DETAILS", "LEARN_MORE", "ORDER_NOW", "DOWNLOAD",
           "SHOP_NOW", "SIGN_UP", "LISTEN_NOW", "PLAY_GAME", "SUBSCRIBE",
           "WATCH_MORE", "INSTALL_MOBILE_APP", "USE_APP", "BOOK_NOW",
         ],

@@ -14,14 +14,19 @@ const CTA_OPTIONS = [
   'GET_QUOTE',
   'APPLY_NOW',
   'GET_OFFER',
-  'GET_DETAILS',
+  // 'GET_DETAILS' is not a real Meta CTA enum — corrected to 'SEE_DETAILS'
+  // 2026-07-08 (same wrong value found and fixed in the V2 wizard's
+  // wizardSchema.js CTA_LABELS the same day).
+  'SEE_DETAILS',
   'GET_SHOWTIMES',
   'ORDER_NOW',
   'WATCH_MORE',
   'LISTEN_NOW',
   'PLAY_GAME',
   'REQUEST_TIME',
-  'VIEW_MENU',
+  // 'VIEW_MENU' is not a real Meta CTA enum — corrected to 'SEE_MENU'
+  // 2026-07-08 (same wrong-key-right-label mistake as GET_DETAILS above).
+  'SEE_MENU',
   'INQUIRE_NOW',
   'SEND_UPDATES',
   'GET_PROMOTIONS',
