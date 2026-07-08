@@ -169,8 +169,8 @@ const Composer = ({
       glowColor="40 80 80"
       // Glassmorphism (matches the Ad Studio → Ad Copy prompt box): translucent
       // dark fill + heavy backdrop blur so the background gradient frosts through.
-      backgroundColor="rgba(13,13,13,0.5)"
-      className="backdrop-blur-[80px]"
+      backgroundColor="rgba(20,20,26,0.35)"
+      className="backdrop-blur-[40px]"
       borderRadius={radius}
       glowRadius={40}
       glowIntensity={1}

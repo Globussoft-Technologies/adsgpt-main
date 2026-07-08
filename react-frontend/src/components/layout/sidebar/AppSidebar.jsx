@@ -196,7 +196,7 @@ const AppSidebar = () => {
         // > */}
         layout
         transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className={`flex h-full w-full flex-col justify-between bg-[#fcfcfc] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-black' : 'dark:bg-[#0F0F0F]'}`}
+        className={`flex h-full w-full flex-col justify-between bg-[#fcfcfc] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-transparent' : 'dark:bg-[#0F0F0F]'}`}
       >
         {/* Logo */}
         <div className="logo_and_history flex w-full flex-col gap-0">
