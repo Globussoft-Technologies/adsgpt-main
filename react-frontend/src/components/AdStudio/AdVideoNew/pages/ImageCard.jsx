@@ -27,6 +27,8 @@ const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
 const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
 const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
 const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
+const CANVA_ALLOWED_USER_ID = import.meta.env.VITE_CANVA_ALLOWED_USER_ID;
+const isCanvaAllowedUser = (userId) => String(userId ?? '') === CANVA_ALLOWED_USER_ID;
 const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 
 // Post Ad nav (Megaphone) visibility. Flip to false to hide the
@@ -585,7 +587,7 @@ export default function ImageCard({
             >
               <Repeat size={18} />
             </button>
-            {CANVA_ENABLED && (
+            {CANVA_ENABLED && isCanvaAllowedUser(userId) && (
             <button
               className="group flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/10 disabled:opacity-50"
               onClick={handleEditWithCanva}

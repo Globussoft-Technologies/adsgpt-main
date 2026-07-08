@@ -23,6 +23,8 @@ const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
 const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
 const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
 const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
+const CANVA_ALLOWED_USER_ID = import.meta.env.VITE_CANVA_ALLOWED_USER_ID;
+const isCanvaAllowedUser = (userId) => String(userId ?? '') === CANVA_ALLOWED_USER_ID;
 const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => {
   const [selected, setSelected] = useState(null);
@@ -530,7 +532,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                               </motion.button>
                             </ShadcnTooltip>
                             {/* Edit in Canva */}
-                            {CANVA_ENABLED && (
+                            {CANVA_ENABLED && isCanvaAllowedUser(userId) && (
                             <motion.button
                               onClick={(e) => handleEditWithCanva(e, item?.fullUrl)}
                               disabled={canvaLoadingKey === item?.fullUrl}
