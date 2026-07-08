@@ -635,14 +635,47 @@ async function createAdSetV2(req, res) {
     // `product_set_id`. Unlike the diagnostic app-shape block above, this
     // is NOT best-effort — without it every ad set under this campaign
     // fails identically, so a failure here is surfaced as a real error
-    // rather than logged-and-continued. Idempotent (a bare `update`, same
-    // as the campaign-budget retry-sync fix elsewhere in this file) — safe
-    // to call on every ad set created under the same campaign.
+    // rather than logged-and-continued.
+    //
+    // CORRECTED 2026-07-08 (subcode 1885090 "Invalid promoted object
+    // update... immutable for most cases", blame_field_specs:
+    // ["ProductCatalogID"]): the original fix called `Campaign.update()`
+    // unconditionally on EVERY ad-set creation, on the assumption this was
+    // idempotent like the campaign-budget retry-sync fix elsewhere in this
+    // file. It ISN'T — Meta rejects ANY update attempt on promoted_object
+    // once it's already set, even resending the identical value. This
+    // worked for a campaign's FIRST ad set (nothing set yet) and broke
+    // every SUBSEQUENT ad set added to the same campaign (real hit:
+    // launching a Sales/CATALOG campaign succeeded, then adding a second
+    // ad set to it failed here). Fixed by reading the campaign's current
+    // promoted_object first and only calling update when it's genuinely
+    // unset — matching Meta's real "settable once" semantics instead of
+    // assuming "settable repeatedly with the same value."
     if (cell.adSet.promotedObjectShape === "product_set" && value.catalogId) {
       try {
-        await new bizSdk.Campaign(value.campaignId).update([], {
-          promoted_object: { product_catalog_id: value.catalogId },
-        });
+        const campaignData = await new bizSdk.Campaign(value.campaignId).get([
+          "promoted_object",
+        ]);
+        const existingCatalogId =
+          (campaignData?._data || campaignData || {}).promoted_object
+            ?.product_catalog_id || null;
+        if (!existingCatalogId) {
+          await new bizSdk.Campaign(value.campaignId).update([], {
+            promoted_object: { product_catalog_id: value.catalogId },
+          });
+        } else if (existingCatalogId !== value.catalogId) {
+          // Meta locks the campaign to whichever catalog its FIRST ad set
+          // bound it to — a later ad set can't switch it. Surface this
+          // clearly instead of letting Meta's generic "immutable" error
+          // through with no explanation of which catalog actually won.
+          return res.status(400).json({
+            status: false,
+            error: "This campaign is already bound to a different Product Catalog",
+            details:
+              "Every ad set in a Sales/Catalog campaign must use the catalog Meta locked in when the campaign's first ad set was created. Create a new campaign to use a different catalog.",
+          });
+        }
+        // else: already bound to this exact catalog — nothing to do.
       } catch (e) {
         return res
           .status(500)
