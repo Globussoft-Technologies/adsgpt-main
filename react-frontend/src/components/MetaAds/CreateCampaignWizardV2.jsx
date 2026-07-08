@@ -946,6 +946,69 @@ export default function CreateCampaignWizardV2({
         const r = await createMetaAdSetV2(adSetPayload);
         adSetId = r.adSet.id;
         setCreated((p) => ({ ...p, adSetId }));
+      } else {
+        // Retry re-runs only the failing step, so an ad set created on a
+        // prior attempt keeps whatever targeting/budget/schedule it had
+        // THEN — even if the user goes back to the Ad Set step and changes
+        // something (e.g. turning off Advantage+ Placements to work around
+        // an Instagram-identity error) before clicking Launch again. Real
+        // hit (2026-07-07): exactly this — placements were changed on the
+        // Ad Set step, but the already-created ad set on Meta's side never
+        // saw the update, so create-ad kept failing the same way. Same
+        // root cause and same fix shape as the campaign-budget retry bug
+        // (subcode 2446149) — reuse the "Edit Ad Set" flow's own update
+        // payload builder (see mode === 'edit-adset' below) so the two
+        // never drift, and re-sync on every retry. updateAdSetV2 forbids
+        // optimizationGoal/billingEvent/bidStrategy post-creation (Meta
+        // locks them), so those are correctly never part of this payload —
+        // matches what create-adset itself can't change on retry either.
+        try {
+          const resyncPayload = {
+            adAccountId,
+            adSetId,
+            name: form.adSetName,
+            targeting: {
+              locations: form.worldwide ? [] : form.locations,
+              worldwide: form.worldwide,
+              ageMin: form.ageMin,
+              ageMax: form.ageMax,
+              genders: form.genders,
+              locales: form.locales,
+              advantageAudience: form.advantageAudience,
+              placementMode: form.placementMode,
+              publisherPlatforms: form.placementMode === 'manual' ? form.publisherPlatforms : [],
+              devicePlatforms: form.devicePlatforms,
+              detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
+                ? { include: [], narrow: [], exclude: [] }
+                : form.detailedTargeting,
+            },
+          };
+          if (!form.cbo) {
+            const budget = majorToMinor(form.adSetBudget);
+            if (form.adSetBudgetType === 'daily') resyncPayload.dailyBudget = budget;
+            else resyncPayload.lifetimeBudget = budget;
+          }
+          if (CAPPED_BID_STRATEGIES.has(form.bidStrategy) && form.bidAmount) {
+            resyncPayload.bidAmount = majorToMinor(form.bidAmount);
+          }
+          if (form.startTime) resyncPayload.startTime = new Date(form.startTime).toISOString();
+          if (form.hasEndTime && form.endTime) {
+            resyncPayload.endTime = new Date(form.endTime).toISOString();
+          }
+          if (
+            cell.adSet.additionalFields?.includes('frequencyControl') &&
+            form.optimizationGoal === 'REACH'
+          ) {
+            const fc = form.frequencyControl;
+            const hasValid = fc && Number(fc.capFrequency) > 0 && Number(fc.capPeriodDays) > 0;
+            resyncPayload.frequencyControl = hasValid ? fc : null;
+          }
+          await updateMetaAdSetV2(resyncPayload);
+        } catch {
+          // Best-effort — if the sync fails, fall through to ad creation
+          // anyway; Meta's own rejection (if the stale field is still the
+          // problem) is still a safety net, just without this fix's benefit.
+        }
       }
 
       // ── Media upload (image OR video) ──
