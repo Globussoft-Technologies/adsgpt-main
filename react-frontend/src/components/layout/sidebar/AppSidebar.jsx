@@ -187,7 +187,15 @@ const AppSidebar = () => {
   }, [isSidebarOpen, openHistory]);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      // On the assistant, make the sidebar's own surface transparent too (the
+      // ui primitive paints bg-sidebar on the inner slot) so the page's
+      // background gradient shows continuously behind the sidebar.
+      className={
+        currentRoute === '/assistant' ? '[&_[data-slot=sidebar-inner]]:bg-transparent' : undefined
+      }
+    >
       <motion.div
         // {/* <div
         //   className={`bg-sidebar fixed left-0 flex h-[100svh] flex-col justify-between text-white ${

@@ -169,8 +169,10 @@ const Composer = ({
       glowColor="40 80 80"
       // Glassmorphism (matches the Ad Studio → Ad Copy prompt box): translucent
       // dark fill + heavy backdrop blur so the background gradient frosts through.
+      // `--fill-opacity:0` disables BorderGlow's interior mesh-fill so the glow
+      // stays on the BORDER only and doesn't bleed into the glass interior.
       backgroundColor="rgba(20,20,26,0.35)"
-      className="backdrop-blur-[40px]"
+      className="backdrop-blur-[40px] [--fill-opacity:0]"
       borderRadius={radius}
       glowRadius={40}
       glowIntensity={1}
@@ -259,9 +261,11 @@ const Composer = ({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={disabled ? 'adsGPT is responding… hang on a sec' : placeholder}
+          placeholder={placeholder}
           rows={3}
-          disabled={disabled}
+          // Stay typeable while a response streams — the user can compose their
+          // next message; only sending is locked (see canSend / the send button).
+          disabled={false}
           className="w-full resize-none overflow-y-auto border-0 bg-transparent text-[19px] leading-8 text-white outline-none placeholder:text-white/40 disabled:opacity-60"
           style={{ minHeight: `${minTextareaPx}px`, maxHeight: `${maxTextareaPx}px` }}
         />
