@@ -169,10 +169,12 @@ const Composer = ({
       glowColor="40 80 80"
       // Glassmorphism (matches the Ad Studio → Ad Copy prompt box): translucent
       // dark fill + heavy backdrop blur so the background gradient frosts through.
-      // `--fill-opacity:0` disables BorderGlow's interior mesh-fill so the glow
-      // stays on the BORDER only and doesn't bleed into the glass interior.
+      // fillOpacity={0} disables BorderGlow's interior mesh-fill so the glow stays
+      // on the BORDER only and doesn't bleed into the glass interior. (Must be the
+      // prop — BorderGlow sets --fill-opacity inline, which beats a CSS class.)
       backgroundColor="rgba(20,20,26,0.35)"
-      className="backdrop-blur-[40px] [--fill-opacity:0]"
+      className="backdrop-blur-[40px]"
+      fillOpacity={0}
       borderRadius={radius}
       glowRadius={40}
       glowIntensity={1}
