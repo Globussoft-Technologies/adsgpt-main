@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import Composer from './Composer';
 import Messages from './Messages';
 import GenCanvas from './GenCanvas';
-import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
+import { streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   buildMockChoiceForm,
   mockChoiceFormResult,
@@ -21,13 +21,46 @@ import {
   attachAssistantStoryboard,
   failAssistantStream,
   finishAssistantStream,
-  loadConversation,
   pushStep,
   pushUserMessage,
   selectConcept,
   setSessionId,
   startAssistantStream,
+  startNewSession,
 } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+
+// Turn a raw/technical failure detail into a clear, friendly message with a
+// hint at the cause or next step. Falls back to the backend's reason when it's
+// already meaningful, and to a safe default otherwise.
+const friendlyErrorMessage = (detail) => {
+  const d = (detail || '').toString().trim();
+  const l = d.toLowerCase();
+  if (!l || l === 'something went wrong.' || l === 'assistant error') {
+    return 'Something went wrong while generating. Please try again in a moment.';
+  }
+  if (l.includes('timed out') || l.includes('timeout')) {
+    return 'That took too long and timed out. Please try again — a shorter or simpler prompt can help.';
+  }
+  if (
+    l.includes('network') ||
+    l.includes('stream interrupted') ||
+    l.includes('did not respond') ||
+    l.startsWith('http ')
+  ) {
+    return 'We lost the connection before finishing. Please check your internet and try again.';
+  }
+  if (l.includes('auth') || l.includes('401') || l.includes('403') || l.includes('token')) {
+    return 'Your session has expired. Please refresh the page and sign in again.';
+  }
+  if (l.includes('credit') || l.includes('insufficient')) {
+    return "You don't have enough credits for this generation. Top up your credits and try again.";
+  }
+  if (l.includes('internal error') || l.includes('500') || l.includes('traceback')) {
+    return 'Our servers hit a snag generating that. Please try again in a moment.';
+  }
+  // Otherwise the backend's reason is usually meaningful — surface it as-is.
+  return d;
+};
 
 const ChatInterface = () => {
   const dispatch = useDispatch();
@@ -73,30 +106,15 @@ const ChatInterface = () => {
     controllerRef.current = null;
   }, [abortRequestId]);
 
-  // Rehydrate on refresh: we persist only the sessionId (not the transcript), so
-  // a reload would otherwise show an empty composer while still pointing at the
-  // old conversation — looking like a brand-new chat. If we have a session but no
-  // messages in memory, pull its history back so the refresh resumes it.
-  const rehydratedRef = useRef(false);
+  // Start fresh every time the module is entered. Navigating away and back (or
+  // reloading) should open a brand-new chat rather than restoring the previous
+  // conversation/generation — past chats stay reachable via the History drawer.
+  const freshSessionRef = useRef(false);
   useEffect(() => {
-    if (rehydratedRef.current) return;
-    rehydratedRef.current = true;
-    if (!sessionId || messages.length > 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const history = await getHistory(sessionId);
-        if (!cancelled && Array.isArray(history) && history.length > 0) {
-          dispatch(loadConversation({ sessionId, messages: history }));
-        }
-      } catch {
-        /* ignore — fall back to an empty chat if history can't be loaded */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Mount-only: capture the persisted session once on first render.
+    if (freshSessionRef.current) return;
+    freshSessionRef.current = true;
+    dispatch(startNewSession());
+    // Mount-only: reset to a clean session on entering the module.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -163,10 +181,12 @@ const ChatInterface = () => {
                 }),
               );
               break;
-            case 'error':
-              dispatch(failAssistantStream(data.detail || 'Something went wrong.'));
-              toast.error(data.detail || 'Assistant error');
+            case 'error': {
+              const friendly = friendlyErrorMessage(data.detail);
+              dispatch(failAssistantStream(friendly));
+              toast.error(friendly);
               break;
+            }
             default:
               break;
           }
@@ -291,7 +311,9 @@ const ChatInterface = () => {
     <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {isEmpty ? (
-        <div className="flex flex-1 flex-col items-center px-4 pt-[10vh] sm:pt-[14vh]">
+        // subtle-scroll + pb so a tall composer (long prompt) is never clipped by
+        // the parent's overflow-hidden at 100% zoom / shorter viewports.
+        <div className="subtle-scroll flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[10vh] pb-10 sm:pt-[14vh]">
           <h2 className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]">
             {`Hi, ${greeting}`}
           </h2>

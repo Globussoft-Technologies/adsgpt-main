@@ -14,7 +14,9 @@ export const handleDownload = async (fileUrl) => {
   const isVideo = videoExtensions.includes(ext);
   const fileType = isVideo ? 'video' : 'image';
 
-  const proxyUrl = `${HOST}/adsgpt/img/preview?url=${fileUrl}`;
+  // Encode the URL — signed S3 links contain `?`, `&`, `://` etc. that otherwise
+  // corrupt the proxy's `url` query param, making the download fail.
+  const proxyUrl = `${HOST}/adsgpt/img/preview?url=${encodeURIComponent(fileUrl)}`;
 
   // Start toast loader
   const toastId = toast.loading(`Downloading ${fileType}...`);
@@ -60,7 +62,9 @@ export const handleDownloadAs = async (fileUrl, format = 'png') => {
   const fmt = (format || 'png').toLowerCase();
   const mimeType = _FORMAT_MIME[fmt] || 'image/png';
   const ext = fmt === 'jpeg' ? 'jpg' : fmt;
-  const proxyUrl = `${HOST}/adsgpt/img/preview?url=${fileUrl}`;
+  // Encode the URL — signed S3 links contain `?`, `&`, `://` etc. that otherwise
+  // corrupt the proxy's `url` query param, making the download fail.
+  const proxyUrl = `${HOST}/adsgpt/img/preview?url=${encodeURIComponent(fileUrl)}`;
   const toastId = toast.loading(`Downloading ${ext.toUpperCase()}…`);
 
   try {

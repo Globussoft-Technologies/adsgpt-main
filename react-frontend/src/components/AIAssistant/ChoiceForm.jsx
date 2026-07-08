@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info } from 'lucide-react';
+import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
@@ -587,6 +587,8 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const dispatch = useDispatch();
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
 
   // Load the user's brands once if we don't have them yet — the assistant can
   // be opened without ever visiting Brand IQ (where they're normally fetched).
@@ -595,20 +597,33 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  if (!brands.length) return null;
+  // Close the dropdown on an outside click.
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
 
+  const logoOf = (b) =>
+    (Array.isArray(b?.logoUrls) && b.logoUrls[0]) || b?.logo || b?.iconUrl || '';
   const fieldKeys = new Set((form.fields || []).map((f) => f.key));
-  const selectedId =
-    brands.find((b) => (b?.name || '') === (values.brand_name || ''))?.id ?? '';
+  const currentName = (values.brand_name || '').trim();
+  const matched =
+    brands.find((b) => (b?.name || '').trim().toLowerCase() === currentName.toLowerCase()) || null;
 
-  const handle = (e) => {
-    const b = brands.find((x) => String(x?.id) === String(e.target.value));
-    if (!b) return;
+  // Hide only when there's nothing to show at all (no saved brands AND no brand
+  // has been detected/typed yet). A website-detected brand still shows here even
+  // when it isn't saved in Brand IQ.
+  if (!brands.length && !currentName) return null;
+
+  const pick = (b) => {
     const patch = {};
     if (fieldKeys.has('brand_name')) patch.brand_name = b.name || '';
     if (fieldKeys.has('brand_description')) patch.brand_description = b.description || '';
     if (fieldKeys.has('brand_logo')) {
-      const logo = (Array.isArray(b.logoUrls) && b.logoUrls[0]) || b.logo || b.iconUrl || '';
+      const logo = logoOf(b);
       patch.brand_logo = logo ? [{ url: logo, filename: 'logo', selected: true }] : [];
     }
     if (fieldKeys.has('brand_colors')) {
@@ -616,33 +631,92 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       if (Array.isArray(colors) && colors.length) patch.brand_colors = colors;
     }
     onPick(patch);
+    setOpen(false);
   };
 
+  const triggerLogo = logoOf(matched);
+  const hasList = brands.length > 0;
+
   return (
-    <div className="flex flex-col gap-1.5 sm:col-span-2">
+    <div ref={wrapRef} className="relative flex flex-col gap-1.5 sm:col-span-2">
       <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
         Brand
-        <Tip content="Pick the brand this creative is for — its description, logo and colors fill in below.">
+        <Tip content="Pick a saved brand to fill its description, logo and colors. A brand detected from a website shows here too — even if it isn't saved in Brand IQ.">
           <span className="cursor-help text-white/35 hover:text-white/70">
             <Info className="h-3 w-3" />
           </span>
         </Tip>
       </label>
-      <select
-        value={selectedId}
-        onChange={handle}
-        disabled={disabled}
-        className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+      <button
+        type="button"
+        disabled={disabled || !hasList}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#111] px-3 text-left transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <option value="" className="bg-[#111]">
-          Select a brand…
-        </option>
-        {brands.map((b) => (
-          <option key={b?.id} value={b?.id} className="bg-[#111]">
-            {b?.name || 'Untitled brand'}
-          </option>
-        ))}
-      </select>
+        <span className="flex min-w-0 items-center gap-2">
+          {currentName ? (
+            <>
+              {triggerLogo ? (
+                <img src={toMediaUrl(triggerLogo)} alt="" className="h-5 w-5 shrink-0 rounded object-cover" />
+              ) : (
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/10 text-[10px] font-semibold text-white/70">
+                  {currentName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="truncate text-[13px] text-white/90">{currentName}</span>
+              {!matched && (
+                <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[9.5px] whitespace-nowrap text-white/45">
+                  from website
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-[13px] text-white/45">Select a brand…</span>
+          )}
+        </span>
+        {hasList && (
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        )}
+      </button>
+      {open && hasList && (
+        <div className="subtle-scroll absolute top-full left-0 z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-white/10 bg-[#141414] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
+          {brands.map((b) => {
+            const on = matched?.id === b?.id;
+            const logo = logoOf(b);
+            return (
+              <button
+                key={b?.id}
+                type="button"
+                onClick={() => pick(b)}
+                className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
+                  on ? 'bg-white/10' : 'hover:bg-white/[0.06]'
+                }`}
+              >
+                {logo ? (
+                  <img
+                    src={toMediaUrl(logo)}
+                    alt=""
+                    className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
+                  />
+                ) : (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/10 text-[11px] font-semibold text-white/60">
+                    {(b?.name || '?').charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13px] text-white/90">{b?.name || 'Untitled brand'}</span>
+                  {b?.description ? (
+                    <span className="truncate text-[11px] text-white/45">{b.description}</span>
+                  ) : null}
+                </span>
+                {on && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
@@ -663,6 +737,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const [values, setValues] = useState(initialValues);
   const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Double-clicking the header collapses the brief to just its title bar.
+  const [collapsed, setCollapsed] = useState(false);
 
   const isSubmitted = !!result;
   // After submitting, the card collapses to a summary — but the user can reopen
@@ -766,8 +842,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
   return (
     <div className="mt-3 w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F0F]">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3">
+      {/* Header — double-click to collapse/expand the brief. */}
+      <div
+        onDoubleClick={() => setCollapsed((c) => !c)}
+        title={collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
+        className="flex cursor-pointer items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3 select-none"
+      >
         <div className="min-w-0">
           <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white/80 uppercase">
             <Sparkles className="h-2.5 w-2.5" />
@@ -778,14 +858,19 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               {form.title}
             </h4>
           )}
-          {form.subtitle && (
+          {form.subtitle && !collapsed && (
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/55">
               {form.subtitle}
             </p>
           )}
         </div>
+        <ChevronDown
+          className={`mt-0.5 h-4 w-4 shrink-0 text-white/45 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+        />
       </div>
 
+      {!collapsed && (
+      <>
       {/* Fields — two-column grid; wide controls span both columns. */}
       <div className="grid grid-cols-1 gap-x-3 gap-y-3.5 px-4 py-4 sm:grid-cols-2">
         {formHasBrandFields(form) && (
@@ -930,6 +1015,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 };

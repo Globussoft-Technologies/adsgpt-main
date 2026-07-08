@@ -7,6 +7,7 @@ import toMediaUrl from '@/utils/mediaUrl';
 import toast from 'react-hot-toast';
 import BorderGlow from './BorderGlow/BorderGlow';
 import ToolToggles from './ToolToggles';
+import ImageLightbox from './ImageLightbox';
 
 let _tmpId = 0;
 const nextTmpId = () => `att_${++_tmpId}`;
@@ -38,6 +39,8 @@ const Composer = ({
   // upload to S3 in the background — like ChatGPT — so the user never waits on a
   // blank composer.
   const [attachments, setAttachments] = useState([]);
+  // Full-screen preview of an attached image (double-click a thumbnail).
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -164,6 +167,7 @@ const Composer = ({
   const radius = variant === 'centered' ? 28 : 24;
 
   return (
+    <>
     <BorderGlow
       edgeSensitivity={30}
       glowColor="40 80 80"
@@ -211,7 +215,9 @@ const Composer = ({
               a.isImage ? (
                 <div
                   key={a.tempId}
-                  className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10 bg-black/40"
+                  onDoubleClick={() => !a.pending && setLightboxSrc(a.url)}
+                  title={a.pending ? undefined : 'Double-click to preview'}
+                  className="group relative h-16 w-16 cursor-zoom-in overflow-hidden rounded-lg border border-white/10 bg-black/40"
                 >
                   <img
                     src={a.pending ? a.preview : toMediaUrl(a.url)}
@@ -318,6 +324,8 @@ const Composer = ({
         </div>
       </div>
     </BorderGlow>
+    <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+    </>
   );
 };
 
