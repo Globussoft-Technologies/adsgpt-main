@@ -2,10 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchPromptTemplates,
   fetchPromptTemplateCategories,
+  ensureBrandCategory,
 } from '../ai-creatives/apiClient';
 import { IS_PROMPT_CATEGORIES_ENABLED } from '@/utils/featureFlags';
 
 const GENERAL_CATEGORY = 'General';
+
+// Original panel height — the size the picker opens at and resets back to
+// whenever it's closed (so a prior drag doesn't carry over to the next open).
+const DEFAULT_PANEL_HEIGHT = IS_PROMPT_CATEGORIES_ENABLED ? 320 : 279;
 
 // Replace every {placeholder} in a template prompt. Tokens with no value
 // (or only whitespace) are stripped out so the literal placeholder text never
@@ -37,6 +42,11 @@ export function usePromptTemplates({
   type,
   brandName = '',
   targetAudience = '',
+  // The selected brand's taxonomy category (from get-lists / autofill). When
+  // present and it has templates, the picker auto-selects it. When absent and
+  // a brandId is given, we ask the backend to classify the brand (lazy).
+  brandCategory = '',
+  brandId = '',
   currentValue = '',
   onSelect,
   // Fired when the user starts typing into a {brand} / {target_audience}
@@ -47,6 +57,10 @@ export function usePromptTemplates({
   onClearBrand,
 }) {
   const [open, setOpen] = useState(false);
+  // Height (px) of the templates panel, adjustable via the drag handle
+  // between the panel and the prompt box. Resets to DEFAULT_PANEL_HEIGHT on
+  // close so reopening always starts at the original size.
+  const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
   const [templates, setTemplates] = useState([]);
   const [state, setState] = useState('idle');
   const [error, setError] = useState('');
@@ -57,6 +71,9 @@ export function usePromptTemplates({
   const [templatesByCategory, setTemplatesByCategory] = useState({});
   const [loadedCategories, setLoadedCategories] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  // True while we're classifying a brand that has no category yet (the
+  // ~1-2s on-select Gemini call). Drives the "finding your prompts…" hint.
+  const [categoryResolving, setCategoryResolving] = useState(false);
   // Which row is currently shown in the right detail panel.
   const [previewedTemplate, setPreviewedTemplate] = useState(null);
   // Which template's text is currently in the textarea (drives the tick on
@@ -157,16 +174,35 @@ export function usePromptTemplates({
     }
   }, [open, selectedCategory, templatesByCategory, loadedCategories]);
 
-  // Search is applied client-side within the fetched category scope.
+  // Search behaviour:
+  //  - No term  → show only the selected category's templates (browse mode).
+  //  - With term → search GLOBALLY across every loaded category, matching the
+  //    title, the prompt body, OR the category name (so typing a category name
+  //    surfaces its prompts). Each result is tagged with its `_category` so the
+  //    list can show where it came from. A template lives in exactly one
+  //    category, but we keep a seen-set to be safe.
   const filteredTemplates = useMemo(() => {
     const term = (searchQuery || '').trim().toLowerCase();
     if (!term) return templates;
-    return templates.filter(
-      (t) =>
-        (t.title || '').toLowerCase().includes(term) ||
-        (t.prompt || '').toLowerCase().includes(term),
-    );
-  }, [templates, searchQuery]);
+
+    const results = [];
+    const seen = new Set();
+    Object.entries(templatesByCategory).forEach(([cat, items]) => {
+      (items || []).forEach((t) => {
+        if (seen.has(t._id)) return;
+        const catName = t.category || cat || '';
+        const matches =
+          (t.title || '').toLowerCase().includes(term) ||
+          (t.prompt || '').toLowerCase().includes(term) ||
+          catName.toLowerCase().includes(term);
+        if (matches) {
+          seen.add(t._id);
+          results.push({ ...t, _category: catName });
+        }
+      });
+    });
+    return results;
+  }, [templates, searchQuery, templatesByCategory]);
 
   // If the active search hides the currently previewed template, clear it so
   // the defaulting effect can pick a visible one.
@@ -179,9 +215,13 @@ export function usePromptTemplates({
     }
   }, [filteredTemplates, previewedTemplate]);
 
-  // Closing the panel clears the right-side preview so re-open re-defaults.
+  // Closing the panel clears the right-side preview so re-open re-defaults,
+  // and resets any dragged height back to the original size.
   useEffect(() => {
-    if (!open) setPreviewedTemplate(null);
+    if (!open) {
+      setPreviewedTemplate(null);
+      setPanelHeight(DEFAULT_PANEL_HEIGHT);
+    }
   }, [open]);
 
   // Auto-open the panel the moment the user picks a brand — the templates
@@ -199,6 +239,49 @@ export function usePromptTemplates({
     // changes, and setOpen(true) when already true is a no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandName]);
+
+  // Auto-select the prompt category that matches the selected brand. Gated on
+  // the category system being enabled and the category list being known (so we
+  // only switch to a category that actually has templates). If the brand has a
+  // category already (from get-lists / DS autofill) we use it directly; if not
+  // (an existing brand that predates DS), we ask the backend to classify it
+  // once (lazy, ~1-2s) and apply the result.
+  const ensuredBrandIdRef = useRef(null);
+  useEffect(() => {
+    if (!IS_PROMPT_CATEGORIES_ENABLED) return undefined;
+    if (!open) return undefined;
+    if (categories.length === 0) return undefined; // wait until categories known
+
+    let cancelled = false;
+    const applyIfAvailable = (cat) => {
+      if (cancelled || !cat) return;
+      // Only switch when the category actually has templates for this type.
+      if (categories.includes(cat)) setSelectedCategory(cat);
+    };
+
+    if (brandCategory) {
+      applyIfAvailable(brandCategory);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // No category on the brand → lazy-classify via backend, once per brand.
+    if (brandId && ensuredBrandIdRef.current !== brandId) {
+      ensuredBrandIdRef.current = brandId;
+      setCategoryResolving(true);
+      ensureBrandCategory(brandId)
+        .then((cat) => applyIfAvailable(cat))
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setCategoryResolving(false);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, brandCategory, brandId, categories]);
 
   // On open (once templates are loaded), default the preview: the used
   // template if one is set (shown with its tick in the rail), otherwise the
@@ -311,6 +394,8 @@ export function usePromptTemplates({
   return {
     open,
     setOpen,
+    panelHeight,
+    setPanelHeight,
     state,
     error,
     templates,
@@ -326,6 +411,8 @@ export function usePromptTemplates({
     useTemplate,
     brandName,
     targetAudience,
+    brandCategory,
+    categoryResolving,
     manualValues,
     updateManualValue,
   };

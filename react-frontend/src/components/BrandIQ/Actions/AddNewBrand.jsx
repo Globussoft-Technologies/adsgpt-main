@@ -9,6 +9,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { BRAND_CATEGORIES } from '@/utils/brandCategories';
+import CategoryCombobox from './CategoryCombobox';
 import {
   ArrowLeft,
   ArrowRight,
@@ -144,6 +146,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       facebookUrl: brandData?.facebookUrl || '',
       linkedinUrl: brandData?.linkedinUrl || '',
       region: brandData?.region || '',
+      category: brandData?.category || '',
     });
 
     const saved = brandData?.targetAudiences || [];
@@ -254,11 +257,19 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         setAnalysisError('Unable to fetch the url. Please enter the details manually');
         return;
       }
+      // DS-supplied category (defensive: reads whichever shape the analyze
+      // returns) — only prefill it if it's one of the 45 valid categories.
+      const analyzedCategory =
+        result?.brandInfo?.category ??
+        result?.aiInsights?.category ??
+        result?.category ??
+        '';
       formik.setValues({
         ...formik.values,
         brandName: result?.meta?.title || '',
         brandDescription: result?.aiInsights?.aiSummary || '',
         websiteUrl: result?.url || analyzeWebsiteUrl,
+        category: BRAND_CATEGORIES.includes(analyzedCategory) ? analyzedCategory : '',
       });
 
       const audiences = result?.aiInsights?.aiTargetAudiences || [];
@@ -443,6 +454,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       facebookUrl: '',
       linkedinUrl: '',
       region: '',
+      category: '',
       brandLogo: '',
       productImage: '',
       brandLogoError: '',
@@ -564,6 +576,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           linkedinUrl: values.linkedinUrl || '',
           region: values.region?.trim() || null,
           targetAudiences: selectedAudiences.length > 0 ? selectedAudiences : undefined,
+          category: values.category || undefined,
         };
 
         if (brandData) {
@@ -1138,6 +1151,15 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         {formik.touched.brandDescription && formik.errors.brandDescription && (
           <p className="text-xs text-red-400">{formik.errors.brandDescription}</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <label className="text-base font-medium text-gray-600 dark:text-gray-200">Category</label>
+        <CategoryCombobox
+          value={formik.values.category || ''}
+          onChange={(v) => formik.setFieldValue('category', v)}
+          triggerClassName="h-10 rounded-md border-0! bg-gray-100! px-4 text-sm text-gray-900 dark:bg-[#90929430]! dark:text-white"
+        />
       </div>
 
       {renderBrandLogoUpload()}

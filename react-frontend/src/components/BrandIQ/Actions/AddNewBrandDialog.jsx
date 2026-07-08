@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import CategoryCombobox from './CategoryCombobox';
 import { ArrowLeft, ArrowRight, CloudUpload, Info, LoaderCircle, Plus, X } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -69,6 +70,7 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
       facebookUrl: brandData?.facebookUrl || '',
       linkedinUrl: brandData?.linkedinUrl || '',
       region: brandData?.region || '',
+      category: brandData?.category || '',
       brandLogo: brandData?.logoUrls || [],
       brandIcon: brandData?.iconUrl || '',
       productImage: brandData?.imageUrl || [],
@@ -361,6 +363,7 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
       facebookUrl: '',
       linkedinUrl: '',
       region: '',
+      category: '',
       brandLogo: '',
       brandIcon: '',
       productImage: '',
@@ -457,6 +460,7 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
           facebookUrl: values.facebookUrl || '',
           linkedinUrl: values.linkedinUrl || '',
           region: values.region.trim() || null,
+          category: values.category || undefined,
         };
 
         if (brandData) {
@@ -742,6 +746,15 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
                 {formik.touched.brandDescription && formik.errors.brandDescription && (
                   <p className="mt-1 text-xs text-red-400">{formik.errors.brandDescription}</p>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-0">
+                <label className="mb-[13px] text-[18px] text-[#AFAFAF]">Category</label>
+                <CategoryCombobox
+                  value={formik.values.category || ''}
+                  onChange={(v) => formik.setFieldValue('category', v)}
+                  triggerClassName="h-13 rounded-20 border border-white/10 bg-[#383838]/50 px-4 text-white backdrop-blur-100"
+                />
               </div>
 
               {/* Separate file upload sections */}

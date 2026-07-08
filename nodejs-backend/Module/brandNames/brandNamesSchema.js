@@ -30,6 +30,22 @@ const discoveryJobSchema = new mongoose.Schema({
   keywordVersion: { type: String, default: 'v1' },
 }, { _id: false });
 
+// Tracks the lazy category-classification job for a brand (existing brands
+// only — new brands get their category from DS and skip this). PENDING guards
+// against double-firing; startedAt drives stale detection; categoryVersion
+// enables a forced re-classify via a version bump. See utils/categoryTaxonomy.js.
+const categoryJobSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ['PENDING', 'DONE', 'FAILED'],
+    default: null,
+  },
+  startedAt: { type: Date, default: null },
+  completedAt: { type: Date, default: null },
+  errorMessage: { type: String, default: null },
+  categoryVersion: { type: String, default: null },
+}, { _id: false });
+
 // ── Main brand schema ───────────────────────────────────────────────────
 
 const brandSchema = new mongoose.Schema({
@@ -47,6 +63,14 @@ const brandSchema = new mongoose.Schema({
   region: { type: String, default: null },
   audienceSuggestions: { type: Array, default: null },
   targetAudiences: { type: [String], default: [] },
+
+  // ── Prompt-template category matching ────────────────────────────────
+  // One of the 45 names in utils/categoryTaxonomy.js, or null if unknown /
+  // not yet classified. Drives which prompt-template category is auto-shown
+  // when this brand is selected in AdCreative.
+  category: { type: String, default: null },
+  categoryJob: { type: categoryJobSchema, default: null },
+  // ─────────────────────────────────────────────────────────────────────
   createdAt: { type: Date, default: Date.now },
   campaignIds: {
     type: [mongoose.Types.ObjectId],   // metadata.campaignId from AdFactory

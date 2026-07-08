@@ -17,7 +17,7 @@ import { SiOpenai } from 'react-icons/si';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { LifestyleShell } from '../LifestyleShell';
-import { TemplatesPanel, TemplatesTrigger } from '../../components/PromptTemplatesPicker';
+import { TemplatesPanel, TemplatesTrigger, TemplatesResizer } from '../../components/PromptTemplatesPicker';
 import { usePromptTemplates } from '../../components/usePromptTemplates';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
@@ -206,11 +206,24 @@ export function AdSetupStep({
       : brandSource.kind === 'autofill'
         ? brandSource.data?.objectives?.targetAudience?.[0] || ''
         : '';
+  // Category drives the auto-matched template category. A saved brand carries
+  // it (get-lists); an autofill brand carries DS's category inline. brandId is
+  // only known for saved brands — used to lazy-classify old brands with none.
+  const brandCategoryForTemplates =
+    brandSource.kind === 'list'
+      ? brandSource.item?.category || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.brandInfo?.category || ''
+        : '';
+  const brandIdForTemplates =
+    brandSource.kind === 'list' ? brandSource.item?.id || '' : '';
 
   const templates = usePromptTemplates({
     type: VARIANT_TO_API_TYPE[variant] || 'lifestyle',
     brandName: brandNameForTemplates,
     targetAudience: targetAudienceForTemplates,
+    brandCategory: brandCategoryForTemplates,
+    brandId: brandIdForTemplates,
     currentValue: instructions,
     onSelect: (text) => {
       setInstructions(text);
@@ -801,7 +814,7 @@ export function AdSetupStep({
 
         <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
           {/* Left — Instructions textarea + model + ratio pills */}
-          <div className={`flex min-h-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
+          <div className={`flex min-h-0 min-w-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[16px] text-gray-900 dark:text-white">
                 {/* Instructions<span>*</span> */}
@@ -810,6 +823,9 @@ export function AdSetupStep({
               <TemplatesTrigger controller={templates} />
             </div>
             <TemplatesPanel controller={templates} />
+            {/* Drag handle to repartition height between the templates picker
+                and the prompt box (only present while the panel is open). */}
+            <TemplatesResizer controller={templates} />
             <div
               className={`relative flex flex-1 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20 transition-[min-height] duration-[250ms] ease-out ${
                 templates.open ? 'min-h-[200px]' : 'min-h-[380px]'

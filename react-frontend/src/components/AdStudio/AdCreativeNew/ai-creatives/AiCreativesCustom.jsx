@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
 import { LifestyleShell } from '../lifestyle/LifestyleShell';
-import { TemplatesPanel, TemplatesTrigger } from '../components/PromptTemplatesPicker';
+import { TemplatesPanel, TemplatesTrigger, TemplatesResizer } from '../components/PromptTemplatesPicker';
 import { usePromptTemplates } from '../components/usePromptTemplates';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png';
@@ -347,11 +347,24 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       : brandSource.kind === 'autofill'
         ? brandSource.data?.objectives?.targetAudience?.[0] || ''
         : '';
+  // Category drives the auto-matched template category. A saved brand carries
+  // it (get-lists); an autofill brand carries DS's category inline. brandId is
+  // only known for saved brands — used to lazy-classify old brands with none.
+  const brandCategory =
+    brandSource.kind === 'list'
+      ? brandSource.item?.category || ''
+      : brandSource.kind === 'autofill'
+        ? brandSource.data?.brandInfo?.category || ''
+        : '';
+  const brandId =
+    brandSource.kind === 'list' ? brandSource.item?.id || '' : '';
 
   const templates = usePromptTemplates({
     type: 'ai_custom',
     brandName,
     targetAudience,
+    brandCategory,
+    brandId,
     currentValue: prompt,
     onSelect: setPrompt,
     // Manual edit of a {brand}/{target_audience} token deselects the
@@ -936,7 +949,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           )}
 
           <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
-            <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[16px] font-medium text-gray-900 dark:text-white">
                   Prompt<span>*</span>
@@ -953,6 +966,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   natural content size when the panel takes its share. */}
               <div className="flex min-h-[480px] flex-1 flex-col">
                 <TemplatesPanel controller={templates} />
+
+                {/* Drag handle to repartition height between the templates
+                    picker and the prompt box. Only present while the panel
+                    is open. */}
+                <TemplatesResizer controller={templates} />
 
                 <div
                   className="relative flex flex-1 min-h-0 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 ring-black/10 dark:ring-white/10 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20"

@@ -128,6 +128,32 @@ export async function fetchPromptTemplateCategories(type, signal) {
   return categories;
 }
 
+// POST /adsgpt/brand/:brandId/ensure-category  { userId }
+// Resolves (classifying synchronously if needed) the taxonomy category for a
+// saved brand. Used on brand-select for existing brands that have no category
+// yet. Returns the category string, or null if unknown. New brands already
+// carry a category from DS so this is never called for them.
+export async function ensureBrandCategory(brandId, signal) {
+  const authToken = getAuthToken();
+  if (!authToken) throw new Error('Missing auth token');
+  const url = `${BRAND_API_BASE}/adsgpt/brand/${encodeURIComponent(
+    brandId,
+  )}/ensure-category`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ userId: getUserId() }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`ensure-category failed (${res.status})`);
+  const json = await res.json();
+  return json?.category ?? null;
+}
+
 // ── Autofill ───────────────────────────────────────────────────────────────
 
 export const AUTOFILL_FAILURE_MESSAGE = 'Website fetching failed. Please add manually.';

@@ -1,6 +1,8 @@
 const brandNameLists = require("../Module/brandNames/brandNamesSchema");
 const { v4: uuidv4 } = require('uuid');
 const { runDiscoveryJob } = require('./competitorDiscoveryController');
+const { isValidCategory, CATEGORY_VERSION } = require('../utils/categoryTaxonomy');
+const { needsClassify, enrichUserBrands } = require('./brandCategoryClassifier');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { s3Client } = require("../storage/s3");
 const axios = require('axios');
@@ -180,7 +182,16 @@ const getBrandsList = async (req, res) => {
       competitors: brand.competitors || [],
       keywords: brand.keywords || [],
       discoveryJob: brand.discoveryJob || null,
+      category: brand.category || null,
     }));
+
+    // Fire-and-forget: lazily classify any of this user's brands that still
+    // lack a category (existing brands that predate DS sending one). Gated so
+    // the extra query only happens when there's actually work to do — in the
+    // steady state every brand is DONE and this is a no-op.
+    if (Array.isArray(user.brands) && user.brands.some(needsClassify)) {
+      enrichUserBrands(userId).catch(() => {});
+    }
 
     return res.status(200).json(response);
   } catch (err) {
@@ -236,6 +247,7 @@ const updateBrandsList = async (req, res) => {
     linkedinUrl,
     region,
     targetAudiences,
+    category,
   } = req.body;
 
   if (!userId || !id || !brandName || !websiteUrl) {
@@ -270,6 +282,20 @@ const updateBrandsList = async (req, res) => {
     brand.brandDescription = brandDescription !== undefined ? brandDescription : brand.brandDescription || '';
     brand.region = region !== undefined ? (region || null) : brand.region ?? null;
     brand.targetAudiences = targetAudiences !== undefined ? (targetAudiences || []) : brand.targetAudiences ?? [];
+
+    // Only overwrite category when a VALID one is supplied (e.g. DS re-analyze).
+    // A missing/invalid value leaves the existing category untouched so we
+    // never clobber a good value or trigger a needless re-classify.
+    if (category !== undefined && isValidCategory(category)) {
+      brand.category = category;
+      brand.categoryJob = {
+        status: 'DONE',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        errorMessage: null,
+        categoryVersion: CATEGORY_VERSION,
+      };
+    }
     const oldLogoUrls = brand.logoUrls || [];
     const oldIconUrl = brand.iconUrl;
     const oldImageUrls = brand.imageUrls || [];
@@ -346,6 +372,7 @@ const updateBrandsList = async (req, res) => {
         id: brand.id,
         brandName: brand.brandName,
         brandDescription: brand.brandDescription,
+        category: brand.category || null,
         logoUrls: brand.logoUrls ? brand.logoUrls.map(url => `${process.env.AWS_IMAGE_VIEW_URL}${url}`) : [],
         iconUrl: brand.iconUrl ? `${process.env.AWS_IMAGE_VIEW_URL}${brand.iconUrl}` : '',
         // imageUrl: brand.imageUrl ? `${process.env.AWS_IMAGE_VIEW_URL}${brand.imageUrl}` : '',
@@ -386,6 +413,7 @@ const createBrands = async (req, res) => {
     linkedinUrl,
     region,
     targetAudiences,
+    category,
   } = req.body;
 
   if (!userId || !brandName || !websiteUrl) {
@@ -437,6 +465,19 @@ const createBrands = async (req, res) => {
             competitors: [],
             keywords: [],
             discoveryJob: null,
+            // DS supplies category on the analyze/autofill APIs. Validate it
+            // against the 45; a valid value is stored as DONE (no lazy
+            // classify), anything else is left null for the lazy path.
+            category: isValidCategory(category) ? category : null,
+            categoryJob: isValidCategory(category)
+              ? {
+                  status: 'DONE',
+                  startedAt: new Date(),
+                  completedAt: new Date(),
+                  errorMessage: null,
+                  categoryVersion: CATEGORY_VERSION,
+                }
+              : null,
           },
         },
       },
@@ -451,6 +492,7 @@ const createBrands = async (req, res) => {
         id: newBrand.id,
         brandName: newBrand.brandName,
         brandDescription: newBrand.brandDescription,
+        category: newBrand.category || null,
         logoUrls: newBrand.logoUrls ? newBrand.logoUrls.map(url => `${AWS_IMAGE_VIEW_URL}${url}`) : [],
         iconUrl: newBrand.iconUrl ? `${AWS_IMAGE_VIEW_URL}${newBrand.iconUrl}` : '',
         // imageUrl: newBrand.imageUrl ? `${AWS_IMAGE_VIEW_URL}${newBrand.imageUrl}` : '',

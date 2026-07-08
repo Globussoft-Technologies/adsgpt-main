@@ -316,7 +316,13 @@ async function scrapePage2(pageUrl) {
         aiTargetAudiences:
           objectives?.targetAudience || [],
         aiKeyFeatures: [],
+        // Industry category from the Python brand-iq scraper (one of the 45,
+        // defaults to "General"). The BrandIQ form reads aiInsights.category
+        // to prefill the Category dropdown.
+        category: brandInfo?.category || "",
       },
+      // Also expose at top level for convenience / other consumers.
+      category: brandInfo?.category || "",
       brandLogo,
       images,
       videos: [],

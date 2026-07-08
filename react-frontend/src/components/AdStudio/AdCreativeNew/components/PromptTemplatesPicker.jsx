@@ -1,19 +1,119 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { Check, ChevronDown, Loader2, Search, Sparkles } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Check,
+  ChevronDown,
+  Loader2,
+  Search,
+  Sparkles,
+  AlertCircle,
+  LayoutGrid,
+  Megaphone,
+  Tag,
+  Percent,
+  Gift,
+  Star,
+  Rocket,
+  TrendingUp,
+  ShoppingBag,
+  CalendarDays,
+  MessageSquareQuote,
+  Scale,
+  Crown,
+  Home,
+  LayoutDashboard,
+  Video,
+  Dumbbell,
+  Utensils,
+  Plane,
+  GraduationCap,
+  Shirt,
+  PenTool,
+  FileText,
+  Users,
+} from 'lucide-react';
 import { IS_PROMPT_CATEGORIES_ENABLED } from '@/utils/featureFlags';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// Templates carry no icon field, so infer a meaningful one from the title +
+// category. Rules are checked in order, first match wins — so the glyph
+// actually signals what the template is for (a "Sale promo" gets a %, a
+// "Testimonial" gets a quote bubble) instead of a random shape. When nothing
+// matches we fall back to a small hashed set so rows still look distinct.
+// The category heading uses LayoutGrid, which is never a row icon.
+const ICON_RULES = [
+  { re: /(sale|discount|promo|clearance|deal|%)/, Icon: Percent, color: 'text-rose-400' },
+  { re: /(price|pricing|cost|budget|offer)/, Icon: Tag, color: 'text-amber-500' },
+  { re: /(season|holiday|festive|christmas|diwali|black ?friday|new ?year|summer|winter|event|webinar)/, Icon: CalendarDays, color: 'text-orange-400' },
+  { re: /(testimonial|review|social proof|quote|rating|feedback)/, Icon: MessageSquareQuote, color: 'text-sky-400' },
+  { re: /(compare|comparison|\bvs\b|versus|usp|advantage|why choose)/, Icon: Scale, color: 'text-violet-400' },
+  { re: /(luxury|premium|elite|exclusive|\bvip\b|high[- ]?end)/, Icon: Crown, color: 'text-amber-400' },
+  { re: /(home|house|property|real ?estate|apartment|rental|listing|estate|amenity)/, Icon: Home, color: 'text-emerald-400' },
+  { re: /(enterprise|software|\bapp\b|saas|tech|dashboard|platform|digital|\bai\b)/, Icon: LayoutDashboard, color: 'text-indigo-400' },
+  { re: /(launch|hero|announce|reveal|introduc|\bnew\b)/, Icon: Rocket, color: 'text-sky-400' },
+  { re: /(gift|giveaway|reward|bonus|\bfree\b)/, Icon: Gift, color: 'text-pink-400' },
+  { re: /(growth|performance|result|roi|convert|scale|boost|traffic)/, Icon: TrendingUp, color: 'text-teal-400' },
+  { re: /(video|reel|clip|motion|story)/, Icon: Video, color: 'text-fuchsia-400' },
+  { re: /(shop|product|store|ecommerce|purchase|cart|retail|\bbuy\b)/, Icon: ShoppingBag, color: 'text-violet-400' },
+  { re: /(health|fitness|wellness|\bgym\b|workout)/, Icon: Dumbbell, color: 'text-lime-500' },
+  { re: /(food|restaurant|menu|meal|dish|cafe|dining)/, Icon: Utensils, color: 'text-orange-400' },
+  { re: /(travel|trip|vacation|flight|tour|destination|hotel)/, Icon: Plane, color: 'text-sky-400' },
+  { re: /(education|course|learn|class|training|academy|school)/, Icon: GraduationCap, color: 'text-indigo-400' },
+  { re: /(fashion|apparel|clothing|\bwear\b|outfit|style)/, Icon: Shirt, color: 'text-pink-400' },
+  { re: /(spotlight|feature|showcase|highlight|benefit)/, Icon: Star, color: 'text-yellow-400' },
+  { re: /(campaign|marketing|announcement|awareness)/, Icon: Megaphone, color: 'text-rose-400' },
+  { re: /(team|audience|people|customer|community|\buser)/, Icon: Users, color: 'text-teal-400' },
+  { re: /(brand|custom|brief|identity)/, Icon: PenTool, color: 'text-cyan-400' },
+];
+
+// Hashed fallbacks — still deterministic per template, so a row's icon never
+// flickers between renders.
+const FALLBACK_ICONS = [
+  { Icon: Sparkles, color: 'text-cyan-400' },
+  { Icon: Star, color: 'text-amber-400' },
+  { Icon: Tag, color: 'text-violet-400' },
+  { Icon: FileText, color: 'text-sky-400' },
+];
+
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    h = (h * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function iconForTemplate(t) {
+  const haystack = `${t?.title || ''} ${t?._category || t?.category || ''}`.toLowerCase();
+  const rule = ICON_RULES.find((r) => r.re.test(haystack));
+  if (rule) return rule;
+  const key = t?._id || t?.title || t?.prompt || '';
+  return FALLBACK_ICONS[hashString(key) % FALLBACK_ICONS.length];
+}
+
+// Reveals a scrollbar only while the container is actively scrolling, then
+// hides it again after a short idle. Returns [isScrolling, onScroll] — pair
+// the flag with the `.scrollbar-auto-hide is-scrolling` classes.
+function useScrollActivity(idleMs = 700) {
+  const [scrolling, setScrolling] = useState(false);
+  const timerRef = useRef(null);
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+  const onScroll = () => {
+    setScrolling(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setScrolling(false), idleMs);
+  };
+  return [scrolling, onScroll];
+}
 
 // Inject the glow keyframes once on first TokenInput mount. Keeping this
 // inline (instead of a global CSS file) so the picker stays self-contained
@@ -23,9 +123,16 @@ const GLOW_RGB = '58, 208, 200'; // #3ad0c8 — cyan/teal per reference
 
 function injectGlowStyles() {
   if (typeof document === 'undefined') return;
-  if (document.getElementById(GLOW_STYLE_ID)) return;
-  const el = document.createElement('style');
-  el.id = GLOW_STYLE_ID;
+  // Upsert rather than bail-if-present: if an older version of this style
+  // block was injected earlier (e.g. before hot-reload), skipping would
+  // leave the newer .pt-token rules — including the empty-token placeholder
+  // — permanently missing. Re-setting textContent is idempotent and cheap.
+  let el = document.getElementById(GLOW_STYLE_ID);
+  if (!el) {
+    el = document.createElement('style');
+    el.id = GLOW_STYLE_ID;
+    document.head.appendChild(el);
+  }
   el.textContent = `
     @keyframes ptGlow {
       0%, 100% {
@@ -48,16 +155,39 @@ function injectGlowStyles() {
         box-shadow: 0 0 0 2px rgba(${GLOW_RGB}, 0.4);
       }
     }
+    /* The inline editable token flows and wraps WITH the surrounding
+       sentence instead of forcing its own full-width line. box-decoration
+       -break: clone keeps the rounded highlight + padding intact on every
+       wrapped fragment. */
+    .pt-token {
+      display: inline;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      cursor: text;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+    /* Empty placeholders are always short and never wrap, so render them as
+       an inline-block pill (matching the original input chip). Filled tokens
+       stay inline above so a long value flows and wraps with the sentence. */
+    .pt-token-empty {
+      display: inline-block;
+    }
+    /* A contentEditable element can't use the placeholder attribute, so an
+       empty token renders its {label} via ::before. */
+    .pt-token-empty::before {
+      content: attr(data-ph);
+      opacity: 0.85;
+    }
   `;
-  document.head.appendChild(el);
 }
 
 const TOKEN_REGEX = /\{([^}]+)\}/g;
 
-// Walks a template prompt and renders every {placeholder} slot as the same
-// inline editable TokenInput chip. Surrounding text, punctuation, spaces and
-// line breaks are preserved as plain spans. Empty inputs show the cyan
-// glow-chip styling; typed values render as plain text.
+// Walks a template prompt and renders every {placeholder} slot as an inline
+// editable TokenInput. Surrounding text, punctuation, spaces and line breaks
+// are preserved as plain spans. Empty tokens show the cyan glow-chip; filled
+// tokens flow and wrap inline with a calmer highlight.
 function renderPromptTokens(prompt, values, onTokenChange) {
   if (!prompt) return null;
 
@@ -93,95 +223,75 @@ function renderPromptTokens(prompt, values, onTokenChange) {
   return elements;
 }
 
-// Hard ceiling so a long paste can't push the input past its column.
-// Combined with `max-w-full` in the className, this guarantees the input
-// never overflows the right detail panel — values longer than 28ch scroll
-// inside the input instead.
-const MAX_TOKEN_INPUT_CH = 28;
+const MAX_TOKEN_LENGTH = 60;
 
-const MAX_TOKEN_LENGTH = 20;
-
+// Renders a {placeholder} slot as an inline, editable token. It's a
+// contentEditable span (not an <input>) on purpose: that's what lets a long
+// value — e.g. a full target-audience phrase — flow and WRAP with the
+// sentence, instead of an <input> forcing itself onto its own full-width
+// line and scroll-clipping the text. Empty tokens show the glowing cyan
+// chip; filled tokens get a calmer highlight so they read as done.
 function TokenInput({ name, value, onChange }) {
   useEffect(injectGlowStyles, []);
-  const placeholder = `{${name}}`;
-  // Auto-grow width up to the ceiling: bigger of the placeholder length
-  // (so the chip stays visible when empty) or the current value length.
-  // `+ 1` buys a sliver of breathing room so the caret never sits flush
-  // against the edge.
-  const widthCh = Math.min(MAX_TOKEN_INPUT_CH, Math.max(placeholder.length, value.length) + 1);
-  // Glow + cyan chip only when the value is genuinely empty (after trim
-  // — matches the resolveTemplate gate so the visual signal stays in
-  // lockstep with whether the token actually contributes to the final
-  // resolved prompt). Whitespace-only counts as empty.
+  const ref = useRef(null);
+  // Whitespace-only counts as empty — mirrors the resolveTemplate gate so
+  // the visual state matches whether the token contributes to the prompt.
   const empty = value.trim() === '';
 
-  // `maxLength` silently blocks keystrokes past the limit (no onChange
-  // fires), so the only way to surface "you tried to type more" is by
-  // catching the keystroke at onKeyDown and inspecting the resulting
-  // value. Same for paste — clipboard text gets truncated.
-  const [overLimit, setOverLimit] = useState(false);
+  // Push text into the DOM only when `value` changes from the OUTSIDE
+  // (brand-chip seeding, resets, variant switch). We deliberately don't
+  // echo the user's own keystrokes back into the node — doing so would
+  // collapse the caret to the start on every character typed.
   useEffect(() => {
-    if (!overLimit) return undefined;
-    const t = setTimeout(() => setOverLimit(false), 2000);
-    return () => clearTimeout(t);
-  }, [overLimit]);
+    const el = ref.current;
+    if (el && el.textContent !== value) el.textContent = value;
+  }, [value]);
 
-  const handleKeyDown = (e) => {
-    if (
-      value.length >= MAX_TOKEN_LENGTH &&
-      e.key.length === 1 &&
-      !e.ctrlKey &&
-      !e.metaKey &&
-      !e.altKey
-    ) {
-      setOverLimit(true);
-    }
+  const moveCaretToEnd = (el) => {
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
   };
 
-  const handlePaste = (e) => {
-    const pasted = e.clipboardData?.getData('text') ?? '';
-    const target = e.target;
-    const selStart = target.selectionStart ?? value.length;
-    const selEnd = target.selectionEnd ?? value.length;
-    const futureLength = value.length - (selEnd - selStart) + pasted.length;
-    if (futureLength > MAX_TOKEN_LENGTH) setOverLimit(true);
+  const handleInput = (e) => {
+    const el = e.currentTarget;
+    let text = el.textContent || '';
+    // Enforce the ceiling for both typing and paste. Trimming the node
+    // (rather than blocking keystrokes) is what also caps pasted text.
+    if (text.length > MAX_TOKEN_LENGTH) {
+      text = text.slice(0, MAX_TOKEN_LENGTH);
+      el.textContent = text;
+      moveCaretToEnd(el);
+    }
+    onChange(text);
+  };
+
+  const handleKeyDown = (e) => {
+    // Tokens are single-line in intent — Enter would inject a <br>.
+    if (e.key === 'Enter') e.preventDefault();
   };
 
   return (
-    <span className="relative inline-block max-w-full">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => {
-          // Any valid input clears the over-limit indicator — the user
-          // either deleted a char or kept editing successfully.
-          if (overLimit) setOverLimit(false);
-          onChange(e.target.value);
-        }}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        placeholder={placeholder}
-        maxLength={MAX_TOKEN_LENGTH}
-        title="Up to 20 characters"
-        className={`mx-0.5 inline-block max-w-full rounded-md border px-1.5 py-0.5 text-[12px] transition-colors outline-none focus:border-cyan-400/60 ${
-          overLimit ? 'border-red-500/70!' : 'border-transparent'
-        } ${
-          empty
-            ? 'pt-token-glow bg-cyan-200/50 font-medium text-cyan-900 placeholder:text-cyan-900 dark:bg-cyan-300/15 dark:text-cyan-100 dark:placeholder:text-cyan-100'
-            : 'bg-transparent font-medium text-gray-900 dark:text-white'
-        }`}
-        style={{ width: `${widthCh}ch` }}
-      />
-      {overLimit && (
-        <span
-          role="alert"
-          className="text-10 pointer-events-none absolute left-1/2 z-20 -translate-x-1/2 rounded-md bg-red-500 px-2 py-0.5 font-medium whitespace-nowrap text-white shadow-lg"
-          style={{ bottom: 'calc(100% + 4px)' }}
-        >
-          Max 20 characters
-        </span>
-      )}
-    </span>
+    <span
+      ref={ref}
+      role="textbox"
+      aria-label={name}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      onInput={handleInput}
+      onKeyDown={handleKeyDown}
+      data-ph={`{${name}}`}
+      title={`Up to ${MAX_TOKEN_LENGTH} characters`}
+      className={`pt-token mx-0.5 rounded-md border px-1.5 text-[12px] outline-none transition-colors ${
+        empty
+          ? 'pt-token-empty pt-token-glow border-transparent py-0.5 bg-cyan-200/50 font-medium text-cyan-900 focus:border-cyan-400/60 dark:bg-cyan-300/15 dark:text-cyan-100'
+          : 'border-transparent bg-cyan-500/10 font-semibold text-cyan-800 dark:bg-cyan-300/10 dark:text-cyan-100'
+      }`}
+    />
   );
 }
 
@@ -205,6 +315,66 @@ export function TemplatesTrigger({ controller }) {
   );
 }
 
+// How far the panel can shrink / grow when dragged. The floor keeps the
+// filter bar + a couple of rows visible; the ceiling stops it from ballooning
+// into a mostly-empty box and shoving the prompt below the fold.
+const MIN_PANEL_HEIGHT = 180;
+const MAX_PANEL_HEIGHT = 420;
+
+// Drag handle rendered between the panel and the prompt box. Dragging DOWN
+// grows the templates picker (and shrinks the prompt box); dragging UP does
+// the reverse. Uses pointer capture so the drag keeps tracking even when the
+// cursor leaves the thin handle. Only renders while the panel is open.
+export function TemplatesResizer({ controller }) {
+  const { open, panelHeight, setPanelHeight } = controller;
+  const dragRef = useRef(null);
+
+  if (!open) return null;
+
+  const onPointerDown = (e) => {
+    dragRef.current = { startY: e.clientY, startH: panelHeight };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragRef.current) return;
+    const delta = e.clientY - dragRef.current.startY;
+    const next = Math.min(
+      MAX_PANEL_HEIGHT,
+      Math.max(MIN_PANEL_HEIGHT, dragRef.current.startH + delta),
+    );
+    setPanelHeight(next);
+  };
+
+  const endDrag = (e) => {
+    dragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize templates panel"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      /* -mt-3 cancels the panel's own mb-3 so the handle sits INSIDE the
+         existing gap instead of adding a second one; mb-1 leaves just a
+         small space above the prompt box. */
+      className="group -mt-3 mb-1 flex h-3 shrink-0 cursor-row-resize touch-none items-center justify-center"
+    >
+      <div className="h-1 w-10 rounded-full bg-black/15 transition-colors group-hover:bg-black/30 dark:bg-white/20 dark:group-hover:bg-white/40" />
+    </div>
+  );
+}
+
 // Inline panel rendered between the Prompt label row and the textarea.
 // Left rail = template titles; right detail = previewed prompt body + Use
 // button. Active (in-textarea) template gets a tick in the rail.
@@ -220,19 +390,22 @@ export function TemplatesPanel({ controller }) {
     error,
     templates,
     filteredTemplates,
-    categories,
     selectedCategory,
-    setSelectedCategory,
     searchQuery,
+    panelHeight,
     setSearchQuery,
     previewedTemplate,
     activeTemplate,
     previewTemplate,
     useTemplate,
     brandName,
+    categoryResolving,
     manualValues,
     updateManualValue,
   } = controller;
+
+  const [railScrolling, onRailScroll] = useScrollActivity();
+  const [previewScrolling, onPreviewScroll] = useScrollActivity();
 
   // Live list of empty placeholders in the currently previewed template.
   // This updates as the user types, so the notice is always current.
@@ -293,47 +466,25 @@ export function TemplatesPanel({ controller }) {
             )}
 
             {state === 'loaded' && templates.length > 0 && (
-              <div className={`flex flex-col ${IS_PROMPT_CATEGORIES_ENABLED ? 'h-[320px]' : 'h-[279px]'}`}>
-                {/* Filter bar — category dropdown + search (hidden until VITE_FEATURE_PROMPT_CATEGORIES=true) */}
+              <div className="flex flex-col" style={{ height: panelHeight }}>
+                {/* Filter bar — single full-width search. The category is no
+                    longer picked here: it's auto-selected from the chosen
+                    brand (or defaults to General) and shown as the rail
+                    heading below. Searching spans every loaded category.
+                    (hidden until VITE_FEATURE_PROMPT_CATEGORIES=true) */}
                 {IS_PROMPT_CATEGORIES_ENABLED && (
-                <div className="flex shrink-0 items-center gap-3 border-b border-black/10 px-3 py-2 dark:border-white/10">
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-black/10 bg-white pr-2 pl-3 text-[12px] text-gray-700 ring-1 ring-black/10 outline-none focus:ring-cyan-400/60 dark:border-white/10 dark:bg-[#202020]/50 dark:text-[#AFAFAF] dark:focus:ring-cyan-400/60 [&>svg]:text-gray-500 [&>svg]:dark:text-white/50">
-                      <span className="text-gray-400 dark:text-white/40">Category:</span>
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      className="z-[999999] min-w-[180px] rounded-xl border-black/10 bg-white text-zinc-800 shadow-lg backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/80 dark:text-white"
-                    >
-                      <SelectItem
-                        value="General"
-                        className="cursor-pointer rounded-lg text-[12px] text-zinc-800 hover:bg-zinc-100 focus:bg-zinc-100 data-[state=checked]:bg-zinc-100 dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:focus:bg-[#0D0D0D]/50 dark:data-[state=checked]:bg-[#0D0D0D]/50"
-                      >
-                        General
-                      </SelectItem>
-                      {categories.map((c) => (
-                        <SelectItem
-                          key={c}
-                          value={c}
-                          className="cursor-pointer rounded-lg text-[12px] text-zinc-800 hover:bg-zinc-100 focus:bg-zinc-100 data-[state=checked]:bg-zinc-100 dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:focus:bg-[#0D0D0D]/50 dark:data-[state=checked]:bg-[#0D0D0D]/50"
-                        >
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="relative flex-1">
+                <div className="flex shrink-0 items-center px-3 py-2.5">
+                  <div className="relative min-w-0 flex-1">
                     <Search
-                      size={14}
-                      className="absolute top-1/2 left-2.5 -translate-y-1/2 text-gray-400 dark:text-white/40"
+                      size={15}
+                      className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-400 dark:text-white/40"
                     />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search templates…"
-                      className="h-8 w-full rounded-full bg-white pr-3 pl-8 text-[12px] text-gray-700 ring-1 ring-black/10 outline-none placeholder:text-gray-400 focus:ring-cyan-400/60 dark:bg-[#1f1f23] dark:text-white/90 dark:ring-white/10 dark:placeholder:text-white/40"
+                      placeholder="Search all templates…"
+                      className="h-9 w-full min-w-0 rounded-full bg-white pr-3 pl-9 text-[12.5px] text-gray-700 outline-none ring-1 ring-black/10 placeholder:text-gray-400 focus:ring-1 focus:ring-black/10 dark:bg-[#1f1f23] dark:text-white/90 dark:ring-white/10 dark:placeholder:text-white/40 dark:focus:ring-white/20"
                     />
                   </div>
                 </div>
@@ -342,11 +493,51 @@ export function TemplatesPanel({ controller }) {
                 {/* Two-column content area — fills remaining height */}
                 <div className="min-h-0 flex-1 flex">
                   {/* Left rail — template list (scrollable) */}
-                  <div className="flex w-[140px] flex-col border-r border-black/10 p-2 sm:w-[160px] dark:border-white/10">
-                    <div className="px-2 pt-1 pb-2 text-[11px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/50">
-                      Templates
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1 scrollbar-white">
+                  <div className="flex w-43 flex-col border-r border-black/10 p-2 sm:w-47 dark:border-white/10">
+                    {/* Heading reflects what the list is showing:
+                        • searching → the result count for the query
+                        • classifying a brand → a "finding" spinner
+                        • otherwise → the active category (brand-derived or
+                          the General default). */}
+                    {(() => {
+                      const searching = Boolean(searchQuery?.trim());
+                      const base =
+                        'flex items-center gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold tracking-wide uppercase';
+                      if (searching) {
+                        return (
+                          <div className={`${base} text-gray-500 dark:text-white/60`}>
+                            <Search size={11} className="shrink-0" />
+                            <span className="truncate">
+                              {filteredTemplates.length} result
+                              {filteredTemplates.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (categoryResolving) {
+                        return (
+                          <div className={`${base} text-cyan-600 dark:text-cyan-300`}>
+                            <Loader2 size={11} className="shrink-0 animate-spin" />
+                            <span className="truncate">Finding category…</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div
+                          className={`${base} text-gray-500 dark:text-white/60`}
+                          title={selectedCategory}
+                        >
+                          <LayoutGrid size={11} className="shrink-0 text-cyan-500 dark:text-cyan-300" />
+                          <span className="truncate">{selectedCategory || 'General'}</span>
+                        </div>
+                      );
+                    })()}
+                    <div
+                      onScroll={onRailScroll}
+                      className={`min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1 scrollbar-auto-hide ${
+                        railScrolling ? 'is-scrolling' : ''
+                      }`}
+                    >
                       {filteredTemplates.length === 0 && (
                         <div className="px-2 py-3 text-[11px] text-gray-500 dark:text-white/50">
                           No matching templates.
@@ -356,6 +547,7 @@ export function TemplatesPanel({ controller }) {
                         const isPreviewed = previewedTemplate?._id === t._id;
                         const isActive = activeTemplate?._id === t._id;
                         const label = t.title || t.prompt;
+                        const { Icon: RowIcon, color: rowColor } = iconForTemplate(t);
                         return (
                           <Tooltip key={t._id}>
                             <TooltipTrigger asChild>
@@ -364,17 +556,30 @@ export function TemplatesPanel({ controller }) {
                                 onClick={() => previewTemplate(t)}
                                 className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] transition-colors ${
                                   isPreviewed
-                                    ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-white'
-                                    : 'text-gray-700 hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/5'
+                                    ? 'bg-gray-900 text-white dark:bg-white/20 dark:text-white'
+                                    : 'text-gray-800 hover:bg-black/5 dark:text-white/90 dark:hover:bg-white/10'
                                 }`}
                               >
-                                <Sparkles
-                                  size={12}
-                                  className={`shrink-0 ${
-                                    isPreviewed ? 'text-white/80' : 'text-gray-400 dark:text-white/40'
-                                  }`}
+                                <RowIcon
+                                  size={13}
+                                  className={`shrink-0 ${isPreviewed ? 'text-white/90' : rowColor}`}
                                 />
-                                <span className="flex-1 truncate">{label}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate">{label}</span>
+                                  {/* During a global search, show which category
+                                      each result came from. */}
+                                  {searchQuery?.trim() && t._category && (
+                                    <span
+                                      className={`block truncate text-[10px] ${
+                                        isPreviewed
+                                          ? 'text-white/60'
+                                          : 'text-gray-400 dark:text-white/40'
+                                      }`}
+                                    >
+                                      {t._category}
+                                    </span>
+                                  )}
+                                </span>
                                 {isActive && <Check size={14} className="shrink-0 text-emerald-400" />}
                               </button>
                             </TooltipTrigger>
@@ -392,17 +597,32 @@ export function TemplatesPanel({ controller }) {
                   </div>
 
                   {/* Right detail — fixed-height preview column */}
-                  <div className="flex min-h-0 flex-1 flex-col p-4">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
                     {!previewedTemplate ? (
                       <div className="flex flex-1 items-center justify-center text-center text-[12px] text-gray-500 dark:text-white/50">
                         Pick a template on the left to preview it.
                       </div>
                     ) : (
                       <>
-                        <div className="mb-2 shrink-0 text-[14px] font-semibold text-gray-900 dark:text-white">
-                          {previewedTemplate.title || 'Template'}
+                        <div className="mb-2 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13.5px] font-semibold text-gray-900 dark:text-white">
+                              {previewedTemplate.title || 'Template'}
+                            </span>
+                            {(previewedTemplate._category || previewedTemplate.category) && (
+                              <span className="flex shrink-0 items-center gap-1 text-[10.5px] text-gray-400 dark:text-white/40">
+                                <LayoutGrid size={10} className="shrink-0" />
+                                {previewedTemplate._category || previewedTemplate.category}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto px-1 py-2 text-[12.5px] leading-relaxed text-gray-700 scrollbar-white dark:text-white/80">
+                        <div
+                          onScroll={onPreviewScroll}
+                          className={`min-h-0 flex-1 overflow-y-auto px-1 py-2 text-[12.5px] leading-relaxed text-gray-700 scrollbar-auto-hide dark:text-white/80 ${
+                            previewScrolling ? 'is-scrolling' : ''
+                          }`}
+                        >
                           {renderPromptTokens(
                             previewedTemplate.prompt,
                             manualValues,
@@ -417,36 +637,35 @@ export function TemplatesPanel({ controller }) {
                           // const canUse = Boolean(brandName);
                           const missing = [];
                           if (!brandName) missing.push('brand');
-                          const skippedText =
-                            skippedPlaceholders.length === 0
-                              ? ''
-                              : `${skippedPlaceholders
-                                  .map((p) => p.replace(/_/g, ' '))
-                                  .join(', ')} empty`;
+                          const skippedLabel = skippedPlaceholders
+                            .map((p) => p.replace(/_/g, ' '))
+                            .join(', ');
 
                           return (
-                            <div className="mt-3 flex shrink-0 flex-col items-end gap-1">
-                              <div className="flex items-center justify-end gap-3">
-                                {!canUse && (
-                                  <span className="text-[11px] text-gray-500 dark:text-white/50">
-                                    Add a {missing.join(' and ')} to use this prompt
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={useTemplate}
-                                  // disabled={!canUse}
-                                  title={canUse ? undefined : `Add a ${missing.join(' and ')} first`}
-                                  className="shrink-0 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40 dark:bg-white dark:text-gray-900"
+                            <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
+                              {IS_PROMPT_CATEGORIES_ENABLED && skippedPlaceholders.length > 0 ? (
+                                <span
+                                  title={`Fill in the highlighted field${skippedPlaceholders.length > 1 ? 's' : ''}: ${skippedLabel}`}
+                                  className="flex min-w-0 items-center gap-1 text-[10.5px] text-amber-600 dark:text-amber-300/90"
                                 >
-                                  Use this prompt →
-                                </button>
-                              </div>
-                              {IS_PROMPT_CATEGORIES_ENABLED && skippedPlaceholders.length > 0 && (
-                                <span className="text-right text-[10px] leading-tight text-amber-600 break-words dark:text-amber-300">
-                                  {skippedText}
+                                  <AlertCircle size={11} className="shrink-0" />
+                                  <span className="truncate">
+                                    {skippedPlaceholders.length} field
+                                    {skippedPlaceholders.length > 1 ? 's' : ''} to fill
+                                  </span>
                                 </span>
+                              ) : (
+                                <span className="min-w-0" />
                               )}
+                              <button
+                                type="button"
+                                onClick={useTemplate}
+                                // disabled={!canUse}
+                                title={canUse ? undefined : `Add a ${missing.join(' and ')} first`}
+                                className="shrink-0 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40 dark:bg-white dark:text-gray-900"
+                              >
+                                Use this prompt →
+                              </button>
                             </div>
                           );
                         })()}

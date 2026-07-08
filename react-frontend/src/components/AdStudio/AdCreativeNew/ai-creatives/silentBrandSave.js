@@ -65,6 +65,9 @@ export async function silentSaveBrandFromAutofill({
         linkedinUrl: '',
         region: '',
         targetAudiences: Array.isArray(obj.targetAudience) ? obj.targetAudience : [],
+        // DS's industry category (one of the 45). BE validates it; anything
+        // not in the list is ignored and the brand is lazy-classified instead.
+        category: bi.category || '',
       },
       {
         headers: {
