@@ -100,6 +100,8 @@ class TiktokAdController {
     this.getAdGroupReviewInfo = this.getAdGroupReviewInfo.bind(this);
     this.getAdReviewInfo = this.getAdReviewInfo.bind(this);
     this.appealAdGroup = this.appealAdGroup.bind(this);
+    this.getMusicList = this.getMusicList.bind(this);
+    this.uploadMusic = this.uploadMusic.bind(this);
   }
 
   /**
@@ -2037,6 +2039,170 @@ class TiktokAdController {
       logger.error(`TikTok getVideoInfo error: ${error.message}`);
       return res.status(error.status || 500).json({
         error: error.userMessage || "Failed to fetch TikTok video info",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * List music available to the ad account for use in ad creatives (music_id).
+   * Covers TikTok's Commercial Music Library plus anything the account has
+   * uploaded. Used by the Carousel / Reach-image creative flows, which require
+   * a music track. TikTok API: GET /file/music/get/
+   * Query: advertiserId, page, pageSize
+   */
+  async getMusicList(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'List available music for ad creatives'
+       #swagger.description = 'Lists music tracks available to the ad account (Commercial Music Library + uploaded music) for use as the music_id on Carousel and Reach image ads. Proxies TikTok Marketing API GET /file/music/get/. Cached for REDIS_TTL (2h).'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
+       #swagger.parameters['page'] = { in: 'query', required: false, type: 'integer', example: 1 }
+       #swagger.parameters['pageSize'] = { in: 'query', required: false, type: 'integer', example: 100 }
+       #swagger.responses[200] = {
+         description: "Music list",
+         schema: { music: [{ musicId: "m1023abc456def", name: "More Than Yesterday", author: "Dj Nil Alex", duration: 28, url: "" }] }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required" }
+       #swagger.responses[500] = { description: "Failed to fetch TikTok music" }
+    */
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId, page, pageSize } = req.query;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+
+      const cacheKey = `tiktokMusic:${userId}:${advertiserId}:${page || 1}:${pageSize || 100}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.json(JSON.parse(cached));
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        endpoint: "/file/music/get/",
+        accessToken,
+        params: {
+          advertiser_id: advertiserId,
+          page: Number(page) || 1,
+          page_size: Number(pageSize) || 100,
+        },
+      });
+
+      // TikTok's response shape for this endpoint isn't fully documented in the
+      // public SDK, so accept the common containers (list / musics / music).
+      const rawList =
+        data?.data?.list || data?.data?.musics || data?.data?.music || [];
+      const music = (Array.isArray(rawList) ? rawList : []).map((m) => ({
+        musicId: m.music_id || m.id,
+        name: m.name || m.title || m.music_name || "",
+        author: m.author || m.author_name || m.singer || "",
+        duration: m.duration,
+        url: m.url || m.play_url || "",
+        raw: m,
+      }));
+
+      const payload = { music };
+      await redisClient
+        .setex(cacheKey, REDIS_TTL, JSON.stringify(payload))
+        .catch(() => {});
+      return res.json(payload);
+    } catch (error) {
+      logger.error(`TikTok getMusicList error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok music",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * Upload a music/audio file to the Asset Library for use as an ad creative's
+   * music_id. TikTok API: POST /file/music/upload/
+   * Multipart field "music" (file). Busts the user's music caches on success.
+   */
+  async uploadMusic(req, res) {
+    /* #swagger.tags = ['TikTok Ads']
+       #swagger.summary = 'Upload a music track for ad creatives'
+       #swagger.description = 'Uploads a music/audio file (multipart field "music") to the Asset Library and returns a music_id usable on Carousel and Reach image ads. Computes an MD5 signature of the file bytes as TikTok requires. Proxies TikTok Marketing API POST /file/music/upload/. Busts the user status + music caches on success.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.requestBody = {
+         required: true,
+         content: {
+           "multipart/form-data": {
+             schema: {
+               type: "object",
+               required: ["advertiserId", "music"],
+               properties: {
+                 advertiserId: { type: "string", example: "7012345678901234567" },
+                 music: { type: "string", format: "binary", description: "Music file (mp3/wav/m4a/flac), max 10MB" }
+               }
+             }
+           }
+         }
+       }
+       #swagger.responses[200] = {
+         description: "Music uploaded",
+         schema: { success: true, music: { musicId: "m1023abc456def", name: "my-track.mp3", url: "" } }
+       }
+       #swagger.responses[400] = { description: "advertiserId is required, or no music file provided" }
+       #swagger.responses[500] = { description: "Failed to upload TikTok music" }
+    */
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId } = req.body;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ error: "Provide a music file (field 'music')" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const form = new FormData();
+      form.append("advertiser_id", String(advertiserId));
+
+      const signature = crypto
+        .createHash("md5")
+        .update(req.file.buffer)
+        .digest("hex");
+      const blob = new Blob([req.file.buffer], {
+        type: req.file.mimetype || "audio/mpeg",
+      });
+      form.append("upload_type", "UPLOAD_BY_FILE");
+      form.append("music_signature", signature);
+      form.append("music_file", blob, req.file.originalname || "music.mp3");
+
+      const agent2 = getTiktokProxyAgent();
+      const response = await axios.post(
+        `${TIKTOK_API_BASE}/file/music/upload/`,
+        form,
+        {
+          headers: { "Access-Token": accessToken },
+          ...(agent2 ? { httpsAgent: agent2, proxy: false } : {}),
+        }
+      );
+
+      const body = response.data || {};
+      if (body.code && body.code !== 0) {
+        throw formatTiktokError({ response: { status: 200, data: body } });
+      }
+
+      const m = Array.isArray(body?.data) ? body.data[0] : body?.data || {};
+      const music = {
+        musicId: m.music_id || m.id,
+        name: m.name || m.music_name || req.file.originalname || "",
+        url: m.url || m.play_url || "",
+        raw: m,
+      };
+
+      await invalidateUserTiktokCache(userId).catch(() => {});
+      return res.json({ success: true, music });
+    } catch (error) {
+      logger.error(`TikTok uploadMusic error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to upload TikTok music",
         tiktokCode: error.tiktokCode,
       });
     }

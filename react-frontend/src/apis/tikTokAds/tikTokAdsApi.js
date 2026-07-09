@@ -148,6 +148,29 @@ export const getTiktokVideoInfo = async (advertiserId, videoIds) => {
   return data;
 };
 
+// ─── Music (Carousel / Reach image ads) ─────────────────────────────────────────
+
+export const getTiktokMusic = async (advertiserId, { page = 1, pageSize = 100 } = {}) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/music`, {
+    params: { advertiserId, page, pageSize },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
+export const uploadTiktokMusic = async ({ advertiserId, file }) => {
+  const formData = new FormData();
+  formData.append('advertiserId', advertiserId);
+  if (file) formData.append('music', file);
+
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/tiktok-ads/upload-music`,
+    formData,
+    { headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+};
+
 // ─── Pixel (conversion tracking) ────────────────────────────────────────────────
 
 export const getTiktokPixels = async (advertiserId) => {

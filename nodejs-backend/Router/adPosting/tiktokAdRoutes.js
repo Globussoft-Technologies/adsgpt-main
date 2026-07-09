@@ -26,6 +26,12 @@ const uploadImage = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// 10MB cap for music tracks (TikTok's documented max for uploaded music).
+const uploadMusic = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 // ─── Connection / User ─────────────────────────────────────────────────────
 router.get("/check-account", tiktokAdController.checkAccount);
 router.get("/users/:id", tiktokAuthController.getCurrentUser);
@@ -52,6 +58,7 @@ router.get("/get-identities", tiktokAdController.getIdentities);
 router.get("/get-regions", tiktokAdController.getRegions);
 router.get("/get-interest-categories", tiktokAdController.getInterestCategories);
 router.get("/get-video-info", tiktokAdController.getVideoInfo);
+router.get("/music", tiktokAdController.getMusicList);
 
 // ─── Mutations ───────────────────────────────────────────────────────────────
 router.post("/update-status", tiktokAdController.updateStatus);
@@ -63,6 +70,7 @@ router.post("/update-ad-group", tiktokAdController.updateAdGroup);
 router.post("/update-ad", tiktokAdController.updateAd);
 router.post("/upload-video", uploadVideo.single("video"), tiktokAdController.uploadVideo);
 router.post("/upload-image", uploadImage.single("image"), tiktokAdController.uploadImage);
+router.post("/upload-music", uploadMusic.single("music"), tiktokAdController.uploadMusic);
 
 // Campaign Templates — user-saved snapshots of the wizard `form` state.
 router.get("/templates", tiktokCampaignTemplateController.listTemplates);

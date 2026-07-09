@@ -18,6 +18,8 @@ import {
   updateTiktokAd,
   uploadTiktokVideo,
   uploadTiktokImage,
+  getTiktokMusic,
+  uploadTiktokMusic,
   listTiktokCampaignTemplates,
   getTiktokCampaignTemplate,
   saveTiktokCampaignTemplate,
@@ -67,6 +69,12 @@ const isSupportedAspectRatio = (width, height) => {
 // the shorter side (confirmed via the live Ads Manager upload error).
 const MAX_IMAGE_LONG_SIDE = 2340;
 const MAX_IMAGE_SHORT_SIDE = 1242;
+
+// Standard Carousel Ads take 2-35 images (confirmed via TikTok's official
+// "Specifications for Carousel Ads" help article). This is a distinct format
+// from CATALOG_CAROUSEL (2-20, feed-driven), which is not implemented here.
+const MIN_CAROUSEL_IMAGES = 2;
+const MAX_CAROUSEL_IMAGES = 35;
 
 // Reads a video file's duration + pixel dimensions client-side via a
 // throwaway <video> element, without uploading it. Resolves null fields if
@@ -366,6 +374,12 @@ const promotionTargetTypeForLeadSubType = (subType) => {
   }
 };
 
+// Sales' Instant Page path reuses the same INSTANT_PAGE promotion_target_type
+// as Lead Generation's Instant Form path; its Website path needs no
+// promotion_target_type at all (promotion_type: WEBSITE already says enough).
+const promotionTargetTypeForProductSalesSubType = (subType) =>
+  subType === 'INSTANT_PAGE' ? 'INSTANT_PAGE' : null;
+
 // Conversion-stage objectives can't launch until the ad account has a real
 // asset set up in TikTok Ads Manager. We surface a heads-up rather than block
 // them — they work in production once the asset exists.
@@ -374,11 +388,8 @@ const OBJECTIVE_ASSET_NOTE = {
     'Requires a registered app in TikTok (Assets → App) linked to the TikTok SDK or an MMP.',
   LEAD_GENERATION:
     'Choose Instant Form (needs a TikTok Instant Form Page ID) or Website (needs a Pixel + lead event).',
-  PRODUCT_SALES: 'Requires a tracking Pixel with a configured conversion event.',
+  PRODUCT_SALES: 'Choose Website (needs a Pixel + conversion event) or TikTok Instant Page (needs a Page ID).',
 };
-
-// Objectives that need a Pixel + optimization event on the ad group.
-const OBJECTIVES_NEEDING_PIXEL = ['PRODUCT_SALES'];
 
 // Lead Generation has two distinct paths. Only the WEBSITE path needs a pixel;
 // INSTANT_FORM uses a TikTok Instant Form referenced by page_id on the creative.
@@ -390,6 +401,37 @@ const LEAD_SUB_TYPES = [
 const isLeadGeneration = (objectiveKey) => objectiveKey === 'LEAD_GENERATION';
 const leadSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
 const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
+
+// Sales has the same Website-vs-Instant-Page split as Lead Generation
+// (confirmed in TikTok Ads Manager: choosing "TikTok Instant Page" as the
+// optimization location removes the Data connection/Optimization event
+// fields entirely and optimizes for outbound clicks on the Instant Page
+// instead — no pixel involved). Re-use the same sub-type vocabulary so the
+// rest of the wizard's pixel/page-id logic can treat both objectives alike.
+const isProductSales = (objectiveKey) => objectiveKey === 'PRODUCT_SALES';
+const PRODUCT_SALES_SUB_TYPES = [
+  { key: 'WEBSITE', label: 'Website' },
+  { key: 'INSTANT_PAGE', label: 'TikTok Instant Page' },
+];
+const productSalesSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
+const productSalesSubTypeNeedsForm = (subType) => subType === 'INSTANT_PAGE';
+
+// TikTok requires music on any image-based ad — single image or carousel are
+// the same image format under the hood, and the Music Builder becomes a
+// required field as soon as an image is added (observed across objectives in
+// Ads Manager). Video ads carry their own audio, so no separate music there.
+const mediaTypeNeedsMusic = (objectiveKey, mediaType) =>
+  mediaType === 'image' || mediaType === 'carousel';
+
+// Ad text becomes mandatory once a creative is attached, matching TikTok Ads
+// Manager: Video Views always requires it; for every other objective EXCEPT
+// Community Interaction, uploading an image or carousel makes it required
+// (single video keeps it optional). Community Interaction never forces it.
+const adTextIsRequired = (objectiveKey, mediaType) => {
+  if (objectiveKey === 'VIDEO_VIEWS') return true;
+  if (objectiveKey === 'ENGAGEMENT') return false; // Community Interaction
+  return mediaType === 'image' || mediaType === 'carousel';
+};
 
 // App Promotion requires a campaign-level app_promotion_type (confirmed via
 // TikTok's official "App promotion" doc) — App Pre-Registration is left out
@@ -524,7 +566,10 @@ function stripUnsavable(form) {
 }
 
 // ── TikTok phone ad preview ──────────────────────────────────────────────────
-function PhoneMockup({ mediaSrc, mediaType, displayName, adText, ctaLabel, size = 'sm' }) {
+function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaLabel, size = 'sm' }) {
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const isCarousel = mediaType === 'carousel' && mediaSrcs?.length > 0;
+  const activeCarouselSrc = isCarousel ? mediaSrcs[Math.min(carouselIndex, mediaSrcs.length - 1)] : null;
   const isSm = size === 'sm';
   const borderRadius = isSm ? 'rounded-[22px]' : 'rounded-[32px]';
   const innerRadius = isSm ? 'rounded-[16px]' : 'rounded-[26px]';
@@ -562,7 +607,54 @@ function PhoneMockup({ mediaSrc, mediaType, displayName, adText, ctaLabel, size 
       </div>
       {/* media area */}
       <div className={`absolute inset-0 overflow-hidden ${innerRadius} bg-gray-900`}>
-        {mediaSrc ? (
+        {isCarousel ? (
+          <>
+            <img
+              src={activeCarouselSrc}
+              className="h-full w-full object-cover"
+              alt={`Carousel image ${carouselIndex + 1} of ${mediaSrcs.length}`}
+              onClick={() => setCarouselIndex((i) => (i + 1) % mediaSrcs.length)}
+            />
+            {/* prev/next affordance — this is one ad, swiped through */}
+            {mediaSrcs.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCarouselIndex((i) => (i - 1 + mediaSrcs.length) % mediaSrcs.length);
+                  }}
+                  className="absolute left-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white"
+                  style={{ fontSize: '12px' }}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCarouselIndex((i) => (i + 1) % mediaSrcs.length);
+                  }}
+                  className="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white"
+                  style={{ fontSize: '12px' }}
+                >
+                  ›
+                </button>
+              </>
+            )}
+            {/* swipe dots (bottom, above the caption — as TikTok shows them) */}
+            <div className="absolute bottom-20 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1">
+              {mediaSrcs.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 rounded-full transition-all ${
+                    i === carouselIndex ? 'w-3 bg-white' : 'w-1 bg-white/40'
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        ) : mediaSrc ? (
           mediaType === 'video' ? (
             <video src={mediaSrc} className="h-full w-full object-cover" muted loop autoPlay playsInline />
           ) : (
@@ -591,7 +683,17 @@ function PhoneMockup({ mediaSrc, mediaType, displayName, adText, ctaLabel, size 
       </div>
       {/* bottom identity + text + sponsored */}
       <div className="absolute bottom-8 left-2 right-10 z-10">
-        <p className="font-bold text-white drop-shadow" style={{ fontSize: nameFs }}>{displayName}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="font-bold text-white drop-shadow" style={{ fontSize: nameFs }}>{displayName}</p>
+          {isCarousel && (
+            <span
+              className="rounded-sm bg-black/40 px-1 py-px font-medium text-white/90"
+              style={{ fontSize: textFs }}
+            >
+              {mediaSrcs.length} Photos
+            </span>
+          )}
+        </div>
         <p className="mt-0.5 leading-tight text-white/80 drop-shadow line-clamp-2" style={{ fontSize: textFs }}>{adText}</p>
         <p className="mt-1 text-white/50" style={{ fontSize: textFs }}>Sponsored</p>
       </div>
@@ -620,6 +722,7 @@ function PhoneMockup({ mediaSrc, mediaType, displayName, adText, ctaLabel, size 
 
 function TikTokAdPreview({ form, identityName }) {
   const [mediaObjectUrl, setMediaObjectUrl] = useState(null);
+  const [carouselObjectUrls, setCarouselObjectUrls] = useState([]);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -636,6 +739,16 @@ function TikTokAdPreview({ form, identityName }) {
     return () => { if (url) URL.revokeObjectURL(url); };
   }, [form.videoFile, form.imageFile, form.mediaType]);
 
+  useEffect(() => {
+    if (form.mediaType !== 'carousel' || !form.carouselFiles.length) {
+      setCarouselObjectUrls([]);
+      return;
+    }
+    const urls = form.carouselFiles.map((f) => URL.createObjectURL(f));
+    setCarouselObjectUrls(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [form.carouselFiles, form.mediaType]);
+
   const mediaSrc = mediaObjectUrl
     || (form.mediaType === 'video' ? form.videoUrl : form.imageUrl)
     || null;
@@ -644,7 +757,14 @@ function TikTokAdPreview({ form, identityName }) {
   const adText = form.adText || 'Your text will be shown here';
   const ctaLabel = (form.cta || 'LEARN_MORE').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const mockupProps = { mediaSrc, mediaType: form.mediaType, displayName, adText, ctaLabel };
+  const mockupProps = {
+    mediaSrc,
+    mediaSrcs: carouselObjectUrls,
+    mediaType: form.mediaType,
+    displayName,
+    adText,
+    ctaLabel,
+  };
 
   return (
     <>
@@ -742,13 +862,16 @@ function StepRail({ currentIndex }) {
 function getStepIssues(step, form, selectedObjective) {
   const issues = [];
   const stepNeedsPixel =
-    OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey) ||
-    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType));
+    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType)) ||
+    (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsPixel(form.productSalesSubType));
   switch (step) {
     case 0: // Objective
       if (!form.objectiveKey) issues.push('Select an objective');
       if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
         issues.push('Select a lead generation path (Instant Form or Website)');
+      }
+      if (isProductSales(form.objectiveKey) && !form.productSalesSubType) {
+        issues.push('Select a sales destination (Website or TikTok Instant Page)');
       }
       break;
     case 1: // Campaign
@@ -772,6 +895,9 @@ function getStepIssues(step, form, selectedObjective) {
       if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
         issues.push('Select or enter a TikTok Instant Form Page ID');
       }
+      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
+        issues.push('Select or enter a TikTok Instant Page ID');
+      }
       break;
     case 3: // Ad
       if (!form.identityId) issues.push('Select a TikTok identity to publish the ad');
@@ -781,7 +907,19 @@ function getStepIssues(step, form, selectedObjective) {
       if (form.mediaType === 'image' && !form.imageUrl && !form.imageFile) {
         issues.push('Provide an image URL or upload an image file');
       }
-      if (!form.adText.trim()) issues.push('Ad text is recommended');
+      if (form.mediaType === 'carousel' && form.carouselFiles.length < MIN_CAROUSEL_IMAGES) {
+        issues.push(`Upload at least ${MIN_CAROUSEL_IMAGES} images for a carousel ad`);
+      }
+      if (mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && !form.musicId) {
+        issues.push('Select or upload music for this ad');
+      }
+      if (!form.adText.trim()) {
+        issues.push(
+          adTextIsRequired(form.objectiveKey, form.mediaType)
+            ? 'Ad text is required'
+            : 'Ad text is recommended'
+        );
+      }
       if (!form.landingPageUrl.trim()) issues.push('Landing page URL is recommended');
       break;
     case 4: // Review
@@ -1152,10 +1290,18 @@ const CreateCampaignWizard = ({
         optimizationEvent: raw.optimization_event || '',
         pageId: raw.page_id || '',
         leadGenSubType:
-          raw.promotion_target_type === 'INSTANT_PAGE'
-            ? 'INSTANT_FORM'
-            : raw.promotion_target_type === 'EXTERNAL_WEBSITE'
-            ? 'WEBSITE'
+          raw.objective_type === 'LEAD_GENERATION'
+            ? raw.promotion_target_type === 'INSTANT_PAGE'
+              ? 'INSTANT_FORM'
+              : raw.promotion_target_type === 'EXTERNAL_WEBSITE'
+              ? 'WEBSITE'
+              : ''
+            : '',
+        productSalesSubType:
+          raw.objective_type === 'PRODUCT_SALES' || raw.objective_type === 'WEB_CONVERSIONS'
+            ? raw.promotion_target_type === 'INSTANT_PAGE'
+              ? 'INSTANT_PAGE'
+              : 'WEBSITE'
             : '',
       };
     }
@@ -1167,7 +1313,8 @@ const CreateCampaignWizard = ({
         cta: raw.call_to_action || raw.creative?.call_to_action || 'LEARN_MORE',
         landingPageUrl: raw.landing_page_url || raw.creative?.landing_page_url || '',
         identityId: raw.identity_id || raw.creative?.identity_id || '',
-        mediaType: raw.ad_format === 'SINGLE_IMAGE' ? 'image' : 'video',
+        mediaType:
+          raw.ad_format === 'SINGLE_IMAGE' ? 'image' : raw.ad_format === 'CAROUSEL_ADS' ? 'carousel' : 'video',
         impressionTrackingUrl: raw.impression_tracking_url || raw.creative?.impression_tracking_url || '',
         clickTrackingUrl: raw.click_tracking_url || raw.creative?.click_tracking_url || '',
       };
@@ -1188,9 +1335,12 @@ const CreateCampaignWizard = ({
   const [creatingPixel, setCreatingPixel] = useState(false);
   const [leadForms, setLeadForms] = useState([]);
   const [loadingLeadForms, setLoadingLeadForms] = useState(false);
+  const [musicList, setMusicList] = useState([]);
+  const [loadingMusic, setLoadingMusic] = useState(false);
+  const [uploadingMusic, setUploadingMusic] = useState(false);
   const [manualPageId, setManualPageId] = useState('');
   const [launching, setLaunching] = useState(false);
-  const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, adId}
+  const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, carouselImageIds, adId}
   const [error, setError] = useState(null);
   const [errors, setErrors] = useState({}); // field-level validation errors
   const [videoWarning, setVideoWarning] = useState(''); // non-blocking advisory (e.g. estimated low bitrate)
@@ -1226,6 +1376,7 @@ const CreateCampaignWizard = ({
     pixelId: '',
     optimizationEvent: '',
     leadGenSubType: '',
+    productSalesSubType: '',
     appPromotionType: 'APP_INSTALL',
     pageId: '',
     tiktokPageCategory: 'PROFILE_PAGE',
@@ -1235,6 +1386,9 @@ const CreateCampaignWizard = ({
     videoFile: null,
     imageUrl: '',
     imageFile: null,
+    carouselFiles: [],
+    musicId: '',
+    musicFile: null,
     adName: '',
     adText: '',
     cta: 'LEARN_MORE',
@@ -1311,6 +1465,57 @@ const CreateCampaignWizard = ({
     update({ imageFile: file });
   };
 
+  // Carousel takes 2-35 images (TikTok's documented range for the standard,
+  // non-catalog Carousel format). Each added file gets the same dimension
+  // check as a single image; the count check runs against the combined total.
+  const handleCarouselFilesSelect = async (files) => {
+    const incoming = Array.from(files || []);
+    if (!incoming.length) return;
+    const combined = [...form.carouselFiles, ...incoming].slice(0, MAX_CAROUSEL_IMAGES);
+    for (const file of incoming) {
+      const dims = await readImageDimensions(file);
+      if (dims) {
+        const longer = Math.max(dims.width, dims.height);
+        const shorter = Math.min(dims.width, dims.height);
+        if (longer > MAX_IMAGE_LONG_SIDE || shorter > MAX_IMAGE_SHORT_SIDE) {
+          setErrors((e) => ({
+            ...e,
+            carousel: `Not supported by TikTok. The longer side must be ${MAX_IMAGE_LONG_SIDE} or less, and the shorter side must be ${MAX_IMAGE_SHORT_SIDE} or less.`,
+          }));
+          return;
+        }
+      }
+    }
+    setErrors((e) => ({ ...e, carousel: undefined }));
+    update({ carouselFiles: combined });
+  };
+
+  const removeCarouselFile = (index) => {
+    update({ carouselFiles: form.carouselFiles.filter((_, i) => i !== index) });
+  };
+
+  // Upload a user's own music track and select it. Adds it to the in-memory
+  // list so it shows as selected immediately (mirrors the pixel-create flow).
+  const handleMusicFileSelect = async (file) => {
+    if (!file) return;
+    setUploadingMusic(true);
+    try {
+      const res = await uploadTiktokMusic({ advertiserId, file });
+      const uploaded = res?.music;
+      if (uploaded?.musicId) {
+        setMusicList((prev) => [uploaded, ...prev]);
+        update({ musicId: String(uploaded.musicId), musicFile: file });
+        toast.success('Music uploaded');
+      } else {
+        throw new Error('Music upload did not return an ID');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to upload music');
+    } finally {
+      setUploadingMusic(false);
+    }
+  };
+
   // Apply a saved campaign template — merge its payload over the current form,
   // strip runtime-only state, and ask the dashboard to switch advertiser accounts
   // if the template was saved against a different one.
@@ -1321,6 +1526,8 @@ const CreateCampaignWizard = ({
     delete patch.advertiserId;
     delete patch.videoFile;
     delete patch.imageFile;
+    delete patch.carouselFiles;
+    delete patch.musicFile;
     // Make sure we don't replay stale IDs, media handles or account-specific
     // identity. Names and all step settings are intentionally preserved.
     patch.selectedMedia = null;
@@ -1370,8 +1577,8 @@ const CreateCampaignWizard = ({
   // Fetch pixels when the selected objective/path needs one. Reset pixel state
   // when the objective changes away from a pixel-requiring objective.
   const needsPixel =
-    OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey) ||
-    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType));
+    (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType)) ||
+    (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsPixel(form.productSalesSubType));
 
   useEffect(() => {
     if (!advertiserId || !needsPixel) {
@@ -1388,9 +1595,28 @@ const CreateCampaignWizard = ({
       .finally(() => setLoadingPixels(false));
   }, [advertiserId, needsPixel]);
 
-  // Fetch TikTok Instant Forms when the user picks the in-app lead path.
+  // Fetch the music library when the chosen creative needs music (Carousel, or
+  // Reach image ads). Best-effort — users can still upload their own track.
+  const needsMusic = mediaTypeNeedsMusic(form.objectiveKey, form.mediaType);
   useEffect(() => {
-    if (!advertiserId || !isLeadGeneration(form.objectiveKey) || !leadSubTypeNeedsForm(form.leadGenSubType)) {
+    if (!advertiserId || !needsMusic) {
+      setMusicList([]);
+      return;
+    }
+    setLoadingMusic(true);
+    getTiktokMusic(advertiserId)
+      .then((r) => setMusicList(r.music || []))
+      .catch(() => setMusicList([]))
+      .finally(() => setLoadingMusic(false));
+  }, [advertiserId, needsMusic]);
+
+  // Fetch TikTok Instant Forms/Pages when the user picks an in-app path —
+  // Lead Generation's Instant Form, or Sales' Instant Page destination.
+  useEffect(() => {
+    const needsPageList =
+      (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType)) ||
+      (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType));
+    if (!advertiserId || !needsPageList) {
       setLeadForms([]);
       return;
     }
@@ -1403,14 +1629,17 @@ const CreateCampaignWizard = ({
         // can still paste a Page ID manually.
       })
       .finally(() => setLoadingLeadForms(false));
-  }, [advertiserId, form.objectiveKey, form.leadGenSubType]);
+  }, [advertiserId, form.objectiveKey, form.leadGenSubType, form.productSalesSubType]);
 
   useEffect(() => {
-    if (!OBJECTIVES_NEEDING_PIXEL.includes(form.objectiveKey)) {
-      update({ pixelId: '', optimizationEvent: '' });
-    }
     if (!isLeadGeneration(form.objectiveKey)) {
       update({ leadGenSubType: '', pageId: '' });
+    }
+    if (!isProductSales(form.objectiveKey)) {
+      update({ productSalesSubType: '' });
+    }
+    if (!isLeadGeneration(form.objectiveKey) && !isProductSales(form.objectiveKey)) {
+      update({ pixelId: '', optimizationEvent: '' });
     }
   }, [form.objectiveKey]);
 
@@ -1429,6 +1658,18 @@ const CreateCampaignWizard = ({
           : form.optimizationGoal,
     });
   }, [form.leadGenSubType]);
+
+  // Reset path-specific fields when the Sales sub-type changes — Instant Page
+  // needs no pixel (TikTok auto-optimizes for outbound clicks on the page).
+  useEffect(() => {
+    if (!isProductSales(form.objectiveKey)) return;
+    update({
+      pixelId: productSalesSubTypeNeedsPixel(form.productSalesSubType) ? form.pixelId : '',
+      optimizationEvent: productSalesSubTypeNeedsPixel(form.productSalesSubType) ? form.optimizationEvent : '',
+      pageId: productSalesSubTypeNeedsForm(form.productSalesSubType) ? form.pageId : '',
+      optimizationGoal: 'CONVERT',
+    });
+  }, [form.productSalesSubType]);
 
   const selectedObjective = useMemo(
     () => schema?.objectives?.find((o) => o.key === form.objectiveKey),
@@ -1471,6 +1712,22 @@ const CreateCampaignWizard = ({
     }
   }, [currentObjective?.videoOnly]);
 
+  // Reach has no Carousel option — if a prior objective left mediaType on
+  // carousel, fall back to the Image flow (where Reach handles multi-image).
+  useEffect(() => {
+    if (form.objectiveKey === 'REACH' && form.mediaType === 'carousel') {
+      update({ mediaType: 'image' });
+    }
+  }, [form.objectiveKey, form.mediaType]);
+
+  // Clear a stale music selection when the creative no longer needs music
+  // (e.g. switching Reach from image to video, or away from carousel).
+  useEffect(() => {
+    if (!mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && (form.musicId || form.musicFile)) {
+      update({ musicId: '', musicFile: null });
+    }
+  }, [form.objectiveKey, form.mediaType]);
+
   const pickObjective = (o) => {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '').replace('-', '').replace('-', '');
     update({
@@ -1478,10 +1735,13 @@ const CreateCampaignWizard = ({
       objectiveType: o.objectiveType,
       optimizationGoal: o.optimizationGoals?.[0] || '',
       leadGenSubType: '',
+      productSalesSubType: '',
       appPromotionType: 'APP_INSTALL',
       pageId: '',
       pixelId: '',
       optimizationEvent: '',
+      musicId: '',
+      musicFile: null,
       adName: `Ad name${ts}`,
     });
   };
@@ -1493,6 +1753,9 @@ const CreateCampaignWizard = ({
       if (!form.objectiveKey) errs.objectiveKey = 'Select an objective';
       if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
         errs.leadGenSubType = 'Select a lead generation path';
+      }
+      if (isProductSales(form.objectiveKey) && !form.productSalesSubType) {
+        errs.productSalesSubType = 'Select a sales destination';
       }
     }
     if (targetStep === 1) {
@@ -1525,6 +1788,9 @@ const CreateCampaignWizard = ({
         if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
         if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
       }
+      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
+        errs.pageId = 'Select or enter a TikTok Instant Page ID';
+      }
       if (form.scheduleStartTime && form.scheduleEndTime) {
         if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
           errs.scheduleEndTime = 'End time must be after start time';
@@ -1552,13 +1818,22 @@ const CreateCampaignWizard = ({
       if (effectiveMediaType === 'image' && !form.imageUrl && !form.imageFile) {
         errs.image = 'Upload an image or provide an image URL';
       }
-      // Ad text is only mandatory for Video Views — every other objective
-      // treats it as optional on the ad. When it is required, TikTok's
-      // length rule applies (1-100 chars, or 1-50 for CJK fullwidth text).
-      if (form.objectiveKey === 'VIDEO_VIEWS') {
+      if (effectiveMediaType === 'carousel' && form.carouselFiles.length < MIN_CAROUSEL_IMAGES) {
+        errs.carousel = `Upload at least ${MIN_CAROUSEL_IMAGES} images (up to ${MAX_CAROUSEL_IMAGES}) for a carousel ad`;
+      }
+      if (mediaTypeNeedsMusic(form.objectiveKey, effectiveMediaType) && !form.musicId) {
+        errs.music = 'Select or upload music for this ad';
+      }
+      // Ad text: required per adTextIsRequired() (Video Views always; image /
+      // carousel on every objective except Community Interaction). The length
+      // rule (1-100 chars, or 1-50 for CJK fullwidth text) applies whenever
+      // text is present, even where the field itself is optional.
+      {
         const adText = form.adText.trim();
         if (!adText) {
-          errs.adText = 'Ad text is required';
+          if (adTextIsRequired(form.objectiveKey, effectiveMediaType)) {
+            errs.adText = 'Ad text is required';
+          }
         } else if (adText.length > adTextMaxLength(adText)) {
           errs.adText = AD_TEXT_LENGTH_ERROR;
         }
@@ -1573,6 +1848,11 @@ const CreateCampaignWizard = ({
       // instead of a landing URL — that page reference is mandatory too.
       if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
         errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
+      }
+      // Sales' Instant Page path is the same idea — a TikTok page reference
+      // instead of a landing URL.
+      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
+        errs.pageId = 'Select or enter a TikTok Instant Page ID';
       }
       // Community Interaction with the "TikTok page visits" goal requires a
       // destination pick, and (except for Account profile) a value for it.
@@ -1669,6 +1949,9 @@ const CreateCampaignWizard = ({
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? { promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType) }
             : {}),
+          ...(isProductSales(form.objectiveKey) && promotionTargetTypeForProductSalesSubType(form.productSalesSubType)
+            ? { promotion_target_type: promotionTargetTypeForProductSalesSubType(form.productSalesSubType) }
+            : {}),
           bid_type: form.bidType,
           ...(form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice
             ? { bid: Number(form.bidPrice) }
@@ -1712,6 +1995,8 @@ const CreateCampaignWizard = ({
                   }
                 : isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
                 ? { page_id: Number(form.pageId) }
+                : isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && form.pageId
+                ? { page_id: Number(form.pageId) }
                 : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
                 ? { landing_page_url: form.landingPageUrl }
                 : {}),
@@ -1738,7 +2023,8 @@ const CreateCampaignWizard = ({
     setLaunching(true);
     setError(null);
     try {
-      let { campaignId, adgroupId, videoId, imageId, adId } = created;
+      let { campaignId, adgroupId, videoId, imageId, carouselImageIds, adId } = created;
+      carouselImageIds = carouselImageIds || [];
 
       // 1. Campaign
       if (!campaignId) {
@@ -1785,6 +2071,11 @@ const CreateCampaignWizard = ({
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? {
                 promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType),
+              }
+            : {}),
+          ...(isProductSales(form.objectiveKey) && promotionTargetTypeForProductSalesSubType(form.productSalesSubType)
+            ? {
+                promotion_target_type: promotionTargetTypeForProductSalesSubType(form.productSalesSubType),
               }
             : {}),
           budget_mode: form.budgetMode,
@@ -1844,10 +2135,20 @@ const CreateCampaignWizard = ({
           }
           if (imageId) setCreated((c) => ({ ...c, imageId }));
         }
+
+        if (form.mediaType === 'carousel' && carouselImageIds.length < form.carouselFiles.length) {
+          const remaining = form.carouselFiles.slice(carouselImageIds.length);
+          for (const file of remaining) {
+            const res = await uploadTiktokImage({ advertiserId, file });
+            const uploadedId = res.images?.[0]?.imageId;
+            if (uploadedId) carouselImageIds = [...carouselImageIds, uploadedId];
+          }
+          setCreated((c) => ({ ...c, carouselImageIds }));
+        }
       }
 
       // 4. Ad (only if we have an identity + a media asset)
-      if (!adId && form.identityId && (videoId || imageId)) {
+      if (!adId && form.identityId && (videoId || imageId || carouselImageIds.length >= MIN_CAROUSEL_IMAGES)) {
         const creative = {
           ad_name: form.adName || form.campaignName,
           identity_id: form.identityId,
@@ -1874,6 +2175,8 @@ const CreateCampaignWizard = ({
               }
             : isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && form.pageId
             ? { page_id: Number(form.pageId) }
+            : isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && form.pageId
+            ? { page_id: Number(form.pageId) }
             : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
             ? { landing_page_url: form.landingPageUrl }
             : {}),
@@ -1887,6 +2190,14 @@ const CreateCampaignWizard = ({
         } else if (form.mediaType === 'image' && imageId) {
           creative.ad_format = 'SINGLE_IMAGE';
           creative.image_ids = [imageId];
+        } else if (form.mediaType === 'carousel' && carouselImageIds.length >= MIN_CAROUSEL_IMAGES) {
+          creative.ad_format = 'CAROUSEL_ADS';
+          creative.image_ids = carouselImageIds;
+        }
+
+        // Carousel and Reach image ads require a music track.
+        if (mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && form.musicId) {
+          creative.music_id = String(form.musicId);
         }
 
         const res = await createTiktokAd({
@@ -1992,6 +2303,38 @@ const CreateCampaignWizard = ({
                   ))}
                 </div>
                 {errors.leadGenSubType && <p className="text-xs text-red-500">{errors.leadGenSubType}</p>}
+              </div>
+            )}
+            {isProductSales(form.objectiveKey) && (
+              <div className="space-y-2 rounded-xl border border-[#15DCFF]/20 bg-[#15DCFF]/5 p-3 dark:bg-[#15DCFF]/5">
+                <p className="text-xs font-semibold text-[#15DCFF]">Sales destination</p>
+                <div className="flex flex-wrap gap-2">
+                  {PRODUCT_SALES_SUB_TYPES.map((st) => (
+                    <button
+                      key={st.key}
+                      type="button"
+                      onClick={() =>
+                        update({
+                          productSalesSubType: st.key,
+                          optimizationGoal: 'CONVERT',
+                          pageId: '',
+                          pixelId: '',
+                          optimizationEvent: '',
+                        })
+                      }
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        form.productSalesSubType === st.key
+                          ? 'bg-[#15DCFF] text-white'
+                          : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                {errors.productSalesSubType && (
+                  <p className="text-xs text-red-500">{errors.productSalesSubType}</p>
+                )}
               </div>
             )}
             {isAppPromotion(form.objectiveKey) && (
@@ -2462,12 +2805,15 @@ const CreateCampaignWizard = ({
                   options={[
                     { value: 'video', label: 'Video' },
                     { value: 'image', label: 'Image' },
+                    // Reach doesn't offer a separate Carousel format — multiple
+                    // images are added under the Image flow instead.
+                    ...(form.objectiveKey === 'REACH' ? [] : [{ value: 'carousel', label: 'Carousel' }]),
                   ]}
                 />
               </FieldShell>
             )}
 
-            {(currentObjective?.videoOnly ? true : form.mediaType === 'video') ? (
+            {(currentObjective?.videoOnly ? true : form.mediaType === 'video') && (
               <>
                 {form.videoFile || form.videoUrl ? (
                   <FieldShell label="Selected video">
@@ -2511,7 +2857,9 @@ const CreateCampaignWizard = ({
                   </>
                 )}
               </>
-            ) : (
+            )}
+
+            {!currentObjective?.videoOnly && form.mediaType === 'image' && (
               <>
                 {form.imageFile || form.imageUrl ? (
                   <FieldShell label="Selected image">
@@ -2551,12 +2899,110 @@ const CreateCampaignWizard = ({
               </>
             )}
 
+            {!currentObjective?.videoOnly && form.mediaType === 'carousel' && (
+              <FieldShell
+                label={`Carousel images (${form.carouselFiles.length}/${MAX_CAROUSEL_IMAGES})`}
+                hint={`Upload ${MIN_CAROUSEL_IMAGES}-${MAX_CAROUSEL_IMAGES} images. TikTok shows them in this order as a swipeable carousel.`}
+              >
+                {form.carouselFiles.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {form.carouselFiles.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="relative">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`Carousel image ${i + 1}`}
+                          className="h-16 w-16 rounded-lg object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeCarouselFile(i)}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-white hover:bg-red-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {form.carouselFiles.length < MAX_CAROUSEL_IMAGES && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
+                      Add images
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        multiple
+                        onChange={(e) => handleCarouselFilesSelect(e.target.files)}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-[11px] text-gray-400 dark:text-white/45">JPG / PNG</span>
+                  </div>
+                )}
+                {errors.carousel && <p className="mt-1 text-xs text-red-500">{errors.carousel}</p>}
+              </FieldShell>
+            )}
+
+            {mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && (
+              <FieldShell
+                label="Music"
+                hint="TikTok requires a music track for this ad format. Pick from the library or upload your own (mp3/wav/m4a/flac, ≤10MB)."
+              >
+                {loadingMusic ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading music…
+                  </div>
+                ) : (
+                  <>
+                    {musicList.length > 0 && (
+                      <SelectField
+                        label="Select music"
+                        value={form.musicId}
+                        onChange={(v) => update({ musicId: v, musicFile: null })}
+                        options={[
+                          { value: '', label: '— select music —' },
+                          ...musicList.map((m) => ({
+                            value: String(m.musicId),
+                            label: m.author ? `${m.name} · ${m.author}` : m.name || String(m.musicId),
+                          })),
+                        ]}
+                        required
+                        error={errors.music}
+                      />
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black 2xl:text-sm">
+                        {uploadingMusic ? 'Uploading…' : 'Upload music'}
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/wav,audio/x-m4a,audio/flac,.mp3,.wav,.m4a,.flac"
+                          disabled={uploadingMusic}
+                          onChange={(e) => handleMusicFileSelect(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                      </label>
+                      <span className="text-[11px] text-gray-400 dark:text-white/45">MP3 / WAV / M4A / FLAC</span>
+                    </div>
+                    {musicList.length === 0 && !form.musicId && (
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-white/45">
+                        No library music loaded — upload your own track above.
+                      </p>
+                    )}
+                    {errors.music && musicList.length === 0 && (
+                      <p className="mt-1 text-xs text-red-500">{errors.music}</p>
+                    )}
+                  </>
+                )}
+              </FieldShell>
+            )}
+
             <TextField
               label="Ad text"
               value={form.adText}
               onChange={(v) => update({ adText: v })}
               placeholder="Check out our product!"
-              required={form.objectiveKey === 'VIDEO_VIEWS'}
+              required={adTextIsRequired(form.objectiveKey, form.mediaType)}
               error={errors.adText}
               hint={`${form.adText.length}/${adTextMaxLength(form.adText)} characters`}
             />
@@ -2618,10 +3064,11 @@ const CreateCampaignWizard = ({
               </div>
             )}
 
-            {isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && (
+            {((isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType)) ||
+              (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType))) && (
               <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 dark:bg-purple-500/5">
                 <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
-                  TikTok Instant Form
+                  {isProductSales(form.objectiveKey) ? 'TikTok Instant Page' : 'TikTok Instant Form'}
                 </p>
                 {loadingLeadForms ? (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -2632,11 +3079,11 @@ const CreateCampaignWizard = ({
                   <>
                     {leadForms.length > 0 ? (
                       <SelectField
-                        label="Instant form"
+                        label={isProductSales(form.objectiveKey) ? 'Instant page' : 'Instant form'}
                         value={form.pageId}
                         onChange={(v) => update({ pageId: v })}
                         options={[
-                          { value: '', label: '— select form —' },
+                          { value: '', label: '— select page —' },
                           ...leadForms.map((f) => ({ value: String(f.pageId), label: f.name || String(f.pageId) })),
                         ]}
                         required
@@ -2644,7 +3091,7 @@ const CreateCampaignWizard = ({
                       />
                     ) : (
                       <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-                        No forms loaded. Paste the Page ID from TikTok Ads Manager (Tools → Leads → Instant Forms).
+                        No pages loaded. Paste the Page ID from TikTok Ads Manager (Assets → Instant Page).
                       </div>
                     )}
                     <TextField
@@ -2722,11 +3169,17 @@ const CreateCampaignWizard = ({
             identities.find((i) => String(i.identityId) === String(form.identityId))?.displayName ||
             form.identityId;
           const hasMedia =
-            form.videoFile || form.videoUrl || form.imageFile || form.imageUrl;
+            form.videoFile ||
+            form.videoUrl ||
+            form.imageFile ||
+            form.imageUrl ||
+            form.carouselFiles.length >= MIN_CAROUSEL_IMAGES;
           const mediaSource = form.videoFile
             ? form.videoFile.name
             : form.imageFile
             ? form.imageFile.name
+            : form.carouselFiles.length
+            ? `${form.carouselFiles.length} image${form.carouselFiles.length === 1 ? '' : 's'}`
             : form.videoUrl || form.imageUrl
             ? 'From URL'
             : 'Not selected';
@@ -2779,6 +3232,12 @@ const CreateCampaignWizard = ({
                     <ReviewField
                       label="Lead path"
                       value={LEAD_SUB_TYPES.find((s) => s.key === form.leadGenSubType)?.label}
+                    />
+                  )}
+                  {isProductSales(form.objectiveKey) && (
+                    <ReviewField
+                      label="Sales destination"
+                      value={PRODUCT_SALES_SUB_TYPES.find((s) => s.key === form.productSalesSubType)?.label}
                     />
                   )}
                   {isAppPromotion(form.objectiveKey) && (
@@ -2884,6 +3343,16 @@ const CreateCampaignWizard = ({
                       <ReviewField label="Identity" value={identityName} />
                       <ReviewField label="Media type" value={form.mediaType} />
                       <ReviewField label="Media" value={mediaSource} />
+                      {mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && (
+                        <ReviewField
+                          label="Music"
+                          value={
+                            musicList.find((m) => String(m.musicId) === String(form.musicId))?.name ||
+                            form.musicId ||
+                            'Not selected'
+                          }
+                        />
+                      )}
                       <ReviewField label="Ad text" value={form.adText} />
                       <ReviewField label="CTA" value={form.cta} />
                       {form.pageId ? (
