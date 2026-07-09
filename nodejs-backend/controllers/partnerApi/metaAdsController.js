@@ -20,6 +20,18 @@ const partnerMetaAdsController = {
   async getAdAccounts(req, res) {
     /* #swagger.tags = ['Partner API']
        #swagger.description = 'List Meta ad accounts visible to the partner-supplied System User token'
+       #swagger.parameters['x-api-key'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'AdsGPT-issued partner API key (see /admin/partner-api-keys)'
+       }
+       #swagger.parameters['x-meta-system-user-token'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'Meta System User access token supplied by the partner'
+       }
        #swagger.security = [{ "PartnerApiKey": [], "MetaSystemUserToken": [] }]
     */
     try {
@@ -88,6 +100,18 @@ const partnerMetaAdsController = {
     /* #swagger.tags = ['Partner API']
        #swagger.description = 'List campaigns for a Meta ad account'
        #swagger.parameters['adAccountId'] = { description: 'Meta Ad Account ID (without the act_ prefix)', type: 'string' }
+       #swagger.parameters['x-api-key'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'AdsGPT-issued partner API key (see /admin/partner-api-keys)'
+       }
+       #swagger.parameters['x-meta-system-user-token'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'Meta System User access token supplied by the partner'
+       }
        #swagger.security = [{ "PartnerApiKey": [], "MetaSystemUserToken": [] }]
     */
     try {
@@ -162,18 +186,18 @@ const partnerMetaAdsController = {
        #swagger.description = 'Get spend for a specific campaign, or a per-campaign spend breakdown for the whole ad account if campaignId is omitted'
        #swagger.parameters['adAccountId'] = { description: 'Meta Ad Account ID (without the act_ prefix)', type: 'string' }
        #swagger.parameters['campaignId'] = { description: 'Optional: limit to a single campaign', type: 'string' }
-       #swagger.parameters['datePreset'] = {
-        in: 'query',
-        description: 'Date preset for the spend window (default last_30d)',
-        type: 'string',
-        schema: {
-            "@enum": [
-                "today", "yesterday", "last_3d", "last_7d", "last_14d",
-                "last_28d", "last_30d", "last_90d", "this_month",
-                "last_month", "this_quarter", "last_quarter", "this_year",
-                "last_year", "lifetime", "maximum"
-            ]
-        }
+       #swagger.parameters['datePreset'] = { description: 'Date preset for the spend window (default last_30d). One of: today, yesterday, last_3d, last_7d, last_14d, last_28d, last_30d, last_90d, this_month, last_month, this_quarter, last_quarter, this_year, last_year, lifetime, maximum', type: 'string' }
+       #swagger.parameters['x-api-key'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'AdsGPT-issued partner API key (see /admin/partner-api-keys)'
+       }
+       #swagger.parameters['x-meta-system-user-token'] = {
+           in: 'header',
+           required: true,
+           type: 'string',
+           description: 'Meta System User access token supplied by the partner'
        }
        #swagger.security = [{ "PartnerApiKey": [], "MetaSystemUserToken": [] }]
     */
