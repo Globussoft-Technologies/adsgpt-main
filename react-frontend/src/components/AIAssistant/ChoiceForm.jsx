@@ -860,7 +860,9 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       dispatch(submitAssistantChoiceForm({ messageId, values: submitValues }));
       // Hand the selected-only values back to the parent (ChatInterface) which
       // decides whether to fire a real streamChat turn or a mocked one.
-      await onSubmit?.({ formId: form.form_id, values: agentValues });
+      // `regenerate` when the brief was already submitted once — tells the backend
+      // to force a fresh generation instead of replying about the prior result.
+      await onSubmit?.({ formId: form.form_id, values: agentValues, regenerate: isSubmitted });
       setEditing(false); // collapse back to the summary after a (re)generation
     } finally {
       setSubmitting(false);
@@ -1004,12 +1006,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                     <Sparkles className="h-3.5 w-3.5 text-[#15DCFF]" />
                     ~{creditInfo.totalCredits} credits
                   </span>
-                  <span className="text-white/45">
-                    · {creditInfo.totalImages} image{creditInfo.totalImages > 1 ? 's' : ''}
-                    {creditInfo.isPack
-                      ? ` (3 variants × ${creditInfo.ratios} ratio${creditInfo.ratios > 1 ? 's' : ''})`
-                      : ` (${creditInfo.perRatio}/ratio × ${creditInfo.ratios} ratio${creditInfo.ratios > 1 ? 's' : ''})`}
-                  </span>
+                  {/* Image count intentionally NOT repeated here — it's already
+                      shown in the "Generating N images" notice above the footer. */}
                 </span>
               )}
               <span

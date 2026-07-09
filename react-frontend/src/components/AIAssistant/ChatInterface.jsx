@@ -244,7 +244,7 @@ const ChatInterface = () => {
   // Real forms forward the values to the agent via streamChat's
   // `form_response` field.
   const handleChoiceFormSubmit = useCallback(
-    ({ formId, values }) => {
+    ({ formId, values, regenerate }) => {
       if (pending) return;
       const isMock = typeof formId === 'string' && formId.startsWith('mock_');
 
@@ -261,7 +261,7 @@ const ChatInterface = () => {
       runStreamingTurn({
         text: '',
         attachments: null,
-        formResponse: { form_id: formId, values },
+        formResponse: { form_id: formId, values, regenerate: !!regenerate },
       });
     },
     [dispatch, pending, runStreamingTurn],
