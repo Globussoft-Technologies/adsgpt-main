@@ -47,6 +47,9 @@ export function usePromptTemplates({
   // a brandId is given, we ask the backend to classify the brand (lazy).
   brandCategory = '',
   brandId = '',
+  // When false, picking/having a brand does NOT auto-open the panel (used by
+  // the Recreate flow, which should land with the picker collapsed).
+  autoOpen = true,
   currentValue = '',
   onSelect,
   // Fired when the user starts typing into a {brand} / {target_audience}
@@ -234,7 +237,7 @@ export function usePromptTemplates({
   useEffect(() => {
     const prev = prevBrandNameRef.current;
     prevBrandNameRef.current = brandName;
-    if (!prev && brandName && !open) setOpen(true);
+    if (autoOpen && !prev && brandName && !open) setOpen(true);
     // `open` deliberately not in deps — we only want to react to brand
     // changes, and setOpen(true) when already true is a no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,17 +253,35 @@ export function usePromptTemplates({
   useEffect(() => {
     if (!IS_PROMPT_CATEGORIES_ENABLED) return undefined;
     if (!open) return undefined;
-    if (categories.length === 0) return undefined; // wait until categories known
 
     let cancelled = false;
-    const applyIfAvailable = (cat) => {
-      if (cancelled || !cat) return;
-      // Only switch when the category actually has templates for this type.
-      if (categories.includes(cat)) setSelectedCategory(cat);
+    // Resolve the brand's category: if it has templates for this type, switch
+    // to it; otherwise fall back to General so a previously-matched category
+    // doesn't linger after switching to a brand we have no templates for
+    // (e.g. Lockheed→Business, then Coca-Cola→category with no templates).
+    const applyResolved = (cat) => {
+      if (cancelled) return;
+      setSelectedCategory(cat && categories.includes(cat) ? cat : GENERAL_CATEGORY);
     };
 
     if (brandCategory) {
-      applyIfAvailable(brandCategory);
+      // Switch to the brand's category the MOMENT we know it — even before the
+      // category list has loaded — so General templates never flash first.
+      // The panel shows a loading state for that category until its templates
+      // arrive; once the list is known we correct to General if the brand has
+      // no templates for this type.
+      if (categories.length === 0) {
+        setSelectedCategory(brandCategory);
+      } else {
+        applyResolved(brandCategory);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Below this point we need the category list to validate a classified id.
+    if (categories.length === 0) {
       return () => {
         cancelled = true;
       };
@@ -271,7 +292,7 @@ export function usePromptTemplates({
       ensuredBrandIdRef.current = brandId;
       setCategoryResolving(true);
       ensureBrandCategory(brandId)
-        .then((cat) => applyIfAvailable(cat))
+        .then((cat) => applyResolved(cat))
         .catch(() => {})
         .finally(() => {
           if (!cancelled) setCategoryResolving(false);

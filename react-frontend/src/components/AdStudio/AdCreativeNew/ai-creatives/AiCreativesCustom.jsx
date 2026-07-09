@@ -244,6 +244,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const imageState = useSelector((s) => s.image.current);
   const recreateInputs = useSelector((s) => s.image.recreateInputs);
   const userData = useSelector((s) => s.socket?.userData);
+  // Captured once at mount: true when this form was opened via Recreate. Used
+  // to keep the templates picker collapsed by default in that flow.
+  const isRecreateSessionRef = useRef(
+    Boolean(recreateInputs && recreateInputs.type === 'ai_ads'),
+  );
 
   // ── Recreate-from-history prefill ─────────────────────────────────────
   // Stashed by MySpace > Images > Recreate. We hydrate this form once on
@@ -311,8 +316,31 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           description: inp.brandDescription || '',
           logoUrls: inp.brandLogo ? [inp.brandLogo] : [],
           imageUrl: Array.isArray(inp.brandImages) ? inp.brandImages : [],
+          category: inp.category || '',
         },
       });
+
+      // Recreate rebuilds a transient brand with no category. If the stored
+      // inputs didn't carry one, look it up from the user's saved brands (which
+      // get-lists returns with a category already) by matching the name — a
+      // pure frontend lookup, no extra classification. Patch it in so the
+      // templates picker auto-matches the right category.
+      if (!inp.category && inp.brandName) {
+        const wanted = inp.brandName.trim().toLowerCase();
+        fetchBrandList(getUserId(), getAuthToken())
+          .then((items) => {
+            const match = (items || []).find(
+              (b) => (b?.name || '').trim().toLowerCase() === wanted,
+            );
+            if (!match?.category) return;
+            setBrandSource((prev) =>
+              prev.kind === 'list' && prev.item?.id === 'recreate'
+                ? { ...prev, item: { ...prev.item, category: match.category } }
+                : prev,
+            );
+          })
+          .catch(() => {});
+      }
     }
 
     dispatch(clearImageRecreateInputs());
@@ -356,8 +384,15 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       : brandSource.kind === 'autofill'
         ? brandSource.data?.brandInfo?.category || ''
         : '';
+  // Exclude the synthetic 'recreate' id — it's not a saved brand, so the hook
+  // must NOT try to lazy-classify it (that shows a stuck "finding category"
+  // loader). The category for recreate is resolved via the name-match instead.
   const brandId =
-    brandSource.kind === 'list' ? brandSource.item?.id || '' : '';
+    brandSource.kind === 'list' &&
+    brandSource.item?.id &&
+    brandSource.item.id !== 'recreate'
+      ? brandSource.item.id
+      : '';
 
   const templates = usePromptTemplates({
     type: 'ai_custom',
@@ -365,6 +400,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     targetAudience,
     brandCategory,
     brandId,
+    // On Recreate, land with the picker collapsed (per request).
+    autoOpen: !isRecreateSessionRef.current,
     currentValue: prompt,
     onSelect: setPrompt,
     // Manual edit of a {brand}/{target_audience} token deselects the

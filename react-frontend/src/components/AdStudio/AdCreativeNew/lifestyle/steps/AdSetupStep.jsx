@@ -215,8 +215,25 @@ export function AdSetupStep({
       : brandSource.kind === 'autofill'
         ? brandSource.data?.brandInfo?.category || ''
         : '';
+  // Exclude the synthetic 'recreate' id — not a saved brand, so the hook must
+  // not lazy-classify it (avoids the stuck "finding category" loader). Recreate
+  // resolves its category via the name-match instead.
   const brandIdForTemplates =
-    brandSource.kind === 'list' ? brandSource.item?.id || '' : '';
+    brandSource.kind === 'list' &&
+    brandSource.item?.id &&
+    brandSource.item.id !== 'recreate'
+      ? brandSource.item.id
+      : '';
+
+  // Captured at mount: true when this form was opened via Recreate for this
+  // variant — keeps the templates picker collapsed by default in that flow.
+  const recreateSessionInputs = useSelector((s) => s.image.recreateInputs);
+  const isRecreateSessionRef = useRef(
+    Boolean(
+      recreateSessionInputs &&
+        recreateSessionInputs.type === (VARIANT_TO_API_TYPE[variant] || 'lifestyle'),
+    ),
+  );
 
   const templates = usePromptTemplates({
     type: VARIANT_TO_API_TYPE[variant] || 'lifestyle',
@@ -224,6 +241,8 @@ export function AdSetupStep({
     targetAudience: targetAudienceForTemplates,
     brandCategory: brandCategoryForTemplates,
     brandId: brandIdForTemplates,
+    // On Recreate, land with the picker collapsed.
+    autoOpen: !isRecreateSessionRef.current,
     currentValue: instructions,
     onSelect: (text) => {
       setInstructions(text);
@@ -516,8 +535,31 @@ export function AdSetupStep({
           description: inp.brandDescription || '',
           logoUrls: inp.brandLogo ? [inp.brandLogo] : [],
           imageUrl: Array.isArray(inp.brandImages) ? inp.brandImages : [],
+          category: inp.category || '',
         },
       });
+
+      // Recreate rebuilds a transient brand with no category. If the stored
+      // inputs didn't carry one, look it up from the user's saved brands
+      // (get-lists returns each brand's category) by matching the name — a
+      // pure frontend lookup, no extra classification — so the templates
+      // picker auto-matches the right category.
+      if (!inp.category && inp.brandName) {
+        const wanted = inp.brandName.trim().toLowerCase();
+        fetchBrandList(getUserId(), getAuthToken())
+          .then((items) => {
+            const match = (items || []).find(
+              (b) => (b?.name || '').trim().toLowerCase() === wanted,
+            );
+            if (!match?.category) return;
+            setBrandSource((prev) =>
+              prev.kind === 'list' && prev.item?.id === 'recreate'
+                ? { ...prev, item: { ...prev.item, category: match.category } }
+                : prev,
+            );
+          })
+          .catch(() => {});
+      }
     }
 
     dispatch(clearImageRecreateInputs());
