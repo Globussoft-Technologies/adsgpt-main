@@ -6,6 +6,7 @@ import OverviewPage from "./pages/OverviewPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
 import UserDetailPage from "./pages/UserDetailPage.jsx";
 import CalculatorPage from "./pages/CalculatorPage.jsx";
+import PartnerApiKeysPage from "./pages/PartnerApiKeysPage.jsx";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/users/:userId" element={<UserDetailPage />} />
         <Route path="/calculator" element={<CalculatorPage />} />
+        <Route path="/partner-api-keys" element={<PartnerApiKeysPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

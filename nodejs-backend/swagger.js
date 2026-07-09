@@ -107,6 +107,10 @@ const doc = {
       description: "Register/unregister native app FCM tokens for push notifications",
     },
     {
+      name: "Partner API",
+      description: "External partner-facing Meta Ads reporting APIs — authenticated via a partner-supplied Meta System User access token, not an AdsGPT JWT",
+    },
+    {
       name: "default",
       description: "Miscellaneous APIs",
     },
@@ -119,6 +123,18 @@ const doc = {
         scheme: "bearer",
         bearerFormat: "JWT",
         description: "Enter JWT Bearer token",
+      },
+      MetaSystemUserToken: {
+        type: "apiKey",
+        in: "header",
+        name: "x-meta-system-user-token",
+        description: "Meta System User access token supplied by the partner",
+      },
+      PartnerApiKey: {
+        type: "apiKey",
+        in: "header",
+        name: "x-api-key",
+        description: "AdsGPT-issued partner API key (see /admin/partner-api-keys)",
       },
     },
 

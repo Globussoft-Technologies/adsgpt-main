@@ -1429,7 +1429,7 @@ class MetaAdLauncher {
     try {
       const { adAccountId, datePreset, adId, campaignId, adsetId, level } =
         req.query;
-
+      const userId = req.user.user_id;
       const fbUser = await FBUsers.findOne({ userId: req.user.user_id });
       if (!fbUser)
         return res.status(404).json({ error: "Facebook user not found" });

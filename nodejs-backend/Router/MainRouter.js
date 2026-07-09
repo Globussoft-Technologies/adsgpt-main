@@ -53,6 +53,7 @@ const promptTemplateRoutes = require("./promptTemplate/promptTemplateRoutes");
 const creditsApiRoutes = require("./creditsApiRoutes");
 const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnalyzerRoutes");
 const deviceTokenRoutes = require("./deviceTokenRoutes");
+const partnerMetaAdsRoutes = require("./partnerApi/metaAdsRoutes");
 
 const app = express();
 app.use("/adcopy", authenticateJWT, adCopyRouter);
@@ -94,6 +95,9 @@ app.use("/ad-posting", authenticateJWT, adPostingRoutes);
 app.use("/getCategory", getCategoryRoutes);
 app.use("/usage", Usage);
 app.use("/meta-ads", authenticateJWT, metaAdRoutes);
+// Partner-facing surface: no AdsGPT JWT — auth is the partner's own Meta
+// System User token, validated inside partnerMetaAdsRoutes itself.
+app.use("/partner-api/v1/meta-ads", partnerMetaAdsRoutes);
 app.use("/google-ads", authenticateJWT, googleAdRoutes);
 app.use("/tiktok-ads", authenticateJWT, tiktokAdRoutes);
 app.use("/video", videoGenerationRoutes);

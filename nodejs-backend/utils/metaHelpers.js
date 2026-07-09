@@ -118,10 +118,33 @@ function getInsightsFields() {
 // canonical implementation lives there so modules that want only the
 // formatter don't have to pull the Meta SDK transitively.
 
+// Cursor-pagination helper for the Meta SDK. Meta's edges default to 25
+// items per call — accounts routinely have more campaigns / ad sets / ads
+// than that, so a single SDK call truncates the list. Pass the first-page
+// cursor (e.g. `account.getCampaigns(fields, { limit: 100 })`) and this
+// walks the rest. 50-page safety cap (= 5000 items) prevents a malformed
+// cursor from looping forever.
+async function fetchAllPaged(firstPageCursor) {
+  let cursor = await firstPageCursor;
+  const items = [...cursor];
+  let pages = 1;
+  while (
+    typeof cursor?.hasNext === "function" &&
+    cursor.hasNext() &&
+    pages < 50
+  ) {
+    cursor = await cursor.next();
+    items.push(...cursor);
+    pages += 1;
+  }
+  return items;
+}
+
 module.exports = {
   formatBudget,
   getAdFields,
   getAdSetFields,
   getCampaignFields,
   getInsightsFields,
+  fetchAllPaged,
 };
