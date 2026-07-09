@@ -198,7 +198,7 @@ class TiktokAdController {
        #swagger.summary = 'List TikTok ad accounts'
        #swagger.description = 'Lists the advertiser (ad) accounts connected during OAuth, refreshed from TikTok. Proxies TikTok Marketing API GET /advertiser/info/. Cached for REDIS_TTL (2h) unless refresh=true is passed.'
        #swagger.security = [{ "BearerAuth": [] }]
-       #swagger.parameters['refresh'] = { in: 'query', description: 'Pass "true" to bypass the cache and refetch from TikTok', type: 'string', example: 'true' }
+       #swagger.parameters['refresh'] = { in: 'query', description: 'Pass true to bypass the cache and refetch from TikTok', type: 'string', example: 'true' }
        #swagger.responses[200] = {
          description: "Ad accounts",
          schema: {
@@ -886,7 +886,7 @@ class TiktokAdController {
        #swagger.parameters['level'] = { in: 'query', description: 'Reporting level', type: 'string', example: 'campaign', schema: { type: 'string', enum: ['account', 'campaign', 'adgroup', 'ad'] } }
        #swagger.parameters['startDate'] = { in: 'query', description: 'Start date (YYYY-MM-DD). Defaults to 7 days ago.', type: 'string', example: '2026-06-30' }
        #swagger.parameters['endDate'] = { in: 'query', description: 'End date (YYYY-MM-DD). Defaults to today.', type: 'string', example: '2026-07-06' }
-       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass "true" to query lifetime totals instead of a date range', type: 'string', example: 'false' }
+       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass true to query lifetime totals instead of a date range', type: 'string', example: 'false' }
        #swagger.parameters['page'] = { in: 'query', description: 'Page number', type: 'integer', example: 1 }
        #swagger.parameters['pageSize'] = { in: 'query', description: 'Page size', type: 'integer', example: 100 }
        #swagger.responses[200] = {
@@ -1005,7 +1005,7 @@ class TiktokAdController {
        #swagger.parameters['advertiserId'] = { in: 'query', required: true, description: 'TikTok advertiser (ad account) ID', type: 'string', example: '7012345678901234567' }
        #swagger.parameters['startDate'] = { in: 'query', description: 'Start date (YYYY-MM-DD). Defaults to 7 days ago.', type: 'string', example: '2026-06-30' }
        #swagger.parameters['endDate'] = { in: 'query', description: 'End date (YYYY-MM-DD). Defaults to today.', type: 'string', example: '2026-07-06' }
-       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass "true" to query lifetime totals instead of a date range', type: 'string', example: 'false' }
+       #swagger.parameters['lifetime'] = { in: 'query', description: 'Pass true to query lifetime totals instead of a date range', type: 'string', example: 'false' }
        #swagger.responses[200] = {
          description: "Dashboard stats + chart data",
          schema: {
@@ -1220,7 +1220,7 @@ class TiktokAdController {
                properties: {
                  advertiserId: { type: "string", example: "7012345678901234567" },
                  campaignName: { type: "string", example: "Summer Sale" },
-                 objectiveType: { type: "string", example: "TRAFFIC", description: "One of TikTok's objective_type enum values, e.g. REACH, TRAFFIC, VIDEO_VIEWS, ENGAGEMENT, APP_PROMOTION, LEAD_GENERATION, PRODUCT_SALES" },
+                 objectiveType: { type: "string", example: "TRAFFIC", description: "One of the TikTok objective_type enum values, e.g. REACH, TRAFFIC, VIDEO_VIEWS, ENGAGEMENT, APP_PROMOTION, LEAD_GENERATION, PRODUCT_SALES" },
                  budgetMode: { type: "string", example: "BUDGET_MODE_INFINITE", description: "BUDGET_MODE_DAY | BUDGET_MODE_TOTAL | BUDGET_MODE_INFINITE" },
                  budget: { type: "number", example: 100, description: "Required unless budgetMode is BUDGET_MODE_INFINITE" },
                  budgetOptimizeOn: { type: "boolean", example: false },
