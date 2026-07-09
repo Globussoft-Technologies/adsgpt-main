@@ -3,13 +3,13 @@ import React, { useEffect } from 'react';
 //   'https://res.cloudinary.com/dqfhpfeor/image/upload/v1764236938/bottom-effect_fluwi5.svg';
 import bottomEffectImage from '@/assets/layouts/ad-factory/bottom-effect.svg';
 
-const AdFactoryBgEffect = ({ isGenerated = false, isHidden = false, animated = false }) => {
+const AdFactoryBgEffect = ({ isGenerated = false, isHidden = false }) => {
   return (
     <>
       {!isHidden && (
         <>
           <div
-            className={`${isGenerated ? 'z-[99]' : 'z-0'} ${animated ? 'bg-blob-drift' : ''} fixed -top-[40%] right-[2vw] h-[19vw] w-[19vw] rounded-full bg-[linear-gradient(90deg,_#0975F0_0%,_#28BCFC_27%,_#8FC8FB_51%,_#28BCFC_72%,_#0975F0_100%)] opacity-50 dark:opacity-100 blur-[100px]`}
+            className={`${isGenerated ? 'z-[99]' : 'z-0'} fixed -top-[40%] right-[2vw] h-[19vw] w-[19vw] rounded-full bg-[linear-gradient(90deg,_#0975F0_0%,_#28BCFC_27%,_#8FC8FB_51%,_#28BCFC_72%,_#0975F0_100%)] opacity-50 dark:opacity-100 blur-[100px]`}
           />
 
           <img

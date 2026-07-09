@@ -369,34 +369,6 @@ html.theme-changing *::after {
   animation: lpa-shim 1.5s linear infinite;
 }
 
-/* Ambient drift for the blurred background gradient blob (AI Assistant).
-   transform-only so it stays on the GPU compositor: the blurred blob is
-   rasterized once, then only moved/rotated — no repaints, no JS, no extra RAM. */
-@keyframes bg-blob-drift {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  33% {
-    transform: translate3d(-9vw, 5vh, 0) rotate(120deg) scale(1.15);
-  }
-  66% {
-    transform: translate3d(-16vw, -2vh, 0) rotate(240deg) scale(0.92);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) rotate(360deg) scale(1);
-  }
-}
-.bg-blob-drift {
-  animation: bg-blob-drift 30s ease-in-out infinite;
-  will-change: transform;
-}
-@media (prefers-reduced-motion: reduce) {
-  .bg-blob-drift {
-    animation: none;
-    will-change: auto;
-  }
-}
-
 .glow-box {
   border-radius: 16px;
   padding: 2rem;
