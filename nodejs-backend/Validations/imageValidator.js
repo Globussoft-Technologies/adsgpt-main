@@ -4,10 +4,14 @@ const Joi = require("joi");
 // SHARED SCHEMAS
 // =========================
 
+// Must stay in sync with the ratios the adcreatives Go service supports
+// (python-backend/adcreatives/internal/providers/catalog.go).
+const SUPPORTED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4"];
+
 const aspectRatioPerImageSchema = Joi.array()
     .items(
         Joi.object({
-            aspectRatio: Joi.string().valid("9:16", "1:1", "16:9", "2:3", "3:2").required(),
+            aspectRatio: Joi.string().valid(...SUPPORTED_ASPECT_RATIOS).required(),
             numberOfImages: Joi.number().integer().min(1).required(),
         })
     )
@@ -191,7 +195,7 @@ const generateImageRequestSchema = Joi.alternatives().try(
 // =========================
 const imageResultSchema = Joi.object({
     generatedImageUrl: Joi.string().required(),
-    aspectRatio: Joi.string().valid("9:16", "1:1", "16:9", "2:3", "3:2"),
+    aspectRatio: Joi.string().valid(...SUPPORTED_ASPECT_RATIOS),
     prompt: Joi.string().allow(""),
     promptTokens: Joi.number().default(0),
     completionTokens: Joi.number().default(0),

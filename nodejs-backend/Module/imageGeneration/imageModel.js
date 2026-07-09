@@ -1,9 +1,13 @@
 const mongoose = require("mongoose");
 
+// Must stay in sync with the ratios the adcreatives Go service supports
+// (python-backend/adcreatives/internal/providers/catalog.go).
+const SUPPORTED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4"];
+
 const resultSchema = new mongoose.Schema(
     {
         generatedImageUrl: { type: String },
-        aspectRatio: { type: String, enum: ["9:16", "1:1", "16:9", "2:3", "3:2"] },
+        aspectRatio: { type: String, enum: SUPPORTED_ASPECT_RATIOS },
         prompt: { type: String, default: "" },
         promptTokens: { type: Number, default: 0 },
         completionTokens: { type: Number, default: 0 },
@@ -56,14 +60,14 @@ const imageSchema = new mongoose.Schema(
             numberOfImages: { type: Number, required: true },
             aspectRatio: {
                 type: String,
-                enum: ["9:16", "1:1", "16:9", "2:3", "3:2"],
+                enum: SUPPORTED_ASPECT_RATIOS,
             },
 
             aspectRatioPerImage: [
                 {
                     aspectRatio: {
                         type: String,
-                        enum: ["9:16", "1:1", "16:9", "2:3", "3:2"],
+                        enum: SUPPORTED_ASPECT_RATIOS,
                     },
                     numberOfImages: Number,
                 }
