@@ -919,7 +919,15 @@ exports.creativeDetails = async (req, res) => {
         console.error("No file received");
         return res.status(400).json({ error: "No file received" });
       }
-  
+      // Defense-in-depth: this endpoint is image-only (it re-encodes to webp), so
+      // reject anything that isn't an image — otherwise a non-image (e.g. a
+      // renamed executable) tagged with an image MIME could be stored via S3.
+      if (!(file.mimetype || "").startsWith("image/")) {
+        return res
+          .status(400)
+          .json({ error: "Only image files are supported." });
+      }
+
       const fileName = getFileName(".webp");
   
     // Upload original file directly to S3 without processing

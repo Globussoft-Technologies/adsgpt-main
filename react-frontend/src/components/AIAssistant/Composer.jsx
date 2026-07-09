@@ -17,6 +17,21 @@ const extOf = (name) => {
   return dot >= 0 ? name.slice(dot).toLowerCase() : '';
 };
 
+// Client-side upload guard. The OS file picker's `accept` is only a hint (users
+// can switch to "All files"; drag/paste bypass it entirely), so validate here
+// too — otherwise a rejected file (e.g. an .exe) flashes in as a chip before the
+// backend rejects it, with a raw error. Keep in sync with the backend
+// ALLOWED_UPLOAD_EXT (Agent chat.py).
+const ALLOWED_EXTS = new Set([
+  '.pdf', '.xlsx', '.xls', '.csv',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
+  '.txt', '.md', '.json',
+]);
+const ACCEPT_ATTR = [...ALLOWED_EXTS].join(',');
+// Max attachments per message — keeps processing/latency sane and matches the
+// brief card's reference-image cap.
+const MAX_ATTACHMENTS = 6;
+
 // Tweak these to change composer size:
 //   MIN_*  → starting / minimum height
 //   MAX_*  → cap before the textarea starts scrolling internally
@@ -97,7 +112,26 @@ const Composer = ({
   // Images go straight to S3 via the shared `uploadToS3` (returns a stored PATH)
   // and show a local preview meanwhile; other files use the Agent /upload.
   const addFiles = (files) => {
+    // 1) Reject unsupported types (e.g. .exe) up front with a friendly message.
+    const supported = [];
     files.forEach((file) => {
+      if (ALLOWED_EXTS.has(extOf(file.name))) supported.push(file);
+      else toast.error(`"${file.name}" isn't a supported file type.`);
+    });
+    if (!supported.length) return;
+
+    // 2) Cap the number of attachments per message.
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      toast.error(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      return;
+    }
+    const accepted = supported.slice(0, room);
+    if (supported.length > room) {
+      toast.error(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+    }
+
+    accepted.forEach((file) => {
       const isImage = isImageFile(file);
       const tempId = nextTmpId();
       const preview = isImage ? URL.createObjectURL(file) : null;
@@ -304,7 +338,7 @@ const Composer = ({
               multiple
               className="hidden"
               onChange={handleFileChange}
-              accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.gif,.webp,.bmp,.txt,.md,.json"
+              accept={ACCEPT_ATTR}
             />
 
             <button

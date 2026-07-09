@@ -9,6 +9,21 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
 
+// Reference / product / website images are often EXTERNAL URLs (scraped sites,
+// ad-library images). Hotlinking them straight into <img> fails a lot of the
+// time (hotlink/referer/CORS protection) → blank white thumbnails. Route
+// absolute http(s) images through the app's image proxy (same one used by
+// downloads and the Ad Studio editor) so they load reliably. Our own stored
+// media (S3 paths / data:/blob:) is left to toMediaUrl untouched.
+const IMG_PROXY_HOST = import.meta.env.VITE_SOCKET_URL;
+const toDisplaySrc = (url) => {
+  const m = toMediaUrl(url);
+  if (typeof m === 'string' && /^https?:\/\//i.test(m)) {
+    return `${IMG_PROXY_HOST}/adsgpt/img/preview?url=${encodeURIComponent(m)}`;
+  }
+  return m;
+};
+
 // ─── Normalisation helpers ─────────────────────────────────────────────────
 // The agent emits options as either ["a","b","c"], [1,3], or
 // [{value, label}]. Internally we always operate on [{value, label}] so the
@@ -447,7 +462,7 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
                 }`}
               >
                 <img
-                  src={toMediaUrl(url)}
+                  src={toDisplaySrc(url)}
                   alt=""
                   loading="lazy"
                   // Broken/unreachable image → drop it entirely (never shown, never sent).
@@ -500,7 +515,12 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
 const ImagePickerField = ({ field, value, onChange, disabled }) => {
   const candidates = Array.isArray(field.candidates) ? field.candidates : [];
   const selected = Array.isArray(value) ? value : [];
-  if (!candidates.length) return null;
+  // Drop thumbnails that fail to load (dead/hotlink-blocked URLs) instead of
+  // leaving blank white boxes — mirrors ImageUploadField's onError behavior,
+  // which this grid previously lacked.
+  const [broken, setBroken] = useState(() => new Set());
+  const visible = candidates.filter((u) => !broken.has(u));
+  if (!candidates.length || !visible.length) return null;
   const toggle = (url) => {
     if (disabled) return;
     onChange(selected.includes(url) ? selected.filter((u) => u !== url) : [...selected, url]);
@@ -508,7 +528,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
   return (
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-        {candidates.map((url) => {
+        {visible.map((url) => {
           const on = selected.includes(url);
           return (
             <button
@@ -521,9 +541,16 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
               }`}
             >
               <img
-                src={toMediaUrl(url)}
+                src={toDisplaySrc(url)}
                 alt=""
                 loading="lazy"
+                onError={() =>
+                  setBroken((prev) => {
+                    const next = new Set(prev);
+                    next.add(url);
+                    return next;
+                  })
+                }
                 className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-75 group-hover:opacity-100'}`}
               />
               {on && (
