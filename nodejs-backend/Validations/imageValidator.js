@@ -5,8 +5,16 @@ const Joi = require("joi");
 // =========================
 
 // Must stay in sync with the ratios the adcreatives Go service supports
-// (python-backend/adcreatives/internal/providers/catalog.go).
-const SUPPORTED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4"];
+// (python-backend/adcreatives/internal/providers/catalog.go): the ten
+// standard ratios every model accepts, plus the four extreme banner /
+// skyscraper ratios only gemini-3.1-flash-image-preview (Nano Banana 2)
+// supports. Node doesn't gate per-model — Go's ValidateAspectRatiosForModel
+// already rejects a ratio the chosen model can't produce — so this list is
+// just the union, wide enough to not reject anything Go would accept.
+const SUPPORTED_ASPECT_RATIOS = [
+    "1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4",
+    "1:4", "4:1", "1:8", "8:1",
+];
 
 const aspectRatioPerImageSchema = Joi.array()
     .items(
