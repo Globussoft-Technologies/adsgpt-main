@@ -11,10 +11,12 @@ const port = process.env.PORT;
 const router = require("./Routes/Router");
 const { auth } = require("./utils/auth");
 const authenticateJWT = require("./middlewares/auth");
+const { apiLimiter } = require("./middlewares/rateLimitMiddleware");
 
 // Middlewares
 App.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 App.use(helmet());
+App.use(apiLimiter);
 App.use(express.urlencoded({ extended: true }));
 App.use(morgan("dev"));
 App.use(express.json());

@@ -36,6 +36,7 @@
     "ejs": "^3.1.10",
     "express": "^4.18.3",
     "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.5.1",
     "express-session": "^1.18.1",
     "facebook-nodejs-business-sdk": "^24.0.1",
     "file-type": "^21.3.0",

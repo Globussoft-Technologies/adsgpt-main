@@ -18,6 +18,7 @@ const viewsDir = "./resources/views";
 const resourcesDir = "./resources";
 const path = require("path");
 const mongoSanitize = require("express-mongo-sanitize");
+const { apiLimiter, webhookLimiter } = require("./middlewares/rateLimitMiddleware");
 const facebookAuthController = require("./controllers/adPosting/authController");
 const googleAuthController = require("./controllers/adPosting/googleAuthController");
 const tiktokAuthController = require("./controllers/adPosting/tiktokAuthController");
@@ -118,6 +119,7 @@ async function createServer() {
   initializeSockets(Socket, pub, sub);
 
   // * 6. Middleware setup
+  App.use(apiLimiter);
   App.use(mongoSanitize());
   App.use(bodyParser.json({ limit: "50mb" }));
   App.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
@@ -153,7 +155,7 @@ async function createServer() {
   // OAuth callbacks above, since Telegram can't carry our JWT.
   {
     const telegram = require("./services/autopilot/telegramBotService");
-    App.post(telegram.DEFAULT_WEBHOOK_PATH, telegram.createWebhookHandler());
+    App.post(telegram.DEFAULT_WEBHOOK_PATH, webhookLimiter, telegram.createWebhookHandler());
   }
   // * 10. TikTok OAuth routes
   App.get("/api/auth/tiktok", tiktokAuthController.initiateAuth);
