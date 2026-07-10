@@ -29,7 +29,7 @@ const BACKEND_HOST_AUTH = import.meta.env.VITE_SOCKET_URL;
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
-const CANVA_ENABLED = import.meta.env.VITE_ENABLE_CANVA === 'true';
+
 const CANVA_ALLOWED_USER_ID = import.meta.env.VITE_CANVA_ALLOWED_USER_ID;
 const isCanvaAllowedUser = (userId) => String(userId ?? '') === CANVA_ALLOWED_USER_ID;
 
@@ -612,7 +612,7 @@ export default function ProfileHome() {
             )}
 
             {/* ── Canva ── */}
-            {CANVA_ENABLED && isCanvaAllowedUser(userData?.user_id) && (
+            
             <div className="flex items-center justify-between gap-3 py-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-[#232323]">
@@ -653,7 +653,7 @@ export default function ProfileHome() {
                 </div>
               )}
             </div>
-            )}
+            
 
           </div>
         </div>
