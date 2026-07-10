@@ -18,7 +18,9 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.744.0",
+    "@google/genai": "^2.10.0",
     "@google/generative-ai": "^0.24.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sendgrid/mail": "^8.1.6",
     "archiver": "^7.0.1",
     "aws-sdk": "^2.1692.0",

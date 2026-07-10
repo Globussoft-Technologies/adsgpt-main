@@ -4,6 +4,7 @@ const { requireAdmin } = require("../middlewares/adminAuth");
 const adminAuth = require("../controllers/admin/adminAuth.controller");
 const adminDashboard = require("../controllers/admin/adminDashboard.controller");
 const partnerApiKeys = require("../controllers/admin/partnerApiKey.controller");
+const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.controller");
 
 router.post("/login", adminAuth.login);
 router.get("/me", requireAdmin, adminAuth.me);
@@ -19,5 +20,8 @@ router.get("/meta-launch-trace/:traceId", requireAdmin, adminDashboard.getMetaLa
 router.post("/partner-api-keys", requireAdmin, partnerApiKeys.createKey);
 router.get("/partner-api-keys", requireAdmin, partnerApiKeys.listKeys);
 router.patch("/partner-api-keys/:id/revoke", requireAdmin, partnerApiKeys.revokeKey);
+
+router.get("/token-usage/overview", requireAdmin, tokenUsageDashboard.overview);
+router.get("/token-usage/users/:userId", requireAdmin, tokenUsageDashboard.userDetail);
 
 module.exports = router;

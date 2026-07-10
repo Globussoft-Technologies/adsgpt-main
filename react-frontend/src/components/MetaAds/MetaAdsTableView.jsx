@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import {
   ChevronRight,
   Target,
@@ -499,7 +500,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce }) {
+function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId }) {
   const [adSets,  setAdSets]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [statuses, setStatuses] = useState({});
@@ -526,6 +527,19 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [campaign.id, adAccountId, manageNonce]);
+
+  // Restore a drilled-in ad set from the URL (e.g. after a page refresh) —
+  // once the list has loaded, re-run the same drill handler a click would,
+  // so the parent picks up the full row object. Only ever fires once per
+  // mount so an unrelated refetch (manageNonce) can't re-select after the
+  // user has since navigated elsewhere.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || loading || !restoreAdSetId) return;
+    restoredRef.current = true;
+    const match = adSets.find((s) => s.id === restoreAdSetId);
+    if (match) onDrillDown(match);
+  }, [adSets, loading, restoreAdSetId, onDrillDown]);
 
   // Read FRESH campaign settings before opening the wizard — the campaign
   // list is cached, so its bid_strategy can be stale/missing. The wizard
@@ -1039,7 +1053,7 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
+function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange }) {
   const [ads,       setAds]       = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [selectedAd, setSelectedAd] = useState(null);
@@ -1062,6 +1076,24 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [adSet.id, manageNonce]);
+
+  // Restore a selected ad (drawer open) from the URL after a page refresh —
+  // mirrors AdSetTable's restore effect. Fires at most once per mount.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || loading || !restoreAdId) return;
+    restoredRef.current = true;
+    const match = ads.find((a) => a.id === restoreAdId);
+    if (match) setSelectedAd(match);
+  }, [ads, loading, restoreAdId]);
+
+  const selectAd = (a) => {
+    setSelectedAd((p) => {
+      const next = p?.id === a.id ? null : a;
+      onSelectAdChange?.(next?.id || null);
+      return next;
+    });
+  };
 
   // "Add Ad": the wizard's Ad step is cell-driven, so first resolve the
   // cell (objective × conversionLocation + the ad set's page) from Meta,
@@ -1198,7 +1230,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: idx * 0.03 }}
-                    onClick={() => setSelectedAd((p) => (p?.id === a.id ? null : a))}
+                    onClick={() => selectAd(a)}
                     className={`group cursor-pointer border-b border-gray-200 transition-colors last:border-b-0 dark:border-white/10
                       ${isSelected ? 'bg-gray-100 dark:bg-white/5' : 'hover:bg-gray-100 dark:hover:bg-white/3'}`}
                   >
@@ -1267,7 +1299,13 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
       {/* side drawer */}
       <AnimatePresence>
         {selectedAd && (
-          <AdDrawer ad={selectedAd} onClose={() => setSelectedAd(null)} />
+          <AdDrawer
+            ad={selectedAd}
+            onClose={() => {
+              setSelectedAd(null);
+              onSelectAdChange?.(null);
+            }}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -1276,15 +1314,58 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce }) {
 
 // ─── root export ──────────────────────────────────────────────────────────────
 
+// Drill-down (campaign → ad set → ad) is mirrored into `campaignId` /
+// `adSetId` / `adId` URL search params, so a refresh restores the same view
+// instead of bouncing back to the Campaigns list — and so the Meta Ads chat
+// widget (mounted alongside this dashboard) can scope its answers to
+// whatever's currently open. See docs/META_ADS_CHATBOT.md.
 export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh, onLaunchWizard, manageNonce }) {
-  const [level,            setLevel]            = useState('campaigns');
-  const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [selectedAdSet,    setSelectedAdSet]    = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const campaignIdParam = searchParams.get('campaignId');
+  const adSetIdParam = searchParams.get('adSetId');
+  const adIdParam = searchParams.get('adId');
 
-  const drillToCampaign = (c) => { setSelectedCampaign(c); setSelectedAdSet(null); setLevel('adsets'); };
-  const drillToAdSet    = (s) => { setSelectedAdSet(s);                              setLevel('ads'); };
-  const goToCampaigns   = ()  => { setLevel('campaigns'); setSelectedCampaign(null); setSelectedAdSet(null); };
-  const goToAdSets      = ()  => { setLevel('adsets');                               setSelectedAdSet(null); };
+  const [selectedAdSet, setSelectedAdSet] = useState(null);
+
+  const selectedCampaign = campaignIdParam
+    ? campaigns.find((c) => c.id === campaignIdParam) || null
+    : null;
+  // A stale ad set object (from a since-changed/cleared adSetId param, e.g.
+  // browser back/forward) shouldn't keep the Ads table mounted.
+  useEffect(() => {
+    if (selectedAdSet && selectedAdSet.id !== adSetIdParam) setSelectedAdSet(null);
+  }, [adSetIdParam, selectedAdSet]);
+
+  const level = !selectedCampaign ? 'campaigns' : selectedAdSet ? 'ads' : 'adsets';
+
+  const updateParams = (patch) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value == null) next.delete(key);
+        else next.set(key, value);
+      });
+      return next;
+    });
+  };
+
+  const drillToCampaign = (c) => {
+    setSelectedAdSet(null);
+    updateParams({ campaignId: c.id, adSetId: null, adId: null });
+  };
+  const drillToAdSet = (s) => {
+    setSelectedAdSet(s);
+    updateParams({ adSetId: s.id, adId: null });
+  };
+  const goToCampaigns = () => {
+    setSelectedAdSet(null);
+    updateParams({ campaignId: null, adSetId: null, adId: null });
+  };
+  const goToAdSets = () => {
+    setSelectedAdSet(null);
+    updateParams({ adSetId: null, adId: null });
+  };
+  const setAdId = (adId) => updateParams({ adId });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1309,12 +1390,26 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
           )}
           {level === 'adsets' && selectedCampaign && (
             <motion.div key="adsets" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <AdSetTable campaign={selectedCampaign} adAccountId={adAccountId} onDrillDown={drillToAdSet} onLaunchWizard={onLaunchWizard} manageNonce={manageNonce} />
+              <AdSetTable
+                campaign={selectedCampaign}
+                adAccountId={adAccountId}
+                onDrillDown={drillToAdSet}
+                onLaunchWizard={onLaunchWizard}
+                manageNonce={manageNonce}
+                restoreAdSetId={adSetIdParam}
+              />
             </motion.div>
           )}
           {level === 'ads' && selectedAdSet && (
             <motion.div key="ads" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <AdsTable adSet={selectedAdSet} campaign={selectedCampaign} onLaunchWizard={onLaunchWizard} manageNonce={manageNonce} />
+              <AdsTable
+                adSet={selectedAdSet}
+                campaign={selectedCampaign}
+                onLaunchWizard={onLaunchWizard}
+                manageNonce={manageNonce}
+                restoreAdId={adIdParam}
+                onSelectAdChange={setAdId}
+              />
             </motion.div>
           )}
         </AnimatePresence>

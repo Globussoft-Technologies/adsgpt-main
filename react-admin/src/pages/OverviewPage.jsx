@@ -12,7 +12,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Activity, DollarSign, Image as ImageIcon, Loader2, Users, Video, Wallet, Zap } from "lucide-react";
+import {
+  Activity,
+  Brain,
+  DollarSign,
+  Image as ImageIcon,
+  Loader2,
+  LogIn,
+  LogOut,
+  Users,
+  Video,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import StatCard from "@/components/StatCard.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi } from "@/lib/api";
@@ -26,6 +38,9 @@ export default function OverviewPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [tokenData, setTokenData] = useState(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
 
   useEffect(() => {
     let cancel = false;
@@ -45,6 +60,26 @@ export default function OverviewPage() {
     };
   }, [range.from, range.to]);
 
+  // Separate call/loading state from the generatedMedia overview above —
+  // token usage is its own collection with its own aggregation, just shown
+  // on the same page instead of a dedicated one.
+  useEffect(() => {
+    let cancel = false;
+    setTokenLoading(true);
+    adminApi
+      .tokenUsageOverview({ from: range.from || undefined, to: range.to || undefined })
+      .then((res) => {
+        if (!cancel) setTokenData(res.data);
+      })
+      .catch(() => {
+        if (!cancel) setTokenData(null);
+      })
+      .finally(() => !cancel && setTokenLoading(false));
+    return () => {
+      cancel = true;
+    };
+  }, [range.from, range.to]);
+
   const totals = data?.totals || { users: 0, generations: 0, cost: 0, credits: 0 };
   const byType = data?.byType || [];
   const byModel = data?.byModel || [];
@@ -52,6 +87,16 @@ export default function OverviewPage() {
 
   const imageStats = useMemo(() => byType.find((t) => t.type === "image") || { generations: 0, cost: 0 }, [byType]);
   const videoStats = useMemo(() => byType.find((t) => t.type === "video") || { generations: 0, cost: 0 }, [byType]);
+
+  const tokenTotals = tokenData?.totals || {
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    thinkingTokens: 0,
+    totalTokens: 0,
+  };
+  const tokenByModel = tokenData?.byModel || [];
+  const tokenDaily = tokenData?.daily || [];
 
   return (
     <div className="space-y-6">
@@ -220,6 +265,173 @@ export default function OverviewPage() {
               </table>
             </div>
           </section>
+
+          <div className="pt-2">
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900">Token usage</h2>
+            <p className="text-sm text-slate-500">LLM API calls and token consumption (Ads Chat).</p>
+          </div>
+
+          {tokenLoading ? (
+            <LoadingState />
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard
+                  label="Total tokens"
+                  value={formatNumber(tokenTotals.totalTokens)}
+                  accent="indigo"
+                  icon={Activity}
+                />
+                <StatCard label="Input tokens" value={formatNumber(tokenTotals.inputTokens)} accent="sky" icon={LogIn} />
+                <StatCard
+                  label="Output tokens"
+                  value={formatNumber(tokenTotals.outputTokens)}
+                  accent="emerald"
+                  icon={LogOut}
+                />
+                <StatCard
+                  label="Thinking tokens"
+                  value={formatNumber(tokenTotals.thinkingTokens)}
+                  accent="amber"
+                  icon={Brain}
+                />
+              </div>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-800">Daily tokens</h2>
+                    <p className="text-xs text-slate-500">Input / output / thinking tokens per day</p>
+                  </div>
+                </div>
+                <div className="h-72 px-2 pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={tokenDaily} margin={{ top: 16, right: 16, left: 0, bottom: 8 }}>
+                      <defs>
+                        <linearGradient id="inputFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="outputFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="thinkingFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.25} />
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                      <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickMargin={8} />
+                      <YAxis stroke="#94a3b8" fontSize={12} tickMargin={4} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Area
+                        type="monotone"
+                        dataKey="inputTokens"
+                        name="Input"
+                        stroke="#0ea5e9"
+                        strokeWidth={2}
+                        fill="url(#inputFill)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="outputTokens"
+                        name="Output"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        fill="url(#outputFill)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="thinkingTokens"
+                        name="Thinking"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        fill="url(#thinkingFill)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-800">Tokens by model</h2>
+                    <p className="text-xs text-slate-500">Which model is consuming the most</p>
+                  </div>
+                </div>
+                <div className="h-72 px-2 pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={tokenByModel} margin={{ top: 16, right: 16, left: 0, bottom: 32 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                      <XAxis
+                        dataKey="model"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        angle={-25}
+                        textAnchor="end"
+                        interval={0}
+                        height={60}
+                      />
+                      <YAxis stroke="#94a3b8" fontSize={12} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="totalTokens" radius={[8, 8, 0, 0]}>
+                        {tokenByModel.map((_, idx) => (
+                          <Cell key={idx} fill={MODEL_BAR_COLORS[idx % MODEL_BAR_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">Model</th>
+                        <th className="px-5 py-3">Calls</th>
+                        <th className="px-5 py-3">Input</th>
+                        <th className="px-5 py-3">Output</th>
+                        <th className="px-5 py-3">Thinking</th>
+                        <th className="px-5 py-3 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tokenByModel.map((row, idx) => (
+                        <tr key={row.model} className="border-t border-slate-100 hover:bg-slate-50/60">
+                          <td className="px-5 py-3">
+                            <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full"
+                                style={{ background: MODEL_BAR_COLORS[idx % MODEL_BAR_COLORS.length] }}
+                              />
+                              {row.model}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.calls)}</td>
+                          <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.inputTokens)}</td>
+                          <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.outputTokens)}</td>
+                          <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.thinkingTokens)}</td>
+                          <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
+                            {formatNumber(row.totalTokens)}
+                          </td>
+                        </tr>
+                      ))}
+                      {tokenByModel.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                            No data in range
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
         </>
       )}
     </div>

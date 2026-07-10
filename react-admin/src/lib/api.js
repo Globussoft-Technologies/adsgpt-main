@@ -38,6 +38,9 @@ export const adminApi = {
   partnerApiKeys: () => api.get("/partner-api-keys"),
   createPartnerApiKey: (partnerName) => api.post("/partner-api-keys", { partnerName }),
   revokePartnerApiKey: (id) => api.patch(`/partner-api-keys/${encodeURIComponent(id)}/revoke`),
+  tokenUsageOverview: (params) => api.get("/token-usage/overview", { params }),
+  tokenUsageUserDetail: (userId, params) =>
+    api.get(`/token-usage/users/${encodeURIComponent(userId)}`, { params }),
 };
 
 // Page-view summaries live under /adsgpt/analytics (a different base than the

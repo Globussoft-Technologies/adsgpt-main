@@ -3,9 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import {
   Activity,
   ArrowLeft,
+  Brain,
   DollarSign,
   Image as ImageIcon,
   Loader2,
+  LogIn,
+  LogOut,
   Mail,
   MousePointerClick,
   Play,
@@ -93,6 +96,8 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [engagement, setEngagement] = useState(null);
+  const [tokenData, setTokenData] = useState(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
 
   // Page-view summary is keyed only on user — no date/type/model filtering.
   useEffect(() => {
@@ -136,12 +141,41 @@ export default function UserDetailPage() {
     };
   }, [userId, range.from, range.to, type, model, page]);
 
+  // Token usage is its own collection/endpoint, keyed only on userId + date
+  // range (no type/model/page filters — those apply to generatedMedia).
+  useEffect(() => {
+    let cancel = false;
+    setTokenLoading(true);
+    adminApi
+      .tokenUsageUserDetail(userId, { from: range.from || undefined, to: range.to || undefined })
+      .then((res) => {
+        if (!cancel) setTokenData(res.data);
+      })
+      .catch(() => {
+        if (!cancel) setTokenData(null);
+      })
+      .finally(() => !cancel && setTokenLoading(false));
+    return () => {
+      cancel = true;
+    };
+  }, [userId, range.from, range.to]);
+
   const user = data?.user;
   const credits = data?.credits;
   const summary = data?.summary || { generations: 0, cost: 0, credits: 0, images: 0, videos: 0 };
   const byModel = data?.byModel || [];
   const generations = data?.generations || { data: [], total: 0, hasMore: false };
   const displayName = user?.name || user?.login || userId;
+
+  const tokenTotals = tokenData?.totals || {
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    thinkingTokens: 0,
+    totalTokens: 0,
+  };
+  const tokenByModel = tokenData?.byModel || [];
+  const tokenByDay = tokenData?.daily || [];
 
   return (
     <div className="space-y-6">
@@ -296,6 +330,106 @@ export default function UserDetailPage() {
           </table>
         </div>
       </section>
+
+      <div className="pt-2">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Token usage</h2>
+        <p className="text-sm text-slate-500">This user's LLM API calls and token consumption (Ads Chat).</p>
+      </div>
+
+      {tokenLoading ? (
+        <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100/60" />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total tokens" value={formatNumber(tokenTotals.totalTokens)} accent="indigo" icon={Activity} />
+            <StatCard label="Input tokens" value={formatNumber(tokenTotals.inputTokens)} accent="sky" icon={LogIn} />
+            <StatCard label="Output tokens" value={formatNumber(tokenTotals.outputTokens)} accent="emerald" icon={LogOut} />
+            <StatCard label="Thinking tokens" value={formatNumber(tokenTotals.thinkingTokens)} accent="amber" icon={Brain} />
+          </div>
+
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-800">Tokens by model</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Model</th>
+                    <th className="px-5 py-3 text-right">Calls</th>
+                    <th className="px-5 py-3 text-right">Input</th>
+                    <th className="px-5 py-3 text-right">Output</th>
+                    <th className="px-5 py-3 text-right">Thinking</th>
+                    <th className="px-5 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tokenByModel.map((m) => (
+                    <tr key={m.model} className="border-t border-slate-100 hover:bg-slate-50/60">
+                      <td className="px-5 py-3 font-medium text-slate-800">{m.model}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(m.calls)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(m.inputTokens)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(m.outputTokens)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(m.thinkingTokens)}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
+                        {formatNumber(m.totalTokens)}
+                      </td>
+                    </tr>
+                  ))}
+                  {tokenByModel.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                        No data in range
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-800">Tokens by day</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Date</th>
+                    <th className="px-5 py-3 text-right">Calls</th>
+                    <th className="px-5 py-3 text-right">Input</th>
+                    <th className="px-5 py-3 text-right">Output</th>
+                    <th className="px-5 py-3 text-right">Thinking</th>
+                    <th className="px-5 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tokenByDay.map((d) => (
+                    <tr key={d.date} className="border-t border-slate-100 hover:bg-slate-50/60">
+                      <td className="px-5 py-3 font-medium text-slate-800">{d.date}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(d.calls)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(d.inputTokens)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(d.outputTokens)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatNumber(d.thinkingTokens)}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
+                        {formatNumber(d.totalTokens)}
+                      </td>
+                    </tr>
+                  ))}
+                  {tokenByDay.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                        No data in range
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">

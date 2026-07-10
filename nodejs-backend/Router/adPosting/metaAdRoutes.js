@@ -5,6 +5,7 @@ const metaAdController = require("../../controllers/adPosting/metaAdLauncher");
 const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
 const campaignTemplateController = require("../../controllers/campaignTemplate.controller");
 const autopilotRoutes = require("../autopilot/autopilotRoutes");
+const metaChatRoutes = require("./metaChatRoutes");
 const adCopyGenerator = require("../../controllers/adPosting/adCopyGeneratorController")
 
 // 10MB cap, in-memory only — we forward bytes straight to Meta.
@@ -155,5 +156,10 @@ router.post("/generate-ad-copy", adCopyGenerator.generateAdCopy);
 // LLM audit). Mounted at /meta-ads/autopilot/* and inherits authenticateJWT
 // from the parent /meta-ads mount in MainRouter.
 router.use("/autopilot", autopilotRoutes);
+
+// Meta Ads chatbot — Gemini + mcps/meta gateway. Mounted at
+// /meta-ads/chat/* and inherits authenticateJWT from the parent /meta-ads
+// mount in MainRouter.
+router.use("/chat", metaChatRoutes);
 
 module.exports = router;

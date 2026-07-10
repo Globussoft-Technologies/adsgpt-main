@@ -31,6 +31,8 @@ import { StatusBadge, Dropdown } from './MetaAdsAtoms';
 import CreateCampaignWizard from './CreateCampaignWizard';
 import CreateCampaignWizardV2 from './CreateCampaignWizardV2';
 import LeadsTab from './LeadsTab';
+import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
+import { IS_META_ADS_CHAT_ENABLED } from '@/utils/featureFlags';
 
 // V2 wizard is gated on a build-time env var so V1 keeps running by
 // default. When V2 is ready for the migrated objectives we flip this
@@ -49,7 +51,12 @@ export default function MetaAdsDashboard() {
   const [campaigns, setCampaigns] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [datePreset, setDatePreset] = useState('last_14d');
-  const [activeTab, setActiveTab] = useState('analytics');
+  // A refresh with a drilled-down campaign/ad set/ad still in the URL should
+  // land back on the Campaigns tab (where TableViewCampaigns restores the
+  // drill-down itself) instead of bouncing to Analytics.
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get('campaignId') ? 'campaigns' : 'analytics',
+  );
 
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
@@ -118,19 +125,63 @@ export default function MetaAdsDashboard() {
     })();
   }, [userData?.user_id, navigate]);
 
-  // load ad accounts
+  // Switch the active ad account — updates the URL (`adAccountId`) so a
+  // refresh restores the same account instead of falling back to the first
+  // one, and drops any campaign/ad set/ad drill-down param since those IDs
+  // belong to the account being left.
+  const selectAccount = useCallback(
+    (acc) => {
+      setSelectedAccount(acc);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (acc?.id) next.set('adAccountId', acc.id);
+        else next.delete('adAccountId');
+        next.delete('campaignId');
+        next.delete('adSetId');
+        next.delete('adId');
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  // load ad accounts — restore the one named in the URL (if any/still valid),
+  // otherwise fall back to the first account. Only reads searchParams at
+  // mount time; deliberately not a dependency so switching accounts later
+  // (which itself rewrites the URL) doesn't re-trigger this fetch.
   useEffect(() => {
     (async () => {
       try {
         const res = await getAdAccounts();
-        setAdAccounts(res.adAccounts || []);
-        if (res.adAccounts?.length) setSelectedAccount(res.adAccounts[0]);
+        const accounts = res.adAccounts || [];
+        setAdAccounts(accounts);
+        if (accounts.length) {
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+          const urlAccountId = searchParams.get('adAccountId');
+          const restored = urlAccountId && accounts.find((a) => a.id === urlAccountId);
+          if (restored) {
+            // Already the right account per the URL — set it directly rather
+            // than through selectAccount(), which also strips
+            // campaignId/adSetId/adId (correct for an explicit account
+            // switch, wrong here: we're restoring the SAME account a
+            // refresh just navigated away from and back to).
+            setSelectedAccount(restored);
+          } else {
+            // No valid account in the URL yet (fresh visit, or a stale/
+            // unknown id) — fall back to the first account. selectAccount()
+            // writes adAccountId and clears any drill-down params, which is
+            // correct here since they can't be trusted to belong to this
+            // account.
+            selectAccount(accounts[0]);
+          }
+        }
       } catch {
         /* noop */
       } finally {
         setLoadingAccounts(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // load campaigns when account changes
@@ -198,7 +249,11 @@ export default function MetaAdsDashboard() {
   ];
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
+    // Row layout: the main dashboard column (flex-1) sits beside the docked
+    // Ads Chat sidebar, so opening the chat shrinks the content instead of
+    // covering it.
+    <div className="flex h-full w-full overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* grid dot bg */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.012]"
@@ -252,7 +307,7 @@ export default function MetaAdsDashboard() {
                   <button
                     key={acc.id}
                     onClick={() => {
-                      setSelectedAccount(acc);
+                      selectAccount(acc);
                       setAccountOpen(false);
                       setActiveTab('analytics');
                     }}
@@ -521,7 +576,7 @@ export default function MetaAdsDashboard() {
           // dashboard when the template was saved against a different one.
           onChangeAccount={(nextId) => {
             const next = adAccounts.find((a) => a.id === nextId);
-            if (next) setSelectedAccount(next);
+            if (next) selectAccount(next);
           }}
           onCreated={() => {
             // Campaign-level changes (new campaign or edited campaign) reload
@@ -596,6 +651,24 @@ export default function MetaAdsDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
+
+      {/* ── docked Ads Chat sidebar (pushes the content when open) ─────────── */}
+      {/* Still in active development — hidden behind VITE_FEATURE_META_ADS_CHAT
+          until it's ready for anyone besides whoever has that flag set locally.
+          campaignId/adSetId/adId read straight from the URL — the same params
+          TableViewCampaigns drills into — so the chat always knows what's
+          currently open, even after a refresh. */}
+      {IS_META_ADS_CHAT_ENABLED && (
+        <MetaAdsChatWidget
+          adAccountId={selectedAccount?.id}
+          adAccountName={selectedAccount?.name}
+          adAccountCurrency={selectedAccount?.currency}
+          campaignId={searchParams.get('campaignId')}
+          adSetId={searchParams.get('adSetId')}
+          adId={searchParams.get('adId')}
+        />
+      )}
     </div>
   );
 }

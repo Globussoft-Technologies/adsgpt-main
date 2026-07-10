@@ -32,3 +32,8 @@ export const IS_PROMPT_CATEGORIES_ENABLED =
 //   import.meta.env.VITE_FEATURE_GOOGLE_AUTOMATION === 'true';
 export const IS_GOOGLE_AUTOMATION_ENABLED =
   import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
+// Meta Ads "Ads Chat" MCP chatbot — still in active development, hidden from
+// everyone until explicitly opted in. Set VITE_FEATURE_META_ADS_CHAT=true
+// locally/in a preview env to see the launcher icon.
+export const IS_META_ADS_CHAT_ENABLED =
+  import.meta.env.VITE_FEATURE_META_ADS_CHAT === 'true';
