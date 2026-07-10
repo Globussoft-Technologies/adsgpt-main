@@ -1,0 +1,74 @@
+/* Animated background for the AI Assistant page ONLY.
+   Same palette, geometry, blur and opacity as AdFactoryBgEffect — the only
+   addition is motion: the gradient colors flow through the blob while the
+   blob itself drifts slowly across the top of the viewport, and the bottom
+   beams sway gently. Ad Factory keeps the static shared component. */
+
+.aia-bg-blob {
+  background: linear-gradient(
+    90deg,
+    #0975f0 0%,
+    #28bcfc 27%,
+    #8fc8fb 51%,
+    #28bcfc 72%,
+    #0975f0 100%
+  );
+  /* Oversize the gradient so animating background-position makes the colors
+     visibly travel inside the blob instead of snapping. */
+  background-size: 300% 100%;
+  animation:
+    aia-gradient-flow 16s linear infinite,
+    aia-blob-drift 28s ease-in-out infinite alternate;
+  will-change: transform, background-position;
+}
+
+@keyframes aia-gradient-flow {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 300% 50%;
+  }
+}
+
+@keyframes aia-blob-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  35% {
+    transform: translate3d(-16vw, 10vh, 0) scale(1.15);
+  }
+  70% {
+    transform: translate3d(-32vw, 3vh, 0) scale(0.95);
+  }
+  100% {
+    transform: translate3d(-8vw, 13vh, 0) scale(1.08);
+  }
+}
+
+/* The base -50% centering lives inside the keyframes because `transform`
+   would otherwise override Tailwind's -translate-x-1/2. */
+.aia-bg-bottom {
+  transform: translateX(-50%);
+  animation: aia-bottom-sway 36s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes aia-bottom-sway {
+  from {
+    transform: translateX(calc(-50% - 2vw));
+  }
+  to {
+    transform: translateX(calc(-50% + 2vw));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aia-bg-blob,
+  .aia-bg-bottom {
+    animation: none;
+  }
+  .aia-bg-bottom {
+    transform: translateX(-50%);
+  }
+}

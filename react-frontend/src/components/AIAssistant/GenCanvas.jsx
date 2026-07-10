@@ -26,7 +26,7 @@ const GenCanvas = ({
   return (
     <aside
       aria-hidden={!isOpen}
-      className={`z-30 flex h-full shrink-0 flex-col border-l border-white/[0.08] bg-[#0A0A0A] transition-[width,transform] duration-300 ease-out ${
+      className={`z-30 flex h-full shrink-0 flex-col border-l border-white/[0.08] bg-[#0A0A0A]/75 backdrop-blur-2xl transition-[width,transform] duration-300 ease-out ${
         isOpen
           ? 'pointer-events-auto w-full translate-x-0 opacity-100 sm:w-[440px] lg:w-[520px]'
           : 'pointer-events-none w-0 translate-x-full opacity-0'

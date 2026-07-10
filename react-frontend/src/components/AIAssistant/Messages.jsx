@@ -199,7 +199,7 @@ const Messages = ({
                     an empty grey bubble. */}
                 {m.text?.trim() && (
                   <div
-                    className="border border-solid border-[#2A2A2A] bg-[#212121] px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
+                    className="border border-solid border-[#2A2A2A] bg-[#212121]/60 px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
                     style={{ borderRadius: '30px 30px 1px 30px' }}
                   >
                     <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
