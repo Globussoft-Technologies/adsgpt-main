@@ -297,6 +297,20 @@ const Composer = ({
           </div>
         )}
 
+        {/* Always-visible attachment count + cap, so the limit is discoverable
+            BEFORE it's hit (not just via an error at the cap). Turns amber on the
+            last slot. */}
+        {attachments.length > 0 && (
+          <span
+            className={`text-[11px] font-medium ${
+              attachments.length >= MAX_ATTACHMENTS ? 'text-amber-400/90' : 'text-white/45'
+            }`}
+          >
+            {attachments.length} / {MAX_ATTACHMENTS} files
+            {attachments.length >= MAX_ATTACHMENTS ? ' · limit reached' : ''}
+          </span>
+        )}
+
         <textarea
           ref={textareaRef}
           value={text}
