@@ -25,6 +25,37 @@ const toneClass = (tone) =>
       ? 'text-red-500 dark:text-red-400'
       : 'text-gray-900 dark:text-white';
 
+// Tiny inline trend line — raw SVG polyline rather than recharts, since at
+// this size (a stat tile) a charting library is overkill.
+const Sparkline = ({ points = [] }) => {
+  if (points.length < 2) return null;
+  const w = 56;
+  const h = 18;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const coords = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const up = points[points.length - 1] >= points[0];
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0" aria-hidden="true">
+      <polyline
+        points={coords}
+        fill="none"
+        stroke={up ? '#10b981' : '#ef4444'}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
 // Titled grid of headline metrics. Values arrive display-ready from the model.
 // When `badge` is set it becomes a glowing hero card (the "TOP PERFORMER"
 // look), themed to the app's cyan→violet accent.
@@ -73,9 +104,12 @@ const StatCard = ({ title, subtitle, badge, stats = [] }) => {
               <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 {s.label}
               </p>
-              <div className="mt-0.5 flex items-baseline justify-between gap-1">
-                <span className={`text-[15px] font-semibold ${toneClass(s.tone)}`}>{s.value}</span>
-                <DeltaChip delta={s.delta} />
+              <div className="mt-0.5 flex items-center justify-between gap-1.5">
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-[15px] font-semibold ${toneClass(s.tone)}`}>{s.value}</span>
+                  <DeltaChip delta={s.delta} />
+                </div>
+                <Sparkline points={s.trend} />
               </div>
             </div>
           ))}

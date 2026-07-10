@@ -59,10 +59,15 @@ const TypingDots = () => (
   </div>
 );
 
-// Collapsible tool-activity trace — the reference's "Thought for 3s".
+// Collapsible tool-activity trace — the reference's "Thought for 3s". Shows
+// for every completed/in-progress turn, not just ones with a discrete MCP
+// tool step — a turn answered purely from local render tools (no Meta call)
+// still took real time to generate, and hiding the pill only for those made
+// the affordance flicker in and out between turns for no visible reason.
 const WorkedTrace = ({ steps = [], activeStep, streaming, elapsedMs }) => {
   const [open, setOpen] = useState(false);
-  if (!steps.length && !activeStep) return null;
+  if (!steps.length && !activeStep && !streaming && elapsedMs == null) return null;
+  const hasSteps = steps.length > 0;
   const label = streaming
     ? activeStep || 'Working…'
     : `Worked for ${elapsedMs ? (elapsedMs / 1000).toFixed(1) : '0.0'}s`;
@@ -70,8 +75,10 @@ const WorkedTrace = ({ steps = [], activeStep, streaming, elapsedMs }) => {
     <div className="mb-2">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full bg-gray-100 py-1 pr-2 pl-2.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-200 dark:bg-white/5 dark:text-white/55 dark:hover:bg-white/10"
+        onClick={() => hasSteps && setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 rounded-full bg-gray-100 py-1 pr-2 pl-2.5 text-[12px] text-gray-500 dark:bg-white/5 dark:text-white/55 ${
+          hasSteps ? 'cursor-pointer transition-colors hover:bg-gray-200 dark:hover:bg-white/10' : 'cursor-default'
+        }`}
       >
         {streaming ? (
           <Loader2 className="h-3 w-3 animate-spin text-[#15DCFF]" />
@@ -79,7 +86,7 @@ const WorkedTrace = ({ steps = [], activeStep, streaming, elapsedMs }) => {
           <Check className="h-3 w-3 text-emerald-500" />
         )}
         <span>{label}</span>
-        <ChevronRight className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} />
+        {hasSteps && <ChevronRight className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} />}
       </button>
       {open && steps.length > 0 && (
         <div className="mt-1.5 flex flex-col gap-1 border-l border-gray-200 pl-3 dark:border-white/10">

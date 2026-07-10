@@ -53,6 +53,13 @@ const LOCAL_TOOL_DECLARATIONS = [
                   "Optional: 'good' colors the value green, 'bad' red — use when a value is clearly " +
                   "favorable/unfavorable (e.g. a strong CTR = good). Omit for neutral.",
               },
+              trend: {
+                type: "array",
+                items: { type: "number" },
+                description:
+                  "Optional recent history for a tiny inline sparkline, oldest first (e.g. last 7 " +
+                  "days of this metric). Omit if you only have the current value.",
+              },
             },
             required: ["label", "value"],
           },
@@ -199,6 +206,330 @@ const LOCAL_TOOL_DECLARATIONS = [
       required: ["previewUrl"],
     },
   },
+  {
+    name: "show_trend_chart",
+    description:
+      "Render a line/area chart of one or more metrics over time. Use this for 'how has spend/CTR/" +
+      "clicks trended' questions — call ads_get_insights with time_increment (e.g. 1 for daily) to " +
+      "get the series, then pass the exact per-day values here. This is the ONLY tool for genuinely " +
+      "time-series data; show_bar_breakdown/show_comparison are for a single snapshot across entities.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        unit: { type: "string", description: "Optional unit shown in the tooltip, e.g. '₹' or '%'" },
+        series: {
+          type: "array",
+          description: "One or more named lines, e.g. 'Spend' and 'Clicks'.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Line name, e.g. 'Spend'" },
+              points: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    date: { type: "string", description: "e.g. '2026-07-01' or a short label" },
+                    value: { type: "number" },
+                  },
+                  required: ["date", "value"],
+                },
+              },
+            },
+            required: ["label", "points"],
+          },
+        },
+      },
+      required: ["title", "series"],
+    },
+  },
+  {
+    name: "show_audience_breakdown",
+    description:
+      "Render a donut chart showing how a total splits by a demographic/placement dimension (age, " +
+      "gender, device, platform, region). Call ads_get_insights with the relevant `breakdowns` value " +
+      "first, then pass the exact returned shares here. For a ranked list across entities (e.g. " +
+      "campaigns) use show_bar_breakdown instead — this is specifically for one entity's composition.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "e.g. 'Audience by age' or 'Spend by placement'" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              value: { type: "number", description: "Numeric magnitude used for the slice size" },
+              valueLabel: { type: "string", description: "Optional display string, e.g. '42%'" },
+            },
+            required: ["label", "value"],
+          },
+        },
+      },
+      required: ["title", "items"],
+    },
+  },
+  {
+    name: "show_budget_pacing",
+    description:
+      "Render a budget pacing meter — spend so far vs. the budget for a campaign/ad set. Use exact " +
+      "spend/budget figures from ads_get_campaign_details, ads_get_ad_set_details, or ads_get_insights.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "e.g. the campaign/ad set name" },
+        period: { type: "string", description: "e.g. 'Daily budget' or 'Lifetime budget'" },
+        spent: { type: "number", description: "Amount spent so far, in the account's currency" },
+        budget: { type: "number", description: "The budget amount, in the account's currency" },
+        unit: { type: "string", description: "Currency symbol, e.g. '₹'" },
+      },
+      required: ["title", "spent", "budget"],
+    },
+  },
+  {
+    name: "show_leads_table",
+    description:
+      "Render a table of captured leads. Use exact field values returned by ads_get_leads — never " +
+      "invent a lead's contact details.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "e.g. the lead form or campaign name" },
+        leads: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              email: { type: "string" },
+              phone: { type: "string" },
+              submittedAt: { type: "string", description: "e.g. '2026-07-08' or a datetime string" },
+              source: { type: "string", description: "Optional: which ad/campaign this lead came from" },
+            },
+          },
+        },
+      },
+      required: ["leads"],
+    },
+  },
+  {
+    name: "show_audiences_list",
+    description:
+      "Render a list of custom/lookalike audiences with their type and size. Use exact data from " +
+      "ads_get_custom_audiences (its results include lookalikes, website, customer-list, and " +
+      "engagement audiences distinguished by subtype).",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        audiences: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              type: { type: "string", description: "e.g. 'Lookalike', 'Website', 'Customer list'" },
+              size: { type: "number", description: "Approximate audience size, if known" },
+              status: { type: "string", description: "e.g. 'Ready', 'Populating'" },
+            },
+            required: ["name", "type"],
+          },
+        },
+      },
+      required: ["audiences"],
+    },
+  },
+  {
+    name: "show_creative_gallery",
+    description:
+      "Render a grid of ad creative thumbnails (images and/or videos). Use exact URLs from " +
+      "ads_get_ad_images, ads_get_ad_videos, or ads_get_ad_creatives — never invent a thumbnail URL.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              thumbnailUrl: { type: "string", description: "Image URL, or video thumbnail/poster URL" },
+              type: { type: "string", enum: ["image", "video"] },
+            },
+            required: ["thumbnailUrl", "type"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+  {
+    name: "show_opportunity_score",
+    description:
+      "Render Meta's Opportunity Score (0-100 account/campaign health signal) as a gauge, with any " +
+      "recommendations. Use the exact score and recommendations from ads_get_opportunity_score.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "e.g. the account or campaign name" },
+        score: { type: "number", description: "0-100" },
+        recommendations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              detail: { type: "string" },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: ["score"],
+    },
+  },
+  {
+    name: "show_pixel_health",
+    description:
+      "Render a pixel/dataset health summary — last fired time, match rate, status. Use exact data " +
+      "from ads_get_dataset_quality (and ads_get_pixel_details for the pixel's name/id).",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        pixelName: { type: "string" },
+        lastFiredAt: { type: "string" },
+        matchRate: { type: "string", description: "e.g. '87%'" },
+        status: { type: "string", enum: ["good", "warning", "bad"] },
+        notes: { type: "string", description: "Optional 1-line note, e.g. what's misconfigured" },
+      },
+      required: ["status"],
+    },
+  },
+  {
+    name: "show_diagnostics",
+    description:
+      "Render a technical issues list — rejected ads, delivery issues, account restrictions, error " +
+      "codes. Use exact data from ads_get_errors or ads_diagnose_underperformance. This is more " +
+      "technical than show_findings (which is for audit narrative + one-tap fixes) — use this when " +
+      "the user wants the raw error/issue list itself.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        issues: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              code: { type: "string", description: "Error code, if any" },
+              subcode: { type: "string", description: "Error subcode, if any" },
+              message: { type: "string" },
+              entity: { type: "string", description: "Which campaign/ad set/ad this affects" },
+            },
+            required: ["message"],
+          },
+        },
+      },
+      required: ["issues"],
+    },
+  },
+  {
+    name: "show_ad_rules",
+    description:
+      "Render a list of an account's automated rules (condition → action). Use exact data from " +
+      "ads_get_ad_rules.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        rules: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              condition: { type: "string", description: "e.g. 'CPC > ₹50 for 3 days'" },
+              action: { type: "string", description: "e.g. 'Pause ad set'" },
+              status: { type: "string", description: "e.g. 'Enabled', 'Disabled'" },
+            },
+            required: ["name", "condition", "action"],
+          },
+        },
+      },
+      required: ["rules"],
+    },
+  },
+  {
+    name: "show_ab_test_results",
+    description:
+      "Render A/B test (split test) results comparing variants on one metric, with the winner " +
+      "highlighted. Use exact data from ads_get_ad_studies.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        metricLabel: { type: "string", description: "e.g. 'Cost per result'" },
+        confidence: { type: "string", description: "Optional, e.g. '95% confidence'" },
+        variants: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              value: { type: "string", description: "Display-ready value for metricLabel" },
+              isWinner: { type: "boolean" },
+            },
+            required: ["name", "value"],
+          },
+        },
+      },
+      required: ["variants"],
+    },
+  },
+  {
+    name: "show_billing_summary",
+    description:
+      "Render account billing/payment info — funding source, amount due, next bill date. Use exact " +
+      "data from ads_get_billing_info / ads_get_invoices.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        paymentMethod: { type: "string" },
+        amountDue: { type: "string", description: "Display-ready, e.g. '₹4,582.00'" },
+        nextBillDate: { type: "string" },
+        accountStatus: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "show_activity_timeline",
+    description:
+      "Render a vertical timeline of recent account changes/events. Only use this when you can " +
+      "actually attribute a sequence of real events (e.g. from tool results you've read this " +
+      "conversation, or a tool that returns an activity/change log) — never fabricate a timeline.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        events: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              time: { type: "string" },
+              actor: { type: "string", description: "Optional, e.g. who/what made the change" },
+              description: { type: "string" },
+            },
+            required: ["time", "description"],
+          },
+        },
+      },
+      required: ["events"],
+    },
+  },
 ];
 
 // ── Handlers ────────────────────────────────────────────────────────────────
@@ -246,6 +577,97 @@ const localHandlers = new Map([
     async (args, ctx) => {
       ctx.onEvent("card", { kind: "ad_preview", ...args });
       return { rendered: true, note: "Ad preview embedded and shown to the user." };
+    },
+  ],
+  [
+    "show_trend_chart",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "trend", ...args });
+      return { rendered: true, note: "Trend chart shown to the user." };
+    },
+  ],
+  [
+    "show_audience_breakdown",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "donut", ...args });
+      return { rendered: true, note: "Audience breakdown shown to the user." };
+    },
+  ],
+  [
+    "show_budget_pacing",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "budget_pacing", ...args });
+      return { rendered: true, note: "Budget pacing meter shown to the user." };
+    },
+  ],
+  [
+    "show_leads_table",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "leads", ...args });
+      return { rendered: true, note: "Leads table shown to the user." };
+    },
+  ],
+  [
+    "show_audiences_list",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "audiences", ...args });
+      return { rendered: true, note: "Audiences list shown to the user." };
+    },
+  ],
+  [
+    "show_creative_gallery",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "gallery", ...args });
+      return { rendered: true, note: "Creative gallery shown to the user." };
+    },
+  ],
+  [
+    "show_opportunity_score",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "opportunity_score", ...args });
+      return { rendered: true, note: "Opportunity score shown to the user." };
+    },
+  ],
+  [
+    "show_pixel_health",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "pixel_health", ...args });
+      return { rendered: true, note: "Pixel health shown to the user." };
+    },
+  ],
+  [
+    "show_diagnostics",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "diagnostics", ...args });
+      return { rendered: true, note: "Diagnostics shown to the user." };
+    },
+  ],
+  [
+    "show_ad_rules",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "ad_rules", ...args });
+      return { rendered: true, note: "Ad rules shown to the user." };
+    },
+  ],
+  [
+    "show_ab_test_results",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "ab_test", ...args });
+      return { rendered: true, note: "A/B test results shown to the user." };
+    },
+  ],
+  [
+    "show_billing_summary",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "billing", ...args });
+      return { rendered: true, note: "Billing summary shown to the user." };
+    },
+  ],
+  [
+    "show_activity_timeline",
+    async (args, ctx) => {
+      ctx.onEvent("card", { kind: "timeline", ...args });
+      return { rendered: true, note: "Activity timeline shown to the user." };
     },
   ],
 ]);
