@@ -392,13 +392,16 @@ exports.updateVideoResult = async (req, res) => {
         resultData?.model,
       );
 
-      // Clone Yourself videos freeze an extra per-second detection surcharge
-      // (see generateCloneVideo) — add it back in here so the settled amount
-      // matches what was frozen instead of silently refunding the surcharge.
-      const detectionCredit =
-        priorDoc.inputs?.type === "clone"
-          ? getExtraDeduction(resultData?.model, "clone")
-          : 0;
+      // Some video types (e.g. Clone Yourself) freeze an extra per-second
+      // surcharge on top of the base model rate (see generateCloneVideo).
+      // Look it up by the video's own type instead of hardcoding "clone",
+      // so this settlement stays correct if other types get a surcharge
+      // registered in modelRegistry.js later — no hardcoded type check to
+      // maintain here.
+      const detectionCredit = getExtraDeduction(
+        resultData?.model,
+        priorDoc.inputs?.type,
+      );
 
       const totalCreditsToDeduct = durationInSeconds * (creditPerSecond + detectionCredit);
 

@@ -181,26 +181,32 @@ function validateCampaign(form) {
   return e;
 }
 
-function validateAssets(form) {
+function validateAssets(form, { isEdit = false } = {}) {
   const e = {};
-  if (isBlank(form.assetGroupName))
+  // Editing an existing asset group: we don't safely re-derive assetGroupName/
+  // long-headline from live Google data, and the group may already have a
+  // valid asset count outside the from-scratch creation bounds — so only
+  // enforce Google's hard minimums, not the wizard's stricter creation rules.
+  if (!isEdit && isBlank(form.assetGroupName))
     e.assetGroupName = 'Asset group name is required.';
   // pmaxBusinessName is optional — backend auto-fetches from Google account if omitted
   const heads = (form.pmaxHeadlines || []).filter((h) => h && h.trim());
   const allSlotsFilled = (form.pmaxHeadlines || []).every((h) => h && h.trim());
   if (heads.length < 3)
-    e.pmaxHeadlines = `Fill in all ${form.pmaxHeadlines?.length || 3} headline fields (${heads.length}/${form.pmaxHeadlines?.length || 3} filled).`;
-  else if (!allSlotsFilled)
+    e.pmaxHeadlines = `At least 3 headlines are required (${heads.length}/3).`;
+  else if (!isEdit && !allSlotsFilled)
     e.pmaxHeadlines = 'All headline fields must be filled in.';
   else if ([...new Set(heads.map((h) => h.toLowerCase()))].length < heads.length)
     e.pmaxHeadlines = 'Headlines must be unique.';
-  if (isBlank(form.pmaxLongHeadline))
-    e.pmaxLongHeadline = 'Long headline is required by Google (min 1, max 90 chars).';
-  else if (String(form.pmaxLongHeadline).trim().length > 90)
-    e.pmaxLongHeadline = 'Long headline must be 90 characters or fewer.';
+  if (!isEdit) {
+    if (isBlank(form.pmaxLongHeadline))
+      e.pmaxLongHeadline = 'Long headline is required by Google (min 1, max 90 chars).';
+    else if (String(form.pmaxLongHeadline).trim().length > 90)
+      e.pmaxLongHeadline = 'Long headline must be 90 characters or fewer.';
+  }
   const descs = (form.pmaxDescriptions || []).filter((d) => d && d.trim());
   if (descs.length < 2)
-    e.pmaxDescriptions = `Fill in both description fields (${descs.length}/2 filled).`;
+    e.pmaxDescriptions = `At least 2 descriptions are required (${descs.length}/2).`;
   // At least one media asset required: image (URL or uploaded) or YouTube video
   // blob: means video upload is in progress — treat as valid (YouTube URL will replace it)
   const pmaxVideoUploading = form.pmaxVideoUrl?.startsWith('blob:');
@@ -415,7 +421,7 @@ function validateBudget(form) {
  * @param {string} adType   'SEARCH' | 'DISPLAY' | 'DEMAND_GEN' (required for ad step)
  * @param {object} schema   wizard schema from server
  */
-export function validateStep(stepId, form, adType, schema) {
+export function validateStep(stepId, form, adType, schema, mode) {
   switch (stepId) {
     case 'objective':    return { ...validateObjective(form), ...validateGoal(form, schema) };
     case 'destination':  return validateDestination(form, schema);
@@ -426,7 +432,7 @@ export function validateStep(stepId, form, adType, schema) {
       ...validateCampaign(form),
       ...validateBudget(form),
     };
-    case 'assets':       return validateAssets(form);
+    case 'assets':       return validateAssets(form, { isEdit: mode === 'edit-adgroup' });
     case 'adGroup':      return { ...validateAdGroup(form), ...validateAudience(form) };
     case 'ad':           return effectiveChannel(form) === 'SHOPPING' ? {} : validateAd(form, adType || deriveAdType(effectiveChannel(form)));
     case 'review':       return {};
@@ -435,12 +441,12 @@ export function validateStep(stepId, form, adType, schema) {
 }
 
 /** Validate all pre-review steps. Returns { stepId: { field: msg } } for steps with errors. */
-export function validateAllSteps(steps, form, schema) {
+export function validateAllSteps(steps, form, schema, mode) {
   const adType = deriveAdType(effectiveChannel(form));
   const byStep = {};
   for (const s of steps || []) {
     if (!s || s.id === 'review') continue;
-    const errs = validateStep(s.id, form, adType, schema);
+    const errs = validateStep(s.id, form, adType, schema, mode);
     if (Object.keys(errs).length) byStep[s.id] = errs;
   }
   return byStep;

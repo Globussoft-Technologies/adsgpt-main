@@ -14,6 +14,7 @@ import {
   Info,
   Plus,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -23,6 +24,7 @@ import {
   parseGoogleCampaignsResponse,
   getGoogleAnalyticsData,
   disconnectGoogleAccount,
+  getGoogleAdGroupAds,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { DATE_PRESETS } from '@/components/MetaAds/metaAdsUtils';
@@ -42,6 +44,8 @@ export default function GoogleAdsDashboard() {
   const [adAccounts, setAdAccounts]       = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [campaigns, setCampaigns]         = useState([]);
+  const [campaignSearch, setCampaignSearch] = useState('');
+  const [campaignsLevel, setCampaignsLevel] = useState('campaigns');
   const [analyticsData, setAnalyticsData] = useState(null);
   const [datePreset, setDatePreset]       = useState('last_14d');
   const [activeTab, setActiveTab]         = useState('analytics');
@@ -61,7 +65,46 @@ export default function GoogleAdsDashboard() {
   const [wizard, setWizard]         = useState({ open: false, mode: 'create-full', context: null });
   const [manageNonce, setManageNonce] = useState(0);
 
-  const openWizard  = (mode, context = null) => setWizard({ open: true, mode, context });
+  const openWizard  = async (mode, context = null) => {
+    if (mode === 'edit-adgroup' && context?.isPmax) {
+      setWizard({ open: true, mode, context: { ...context, _loadingAssets: true } });
+      try {
+        const r = await getGoogleAdGroupAds({ adAccountId: context.adAccountId || selectedAccount?.id, adGroupId: context.adGroupId, refresh: true });
+        const item = (r.ads || [])[0] || null;
+        const originalAssets = {
+          headlines: item?.headlines || [],
+          descriptions: item?.descriptions || [],
+          images: item?.images || [],
+          logos: item?.logos || [],
+        };
+        const marketingImage = item?.images?.find((i) => i.fieldType === 'MARKETING_IMAGE');
+        const squareImage = item?.images?.find((i) => i.fieldType === 'SQUARE_MARKETING_IMAGE');
+        const logo = item?.logos?.[0];
+        setWizard({
+          open: true,
+          mode,
+          context: {
+            ...context,
+            assetGroupName: item?.name || context.adGroupName,
+            pmaxFinalUrl: item?.finalUrls?.[0] || '',
+            pmaxHeadlines: (item?.headlines || []).map((h) => h.text || h).filter(Boolean),
+            pmaxDescriptions: (item?.descriptions || []).map((d) => d.text || d).filter(Boolean),
+            pmaxImageUrl: marketingImage?.url || '',
+            pmaxImageAssetRN: marketingImage?.assetRN || '',
+            pmaxSquareImageAssetRN: squareImage?.assetRN || '',
+            pmaxLogoUrl: logo?.url || '',
+            pmaxLogoAssetRN: logo?.assetRN || '',
+            _originalPmaxAssets: originalAssets,
+          },
+        });
+      } catch (e) {
+        globalToast.error('Failed to load asset group data');
+        setWizard({ open: true, mode, context });
+      }
+      return;
+    }
+    setWizard({ open: true, mode, context });
+  };
   const closeWizard = () => setWizard((w) => ({ ...w, open: false }));
 
   // Deep-link entry: callers (e.g. the TemplatePicker empty-state in
@@ -473,6 +516,22 @@ export default function GoogleAdsDashboard() {
                   <p className="text-xs text-gray-500 2xl:text-sm dark:text-[#BEBEBE]">Manage your Google Ads campaigns</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {campaignsLevel === 'campaigns' && (
+                    <div
+                      className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-1.5 dark:border-white/6 dark:bg-[#171717]"
+                      title="Search campaigns by name or ID"
+                    >
+                      <Search className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40" />
+                      <input
+                        type="text"
+                        value={campaignSearch}
+                        onChange={(e) => setCampaignSearch(e.target.value)}
+                        placeholder="Search by name or ID…"
+                        title="Search campaigns by name or ID"
+                        className="w-40 bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40 2xl:w-56"
+                      />
+                    </div>
+                  )}
                   <button
                     onClick={reloadCampaigns}
                     disabled={loadingCampaigns}
@@ -528,6 +587,8 @@ export default function GoogleAdsDashboard() {
                 onRefresh={reloadCampaigns}
                 onLaunchWizard={openWizard}
                 manageNonce={manageNonce}
+                campaignSearch={campaignSearch}
+                onLevelChange={setCampaignsLevel}
               />
             </motion.div>
           )}

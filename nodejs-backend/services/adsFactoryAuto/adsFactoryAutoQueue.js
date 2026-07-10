@@ -36,10 +36,27 @@ function jobName(jobId) {
   return `ads-factory:${jobId}`;
 }
 
+// Dev/testing-only override — same convention utils/logger.js uses to gate
+// dev-only behavior (MODE=DEV or NODE_ENV=development). Forces every
+// AdsFactoryAuto job (except does_not_repeat) to repeat on a fixed short
+// interval so a full daily/weekly cycle doesn't have to be waited out
+// during local testing. Guarded on BOTH the dev-mode check AND the env var
+// being explicitly set, so it can never accidentally fire in production —
+// even if the var were mistakenly left set in a deployed .env.
+const IS_DEV_MODE =
+  String(process.env.MODE || "").toUpperCase() === "DEV" ||
+  process.env.NODE_ENV === "development";
+
 // Converts a saved ScheduleSchema doc → the object buildRepeatOpts expects.
 // Shared by controller and reloadActiveJobs so both resolve the same way.
 function resolveScheduleForQueue(schedule) {
   const { frequency, startDate, timezone } = schedule;
+
+  const fastCronMinutes = Number(process.env.ADSFACTORY_TEST_FAST_CRON_MINUTES || 0);
+  if (IS_DEV_MODE && fastCronMinutes > 0 && frequency !== "does_not_repeat") {
+    logger.warn(`[resolveScheduleForQueue] DEV fast-cron override active — repeating every ${fastCronMinutes}min instead of "${frequency}"`);
+    return { type: "interval", every: fastCronMinutes * 60_000, timezone };
+  }
 
   if (frequency === "does_not_repeat") {
     let runAt;
@@ -81,11 +98,9 @@ function resolveScheduleForQueue(schedule) {
 /**
  * Convert the resolved schedule object (from controller) into BullMQ repeat options.
  *
- * schedule.type is one of: "cron" | "interval" | "once"
- *
- * For "interval" the UI only exposes days + hours (no minutes/seconds),
- * so intervalDays and intervalHours are both supported.
- * Total ms = (days * 86_400_000) + (hours * 3_600_000)
+ * schedule.type is one of: "cron" | "custom" | "once" in real production
+ * schedules, plus "interval" — DEV-ONLY, produced exclusively by the
+ * ADSFACTORY_TEST_FAST_CRON_MINUTES override above when IS_DEV_MODE is true.
  */
 function buildRepeatOpts(schedule) {
   if (schedule.type === "cron") {
@@ -97,12 +112,10 @@ function buildRepeatOpts(schedule) {
     };
   }
 
-  if (schedule.type === "interval") {
-    const days  = Number(schedule.intervalDays  || 0);
-    const hours = Number(schedule.intervalHours || 0);
-    const every = days * 86_400_000 + hours * 3_600_000;
-    if (every <= 0) throw new Error("interval must be at least 1 hour");
-    return { repeat: { every } };
+  // Dev-only fast-repeat — every value is a plain ms interval, already
+  // computed by the ADSFACTORY_TEST_FAST_CRON_MINUTES override.
+  if (schedule.type === "interval" && schedule.every) {
+    return { repeat: { every: Number(schedule.every) } };
   }
 
   // "custom" — repeatEvery + repeatUnit + optional repeatOnDays
@@ -437,6 +450,20 @@ async function reloadActiveJobs() {
       }
 
       await scheduleJob(job._id, resolved);
+
+      // scheduleJob only touches BullMQ — the DB's schedule.nextRunAt is a
+      // separate field the frontend reads directly, so it must be synced
+      // here too. Without this, a restart that changes the effective cron
+      // (e.g. the ADSFACTORY_TEST_FAST_CRON_MINUTES dev override) re-registers
+      // BullMQ correctly but leaves the UI showing the stale pre-restart time.
+      const freshNextRunAt = await getNextRunTime(job._id.toString(), job.schedule);
+      if (freshNextRunAt) {
+        await AdsFactoryJob.updateOne(
+          { _id: job._id },
+          { $set: { "schedule.nextRunAt": freshNextRunAt } }
+        );
+      }
+
       count++;
     } catch (err) {
       logger.error(`[adsFactoryAuto] failed to reload job ${job._id}: ${err.message}`);

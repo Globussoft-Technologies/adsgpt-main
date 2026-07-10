@@ -18,6 +18,10 @@ const RunHistorySchema = new mongoose.Schema(
     googleAdId: { type: String, default: null }, // Google Ads ad ID created this run
     // Ad IDs for any other platform — { tiktok: "id", snapchat: "id", linkedin: "id", … }
     platformAdIds: { type: Map, of: String, default: () => new Map() },
+    // Per-platform campaign/ad-group/ad-set IDs from this run, used to build
+    // deep links straight to the created ad in each platform's UI —
+    // { meta: { campaignId, adSetId }, google: { campaignId, adGroupId } }
+    platformContext: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     error: { type: String, default: null }, // error message if status = "failed"
 
     // Storing the creatives generated during this run locally (avoids polluting campaign.creatives)
@@ -32,6 +36,9 @@ const RunHistorySchema = new mongoose.Schema(
           callToAction: { type: String, default: "", trim: true },
           description:  { type: String, default: "", trim: true },
           platform:     { type: String, default: "", trim: true },
+          // The real ad ID created for this specific creative on each
+          // platform it was posted to — { meta: "1202...", google: "789..." }
+          postedAdIds:  { type: Map, of: String, default: () => new Map() },
         },
         { _id: false }
       )],
@@ -95,6 +102,9 @@ const MetaTargetSchema = new mongoose.Schema(
       pageId:             { type: String, default: "" }, // Facebook Page the ad runs under
       payload:            { type: mongoose.Schema.Types.Mixed, required: true },
     },
+    // Meta campaign created on this job's first successful run — reused by
+    // every subsequent run so all runs post ad sets/ads under one campaign.
+    createdCampaignId: { type: String, default: null },
   },
   { _id: false }
 );
@@ -111,6 +121,23 @@ const GoogleTargetSchema = new mongoose.Schema(
       customerId:         { type: String, default: "" },
       payload:            { type: mongoose.Schema.Types.Mixed, required: true },
     },
+    // Google campaign created on this job's first successful run — reused by
+    // every subsequent run so all runs post ad groups/ads under one campaign.
+    createdCampaignId: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+// ─── AlertsSchema ─────────────────────────────────────────────────────────────
+
+// Per-job alert config. After every run cycle finishes (success/partial/failed)
+// the orchestrator emails a cycle summary to these recipients. emailTo is a
+// comma-separated list (up to 5) stored as a single string — same convention as
+// the Meta Autopilot's autopilotSettings.alerts.emailTo, split at send-time by
+// adsFactoryAlertService.parseEmailRecipients. Empty/unset → no email is sent.
+const AlertsSchema = new mongoose.Schema(
+  {
+    emailTo: { type: String, default: "", trim: true },
   },
   { _id: false }
 );
@@ -139,6 +166,9 @@ const AdsFactoryJobSchema = new mongoose.Schema(
       meta:   { type: MetaTargetSchema },
       google: { type: GoogleTargetSchema },
     },
+
+    // Per-job alert config — cycle-complete email recipients (see AlertsSchema)
+    alerts: { type: AlertsSchema, default: () => ({}) },
 
     // Lifecycle state of the job
     status: {

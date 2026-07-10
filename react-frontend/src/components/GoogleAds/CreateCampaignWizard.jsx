@@ -37,6 +37,8 @@ import {
   updateGoogleAd,
   uploadGoogleImage,
   uploadGoogleVideo,
+  addAssetToAssetGroup,
+  removeAssetFromAssetGroup,
   getGoogleWizardSchema,
   listGoogleCampaignTemplates,
   getGoogleCampaignTemplate,
@@ -132,7 +134,11 @@ function buildSteps(mode, form = {}, schema = null) {
   if (mode === 'create-adgroup') return BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
   if (mode === 'create-ad')      return BASE_STEPS.filter((s) => ['ad', 'review'].includes(s.id));
   if (mode === 'edit-campaign')  return BASE_STEPS.filter((s) => ['campaign', 'review'].includes(s.id));
-  if (mode === 'edit-adgroup')   return BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
+  if (mode === 'edit-adgroup') {
+    return form.isPmax
+      ? PMAX_STEPS.filter((s) => ['assets', 'review'].includes(s.id))
+      : BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
+  }
   if (mode === 'edit-ad')        return BASE_STEPS.filter((s) => ['ad', 'review'].includes(s.id));
 
   const channel = effectiveChannel(form);
@@ -224,6 +230,8 @@ function buildInitialForm(context) {
     storeAddress:       context?.storeAddress   || '',
     locationRadius:     context?.locationRadius || '',
     // PERFORMANCE_MAX extras
+    isPmax:             !!context?.isPmax,
+    _originalPmaxAssets: context?._originalPmaxAssets || null,
     assetGroupName:     context?.assetGroupName      || '',
     businessDescription:context?.businessDescription || '',
     finalUrlSuffix:     context?.finalUrlSuffix      || '',
@@ -2048,9 +2056,12 @@ function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpl
 // ─── Campaign Templates ────────────────────────────────────────────────────────
 
 // Strip imageFile before serialising — not JSON-safe and not reusable.
+// Also drop keywords with no text — they're a SEARCH-only concept and the
+// wizard seeds a blank placeholder row by default for every destination.
 function stripUnsavable(form) {
-  const { imageFile: _i, ...rest } = form;
-  return rest;
+  const { imageFile: _i, keywords, ...rest } = form;
+  const validKeywords = (keywords || []).filter((k) => k?.text?.trim());
+  return validKeywords.length ? { ...rest, keywords: validKeywords } : rest;
 }
 
 // "Save as template" — shown on Review step in create-full mode.
@@ -2483,8 +2494,11 @@ export default function CreateCampaignWizard({
 
 
   // ── reset when wizard opens ───────────────────────────────────────────────
+  // Also re-run when a PMax asset-group edit finishes its async pre-fetch
+  // (context flips from a `_loadingAssets` placeholder to the real payload)
+  // so the form actually picks up the loaded headlines/descriptions/media.
   useEffect(() => {
-    if (open) {
+    if (open && !context?._loadingAssets) {
       setFormState(buildInitialForm(context));
       setStepIndex(0);
       setTouched({});
@@ -2494,7 +2508,7 @@ export default function CreateCampaignWizard({
       setAttemptedStepIds(new Set());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, context?._loadingAssets]);
 
   const setField = useCallback((name, value) => {
     setFormState((f) => ({ ...f, [name]: value }));
@@ -2556,10 +2570,10 @@ export default function CreateCampaignWizard({
 
   // re-validate current step on form change
   useEffect(() => {
-    setErrors(validateStep(currentStep?.id, form, adType, schema));
-  }, [form, currentStep?.id, adType, schema]);
+    setErrors(validateStep(currentStep?.id, form, adType, schema, mode));
+  }, [form, currentStep?.id, adType, schema, mode]);
 
-  const stepErrors   = validateAllSteps(steps, form, schema);
+  const stepErrors   = validateAllSteps(steps, form, schema, mode);
   const canLaunch    = Object.keys(stepErrors).length === 0;
 
   const launchLabel = (() => {
@@ -2572,7 +2586,7 @@ export default function CreateCampaignWizard({
     if (['edit-campaign', 'edit-adgroup', 'edit-ad'].includes(mode)) return Check;
     return RefreshCw;
   })();
-  const rawStepErrors = useMemo(() => validateStep(currentStep?.id, form, adType, schema), [currentStep?.id, form, adType, schema]);
+  const rawStepErrors = useMemo(() => validateStep(currentStep?.id, form, adType, schema, mode), [currentStep?.id, form, adType, schema, mode]);
   const visibleStepErrors = useMemo(() => {
     const showAll = attemptedStepIds.has(currentStep?.id);
     return Object.fromEntries(Object.entries(rawStepErrors).filter(([k]) => touched[k] || showAll));
@@ -2689,7 +2703,7 @@ export default function CreateCampaignWizard({
   };
 
   const goNext = () => {
-    const errs = validateStep(currentStep.id, form, adType, schema);
+    const errs = validateStep(currentStep.id, form, adType, schema, mode);
     setErrors(errs);
     setAttemptedStepIds((prev) => new Set([...prev, currentStep.id]));
     if (Object.keys(errs).length) return;
@@ -2784,7 +2798,47 @@ export default function CreateCampaignWizard({
       // Step 2 — Ad Group
       const isPmax = effectiveChannel(form) === 'PERFORMANCE_MAX';
       const isShopping = effectiveChannel(form) === 'SHOPPING';
-      if (mode === 'edit-adgroup') {
+      if (mode === 'edit-adgroup' && isPmax) {
+        // No bulk-update endpoint for asset group assets — diff against what
+        // was loaded when the wizard opened and add/remove only what changed.
+        const original = form._originalPmaxAssets || { headlines: [], descriptions: [], images: [], logos: [] };
+        const newHeadlines = (form.pmaxHeadlines || []).map((h) => h.trim()).filter(Boolean);
+        const newDescriptions = (form.pmaxDescriptions || []).map((d) => d.trim()).filter(Boolean);
+
+        const origHeadlineTexts = original.headlines.map((h) => (h.text || h || '').trim());
+        const origDescriptionTexts = original.descriptions.map((d) => (d.text || d || '').trim());
+
+        const headlinesToRemove = original.headlines.filter((h) => !newHeadlines.includes((h.text || h || '').trim()));
+        const headlinesToAdd = newHeadlines.filter((t) => !origHeadlineTexts.includes(t));
+        const descriptionsToRemove = original.descriptions.filter((d) => !newDescriptions.includes((d.text || d || '').trim()));
+        const descriptionsToAdd = newDescriptions.filter((t) => !origDescriptionTexts.includes(t));
+
+        const imageChanged = form.pmaxImageUrl && form.pmaxImageUrl !== (original.images.find((i) => i.fieldType === 'MARKETING_IMAGE')?.url || '');
+        const logoChanged = form.pmaxLogoUrl && form.pmaxLogoUrl !== (original.logos?.[0]?.url || '');
+
+        for (const h of headlinesToRemove) {
+          if (h.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: h.assetRN, fieldType: 'HEADLINE' });
+        }
+        for (const text of headlinesToAdd) {
+          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'HEADLINE', text });
+        }
+        for (const d of descriptionsToRemove) {
+          if (d.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: d.assetRN, fieldType: 'DESCRIPTION' });
+        }
+        for (const text of descriptionsToAdd) {
+          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'DESCRIPTION', text });
+        }
+        if (imageChanged && form.pmaxImageAssetRN) {
+          const oldImage = original.images.find((i) => i.fieldType === 'MARKETING_IMAGE');
+          if (oldImage?.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: oldImage.assetRN, fieldType: 'MARKETING_IMAGE' });
+          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'MARKETING_IMAGE', imageAssetRN: form.pmaxImageAssetRN });
+        }
+        if (logoChanged && form.pmaxLogoAssetRN) {
+          const oldLogo = original.logos?.[0];
+          if (oldLogo?.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: oldLogo.assetRN, fieldType: 'LOGO' });
+          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'LOGO', imageAssetRN: form.pmaxLogoAssetRN });
+        }
+      } else if (mode === 'edit-adgroup') {
         await updateGoogleAdGroup({
           adAccountId,
           adGroupId,
@@ -2898,6 +2952,17 @@ export default function CreateCampaignWizard({
   };
 
   if (!open) return null;
+
+  if (context?._loadingAssets) {
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+        <div className="flex h-40 w-full max-w-sm flex-col items-center justify-center gap-3 rounded-2xl bg-white shadow-2xl dark:bg-[#141414]">
+          <Loader2 className="h-6 w-6 animate-spin text-[#4285F4]" />
+          <p className="text-xs text-gray-500 dark:text-white/50">Loading asset group…</p>
+        </div>
+      </div>
+    );
+  }
 
   const modeMeta = WIZARD_MODE_META[mode] || WIZARD_MODE_META['create-full'];
 

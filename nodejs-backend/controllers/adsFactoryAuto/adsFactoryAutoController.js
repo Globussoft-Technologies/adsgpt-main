@@ -5,6 +5,8 @@ const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePrese
 const {
   createJobSchema,
   updateJobSchema,
+  EDITABLE_META_PAYLOAD_FIELDS,
+  EDITABLE_GOOGLE_PAYLOAD_FIELDS,
 } = require("../../Validations/adsFactoryAuto/adsFactoryAutoValidation");
 const logger = require("../../utils/logger");
 const { _runningJobs } = require("../../services/adsFactoryAuto/adsFactoryAutoOrchestrator");
@@ -62,6 +64,7 @@ class AdsFactoryAutoController {
         pairsPerCycle: value.pairsPerCycle ?? 1,
         model:         value.model         ?? null,
         targets:        value.targets ?? {},
+        alerts:         value.alerts  ?? {},
         status:         "active",
       });
 
@@ -95,7 +98,10 @@ class AdsFactoryAutoController {
       const { status, campaignId, skip = 0, limit = 20 } = req.query;
 
       const filter = { userId };
+      // Archived (soft-deleted) jobs are hidden from the default list — pass
+      // ?status=archived explicitly to see them.
       if (status) filter.status = status;
+      else filter.status = { $ne: "archived" };
       if (campaignId) filter.campaignId = campaignId;
 
       const skipNum = Number(skip);
@@ -202,19 +208,133 @@ class AdsFactoryAutoController {
         });
       }
 
-      if (value.campaignId     !== undefined) job.campaignId     = value.campaignId;
-      if (value.pairsPerCycle  !== undefined) job.pairsPerCycle  = value.pairsPerCycle;
-      if (value.model          !== undefined) job.model          = value.model;
-      if (value.callToAction   !== undefined) job.callToAction   = value.callToAction;
-      if (value.destinationUrl !== undefined) job.destinationUrl = value.destinationUrl;
+      // Validate the targets diff BEFORE mutating `job` at all — a rejected
+      // request must leave the in-memory document (and therefore the DB,
+      // since nothing is saved yet) completely untouched.
+      // Platforms being newly added by this request (no existing template on
+      // the job) — these accept a full template, since there's nothing to
+      // diff against yet. Platforms that already have a template are still
+      // restricted to editing budget/CTA/link only (see below).
+      const newlyAddedPlatforms = new Set();
 
       if (value.targets !== undefined) {
-        // Merge the incoming platform targets — both meta and google can be active at once
+        // The frontend may send back the full job object it already has (so
+        // it doesn't need to hand-pick fields), but only budget/CTA/link are
+        // actually editable on an EXISTING platform template — the
+        // campaign/ad group/ad structure was fixed when that template was
+        // first used. Any non-editable field that differs from the saved
+        // value is rejected by name; fields echoed back unchanged are
+        // accepted silently either way. A platform with no existing template
+        // is a brand-new addition and accepts its full template as-is.
+        const EDITABLE_FIELDS = { meta: EDITABLE_META_PAYLOAD_FIELDS, google: EDITABLE_GOOGLE_PAYLOAD_FIELDS };
+        const rejections = [];
+
         for (const [platform, targetData] of Object.entries(value.targets)) {
-          if (!job.targets[platform]) job.targets[platform] = {};
-          Object.assign(job.targets[platform], targetData);
+          const savedTemplate = job.targets[platform]?.template;
+          if (!savedTemplate) {
+            newlyAddedPlatforms.add(platform);
+            continue; // new platform — full template accepted, nothing to diff
+          }
+
+          // Top-level template fields (name, objective, conversionLocation, pageId/customerId)
+          const incomingTemplate = targetData.template || {};
+          for (const key of ["name", "objective", "conversionLocation", "pageId", "customerId"]) {
+            if (incomingTemplate[key] === undefined) continue;
+            const savedVal = savedTemplate[key] ?? "";
+            const incomingVal = incomingTemplate[key] ?? "";
+            if (String(savedVal) !== String(incomingVal)) {
+              rejections.push(`targets.${platform}.template.${key} cannot be changed`);
+            }
+          }
+
+          // Payload fields — only EDITABLE_FIELDS[platform] may actually differ
+          const savedPayload    = savedTemplate.payload || {};
+          const incomingPayload = incomingTemplate.payload || {};
+          const editableSet = new Set(EDITABLE_FIELDS[platform] || []);
+          for (const key of Object.keys(incomingPayload)) {
+            if (editableSet.has(key)) continue;
+            const savedVal = savedPayload[key] ?? "";
+            const incomingVal = incomingPayload[key] ?? "";
+            if (String(savedVal) !== String(incomingVal)) {
+              rejections.push(`targets.${platform}.template.payload.${key} cannot be changed`);
+            }
+          }
+        }
+
+        if (rejections.length) {
+          return res.status(400).json({
+            success: false,
+            error: `The following fields cannot be edited on an existing job: ${rejections.join("; ")}`,
+          });
+        }
+      }
+
+      // Validation passed (or no targets were sent) — now safe to mutate.
+      if (value.campaignId    !== undefined) job.campaignId    = value.campaignId;
+      if (value.pairsPerCycle !== undefined) job.pairsPerCycle = value.pairsPerCycle;
+      if (value.model         !== undefined) job.model         = value.model;
+
+      // Alert recipients — merge (PATCH semantics): only overwrite emailTo when
+      // it was sent, so an update that omits `alerts` leaves recipients intact.
+      if (value.alerts !== undefined) {
+        if (!job.alerts) job.alerts = {};
+        if (value.alerts.emailTo !== undefined) job.alerts.emailTo = value.alerts.emailTo;
+        job.markModified("alerts");
+      }
+
+      if (value.targets !== undefined) {
+        const EDITABLE_FIELDS = { meta: EDITABLE_META_PAYLOAD_FIELDS, google: EDITABLE_GOOGLE_PAYLOAD_FIELDS };
+        for (const [platform, targetData] of Object.entries(value.targets)) {
+          if (newlyAddedPlatforms.has(platform)) {
+            // Brand-new platform on this job — save its full template as-is.
+            if (!job.targets[platform]) job.targets[platform] = {};
+            job.targets[platform].template = targetData.template;
+            continue;
+          }
+          const editableSet = new Set(EDITABLE_FIELDS[platform] || []);
+          for (const key of Object.keys(targetData.template.payload)) {
+            if (editableSet.has(key)) {
+              job.targets[platform].template.payload[key] = targetData.template.payload[key];
+            }
+          }
         }
         job.markModified("targets");
+
+        // If a Google campaign already exists for this job (created on a prior
+        // run), push the campaign-level budget change to Google now instead of
+        // waiting for the next run. Name is intentionally excluded — never
+        // renamed. lifetimeBudget/cpcBid/finalUrl are ad-group/ad-level, not
+        // campaign-level — they aren't pushed here because there's nothing to
+        // push to yet; they take effect naturally on the next run, since the
+        // orchestrator always builds a fresh ad group + ads from the saved
+        // template payload every run.
+        const googleCampaignId = job.targets.google?.createdCampaignId;
+        const googlePayload    = value.targets.google?.template?.payload;
+        if (googleCampaignId && googlePayload) {
+          try {
+            const googleAdController = require("../adPosting/googleAdController");
+            const adAccountId = job.targets.google.template.payload.adAccountId || job.targets.google.template.customerId;
+            const dailyBudgetMicros = googlePayload.dailyBudgetMicros
+              ?? (googlePayload.dailyBudget != null ? Math.round(Number(googlePayload.dailyBudget) * 1_000_000) : undefined);
+            const updateReq = {
+              body: { adAccountId, campaignId: googleCampaignId, dailyBudgetMicros },
+              user: { user_id: userId },
+            };
+            let updateStatus = 200, updateBody = null;
+            const updateRes = {
+              status: (code) => { updateStatus = code; return updateRes; },
+              json:   (data)  => { updateBody = data; return updateRes; },
+            };
+            await googleAdController.updateCampaignAPI(updateReq, updateRes);
+            if (updateStatus >= 400) {
+              logger.warn(`[adsFactoryAuto:updateJob] Google campaign sync failed: ${updateBody?.error || "unknown error"}`);
+            } else {
+              logger.info(`[adsFactoryAuto:updateJob] synced budget change to existing Google campaign ${googleCampaignId}`);
+            }
+          } catch (e) {
+            logger.warn(`[adsFactoryAuto:updateJob] Google campaign sync failed: ${e.message}`);
+          }
+        }
       }
 
       if (value.schedule) {
@@ -240,8 +360,8 @@ class AdsFactoryAutoController {
   async deleteJob(req, res) {
     /*
       #swagger.tags = ['Ads Factory Autopilot']
-      #swagger.summary = 'Delete autopilot job'
-      #swagger.description = 'Permanently delete an autopilot job and cancel its scheduled queue entry.'
+      #swagger.summary = 'Delete (archive) autopilot job'
+      #swagger.description = 'Soft-deletes an autopilot job — sets status to "archived" and cancels its scheduled queue entry. The job document and its full runHistory are preserved so campaign-level activity/history views keep showing past runs. Archived jobs are excluded from the normal active job list.'
       #swagger.security = [{ "BearerAuth": [] }]
       #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
     */
@@ -257,7 +377,14 @@ class AdsFactoryAutoController {
         });
       }
 
-      await AdsFactoryJob.findOneAndDelete({ _id: req.params.id, userId });
+      // Soft-delete: archive instead of removing the document, so runHistory
+      // (generated creatives, errors, posting outcomes) is never lost —
+      // campaign-level activity/history views continue to show past runs
+      // even after the job that created them is "deleted" by the user.
+      await AdsFactoryJob.updateOne(
+        { _id: req.params.id, userId },
+        { $set: { status: "archived", "schedule.nextRunAt": null } }
+      );
       await cancelJob(req.params.id);
       if (job.campaignId) {
         const stuckCampaign = await Campaign.findOne(
@@ -274,7 +401,7 @@ class AdsFactoryAutoController {
           );
         }
       }
-      return res.json({ success: true, message: "Job deleted" });
+      return res.json({ success: true, message: "Job archived" });
     } catch (err) {
       logger.error(`[adsFactoryAuto:deleteJob] ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });
@@ -404,6 +531,68 @@ class AdsFactoryAutoController {
     }
   }
 
+  async testAlertEmail(req, res) {
+    /*
+      #swagger.tags = ['Ads Factory Autopilot']
+      #swagger.summary = 'Send a test alert email'
+      #swagger.description = 'Sends a plain confirmation email so the user can verify delivery before relying on the automation. Recipients: the emailTo passed in the request (may be unsaved form state) or the job\'s saved alerts.emailTo.'
+      #swagger.security = [{ "BearerAuth": [] }]
+      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
+    */
+    try {
+      const userId = req.user.user_id;
+      const { sendEmail, parseEmailRecipients } =
+        require("../../services/adsFactoryAuto/adsFactoryAlertService");
+
+      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId }).lean();
+      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      // Prefer whatever the user currently has typed in the Alert emails
+      // field (may be unsaved) over the job's last-saved value — otherwise
+      // "Send test" silently mails the stale DB address after the user edits
+      // the field but before clicking "Update automation".
+      const explicitTo = req.body?.to || req.query?.to || null;
+      const recipients = parseEmailRecipients(explicitTo || job.alerts?.emailTo);
+      if (!recipients.length) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "No email address saved on this automation. Add one (or up to 5, comma-separated) and try again.",
+        });
+      }
+
+      const campaign = job.campaignId
+        ? await Campaign.findById(job.campaignId).select("metadata").lean()
+        : null;
+      const campaignName = campaign?.metadata?.campaignName || "this campaign";
+      const now = new Date();
+      const bodyLines = [
+        `AdsGPT Ads Factory — test email`,
+        `campaign: ${campaignName}`,
+        `sent: ${now.toISOString()}`,
+        ``,
+        `This is a test of the alert email for this automation.`,
+        `If you received this, alert emails are working correctly. You'll get`,
+        `an email like this every time this automation finishes a run.`,
+      ];
+
+      const result = await sendEmail({
+        to: recipients,
+        subject: `AdsGPT Ads Factory — test email`,
+        text: bodyLines.join("\n"),
+      });
+
+      return res.status(result.sent ? 200 : 500).json({
+        success: !!result.sent,
+        to:      recipients,
+        ...result,
+      });
+    } catch (err) {
+      logger.error(`[adsFactoryAuto:testAlertEmail] ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
   async getCtaOptions(req, res) {
     /*
       #swagger.tags = ['Ads Factory Autopilot']
@@ -444,30 +633,88 @@ class AdsFactoryAutoController {
   async getRunHistory(req, res) {
     /*
       #swagger.tags = ['Ads Factory Autopilot']
-      #swagger.summary = 'Get job run history'
-      #swagger.description = 'Retrieve paginated run history for an autopilot job, ordered newest-first.'
+      #swagger.summary = 'Get run history — by job or by campaign'
+      #swagger.description = 'Retrieve paginated run history, newest-first. Pass a job ObjectId in :id for a single job'\''s history. Pass an Ads Factory campaignId in :id to get every autopilot job ever created for that campaign, each with its own paginated history — covers the full automation lifetime across job restarts, not just the currently-active job.'
       #swagger.security = [{ "BearerAuth": [] }]
-      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
+      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId OR Ads Factory campaignId', type: 'string', required: true }
       #swagger.parameters['page'] = { description: 'Page number (default: 1)', type: 'integer', default: 1 }
       #swagger.parameters['limit'] = { description: 'Items per page (default: 20)', type: 'integer', default: 20 }
     */
     try {
       const userId = req.user.user_id;
       const { page = 1, limit = 20 } = req.query;
-      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId })
-        .select("runHistory totalRuns failedRuns")
-        .lean();
-      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+      const skip  = (Number(page) - 1) * Number(limit);
+      const SELECT = "campaignId runHistory totalRuns failedRuns status createdAt";
 
-      const skip    = (Number(page) - 1) * Number(limit);
-      const history = [...job.runHistory].reverse().slice(skip, skip + Number(limit));
+      // :id is a job ObjectId first; if no job matches, treat it as a
+      // campaignId and return every autopilot job ever created for that
+      // campaign — so pausing/deleting a job and starting a new one for the
+      // same campaign doesn't hide the earlier job's history from this view.
+      const jobById = await AdsFactoryJob.findOne({ _id: req.params.id, userId })
+        .select(SELECT).lean();
 
+      let jobs;
+      let idType;
+      if (jobById) {
+        jobs = [jobById];
+        idType = "jobId";
+      } else {
+        jobs = await AdsFactoryJob.find({ campaignId: req.params.id, userId })
+          .select(SELECT).sort({ createdAt: -1 }).lean();
+        if (!jobs.length) {
+          return res.status(404).json({ success: false, error: "No job or campaign found for this id" });
+        }
+        idType = "campaignId";
+      }
+
+      const buildHistoryPage = (job) => {
+        const allRuns = [...(job.runHistory || [])].reverse();
+        const data = allRuns.slice(skip, skip + Number(limit)).map((run) => ({
+          runId:       run.runId,
+          status:      run.status, // "success" | "failed" | "partial" | "skipped"
+          startedAt:   run.startedAt,
+          completedAt: run.completedAt,
+          durationMs:  (run.startedAt && run.completedAt) ? new Date(run.completedAt) - new Date(run.startedAt) : null,
+          // The cause when a run failed/partially failed — null on a clean success.
+          error: run.error || null,
+          platformAdIds: run.platformAdIds
+            ? (run.platformAdIds instanceof Map ? Object.fromEntries(run.platformAdIds) : run.platformAdIds)
+            : {},
+          // What Autopilot actually generated + attempted to post this run.
+          generatedCreatives: (run.automationCreatives || []).map((c) => ({
+            creativeId:   c.creativeId,
+            headline:     c.headline || null,
+            message:      c.message || null,
+            description:  c.description || null,
+            imageUrl:     c.imageUrl || null,
+            callToAction: c.callToAction || null,
+            linkUrl:      c.linkUrl || null,
+            platform:     c.platform || null,
+          })),
+        }));
+        return {
+          jobId:      job._id,
+          jobStatus:  job.status,
+          createdAt:  job.createdAt,
+          total:      job.totalRuns || (job.runHistory || []).length,
+          failedRuns: job.failedRuns || 0,
+          page:       Number(page),
+          data,
+        };
+      };
+
+      if (idType === "jobId") {
+        const single = buildHistoryPage(jobs[0]);
+        return res.json({ success: true, ...single });
+      }
+
+      // campaignId lookup — one entry per job, newest job first
+      const perJob = jobs.map(buildHistoryPage);
       return res.json({
         success:    true,
-        total:      job.totalRuns || job.runHistory.length,
-        failedRuns: job.failedRuns || 0,
-        page:       Number(page),
-        data:       history,
+        campaignId: req.params.id,
+        totalJobs:  perJob.length,
+        jobs:       perJob,
       });
     } catch (err) {
       logger.error(`[adsFactoryAuto:getRunHistory] ${err.message}`);

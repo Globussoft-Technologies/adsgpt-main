@@ -17,6 +17,10 @@ const googleCampaignTemplateSchema = new mongoose.Schema(
     // Denormalized from payload for the picker UI.
     objective: { type: String, default: "" },
     conversionLocation: { type: String, default: "" },
+    // Derived from conversionLocation at save time — lets the picker filter
+    // by ?type=image|video|text without the caller needing to know Google's
+    // full channel-type vocabulary (SEARCH/DISPLAY/PERFORMANCE_MAX/etc).
+    mediaType: { type: String, enum: ["image", "video", "text"], default: "image" },
     // The wizard `form` snapshot. Mixed because the shape varies per objective.
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
   },

@@ -135,6 +135,19 @@ function buildGoogleTemplateForJob(formTemplate, fullTemplate) {
   };
 }
 
+// Normalize the form's alerts.emailTo into the value the backend expects — a
+// trimmed, comma-separated string (the backend splits + validates it). Returns
+// an `alerts` object only when a non-empty value is present, so we never send
+// an empty alerts block on create; on update we DO send "" so a cleared field
+// clears the saved recipients (see buildJobUpdatePayload).
+function buildAlertsForJob(config, { allowEmpty = false } = {}) {
+  const emailTo = typeof config?.alerts?.emailTo === 'string'
+    ? config.alerts.emailTo.trim()
+    : '';
+  if (!emailTo && !allowEmpty) return null;
+  return { emailTo };
+}
+
 // Builds the POST /jobs request body from the form's values + the slice's
 // cached full template document. `fullTemplate` is looked up by the calling
 // thunk from `metaTemplatesById[template.id].template`.
@@ -206,6 +219,11 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate, fullGoogleTempl
   if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
   if (Object.keys(targets).length > 0) payload.targets = targets;
 
+  // Alert emails — only attached when the user actually typed something (no
+  // empty block on create).
+  const alerts = buildAlertsForJob(config);
+  if (alerts) payload.alerts = alerts;
+
   return payload;
 }
 
@@ -270,6 +288,12 @@ function buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate) {
   if (metaTemplate) targets.meta = { template: metaTemplate };
   if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
   if (Object.keys(targets).length > 0) payload.targets = targets;
+
+  // Alert emails on update — send even when empty ("") so clearing the field
+  // clears the saved recipients (backend PATCH-merges alerts.emailTo). Only
+  // omitted entirely when the form never carried an alerts object at all.
+  const alerts = config.alerts ? buildAlertsForJob(config, { allowEmpty: true }) : null;
+  if (alerts) payload.alerts = alerts;
 
   return payload;
 }
@@ -459,6 +483,15 @@ function mapJobToEntry(job, previous) {
             apiGoogleTemplate?.payload?.linkUrl ||
             '',
         },
+      },
+      // Alert emails — the backend stores this as job.alerts.emailTo (a
+      // comma-separated string). Fall back to the previous local value so a
+      // partial response doesn't blank the field the user just typed.
+      alerts: {
+        emailTo:
+          (typeof job?.alerts?.emailTo === 'string' ? job.alerts.emailTo : null) ??
+          previous?.config?.alerts?.emailTo ??
+          '',
       },
     },
     stats: {
@@ -881,6 +914,68 @@ export const deleteAutomation = createAsyncThunk(
     }
 
     return campaignId;
+  }
+);
+
+// ----------------------------------------------------------------------------
+// testAutomationEmail — POST /ads-factory/autopilot/jobs/:jobId/test-email
+//
+// Sends a sample "cycle complete" email so the user can verify delivery +
+// rendering before relying on the automation. Recipients are resolved by the
+// backend: the optional `to` we pass (the emailTo currently typed in the form)
+// → the job's saved alerts.emailTo → the account owner's email. Requires an
+// existing job (edit mode) — the backend looks the job up by id.
+//
+// Does NOT touch Redux state — it's a fire-once side effect. Resolves with the
+// backend result ({ sent, to, reason?, error? }); rejects with a message the
+// component surfaces via toast.
+// ----------------------------------------------------------------------------
+export const testAutomationEmail = createAsyncThunk(
+  'adFactoryAutomation/testEmail',
+  async ({ campaignId, to } = {}, { getState, rejectWithValue }) => {
+    if (!campaignId) {
+      return rejectWithValue({ message: 'campaignId is required' });
+    }
+    const previous = getState().adFactoryAutomation?.configsByCampaign?.[campaignId];
+    const jobId = previous?.jobId;
+    if (!jobId) {
+      return rejectWithValue({
+        message: 'Save the automation first, then send a test email.',
+      });
+    }
+
+    try {
+      const token = getCookies();
+      const trimmedTo = typeof to === 'string' ? to.trim() : '';
+      const res = await axios.post(
+        `${AUTOPILOT_BASE}/jobs/${jobId}/test-email`,
+        trimmedTo ? { to: trimmedTo } : {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      const data = res?.data || {};
+      // Backend returns { success, sent, to: [...], reason?, error? }. Treat a
+      // non-sent 200 (shouldn't happen) as a failure so the UI never shows a
+      // false "sent" toast.
+      if (!data.sent) {
+        return rejectWithValue({
+          message: data.error || data.reason || 'Test email was not sent',
+        });
+      }
+      return { to: data.to || (trimmedTo ? [trimmedTo] : []) };
+    } catch (err) {
+      return rejectWithValue({
+        message:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to send test email',
+      });
+    }
   }
 );
 

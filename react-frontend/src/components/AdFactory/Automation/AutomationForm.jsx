@@ -8,6 +8,7 @@ import {
   saveAutomation,
   updateAutomation,
   fetchAutomationSummary,
+  testAutomationEmail,
 } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 import {
   selectAutomationEntry,
@@ -29,6 +30,7 @@ import { MODEL_OPTIONS } from './imageModels';
 import { isValidCtaUrl } from './CallToActionSection';
 import TemplatePicker from './TemplatePicker';
 import SummarySection from './SummarySection';
+import AlertEmailsSection, { validateEmailList } from './AlertEmailsSection';
 import MetaStatusPill from './MetaStatusPill';
 import GoogleStatusPill from './GoogleStatusPill';
 import { Info } from 'lucide-react';
@@ -137,6 +139,12 @@ const defaultFormValues = () => {
       callToAction: { button: null, url: '' },
       enabled: true,
     },
+    // Cycle-complete alert emails. `emailTo` is a comma-separated list (up to
+    // 5) sent as-is to the backend (targets.job.alerts.emailTo). Empty = no
+    // alert emails. Optional — never blocks activation.
+    alerts: {
+      emailTo: '',
+    },
   };
 };
 
@@ -162,6 +170,7 @@ function mergeConfig(target, source) {
     // Legacy top-level callToAction is migrated into platform CTAs below.
     template: mergeTemplate(target.template, source.template || {}),
     googleTemplate: mergeTemplate(target.googleTemplate, source.googleTemplate || {}),
+    alerts: { ...target.alerts, ...(source.alerts || {}) },
   };
 }
 
@@ -425,6 +434,10 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     };
     if (hasMetaSelected) checkName(values.template?.campaignName, 'Meta');
     if (hasGoogleSelected) checkName(values.googleTemplate?.campaignName, 'Google');
+    // Alert emails are optional, but if the user typed something it must be a
+    // valid comma-separated list (≤5 valid addresses). Empty is fine.
+    const alertErr = validateEmailList(values.alerts?.emailTo);
+    if (alertErr) errs.push(alertErr);
     // Block activation if the user has picked today as start date but the
     // hour they last selected has slipped into the past while the form was
     // open. FrequencySection auto-bumps as long as a future hour exists; if
@@ -484,6 +497,30 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
       // the backend's actual rejection reason.
       const msg = res?.payload?.message || res?.error?.message || failureMsg;
       toast.error(msg);
+    }
+  };
+
+  // Send-test-email — only meaningful in edit mode (needs a saved job the
+  // backend can look up). `testingEmail` drives the button's spinner.
+  const [testingEmail, setTestingEmail] = useState(false);
+  const handleSendTestEmail = async () => {
+    if (!campaignId || testingEmail) return;
+    setTestingEmail(true);
+    try {
+      const res = await dispatch(
+        testAutomationEmail({ campaignId, to: values.alerts?.emailTo }),
+      );
+      if (testAutomationEmail.fulfilled.match(res)) {
+        const to = res.payload?.to;
+        const where = Array.isArray(to) && to.length ? ` to ${to.join(', ')}` : '';
+        toast.success(`Test email sent${where}`);
+      } else {
+        toast.error(
+          res?.payload?.message || res?.error?.message || 'Failed to send test email',
+        );
+      }
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -602,6 +639,17 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
           />
         )}
       </WhereToPostSection>
+
+      <AlertEmailsSection
+        value={values.alerts?.emailTo}
+        onChange={(emailTo) =>
+          updateValues({ alerts: { ...values.alerts, emailTo } })
+        }
+        disabled={!anyPlatformConnected}
+        canTest={isEditMode}
+        testing={testingEmail}
+        onSendTest={handleSendTestEmail}
+      />
 
       <SummarySection
         frequency={values.frequency}

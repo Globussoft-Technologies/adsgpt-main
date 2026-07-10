@@ -13,13 +13,20 @@ export const getGoogleAdAccounts = async () => {
 };
 
 // adType: 'text' | 'image' | 'video' | string[] | undefined (all)
-export const getGoogleCampaigns = async (adAccountId, { refresh = false, adType } = {}) => {
+// group: 'ads' | 'assets' | string[] | undefined — defaults to BOTH so this
+// general campaigns list includes PERFORMANCE_MAX (asset-group) campaigns
+// alongside regular ad-group campaigns. The backend itself defaults to
+// "ads" only when group is omitted entirely, so callers that want the full
+// list (like the Campaigns table) must pass both explicitly.
+export const getGoogleCampaigns = async (adAccountId, { refresh = false, adType, group = ['ads', 'assets'] } = {}) => {
   const adTypes = adType ? (Array.isArray(adType) ? adType : [adType]) : [];
+  const groups = group ? (Array.isArray(group) ? group : [group]) : [];
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-campaigns`, {
     params: {
       adAccountId,
       ...(refresh ? { refresh: 'true', _t: Date.now() } : {}),
       ...(adTypes.length ? { adType: adTypes } : {}),
+      ...(groups.length ? { group: groups } : {}),
     },
     paramsSerializer: (p) => {
       const parts = [];
@@ -264,8 +271,21 @@ export const deleteGoogleCampaign = async ({ adAccountId, campaignId }) => {
 
 // ─── Campaign Templates ────────────────────────────────────────────────────────
 
-export const listGoogleCampaignTemplates = async () => {
+// group defaults to BOTH so the template picker includes PERFORMANCE_MAX
+// (asset-group) templates alongside regular ad-group templates — the
+// backend itself defaults to "ads" only when group is omitted entirely.
+export const listGoogleCampaignTemplates = async ({ group = ['ads', 'assets'] } = {}) => {
+  const groups = group ? (Array.isArray(group) ? group : [group]) : [];
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/templates`, {
+    params: groups.length ? { group: groups } : undefined,
+    paramsSerializer: (p) => {
+      const parts = [];
+      Object.entries(p || {}).forEach(([k, v]) => {
+        if (Array.isArray(v)) v.forEach((i) => parts.push(`${k}=${encodeURIComponent(i)}`));
+        else parts.push(`${k}=${encodeURIComponent(v)}`);
+      });
+      return parts.join('&');
+    },
     headers: authHeaders(),
   });
   return data;
