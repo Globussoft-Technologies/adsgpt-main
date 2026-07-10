@@ -10,9 +10,8 @@ import { Mail, Send, Loader2 } from 'lucide-react';
 // validates it (adsFactoryAlertService). Empty = no alert emails.
 //
 // "Send test" fires POST /jobs/:id/test-email so the user can verify delivery
-// + rendering before trusting the automation. It requires a saved job, so the
-// button is only enabled in edit mode (canTest) — otherwise it shows a hint to
-// save first.
+// works — independent of whether the automation has been saved yet. Sends to
+// whatever address is currently typed in the field, saved or not.
 // ----------------------------------------------------------------------------
 
 const MAX_RECIPIENTS = 5;
@@ -108,11 +107,9 @@ export default function AlertEmailsSection({
           onClick={onSendTest}
           disabled={!canSendTest}
           title={
-            !canTest
-              ? 'Save the automation first, then send a test email'
-              : tokens.length === 0
-                ? 'Enter at least one email address'
-                : 'Send a sample cycle-complete email'
+            tokens.length === 0
+              ? 'Enter at least one email address'
+              : 'Send a test email to verify delivery'
           }
           className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-4 text-sm font-semibold text-[#15DCFF] transition hover:bg-[#15DCFF]/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -125,15 +122,7 @@ export default function AlertEmailsSection({
         </button>
       </div>
 
-      {showError ? (
-        <p className="text-[12px] text-red-400">{error}</p>
-      ) : (
-        !canTest && (
-          <p className="text-[12px] italic text-[#6a6a70]">
-            Save the automation to enable the test email.
-          </p>
-        )
-      )}
+      {showError && <p className="text-[12px] text-red-400">{error}</p>}
     </section>
   );
 }

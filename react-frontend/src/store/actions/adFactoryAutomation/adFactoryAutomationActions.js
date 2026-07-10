@@ -918,13 +918,11 @@ export const deleteAutomation = createAsyncThunk(
 );
 
 // ----------------------------------------------------------------------------
-// testAutomationEmail — POST /ads-factory/autopilot/jobs/:jobId/test-email
+// testAutomationEmail — POST /ads-factory/autopilot/jobs/test-email
 //
-// Sends a sample "cycle complete" email so the user can verify delivery +
-// rendering before relying on the automation. Recipients are resolved by the
-// backend: the optional `to` we pass (the emailTo currently typed in the form)
-// → the job's saved alerts.emailTo → the account owner's email. Requires an
-// existing job (edit mode) — the backend looks the job up by id.
+// Sends a plain confirmation email to whatever address is currently typed in
+// the form. Fully independent of any job/campaign — no automation needs to
+// exist or be saved first.
 //
 // Does NOT touch Redux state — it's a fire-once side effect. Resolves with the
 // backend result ({ sent, to, reason?, error? }); rejects with a message the
@@ -932,24 +930,17 @@ export const deleteAutomation = createAsyncThunk(
 // ----------------------------------------------------------------------------
 export const testAutomationEmail = createAsyncThunk(
   'adFactoryAutomation/testEmail',
-  async ({ campaignId, to } = {}, { getState, rejectWithValue }) => {
-    if (!campaignId) {
-      return rejectWithValue({ message: 'campaignId is required' });
-    }
-    const previous = getState().adFactoryAutomation?.configsByCampaign?.[campaignId];
-    const jobId = previous?.jobId;
-    if (!jobId) {
-      return rejectWithValue({
-        message: 'Save the automation first, then send a test email.',
-      });
+  async ({ to } = {}, { rejectWithValue }) => {
+    const trimmedTo = typeof to === 'string' ? to.trim() : '';
+    if (!trimmedTo) {
+      return rejectWithValue({ message: 'Enter an email address to send the test to.' });
     }
 
     try {
       const token = getCookies();
-      const trimmedTo = typeof to === 'string' ? to.trim() : '';
       const res = await axios.post(
-        `${AUTOPILOT_BASE}/jobs/${jobId}/test-email`,
-        trimmedTo ? { to: trimmedTo } : {},
+        `${AUTOPILOT_BASE}/jobs/test-email`,
+        { to: trimmedTo },
         {
           headers: {
             Authorization: `Bearer ${token}`,

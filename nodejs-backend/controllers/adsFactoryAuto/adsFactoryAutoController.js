@@ -535,45 +535,38 @@ class AdsFactoryAutoController {
     /*
       #swagger.tags = ['Ads Factory Autopilot']
       #swagger.summary = 'Send a test alert email'
-      #swagger.description = 'Sends a plain confirmation email so the user can verify delivery before relying on the automation. Recipients: the emailTo passed in the request (may be unsaved form state) or the job\'s saved alerts.emailTo.'
+      #swagger.description = 'Sends a plain confirmation email to whatever address the caller provides. Fully independent of any automation, job, or campaign — works at any time.'
       #swagger.security = [{ "BearerAuth": [] }]
-      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
+      #swagger.parameters['body'] = {
+        in: 'body',
+        description: 'Test email request',
+        required: true,
+        schema: {
+          to: 'alice@example.com'
+        }
+      }
     */
     try {
-      const userId = req.user.user_id;
       const { sendEmail, parseEmailRecipients } =
         require("../../services/adsFactoryAuto/adsFactoryAlertService");
 
-      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId }).lean();
-      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
-
-      // Prefer whatever the user currently has typed in the Alert emails
-      // field (may be unsaved) over the job's last-saved value — otherwise
-      // "Send test" silently mails the stale DB address after the user edits
-      // the field but before clicking "Update automation".
       const explicitTo = req.body?.to || req.query?.to || null;
-      const recipients = parseEmailRecipients(explicitTo || job.alerts?.emailTo);
+      const recipients = parseEmailRecipients(explicitTo);
       if (!recipients.length) {
         return res.status(400).json({
           success: false,
-          error:
-            "No email address saved on this automation. Add one (or up to 5, comma-separated) and try again.",
+          error: "No email address provided. Enter one (or up to 5, comma-separated) and try again.",
         });
       }
 
-      const campaign = job.campaignId
-        ? await Campaign.findById(job.campaignId).select("metadata").lean()
-        : null;
-      const campaignName = campaign?.metadata?.campaignName || "this campaign";
       const now = new Date();
       const bodyLines = [
         `AdsGPT Ads Factory — test email`,
-        `campaign: ${campaignName}`,
         `sent: ${now.toISOString()}`,
         ``,
-        `This is a test of the alert email for this automation.`,
+        `This is a test of the alert email for Ads Factory automations.`,
         `If you received this, alert emails are working correctly. You'll get`,
-        `an email like this every time this automation finishes a run.`,
+        `an email like this every time an automation finishes a run.`,
       ];
 
       const result = await sendEmail({

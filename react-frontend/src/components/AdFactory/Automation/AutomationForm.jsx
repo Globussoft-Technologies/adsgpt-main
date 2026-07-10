@@ -504,11 +504,11 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // backend can look up). `testingEmail` drives the button's spinner.
   const [testingEmail, setTestingEmail] = useState(false);
   const handleSendTestEmail = async () => {
-    if (!campaignId || testingEmail) return;
+    if (testingEmail) return;
     setTestingEmail(true);
     try {
       const res = await dispatch(
-        testAutomationEmail({ campaignId, to: values.alerts?.emailTo }),
+        testAutomationEmail({ to: values.alerts?.emailTo }),
       );
       if (testAutomationEmail.fulfilled.match(res)) {
         const to = res.payload?.to;
@@ -646,7 +646,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
           updateValues({ alerts: { ...values.alerts, emailTo } })
         }
         disabled={!anyPlatformConnected}
-        canTest={isEditMode}
+        canTest
         testing={testingEmail}
         onSendTest={handleSendTestEmail}
       />
