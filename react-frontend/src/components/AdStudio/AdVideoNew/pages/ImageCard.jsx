@@ -365,14 +365,6 @@ export default function ImageCard({
                   // Records created before the quality field existed won't
                   // carry it — fall back to the backend default of "medium".
                   const q = item?.inputs?.quality || 'medium';
-                  // Nano Banana 2 surfaces its tiers as output resolutions
-                  // (low→0.5K, medium→1K, high→2K, ultra_high→4K), matching the
-                  // AdCreative quality picker; every other model shows Low/Medium/High.
-                  const isNanoBanana2 =
-                    item?.inputs?.model === 'gemini-3.1-flash-image-preview' ||
-                    item?.inputs?.modelLabel === 'Nano Banana 2';
-                  const resolutionLabels = { low: '0.5K', medium: '1K', high: '2K', ultra_high: '4K' };
-                  if (isNanoBanana2 && resolutionLabels[q]) return resolutionLabels[q];
                   // "ultra_high" → "Ultra High"
                   return q.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
                 })()}

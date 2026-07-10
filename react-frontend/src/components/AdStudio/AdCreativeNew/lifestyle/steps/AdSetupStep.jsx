@@ -67,14 +67,7 @@ function ModelIcon({ apiId }) {
 // Quality tiers are per-model, from the `ad_creative` surface
 // (selectedModel.qualities). Labels below are presentation-only.
 const QUALITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High', ultra_high: 'Ultra High' };
-// Nano Banana 2 exposes its four tiers as output resolutions rather than the
-// abstract Low/Medium/High other models use: low→0.5K, medium→1K, high→2K,
-// ultra_high→4K. The backend still sends/reads the raw tier keys; this is
-// presentation-only.
-const NANO_BANANA_2_API_ID = 'gemini-3.1-flash-image-preview';
-const NANO_BANANA_2_QUALITY_LABELS = { low: '0.5K', medium: '1K', high: '2K', ultra_high: '4K' };
-const qualityLabel = (v, apiId) =>
-  (apiId === NANO_BANANA_2_API_ID && NANO_BANANA_2_QUALITY_LABELS[v]) || QUALITY_LABELS[v] || v;
+const qualityLabel = (v) => QUALITY_LABELS[v] || v;
 
 // Quality picker is enabled; the backend reads the sent quality (no longer
 // forced to "high" in imageController).
@@ -1727,7 +1720,7 @@ function QualityPickerPill({ value, onChange, model }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeLabel = qualityLabel(value, model);
+  const activeLabel = qualityLabel(value);
 
   return (
     <div ref={ref} className="relative">
@@ -1757,7 +1750,7 @@ function QualityPickerPill({ value, onChange, model }) {
                     : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                 }`}
               >
-                <span className="flex-1">{qualityLabel(q, model)}</span>
+                <span className="flex-1">{qualityLabel(q)}</span>
               </button>
             );
           })}

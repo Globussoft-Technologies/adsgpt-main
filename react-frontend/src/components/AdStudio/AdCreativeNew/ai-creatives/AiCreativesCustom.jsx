@@ -84,14 +84,7 @@ function ModelIcon({ apiId }) {
 // (selectedModel.qualities). Labels below are presentation-only, with a
 // fallback to the raw value.
 const QUALITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High', ultra_high: 'Ultra High' };
-// Nano Banana 2 exposes its four tiers as output resolutions rather than the
-// abstract Low/Medium/High other models use: low→0.5K, medium→1K, high→2K,
-// ultra_high→4K. The backend still sends/reads the raw tier keys; this is
-// presentation-only.
-const NANO_BANANA_2_API_ID = 'gemini-3.1-flash-image-preview';
-const NANO_BANANA_2_QUALITY_LABELS = { low: '0.5K', medium: '1K', high: '2K', ultra_high: '4K' };
-const qualityLabel = (v, apiId) =>
-  (apiId === NANO_BANANA_2_API_ID && NANO_BANANA_2_QUALITY_LABELS[v]) || QUALITY_LABELS[v] || v;
+const qualityLabel = (v) => QUALITY_LABELS[v] || v;
 
 // Quality picker is enabled; the backend reads the sent quality (no longer
 // forced to "high" in imageController).
@@ -1090,7 +1083,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   {SHOW_QUALITY_PICKER && (
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <PillButton
-                      label={qualityLabel(quality, selectedModel?.apiId)}
+                      label={qualityLabel(quality)}
                       onClick={() => {
                         setShowQualityPicker((v) => !v);
                         setShowModelPicker(false);
@@ -1118,7 +1111,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                   : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                               }`}
                             >
-                              <span className="flex-1">{qualityLabel(q, selectedModel?.apiId)}</span>
+                              <span className="flex-1">{qualityLabel(q)}</span>
                             </button>
                           );
                         })}

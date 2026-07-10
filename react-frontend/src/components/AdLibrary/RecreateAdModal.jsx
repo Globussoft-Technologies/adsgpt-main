@@ -63,14 +63,7 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 // Quality tiers are per-model (selectedModel.qualities). Labels are
 // presentation-only.
 const QUALITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High', ultra_high: 'Ultra High' };
-// Nano Banana 2 exposes its four tiers as output resolutions rather than the
-// abstract Low/Medium/High other models use: low→0.5K, medium→1K, high→2K,
-// ultra_high→4K. The backend still sends/reads the raw tier keys; this is
-// presentation-only.
-const NANO_BANANA_2_API_ID = 'gemini-3.1-flash-image-preview';
-const NANO_BANANA_2_QUALITY_LABELS = { low: '0.5K', medium: '1K', high: '2K', ultra_high: '4K' };
-const qualityLabel = (v, apiId) =>
-  (apiId === NANO_BANANA_2_API_ID && NANO_BANANA_2_QUALITY_LABELS[v]) || QUALITY_LABELS[v] || v;
+const qualityLabel = (v) => QUALITY_LABELS[v] || v;
 
 // Quality picker enabled; the backend reads the sent quality.
 const SHOW_QUALITY_PICKER = true;
@@ -961,7 +954,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       }}
                       className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      {qualityLabel(quality, selectedModel?.apiId)}
+                      {qualityLabel(quality)}
                       <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
                     {showQualityPicker && (
@@ -982,7 +975,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                                   : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                               }`}
                             >
-                              <span className="flex-1">{qualityLabel(q, selectedModel?.apiId)}</span>
+                              <span className="flex-1">{qualityLabel(q)}</span>
                             </button>
                           );
                         })}
