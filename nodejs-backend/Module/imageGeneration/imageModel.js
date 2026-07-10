@@ -1,19 +1,15 @@
 const mongoose = require("mongoose");
 
-// Must stay in sync with the ratios the adcreatives Go service supports
-// (python-backend/adcreatives/internal/providers/catalog.go): the ten
-// standard ratios every model accepts, plus the four extreme banner /
-// skyscraper ratios only gemini-3.1-flash-image-preview (Nano Banana 2)
-// supports.
-const SUPPORTED_ASPECT_RATIOS = [
-    "1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4",
-    "1:4", "4:1", "1:8", "8:1",
-];
+// Aspect ratios + quality tiers offered by the `ad_creative` image surface.
+// Keep in sync with surfaceCatalog.js (ADCREATIVE_IMAGE) and modelRegistry.js
+// (qualityTiers). ultra_high is currently only exposed by Nano Banana 2.
+const IMAGE_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4", "1:4", "4:1", "1:8", "8:1"];
+const IMAGE_QUALITIES = ["low", "medium", "high", "ultra_high"];
 
 const resultSchema = new mongoose.Schema(
     {
         generatedImageUrl: { type: String },
-        aspectRatio: { type: String, enum: SUPPORTED_ASPECT_RATIOS },
+        aspectRatio: { type: String, enum: IMAGE_ASPECT_RATIOS },
         prompt: { type: String, default: "" },
         promptTokens: { type: Number, default: 0 },
         completionTokens: { type: Number, default: 0 },
@@ -62,18 +58,18 @@ const imageSchema = new mongoose.Schema(
 
             model: { type: String, required: true },
             modelLabel: { type: String }, // Human-readable label (e.g., "Nano Banana Pro", "Gemini Flash")
-            quality: { type: String, enum: ["low", "medium", "high"], default: "medium" },
+            quality: { type: String, enum: IMAGE_QUALITIES, default: "medium" },
             numberOfImages: { type: Number, required: true },
             aspectRatio: {
                 type: String,
-                enum: SUPPORTED_ASPECT_RATIOS,
+                enum: IMAGE_ASPECT_RATIOS,
             },
 
             aspectRatioPerImage: [
                 {
                     aspectRatio: {
                         type: String,
-                        enum: SUPPORTED_ASPECT_RATIOS,
+                        enum: IMAGE_ASPECT_RATIOS,
                     },
                     numberOfImages: Number,
                 }

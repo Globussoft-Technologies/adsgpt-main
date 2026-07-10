@@ -125,8 +125,10 @@ const handleAdCreativeResponse = async (data) => {
       // cost = 0 for now; will be real once Python sends tokens in socket payload.
       const inputTokens = data?.usage?.input_tokens || 0;
       const outputTokens = data?.usage?.output_tokens || 0;
-      const actualImageCost = modelPricingConfig.getImageCost(
+      // const actualImageCost = modelPricingConfig.getImageCost(
+      const actualImageCost = modelPricingConfig.getImageCostByQuality(
         model,
+        data?.inputs?.quality,
         inputTokens,
         outputTokens
       );

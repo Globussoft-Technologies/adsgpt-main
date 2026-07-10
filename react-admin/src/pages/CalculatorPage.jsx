@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Calculator, Coins, Image as ImageIcon, Loader2, RotateCcw, Video } from "lucide-react";
-import { fetchModelCredits } from "../lib/api";
+import { fetchModelCredits, fetchAdCreativeImageTiers } from "../lib/api";
 
 const GDP_TIERS = {
   high: { label: "High GDP", costPerCredit: 0.157 },
@@ -33,16 +33,22 @@ export default function CalculatorPage() {
 
   const [imageModels, setImageModels] = useState([]);
   const [videoModels, setVideoModels] = useState([]);
+  // Per-quality image tiers (ad_creative surface). Falls back to the legacy
+  // flat imageModels above when empty.
+  const [imageTiers, setImageTiers] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState("");
 
   useEffect(() => {
     setModelsLoading(true);
-    fetchModelCredits()
-      .then(({ imageModels: img, videoModels: vid }) => {
+    Promise.all([fetchModelCredits(), fetchAdCreativeImageTiers()])
+      .then(([{ imageModels: img, videoModels: vid }, tiers]) => {
         setImageModels(img);
         setVideoModels(vid);
-        if (!img.length && !vid.length) setModelsError("Failed to load model data. Please refresh.");
+        setImageTiers(tiers);
+        if (!img.length && !vid.length && !tiers.length) {
+          setModelsError("Failed to load model data. Please refresh.");
+        }
       })
       .finally(() => setModelsLoading(false));
   }, []);
@@ -187,21 +193,32 @@ export default function CalculatorPage() {
             icon={ImageIcon}
             iconClass="text-indigo-500"
           >
-            {imageModels.map((m, i) => {
-              const credits = parseCredits(m.value);
-              const count = calcImages(usd, costPerCredit, credits);
-              return (
-                <ResultRow
-                  key={`img-${i}`}
-                  name={m.label}
-                  meta={`${credits} credit${credits !== 1 ? "s" : ""} / image`}
-                  primary={count.toLocaleString()}
-                  primaryLabel="Images"
-                  primaryColor="text-indigo-600"
-                  hoverColor="group-hover:text-indigo-600"
-                />
-              );
-            })}
+            {imageTiers.length > 0
+              ? // Per-quality breakdown per model.
+                imageTiers.map((m, i) => (
+                  <ImageTierGroup
+                    key={`imgt-${i}`}
+                    model={m}
+                    usd={usd}
+                    costPerCredit={costPerCredit}
+                  />
+                ))
+              : // Legacy fallback — flat one-row-per-model.
+                imageModels.map((m, i) => {
+                  const credits = parseCredits(m.value);
+                  const count = calcImages(usd, costPerCredit, credits);
+                  return (
+                    <ResultRow
+                      key={`img-${i}`}
+                      name={m.label}
+                      meta={`${credits} credit${credits !== 1 ? "s" : ""} / image`}
+                      primary={count.toLocaleString()}
+                      primaryLabel="Images"
+                      primaryColor="text-indigo-600"
+                      hoverColor="group-hover:text-indigo-600"
+                    />
+                  );
+                })}
           </ResultPanel>
 
           <ResultPanel
@@ -248,6 +265,36 @@ export default function CalculatorPage() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// One image model with a row per quality tier (images are priced per quality).
+// Reads qualityTiers: [{ quality, creditsPerImage }] from the ad_creative surface.
+function ImageTierGroup({ model, usd, costPerCredit }) {
+  const tiers = Array.isArray(model.qualityTiers) ? model.qualityTiers : [];
+  const label = (q) => q.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <div className="px-5 py-4">
+      <p className="text-sm font-semibold uppercase tracking-tight text-slate-800">{model.label}</p>
+      <div className="mt-2 space-y-1.5">
+        {tiers.map((t) => {
+          const credits = t.creditsPerImage || 0;
+          const count = calcImages(usd, costPerCredit, credits);
+          return (
+            <div key={t.quality} className="flex items-center justify-between">
+              <p className="text-[12px] font-medium text-slate-500">
+                {label(t.quality)}
+                <span className="text-slate-400"> · {credits} cr/img</span>
+              </p>
+              <p className="text-sm font-bold tabular-nums text-indigo-600">
+                {count.toLocaleString()}
+                <span className="ml-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">images</span>
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

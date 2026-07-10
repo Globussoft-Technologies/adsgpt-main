@@ -11,6 +11,7 @@ import {
   AlertCircle,
   LinkIcon,
   ArrowLeft,
+  Proportions,
 } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
 import { LifestyleShell } from '../lifestyle/LifestyleShell';
@@ -46,7 +47,12 @@ import {
   filterAllowedImageFiles,
   isAllowedImageFile,
 } from '@/utils/imageValidation';
-import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
+import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
+import AspectRatioTiles, {
+  AnimatedPanel,
+  primaryRatio,
+  totalImages,
+} from '@/components/AdStudio/AdCreativeNew/AspectRatioPicker';
 import getCookies from '@/utils/getCookies';
 import axios from 'axios';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
@@ -60,77 +66,33 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 // Models the Go backend accepts. Display order = picker order. Each entry
 // carries either a ReactNode `icon` (e.g. SiOpenai) or an `iconSrc` image path
 // rendered via <img>. The picker handles both shapes.
-const MODEL_OPTIONS = [
-  { name: 'Nano Banana 2', available: true, iconSrc: geminiIcon },
-  { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
-  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
-  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-600 dark:text-white/80" /> },
-  // { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
-  { name: 'Imagen', available: true, iconSrc: geminiIcon },
-];
-
-// Translates the UI model label into the backend model id at dispatch time.
-// (Keeps the picker text untouched.)
-const MODEL_TO_API = {
-  'Nano Banana 2': 'gemini-3.1-flash-image-preview',
-  'Nano Banana Pro': 'gemini-3-pro-image-preview',
-  'OpenAI 1.5': 'gpt-image-1.5',
-  'OpenAI 2.0': 'gpt-image-2',
-  // 'Seedream 5.0 lite': 'seedream-5.0-lite',
-  'Imagen': 'seedream-5.0-lite',
-};
-
-// Renders either the ReactNode icon or the iconSrc image at a fixed 14px slot.
-function ModelIcon({ option }) {
-  if (option?.iconSrc) {
-    return (
-      <img src={option.iconSrc} alt="" className="h-3.5 w-3.5 object-contain" />
-    );
+// Model list, labels, apiIds, aspect ratios, qualities and per-quality credits
+// now come from the backend `ad_creative` surface via useAdCreativeConfig — no
+// longer hardcoded here. Icons stay frontend-owned and are chosen by model id
+// (the API's `icon` field is not relied on): OpenAI → SiOpenai react-icon,
+// Seedream → Seedance logo, everything else → Gemini image.
+function ModelIcon({ apiId }) {
+  const id = String(apiId || '');
+  if (/gpt-image/i.test(id)) {
+    return <SiOpenai size={14} className="text-gray-600 dark:text-white/80" />;
   }
-  return option?.icon ?? null;
+  const src = /seedream/i.test(id) ? seedanceIcon : geminiIcon;
+  return <img src={src} alt="" className="h-3.5 w-3.5 object-contain" />;
 }
 
-// Generation quality tiers. Value matches the backend contract verbatim
-// (Joi accepts 'low' | 'medium' | 'high'); label is the picker text.
-const QUALITY_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-];
+// Quality tiers are per-model, from the `ad_creative` surface
+// (selectedModel.qualities). Labels below are presentation-only, with a
+// fallback to the raw value.
+const QUALITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High', ultra_high: 'Ultra High' };
+const qualityLabel = (v) => QUALITY_LABELS[v] || v;
 
-// HIDE-MARK — Quality picker hidden platform-wide; quality is forced to "high"
-// in the backend (imageController.generateImage). Flip to true to bring it back.
-const SHOW_QUALITY_PICKER = false;
+// Quality picker is enabled; the backend reads the sent quality (no longer
+// forced to "high" in imageController).
+const SHOW_QUALITY_PICKER = true;
 
-const ASPECT_LABELS = [
-  { key: '1:1', label: '1:1 (square)' },
-  { key: '2:3', label: '2:3 (portrait)' },
-  { key: '3:2', label: '3:2 (landscape)' },
-  { key: '9:16', label: '9:16 (vertical widescreen)' },
-  { key: '16:9', label: '16:9 (widescreen)' },
-];
-
-// OpenAI's image models currently only generate these three ratios — hide
-// 9:16 / 16:9 from the picker when an OpenAI model is selected.
-const OPENAI_ALLOWED_RATIOS = new Set(['1:1', '2:3', '3:2']);
-const isOpenAIModel = (name) => /^openai/i.test(String(name || ''));
-const allowedAspectLabels = (modelName) =>
-  isOpenAIModel(modelName)
-    ? ASPECT_LABELS.filter((a) => OPENAI_ALLOWED_RATIOS.has(a.key))
-    : ASPECT_LABELS;
-
-const DEFAULT_COUNTS = { '1:1': 1, '2:3': 0, '3:2': 0, '9:16': 0, '16:9': 0 };
-
-function totalImages(counts) {
-  return Object.values(counts).reduce((a, b) => a + b, 0);
-}
-
-function primaryRatio(counts) {
-  for (const { key } of ASPECT_LABELS) {
-    if (counts[key] > 0) return key;
-  }
-  return '1:1';
-}
+// Aspect-ratio helpers + the picker panel now live in the shared
+// AspectRatioTiles module (imported above), so every AdCreative surface stays
+// in sync. Ratios themselves come per-model from the `ad_creative` surface.
 
 const COMPETITOR_PLACEHOLDERS = [
   { hClass: 'h-[250px]', color: 'from-[#1a2a5e] to-[#2a3a7e]' },
@@ -180,12 +142,18 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // default — user must click one to make it the active logo.
   const [brandLogoOptions, setBrandLogoOptions] = useState([]);
   const [competitorAdRef, setCompetitorAdRef] = useState('');
-  const [model, setModel] = useState('Nano Banana 2');
-  const [quality, setQuality] = useState('medium');
-  const [aspectCounts, setAspectCounts] = useState(DEFAULT_COUNTS);
-  // Live per-model credit cost from /adsgpt/usage/model-credit-value
-  // (shared cache). Falls back to 7 while loading or on API error.
-  const creditsPerImage = useImageCreditsForModel(model);
+  const [model, setModel] = useState('gemini-3.1-flash-image-preview'); // Nano Banana 2 (canonical apiId)
+  const [quality, setQuality] = useState('high');
+  const [aspectCounts, setAspectCounts] = useState({});
+
+  // Model list + per-model aspect ratios / qualities / credits from the backend
+  // `ad_creative` surface (shared cache, hardcoded fallback baked in).
+  const { models: configModels } = useAdCreativeConfig();
+  const selectedModel = configModels.find((m) => m.apiId === model);
+  // Per-image credits for the selected model + quality (falls back to the
+  // model's default/high tier, then 7).
+  const creditsPerImage =
+    selectedModel?.creditsByQuality?.[quality] ?? selectedModel?.creditsPerImage ?? 7;
 
   // Lightbox preview state for thumbnail clicks.
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -223,22 +191,31 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // Improve-prompt (Gemini) state — drives the spinner on the wand button.
   const [isSuggestingPrompt, setIsSuggestingPrompt] = useState(false);
 
-  // Whenever the user switches to an OpenAI model, zero out any aspect-ratio
-  // counts that OpenAI doesn't support so the totals + payload stay valid.
+  // Reconcile per-ratio counts whenever the selected model changes — models
+  // support different aspect-ratio sets. Keep counts for ratios the new model
+  // still offers, drop the rest, and default to a single 1:1 (or the first
+  // ratio) if nothing is selected so the payload stays valid.
   useEffect(() => {
-    if (!isOpenAIModel(model)) return;
+    const ratios = selectedModel?.aspectRatios;
+    if (!ratios || ratios.length === 0) return;
     setAspectCounts((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const key of Object.keys(next)) {
-        if (!OPENAI_ALLOWED_RATIOS.has(key) && next[key] > 0) {
-          next[key] = 0;
-          changed = true;
-        }
+      const next = {};
+      for (const r of ratios) next[r] = prev[r] || 0;
+      if (totalImages(next) === 0) {
+        next[ratios.includes('1:1') ? '1:1' : ratios[0]] = 1;
       }
-      return changed ? next : prev;
+      return next;
     });
-  }, [model]);
+  }, [selectedModel]);
+
+  // Keep the selected quality valid for the current model — tiers differ per
+  // model (only Nano Banana 2 offers "ultra_high"). Reset to high (or the first
+  // available) when the current pick isn't supported.
+  useEffect(() => {
+    const qualities = selectedModel?.qualities;
+    if (!qualities || qualities.length === 0 || qualities.includes(quality)) return;
+    setQuality(qualities.includes('high') ? 'high' : qualities[0]);
+  }, [selectedModel, quality]);
 
   const dispatch = useDispatch();
   const imageState = useSelector((s) => s.image.current);
@@ -279,30 +256,23 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       setCompetitorAdRef(inp.competitorReferenceImage);
     }
 
-    if (inp.model) {
-      // Reverse-map the stored API model id back to the UI label.
-      const reverseModel = Object.fromEntries(
-        Object.entries(MODEL_TO_API).map(([k, v]) => [v, k]),
-      );
-      if (reverseModel[inp.model]) setModel(reverseModel[inp.model]);
+    if (inp.model && configModels.some((m) => m.apiId === inp.model)) {
+      // Records store the canonical model id — which is now what `model` holds.
+      setModel(inp.model);
     }
 
-    if (QUALITY_OPTIONS.some((q) => q.value === inp.quality)) {
+    if (inp.quality && QUALITY_LABELS[inp.quality]) {
       setQuality(inp.quality);
     }
 
     if (Array.isArray(inp.aspectRatioPerImage) && inp.aspectRatioPerImage.length > 0) {
-      const counts = { ...DEFAULT_COUNTS };
+      const counts = {};
       for (const { aspectRatio, numberOfImages } of inp.aspectRatioPerImage) {
-        if (aspectRatio in counts) counts[aspectRatio] = Number(numberOfImages) || 0;
+        if (aspectRatio) counts[aspectRatio] = Number(numberOfImages) || 0;
       }
       setAspectCounts(counts);
     } else if (inp.aspectRatio) {
-      const counts = { ...DEFAULT_COUNTS, [inp.aspectRatio]: 0 };
-      if (inp.aspectRatio in counts) {
-        counts[inp.aspectRatio] = Number(inp.numberOfImages) || 1;
-      }
-      setAspectCounts(counts);
+      setAspectCounts({ [inp.aspectRatio]: Number(inp.numberOfImages) || 1 });
     }
 
     // Mirror brand info into the brand-voice chip so resolveBrandInfo()
@@ -477,9 +447,6 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       completeFiredRef.current = false;
     }
   }, [imageState.status, onComplete]);
-
-  const adjustCount = (key, delta) =>
-    setAspectCounts((prev) => ({ ...prev, [key]: Math.max(0, prev[key] + delta) }));
 
   // Total images shown in the prompt box are capped at 5. The competitor
   // visual + every picked brand-pool chip count toward the same five slots.
@@ -864,7 +831,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     const realCompetitorRef =
       competitorAdRef && !competitorAdRef.startsWith('competitor-ref-') ? competitorAdRef : '';
 
-    const apiModel = MODEL_TO_API[model] || model;
+    const apiModel = model; // `model` already holds the canonical apiId
 
     // Combine user-supplied refs with the chip-picked brand images. Dedupe
     // so the same URL never lands in the payload twice.
@@ -1113,11 +1080,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     )}
                   </button>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
                   {SHOW_QUALITY_PICKER && (
                   <div ref={qualityPickerWrapperRef} className="relative">
                     <PillButton
-                      label={QUALITY_OPTIONS.find((q) => q.value === quality)?.label || 'Medium'}
+                      label={qualityLabel(quality)}
                       onClick={() => {
                         setShowQualityPicker((v) => !v);
                         setShowModelPicker(false);
@@ -1127,14 +1093,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     />
                     {showQualityPicker && (
                       <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {QUALITY_OPTIONS.map((opt, i) => {
-                          const selected = opt.value === quality;
+                        {(selectedModel?.qualities || []).map((q, i) => {
+                          const selected = q === quality;
                           return (
                             <button
-                              key={opt.value}
+                              key={q}
                               type="button"
                               onClick={() => {
-                                setQuality(opt.value);
+                                setQuality(q);
                                 setShowQualityPicker(false);
                               }}
                               className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
@@ -1145,7 +1111,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                   : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                               }`}
                             >
-                              <span className="flex-1">{opt.label}</span>
+                              <span className="flex-1">{qualityLabel(q)}</span>
                             </button>
                           );
                         })}
@@ -1155,8 +1121,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
-                      icon={<ModelIcon option={MODEL_OPTIONS.find((m) => m.name === model)} />}
-                      label={model}
+                      icon={<ModelIcon apiId={selectedModel?.apiId} />}
+                      label={selectedModel?.label || model}
                       onClick={() => {
                         setShowModelPicker((v) => !v);
                         setShowQualityPicker(false);
@@ -1166,35 +1132,29 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     />
                     {showModelPicker && (
                       <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {MODEL_OPTIONS.map((opt) => {
-                          const { name, available } = opt;
-                          const selected = name === model;
+                        {configModels.map((opt) => {
+                          const selected = opt.apiId === model;
                           return (
                             <button
-                              key={name}
+                              key={opt.apiId}
                               type="button"
-                              disabled={!available}
                               onClick={() => {
-                                if (!available) return;
-                                setModel(name);
+                                setModel(opt.apiId);
                                 setShowModelPicker(false);
                               }}
-                              title={available ? undefined : 'Coming soon'}
                               className={`flex w-full items-center gap-2 rounded-tl-[14px] rounded-tr-[14px] px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                !available
-                                  ? 'cursor-not-allowed text-gray-500 dark:text-white/80'
-                                  : selected
-                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                                selected
+                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                               }`}
                             >
                               <span
                                 aria-hidden
                                 className="flex h-4 w-4 shrink-0 items-center justify-center"
                               >
-                                <ModelIcon option={opt} />
+                                <ModelIcon apiId={opt.apiId} />
                               </span>
-                              <span className="flex-1">{name}</span>
+                              <span className="flex-1">{opt.label}</span>
                             </button>
                           );
                         })}
@@ -1213,7 +1173,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                       className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      <span className="text-[14px] text-gray-600 dark:text-white/90">1:1</span>
+                      <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
                       <span className="h-3 w-px bg-black/10 dark:bg-white/20" />
                       <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
                       <span className="text-[14px]">
@@ -1222,51 +1182,17 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
                     </button>
 
-                    {showAspectPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 w-[280px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        <p className="mb-2 text-center text-[13px] font-medium text-gray-600 dark:text-[#d9d9d9]">
-                          Aspect Ratio per Image
-                        </p>
-                        <div className="flex items-center justify-center gap-1.5 text-sm">
-                          <span className="text-gray-500 dark:text-white/70">Total Number of Images :</span>
-                          <span className="font-medium text-gray-900 dark:text-white">{total}</span>
-                        </div>
-                        <p className="mb-6 mt-1 text-center text-[11px] text-gray-500 dark:text-white/50">
-                          {creditsPerImage} credits per image
-                        </p>
-                        <div className="space-y-1">
-                          {allowedAspectLabels(model).map(({ key, label }) => (
-                            <div key={key} className="flex pl-4 items-center justify-between">
-                              <span className="text-[12px] text-gray-900 dark:text-white">{label}</span>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => adjustCount(key, -1)}
-                                  className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
-                                  aria-label={`Decrease ${label}`}
-                                >
-                                  <span className="text-[18px] leading-none select-none">−</span>
-                                </button>
-                                <span className="bg-black/5 dark:bg-[#9092941A] w-8 rounded-full py-0.5 text-center text-[11px] font-medium text-gray-900 dark:text-white">
-                                  {aspectCounts[key]}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    adjustCount(key, Math.min(4 - aspectCounts[key], 1))
-                                  }
-                                  className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
-                                  aria-label={`Increase ${label}`}
-                                >
-                                  <span className="text-[18px] leading-none select-none">+</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="mt-3 text-right text-[10px] text-gray-500 dark:text-white/40">Max 4 per ratio</p>
-                      </div>
-                    )}
+                    <AnimatedPanel
+                      open={showAspectPicker}
+                      className="absolute right-0 bottom-full z-40 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+                    >
+                      <AspectRatioTiles
+                        counts={aspectCounts}
+                        onChange={setAspectCounts}
+                        ratios={selectedModel?.aspectRatios || []}
+                        creditsPerImage={creditsPerImage}
+                      />
+                    </AnimatedPanel>
                   </div>
                   </div>
                 </div>

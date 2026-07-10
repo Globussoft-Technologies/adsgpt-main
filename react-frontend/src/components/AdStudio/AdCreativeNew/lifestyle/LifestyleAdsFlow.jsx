@@ -58,17 +58,6 @@ const VARIANT_TO_API_TYPE = {
   'brand-awareness': 'brand_awareness',
 };
 
-// Maps the UI model label to the backend model id at dispatch time so the
-// picker text stays untouched. Mirrors the table in AiCreativesCustom.
-const MODEL_TO_API = {
-  'Nano Banana 2': 'gemini-3.1-flash-image-preview',
-  'Nano Banana Pro': 'gemini-3-pro-image-preview',
-  'OpenAI 1.5': 'gpt-image-1.5',
-  'OpenAI 2.0': 'gpt-image-2',
-  // 'Seedream 5.0 lite': 'seedream-5.0-lite',
-  'Imagen': 'seedream-5.0-lite',
-};
-
 // Translates a *resolved* AdSetup payload (where every image array has been
 // replaced with hosted-URL strings) plus brandInfo into the variant-specific
 // `form` shape that buildImageInputs expects.
@@ -275,7 +264,7 @@ export function LifestyleAdsFlow({ title, variant = VARIANT_DEFAULT, onClose, on
       return;
     }
 
-    const apiModel = MODEL_TO_API[adSetup.model] || adSetup.model;
+    const apiModel = adSetup.model; // AdSetupStep now stores the canonical apiId
     const apiType = VARIANT_TO_API_TYPE[variant] || 'lifestyle';
     const body = buildImageInputs(apiType, buildFormInputs(apiType, resolved, brandInfo, apiModel));
 

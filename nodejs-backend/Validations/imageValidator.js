@@ -4,22 +4,15 @@ const Joi = require("joi");
 // SHARED SCHEMAS
 // =========================
 
-// Must stay in sync with the ratios the adcreatives Go service supports
-// (python-backend/adcreatives/internal/providers/catalog.go): the ten
-// standard ratios every model accepts, plus the four extreme banner /
-// skyscraper ratios only gemini-3.1-flash-image-preview (Nano Banana 2)
-// supports. Node doesn't gate per-model — Go's ValidateAspectRatiosForModel
-// already rejects a ratio the chosen model can't produce — so this list is
-// just the union, wide enough to not reject anything Go would accept.
-const SUPPORTED_ASPECT_RATIOS = [
-    "1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4",
-    "1:4", "4:1", "1:8", "8:1",
-];
+// Aspect ratios the `ad_creative` surface offers (per-model). Keep in sync with
+// surfaceCatalog.js and imageModel.js. Used by BOTH the generate-request schema
+// and the Python result-callback schema.
+const IMAGE_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4", "1:4", "4:1", "1:8", "8:1"];
 
 const aspectRatioPerImageSchema = Joi.array()
     .items(
         Joi.object({
-            aspectRatio: Joi.string().valid(...SUPPORTED_ASPECT_RATIOS).required(),
+            aspectRatio: Joi.string().valid(...IMAGE_ASPECT_RATIOS).required(),
             numberOfImages: Joi.number().integer().min(1).required(),
         })
     )
@@ -29,16 +22,12 @@ const aspectRatioPerImageSchema = Joi.array()
 const brandInfoSchema = Joi.object({
     brandName: Joi.string().required(),
     brandDescription: Joi.string().allow("", null),
-    brandLogo: Joi.string().allow("", null),  // Optional - can be empty or blob
-    brandImages: Joi.array().items(Joi.string()).allow(null),  // Optional - can contain blobs
-    brandColors: Joi.array().items(Joi.string()),
 });
-
 const baseUserInputs = {
     userPrompt: Joi.string().required(),
     aspectRatioPerImage: aspectRatioPerImageSchema,
     Model: Joi.string().required(),
-    quality: Joi.string().valid("low", "medium", "high").default("high"),
+    quality: Joi.string().valid("low", "medium", "high", "ultra_high").default("high"),
 };
 
 // =========================
@@ -154,7 +143,7 @@ const recreateAdsUserInputsSchema = Joi.object({
     ReferenceImages: Joi.array().items(Joi.string()),
     aspectRatioPerImage: aspectRatioPerImageSchema,
     Model: Joi.string().required(),
-    quality: Joi.string().valid("low", "medium", "high").default("high"),
+    quality: Joi.string().valid("low", "medium", "high", "ultra_high").default("high"),
 });
 
 const recreateAdsSchema = Joi.object({
@@ -203,7 +192,7 @@ const generateImageRequestSchema = Joi.alternatives().try(
 // =========================
 const imageResultSchema = Joi.object({
     generatedImageUrl: Joi.string().required(),
-    aspectRatio: Joi.string().valid(...SUPPORTED_ASPECT_RATIOS),
+    aspectRatio: Joi.string().valid(...IMAGE_ASPECT_RATIOS),
     prompt: Joi.string().allow(""),
     promptTokens: Joi.number().default(0),
     completionTokens: Joi.number().default(0),

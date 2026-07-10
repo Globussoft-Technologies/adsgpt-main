@@ -19,6 +19,7 @@ import adFactorySlice from '@/store/reducers/AdFactory/AdFactorySlice';
 import adFactoryNewSlice from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import adFactoryAutomationSlice from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
 import modelCreditsSlice from '@/store/reducers/modelCredits/modelCreditsSlice';
+import adCreativeConfigSlice from '@/store/reducers/adCreativeConfig/adCreativeConfigSlice';
 import usageSlice from '@/store/reducers/profile/usageSlice';
 import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSlice';
 import imageReducer from '@/store/reducers/image/imageSlice';
@@ -70,6 +71,7 @@ const store = configureStore({
     adFactoryNew: adFactoryNewSlice,
     adFactoryAutomation: adFactoryAutomationSlice,
     modelCredits: modelCreditsSlice,
+    adCreativeConfig: adCreativeConfigSlice,
     usage: usageSlice,
     competitorSearch: competitorSearchReducer,
     image: imageReducer,

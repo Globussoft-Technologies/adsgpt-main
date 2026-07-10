@@ -1,7 +1,7 @@
 const creditConfig = require("../config/creditConfig");
 const UserProfile = require("../Module/user/userProfileModel");
 const CreditReservation = require("../Module/credit/creditReservationModel");
-const { getCreditDeduction } = require("../config/modelRegistry");
+const { getCreditDeduction, getCreditDeductionByQuality } = require("../config/modelRegistry");
 
 const TOPUP_PLAN_ID = "18";
 
@@ -43,6 +43,21 @@ class UnifiedCreditController {
       return Number.isFinite(v) ? v : fallback;
     }
     return getCreditDeduction(model);
+  }
+
+  /**
+   * Quality-aware variant of getModelDeduction. NEW + additive — the original
+   * above is left untouched. Image models resolve their (model, quality) tier
+   * credits via the registry; SPECIAL_CASES and tier-less models behave exactly
+   * as getModelDeduction (quality ignored). Unknown/missing quality → "high".
+   */
+  static getModelDeductionByQuality(model, quality) {
+    if (model && SPECIAL_CASES[model]) {
+      const { envVar, default: fallback } = SPECIAL_CASES[model];
+      const v = parseFloat(process.env[envVar]);
+      return Number.isFinite(v) ? v : fallback;
+    }
+    return getCreditDeductionByQuality(model, quality);
   }
 
   /**

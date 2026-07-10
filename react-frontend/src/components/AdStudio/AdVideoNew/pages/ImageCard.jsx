@@ -41,8 +41,10 @@ const SHOW_POST_AD_NAV = true;
 // change. Keyed by both the stored label and the raw model id, so old and new
 // records both resolve.
 const MODEL_LABEL_OVERRIDES = {
-  'Seedream 5.0 lite': 'Imagen',
-  'seedream-5.0-lite': 'Imagen',
+  // 'Seedream 5.0 lite': 'Imagen',
+  // 'seedream-5.0-lite': 'Imagen',
+  'Seedream 5.0 lite': 'Seedream 5.0 lite',
+  'seedream-5.0-lite': 'Seedream 5.0 lite',
 };
 
 // Backend `inputs.type` → AdCreativeNewLayout route key. NOTE:
@@ -358,17 +360,16 @@ export default function ImageCard({
                   return MODEL_LABEL_OVERRIDES[raw] || raw;
                 })()}
               </p>
-              {/* HIDE-MARK — Quality key hidden from tooltip. Restore this <p> to bring it back.
               <p>
                 <span className="text-gray-400">Quality:</span>{' '}
                 {(() => {
                   // Records created before the quality field existed won't
                   // carry it — fall back to the backend default of "medium".
                   const q = item?.inputs?.quality || 'medium';
-                  return q.charAt(0).toUpperCase() + q.slice(1);
+                  // "ultra_high" → "Ultra High"
+                  return q.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
                 })()}
               </p>
-              */}
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-400">Brand:</span> {item.inputs.brandName}

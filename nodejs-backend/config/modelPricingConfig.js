@@ -9,7 +9,7 @@
  * that look up by string key (e.g. existing aggregation code).
  */
 
-const { MODEL_REGISTRY, findModel, imageEntries, videoEntries } = require("./modelRegistry");
+const { MODEL_REGISTRY, findModel, findQualityTier, imageEntries, videoEntries } = require("./modelRegistry");
 
 function buildImagePricingMap() {
   const map = {};
@@ -52,6 +52,19 @@ const modelPricingConfig = {
     const inputCost = (inputTokens / 1_000_000) * (pricing.input_per_million || 0);
     const outputCost = (outputTokens / 1_000_000) * (pricing.output_per_million || 0);
     return parseFloat((inputCost + outputCost).toFixed(6));
+  },
+
+  /**
+   * Get actual cost (USD) for an image generation at a specific quality.
+   * NEW + additive — getImageCost above is left untouched. When the
+   * (model, quality) combo resolves to a qualityTier, that tier's flat
+   * pricing.per_image wins. Models without qualityTiers fall back to the
+   * original getImageCost (token-based / top-level flat rate).
+   */
+  getImageCostByQuality(model, quality, inputTokens = 0, outputTokens = 0) {
+    const tier = findQualityTier(model, quality);
+    if (tier?.pricing?.per_image != null) return tier.pricing.per_image;
+    return this.getImageCost(model, inputTokens, outputTokens);
   },
 
   /**

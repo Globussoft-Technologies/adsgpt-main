@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   LayoutGrid,
+  Proportions,
   LinkIcon,
   Loader2,
   UploadCloud,
@@ -25,7 +26,12 @@ import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png
 import chatResponseDark from '@/assets/layouts/adstudio/chat-response-dark.svg';
 import brandIqIcon from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
 import getCookies from '@/utils/getCookies';
-import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
+import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
+import AspectRatioTiles, {
+  AnimatedPanel,
+  primaryRatio,
+  totalImages,
+} from '@/components/AdStudio/AdCreativeNew/AspectRatioPicker';
 import {
   ALLOWED_IMAGE_ACCEPT,
   IMAGE_TYPE_ERROR,
@@ -42,64 +48,30 @@ import { silentSaveBrandFromAutofill } from '../../ai-creatives/silentBrandSave'
 
 const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 
-// Each entry carries either a ReactNode `icon` or an image path `iconSrc`
-// (the picker renders the latter via <img>).
-const MODEL_OPTIONS = [
-  { name: 'Nano Banana 2', available: true, iconSrc: geminiIcon },
-  { name: 'Nano Banana Pro', available: true, iconSrc: geminiIcon },
-  { name: 'OpenAI 1.5', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
-  { name: 'OpenAI 2.0', available: true, icon: <SiOpenai size={14} className="text-gray-500 dark:text-white/80" /> },
-  // { name: 'Seedream 5.0 lite', available: true, iconSrc: seedanceIcon },
-  { name: 'Imagen', available: true, iconSrc: geminiIcon },
-];
-
-function ModelIcon({ option }) {
-  if (option?.iconSrc) {
-    return <img src={option.iconSrc} alt="" className="h-3.5 w-3.5 object-contain" />;
+// Model list, labels, apiIds, aspect ratios, qualities and per-quality credits
+// come from the backend `ad_creative` surface via useAdCreativeConfig — no
+// longer hardcoded. Icons stay frontend-owned, chosen by model id: OpenAI →
+// SiOpenai react-icon, Seedream → Seedance logo, everything else → Gemini.
+function ModelIcon({ apiId }) {
+  const id = String(apiId || '');
+  if (/gpt-image/i.test(id)) {
+    return <SiOpenai size={14} className="text-gray-500 dark:text-white/80" />;
   }
-  return option?.icon ?? null;
+  const src = /seedream/i.test(id) ? seedanceIcon : geminiIcon;
+  return <img src={src} alt="" className="h-3.5 w-3.5 object-contain" />;
 }
 
-const ASPECT_LABELS = [
-  { key: '1:1', label: '1:1 (square)' },
-  { key: '2:3', label: '2:3 (portrait)' },
-  { key: '3:2', label: '3:2 (landscape)' },
-  { key: '9:16', label: '9:16 (vertical widescreen)' },
-  { key: '16:9', label: '16:9 (widescreen)' },
-];
+// Aspect-ratio helpers + the picker panel live in the shared AspectRatioTiles
+// module (imported above).
 
-// OpenAI's image models currently only generate these three ratios.
-const OPENAI_ALLOWED_RATIOS = new Set(['1:1', '2:3', '3:2']);
-const isOpenAIModel = (name) => /^openai/i.test(String(name || ''));
-const allowedAspectLabels = (modelName) =>
-  isOpenAIModel(modelName)
-    ? ASPECT_LABELS.filter((a) => OPENAI_ALLOWED_RATIOS.has(a.key))
-    : ASPECT_LABELS;
+// Quality tiers are per-model, from the `ad_creative` surface
+// (selectedModel.qualities). Labels below are presentation-only.
+const QUALITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High', ultra_high: 'Ultra High' };
+const qualityLabel = (v) => QUALITY_LABELS[v] || v;
 
-const DEFAULT_RATIO_COUNTS = { '1:1': 1, '2:3': 0, '3:2': 0, '9:16': 0, '16:9': 0 };
-
-// Generation quality tiers. Value matches the backend contract verbatim
-// (Joi accepts 'low' | 'medium' | 'high'); label is the picker text.
-const QUALITY_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-];
-
-// HIDE-MARK — Quality picker hidden platform-wide; quality is forced to "high"
-// in the backend (imageController.generateImage). Flip to true to bring it back.
-const SHOW_QUALITY_PICKER = false;
-
-// Reverse of LifestyleAdsFlow.MODEL_TO_API — used to map a stored API model
-// id back to the UI label for the recreate-from-history flow.
-const API_MODEL_TO_UI = {
-  'gemini-3.1-flash-image-preview': 'Nano Banana 2',
-  'gemini-3-pro-image-preview': 'Nano Banana Pro',
-  'gpt-image-1.5': 'OpenAI 1.5',
-  'gpt-image-2': 'OpenAI 2.0',
-  // 'seedream-5.0-lite': 'Seedream 5.0 lite',
-  'seedream-5.0-lite': 'Imagen',
-};
+// Quality picker is enabled; the backend reads the sent quality (no longer
+// forced to "high" in imageController).
+const SHOW_QUALITY_PICKER = true;
 
 // Variant route key → backend `inputs.type`. Mirrors VARIANT_TO_API_TYPE
 // in LifestyleAdsFlow — duplicated here to avoid coupling AdSetupStep
@@ -123,8 +95,6 @@ const unquote = (v) => {
   }
 };
 
-const totalImages = (counts) => Object.values(counts).reduce((a, b) => a + b, 0);
-const primaryRatio = (counts) => ASPECT_LABELS.find(({ key }) => counts[key] > 0)?.key ?? '1:1';
 
 const AGE_OPTIONS = ['18-24', '25-34', '35-44', '45-54', '55+'];
 const GENDER_OPTIONS = ['Any', 'Female', 'Male', 'Non-binary'];
@@ -452,28 +422,25 @@ export function AdSetupStep({
       }
     }
 
-    if (inp.model && API_MODEL_TO_UI[inp.model]) {
-      setModel(API_MODEL_TO_UI[inp.model]);
+    if (inp.model && configModels.some((m) => m.apiId === inp.model)) {
+      setModel(inp.model);
     }
 
-    if (QUALITY_OPTIONS.some((q) => q.value === inp.quality)) {
+    if (inp.quality && QUALITY_LABELS[inp.quality]) {
       setQuality(inp.quality);
     }
 
     // Aspect ratio. Prefer the structured aspectRatioPerImage if present;
-    // otherwise fall back to the flat aspectRatio + numberOfImages pair.
+    // otherwise fall back to the flat aspectRatio + numberOfImages pair. The
+    // reconcile effect merges these into the selected model's ratio set.
     if (Array.isArray(inp.aspectRatioPerImage) && inp.aspectRatioPerImage.length > 0) {
-      const counts = { ...DEFAULT_RATIO_COUNTS };
+      const counts = {};
       for (const { aspectRatio, numberOfImages } of inp.aspectRatioPerImage) {
-        if (aspectRatio in counts) counts[aspectRatio] = Number(numberOfImages) || 0;
+        if (aspectRatio) counts[aspectRatio] = Number(numberOfImages) || 0;
       }
       setRatioCounts(counts);
     } else if (inp.aspectRatio) {
-      const counts = { ...DEFAULT_RATIO_COUNTS, [inp.aspectRatio]: 0 };
-      if (inp.aspectRatio in counts) {
-        counts[inp.aspectRatio] = Number(inp.numberOfImages) || 1;
-      }
-      setRatioCounts(counts);
+      setRatioCounts({ [inp.aspectRatio]: Number(inp.numberOfImages) || 1 });
     }
 
     const toItem = (u) => ({ file: null, preview: u });
@@ -623,30 +590,43 @@ export function AdSetupStep({
   const [logoUrl, setLogoUrl] = useState(brandInfo.brandLogoUrl ?? '');
   const [logoFiles, setLogoFiles] = useState([]);
 
-  const [model, setModel] = useState('Nano Banana 2');
-  const [quality, setQuality] = useState('medium');
-  const [ratioCounts, setRatioCounts] = useState(DEFAULT_RATIO_COUNTS);
-  // Live per-model credit cost from /adsgpt/usage/model-credit-value
-  // (shared cache). Falls back to 7 while loading or on API error.
-  const creditsPerImage = useImageCreditsForModel(model);
+  const [model, setModel] = useState('gemini-3.1-flash-image-preview'); // Nano Banana 2 (canonical apiId)
+  const [quality, setQuality] = useState('high');
+  const [ratioCounts, setRatioCounts] = useState({});
 
-  // Switching to an OpenAI model removes 9:16 / 16:9 from the picker; zero
-  // out any counts the user may have already set so totals + payload match
-  // what the backend will accept.
+  // Model list + per-model aspect ratios / qualities / credits from the backend
+  // `ad_creative` surface (shared cache, fallback baked in).
+  const { models: configModels } = useAdCreativeConfig();
+  const selectedModel = configModels.find((m) => m.apiId === model);
+  // Per-image credits for the selected model + quality (falls back to the
+  // model's default/high tier, then 7).
+  const creditsPerImage =
+    selectedModel?.creditsByQuality?.[quality] ?? selectedModel?.creditsPerImage ?? 7;
+
+  // Reconcile per-ratio counts whenever the selected model changes — models
+  // support different aspect-ratio sets. Keep counts for ratios the new model
+  // still offers, drop the rest, and default to a single 1:1 (or first ratio)
+  // if nothing is selected so the payload stays valid.
   useEffect(() => {
-    if (!isOpenAIModel(model)) return;
+    const ratios = selectedModel?.aspectRatios;
+    if (!ratios || ratios.length === 0) return;
     setRatioCounts((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const key of Object.keys(next)) {
-        if (!OPENAI_ALLOWED_RATIOS.has(key) && next[key] > 0) {
-          next[key] = 0;
-          changed = true;
-        }
+      const next = {};
+      for (const r of ratios) next[r] = prev[r] || 0;
+      if (totalImages(next) === 0) {
+        next[ratios.includes('1:1') ? '1:1' : ratios[0]] = 1;
       }
-      return changed ? next : prev;
+      return next;
     });
-  }, [model]);
+  }, [selectedModel]);
+
+  // Keep the selected quality valid for the current model — tiers differ per
+  // model (only Nano Banana 2 offers "ultra_high").
+  useEffect(() => {
+    const qualities = selectedModel?.qualities;
+    if (!qualities || qualities.length === 0 || qualities.includes(quality)) return;
+    setQuality(qualities.includes('high') ? 'high' : qualities[0]);
+  }, [selectedModel, quality]);
   const [errors, setErrors] = useState({});
   const clearError = (field) => setErrors((p) => (p[field] ? { ...p, [field]: '' } : p));
 
@@ -955,9 +935,11 @@ export function AdSetupStep({
                   )}
                 </button>
                 {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
-                {SHOW_QUALITY_PICKER && <QualityPickerPill value={quality} onChange={setQuality} />}
+                {SHOW_QUALITY_PICKER && (
+                  <QualityPickerPill value={quality} onChange={setQuality} model={model} />
+                )}
                 <ModelPickerPill value={model} onChange={setModel} />
-                <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} />
+                <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} quality={quality} />
               </div>
             </div>
             {errors.instructions && (
@@ -1723,9 +1705,11 @@ function PillDropdown({ label, value, onChange, options }) {
   );
 }
 
-function QualityPickerPill({ value, onChange }) {
+function QualityPickerPill({ value, onChange, model }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const { models } = useAdCreativeConfig();
+  const qualities = models.find((m) => m.apiId === model)?.qualities || [];
 
   useEffect(() => {
     if (!open) return;
@@ -1736,7 +1720,7 @@ function QualityPickerPill({ value, onChange }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeLabel = QUALITY_OPTIONS.find((q) => q.value === value)?.label || 'Medium';
+  const activeLabel = qualityLabel(value);
 
   return (
     <div ref={ref} className="relative">
@@ -1750,14 +1734,14 @@ function QualityPickerPill({ value, onChange }) {
       </button>
       {open && (
         <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-          {QUALITY_OPTIONS.map((opt) => {
-            const selected = opt.value === value;
+          {qualities.map((q) => {
+            const selected = q === value;
             return (
               <button
-                key={opt.value}
+                key={q}
                 type="button"
                 onClick={() => {
-                  onChange(opt.value);
+                  onChange(q);
                   setOpen(false);
                 }}
                 className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
@@ -1766,7 +1750,7 @@ function QualityPickerPill({ value, onChange }) {
                     : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                 }`}
               >
-                <span className="flex-1">{opt.label}</span>
+                <span className="flex-1">{qualityLabel(q)}</span>
               </button>
             );
           })}
@@ -1779,6 +1763,8 @@ function QualityPickerPill({ value, onChange }) {
 function ModelPickerPill({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const { models } = useAdCreativeConfig();
+  const selectedModel = models.find((m) => m.apiId === value);
 
   useEffect(() => {
     if (!open) return;
@@ -1797,44 +1783,33 @@ function ModelPickerPill({ value, onChange }) {
         className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
-          <ModelIcon option={MODEL_OPTIONS.find((m) => m.name === value)} />
+          <ModelIcon apiId={value} />
         </span>
-        {value}
+        {selectedModel?.label || value}
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
         <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-          {MODEL_OPTIONS.map((opt) => {
-            const { name, available } = opt;
-            const selected = name === value;
+          {models.map((opt) => {
+            const selected = opt.apiId === value;
             return (
               <button
-                key={name}
+                key={opt.apiId}
                 type="button"
-                disabled={!available}
                 onClick={() => {
-                  if (!available) return;
-                  onChange(name);
+                  onChange(opt.apiId);
                   setOpen(false);
                 }}
-                title={available ? undefined : 'Coming soon'}
                 className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
-                  !available
-                    ? 'cursor-not-allowed text-gray-500 dark:text-white/80'
-                    : selected
-                      ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                      : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                  selected
+                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
-                  <ModelIcon option={opt} />
+                  <ModelIcon apiId={opt.apiId} />
                 </span>
-                <span className="flex-1">{name}</span>
-                {!available && (
-                  <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[9px] uppercase tracking-wide text-gray-500 dark:text-white/50">
-                    soon
-                  </span>
-                )}
+                <span className="flex-1">{opt.label}</span>
               </button>
             );
           })}
@@ -1844,14 +1819,16 @@ function ModelPickerPill({ value, onChange }) {
   );
 }
 
-function RatioPickerPill({ counts, onChange, model }) {
-  // Reuses the shared modelCredits cache — multiple components calling the
-  // hook with the same model still cost one network request per session.
-  const creditsPerImage = useImageCreditsForModel(model);
+function RatioPickerPill({ counts, onChange, model, quality }) {
+  // Shared ad_creative config cache — multiple components calling the hook
+  // still cost one network request per session.
+  const { models } = useAdCreativeConfig();
+  const selectedModel = models.find((m) => m.apiId === model);
+  const creditsPerImage =
+    selectedModel?.creditsByQuality?.[quality] ?? selectedModel?.creditsPerImage ?? 7;
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const total = totalImages(counts);
-  const primary = primaryRatio(counts);
 
   useEffect(() => {
     if (!open) return;
@@ -1862,11 +1839,6 @@ function RatioPickerPill({ counts, onChange, model }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const adjust = (key, delta) => {
-    const next = Math.max(0, Math.min(4, (counts[key] ?? 0) + delta));
-    onChange({ ...counts, [key]: next });
-  };
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -1874,7 +1846,7 @@ function RatioPickerPill({ counts, onChange, model }) {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
-        <span className="text-[14px] text-gray-900 dark:text-white/90">{primary}</span>
+        <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
         <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
         <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
         <span className="text-[14px]">
@@ -1882,49 +1854,17 @@ function RatioPickerPill({ counts, onChange, model }) {
         </span>
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
-      {open && (
-        <div className="absolute right-0 bottom-full z-30 mb-2 w-[280px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-5 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-          <p className="mb-2 text-center text-[13px] font-medium text-gray-500 dark:text-[#d9d9d9]">
-            Aspect Ratio per Image
-          </p>
-          <div className="flex items-center justify-center gap-1.5 text-sm">
-            <span className="text-gray-500 dark:text-white/70">Total Number of Images :</span>
-            <span className="font-medium text-gray-900 dark:text-white">{total}</span>
-          </div>
-          <p className="mb-6 mt-1 text-center text-[11px] text-gray-500 dark:text-white/50">
-            {creditsPerImage} credits per image
-          </p>
-          <div className="space-y-1">
-            {allowedAspectLabels(model).map(({ key, label }) => (
-              <div key={key} className="flex items-center justify-between pl-4">
-                <span className="text-[12px] text-gray-900 dark:text-white">{label}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => adjust(key, -1)}
-                    className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
-                    aria-label={`Decrease ${label}`}
-                  >
-                    <span className="text-[18px] leading-none select-none">−</span>
-                  </button>
-                  <span className="w-8 rounded-full bg-gray-100 dark:bg-[#9092941A] py-0.5 text-center text-[11px] font-medium text-gray-900 dark:text-white">
-                    {counts[key] ?? 0}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => adjust(key, 1)}
-                    className="flex h-5 w-5 items-center justify-center text-gray-500 dark:text-white/60 hover:text-black dark:hover:text-white"
-                    aria-label={`Increase ${label}`}
-                  >
-                    <span className="text-[18px] leading-none select-none">+</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-right text-[10px] text-gray-500 dark:text-white/40">Max 4 per ratio</p>
-        </div>
-      )}
+      <AnimatedPanel
+        open={open}
+        className="absolute right-0 bottom-full z-30 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+      >
+        <AspectRatioTiles
+          counts={counts}
+          onChange={onChange}
+          ratios={selectedModel?.aspectRatios || []}
+          creditsPerImage={creditsPerImage}
+        />
+      </AnimatedPanel>
     </div>
   );
 }

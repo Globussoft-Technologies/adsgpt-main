@@ -25,6 +25,16 @@
  *                          (per_image, when present, short-circuits token math)
  *                  VIDEO: { per_second }
  *
+ *   qualityTiers   IMAGE ONLY, optional. Per-quality credit + price overrides.
+ *                  Array of { quality, creditEnvVar, creditDefault, pricing }
+ *                  — one entry per quality the model offers ("low" | "medium" |
+ *                  "high", plus "ultra_high" where supported). When the
+ *                  frontend sends a model+quality combo, the matching tier's
+ *                  credits resolve from creditEnvVar (env, fallback
+ *                  creditDefault) and cost from pricing.per_image. The
+ *                  top-level creditEnvVar/creditDefault/pricing are retained as
+ *                  the pre-quality fallback for callers that pass no quality.
+ *
  *   aggregationCreditDefault
  *                  VIDEO ONLY. Per-second fallback used by aggregation
  *                  pipelines for OLD records where credit_deduction is 0.
@@ -223,6 +233,12 @@ const MODEL_REGISTRY = [
     creditEnvVar: "gemini-3.1-flash-image-preview_IMAGE_CREDIT_DEDUCTION",
     creditDefault: 7,
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
+    qualityTiers: [
+      { quality: "low",        creditEnvVar: "gemini-3.1-flash-image-preview_IMAGE_CREDIT_DEDUCTION_LOW",        creditDefault: 1, pricing: { per_image: 0.040 } },
+      { quality: "medium",     creditEnvVar: "gemini-3.1-flash-image-preview_IMAGE_CREDIT_DEDUCTION_MEDIUM",     creditDefault: 2, pricing: { per_image: 0.067 } },
+      { quality: "high",       creditEnvVar: "gemini-3.1-flash-image-preview_IMAGE_CREDIT_DEDUCTION_HIGH",       creditDefault: 3, pricing: { per_image: 0.101 } },
+      { quality: "ultra_high", creditEnvVar: "gemini-3.1-flash-image-preview_IMAGE_CREDIT_DEDUCTION_ULTRA_HIGH", creditDefault: 4, pricing: { per_image: 0.151 } },
+    ],
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
     enabled: true,
@@ -235,6 +251,11 @@ const MODEL_REGISTRY = [
     creditEnvVar: "gemini-3-pro-image-preview_IMAGE_CREDIT_DEDUCTION",
     creditDefault: 7,
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
+    qualityTiers: [
+      { quality: "low",    creditEnvVar: "gemini-3-pro-image-preview_IMAGE_CREDIT_DEDUCTION_LOW",    creditDefault: 4, pricing: { per_image: 0.134 } },
+      { quality: "medium", creditEnvVar: "gemini-3-pro-image-preview_IMAGE_CREDIT_DEDUCTION_MEDIUM", creditDefault: 4, pricing: { per_image: 0.134 } },
+      { quality: "high",   creditEnvVar: "gemini-3-pro-image-preview_IMAGE_CREDIT_DEDUCTION_HIGH",   creditDefault: 6, pricing: { per_image: 0.240 } },
+    ],
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
     enabled: true,
@@ -247,6 +268,11 @@ const MODEL_REGISTRY = [
     creditEnvVar: "gpt-image-1.5_IMAGE_CREDIT_DEDUCTION",
     creditDefault: 7,
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
+    qualityTiers: [
+      { quality: "low",    creditEnvVar: "gpt-image-1.5_IMAGE_CREDIT_DEDUCTION_LOW",    creditDefault: 1, pricing: { per_image: 0.009 } },
+      { quality: "medium", creditEnvVar: "gpt-image-1.5_IMAGE_CREDIT_DEDUCTION_MEDIUM", creditDefault: 1, pricing: { per_image: 0.034 } },
+      { quality: "high",   creditEnvVar: "gpt-image-1.5_IMAGE_CREDIT_DEDUCTION_HIGH",   creditDefault: 4, pricing: { per_image: 0.133 } },
+    ],
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
     enabled: true,
@@ -259,6 +285,11 @@ const MODEL_REGISTRY = [
     creditEnvVar: "gpt-image-2_IMAGE_CREDIT_DEDUCTION",
     creditDefault: 7,
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.27 },
+    qualityTiers: [
+      { quality: "low",    creditEnvVar: "gpt-image-2_IMAGE_CREDIT_DEDUCTION_LOW",    creditDefault: 1, pricing: { per_image: 0.006 } },
+      { quality: "medium", creditEnvVar: "gpt-image-2_IMAGE_CREDIT_DEDUCTION_MEDIUM", creditDefault: 2, pricing: { per_image: 0.053 } },
+      { quality: "high",   creditEnvVar: "gpt-image-2_IMAGE_CREDIT_DEDUCTION_HIGH",   creditDefault: 6, pricing: { per_image: 0.211 } },
+    ],
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
     enabled: true,
@@ -271,6 +302,11 @@ const MODEL_REGISTRY = [
     creditEnvVar: "seedream-5.0-lite_IMAGE_CREDIT_DEDUCTION",
     creditDefault: 1,
     pricing: { input_per_million: 8, output_per_million: 32, per_image: 0.04 },
+    qualityTiers: [
+      { quality: "low",    creditEnvVar: "seedream-5.0-lite_IMAGE_CREDIT_DEDUCTION_LOW",    creditDefault: 1, pricing: { per_image: 0.035 } },
+      { quality: "medium", creditEnvVar: "seedream-5.0-lite_IMAGE_CREDIT_DEDUCTION_MEDIUM", creditDefault: 1, pricing: { per_image: 0.035 } },
+      { quality: "high",   creditEnvVar: "seedream-5.0-lite_IMAGE_CREDIT_DEDUCTION_HIGH",   creditDefault: 1, pricing: { per_image: 0.035 } },
+    ],
     capabilities: { aspectRatios: "model1", autoAspectDefault: true, generationTimeSec: 100, qualityToggle: true },
     icon: "google",
     enabled: true,
@@ -335,11 +371,56 @@ function videoEntries({ activeOnly = false } = {}) {
   return MODEL_REGISTRY.filter((e) => e.type === "video" && (!activeOnly || e.enabled !== false));
 }
 
+// ─────────────────── Quality-aware helpers (image) ───────────────────
+// NEW + additive. The originals above (getCreditDeduction, and the pricing
+// helpers in modelPricingConfig) are intentionally left untouched — these
+// parallel functions add per-quality behaviour without changing any caller.
+
+/** Default image quality when a caller supplies no / an unknown quality.
+ *  Mirrors the frontend, where the quality picker is hidden and generation
+ *  is forced to "high". */
+const DEFAULT_IMAGE_QUALITY = "high";
+
+/**
+ * Resolve a model's per-quality tier (see `qualityTiers` on image entries).
+ * Case-insensitive; a missing/unknown quality falls back to the
+ * DEFAULT_IMAGE_QUALITY ("high") tier. Returns undefined for models that
+ * declare no qualityTiers (video, disabled image models).
+ */
+function findQualityTier(model, quality) {
+  const entry = findModel(model);
+  const tiers = entry?.qualityTiers;
+  if (!Array.isArray(tiers) || tiers.length === 0) return undefined;
+  const q = typeof quality === "string" ? quality.trim().toLowerCase() : "";
+  return (
+    tiers.find((t) => t.quality === q) ||
+    tiers.find((t) => t.quality === DEFAULT_IMAGE_QUALITY) ||
+    undefined
+  );
+}
+
+/**
+ * Credits-per-image for a (model, quality) combo. Reads the matching tier's
+ * creditEnvVar from env, falling back to that tier's creditDefault. For models
+ * with no qualityTiers it defers to the original getCreditDeduction, so this is
+ * safe to call for any model.
+ */
+function getCreditDeductionByQuality(model, quality) {
+  const tier = findQualityTier(model, quality);
+  if (tier) {
+    const raw = parseFloat(process.env[tier.creditEnvVar]);
+    return Number.isFinite(raw) ? raw : tier.creditDefault;
+  }
+  return getCreditDeduction(model);
+}
+
 module.exports = {
   MODEL_REGISTRY,
   findModel,
   allKeysFor,
+  findQualityTier,
   getCreditDeduction,
+  getCreditDeductionByQuality,
   getExtraDeduction,
   getExtraCostPerSecond,
   imageEntries,

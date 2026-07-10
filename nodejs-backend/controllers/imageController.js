@@ -121,7 +121,7 @@ exports.generateImage = async (req, res) => {
     try {
         /* #swagger.tags = ['Image Generation']
            #swagger.summary = 'Submit image generation request'
-           #swagger.description = 'Dynamic API handling lifestyle, product_shot, apps_saas, brand_awareness, ai_ads, and recreate_ads image types. Each type has different required fields inside userInputs.'
+           #swagger.description = 'Dynamic API handling lifestyle, product_shot, apps_saas, brand_awareness, ai_ads, and recreate_ads image types. Each type has different required fields inside userInputs. <br/><br/>`userInputs.quality` is optional: `low | medium | high | ultra_high` (default `high`; `ultra_high` is only supported by Nano Banana 2). <br/>`aspectRatioPerImage[].aspectRatio` accepts: 1:1, 4:5, 9:16, 2:3, 3:4, 16:9, 21:9, 3:2, 4:3, 5:4, 1:4, 4:1, 1:8, 8:1 (per-model subset — see /usage/model-credit-value?media=ad_creative).'
            #swagger.requestBody = {
                 required: true,
                 content: {
@@ -145,7 +145,8 @@ exports.generateImage = async (req, res) => {
                                             { aspectRatio: "1:1", numberOfImages: 2 },
                                             { aspectRatio: "9:16", numberOfImages: 1 }
                                         ],
-                                        Model: "gemini-3.1-flash-image-preview"
+                                        Model: "gemini-3.1-flash-image-preview",
+                                        quality: "high"
                                     }
                                 }
                             },
@@ -335,14 +336,23 @@ exports.generateImage = async (req, res) => {
         }
         console.log(`[generateImage] Authenticated user: ${userId}`);
 
-        // Quality picker has been removed from every creative surface, so the
-        // client no longer sends a quality choice. Force HIGH here (before both
-        // buildDbInputs and the Python payload) so the DB record and Python
-        // request stay consistent regardless of what — if anything — arrived.
-        value.userInputs.quality = "high";
+        // Quality picker is now enabled on the creative surfaces, so the client
+        // sends the chosen quality. The force-HIGH override below is cancelled —
+        // the sent quality flows through to buildDbInputs, the Python payload,
+        // and credit charging. Validation defaults quality to "high" if absent,
+        // so records/charging stay safe when no choice arrives.
+        // value.userInputs.quality = "high";
 
         const selectedModel = value.userInputs.Model;
-        const imageCreditCost = UnifiedCreditController.getModelDeduction(selectedModel);
+        // LEGACY (pre-quality, flat top-level rate) — kept for reference:
+        // const imageCreditCost = UnifiedCreditController.getModelDeduction(selectedModel);
+        // Quality-aware charge. quality is forced "high" just above, so image
+        // models are billed at their high tier; tier-less models fall back to
+        // the flat rate inside getModelDeductionByQuality.
+        const imageCreditCost = UnifiedCreditController.getModelDeductionByQuality(
+            selectedModel,
+            value.userInputs.quality,
+        );
         const totalImages = value.userInputs.aspectRatioPerImage.reduce(
             (sum, r) => sum + r.numberOfImages,
             0
@@ -729,7 +739,14 @@ exports.updateImageResult = async (req, res) => {
                 (img) => !!img?.generatedImageUrl,
             );
             const failedCount = images.length - successfulImages.length;
-            const perImage = UnifiedCreditController.getModelDeduction(model);
+            // LEGACY (pre-quality, flat top-level rate) — kept for reference:
+            // const perImage = UnifiedCreditController.getModelDeduction(model);
+            // Quality-aware charge — read the quality persisted on the record
+            // (buildDbInputs stores userInputs.quality, defaulting to "high").
+            const perImage = UnifiedCreditController.getModelDeductionByQuality(
+                model,
+                priorDoc?.inputs?.quality,
+            );
             const totalCreditsToDeduct = perImage * successfulImages.length;
             const totalPromptTokens = images.reduce((sum, img) => sum + (img.promptTokens || 0), 0);
             const totalCompletionTokens = images.reduce((sum, img) => sum + (img.completionTokens || 0), 0);
@@ -761,8 +778,9 @@ exports.updateImageResult = async (req, res) => {
                 );
             }
 
-            const actualImageCost = modelPricingConfig.getImageCost(
+            const actualImageCost = modelPricingConfig.getImageCostByQuality(
                 model,
+                priorDoc?.inputs?.quality,
                 totalPromptTokens,
                 totalCompletionTokens
             );

@@ -82,3 +82,24 @@ export const fetchModelCredits = async () => {
     return { imageModels: [], videoModels: [] };
   }
 };
+
+// Per-quality image credits from the `ad_creative` surface. Legacy
+// fetchModelCredits (above) is kept for video + as a flat fallback. Each model
+// returned carries qualityTiers: [{ quality, creditsPerImage }] so the
+// estimator can show credits per quality (images are priced per tier).
+export const fetchAdCreativeImageTiers = async () => {
+  try {
+    const token = getAdminToken();
+    const response = await axios.get(`${BASE_URL}/adsgpt/usage/model-credit-value`, {
+      params: { media: "ad_creative", type: "image" },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.data.success) {
+      return response.data.data.imageModels || [];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching ad creative image tiers:", error);
+    return [];
+  }
+};
