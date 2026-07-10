@@ -61,10 +61,28 @@ const gridColsClass = (n) => {
 const MediaGrid = ({ urls = [], onOpenImage }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  // Under rapid/continuous generation a freshly-generated image URL can 404
+  // briefly (S3 path not yet propagated). Retry once with a cache-bust before
+  // giving up, and hide the tile entirely if it still fails — so the user never
+  // sees a permanent broken-image box (bug: broken images on continuous prompts).
+  const [attempts, setAttempts] = useState({});
+  const [dead, setDead] = useState(() => new Set());
+
+  const onImgError = (url) => {
+    setAttempts((prev) => {
+      const n = (prev[url] || 0) + 1;
+      if (n > 1) setDead((d) => new Set(d).add(url));
+      return { ...prev, [url]: n };
+    });
+  };
+
   if (!urls.length) return null;
 
-  const total = urls.length;
-  const visible = urls.slice(0, MEDIA_GRID_LIMIT);
+  const live = urls.filter((u) => isVideoUrl(u) || !dead.has(u));
+  if (!live.length) return null;
+
+  const total = live.length;
+  const visible = live.slice(0, MEDIA_GRID_LIMIT);
   const overflow = total - visible.length;
 
   // Open My Space → Images → AI Assistant source (where these chat-generated
@@ -80,7 +98,12 @@ const MediaGrid = ({ urls = [], onOpenImage }) => {
     <div className="mt-3 flex flex-col gap-2">
       <div className={`grid gap-2 ${gridColsClass(visible.length)}`}>
         {visible.map((url, i) => {
-          const src = toMediaUrl(url);
+          const base = toMediaUrl(url);
+          const retry = attempts[url] || 0;
+          const src =
+            retry && typeof base === 'string'
+              ? `${base}${base.includes('?') ? '&' : '?'}r=${retry}`
+              : base;
           const isOverflowTile = overflow > 0 && i === visible.length - 1;
           if (isVideoUrl(url)) {
             return (
@@ -106,6 +129,7 @@ const MediaGrid = ({ urls = [], onOpenImage }) => {
                   src={src}
                   alt="Generated"
                   loading="lazy"
+                  onError={() => onImgError(url)}
                   className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                 />
                 {isOverflowTile && (
@@ -152,6 +176,7 @@ const Messages = ({
   onConceptSelect,
   onOpenCanvas,
   onQuote,
+  onRecreate,
 }) => {
   const endRef = useRef(null);
   const sessionId = useSelector((state) => state.aiAssistant.sessionId);
@@ -295,7 +320,7 @@ const Messages = ({
 
               <MediaGrid urls={m.images || []} onOpenImage={setLightboxSrc} />
 
-              <CompetitorAdsGrid ads={m.competitorAds || []} />
+              <CompetitorAdsGrid ads={m.competitorAds || []} onRecreate={onRecreate} />
 
               {m.conceptCards && Array.isArray(m.conceptCards.concepts) && (
                 <ConceptCards

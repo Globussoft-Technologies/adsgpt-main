@@ -8,6 +8,7 @@ import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
+import ImageLightbox from './ImageLightbox';
 
 // Reference / product / website images are often EXTERNAL URLs (scraped sites,
 // ad-library images). Hotlinking them straight into <img> fails a lot of the
@@ -401,6 +402,8 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 const ImageUploadField = ({ field, value, onChange, disabled }) => {
   const arr = Array.isArray(value) ? value.map(asImgItem) : value ? [asImgItem(value)] : [];
   const [uploading, setUploading] = useState(false);
+  // Full-screen preview (double-click / double-tap a thumbnail).
+  const [preview, setPreview] = useState(null);
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const maxFiles = field.maxFiles || 5;
   const selectedCount = arr.filter(isImgSelected).length;
@@ -455,8 +458,9 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
               <button
                 type="button"
                 onClick={() => toggle(i)}
+                onDoubleClick={() => setPreview(toDisplaySrc(url))}
                 disabled={disabled}
-                title={on ? 'Selected — click to deselect' : 'Click to use this image'}
+                title={on ? 'Selected — double-click to preview' : 'Click to use · double-click to preview'}
                 className={`group h-full w-full overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
                   on ? 'border-white' : 'border-transparent hover:border-white/30'
                 }`}
@@ -505,6 +509,7 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
             : 'Click the images you want to use in generation'}
         </span>
       )}
+      <ImageLightbox src={preview} onClose={() => setPreview(null)} />
     </div>
   );
 };
@@ -519,6 +524,8 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
   // leaving blank white boxes — mirrors ImageUploadField's onError behavior,
   // which this grid previously lacked.
   const [broken, setBroken] = useState(() => new Set());
+  // Full-screen preview (double-click / double-tap a thumbnail).
+  const [preview, setPreview] = useState(null);
   const visible = candidates.filter((u) => !broken.has(u));
   if (!candidates.length || !visible.length) return null;
   const toggle = (url) => {
@@ -535,7 +542,9 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
               type="button"
               key={url}
               onClick={() => toggle(url)}
+              onDoubleClick={() => setPreview(toDisplaySrc(url))}
               disabled={disabled}
+              title="Click to use · double-click to preview"
               className={`group relative aspect-square overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
                 on ? 'border-white' : 'border-transparent hover:border-white/30'
               }`}
@@ -569,6 +578,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
           ? `${selected.length} image${selected.length > 1 ? 's' : ''} selected`
           : 'Pick the images you want to use (none selected yet)'}
       </span>
+      <ImageLightbox src={preview} onClose={() => setPreview(null)} />
     </div>
   );
 };
@@ -775,6 +785,21 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
   const setField = (key, val) => setValues((prev) => ({ ...prev, [key]: val }));
 
+  // What the "Submitted with" summary should show for a field. Prefer the
+  // submitted `result.values`, but fall back to the card's live `values` when
+  // that field came back empty — on a regenerate (esp. after a first attempt
+  // failed and was retried) the submitted snapshot can lose optional fields
+  // (logo, brand, reference images) even though the card still holds them,
+  // which otherwise renders every optional row as "—".
+  const summaryValue = (f) => {
+    const rv = result?.values?.[f.key];
+    const empty =
+      rv == null ||
+      (typeof rv === 'string' && rv.trim() === '') ||
+      (Array.isArray(rv) && rv.length === 0);
+    return empty ? values[f.key] : rv;
+  };
+
   const validationError = useMemo(() => {
     for (const f of form.fields || []) {
       if (!f.required) continue;
@@ -980,7 +1005,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 key={f.key}
                 className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10.5px] text-white/80"
               >
-                {f.label || f.key}: {formatValueLabel(f, result.values?.[f.key])}
+                {f.label || f.key}: {formatValueLabel(f, summaryValue(f))}
               </span>
             ))}
             {!disabled && (

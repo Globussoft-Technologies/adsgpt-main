@@ -81,6 +81,21 @@ const Composer = ({
     if (quote?.text) textareaRef.current?.focus();
   }, [quote]);
 
+  // Refocus the composer when a turn/generation finishes streaming (disabled
+  // flips true → false) so the user can type a follow-up immediately without
+  // having to click back into the box. Don't steal focus if they're actively
+  // typing elsewhere (e.g. editing a Creative Studio field).
+  const wasDisabledRef = useRef(disabled);
+  useEffect(() => {
+    const justFinished = wasDisabledRef.current && !disabled;
+    wasDisabledRef.current = disabled;
+    if (!justFinished) return;
+    const active = document.activeElement;
+    const tag = active?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || active?.isContentEditable) return;
+    textareaRef.current?.focus();
+  }, [disabled]);
+
   const readyAttachments = attachments.filter((a) => !a.pending && a.url);
   const canSend =
     !disabled && uploadingCount === 0 && (text.trim().length > 0 || readyAttachments.length > 0);

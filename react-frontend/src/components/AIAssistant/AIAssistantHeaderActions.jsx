@@ -4,6 +4,14 @@ import { History, Loader2, MessageCirclePlus, MessageSquare, Trash2 } from 'luci
 import toast from 'react-hot-toast';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   deleteConversation as deleteConversationApi,
@@ -42,6 +50,10 @@ const AIAssistantHeaderActions = () => {
   );
   const [open, setOpen] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
+  // Conversation queued for deletion, awaiting confirmation. Keeps the History
+  // popover open behind the dialog so the list doesn't disappear mid-confirm.
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Refresh the conversation list each time the popover opens.
   useEffect(() => {
@@ -84,9 +96,19 @@ const AIAssistantHeaderActions = () => {
     }
   };
 
-  const handleDelete = async (e, conv) => {
+  // Step 1: clicking the trash icon only queues the conversation for deletion
+  // and opens a confirmation dialog — it no longer deletes immediately.
+  const handleDeleteClick = (e, conv) => {
     e.stopPropagation();
     if (!conv?.id) return;
+    setPendingDelete(conv);
+  };
+
+  // Step 2: actually delete, only after the user confirms in the dialog.
+  const confirmDelete = async () => {
+    const conv = pendingDelete;
+    if (!conv?.id) return;
+    setDeleting(true);
     try {
       await deleteConversationApi(conv.id);
       // Drop it from the visible list immediately.
@@ -95,14 +117,24 @@ const AIAssistantHeaderActions = () => {
       );
       // If we just deleted the currently-loaded conversation, start fresh.
       if (sessionId === conv.id) dispatch(startNewSession());
+      setPendingDelete(null);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to delete conversation');
+    } finally {
+      setDeleting(false);
     }
   };
 
   return (
     <div className="flex items-center gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          // Keep the history list open behind the confirmation dialog.
+          if (!next && pendingDelete) return;
+          setOpen(next);
+        }}
+      >
         <PopoverTrigger asChild>
           <Button variant="ghost" className={PILL_BTN}>
             <History className="h-4 w-4 2xl:h-5 2xl:w-5" />
@@ -159,15 +191,11 @@ const AIAssistantHeaderActions = () => {
                         <span
                           role="button"
                           tabIndex={-1}
-                          onClick={(e) => handleDelete(e, conv)}
+                          onClick={(e) => handleDeleteClick(e, conv)}
                           className="mt-0.5 hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/40 hover:text-red-400 group-hover:flex"
                           aria-label="Delete conversation"
                         >
-                          {loadingId === conv.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3 w-3" />
-                          )}
+                          <Trash2 className="h-3 w-3" />
                         </span>
                       </button>
                     </li>
@@ -183,6 +211,48 @@ const AIAssistantHeaderActions = () => {
         <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
         <span>New Chat</span>
       </Button>
+
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setPendingDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-sm border border-white/10 bg-[#0D0D0D]/95 text-white backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle>Delete conversation?</DialogTitle>
+            <DialogDescription className="text-white/60">
+              {pendingDelete?.title
+                ? `"${pendingDelete.title}" will be permanently deleted. This can't be undone.`
+                : "This conversation will be permanently deleted. This can't be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPendingDelete(null)}
+              disabled={deleting}
+              className="border border-white/15 text-white/80 hover:bg-white/5"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

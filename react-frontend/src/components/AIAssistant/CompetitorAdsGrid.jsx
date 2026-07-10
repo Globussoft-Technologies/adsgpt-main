@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BadgeCheck, ExternalLink } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Sparkles } from 'lucide-react';
 import {
   FaFacebook,
   FaInstagram,
@@ -91,7 +91,7 @@ const BrandAvatar = ({ brand, logoUrl }) => {
   );
 };
 
-const AdCard = ({ ad, onLoadFail }) => {
+const AdCard = ({ ad, onLoadFail, onRecreate }) => {
   const imageCandidates = useMemo(() => imageCandidatesFor(ad), [ad]);
   const [imgIdx, setImgIdx] = useState(0);
   const [imgExhausted, setImgExhausted] = useState(imageCandidates.length === 0);
@@ -104,6 +104,10 @@ const AdCard = ({ ad, onLoadFail }) => {
   const lastSeen = formatLastSeen(ad.last_seen);
   const isVideo = (ad.ad_type || '').toUpperCase() === 'VIDEO' && !!ad.video_url;
   const adUrl = ad.ad_url || '';
+  // Offer "Recreate" whenever we have a visual to seed generation from (an image
+  // ad, or a video ad's poster/thumbnail).
+  const canRecreate =
+    !!onRecreate && (imageCandidates.length > 0 || !!ad.image_url || !!ad.thumbnail_url);
 
   const handleImgError = () => {
     if (imgIdx + 1 < imageCandidates.length) {
@@ -197,8 +201,8 @@ const AdCard = ({ ad, onLoadFail }) => {
         </div>
       )}
 
-      {/* ── Footer: CTA badge + explicit "View ad" link ──────────────────── */}
-      {(ad.call_to_action || adUrl) && (
+      {/* ── Footer: CTA badge + Recreate + "View ad" link ────────────────── */}
+      {(ad.call_to_action || adUrl || canRecreate) && (
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
           {ad.call_to_action ? (
             <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-medium tracking-wide text-white/70 capitalize">
@@ -207,24 +211,37 @@ const AdCard = ({ ad, onLoadFail }) => {
           ) : (
             <span />
           )}
-          {adUrl && (
-            <a
-              href={adUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 text-[11.5px] font-medium text-white/55 transition-colors duration-150 hover:text-white"
-            >
-              View ad
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            {canRecreate && (
+              <button
+                type="button"
+                onClick={() => onRecreate(ad)}
+                title="Recreate a similar ad with the AI Assistant"
+                className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2.5 py-1 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
+              >
+                <Sparkles className="h-3 w-3 text-[#15DCFF]" />
+                Recreate
+              </button>
+            )}
+            {adUrl && (
+              <a
+                href={adUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-[11.5px] font-medium text-white/55 transition-colors duration-150 hover:text-white"
+              >
+                View ad
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
         </div>
       )}
     </article>
   );
 };
 
-const CompetitorAdsGrid = ({ ads = [] }) => {
+const CompetitorAdsGrid = ({ ads = [], onRecreate }) => {
   const [hidden, setHidden] = useState(() => new Set());
 
   if (!ads || ads.length === 0) return null;
@@ -249,7 +266,7 @@ const CompetitorAdsGrid = ({ ads = [] }) => {
       >
         <Masonry>
           {visible.map((ad, i) => (
-            <AdCard key={`${keyFor(ad)}-${i}`} ad={ad} onLoadFail={handleFail} />
+            <AdCard key={`${keyFor(ad)}-${i}`} ad={ad} onLoadFail={handleFail} onRecreate={onRecreate} />
           ))}
         </Masonry>
       </ResponsiveMasonry>

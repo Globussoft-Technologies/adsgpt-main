@@ -55,10 +55,40 @@ const friendlyErrorMessage = (detail) => {
   if (l.includes('credit') || l.includes('insufficient')) {
     return "You don't have enough credits for this generation. Top up your credits and try again.";
   }
+  if (
+    l.includes('rate limit') ||
+    l.includes('429') ||
+    l.includes('too many requests') ||
+    l.includes('overloaded') ||
+    l.includes('busy')
+  ) {
+    return 'The service is busy right now. Please wait a few seconds and try again.';
+  }
+  if (
+    l.includes('content policy') ||
+    l.includes('safety') ||
+    l.includes('blocked') ||
+    l.includes('violat')
+  ) {
+    return "That request couldn't be processed due to content guidelines. Try rephrasing or adjusting it and send again.";
+  }
+  if (l.includes('conversation') && (l.includes('limit') || l.includes('full') || l.includes('new chat'))) {
+    // Backend sends a clean, actionable message here — keep it.
+    return d;
+  }
   if (l.includes('internal error') || l.includes('500') || l.includes('traceback')) {
     return 'Our servers hit a snag generating that. Please try again in a moment.';
   }
-  // Otherwise the backend's reason is usually meaningful — surface it as-is.
+  // Fall back to the backend's reason only when it reads like a human sentence.
+  // Raw/technical payloads (JSON, stack traces, single tokens, very long dumps)
+  // get a safe generic message instead of being shown verbatim.
+  const looksTechnical =
+    d.length > 200 ||
+    /[{}[\]]|traceback|exception|\bat \w+\.|https?:\/\//i.test(d) ||
+    !d.includes(' ');
+  if (looksTechnical) {
+    return 'Something went wrong while generating. Please try again in a moment.';
+  }
   return d;
 };
 
@@ -280,6 +310,33 @@ const ChatInterface = () => {
     [dispatch, pending, runStreamingTurn],
   );
 
+  // Called by an Ad Library result card's "Recreate" button. Sends a turn that
+  // asks the assistant to build a similar ad, passing the reference ad's image
+  // as an attachment so the agent can use it as visual reference (→ brief card).
+  const handleRecreate = useCallback(
+    (ad) => {
+      if (pending || !ad) return;
+      const img =
+        ad.image_url ||
+        ad.thumbnail_url ||
+        (Array.isArray(ad.image_candidates) ? ad.image_candidates[0] : '');
+      const brand = ad.brand ? ` this ${ad.brand}` : ' this';
+      const bits = [ad.headline, ad.call_to_action].filter(Boolean).join(' — ');
+      const text =
+        `Recreate${brand} ad as inspiration — keep the overall style and layout, ` +
+        `but make it an original creative I can use.` +
+        (bits ? ` (Reference: ${bits})` : '');
+      // Derive a sane image extension; ad-CDN URLs often omit one, so default jpg.
+      const clean = (img || '').split('?')[0];
+      const m = clean.match(/\.(png|jpe?g|webp|gif|bmp)$/i);
+      const attachments = img
+        ? [{ file_type: m ? `.${m[1].toLowerCase()}` : '.jpg', url: img, filename: 'reference-ad' }]
+        : [];
+      handleSend(text, attachments);
+    },
+    [pending, handleSend],
+  );
+
   // ── Right-side canvas (genCards / creative briefs) ──────────────────────────
   // The genCards are every assistant message carrying a choiceForm. The canvas
   // shows one at a time; auto-opens to the newest when a fresh brief arrives.
@@ -342,6 +399,7 @@ const ChatInterface = () => {
                 onConceptSelect={handleConceptSelect}
                 onOpenCanvas={handleOpenCanvas}
                 onQuote={handleQuote}
+                onRecreate={handleRecreate}
               />
             </div>
           </div>
