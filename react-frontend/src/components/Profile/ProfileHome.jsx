@@ -30,8 +30,7 @@ const BACKEND_HOST_AUTH = import.meta.env.VITE_SOCKET_URL;
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
-const CANVA_ALLOWED_USER_ID = import.meta.env.VITE_CANVA_ALLOWED_USER_ID;
-const isCanvaAllowedUser = (userId) => String(userId ?? '') === CANVA_ALLOWED_USER_ID;
+
 
 function ProfileShimmer() {
   return (
