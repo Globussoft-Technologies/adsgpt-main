@@ -215,6 +215,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       return undefined;
     const onDocClick = (e) => {
       const t = e.target;
+      // The aspect quantity dropdown is portalled to <body>, outside these
+      // wrappers — treat clicks inside it as "inside" so selecting a quantity
+      // doesn't close the aspect panel.
+      if (t?.closest?.('[data-aspect-quantity-menu]')) return;
       const inModel = modelPickerWrapperRef.current?.contains(t);
       const inQuality = qualityPickerWrapperRef.current?.contains(t);
       const inAspect = aspectPickerWrapperRef.current?.contains(t);

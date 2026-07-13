@@ -2,7 +2,14 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { ListFilter } from 'lucide-react';
 
-const CreativeFilterDropdown = ({ options = [], label = '', value = '', onChange, onClear }) => {
+const CreativeFilterDropdown = ({
+  options = [],
+  label = '',
+  value = '',
+  onChange,
+  onClear,
+  contentClassName = '',
+}) => {
   // Find the selected option from options array
   const selectedOption = options.find((opt) => opt.value === value?.value);
   const selectedLabel = selectedOption?.label || label || 'Filter';
@@ -25,7 +32,7 @@ const CreativeFilterDropdown = ({ options = [], label = '', value = '', onChange
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="mt-2 min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent className={`mt-2 min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}>
         {label && (
           <div className="text-10 flex items-center justify-between px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">
             {label}

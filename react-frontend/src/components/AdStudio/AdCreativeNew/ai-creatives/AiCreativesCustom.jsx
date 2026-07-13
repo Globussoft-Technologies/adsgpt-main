@@ -137,6 +137,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // stays clean for user input.
   const [brandLogoUrl, setBrandLogoUrl] = useState('');
   const [brandLogoFile, setBrandLogoFile] = useState(null);
+  // Object-URL preview for an uploaded logo file. Kept separate from
+  // `brandLogoUrl` so the visible URL input never shows a `blob:` string —
+  // the upload surfaces as a thumbnail instead (mirrors the references flow).
+  const [brandLogoFilePreview, setBrandLogoFilePreview] = useState('');
   const [brandLogoPicked, setBrandLogoPicked] = useState('');
   // Logo options surfaced after autofill / BrandIQ pick. Display-only by
   // default — user must click one to make it the active logo.
@@ -216,6 +220,18 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     if (!qualities || qualities.length === 0 || qualities.includes(quality)) return;
     setQuality(qualities.includes('high') ? 'high' : qualities[0]);
   }, [selectedModel, quality]);
+
+  // Derive (and clean up) the blob preview for the uploaded logo file. This
+  // is what the thumbnail renders — the URL text input stays untouched.
+  useEffect(() => {
+    if (!brandLogoFile) {
+      setBrandLogoFilePreview('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(brandLogoFile);
+    setBrandLogoFilePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [brandLogoFile]);
 
   const dispatch = useDispatch();
   const imageState = useSelector((s) => s.image.current);
@@ -561,8 +577,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     if (files && files.length > 0) {
       const f = Array.from(files).find(isAllowedImageFile);
       if (f) {
+        // Uploaded file lives in brandLogoFile (+ thumbnail); the URL input
+        // stays clean so it never shows a blob: string.
         setBrandLogoFile(f);
-        setBrandLogoUrl(URL.createObjectURL(f));
+        setBrandLogoUrl('');
         setLogoError('');
         return;
       }
@@ -740,6 +758,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       return undefined;
     const onMouseDown = (e) => {
       const t = e.target;
+      // The aspect quantity dropdown is portalled to <body> (to escape the
+      // panel's overflow + the form's backdrop-blur), so it lives outside
+      // aspectPickerWrapperRef. Treat clicks inside it as "inside" so picking a
+      // quantity doesn't close the whole aspect panel.
+      if (t?.closest?.('[data-aspect-quantity-menu]')) return;
       const inModel = modelPickerWrapperRef.current?.contains(t);
       const inQuality = qualityPickerWrapperRef.current?.contains(t);
       const inAspect = aspectPickerWrapperRef.current?.contains(t);
@@ -1142,7 +1165,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 setModel(opt.apiId);
                                 setShowModelPicker(false);
                               }}
-                              className={`flex w-full items-center gap-2 rounded-tl-[14px] rounded-tr-[14px] px-3 py-2.5 text-left text-[13px] transition-colors ${
+                              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
                                 selected
                                   ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
                                   : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
@@ -1478,7 +1501,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         const f = Array.from(files).find(isAllowedImageFile);
                         if (f) {
                           setBrandLogoFile(f);
-                          setBrandLogoUrl(URL.createObjectURL(f));
+                          setBrandLogoUrl('');
                           setLogoError('');
                         } else {
                           setLogoError(IMAGE_TYPE_ERROR);
@@ -1539,7 +1562,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         if (f) {
                           if (isAllowedImageFile(f)) {
                             setBrandLogoFile(f);
-                            setBrandLogoUrl(URL.createObjectURL(f));
+                            setBrandLogoUrl('');
                             setLogoError('');
                           } else {
                             // Defensive — the accept attribute should already
@@ -1552,6 +1575,36 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                     />
                   </div>
+                  {/* Uploaded logo preview — a local file shows here as a
+                      compact thumbnail (mirrors the Product Shots upload row)
+                      instead of dumping a blob: URL into the text input. */}
+                  {brandLogoFile && brandLogoFilePreview && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="group relative h-[40px] w-[40px] shrink-0 cursor-pointer rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40">
+                        <img
+                          src={brandLogoFilePreview}
+                          alt="Brand logo preview"
+                          onClick={() => {
+                            setLightboxImages([brandLogoFilePreview]);
+                            setLightboxImage(brandLogoFilePreview);
+                            setLightboxOpen(true);
+                          }}
+                          className="h-full w-full rounded-sm object-cover"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Remove brand logo"
+                          onClick={() => {
+                            setBrandLogoFile(null);
+                            setLogoError('');
+                          }}
+                          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                        >
+                          <X size={10} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {/* Scraped/BrandIQ logo options — unselected by default.
                       Single click picks; double-click opens the lightbox.
                       Selection goes to brandLogoPicked so the URL input

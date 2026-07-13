@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAdCreativeConfig } from '@/store/actions/adCreativeConfig/adCreativeConfigActions';
 import {
@@ -33,5 +33,10 @@ export function useAdCreativeConfig() {
   const resolved = status === 'ok' && models?.length ? models : FALLBACK_AD_CREATIVE_MODELS;
   const isFallback = resolved === FALLBACK_AD_CREATIVE_MODELS;
 
-  return { models: resolved, status, isFallback };
+  // The surface (and fallback) come cheapest-first; the pickers show
+  // most-expensive first. Memoised so the array identity stays stable and
+  // doesn't retrigger the consumers' reconcile effects every render.
+  const ordered = useMemo(() => [...resolved].reverse(), [resolved]);
+
+  return { models: ordered, status, isFallback };
 }

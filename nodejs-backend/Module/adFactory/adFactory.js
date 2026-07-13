@@ -157,6 +157,22 @@ const CreativeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Images the user adds manually in the preview (device upload, external link,
+// or picked from their app library). Kept in a dedicated key — separate from
+// AI-generated `results.image` — and written only when the user Saves.
+const CustomImageSchema = new mongoose.Schema(
+  {
+    data: { type: String, default: "" }, // S3 key ("/creatives/…") or full URL
+    source: {
+      type: String,
+      enum: ["upload", "link", "app"],
+      default: "upload",
+    },
+    timestamp: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const AdFactoryLaunchSchema = new mongoose.Schema(
   {
     adAccountId: {
@@ -268,6 +284,9 @@ const CampaignSchema = new mongoose.Schema(
       default: [],
       status:StatusSchema,
     },
+
+    // Manually-added preview images (upload / link / app library), synced on Save.
+    customImages: { type: [CustomImageSchema], default: [] },
 
 
     fbMetaData: {

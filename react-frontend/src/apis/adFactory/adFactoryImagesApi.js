@@ -36,6 +36,19 @@ export const getAdFactoryImages = async ({
   return data;
 };
 
+// Syncs the campaign's manually-added images (upload / link / app). Sends the
+// FULL current set, which the backend $sets — so this captures both additions
+// and removals. Called when the user Saves the preview.
+// `images` = [{ data, source }].
+export const saveCustomAdImages = async ({ userId, campaignId, images }) => {
+  const res = await axios.post(
+    `${BASE_URL}/campaign/custom-images`,
+    { userId, campaignId, images },
+    { headers: { ...headers(), 'Content-Type': 'application/json' } },
+  );
+  return res.data;
+};
+
 // Persists a logo-edited (or otherwise altered) AdFactory image so it
 // shows up in the campaign's results AND in the user's saved gallery.
 // Backend = `saveEditedAdImage` in nodejs-backend/controllers/adFactory.js.

@@ -914,29 +914,51 @@ exports.creativeDetails = async (req, res) => {
     try {
       const userId = req?.body?.userId;
       const file = req.file;
+      // Also accept an external image URL: we fetch it server-side and re-host
+      // it on S3 (browsers usually can't read cross-origin image bytes).
+      const imageUrl = req?.body?.imageUrl;
       const save = req?.body?.save;
-      if (!file) {
-        console.error("No file received");
-        return res.status(400).json({ error: "No file received" });
-      }
-      // Defense-in-depth: this endpoint is image-only (it re-encodes to webp), so
-      // reject anything that isn't an image — otherwise a non-image (e.g. a
-      // renamed executable) tagged with an image MIME could be stored via S3.
-      if (!(file.mimetype || "").startsWith("image/")) {
-        return res
-          .status(400)
-          .json({ error: "Only image files are supported." });
+
+      let buffer;
+      let contentType = "image/webp";
+
+      if (file) {
+        // Defense-in-depth: this endpoint is image-only, so reject anything that
+        // isn't an image — otherwise a non-image (e.g. a renamed executable)
+        // tagged with an image MIME could be stored via S3.
+        if (!(file.mimetype || "").startsWith("image/")) {
+          return res
+            .status(400)
+            .json({ error: "Only image files are supported." });
+        }
+        buffer = file.buffer;
+        // Preserve prior behavior: file uploads are stored as image/webp.
+      } else if (imageUrl) {
+        const response = await axios.get(imageUrl, {
+          responseType: "arraybuffer",
+          timeout: 20000,
+          maxContentLength: 15 * 1024 * 1024,
+        });
+        const ct = response.headers["content-type"] || "";
+        if (!ct.startsWith("image/")) {
+          return res.status(400).json({ error: "URL does not point to an image." });
+        }
+        buffer = Buffer.from(response.data);
+        contentType = ct;
+      } else {
+        console.error("No file or imageUrl received");
+        return res.status(400).json({ error: "No file or imageUrl received" });
       }
 
       const fileName = getFileName(".webp");
   
-    // Upload original file directly to S3 without processing
+    // Upload directly to S3 without processing
     // 1. Upload to S3
     const uploadParams = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
       Key: `creatives/${userId}/${fileName}`,
-      Body: file.buffer,
-      ContentType: "image/webp",
+      Body: buffer,
+      ContentType: contentType,
     };
 
     await s3Client.send(new PutObjectCommand(uploadParams));

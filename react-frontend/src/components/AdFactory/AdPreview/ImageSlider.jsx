@@ -2,9 +2,9 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-const ImageSlider = ({ mockImages, onSelect, selectedImage }) => {
+const ImageSlider = ({ mockImages, onSelect, selectedImage, onRemoveImage }) => {
   const [swiper, setSwiper] = useState(null);
   const [isBeginning, setIsBeginning] = useState(true);
   const [isEnd, setIsEnd] = useState(false);
@@ -92,7 +92,8 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage }) => {
         }}
         className="ad-image-swiper"
       >
-        {mockImages.map(({ src, id }, index) => (
+        {/* Leading "Add image" tile — always slide 0 */}
+        {mockImages.map(({ src, id, isUser, source }) => (
           <SwiperSlide key={id}>
             <div
               className={`group relative h-38 cursor-pointer overflow-hidden rounded-xl bg-gray-100 dark:bg-white/5 hover:opacity-80 2xl:h-45 ${
@@ -105,6 +106,28 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage }) => {
                 alt="Ad creative"
                 className="transition-scale h-full w-full scale-100 object-cover duration-300 hover:scale-105"
               />
+
+              {/* Source badge for user-added images */}
+              {isUser && (
+                <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] leading-none font-medium capitalize text-white backdrop-blur-sm">
+                  {source === 'link' ? 'Linked' : source === 'app' ? 'Library' : 'Uploaded'}
+                </span>
+              )}
+
+              {/* Remove control for user-added images */}
+              {isUser && onRemoveImage && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveImage(id, src);
+                  }}
+                  className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500 group-hover:opacity-100"
+                  aria-label="Remove image"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </SwiperSlide>
         ))}

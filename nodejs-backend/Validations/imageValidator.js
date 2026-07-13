@@ -19,10 +19,6 @@ const aspectRatioPerImageSchema = Joi.array()
     .min(1)
     .required();
 
-const brandInfoSchema = Joi.object({
-    brandName: Joi.string().required(),
-    brandDescription: Joi.string().allow("", null),
-});
 const baseUserInputs = {
     userPrompt: Joi.string().required(),
     aspectRatioPerImage: aspectRatioPerImageSchema,
@@ -113,6 +109,14 @@ const appsSaasSchema = Joi.object({
 // =========================
 // BRAND AWARENESS
 // =========================
+const brandAwarenessBrandInfoSchema = Joi.object({
+    brandName: Joi.string().required(),
+    brandDescription: Joi.string().allow("", null),
+    brandLogo: Joi.string().allow("", null),
+    brandImages: Joi.array().items(Joi.string()).allow(null),
+    brandColors: Joi.array().items(Joi.string()),
+});
+
 const brandAwarenessUserInputsSchema = Joi.object({
     ...baseUserInputs,
     productName: Joi.string().allow("", null),
@@ -122,7 +126,7 @@ const brandAwarenessUserInputsSchema = Joi.object({
 
 const brandAwarenessSchema = Joi.object({
     type: Joi.valid("brand_awareness").required(),
-    brandInfo: brandInfoSchema.required(),
+    brandInfo: brandAwarenessBrandInfoSchema.required(),
     userInputs: brandAwarenessUserInputsSchema.required(),
 });
 

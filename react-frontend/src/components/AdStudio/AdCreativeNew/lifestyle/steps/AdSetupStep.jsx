@@ -1714,6 +1714,8 @@ function QualityPickerPill({ value, onChange, model }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
+      // Aspect quantity dropdown is portalled to <body>, outside this ref.
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
@@ -1769,6 +1771,8 @@ function ModelPickerPill({ value, onChange }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
+      // Aspect quantity dropdown is portalled to <body>, outside this ref.
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
@@ -1833,6 +1837,8 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
+      // Aspect quantity dropdown is portalled to <body>, outside this ref.
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);

@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import ImageSlider from './ImageSlider';
+import AddImageDialog from './AddImageDialog';
 import TextSlider from './TextSlider';
 import CreativeSection from './CreativeSection';
 import MobilePreview from './MobilePreview';
 import GoogleMobilePreview from './GoogleMobilePreview';
-import { Loader2, Check, Smartphone } from 'lucide-react';
+import { Loader2, Check, Plus, Smartphone } from 'lucide-react';
 import MobilePreviewModal from './MobilePreviewModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
@@ -19,6 +20,7 @@ import {
   setFirstAdCopies,
   setAvailablefirstImages,
 } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
+import { saveCustomAdImages } from '@/apis/adFactory/adFactoryImagesApi';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
@@ -65,13 +67,19 @@ const PreviewCanvas = ({
   imageHistory,
   isloading,
 }) => {
-  const { adCreatives, enableId, postnodecreatives } = useSelector((state) => state?.adFactoryNew);
+  const { adCreatives, enableId, postnodecreatives, activeCampaign } = useSelector(
+    (state) => state?.adFactoryNew
+  );
   const [saveStatus, setSaveStatus] = useState('idle');
   const [adCopies, setAdCopies] = useState([]);
   const [selectedPlatformTab, setSelectedPlatformTab] = useState('meta');
   const tabInitializedRef = useRef(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [availableImages, setAvailableImages] = useState([]);
+  // Images the user adds manually (upload / link / app library). Kept separate
+  // so the results→availableImages effect never clobbers them.
+  const [userImages, setUserImages] = useState([]);
+  const [addImageOpen, setAddImageOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state?.socket) || {};
@@ -328,24 +336,83 @@ const PreviewCanvas = ({
   const prevAvailableImagesRef = useRef(availableImages);
 
   useEffect(() => {
+    // Publish AI images + any user-added ones so downstream (AdsPreviewDialog)
+    // sees the full set the user is choosing from.
+    const merged = [...availableImages, ...userImages];
+
     // Only dispatch if arrays have actually changed
     const adCopiesChanged = JSON.stringify(prevAdCopiesRef.current) !== JSON.stringify(adCopies);
     const imagesChanged =
-      JSON.stringify(prevAvailableImagesRef.current) !== JSON.stringify(availableImages);
+      JSON.stringify(prevAvailableImagesRef.current) !== JSON.stringify(merged);
 
     if (adCopiesChanged || imagesChanged) {
-      dispatch(setAvailablefirstImages(availableImages));
+      dispatch(setAvailablefirstImages(merged));
       dispatch(setFirstAdCopies(adCopies));
 
       // Update refs with current values
       prevAdCopiesRef.current = adCopies;
-      prevAvailableImagesRef.current = availableImages;
+      prevAvailableImagesRef.current = merged;
     }
-  }, [availableImages, adCopies, dispatch]);
+  }, [availableImages, userImages, adCopies, dispatch]);
+
+  // Seed manually-added images from the campaign's persisted custom gallery so
+  // they reappear on reload. Union with any local additions (never wipe them).
+  useEffect(() => {
+    const persisted = (activeCampaign?.customImages || [])
+      .filter((c) => c?.data)
+      .map((c) => ({
+        id: `custom-${c.data}`,
+        src: c.data.startsWith('http') ? c.data : `${S3_BASE_URL}${c.data}`,
+        key: c.data,
+        isUser: true,
+        source: c.source || 'upload',
+      }));
+    if (persisted.length === 0) return;
+    setUserImages((prev) => {
+      const bySrc = new Map();
+      [...persisted, ...prev].forEach((img) => bySrc.set(img.src, img));
+      return Array.from(bySrc.values());
+    });
+  }, [activeCampaign?.customImages]);
+
   if (!creative) return null;
 
   const update = (patch) => {
     onUpdateCreative?.({ ...creative, ...patch });
+  };
+
+  // AI/generated images first (preserves existing [0] defaults elsewhere),
+  // then anything the user added manually.
+  const displayImages = [...availableImages, ...userImages];
+
+  const handleAddImage = (img) => {
+    setUserImages((prev) =>
+      prev.some((p) => p.src === img.src) ? prev : [...prev, img]
+    );
+    update?.({ image: img.src }); // auto-select the freshly added image
+  };
+
+  const handleRemoveImage = (id, src) => {
+    setUserImages((prev) => prev.filter((p) => p.id !== id));
+    // If the removed image was selected, fall back to the first available one.
+    if (creative?.image === src) {
+      update?.({ image: availableImages[0]?.src || '' });
+    }
+  };
+
+  // Writes the current manual images to the campaign's customImages gallery.
+  // Sends the full set (both additions and removals captured in one $set).
+  const persistCustomImages = async () => {
+    if (!campaignId || !userData?.user_id) return;
+    try {
+      await saveCustomAdImages({
+        userId: userData.user_id,
+        campaignId,
+        images: userImages.map((u) => ({ data: u.key || u.src, source: u.source || 'upload' })),
+      });
+    } catch {
+      // Non-fatal — the creative save itself already succeeded.
+    }
   };
 
   const handleSave = async () => {
@@ -386,6 +453,10 @@ const PreviewCanvas = ({
         return;
       }
       if (updateCampaign.fulfilled.match(result) || updateCreativeById.fulfilled.match(result)) {
+        // Persist manual images BEFORE refetch so the campaign comes back with
+        // its customImages populated (which re-seeds the slider).
+        await persistCustomImages();
+
         const campaignPayload = {
           campaignId,
           userId: userData?.user_id,
@@ -443,11 +514,24 @@ const PreviewCanvas = ({
       <div className="flex flex-col overflow-hidden pt-2 md:pt-5 2xl:pt-0">
         <div className="flex max-h-[1200px] max-w-[1600px] flex-1 overflow-x-hidden">
           <div className="mx-auto flex w-[95%] flex-col gap-4 sm:pr-2 2xl:pr-8">
-            <CreativeSection title="Ad Image">
+            <CreativeSection
+              title="Ad Image"
+              action={
+                <button
+                  type="button"
+                  onClick={() => setAddImageOpen(true)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:border-[#2364B8] hover:text-[#2364B8] dark:border-white/15 dark:bg-white/5 dark:text-white/70 dark:hover:border-[#2364B8] dark:hover:text-white"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add image
+                </button>
+              }
+            >
               <ImageSlider
-                mockImages={availableImages}
+                mockImages={displayImages}
                 selectedImage={creative?.image}
                 onSelect={(image) => update?.({ image })}
+                onRemoveImage={handleRemoveImage}
               />
             </CreativeSection>
 
@@ -566,7 +650,10 @@ const PreviewCanvas = ({
                 {saveStatus === 'idle' && 'Save'}
               </button>
               <button
-                onClick={handleSaveAndContinue}
+                onClick={async () => {
+                  await persistCustomImages();
+                  handleSaveAndContinue?.();
+                }}
                 disabled={isloading || !enableId || creative?.canSave}
                 className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs 2xl:text-base ${
                   isloading || !enableId || creative?.canSave
@@ -591,6 +678,13 @@ const PreviewCanvas = ({
         open={isPreviewOpen}
         onClose={() => setIsPreviewOpen?.(false)}
         creative={creative}
+      />
+
+      <AddImageDialog
+        open={addImageOpen}
+        onClose={() => setAddImageOpen(false)}
+        onAdd={handleAddImage}
+        userId={userData?.user_id}
       />
     </main>
   );
