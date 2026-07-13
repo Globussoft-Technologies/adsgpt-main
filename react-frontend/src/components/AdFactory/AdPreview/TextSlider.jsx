@@ -77,66 +77,63 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }
         const isEditing = editingId === adCopy?.id;
         const currentCopy = isEditing ? localCopies?.find((c) => c?.id === adCopy?.id) : adCopy;
 
+        const labelClass = `mb-1 shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
+          isSelected ? 'text-white/80' : 'text-gray-400 dark:text-white/50'
+        }`;
+        const bodyScroll = `min-h-0 flex-1 overflow-y-auto pr-1 text-xs whitespace-pre-wrap break-words 2xl:text-sm ${
+          isSelected ? 'scrollbar-white text-white' : 'scrollbar-thin text-gray-500 dark:text-[#DFDFDF]'
+        }`;
+
         return (
           <div
             key={adCopy?.id}
-            className={`scrollbar-hide relative flex h-64 w-55 flex-shrink-0 flex-col overflow-auto rounded-xl p-4 text-xs 2xl:h-78 2xl:w-[240px] ${
+            className={`relative flex h-64 w-55 flex-shrink-0 flex-col overflow-hidden rounded-xl p-4 text-xs 2xl:h-78 2xl:w-[240px] ${
               isSelected
                 ? 'bg-gradient-to-br from-[#424CFF] to-[#22C5FD] text-white'
                 : 'bg-black/5 dark:bg-white/10 text-gray-500 dark:text-white/70'
             }`}
             onClick={() => handleSelect(adCopy)}
           >
-            <button>
+            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+              <p className={`text-base font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'} 2xl:text-lg`}>
+                Ad Copy {index + 1}
+              </p>
               {isEditing && (
-                <CheckCircle
-                  className="h-4.5 w-4.5 text-gray-500 dark:text-white/70 hover:text-black dark:hover:text-white"
-                  onClick={() => handleSelect(adCopy)}
-                />
+                <button onClick={(e) => { e.stopPropagation(); handleSelect(adCopy); }}>
+                  <CheckCircle className={`h-4.5 w-4.5 ${isSelected ? 'text-white/80 hover:text-white' : 'text-gray-500 dark:text-white/70 hover:text-black dark:hover:text-white'}`} />
+                </button>
               )}
-            </button>
-
-            <p className={`mb-2 text-base font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'} 2xl:text-lg`}>Ad Copy {index + 1}</p>
+            </div>
 
             {isEditing ? (
-              <textarea
-                value={currentCopy?.primaryText || ''}
-                onChange={(e) => updateCopy(adCopy?.id, 'primaryText', e?.target?.value)}
-                className="mb-2 h-50 w-full resize-none rounded-md bg-black/20 p-2.5 text-xs text-white outline-none 2xl:text-sm"
-                rows={4}
-              />
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <textarea
+                  value={currentCopy?.primaryText || ''}
+                  onChange={(e) => updateCopy(adCopy?.id, 'primaryText', e?.target?.value)}
+                  className="min-h-0 w-full flex-1 resize-none rounded-md bg-black/20 p-2.5 text-xs text-white outline-none 2xl:text-sm"
+                  placeholder="Primary text"
+                />
+                <input
+                  value={currentCopy?.headline || ''}
+                  onChange={(e) => updateCopy(adCopy?.id, 'headline', e?.target?.value)}
+                  className="w-full shrink-0 rounded-md bg-black/20 p-2.5 text-xs text-white outline-none 2xl:text-sm"
+                  placeholder="Headline"
+                />
+              </div>
             ) : (
-              <p
-                className={`mb-3 max-h-[150px] overflow-auto text-xs 2xl:text-sm ${isSelected ? 'scrollbar-white text-white' : 'scrollbar-thin text-gray-500 dark:text-[#DFDFDF]'}`}
-              >
-                Primary Text: {adCopy?.primaryText} <br />
-                {adCopy?.ctaLabel}
-              </p>
+              // Two independent sections so a long headline never pushes the
+              // primary text — each gets its own bounded, scrollable box.
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                <div className="flex min-h-0 flex-[3] flex-col">
+                  <span className={labelClass}>Primary text</span>
+                  <div className={bodyScroll}>{adCopy?.primaryText || '—'}</div>
+                </div>
+                <div className="flex min-h-0 flex-[2] flex-col">
+                  <span className={labelClass}>Headline</span>
+                  <div className={bodyScroll}>{adCopy?.headline || '—'}</div>
+                </div>
+              </div>
             )}
-
-            {isEditing ? (
-              <input
-                value={currentCopy?.headline || ''}
-                onChange={(e) => updateCopy(adCopy?.id, 'headline', e?.target?.value)}
-                className="mb-2 w-full rounded-md bg-black/20 p-2.5 text-xs text-white outline-none 2xl:text-sm"
-              />
-            ) : (
-              <p
-                className={`${isSelected ? 'text-white' : 'text-gray-500 dark:text-[#DFDFDF]'} my-2 text-xs 2xl:text-sm`}
-              >
-                Headline: {adCopy?.headline}
-              </p>
-            )}
-
-            {/* <button
-              disabled={isEditing}
-              className={`mt-auto self-center rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-[#0F0F0F] shadow-md shadow-white/25 ${
-                isEditing ? 'cursor-not-allowed opacity-50' : 'hover:opacity-75'
-              }`}
-              onClick={() => handleSelect(adCopy)}
-            >
-              {isSelected ? 'Selected' : 'Select'}
-            </button> */}
           </div>
         );
       })}
