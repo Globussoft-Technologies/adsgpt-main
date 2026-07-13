@@ -90,6 +90,42 @@ export const searchVoices = async (q) => {
   return Array.isArray(data) ? data : [];
 };
 
+// ── Sarvam catalog ──────────────────────────────────────────────────────────
+// Second TTS provider. Shorter cascade than ElevenLabs: language → gender →
+// voice (no accent/age, no free-text search). Backed by the Node proxy routes
+// under /voice-selector/sarvam/* (see voiceSelectorRoutes.js), which forward to
+// the Python …/sarvam/api/* catalog. Sarvam uses BCP-47 language codes
+// (e.g. "hi-IN") and returns `voice_name` (not `name`) on each voice.
+
+// → [{ code: 'hi-IN', label: 'Hindi', voice_count: 31 }, ...]
+export const getSarvamLanguages = async () => {
+  const { data } = await axios.get(`${ROOT}/sarvam/languages`, {
+    headers: getAuthHeaders(),
+  });
+  return Array.isArray(data) ? data : [];
+};
+
+// → ['female', 'male']
+export const getSarvamGenders = async () => {
+  const { data } = await axios.get(`${ROOT}/sarvam/genders`, {
+    headers: getAuthHeaders(),
+  });
+  return Array.isArray(data) ? data : [];
+};
+
+// → [{ voice_id, voice_name, gender, language, preview_url }, ...]
+// The service takes `lang` (echoed into each voice's language field, does not
+// filter) + `gender` (filters). All speakers support all languages, so the
+// language pick is only echoed back, not used to narrow the list.
+export const getSarvamVoices = async (filters = {}) => {
+  const params = pickParams({ lang: filters.lang, gender: filters.gender });
+  const { data } = await axios.get(`${ROOT}/sarvam/voices`, {
+    params,
+    headers: getAuthHeaders(),
+  });
+  return Array.isArray(data) ? data : [];
+};
+
 // Code → name map for the language dropdown. The catalog returns ISO codes
 // like "en" / "hi"; the UI shows English names. Anything not in the map
 // falls back to the raw code so a new ElevenLabs language never breaks the

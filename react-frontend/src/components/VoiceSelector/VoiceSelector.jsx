@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, X, Mic2, Search, Play, Pause, Loader2 } from 'lucide-react';
+import { Plus, X, Mic2, Search, Play, Pause, Loader2, ChevronDown } from 'lucide-react';
 import {
   getLanguages,
   getGenders,
@@ -8,10 +8,22 @@ import {
   getVoices,
   searchVoices,
   labelForLanguage,
+  getSarvamLanguages,
+  getSarvamGenders,
+  getSarvamVoices,
 } from '@/apis/voiceSelector/voiceSelectorApi';
 import ChipDropdown from './ChipDropdown';
 
-const FIELDS = ['language', 'gender', 'accent', 'age', 'voice'];
+// ElevenLabs uses the full 5-chip cascade; Sarvam only has language → gender →
+// voice (no accent/age, no free-text search). FIELDS is chosen per provider.
+const EL_FIELDS = ['language', 'gender', 'accent', 'age', 'voice'];
+const SARVAM_FIELDS = ['language', 'gender', 'voice'];
+
+const PROVIDERS = [
+  { id: 'elevenlabs', label: 'ElevenLabs' },
+  { id: 'sarvam', label: 'Sarvam' },
+];
+const DEFAULT_PROVIDER = 'elevenlabs';
 
 // Sentinel language code for the "Other" option. Picking it swaps the cascade
 // for a free-text search box (→ /search) so users can find voices for
@@ -24,14 +36,30 @@ const prettify = (s) =>
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
 /**
- * VoiceSelector — five cascading chips for picking an ElevenLabs voice.
+ * VoiceSelector — cascading chips for picking a narrator voice, with a leftmost
+ * provider selector (ElevenLabs / Sarvam).
+ *   • ElevenLabs (default): 5 chips — language → gender → accent → age → voice.
+ *   • Sarvam: 3 chips — language → gender → voice (no accent/age, no search).
  *
  * Props
- *   value         { language, gender, accent, age, voiceId, voiceName, languageLabel }
- *   onChange      (next) => void   — fired whenever any chip updates
+ *   value         { provider, language, gender, accent, age, voiceId, voiceName, languageLabel }
+ *   onChange      (next) => void   — fired whenever the provider or any chip updates
  *   error         string|undefined — render in red if present
+ *
+ * NOTE: `value.provider` still needs to be threaded into the generation payload
+ * as `voiceProvider` (Advideoactions.jsx voicePayload + videoModel.js schema)
+ * once the Python team confirms the exact key/values — see integration notes.
  */
 const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
+  // Which TTS provider's catalog to browse. Persisted on `value.provider` so a
+  // resumed/saved selection reopens on the right provider; defaults to
+  // ElevenLabs so existing behaviour is unchanged when nothing is set.
+  const provider = value.provider || DEFAULT_PROVIDER;
+  const isSarvam = provider === 'sarvam';
+  const FIELDS = isSarvam ? SARVAM_FIELDS : EL_FIELDS;
+  const [providerOpen, setProviderOpen] = useState(false);
+  const providerRef = useRef(null);
+
   const [openChip, setOpenChip] = useState(null);
   const [options, setOptions] = useState({
     language: [], gender: [], accent: [], age: [], voice: [],
@@ -83,6 +111,32 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
           age: value.age || '',
         };
         let data = [];
+        if (isSarvam) {
+          // ── Sarvam cascade: language → gender → voice ──────────────────────
+          // Sarvam ships its own {code,label} language list (BCP-47 codes like
+          // "hi-IN"), a static gender list, and a voice catalog keyed by `lang`
+          // + `gender`. Voices carry `voice_name`; map it to `name` so the
+          // shared ChipDropdown / chip-label code (which reads `.name`) works
+          // unchanged across both providers.
+          if (field === 'language') {
+            const all = await getSarvamLanguages();
+            data = all.map((l) => ({
+              code: l?.code || l,
+              label: l?.label || labelForLanguage(l?.code || l),
+            }));
+          } else if (field === 'gender') {
+            data = await getSarvamGenders();
+          } else if (field === 'voice') {
+            const voices = await getSarvamVoices({
+              lang: upstream.language,
+              gender: upstream.gender,
+            });
+            data = voices.map((v) => ({ ...v, name: v.voice_name || v.name }));
+          }
+          setOptions((s) => ({ ...s, [field]: data }));
+          return;
+        }
+
         if (field === 'language') {
           // Show every language the catalog returns as a direct pick, then
           // append the "Other" escape hatch (free-text /search) at the end for
@@ -108,7 +162,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
         setLoading((s) => ({ ...s, [field]: false }));
       }
     },
-    [value.language, value.gender, value.accent, value.age]
+    [value.language, value.gender, value.accent, value.age, isSarvam]
   );
 
   // Lazy-load each chip's options the first time it opens.
@@ -171,6 +225,37 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
     e.stopPropagation();
     handleSelect(field, '');
   };
+
+  // Switching provider wipes the current voice + all cascade picks — voice IDs
+  // and language codes don't carry across ElevenLabs ↔ Sarvam. Also exits
+  // search mode and clears cached options so the new provider refetches clean.
+  // Language is non-clearable, so it must keep a valid default per provider:
+  // ElevenLabs uses ISO "en", Sarvam uses BCP-47 "en-IN" — both "English".
+  const handleProviderChange = (nextProvider) => {
+    setProviderOpen(false);
+    if (nextProvider === provider) return;
+    setSearchMode(false);
+    setOpenChip(null);
+    setOptions({ language: [], gender: [], accent: [], age: [], voice: [] });
+    const defaultLang = nextProvider === 'sarvam' ? 'en-IN' : 'en';
+    onChange?.({
+      provider: nextProvider,
+      language: defaultLang, languageLabel: 'English',
+      gender: '', accent: '', age: '',
+      voiceId: '', voiceName: '',
+    });
+  };
+
+  // Close the provider dropdown on outside click.
+  useEffect(() => {
+    if (!providerOpen) return undefined;
+    const onClick = (e) => {
+      if (providerRef.current?.contains(e.target)) return;
+      setProviderOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [providerOpen]);
 
   // ── Free-text search (Other language) ──────────────────────────────────
   const stopSearchPreview = useCallback(() => {
@@ -299,6 +384,42 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
 
       <div className="relative flex items-start justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
+        {/* Provider selector — leftmost. Picking Sarvam swaps the cascade to
+            language → gender → voice against the Sarvam catalog; ElevenLabs
+            keeps the full 5-chip cascade. Defaults to ElevenLabs. */}
+        <div ref={providerRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setProviderOpen((o) => !o)}
+            className="group flex items-center gap-1.5 rounded-full border border-transparent bg-gray-200 px-3 py-1 text-[12px] font-medium text-gray-900 transition dark:bg-[#3A3A3A] dark:text-white sm:text-13"
+          >
+            <ChevronDown className="h-3 w-3" />
+            <span>
+             Voice Model
+              <span className="ml-1 text-gray-500 dark:text-white/60">
+                : {PROVIDERS.find((p) => p.id === provider)?.label || 'ElevenLabs'}
+              </span>
+            </span>
+          </button>
+          {providerOpen && (
+            <div className="absolute left-0 top-full z-50 mt-2 w-40 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleProviderChange(p.id)}
+                  className={`flex w-full items-center px-3 py-2 text-left text-13 transition ${
+                    p.id === provider
+                      ? 'bg-black/5 text-gray-900 dark:bg-white/10 dark:text-white'
+                      : 'text-gray-700 hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/5'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {FIELDS.map((field) => {
           const selected = isSelected(field);
           const label = chipLabel(field);
@@ -327,7 +448,10 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
                       : 'border-black/10 bg-gray-100 text-gray-500 hover:text-black dark:border-white/10 dark:bg-[#909294]/15 dark:text-white/70 dark:hover:text-white'
                 }`}
               >
-                {selected ? (
+                {/* Language is the root of the cascade — clearing it would leave
+                    the voice list with no filter and return nothing, so it's not
+                    clearable (always keeps a value; defaults to English). */}
+                {field === 'language' ? null : selected ? (
                   <span
                     role="button"
                     tabIndex={0}

@@ -633,12 +633,16 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     const { formData } = details;
     const isBrand = aiAdsType === 'brand';
 
-    // Voice cascade — voice_id is the deliverable, the rest is metadata
-    // useful for analytics / recreating the picker selection on resume.
+    // Voice cascade — the deliverable depends on the provider:
+    //   • ElevenLabs → voiceId is the deliverable, voiceName is metadata.
+    //   • Sarvam     → voiceName is the deliverable, voiceId stays ''.
+    // voiceProvider tells Python which TTS engine to synthesize with; the rest
+    // is metadata useful for analytics / recreating the picker on resume.
     // NOTE: key is `voiceFilters` (not `voice`) — the inputs schema already
     // reserves `voice: String` for the older video types.
     const voice = formData.voice || {};
     const voicePayload = {
+      voiceProvider: voice.provider || 'elevenlabs',
       voiceId: voice.voiceId || '',
       voiceName: voice.voiceName || '',
       voiceFilters: {

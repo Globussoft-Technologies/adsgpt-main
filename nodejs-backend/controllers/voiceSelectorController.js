@@ -10,6 +10,11 @@ const axios = require("axios");
 // Basic-Auth-guarded docs UI, so a missing `/api` shows up as a 401.
 const BASE = process.env.VOICE_PYTHON_BASE_URL
 
+// Sarvam catalog lives on the same host under a different prefix
+// (…/sarvam/api vs …/elevenlabs/api). Same thin-proxy pattern — Node holds no
+// credentials, just forwards GETs and pipes the response back to the browser.
+const SARVAM_BASE = process.env.VOICE_PYTHON_SARVAM_BASE_URL
+
 function pickParams(query = {}) {
   const out = {};
   for (const k of ["language", "gender", "accent", "age"]) {
@@ -53,3 +58,41 @@ exports.ages = (req, res) => proxyGet("/ages", req, res);
 exports.voices = (req, res) => proxyGet("/voices", req, res);
 exports.search = (req, res) =>
   proxyGet("/search", req, res, pickSearchParams(req.query));
+
+// ── Sarvam catalog proxy ────────────────────────────────────────────────────
+// Same forwarding pattern as proxyGet but against SARVAM_BASE. Sarvam has a
+// shorter cascade (language → gender → voice; no accent/age) and uses `lang`
+// (not `language`) as the voices query param — see the OpenAPI docs.
+async function sarvamProxyGet(path, req, res, params) {
+  try {
+    const { data } = await axios.get(`${SARVAM_BASE}${path}`, {
+      params,
+      timeout: 30000,
+    });
+    return res.status(200).json(data);
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    const message =
+      err?.response?.data?.detail ||
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      "Sarvam voice catalog request failed";
+    console.error(`[voice-selector] sarvam ${path} failed:`, status, message);
+    return res.status(status).json({ error: message });
+  }
+}
+
+// /voices takes `lang` (echoed into each voice's language field) + `gender`.
+function pickSarvamVoiceParams(query = {}) {
+  const out = {};
+  if (typeof query.lang === "string" && query.lang.length > 0) out.lang = query.lang;
+  if (typeof query.gender === "string" && query.gender.length > 0) out.gender = query.gender;
+  return out;
+}
+
+// /languages and /genders take no params; /voices takes lang + gender.
+exports.sarvamLanguages = (req, res) => sarvamProxyGet("/languages", req, res);
+exports.sarvamGenders = (req, res) => sarvamProxyGet("/genders", req, res);
+exports.sarvamVoices = (req, res) =>
+  sarvamProxyGet("/voices", req, res, pickSarvamVoiceParams(req.query));

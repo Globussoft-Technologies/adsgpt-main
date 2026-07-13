@@ -139,10 +139,13 @@ const videoSchema = new mongoose.Schema(
       // confirmed scenes sent to generate-video step
       scenes: { type: mongoose.Schema.Types.Mixed },
 
-      // ── ElevenLabs voice picker (AI Ads) ───────────────────────────────────
-      // voiceId is the deliverable forwarded to Python for TTS. voiceFilters
-      // is metadata used to repopulate the picker on resume/recreate; Python
-      // does not consume it.
+      // ── Narrator voice picker (AI Ads) ─────────────────────────────────────
+      // voiceProvider selects the TTS engine ('elevenlabs' | 'sarvam') and must
+      // persist so regenerate/copy/resume rebuild the Python payload with the
+      // right engine. The deliverable differs by provider: ElevenLabs uses
+      // voiceId, Sarvam uses voiceName (voiceId stays ''). voiceFilters is
+      // picker metadata for repopulating the cascade on resume/recreate.
+      voiceProvider: String,
       voiceId: String,
       voiceName: String,
       voiceFilters: {

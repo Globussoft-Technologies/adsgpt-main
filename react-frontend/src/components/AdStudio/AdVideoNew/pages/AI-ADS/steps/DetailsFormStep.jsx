@@ -180,7 +180,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     if (urlImages.length + uploadedImages.length === 0) e.images = 'At least one image is required';
     if (!formData.model) e.model = 'Model is required';
     if (!formData.duration) e.duration = 'Duration is required';
-    if (!formData.voice?.voiceId) e.voice = 'Voice is required';
+    // Deliverable differs by provider: Sarvam picks resolve to voiceName
+    // (voiceId is always '' for Sarvam), ElevenLabs to voiceId.
+    const vv = formData.voice || {};
+    const hasVoice = vv.provider === 'sarvam' ? !!vv.voiceName : !!vv.voiceId;
+    if (!hasVoice) e.voice = 'Voice is required';
     return e;
   };
 
@@ -203,9 +207,13 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       //   (b) Saved/DB shape (on first entry or recreate): data.voiceFilters,
       //       data.voiceId, data.voiceName (flat)
       // Check (a) first so a user's selection survives Back→forward.
-      // Language defaults to English — currently the only supported locale
-      // (see VoiceSelector.jsx where non-'en' codes are filtered out).
-      language: data?.voice?.language || data?.voiceFilters?.language || 'en',
+      // Language is non-clearable and defaults to English, but the code differs
+      // by provider: ElevenLabs uses ISO "en", Sarvam uses BCP-47 "en-IN".
+      provider: data?.voice?.provider || data?.voiceProvider || 'elevenlabs',
+      language:
+        data?.voice?.language ||
+        data?.voiceFilters?.language ||
+        ((data?.voice?.provider || data?.voiceProvider) === 'sarvam' ? 'en-IN' : 'en'),
       languageLabel: data?.voice?.languageLabel || data?.voiceFilters?.languageLabel || 'English',
       gender: data?.voice?.gender || data?.voiceFilters?.gender || '',
       accent: data?.voice?.accent || data?.voiceFilters?.accent || '',
@@ -262,7 +270,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       voice: {
         // Same dual-shape handling as the useState initializer above.
         // Runtime shape (inputs.voice) wins over saved shape (inputs.voiceFilters).
-        language: inputs.voice?.language || inputs.voiceFilters?.language || 'en',
+        provider: inputs.voice?.provider || inputs.voiceProvider || 'elevenlabs',
+        language:
+          inputs.voice?.language ||
+          inputs.voiceFilters?.language ||
+          ((inputs.voice?.provider || inputs.voiceProvider) === 'sarvam' ? 'en-IN' : 'en'),
         languageLabel: inputs.voice?.languageLabel || inputs.voiceFilters?.languageLabel || 'English',
         gender: inputs.voice?.gender || inputs.voiceFilters?.gender || '',
         accent: inputs.voice?.accent || inputs.voiceFilters?.accent || '',
