@@ -14,7 +14,7 @@ const {
   getAdFactoryImagesByUserId,
   downLoadZipImages,
   saveEditedAdImage,
-  syncUserAdImages
+  syncCustomCreatives
 } = require("../controllers/adFactory");
 const { authenticateJWT, verifySecretKey } = require("../services/authService");
 const { requireBasePlan } = require("../middlewares/requireBasePlan");
@@ -41,7 +41,7 @@ router.put("/creatives/:campaignId/:creativeId", authenticateJWT,updateCreativeB
 router.delete("/creatives/:campaignId/:creativeId", authenticateJWT, deleteCreativeByCreativeId)
 router.put("/result-update", verifySecretKey, updateGenerationResult);
 router.post("/upload-image-url", verifyUploadSecretKey, upload.single("file"), uploadImageFromUrl)
-router.post("/custom-images", authenticateJWT, syncUserAdImages)
+router.post("/custom-creatives", authenticateJWT, syncCustomCreatives)
 router.post("/save-edited-image", authenticateJWT, saveEditedAdImage);
 router.delete("/delete/:userId/:campaignId", authenticateJWT, deleteCampaign);
 router.post("/images-zip-download",authenticateJWT,downLoadZipImages);

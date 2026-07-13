@@ -538,7 +538,8 @@ const AppLibraryPanel = ({ userId, onCommit }) => {
                   src={item.src}
                   alt={item.prompt || 'Generated image'}
                   loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  decoding="async"
+                  className="h-full w-full object-cover"
                 />
                 {/* Selected check badge */}
                 {isSelected && (

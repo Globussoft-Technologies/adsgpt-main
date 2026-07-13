@@ -1,8 +1,8 @@
-import { Check, CheckCircle, Pencil } from 'lucide-react';
+import { CheckCircle, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 
-const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
+const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }) => {
   const [editingId, setEditingId] = useState(null);
   const [localCopies, setLocalCopies] = useState(adCopies);
   const isDarkMode = useSelector((state) => state.theme.isDarkMode);
@@ -64,7 +64,12 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
   };
 
   return (
-    <div className={`${isDarkMode ? "scrollbar-white" : ""} flex gap-2 overflow-x-auto pb-4`}>
+    <div className="flex items-start gap-2">
+      {/* Scroller — copies only. flex-1 + min-w-0 so it fills the space left of
+          the add card and scrolls horizontally without pushing it off-screen. */}
+      <div
+        className={`${isDarkMode ? 'scrollbar-white' : ''} flex min-w-0 flex-1 gap-2 overflow-x-auto pb-4`}
+      >
       {localCopies.map((adCopy, index) => {
         const isSelected =
           adCopy?.headline + adCopy?.primaryText ===
@@ -135,6 +140,21 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies }) => {
           </div>
         );
       })}
+      </div>
+
+      {/* Add card — fixed on the right, always visible, never overlapped. */}
+      {onAddCopy && (
+        <button
+          type="button"
+          onClick={onAddCopy}
+          className="group flex h-64 w-55 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-gray-100 text-gray-500 transition-colors hover:border-[#2364B8] hover:text-[#2364B8] 2xl:h-78 2xl:w-[240px] dark:border-white/15 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#2364B8] dark:hover:text-white"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 transition-colors group-hover:bg-[#2364B8]/10 dark:bg-white/10 2xl:h-11 2xl:w-11">
+            <Plus className="h-5 w-5 2xl:h-6 2xl:w-6" />
+          </span>
+          <span className="text-xs font-medium 2xl:text-sm">Add ad copy</span>
+        </button>
+      )}
     </div>
   );
 };

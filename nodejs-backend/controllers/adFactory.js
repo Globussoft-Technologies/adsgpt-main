@@ -1671,37 +1671,51 @@ exports.uploadImageFromUrl = async (req, res) => {
     return res.status(500).json({ error: "Image upload failed" });
   }
 };
-// Syncs a campaign's manually-added images. Called when the user Saves the
-// preview — we replace the whole `customImages` array with the current set, so
-// both additions and removals are captured in one write.
-// Body: { userId, campaignId, images: [{ data, source }] }.
-exports.syncUserAdImages = async (req, res) => {
+// Syncs a campaign's manually-added content (images + copies). Called when the
+// user Saves the preview — we replace the whole customCreatives set, so both
+// additions and removals are captured in one write.
+// Body: { userId, campaignId, images: [{ data, source }], copies: [{ primaryText, headline, description, platform, source }] }.
+exports.syncCustomCreatives = async (req, res) => {
   try {
     const userId = req.body.userId || req.user?.user_id || req.user?.userId;
-    const { campaignId, images } = req.body;
+    const { campaignId, images, copies } = req.body;
 
     if (!userId || !campaignId) {
       return res.status(400).json({ error: "userId and campaignId are required" });
     }
 
-    const allowed = ["upload", "link", "app"];
-    const clean = (Array.isArray(images) ? images : [])
+    const allowedImageSrc = ["upload", "link", "app"];
+    const cleanImages = (Array.isArray(images) ? images : [])
       .filter((i) => i && i.data)
       .map((i) => ({
         data: i.data,
-        source: allowed.includes(i.source) ? i.source : "upload",
+        source: allowedImageSrc.includes(i.source) ? i.source : "upload",
+        timestamp: new Date(),
+      }));
+
+    const cleanCopies = (Array.isArray(copies) ? copies : [])
+      .filter((c) => c && (c.primaryText || c.headline || c.description))
+      .map((c) => ({
+        primaryText: c.primaryText || "",
+        headline: c.headline || "",
+        description: c.description || "",
+        platform: c.platform || "meta",
         timestamp: new Date(),
       }));
 
     await Campaign.updateOne(
       { "metadata.campaignId": campaignId, userId },
-      { $set: { customImages: clean } }
+      { $set: { "customCreatives.images": cleanImages, "customCreatives.copies": cleanCopies } }
     );
 
-    return res.status(200).json({ success: true, count: clean.length });
+    return res.status(200).json({
+      success: true,
+      images: cleanImages.length,
+      copies: cleanCopies.length,
+    });
   } catch (error) {
-    console.error("Error in syncUserAdImages:", error);
-    return res.status(500).json({ error: "Failed to save images" });
+    console.error("Error in syncCustomCreatives:", error);
+    return res.status(500).json({ error: "Failed to save custom creatives" });
   }
 };
 

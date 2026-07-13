@@ -157,9 +157,11 @@ const CreativeSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Images the user adds manually in the preview (device upload, external link,
-// or picked from their app library). Kept in a dedicated key — separate from
-// AI-generated `results.image` — and written only when the user Saves.
+// Content the user adds manually in the preview — kept under a single
+// `customCreatives` key ({ images, copies }), separate from AI-generated
+// `results`, and written only when the user Saves.
+//
+// Images: device upload, external link, or picked from the app library.
 const CustomImageSchema = new mongoose.Schema(
   {
     data: { type: String, default: "" }, // S3 key ("/creatives/…") or full URL
@@ -168,6 +170,19 @@ const CustomImageSchema = new mongoose.Schema(
       enum: ["upload", "link", "app"],
       default: "upload",
     },
+    timestamp: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+// Copies the user adds in the preview (AI-drafted and/or hand-written — both
+// are freely editable, so we don't distinguish the origin).
+const CustomCopySchema = new mongoose.Schema(
+  {
+    primaryText: { type: String, default: "" },
+    headline: { type: String, default: "" },
+    description: { type: String, default: "" },
+    platform: { type: String, default: "meta" },
     timestamp: { type: Date, default: Date.now },
   },
   { _id: false }
@@ -285,8 +300,11 @@ const CampaignSchema = new mongoose.Schema(
       status:StatusSchema,
     },
 
-    // Manually-added preview images (upload / link / app library), synced on Save.
-    customImages: { type: [CustomImageSchema], default: [] },
+    // Manually-added preview content (images + copies), synced on Save.
+    customCreatives: {
+      images: { type: [CustomImageSchema], default: [] },
+      copies: { type: [CustomCopySchema], default: [] },
+    },
 
 
     fbMetaData: {

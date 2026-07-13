@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import ImageSlider from './ImageSlider';
 import AddImageDialog from './AddImageDialog';
+import AddCopyDialog from './AddCopyDialog';
 import TextSlider from './TextSlider';
 import CreativeSection from './CreativeSection';
 import MobilePreview from './MobilePreview';
 import GoogleMobilePreview from './GoogleMobilePreview';
-import { Loader2, Check, Plus, Smartphone } from 'lucide-react';
+import { Loader2, Check, Smartphone } from 'lucide-react';
 import MobilePreviewModal from './MobilePreviewModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
@@ -20,7 +21,7 @@ import {
   setFirstAdCopies,
   setAvailablefirstImages,
 } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
-import { saveCustomAdImages } from '@/apis/adFactory/adFactoryImagesApi';
+import { saveCustomCreatives } from '@/apis/adFactory/adFactoryImagesApi';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const enableGooglePosting = import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
@@ -80,6 +81,10 @@ const PreviewCanvas = ({
   // so the results→availableImages effect never clobbers them.
   const [userImages, setUserImages] = useState([]);
   const [addImageOpen, setAddImageOpen] = useState(false);
+  // Copies the user adds manually (AI-generated with a custom prompt, or
+  // hand-written). Kept separate from AI results, like userImages.
+  const [userCopies, setUserCopies] = useState([]);
+  const [addCopyOpen, setAddCopyOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state?.socket) || {};
@@ -358,7 +363,7 @@ const PreviewCanvas = ({
   // Seed manually-added images from the campaign's persisted custom gallery so
   // they reappear on reload. Union with any local additions (never wipe them).
   useEffect(() => {
-    const persisted = (activeCampaign?.customImages || [])
+    const persisted = (activeCampaign?.customCreatives?.images || [])
       .filter((c) => c?.data)
       .map((c) => ({
         id: `custom-${c.data}`,
@@ -373,7 +378,30 @@ const PreviewCanvas = ({
       [...persisted, ...prev].forEach((img) => bySrc.set(img.src, img));
       return Array.from(bySrc.values());
     });
-  }, [activeCampaign?.customImages]);
+  }, [activeCampaign?.customCreatives?.images]);
+
+  // Same for manually-added copies.
+  useEffect(() => {
+    const persisted = (activeCampaign?.customCreatives?.copies || [])
+      .filter((c) => c && (c.primaryText || c.headline || c.description))
+      .map((c, i) => ({
+        id: `customcopy-${c.platform || 'meta'}-${i}-${c.headline || ''}-${c.primaryText || ''}`,
+        title: 'Custom Copy',
+        primaryText: c.primaryText || '',
+        headline: c.headline || '',
+        description: c.description || '',
+        platform: c.platform || 'meta',
+        isUser: true,
+      }));
+    if (persisted.length === 0) return;
+    setUserCopies((prev) => {
+      const byKey = new Map();
+      [...persisted, ...prev].forEach((c) =>
+        byKey.set(`${c.platform}|${c.headline}|${c.primaryText}`, c)
+      );
+      return Array.from(byKey.values());
+    });
+  }, [activeCampaign?.customCreatives?.copies]);
 
   if (!creative) return null;
 
@@ -400,15 +428,37 @@ const PreviewCanvas = ({
     }
   };
 
-  // Writes the current manual images to the campaign's customImages gallery.
-  // Sends the full set (both additions and removals captured in one $set).
-  const persistCustomImages = async () => {
+  // Adds a manually-created copy (AI-generated or hand-written) to the current
+  // platform tab, and selects it. Persisted on Save.
+  const handleAddCopy = (copy) => {
+    const newCopy = {
+      id: `customcopy-${nanoid(6)}`,
+      title: 'Custom Copy',
+      primaryText: copy.primaryText || '',
+      headline: copy.headline || '',
+      description: copy.description || '',
+      platform: selectedPlatformTab,
+      isUser: true,
+    };
+    setUserCopies((prev) => [...prev, newCopy]);
+    update?.({ text: newCopy }); // auto-select the freshly added copy
+  };
+
+  // Writes the current manual images + copies to the campaign's customCreatives
+  // key. Sends the full set (additions and removals captured in one $set).
+  const persistCustomCreatives = async () => {
     if (!campaignId || !userData?.user_id) return;
     try {
-      await saveCustomAdImages({
+      await saveCustomCreatives({
         userId: userData.user_id,
         campaignId,
         images: userImages.map((u) => ({ data: u.key || u.src, source: u.source || 'upload' })),
+        copies: userCopies.map((c) => ({
+          primaryText: c.primaryText || '',
+          headline: c.headline || '',
+          description: c.description || '',
+          platform: c.platform || 'meta',
+        })),
       });
     } catch {
       // Non-fatal — the creative save itself already succeeded.
@@ -454,8 +504,8 @@ const PreviewCanvas = ({
       }
       if (updateCampaign.fulfilled.match(result) || updateCreativeById.fulfilled.match(result)) {
         // Persist manual images BEFORE refetch so the campaign comes back with
-        // its customImages populated (which re-seeds the slider).
-        await persistCustomImages();
+        // its customCreatives populated (which re-seeds the slider/copies).
+        await persistCustomCreatives();
 
         const campaignPayload = {
           campaignId,
@@ -514,30 +564,22 @@ const PreviewCanvas = ({
       <div className="flex flex-col overflow-hidden pt-2 md:pt-5 2xl:pt-0">
         <div className="flex max-h-[1200px] max-w-[1600px] flex-1 overflow-x-hidden">
           <div className="mx-auto flex w-[95%] flex-col gap-4 sm:pr-2 2xl:pr-8">
-            <CreativeSection
-              title="Ad Image"
-              action={
-                <button
-                  type="button"
-                  onClick={() => setAddImageOpen(true)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:border-[#2364B8] hover:text-[#2364B8] dark:border-white/15 dark:bg-white/5 dark:text-white/70 dark:hover:border-[#2364B8] dark:hover:text-white"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add image
-                </button>
-              }
-            >
+            <CreativeSection title="Ad Image">
               <ImageSlider
                 mockImages={displayImages}
                 selectedImage={creative?.image}
                 onSelect={(image) => update?.({ image })}
                 onRemoveImage={handleRemoveImage}
+                onAddImage={() => setAddImageOpen(true)}
               />
             </CreativeSection>
 
             {(() => {
-              const hasAnyCopies = adCopies.length > 0;
-              const filteredAdCopies = adCopies.filter((c) => c.platform === selectedPlatformTab);
+              const hasAnyCopies = adCopies.length > 0 || userCopies.length > 0;
+              // AI copies first, then the user's own — both scoped to the platform tab.
+              const filteredAiCopies = adCopies.filter((c) => c.platform === selectedPlatformTab);
+              const filteredUserCopies = userCopies.filter((c) => c.platform === selectedPlatformTab);
+              const mergedCopies = [...filteredAiCopies, ...filteredUserCopies];
               return (
                 <CreativeSection
                   title={
@@ -563,24 +605,26 @@ const PreviewCanvas = ({
                     </div>
                   }
                 >
-                  {filteredAdCopies.length > 0 ? (
-                    <TextSlider
-                      key={selectedPlatformTab}
-                      adCopies={filteredAdCopies}
-                      setAdCopies={(updated) =>
-                        setAdCopies((prev) => [
-                          ...prev.filter((c) => c.platform !== selectedPlatformTab),
-                          ...updated,
-                        ])
-                      }
-                      selectedText={creative?.text}
-                      onSelect={(text) => update?.({ text })}
-                    />
-                  ) : (
-                    <div className="flex h-24 items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-sm text-gray-500 dark:text-white/40">
-                      No ad copies generated for this platform
-                    </div>
-                  )}
+                  <TextSlider
+                    key={selectedPlatformTab}
+                    adCopies={mergedCopies}
+                    setAdCopies={(updated) => {
+                      // Route edits back to the right state by the isUser flag.
+                      const ai = updated.filter((c) => !c.isUser);
+                      const usr = updated.filter((c) => c.isUser);
+                      setAdCopies((prev) => [
+                        ...prev.filter((c) => c.platform !== selectedPlatformTab),
+                        ...ai,
+                      ]);
+                      setUserCopies((prev) => [
+                        ...prev.filter((c) => c.platform !== selectedPlatformTab),
+                        ...usr,
+                      ]);
+                    }}
+                    selectedText={creative?.text}
+                    onSelect={(text) => update?.({ text })}
+                    onAddCopy={() => setAddCopyOpen(true)}
+                  />
                 </CreativeSection>
               );
             })()}
@@ -651,7 +695,7 @@ const PreviewCanvas = ({
               </button>
               <button
                 onClick={async () => {
-                  await persistCustomImages();
+                  await persistCustomCreatives();
                   handleSaveAndContinue?.();
                 }}
                 disabled={isloading || !enableId || creative?.canSave}
@@ -685,6 +729,13 @@ const PreviewCanvas = ({
         onClose={() => setAddImageOpen(false)}
         onAdd={handleAddImage}
         userId={userData?.user_id}
+      />
+
+      <AddCopyDialog
+        open={addCopyOpen}
+        onClose={() => setAddCopyOpen(false)}
+        onAdd={handleAddCopy}
+        platform={selectedPlatformTab}
       />
     </main>
   );

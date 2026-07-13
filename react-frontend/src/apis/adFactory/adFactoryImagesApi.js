@@ -36,14 +36,14 @@ export const getAdFactoryImages = async ({
   return data;
 };
 
-// Syncs the campaign's manually-added images (upload / link / app). Sends the
-// FULL current set, which the backend $sets — so this captures both additions
-// and removals. Called when the user Saves the preview.
-// `images` = [{ data, source }].
-export const saveCustomAdImages = async ({ userId, campaignId, images }) => {
+// Syncs the campaign's manually-added content (images + copies) under the
+// central customCreatives key. Sends the FULL current set, which the backend
+// $sets — so this captures both additions and removals. Called on Save.
+// `images` = [{ data, source }], `copies` = [{ primaryText, headline, description, platform, source }].
+export const saveCustomCreatives = async ({ userId, campaignId, images, copies }) => {
   const res = await axios.post(
-    `${BASE_URL}/campaign/custom-images`,
-    { userId, campaignId, images },
+    `${BASE_URL}/campaign/custom-creatives`,
+    { userId, campaignId, images, copies },
     { headers: { ...headers(), 'Content-Type': 'application/json' } },
   );
   return res.data;
