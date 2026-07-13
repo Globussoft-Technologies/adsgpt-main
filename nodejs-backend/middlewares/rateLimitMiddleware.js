@@ -7,7 +7,12 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
-  skip: (req) => req.path === "/telegram/webhook",
+  // Skip high-frequency polls and self-authed webhooks so they don't burn the
+  // shared budget: the Telegram webhook (gated by its own secret token) and the
+  // video/image processing-count endpoints, which the frontend polls on an interval.
+  skip: (req) =>
+    req.path === "/telegram/webhook" ||
+    req.path.endsWith("/processing-count"),
 });
 
 // Looser limiter for the Telegram webhook — inbound traffic is already
