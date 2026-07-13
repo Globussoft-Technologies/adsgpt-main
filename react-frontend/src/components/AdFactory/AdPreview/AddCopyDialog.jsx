@@ -10,6 +10,22 @@ import {
 } from '@/components/ui/dialog';
 import { generateAdCopy } from '@/apis/metaAds/metaAdsApi';
 
+// Platform character limits. `rec` = recommended (soft), `max` = hard cap.
+// Meta: Primary 1–2200 (125 rec), Headline 1–255 (40 rec), Description 1–30.
+// Google: Primary/Description 1–90, Headline 1–30.
+const LIMITS = {
+  meta: {
+    primaryText: { max: 2200, rec: 125 },
+    headline: { max: 255, rec: 40 },
+    description: { max: 30 },
+  },
+  google: {
+    primaryText: { max: 90 },
+    headline: { max: 30 },
+    description: { max: 90 },
+  },
+};
+
 const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
   const [prompt, setPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -25,6 +41,13 @@ const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
   }, [open]);
 
   const setField = (k, v) => setFields((f) => ({ ...f, [k]: v }));
+
+  const limits = LIMITS[platform] || LIMITS.meta;
+  const overMax = (k) => {
+    const m = limits[k]?.max;
+    return m != null && fields[k].length > m;
+  };
+  const anyOver = overMax('primaryText') || overMax('headline') || overMax('description');
 
   const handleGenerate = async () => {
     const p = prompt.trim();
@@ -48,7 +71,7 @@ const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
     }
   };
 
-  const canAdd = Boolean(fields.primaryText.trim() || fields.headline.trim());
+  const canAdd = Boolean(fields.primaryText.trim() || fields.headline.trim()) && !anyOver;
 
   const handleAdd = () => {
     if (!canAdd) return;
@@ -59,6 +82,13 @@ const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
     });
     onClose?.();
   };
+
+  const inputBase =
+    'w-full rounded-xl border bg-transparent p-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-white/40';
+  const borderClass = (k) =>
+    overMax(k)
+      ? 'border-red-500 focus:border-red-500'
+      : 'border-black/15 focus:border-[#2364B8] dark:border-white/15';
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose?.()}>
@@ -106,29 +136,35 @@ const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
 
           {/* Editable fields — write your own or tweak the generated draft */}
           <div className="flex flex-col gap-3">
-            <Field label="Primary text">
-              <textarea
-                value={fields.primaryText}
-                onChange={(e) => setField('primaryText', e.target.value)}
-                rows={3}
-                placeholder="Main body of the ad…"
-                className="w-full resize-none rounded-xl border border-black/15 bg-transparent p-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#2364B8] focus:outline-none dark:border-white/15 dark:text-white dark:placeholder:text-white/40"
-              />
-            </Field>
-            <Field label="Headline">
+            {limits.primaryText && (
+              <Field label="Primary text" value={fields.primaryText} limit={limits.primaryText}>
+                <textarea
+                  value={fields.primaryText}
+                  onChange={(e) => setField('primaryText', e.target.value)}
+                  rows={3}
+                  placeholder="Main body of the ad…"
+                  className={`resize-none ${inputBase} ${borderClass('primaryText')}`}
+                />
+              </Field>
+            )}
+            <Field label="Headline" value={fields.headline} limit={limits.headline}>
               <input
                 value={fields.headline}
                 onChange={(e) => setField('headline', e.target.value)}
                 placeholder="Short headline…"
-                className="w-full rounded-xl border border-black/15 bg-transparent p-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#2364B8] focus:outline-none dark:border-white/15 dark:text-white dark:placeholder:text-white/40"
+                className={`${inputBase} ${borderClass('headline')}`}
               />
             </Field>
-            <Field label="Description (optional)">
+            <Field
+              label="Description (optional)"
+              value={fields.description}
+              limit={limits.description}
+            >
               <input
                 value={fields.description}
                 onChange={(e) => setField('description', e.target.value)}
                 placeholder="Supporting line…"
-                className="w-full rounded-xl border border-black/15 bg-transparent p-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#2364B8] focus:outline-none dark:border-white/15 dark:text-white dark:placeholder:text-white/40"
+                className={`${inputBase} ${borderClass('description')}`}
               />
             </Field>
           </div>
@@ -150,11 +186,37 @@ const AddCopyDialog = ({ open, onClose, onAdd, platform = 'meta' }) => {
   );
 };
 
-const Field = ({ label, children }) => (
-  <label className="flex flex-col gap-1">
-    <span className="px-1 text-xs font-medium text-gray-500 dark:text-white/50">{label}</span>
-    {children}
-  </label>
-);
+const Field = ({ label, value = '', limit, children }) => {
+  const len = value.length;
+  const max = limit?.max;
+  const rec = limit?.rec;
+  const over = max != null && len > max;
+  const overRec = rec != null && len > rec && !over;
+  return (
+    <label className="flex flex-col gap-1">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium text-gray-500 dark:text-white/50">{label}</span>
+        {max != null && (
+          <span
+            className={`text-[11px] tabular-nums ${
+              over
+                ? 'text-red-500'
+                : overRec
+                  ? 'text-amber-500'
+                  : 'text-gray-400 dark:text-white/40'
+            }`}
+          >
+            {len}/{max}
+            {/* {rec ? ` · ${rec} rec` : ''} */}
+          </span>
+        )}
+      </div>
+      {children}
+      {over && (
+        <span className="px-1 text-[11px] text-red-500">Exceeds the {max}-character limit.</span>
+      )}
+    </label>
+  );
+};
 
 export default AddCopyDialog;

@@ -79,8 +79,8 @@ COPY PRINCIPLES:
   
 FIELD RULES:
 - primary_text: the caption shown ABOVE the image. Hook the reader fast;
-  ~125 characters or fewer is ideal so it isn't truncated in the feed.
-- headline: the bold line under the image. <= 40 characters. One clear value proposition.
+  <= 90 characters or fewer is ideal so it isn't truncated in the feed.
+- headline: the bold line under the image. <= 30 characters. One clear value proposition.
 - description: the small supporting line under the headline. <= 30 characters.
 - call_to_action: choose EXACTLY ONE value from this list, whichever best
   matches the intent of the copy:
