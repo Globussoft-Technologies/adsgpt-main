@@ -22,12 +22,17 @@ export const handleDownload = async (fileUrl) => {
   const toastId = toast.loading(`Downloading ${fileType}...`);
 
   try {
-    const response = await fetch(proxyUrl, {
+    // The gateway proxy dodges CORS/hotlink blocks, but it must not be a single
+    // point of failure — if it errors (auth, 404, gateway down) retry the file
+    // URL directly before giving up.
+    let response = await fetch(proxyUrl, {
       headers: {
         Authorization: `Bearer ${getCookies()}`,
       },
       mode: 'cors',
     });
+    if (!response.ok) response = await fetch(fileUrl, { mode: 'cors' });
+    if (!response.ok) throw new Error(`Download failed (HTTP ${response.status})`);
 
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
@@ -68,10 +73,14 @@ export const handleDownloadAs = async (fileUrl, format = 'png') => {
   const toastId = toast.loading(`Downloading ${ext.toUpperCase()}…`);
 
   try {
-    const response = await fetch(proxyUrl, {
+    // Same proxy-then-direct fallback as handleDownload — a proxy error must
+    // not leave the user with a button that appears to do nothing.
+    let response = await fetch(proxyUrl, {
       headers: { Authorization: `Bearer ${getCookies()}` },
       mode: 'cors',
     });
+    if (!response.ok) response = await fetch(fileUrl, { mode: 'cors' });
+    if (!response.ok) throw new Error(`Download failed (HTTP ${response.status})`);
 
     const blob = await response.blob();
     const imageBitmap = await createImageBitmap(blob);

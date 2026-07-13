@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Sparkles, Check, Loader2, Plus, Minus, X, Pencil, Info, ChevronDown } from 'lucide-react';
+import {
+  Sparkles,
+  Check,
+  Loader2,
+  Plus,
+  Minus,
+  X,
+  Pencil,
+  Info,
+  ChevronDown,
+  RefreshCw,
+  Globe,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
-import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
+import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
@@ -625,6 +637,11 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // "Add from website" — analyze a typed domain and hydrate the brand fields
+  // from it (for brands that aren't in the saved list).
+  const [siteDraft, setSiteDraft] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
   const wrapRef = useRef(null);
 
   // Load the user's brands once if we don't have them yet — the assistant can
@@ -650,11 +667,6 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const matched =
     brands.find((b) => (b?.name || '').trim().toLowerCase() === currentName.toLowerCase()) || null;
 
-  // Hide only when there's nothing to show at all (no saved brands AND no brand
-  // has been detected/typed yet). A website-detected brand still shows here even
-  // when it isn't saved in Brand IQ.
-  if (!brands.length && !currentName) return null;
-
   const pick = (b) => {
     const patch = {};
     if (fieldKeys.has('brand_name')) patch.brand_name = b.name || '';
@@ -671,6 +683,55 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     setOpen(false);
   };
 
+  // Clear a wrong selection — blanks every brand field the form has so the
+  // user can re-pick (or leave brand-less) without restarting the workflow.
+  const clear = () => {
+    const patch = {};
+    if (fieldKeys.has('brand_name')) patch.brand_name = '';
+    if (fieldKeys.has('brand_description')) patch.brand_description = '';
+    if (fieldKeys.has('brand_logo')) patch.brand_logo = [];
+    if (fieldKeys.has('brand_colors')) patch.brand_colors = [];
+    onPick(patch);
+  };
+
+  const refresh = () => {
+    if (!userId || refreshing) return;
+    setRefreshing(true);
+    dispatch(fetchBrands(userId)).finally(() => setRefreshing(false));
+  };
+
+  const analyzeSite = async () => {
+    const raw = siteDraft.trim();
+    if (!raw || analyzing) return;
+    const site = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    setAnalyzing(true);
+    try {
+      const res = await analazeDomain(site);
+      const patch = {};
+      if (fieldKeys.has('brand_name')) {
+        patch.brand_name =
+          res?.meta?.title || raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+      }
+      if (fieldKeys.has('brand_description')) {
+        patch.brand_description = res?.aiInsights?.aiSummary || res?.meta?.description || '';
+      }
+      onPick(patch);
+      setSiteDraft('');
+      setOpen(false);
+      // Analyzing can save the brand server-side — refresh so it's listed next time.
+      if (userId) dispatch(fetchBrands(userId));
+    } catch (err) {
+      // 409 = brand already saved — refresh the list so the user can pick it.
+      if (err?.response?.status === 409) {
+        refresh();
+      } else {
+        toast.error('Could not analyze that website — check the URL and try again.');
+      }
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const triggerLogo = logoOf(matched);
   const hasList = brands.length > 0;
 
@@ -678,15 +739,26 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     <div ref={wrapRef} className="relative flex flex-col gap-1.5 sm:col-span-2">
       <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
         Brand
-        <Tip content="Pick a saved brand to fill its description, logo and colors. A brand detected from a website shows here too — even if it isn't saved in Brand IQ.">
+        <Tip content="Pick a saved brand to fill its description, logo and colors — or add one from its website. Use ✕ to clear a wrong selection.">
           <span className="cursor-help text-white/35 hover:text-white/70">
             <Info className="h-3 w-3" />
           </span>
         </Tip>
+        <Tip content="Refresh the brand list">
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={disabled || refreshing}
+            aria-label="Refresh brand list"
+            className="ml-auto rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </Tip>
       </label>
       <button
         type="button"
-        disabled={disabled || !hasList}
+        disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#111] px-3 text-left transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -711,47 +783,109 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
             <span className="text-[13px] text-white/45">Select a brand…</span>
           )}
         </span>
-        {hasList && (
+        <span className="flex shrink-0 items-center gap-1">
+          {currentName && !disabled && (
+            // Not a <button> — nesting one inside the trigger button is invalid
+            // HTML. stopPropagation keeps the clear click from toggling the list.
+            <span
+              role="button"
+              tabIndex={0}
+              title="Clear selected brand"
+              onClick={(e) => {
+                e.stopPropagation();
+                clear();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  clear();
+                }
+              }}
+              className="rounded-full p-0.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
           <ChevronDown
-            className={`h-4 w-4 shrink-0 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`}
           />
-        )}
+        </span>
       </button>
-      {open && hasList && (
-        <div className="subtle-scroll absolute top-full left-0 z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-white/10 bg-[#141414] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
-          {brands.map((b) => {
-            const on = matched?.id === b?.id;
-            const logo = logoOf(b);
-            return (
+      {open && (
+        <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-lg border border-white/10 bg-[#141414] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
+          <div className="subtle-scroll max-h-52 overflow-auto">
+            {hasList ? (
+              brands.map((b) => {
+                const on = matched?.id === b?.id;
+                const logo = logoOf(b);
+                return (
+                  <button
+                    key={b?.id}
+                    type="button"
+                    onClick={() => pick(b)}
+                    className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
+                      on ? 'bg-white/10' : 'hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {logo ? (
+                      <img
+                        src={toMediaUrl(logo)}
+                        alt=""
+                        className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
+                      />
+                    ) : (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/10 text-[11px] font-semibold text-white/60">
+                        {(b?.name || '?').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-[13px] text-white/90">{b?.name || 'Untitled brand'}</span>
+                      {b?.description ? (
+                        <span className="truncate text-[11px] text-white/45">{b.description}</span>
+                      ) : null}
+                    </span>
+                    {on && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+                  </button>
+                );
+              })
+            ) : (
+              <p className="px-2 py-1.5 text-[12px] text-white/45">
+                No saved brands yet — add one from its website below.
+              </p>
+            )}
+          </div>
+          {/* Brand not in the list? Analyze its website and fill the fields. */}
+          <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 p-1.5">
+            <span className="flex items-center gap-1 text-[10.5px] font-medium text-white/45">
+              <Globe className="h-3 w-3" />
+              Brand not listed? Add it from its website
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={siteDraft}
+                placeholder="yourbrand.com"
+                disabled={analyzing}
+                onChange={(e) => setSiteDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    analyzeSite();
+                  }
+                }}
+                className="h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111] px-2.5 text-[12px] text-white outline-none placeholder:text-white/35 focus:border-white/40 disabled:opacity-60"
+              />
               <button
-                key={b?.id}
                 type="button"
-                onClick={() => pick(b)}
-                className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
-                  on ? 'bg-white/10' : 'hover:bg-white/[0.06]'
-                }`}
+                onClick={analyzeSite}
+                disabled={analyzing || !siteDraft.trim()}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-white/10 px-2.5 text-[12px] text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {logo ? (
-                  <img
-                    src={toMediaUrl(logo)}
-                    alt=""
-                    className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
-                  />
-                ) : (
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/10 text-[11px] font-semibold text-white/60">
-                    {(b?.name || '?').charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] text-white/90">{b?.name || 'Untitled brand'}</span>
-                  {b?.description ? (
-                    <span className="truncate text-[11px] text-white/45">{b.description}</span>
-                  ) : null}
-                </span>
-                {on && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+                {analyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
               </button>
-            );
-          })}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -918,9 +1052,22 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </p>
           )}
         </div>
-        <ChevronDown
-          className={`mt-0.5 h-4 w-4 shrink-0 text-white/45 transition-transform ${collapsed ? '-rotate-90' : ''}`}
-        />
+        {/* Single-click fallback for collapse — double-click on some devices /
+            after text focus is easy to miss, so the chevron always toggles too. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCollapsed((c) => !c);
+          }}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand' : 'Collapse'}
+          className="mt-0.5 shrink-0 rounded-md p-1 text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white"
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+          />
+        </button>
       </div>
 
       {!collapsed && (
@@ -973,25 +1120,29 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           );
         })}
 
-        {/* Total-images notice — clarifies per-ratio vs total so the count isn't
-            mistaken for the grand total. Shown in red whenever >1 image. */}
-        {creditInfo.totalImages > 1 && (
-          <p className="sm:col-span-2 -mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-red-400/90">
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            {creditInfo.isPack ? (
-              <span>
-                Ad pack: generating {creditInfo.totalImages} image
-                {creditInfo.totalImages > 1 ? 's' : ''} total (3 variants ×{' '}
-                {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}).
-              </span>
-            ) : (
-              <span>
-                Generating {creditInfo.totalImages} images total — {creditInfo.perRatio} per
-                ratio × {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}.
-              </span>
-            )}
-          </p>
-        )}
+        {/* Total-images notice — always shown (even for a single image) so the
+            user can confirm the output count before firing. Red when >1 image
+            so a multi-image spend isn't mistaken for the per-ratio count. */}
+        <p
+          className={`sm:col-span-2 -mt-1 flex items-center gap-1.5 text-[11.5px] font-medium ${
+            creditInfo.totalImages > 1 ? 'text-red-400/90' : 'text-white/55'
+          }`}
+        >
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          {creditInfo.isPack ? (
+            <span>
+              Ad pack: generating {creditInfo.totalImages} image
+              {creditInfo.totalImages > 1 ? 's' : ''} in total (3 variants ×{' '}
+              {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}).
+            </span>
+          ) : (
+            <span>
+              Generating {creditInfo.totalImages} image
+              {creditInfo.totalImages > 1 ? 's' : ''} in total — {creditInfo.perRatio} per
+              ratio × {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}.
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Footer — submit OR submitted summary */}

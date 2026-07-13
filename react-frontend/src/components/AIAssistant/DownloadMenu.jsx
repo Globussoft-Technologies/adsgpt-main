@@ -47,7 +47,10 @@ const DownloadMenu = ({ url, variant = 'icon', className = '' }) => {
       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
         {trigger}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[9rem]">
+      {/* z-[60]: must paint above the image-lightbox dialog overlay (z-55) —
+          at the default z-50 the menu opens BEHIND the overlay and the
+          Download button looks dead. */}
+      <DropdownMenuContent align="end" className="z-[60] min-w-[9rem]">
         {FORMATS.map((f) => (
           <DropdownMenuItem
             key={f.key}
