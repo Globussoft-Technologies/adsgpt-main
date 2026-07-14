@@ -39,10 +39,28 @@ import {
 const MIN_VIDEO_DURATION_SECONDS = 5;
 const MAX_VIDEO_DURATION_SECONDS = 600;
 
-// TikTok rejects videos below 960x540 resolution (confirmed via the live
-// Ads Manager "technical issues" upload check).
-const MIN_VIDEO_WIDTH = 960;
-const MIN_VIDEO_HEIGHT = 540;
+// TikTok's minimum resolution is orientation-aware (confirmed via the live
+// Ads Manager check + official video specs):
+//   • Horizontal 16:9 → 960×540
+//   • Vertical   9:16 → 540×960
+//   • Square     1:1  → 640×640
+// A flat "width≥960 AND height≥540" would wrongly reject a valid 540×960
+// vertical video, so check the longer/shorter sides instead: longer ≥ 960 and
+// shorter ≥ 540 covers both 16:9 and 9:16; square needs its own 640×640 floor.
+const MIN_VIDEO_LONG_SIDE = 960;
+const MIN_VIDEO_SHORT_SIDE = 540;
+const MIN_VIDEO_SQUARE_SIDE = 640;
+const SQUARE_RATIO_TOLERANCE = 0.02;
+const meetsMinResolution = (width, height) => {
+  if (width == null || height == null) return true; // can't read → don't block
+  const longSide = Math.max(width, height);
+  const shortSide = Math.min(width, height);
+  // Square (1:1) has its own floor.
+  if (Math.abs(width / height - 1) <= SQUARE_RATIO_TOLERANCE) {
+    return width >= MIN_VIDEO_SQUARE_SIDE && height >= MIN_VIDEO_SQUARE_SIDE;
+  }
+  return longSide >= MIN_VIDEO_LONG_SIDE && shortSide >= MIN_VIDEO_SHORT_SIDE;
+};
 
 // TikTok requires a minimum average bitrate of 350 Kbps. The browser has no
 // API that reports a file's real (video-track-only) bitrate without parsing
@@ -1501,10 +1519,11 @@ const CreateCampaignWizard = ({
       setErrors((e) => ({ ...e, video: 'Video must be 10 minutes or shorter.' }));
       return;
     }
-    if (width != null && height != null && (width < MIN_VIDEO_WIDTH || height < MIN_VIDEO_HEIGHT)) {
+    if (!meetsMinResolution(width, height)) {
       setErrors((e) => ({
         ...e,
-        video: `Cannot be delivered to TikTok: Resolution must be at least ${MIN_VIDEO_WIDTH}x${MIN_VIDEO_HEIGHT}.`,
+        video:
+          'Cannot be delivered to TikTok: Resolution too low. Minimum is 960×540 (horizontal), 540×960 (vertical), or 640×640 (square).',
       }));
       return;
     }
@@ -2264,10 +2283,15 @@ const CreateCampaignWizard = ({
 
       // 4. Ad (only if we have an identity + a media asset)
       if (!adId && form.identityId && (videoId || imageId || carouselImageIds.length >= MIN_CAROUSEL_IMAGES)) {
+        // Send the SELECTED identity's actual type — TikTok rejects an ad if
+        // identity_type doesn't match the identity_id (e.g. a real linked
+        // TT_USER/BC_AUTH_TT account submitted as CUSTOMIZED_USER). Fall back to
+        // CUSTOMIZED_USER only if the type can't be resolved from the list.
+        const selectedIdentity = identities.find((i) => i.identityId === form.identityId);
         const creative = {
           ad_name: form.adName || form.campaignName,
           identity_id: form.identityId,
-          identity_type: 'CUSTOMIZED_USER',
+          identity_type: selectedIdentity?.identityType || 'CUSTOMIZED_USER',
           ad_text: form.adText,
           // Community Interaction's Follow goal disallows call_to_action
           // entirely (destination is fixed to the TikTok profile).

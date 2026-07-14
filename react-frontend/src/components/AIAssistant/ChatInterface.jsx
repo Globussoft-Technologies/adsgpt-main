@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 import Composer from './Composer';
 import Messages from './Messages';
 import GenCanvas from './GenCanvas';
+import BlurText from './BlurText';
 import { streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   appendAssistantText,
@@ -23,6 +25,17 @@ import {
   startAssistantStream,
   startNewSession,
 } from '@/store/reducers/aiAssistant/aiAssistantSlice';
+
+// Welcome intro: same blur-in curve as BlurText's defaults, applied to the
+// gradient heading as one unit — word-splitting would break the continuous
+// bg-clip-text gradient across the heading (per-word filters/transforms take
+// the glyphs out of the parent's text-clip).
+const INTRO_HEADING_FROM = { filter: 'blur(10px)', opacity: 0, y: -50 };
+const INTRO_HEADING_KEYFRAMES = {
+  filter: ['blur(10px)', 'blur(5px)', 'blur(0px)'],
+  opacity: [0, 0.5, 1],
+  y: [-50, 5, 0],
+};
 
 // Turn a raw/technical failure detail into a clear, friendly message with a
 // hint at the cause or next step. Falls back to the backend's reason when it's
@@ -113,6 +126,16 @@ const ChatInterface = () => {
   }, []);
 
   const isEmpty = messages.length === 0 && !pending;
+
+  // Play the welcome intro (blur-in greeting) once per page entry — this
+  // component mounts fresh each time the sidebar's AI button opens the module.
+  // Returning to the empty state later in the same visit (New Chat) shows the
+  // static greeting instead of replaying the animation.
+  const [introPlayed, setIntroPlayed] = useState(false);
+  useEffect(() => {
+    if (!isEmpty && !introPlayed) setIntroPlayed(true);
+  }, [isEmpty, introPlayed]);
+  const animateIntro = !introPlayed;
 
   // Cancel any in-flight stream when this component unmounts.
   const controllerRef = useRef(null);
@@ -326,10 +349,24 @@ const ChatInterface = () => {
         // subtle-scroll + pb so a tall composer (long prompt) is never clipped by
         // the parent's overflow-hidden at 100% zoom / shorter viewports.
         <div className="subtle-scroll flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[10vh] pb-10 sm:pt-[14vh]">
-          <h2 className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]">
+          <motion.h2
+            className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]"
+            initial={animateIntro ? INTRO_HEADING_FROM : false}
+            animate={animateIntro ? INTRO_HEADING_KEYFRAMES : undefined}
+            transition={{ duration: 0.7, times: [0, 0.5, 1] }}
+          >
             {`Hi, ${greeting}`}
-          </h2>
-          <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
+          </motion.h2>
+          {animateIntro ? (
+            <BlurText
+              text="Where do you want to start?"
+              delay={120}
+              stepDuration={0.3}
+              className="mt-2 justify-center text-sm text-white/60"
+            />
+          ) : (
+            <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
+          )}
           <div className="mt-7 w-full max-w-[820px] px-3 sm:px-0">
             <Composer
               onSend={handleSend}
