@@ -47,19 +47,34 @@
 }
 
 /* The base -50% centering lives inside the keyframes because `transform`
-   would otherwise override Tailwind's -translate-x-1/2. */
+   would otherwise override Tailwind's -translate-x-1/2.
+
+   Wave motion: the beams swell gently upward and settle while drifting a
+   little side to side, like a slow water surface. The vertical movement is
+   scaleY-only with transform-origin at the bottom edge, so the bottom stays
+   pinned exactly in place (no gap can ever open under the image); the two
+   swell keyframes have different heights so the rhythm reads organic rather
+   than metronomic. */
 .aia-bg-bottom {
   transform: translateX(-50%);
-  animation: aia-bottom-sway 36s ease-in-out infinite alternate;
+  transform-origin: 50% 100%;
+  animation: aia-bottom-wave 18s ease-in-out infinite;
   will-change: transform;
 }
 
-@keyframes aia-bottom-sway {
-  from {
-    transform: translateX(calc(-50% - 2vw));
+@keyframes aia-bottom-wave {
+  0%,
+  100% {
+    transform: translateX(calc(-50% - 1.5vw)) scaleY(1);
   }
-  to {
-    transform: translateX(calc(-50% + 2vw));
+  25% {
+    transform: translateX(-50%) scaleY(1.04);
+  }
+  50% {
+    transform: translateX(calc(-50% + 1.5vw)) scaleY(1);
+  }
+  75% {
+    transform: translateX(-50%) scaleY(1.06);
   }
 }
 
