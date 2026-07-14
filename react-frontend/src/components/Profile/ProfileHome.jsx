@@ -17,7 +17,7 @@ import {
 import getCookies from '@/utils/getCookies';
 import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
-import { fetchModelCredits } from '@/utils/fetchModelCredits';
+import { fetchModelCredits, fetchAdCreativeImageTiers } from '@/utils/fetchModelCredits';
 import { getCanvaStatus, disconnectCanva, checkCanvaAuth } from '@/apis/canva/canvaApi';
 import { getUserAdPostingInfo, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
 import { getGoogleUser, googleDisconnect } from '@/apis/googleAds/googleAdsApi';
@@ -211,10 +211,15 @@ export default function ProfileHome() {
 
   useEffect(() => {
     const loadCredits = async () => {
-      const data = await fetchModelCredits();
+      const [data, imageTiers] = await Promise.all([
+        fetchModelCredits(),
+        fetchAdCreativeImageTiers(),
+      ]);
 
       setExtraCredits({
-        imageModels: data.imageModels,
+        // Prefer the tiered AdCreative image rows (per-quality breakdown);
+        // fall back to the flat rows if that surface returns nothing.
+        imageModels: imageTiers.length > 0 ? imageTiers : data.imageModels,
         videoModels: data.videoModels,
       });
 

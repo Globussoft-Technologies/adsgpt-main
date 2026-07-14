@@ -103,7 +103,7 @@ const selectImageType = [
 const selectImageSource = [
   { value: 'adCreative', label: 'AdCreative' },
   { value: 'adFactory', label: 'AdFactory' },
-  // { value: 'aiAssistant', label: 'AI Assistant' },
+  { value: 'aiAssistant', label: 'AI Assistant' },
 ];
 
 const AdVideoLayout = () => {

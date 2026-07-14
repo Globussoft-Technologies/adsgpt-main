@@ -26,3 +26,32 @@ export const fetchModelCredits = async () => {
     return { imageModels: [], videoModels: [] };
   }
 };
+
+/**
+ * Fetches the AdCreative image surface, which enriches each image model with
+ * per-quality credit tiers (`qualityTiers: [{ quality, creditsPerImage }]`).
+ * Used by the Account credits card to show a tiered breakdown per image model
+ * instead of a single flat credit value. Returns [] on failure so callers can
+ * fall back to the flat `fetchModelCredits().imageModels`.
+ */
+export const fetchAdCreativeImageTiers = async () => {
+  try {
+    const token = getCookies();
+
+    const response = await axios.get(`${BACKEND_HOST}/adsgpt/usage/model-credit-value`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      params: { media: 'ad_creative', type: 'image' },
+    });
+
+    if (response.data.success) {
+      return response.data.data.imageModels || [];
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error fetching AdCreative image tiers:', error);
+    return [];
+  }
+};

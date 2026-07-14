@@ -301,15 +301,17 @@ export function LifestyleAdsFlow({ title, variant = VARIANT_DEFAULT, onClose, on
         <LoadingStep
           title={title}
           label="Generating your ads…"
-          onCancel={() => {
-            dispatch(resetCurrent());
-            setState({
-              step: 'ad-setup',
-              websiteUrl: state.websiteUrl,
-              data: state.data,
-              brandInfo: state.brandInfo,
-            });
-          }}
+          // HIDE-MARK — Cancel button on the "Generating your ads…" loader
+          // hidden. Restore this prop to bring the Cancel button back.
+          // onCancel={() => {
+          //   dispatch(resetCurrent());
+          //   setState({
+          //     step: 'ad-setup',
+          //     websiteUrl: state.websiteUrl,
+          //     data: state.data,
+          //     brandInfo: state.brandInfo,
+          //   });
+          // }}
         />
       );
     }
