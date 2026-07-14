@@ -7,11 +7,6 @@ import Messages from './Messages';
 import GenCanvas from './GenCanvas';
 import { streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
-  buildMockChoiceForm,
-  mockChoiceFormResult,
-  parseCascadeCommand,
-} from './mockChoiceForms';
-import {
   appendAssistantText,
   resetAssistantText,
   attachAssistantAds,
@@ -148,7 +143,7 @@ const ChatInterface = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Real network turn — extracted so both `/cascade` follow-ups and the
+  // Real network turn — extracted so form/concept follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.
   const runStreamingTurn = useCallback(
     ({ text, attachments, formResponse, conceptResponse, quote: turnQuote }) => {
@@ -227,26 +222,6 @@ const ChatInterface = () => {
     [dispatch, sessionId, enabledTools],
   );
 
-  // Demo path: when the user types `/cascade [video|ad|copy]` we skip the
-  // network entirely and inject a locally-built ChoiceForm into a fresh
-  // assistant message. The form's `form_id` is prefixed `mock_` so the
-  // submit handler can short-circuit too. Remove this branch + the mock
-  // helpers once the Python agent emits real `choice_form` events.
-  const handleCascadeDemo = useCallback(
-    (kind) => {
-      const form = buildMockChoiceForm(kind);
-      dispatch(startAssistantStream());
-      dispatch(
-        appendAssistantText(
-          "Sure — pick what you want below, I'll generate when you hit submit.",
-        ),
-      );
-      dispatch(attachAssistantChoiceForm(form));
-      dispatch(finishAssistantStream({}));
-    },
-    [dispatch],
-  );
-
   const handleSend = useCallback(
     (text, attachments) => {
       if (pending) return;
@@ -254,38 +229,18 @@ const ChatInterface = () => {
       const activeQuote = quote;
       setQuote(null); // consume the quote — one reply per quote
 
-      const cascadeKind = parseCascadeCommand(text);
-      if (cascadeKind && !attachments?.length) {
-        // Still push the user message so the chat reflects what they typed.
-        dispatch(pushUserMessage({ text, attachments, quote: activeQuote }));
-        handleCascadeDemo(cascadeKind);
-        return;
-      }
-
       dispatch(pushUserMessage({ text, attachments, quote: activeQuote }));
       dispatch(startAssistantStream());
       runStreamingTurn({ text, attachments, quote: activeQuote });
     },
-    [dispatch, pending, quote, runStreamingTurn, handleCascadeDemo],
+    [dispatch, pending, quote, runStreamingTurn],
   );
 
-  // Called by ChoiceForm when the user submits picks. Mock forms (form_id
-  // starts with `mock_`) bypass the network and stream a canned summary.
-  // Real forms forward the values to the agent via streamChat's
-  // `form_response` field.
+  // Called by ChoiceForm when the user submits picks — forwards the values to
+  // the agent via streamChat's `form_response` field.
   const handleChoiceFormSubmit = useCallback(
     ({ formId, values, regenerate }) => {
       if (pending) return;
-      const isMock = typeof formId === 'string' && formId.startsWith('mock_');
-
-      if (isMock) {
-        // form_id shape: mock_<kind>_<nanoid>
-        const kind = formId.split('_')[1] || 'video';
-        dispatch(startAssistantStream());
-        dispatch(appendAssistantText(mockChoiceFormResult(kind, values)));
-        dispatch(finishAssistantStream({}));
-        return;
-      }
 
       dispatch(startAssistantStream());
       runStreamingTurn({
