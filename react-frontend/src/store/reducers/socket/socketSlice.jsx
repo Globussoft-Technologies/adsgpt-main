@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { triggerLogout } from '@/utils/logout';
 import emitter from '@/utils/eventEmitter';
+import { setGA4User } from '@/utils/ga4';
 import {
   clearBotTimeout,
   setLoading,
@@ -167,8 +168,10 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     socket.on(getCookies(), (data) => {
       if (data?.user_id) {
+        Cookies.set('user_id', data.user_id, { expires: 1, path: '/' });
         Cookies.set('user_name', data.user_name, { expires: 1, path: '/' });
         Cookies.set('user_email', data.user_email, { expires: 1, path: '/' });
+        setGA4User(data.user_id, data.user_name);
         dispatch(setUserData(data));
       }
     });

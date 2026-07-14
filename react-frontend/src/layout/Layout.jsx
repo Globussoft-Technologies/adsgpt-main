@@ -14,6 +14,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
 import { useEffect, useRef } from 'react';
 import { trackEvent } from '@/apis/analytics/analyticsApi';
+import { trackGA4PageView, GA4Events } from '@/utils/ga4';
 import { setCurrentSeesionId } from '@/store/reducers/userInteraction/userInteraction';
 
 const HOST = import.meta.env.VITE_SOCKET_URL;
@@ -61,6 +62,8 @@ const Layout = () => {
       dispatch(setCurrentSeesionId(sessionId));
     }
     startGlobalInteractionTracking(location, null, 'pageRedirect', userData, sessionId);
+    trackGA4PageView(location.pathname);
+    GA4Events.featureVisitedByRoute(location.pathname);
 
     // Save time spent on previous page then record new page entry
     const now = Date.now();

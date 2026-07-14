@@ -296,6 +296,47 @@ const BUDGET_MODES = [
   { value: 'BUDGET_MODE_INFINITE', label: 'No limit' },
 ];
 
+// The two budget modes a user actually picks in the UI. "No limit"
+// (BUDGET_MODE_INFINITE) is not a dropdown choice — it's the implicit result
+// of not setting a campaign budget at all (see hasCampaignBudget).
+const BUDGET_MODE_CHOICES = BUDGET_MODES.filter((m) => m.value !== 'BUDGET_MODE_INFINITE');
+
+// A campaign has a budget when CBO is on (CBO always requires one) OR when the
+// optional "Set campaign budget" toggle is on. When neither is true, no budget
+// is set at the campaign level (BUDGET_MODE_INFINITE) and budget is defined per
+// ad group instead.
+// Awareness/consideration objectives (Reach, Video Views, Community
+// Interaction) expose the full CBO model: a "Campaign budget optimization"
+// toggle plus an optional "Set campaign budget" toggle. The other objectives
+// (Traffic, Lead Gen, App Promotion, Sales) show neither toggle — they always
+// carry a plain campaign budget (confirmed in-product).
+const objectiveHasCboOption = (objectiveKey) =>
+  ['REACH', 'VIDEO_VIEWS', 'ENGAGEMENT'].includes(objectiveKey);
+
+// A campaign carries a budget when: it's a non-CBO-toggle objective (always
+// has a campaign budget), or CBO is on, or the "Set campaign budget" toggle is on.
+const hasCampaignBudget = (form) =>
+  !objectiveHasCboOption(form.objectiveKey) || form.budgetOptimizeOn || form.setCampaignBudget;
+
+// The budget mode that actually governs an ad group's schedule: the campaign's
+// mode when the campaign carries the budget, else the ad group's own mode.
+const effectiveAdgroupBudgetMode = (form) =>
+  hasCampaignBudget(form) ? form.budgetMode : form.adgroupBudgetMode;
+
+// A lifetime budget locks the schedule to a fixed start+end — the API rejects
+// SCHEDULE_FROM_NOW (run continuously) for total budgets.
+const lifetimeForcesStartEnd = (form) =>
+  effectiveAdgroupBudgetMode(form) === 'BUDGET_MODE_TOTAL';
+
+// The schedule type actually in effect: forced to SCHEDULE_START_END by a
+// lifetime budget, otherwise the user's radio choice.
+const effectiveScheduleType = (form) =>
+  lifetimeForcesStartEnd(form) ? 'SCHEDULE_START_END' : form.scheduleType;
+
+// An end date is needed (and the field shown) only in start-end mode. A start
+// time is always required regardless of mode.
+const scheduleNeedsEndDate = (form) => effectiveScheduleType(form) === 'SCHEDULE_START_END';
+
 const SPECIAL_INDUSTRIES = [
   { value: 'HOUSING', label: 'Housing' },
   { value: 'EMPLOYMENT', label: 'Employment' },
@@ -462,6 +503,25 @@ const adGroupMinBudget = (currency) => AD_GROUP_MIN_BUDGET_BY_CURRENCY[currency]
 // per-currency ratio — i.e. exactly 2.5x the ad group minimum for every
 // currency, per TikTok's daily budget value range tables.
 const campaignMinBudget = (currency) => adGroupMinBudget(currency) * 2.5;
+
+// Whole days between two datetime-local strings (min 1). Used for lifetime
+// budget minimums, which TikTok computes as dailyMin × scheduled days.
+const scheduledDays = (startStr, endStr) => {
+  if (!startStr || !endStr) return null;
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return null;
+  return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+};
+
+// TikTok's documented lifetime-budget minimum = daily minimum × scheduled days
+// (e.g. 20 × 31-day schedule = 620). Without an end date we can't know the day
+// count, so fall back to the flat daily minimum as a floor. `dailyMin` is the
+// per-level (campaign or ad group) daily minimum.
+const lifetimeMinBudget = (dailyMin, startStr, endStr) => {
+  const days = scheduledDays(startStr, endStr);
+  return days ? dailyMin * days : dailyMin;
+};
 
 // Whether the ad requires a destination website URL. TRAFFIC is the only
 // objective that requires it on the ad itself — every other objective either
@@ -876,14 +936,16 @@ function getStepIssues(step, form, selectedObjective) {
       break;
     case 1: // Campaign
       if (!form.campaignName.trim()) issues.push('Campaign name is required');
-      if (form.budgetMode !== 'BUDGET_MODE_INFINITE' && (!form.budget || Number(form.budget) <= 0)) {
-        issues.push('Enter a valid budget');
+      if (hasCampaignBudget(form) && (!form.budget || Number(form.budget) <= 0)) {
+        issues.push('Enter a valid campaign budget');
       }
       break;
     case 2: // Ad Group
       if (!form.adgroupName.trim()) issues.push('Ad group name is required');
       if (!form.optimizationGoal) issues.push('Select an optimization goal');
-      if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) issues.push('Enter a valid daily budget');
+      if (!hasCampaignBudget(form) && (!form.adgroupBudget || Number(form.adgroupBudget) <= 0)) {
+        issues.push('Enter a valid ad group budget');
+      }
       // locationIds empty = all locations (same as Meta Ads Manager behaviour)
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
         issues.push('Enter a valid bid price');
@@ -897,6 +959,10 @@ function getStepIssues(step, form, selectedObjective) {
       }
       if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
         issues.push('Select or enter a TikTok Instant Page ID');
+      }
+      if (!form.scheduleStartTime) issues.push('Set a start time');
+      if (scheduleNeedsEndDate(form) && !form.scheduleEndTime) {
+        issues.push('Set an end time');
       }
       break;
     case 3: // Ad
@@ -1254,11 +1320,15 @@ const CreateCampaignWizard = ({
     if (!context) return {};
     if (isEditCampaign) {
       const raw = context.raw || {};
+      const rawBudgetMode = context.budgetMode || raw.budget_mode || 'BUDGET_MODE_DAY';
+      const campaignHasBudget = rawBudgetMode !== 'BUDGET_MODE_INFINITE';
       return {
         campaignName: context.name || '',
-        budgetMode: context.budgetMode || 'BUDGET_MODE_DAY',
+        // Infinite = no campaign budget was set; default the picker to Daily.
+        budgetMode: campaignHasBudget ? rawBudgetMode : 'BUDGET_MODE_DAY',
         budget: context.budget != null ? Number(context.budget) : 50,
         budgetOptimizeOn: raw.budget_optimize_on || false,
+        setCampaignBudget: campaignHasBudget,
         specialIndustries: raw.special_industries || [],
         appPromotionType: raw.app_promotion_type || 'APP_INSTALL',
       };
@@ -1275,12 +1345,14 @@ const CreateCampaignWizard = ({
         interestCategoryIds: (raw.interest_category_ids || []).map(String),
         adgroupBudget: context.budget != null ? Number(context.budget) : 20,
         budgetMode: context.budgetMode || raw.budget_mode || 'BUDGET_MODE_DAY',
+        adgroupBudgetMode: raw.budget_mode || context.budgetMode || 'BUDGET_MODE_DAY',
         frequency: raw.frequency || 3,
         frequencySchedule: raw.frequency_schedule || 7,
         bidType: raw.bid_type || 'BID_TYPE_NO_BID',
         bidPrice: raw.bid != null ? String(raw.bid) : '',
         placements: raw.placements?.length ? raw.placements : ['PLACEMENT_TIKTOK'],
         deviceTypes: raw.device_type || [],
+        scheduleType: raw.schedule_type === 'SCHEDULE_START_END' ? 'SCHEDULE_START_END' : 'SCHEDULE_FROM_NOW',
         scheduleStartTime: toDatetimeLocal(raw.schedule_start_time),
         scheduleEndTime: toDatetimeLocal(raw.schedule_end_time),
         languages: raw.languages || [],
@@ -1353,6 +1425,10 @@ const CreateCampaignWizard = ({
     budgetMode: 'BUDGET_MODE_DAY',
     budget: 50,
     budgetOptimizeOn: false,
+    // When CBO is off, this optional toggle decides whether a (non-optimized)
+    // campaign-level budget is set. Off → no campaign budget (BUDGET_MODE_INFINITE),
+    // budget lives at the ad-group level. Ignored when CBO is on.
+    setCampaignBudget: true,
     specialIndustries: [],
     adgroupName: '',
     placements: ['PLACEMENT_TIKTOK'],
@@ -1362,10 +1438,17 @@ const CreateCampaignWizard = ({
     gender: 'GENDER_UNLIMITED',
     interestCategoryIds: [],
     adgroupBudget: 20,
+    // The ad group's OWN budget mode, used only when the campaign has no
+    // budget (otherwise the ad group inherits the campaign budget).
+    adgroupBudgetMode: 'BUDGET_MODE_DAY',
     frequency: 3,
     frequencySchedule: 7,
     bidType: 'BID_TYPE_NO_BID',
     bidPrice: '',
+    // SCHEDULE_FROM_NOW (run continuously, start only) or SCHEDULE_START_END
+    // (fixed start + end). TikTok always requires a start time; end only in
+    // start-end mode. Lifetime budgets force SCHEDULE_START_END.
+    scheduleType: 'SCHEDULE_FROM_NOW',
     scheduleStartTime: '',
     scheduleEndTime: '',
     languages: [],
@@ -1742,6 +1825,10 @@ const CreateCampaignWizard = ({
       optimizationEvent: '',
       musicId: '',
       musicFile: null,
+      // Reset budget toggles so each objective starts from its own default
+      // (the non-CBO objectives always carry a plain campaign budget).
+      budgetOptimizeOn: false,
+      setCampaignBudget: true,
       adName: `Ad name${ts}`,
     });
   };
@@ -1760,25 +1847,31 @@ const CreateCampaignWizard = ({
     }
     if (targetStep === 1) {
       if (!form.campaignName.trim()) errs.campaignName = 'Campaign name is required';
-      if (!form.budget || Number(form.budget) <= 0) {
-        if (form.budgetMode !== 'BUDGET_MODE_INFINITE') errs.budget = 'Enter a valid budget';
-      } else if (
-        form.budgetMode !== 'BUDGET_MODE_INFINITE' &&
-        Number(form.budget) < campaignMinBudget(currency)
-      ) {
-        errs.budget = `Minimum budget is ${campaignMinBudget(currency)} ${currency}`;
+      // Only validate a campaign budget when one is actually being set.
+      if (hasCampaignBudget(form)) {
+        const min = campaignMinBudget(currency);
+        if (!form.budget || Number(form.budget) <= 0) {
+          errs.budget = 'Enter a valid budget';
+        } else if (Number(form.budget) < min) {
+          errs.budget = `Minimum budget is ${min} ${currency}`;
+        }
       }
     }
     if (targetStep === 2) {
       if (!form.adgroupName.trim()) errs.adgroupName = 'Ad group name is required';
       if (!form.optimizationGoal) errs.optimizationGoal = 'Optimization goal is required';
-      if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
-        errs.adgroupBudget = 'Daily budget is required';
-      } else if (
-        form.budgetMode !== 'BUDGET_MODE_INFINITE' &&
-        Number(form.adgroupBudget) < adGroupMinBudget(currency)
-      ) {
-        errs.adgroupBudget = `Minimum budget is ${adGroupMinBudget(currency)} ${currency}`;
+      // The ad group sets its own budget only when the campaign has none.
+      if (!hasCampaignBudget(form)) {
+        const min =
+          form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
+            ? lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)
+            : adGroupMinBudget(currency);
+        const unit = form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'lifetime budget' : 'daily budget';
+        if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
+          errs.adgroupBudget = `A ${unit} is required`;
+        } else if (Number(form.adgroupBudget) < min) {
+          errs.adgroupBudget = `Minimum ${unit} is ${min} ${currency}`;
+        }
       }
       // locationIds empty = all locations selected — no validation error needed
       if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
@@ -1790,6 +1883,19 @@ const CreateCampaignWizard = ({
       }
       if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
         errs.pageId = 'Select or enter a TikTok Instant Page ID';
+      }
+      // TikTok always requires a start time for an ad group (both schedule types).
+      if (!form.scheduleStartTime) {
+        errs.scheduleStartTime = 'A start time is required';
+      }
+      // An end time is required in the fixed start-end mode (which a lifetime
+      // budget forces), and must be after the start time.
+      if (scheduleNeedsEndDate(form)) {
+        if (!form.scheduleEndTime) {
+          errs.scheduleEndTime = lifetimeForcesStartEnd(form)
+            ? 'A lifetime budget requires an end date'
+            : 'An end time is required';
+        }
       }
       if (form.scheduleStartTime && form.scheduleEndTime) {
         if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
@@ -1893,7 +1999,9 @@ const CreateCampaignWizard = ({
   }, [form, step]);
 
   const scheduleEndPayload = () => {
-    // TikTok expects "YYYY-MM-DD HH:MM:SS" in the account timezone.
+    // TikTok expects "YYYY-MM-DD HH:MM:SS" in the account timezone. A start
+    // time is always required by the API, so fall back to ~now if unset. The
+    // end time is only sent in the fixed start-end mode.
     const pad = (n) => String(n).padStart(2, '0');
     const fmt = (val) => {
       const d = new Date(val);
@@ -1901,11 +2009,9 @@ const CreateCampaignWizard = ({
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
     const result = {};
-    if (form.scheduleStartTime) {
-      const v = fmt(form.scheduleStartTime);
-      if (v) result.schedule_start_time = v;
-    }
-    if (form.scheduleEndTime) {
+    const start = fmt(form.scheduleStartTime) || fmt(new Date(Date.now() + 60000));
+    if (start) result.schedule_start_time = start;
+    if (scheduleNeedsEndDate(form) && form.scheduleEndTime) {
       const v = fmt(form.scheduleEndTime);
       if (v) result.schedule_end_time = v;
     }
@@ -1922,8 +2028,8 @@ const CreateCampaignWizard = ({
           advertiserId,
           campaignId: context.id,
           campaignName: form.campaignName,
-          budget: Number(form.budget),
-          budgetMode: form.budgetMode,
+          budgetMode: hasCampaignBudget(form) ? form.budgetMode : 'BUDGET_MODE_INFINITE',
+          ...(hasCampaignBudget(form) ? { budget: Number(form.budget) } : {}),
         });
       } else if (isEditAdGroup) {
         const payload = {
@@ -1944,7 +2050,7 @@ const CreateCampaignWizard = ({
           //   ? { brand_safety_type: form.brandSafetyType }
           //   : {}),
           budget: Number(form.adgroupBudget),
-          budget_mode: 'BUDGET_MODE_DAY',
+          budget_mode: form.adgroupBudgetMode || 'BUDGET_MODE_DAY',
           optimization_goal: form.optimizationGoal,
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? { promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType) }
@@ -1958,6 +2064,7 @@ const CreateCampaignWizard = ({
             : {}),
           ...(form.pixelId ? { pixel_id: String(form.pixelId) } : {}),
           ...(form.optimizationEvent ? { optimization_event: form.optimizationEvent } : {}),
+          schedule_type: effectiveScheduleType(form),
           ...scheduleEndPayload(),
           ...(form.optimizationGoal === 'REACH'
             ? {
@@ -2032,8 +2139,9 @@ const CreateCampaignWizard = ({
           advertiserId,
           campaignName: form.campaignName,
           objectiveType: form.objectiveType,
-          budgetMode: form.budgetMode,
-          budget: Number(form.budget),
+          // No campaign budget set → infinite (budget lives at ad-group level).
+          budgetMode: hasCampaignBudget(form) ? form.budgetMode : 'BUDGET_MODE_INFINITE',
+          ...(hasCampaignBudget(form) ? { budget: Number(form.budget) } : {}),
           budgetOptimizeOn: form.budgetOptimizeOn,
           specialIndustries: form.specialIndustries,
           ...(isAppPromotion(form.objectiveKey) ? { appPromotionType: form.appPromotionType } : {}),
@@ -2078,9 +2186,16 @@ const CreateCampaignWizard = ({
                 promotion_target_type: promotionTargetTypeForProductSalesSubType(form.productSalesSubType),
               }
             : {}),
-          budget_mode: form.budgetMode,
-          budget: Number(form.adgroupBudget),
-          schedule_type: form.scheduleStartTime ? 'SCHEDULE_START_END' : 'SCHEDULE_FROM_NOW',
+          // Ad group sets its own budget only when the campaign has none;
+          // otherwise it inherits/shares the campaign budget (no ad-group budget).
+          ...(hasCampaignBudget(form)
+            ? {}
+            : {
+                budget_mode: form.adgroupBudgetMode,
+                budget: Number(form.adgroupBudget),
+              }),
+          // Radio choice, forced to SCHEDULE_START_END by a lifetime budget.
+          schedule_type: effectiveScheduleType(form),
           ...scheduleEndPayload(),
           optimization_goal: form.optimizationGoal,
           billing_event: billingEventForGoal(form.optimizationGoal),
@@ -2416,39 +2531,71 @@ const CreateCampaignWizard = ({
                 })}
               </div>
             </FieldShell>
-            <FieldShell
-              label="Campaign budget optimization"
-              hint="Let TikTok automatically distribute your campaign budget across ad groups for the best results."
-            >
-              <button
-                type="button"
-                onClick={() => update({ budgetOptimizeOn: !form.budgetOptimizeOn })}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                  form.budgetOptimizeOn
-                    ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                    : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
-                }`}
-              >
-                {form.budgetOptimizeOn ? <Check className="h-3 w-3" /> : null}
-                {form.budgetOptimizeOn ? 'Enabled' : 'Disabled'}
-              </button>
-            </FieldShell>
-            <SelectField
-              label="Budget mode"
-              value={form.budgetMode}
-              onChange={(v) => update({ budgetMode: v })}
-              options={BUDGET_MODES}
-            />
-            {form.budgetMode !== 'BUDGET_MODE_INFINITE' && (
-              <NumberField
-                label={`Budget (${currency})`}
-                value={form.budget}
-                onChange={(v) => update({ budget: v })}
-                min={campaignMinBudget(currency)}
-                required
-                error={errors.budget}
-                hint={`TikTok requires at least ${campaignMinBudget(currency)} ${currency}/day at the campaign level.`}
-              />
+            {/* Reach / Video Views / Community Interaction expose the CBO model
+                (optimization toggle + optional set-campaign-budget). The other
+                objectives always carry a plain campaign budget with no toggles. */}
+            {objectiveHasCboOption(form.objectiveKey) && (
+              <>
+                <FieldShell
+                  label="Campaign budget optimization"
+                  hint="Let TikTok automatically distribute your campaign budget across ad groups for the best results."
+                >
+                  <button
+                    type="button"
+                    onClick={() => update({ budgetOptimizeOn: !form.budgetOptimizeOn })}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                      form.budgetOptimizeOn
+                        ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
+                        : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                    }`}
+                  >
+                    {form.budgetOptimizeOn ? <Check className="h-3 w-3" /> : null}
+                    {form.budgetOptimizeOn ? 'Enabled' : 'Disabled'}
+                  </button>
+                </FieldShell>
+
+                {/* When CBO is off, an optional "Set campaign budget" toggle.
+                    Off → no campaign-level budget; budget is set per ad group. */}
+                {!form.budgetOptimizeOn && (
+                  <FieldShell
+                    label="Set campaign budget"
+                    hint="Optional. Off means no campaign-level budget — you'll set budgets at the ad group level instead."
+                  >
+                    <button
+                      type="button"
+                      onClick={() => update({ setCampaignBudget: !form.setCampaignBudget })}
+                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                        form.setCampaignBudget
+                          ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
+                          : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
+                      }`}
+                    >
+                      {form.setCampaignBudget ? <Check className="h-3 w-3" /> : null}
+                      {form.setCampaignBudget ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </FieldShell>
+                )}
+              </>
+            )}
+
+            {hasCampaignBudget(form) && (
+              <>
+                <SelectField
+                  label="Budget mode"
+                  value={form.budgetMode}
+                  onChange={(v) => update({ budgetMode: v })}
+                  options={BUDGET_MODE_CHOICES}
+                />
+                <NumberField
+                  label={`${form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
+                  value={form.budget}
+                  onChange={(v) => update({ budget: v })}
+                  min={campaignMinBudget(currency, form.objectiveKey)}
+                  required
+                  error={errors.budget}
+                  hint={`TikTok requires at least ${campaignMinBudget(currency, form.objectiveKey)} ${currency} at the campaign level.`}
+                />
+              </>
             )}
           </div>
         );
@@ -2557,22 +2704,50 @@ const CreateCampaignWizard = ({
               onChange={(v) => update({ deviceTypes: v })}
               options={DEVICE_TYPES}
             />
-            <SelectField
-              label="Budget mode"
-              value={form.budgetMode}
-              onChange={(v) => update({ budgetMode: v })}
-              options={BUDGET_MODES}
-            />
-            {form.budgetMode !== 'BUDGET_MODE_INFINITE' && (
-              <NumberField
-                label={`${form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
-                value={form.adgroupBudget}
-                onChange={(v) => update({ adgroupBudget: v })}
-                min={adGroupMinBudget(currency)}
-                required
-                error={errors.adgroupBudget}
-                hint={`TikTok requires at least ${adGroupMinBudget(currency)} ${currency}/day at the ad-group level.`}
-              />
+            {/* When the campaign carries a budget (CBO or a set campaign
+                budget), all ad groups share it — TikTok doesn't let you set a
+                separate ad-group budget. Only when there's no campaign budget
+                does the ad group define its own. */}
+            {hasCampaignBudget(form) ? (
+              <FieldShell label="Budget">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
+                  From campaign settings:{' '}
+                  <span className="font-medium">
+                    {form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} · {form.budget} {currency}
+                  </span>
+                  {form.budgetOptimizeOn && ' (shared across ad groups)'}
+                </div>
+              </FieldShell>
+            ) : (
+              <>
+                <SelectField
+                  label="Budget mode"
+                  value={form.adgroupBudgetMode}
+                  onChange={(v) => update({ adgroupBudgetMode: v })}
+                  options={BUDGET_MODE_CHOICES}
+                />
+                <NumberField
+                  label={`${form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
+                  value={form.adgroupBudget}
+                  onChange={(v) => update({ adgroupBudget: v })}
+                  min={
+                    form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
+                      ? lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)
+                      : adGroupMinBudget(currency)
+                  }
+                  required
+                  error={errors.adgroupBudget}
+                  hint={
+                    form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
+                      ? `Lifetime minimum = ${adGroupMinBudget(currency)} ${currency} × scheduled days${
+                          scheduledDays(form.scheduleStartTime, form.scheduleEndTime)
+                            ? ` = ${lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)} ${currency}`
+                            : ' (set start & end dates below)'
+                        }.`
+                      : `TikTok requires at least ${adGroupMinBudget(currency)} ${currency}/day at the ad-group level.`
+                  }
+                />
+              </>
             )}
             {form.optimizationGoal === 'REACH' && (
               <FieldShell
@@ -2722,15 +2897,69 @@ const CreateCampaignWizard = ({
                 error={errors.bidPrice}
               />
             )}
-            <FieldShell label="Schedule start time (optional)" hint="Leave empty to start immediately.">
+            {/* Schedule is a radio: run continuously (start only) vs a fixed
+                start+end. A lifetime budget forces the start-end mode. TikTok
+                always requires a start time regardless of mode. */}
+            <FieldShell label="Schedule">
+              <div className="flex flex-col gap-2">
+                {[
+                  { value: 'SCHEDULE_FROM_NOW', label: 'Run ad group continuously' },
+                  { value: 'SCHEDULE_START_END', label: 'Set start and end time' },
+                ].map((opt) => {
+                  const locked = lifetimeForcesStartEnd(form);
+                  const disabled = locked && opt.value === 'SCHEDULE_FROM_NOW';
+                  const checked = effectiveScheduleType(form) === opt.value;
+                  return (
+                    <label
+                      key={opt.value}
+                      className={`flex items-center gap-2 text-sm ${
+                        disabled ? 'cursor-not-allowed text-gray-400 dark:text-white/30' : 'cursor-pointer text-gray-700 dark:text-white/80'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="scheduleType"
+                        value={opt.value}
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() =>
+                          update({
+                            scheduleType: opt.value,
+                            // Leaving start-end clears the end date.
+                            ...(opt.value === 'SCHEDULE_FROM_NOW' ? { scheduleEndTime: '' } : {}),
+                          })
+                        }
+                        className="accent-[#15DCFF]"
+                      />
+                      {opt.label}
+                      {disabled && <span className="text-xs">(lifetime budget needs an end date)</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </FieldShell>
+
+            <FieldShell
+              label="Planned start time"
+              hint="TikTok requires a start time. Set when the ad group begins delivering."
+              required
+              error={errors.scheduleStartTime}
+            >
               <input
                 type="datetime-local"
-                className="w-full rounded-full border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/5 dark:bg-[#909294]/15 dark:text-white"
+                className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:bg-[#909294]/15 dark:text-white ${
+                  errors.scheduleStartTime ? 'border-red-500' : 'border-gray-300 dark:border-white/5'
+                }`}
                 style={{ colorScheme: 'dark' }}
                 min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
                 value={form.scheduleStartTime}
                 onChange={(e) => {
-                  update({ scheduleStartTime: e.target.value, scheduleEndTime: '' });
+                  // Changing start clears an end that would now be before it.
+                  const patch = { scheduleStartTime: e.target.value };
+                  if (form.scheduleEndTime && new Date(form.scheduleEndTime) <= new Date(e.target.value)) {
+                    patch.scheduleEndTime = '';
+                  }
+                  update(patch);
                 }}
               />
               {timezone && (
@@ -2739,26 +2968,25 @@ const CreateCampaignWizard = ({
                 </p>
               )}
             </FieldShell>
-            <FieldShell
-              label="Schedule end time (optional)"
-              hint="Leave empty to run indefinitely."
-              error={errors.scheduleEndTime}
-            >
-              <input
-                type="datetime-local"
-                className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:bg-[#909294]/15 dark:text-white ${
-                  errors.scheduleEndTime ? 'border-red-500' : 'border-gray-300 dark:border-white/5'
-                }`}
-                style={{ colorScheme: 'dark' }}
-                min={
-                  form.scheduleStartTime
-                    ? new Date(new Date(form.scheduleStartTime).getTime() + 60000).toISOString().slice(0, 16)
-                    : new Date(Date.now() + 60000).toISOString().slice(0, 16)
-                }
-                value={form.scheduleEndTime}
-                onChange={(e) => update({ scheduleEndTime: e.target.value })}
-              />
-            </FieldShell>
+
+            {scheduleNeedsEndDate(form) && (
+              <FieldShell label="Planned end time" required error={errors.scheduleEndTime}>
+                <input
+                  type="datetime-local"
+                  className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-400 dark:bg-[#909294]/15 dark:text-white ${
+                    errors.scheduleEndTime ? 'border-red-500' : 'border-gray-300 dark:border-white/5'
+                  }`}
+                  style={{ colorScheme: 'dark' }}
+                  min={
+                    form.scheduleStartTime
+                      ? new Date(new Date(form.scheduleStartTime).getTime() + 60000).toISOString().slice(0, 16)
+                      : new Date(Date.now() + 60000).toISOString().slice(0, 16)
+                  }
+                  value={form.scheduleEndTime}
+                  onChange={(e) => update({ scheduleEndTime: e.target.value })}
+                />
+              </FieldShell>
+            )}
           </div>
         );
 
@@ -3251,8 +3479,14 @@ const CreateCampaignWizard = ({
 
                 <ReviewSection title="Campaign">
                   <ReviewField label="Name" value={form.campaignName} />
-                  <ReviewField label="Budget mode" value={budgetModeLabel} />
-                  <ReviewField label="Budget" value={`${form.budget} ${currency}`} />
+                  {hasCampaignBudget(form) ? (
+                    <>
+                      <ReviewField label="Budget mode" value={budgetModeLabel} />
+                      <ReviewField label="Budget" value={`${form.budget} ${currency}`} />
+                    </>
+                  ) : (
+                    <ReviewField label="Budget" value="No campaign budget (set at ad group level)" />
+                  )}
                   {form.budgetOptimizeOn && (
                     <ReviewField label="Budget optimization" value="Enabled (CBO)" />
                   )}
@@ -3295,8 +3529,17 @@ const CreateCampaignWizard = ({
                       value={BRAND_SAFETY_TYPES.find((b) => b.value === form.brandSafetyType)?.label || form.brandSafetyType}
                     />
                   )} */}
-                  <ReviewField label="Budget mode" value={budgetModeLabel} />
-                  <ReviewField label="Budget" value={`${form.adgroupBudget} ${currency}`} />
+                  {hasCampaignBudget(form) ? (
+                    <ReviewField label="Budget" value="Shared from campaign" />
+                  ) : (
+                    <>
+                      <ReviewField
+                        label="Budget mode"
+                        value={form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime budget' : 'Daily budget'}
+                      />
+                      <ReviewField label="Budget" value={`${form.adgroupBudget} ${currency}`} />
+                    </>
+                  )}
                   <ReviewField label="Bid type" value={bidTypeLabel} />
                   {form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice && (
                     <ReviewField label="Bid price" value={`${form.bidPrice} ${currency}`} />
