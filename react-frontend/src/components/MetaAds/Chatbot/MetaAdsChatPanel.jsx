@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Plus, SendHorizonal, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -492,4 +492,7 @@ const MetaAdsChatPanel = ({
   );
 };
 
-export default MetaAdsChatPanel;
+// Memoized: the parent (MetaAdsChatWidget) re-renders on every resize-drag frame
+// to update the panel's width, and without this the whole transcript/cards subtree
+// would re-render (and re-run markdown/chart rendering) on every one of those frames.
+export default memo(MetaAdsChatPanel);

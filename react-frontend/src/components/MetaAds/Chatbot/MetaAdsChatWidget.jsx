@@ -23,6 +23,8 @@ const MetaAdsChatWidget = ({
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
   const dragRef = useRef({ startX: 0, startWidth: DEFAULT_WIDTH });
+  const rafRef = useRef(null);
+  const latestClientXRef = useRef(0);
 
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -30,20 +32,48 @@ const MetaAdsChatWidget = ({
     setIsResizing(true);
   }, [width]);
 
+  // stable reference — MetaAdsChatPanel is memoized so it doesn't re-render (with
+  // its full transcript/cards) on every width-drag frame; a new inline function
+  // here every render would defeat that.
+  const handleClose = useCallback(() => setOpen(false), []);
+
   useEffect(() => {
     if (!isResizing) return undefined;
-    const handleMove = (e) => {
+    // mousemove can fire far more often than the screen repaints; setWidth on every
+    // event forces a reflow of the pushed dashboard content each time, which is what
+    // made dragging feel janky. Coalesce to at most one width update per animation
+    // frame instead.
+    const applyWidth = (clientX) => {
       // handle sits on the panel's left edge — dragging left (lower clientX) grows it
-      const delta = dragRef.current.startX - e.clientX;
+      const delta = dragRef.current.startX - clientX;
       const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragRef.current.startWidth + delta));
       setWidth(next);
     };
-    const handleUp = () => setIsResizing(false);
+    const handleMove = (e) => {
+      latestClientXRef.current = e.clientX;
+      if (rafRef.current == null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          applyWidth(latestClientXRef.current);
+        });
+      }
+    };
+    const handleUp = () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      setIsResizing(false);
+    };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
     return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       window.removeEventListener('mousemove', handleMove);
@@ -103,7 +133,7 @@ const MetaAdsChatWidget = ({
                 campaignId={campaignId}
                 adSetId={adSetId}
                 adId={adId}
-                onClose={() => setOpen(false)}
+                onClose={handleClose}
               />
             </div>
           </motion.aside>
