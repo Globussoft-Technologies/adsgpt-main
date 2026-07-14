@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react';
 
-// Soft glow that follows the native cursor on the AI Assistant page. The real
-// pointer is untouched — this is a pointer-events-none light layered over the
-// content, in the same colors as the greeting gradient (#15DCFF → #5E66F5).
+// Barely-there glow that follows the native cursor on the AI Assistant page.
+// The real pointer is untouched — this is a pointer-events-none light layered
+// over the content. One uniform color from the background blob's gradient
+// (#28bcfc), at an alpha low enough to read as ambience, not an effect.
 //
 // Performance: no React state — pointermove writes coordinates to locals and a
 // requestAnimationFrame tick applies a compositor-only translate3d, so at most
 // one transform update lands per display frame and nothing ever re-renders.
 // The softness is baked into the radial gradient itself (no filter: blur, so
 // no per-frame filter work). Touch devices skip the effect entirely.
-const GLOW_SIZE = 360;
+const GLOW_SIZE = 160;
 
 const CursorGlow = () => {
   const glowRef = useRef(null);
@@ -56,7 +57,7 @@ const CursorGlow = () => {
         width: GLOW_SIZE,
         height: GLOW_SIZE,
         background:
-          'radial-gradient(circle, rgba(21,220,255,0.16) 0%, rgba(94,102,245,0.12) 40%, rgba(94,102,245,0) 70%)',
+          'radial-gradient(circle, rgba(40,188,252,0.05) 0%, rgba(40,188,252,0) 70%)',
       }}
     />
   );
