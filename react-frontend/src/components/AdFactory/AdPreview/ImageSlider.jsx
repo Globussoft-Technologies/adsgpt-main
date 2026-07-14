@@ -36,14 +36,24 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage, onRemoveImage, onAdd
     }
   }, [mockImages, selectedImage, onSelect]);
 
-  // Bring the selected tile into view.
+  // Bring the selected tile into horizontal view WITHIN this scroller only.
+  // NB: don't use scrollIntoView — it walks up and scrolls the page/<main>
+  // vertical scroller too, which yanked the whole preview back to the top on
+  // any re-render. scrollBy on `el` affects only this container. Depend on
+  // `selectedImage` alone; `mockImages` is a fresh array each render, so
+  // including it would re-fire (and re-scroll) on every parent update.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !selectedImage) return;
     const idx = mockImages.findIndex((img) => img.src === selectedImage);
     const node = idx >= 0 ? el.querySelector(`[data-idx="${idx}"]`) : null;
-    node?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-  }, [selectedImage, mockImages]);
+    if (!node) return;
+    const elRect = el.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const delta = nodeRect.left - elRect.left - (el.clientWidth - node.clientWidth) / 2;
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedImage]);
 
   const scrollByDir = (dir) => {
     const el = scrollRef.current;

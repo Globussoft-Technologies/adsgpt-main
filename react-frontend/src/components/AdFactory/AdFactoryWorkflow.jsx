@@ -71,7 +71,7 @@ import {
   checkFbUser,
   checkGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
-import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
+import { IS_AUTOMATION_ENABLED, IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 const nodeTypes = {
   customNode: AdFactoryStepCard,
@@ -86,6 +86,11 @@ const nodeTypes = {
 // respective group container when expanded, via ReactFlow's parentId.
 const MANUAL_GROUP_ID = 'manual-group';
 const AUTO_GROUP_ID = 'auto-group';
+// TEMPORARILY DISABLED: auto-pause on platform removal is turned off for now.
+// Flip to true to re-enable the "Automation paused — Meta was removed from
+// platforms" behavior. (When re-enabling, also update the Meta-only check
+// inside the effect to the meta-and/or-google model.)
+const AUTO_PAUSE_ON_PLATFORM_REMOVAL = false;
 // Manual sits upper-right, auto lower-right of the trunk. Y positions leave
 // enough room for the manual container to expand downwards (height 500)
 // without colliding with the collapsed auto card below.
@@ -393,6 +398,8 @@ export default function AdFactoryWorkflowDarkReal() {
   // ---------------------------------------------------------------------------
   const previousHasMetaRef = React.useRef(null);
   React.useEffect(() => {
+    if (!AUTO_PAUSE_ON_PLATFORM_REMOVAL) return;
+
     // Don't make a decision until distribution.platforms is actually defined.
     // (undefined → still hydrating; [] → user explicitly cleared platforms.)
     if (!Array.isArray(distribution?.platforms)) return;
@@ -430,7 +437,13 @@ export default function AdFactoryWorkflowDarkReal() {
   // locked decision. Drives the lock-card swap on AutomationActiveNode.
   const automationDormant = React.useMemo(() => {
     if (!automationEntry?.jobId) return false;
-    if (selectedPlatforms.includes('meta')) return false;
+    // Automation stays live while EITHER Meta or (flag-gated) Google is still
+    // selected — mirrors the meta-and/or-google precondition in ServicesForm /
+    // AutomationForm. Only dormant once neither platform remains.
+    const hasMeta = selectedPlatforms.includes('meta');
+    const hasGoogle =
+      IS_GOOGLE_AUTOMATION_ENABLED && selectedPlatforms.includes('google');
+    if (hasMeta || hasGoogle) return false;
     const status = automationEntry?.status;
     return (
       status === AUTOMATION_STATUS.ACTIVE || status === AUTOMATION_STATUS.PAUSED

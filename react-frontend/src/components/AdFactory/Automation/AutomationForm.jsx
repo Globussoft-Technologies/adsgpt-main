@@ -474,6 +474,16 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   const isCompleted = entry?.status === AUTOMATION_STATUS.COMPLETED;
   const isEditMode = !!entry?.jobId && !isCompleted;
 
+  // Per-platform edit-lock. The backend only forbids changing the template /
+  // campaign name / removing a platform that ALREADY has a saved template on
+  // the job (adsFactoryAutoController.updateJob field-diff). A platform being
+  // added fresh in this same edit accepts a full new template, so it stays
+  // fully editable. `entry.config.<platform>.enabled` is set to
+  // hasApi<Platform>Template during normalize, so it's the exact "this
+  // platform is already on the saved job" signal.
+  const metaLocked = isEditMode && !!entry?.config?.template?.enabled;
+  const googleLocked = isEditMode && !!entry?.config?.googleTemplate?.enabled;
+
   const handleActivateClick = async () => {
     if (!campaignId) return;
     const action = isEditMode ? updateAutomation : saveAutomation;
@@ -622,6 +632,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
               updateValues({ template: { ...values.template, enabled: next } })
             }
             disabled={!isMetaConnected}
+            locked={metaLocked}
           />
         )}
         {hasGoogleSelected && (
@@ -636,6 +647,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
               })
             }
             disabled={!isGoogleConnected}
+            locked={googleLocked}
           />
         )}
       </WhereToPostSection>

@@ -7,6 +7,7 @@ import {
   Inbox,
   AlertCircle,
   Check,
+  Lock,
 } from 'lucide-react';
 import { FaFacebookF } from 'react-icons/fa6';
 import { FcGoogle } from 'react-icons/fc';
@@ -120,6 +121,10 @@ const BUDGET_MIN = 100;
 const BUDGET_MAX = 1_000_000;
 const DIGITS_RE = /^\d+$/;
 
+// `locked` = this platform already has a saved template on an existing job, so
+// the backend forbids swapping the template, renaming the campaign, or removing
+// the platform (see adsFactoryAutoController.updateJob field-diff). Only budget
+// and CTA remain editable — those are the backend's EDITABLE_*_PAYLOAD_FIELDS.
 export default function TemplatePicker({
   value,
   onChange,
@@ -127,6 +132,7 @@ export default function TemplatePicker({
   platform = 'meta',
   enabled = true,
   onToggleEnabled,
+  locked = false,
 }) {
   const cfg = PLATFORM_CONFIG[platform] || PLATFORM_CONFIG.meta;
   const dispatch = useDispatch();
@@ -340,7 +346,7 @@ export default function TemplatePicker({
 
         <Switch
           enabled={enabled}
-          disabled={disabled}
+          disabled={disabled || locked}
           onToggle={() => onToggleEnabled?.(!enabled)}
           label={`Publish to ${cfg.displayName}`}
         />
@@ -349,6 +355,16 @@ export default function TemplatePicker({
       {/* Body — visible only when toggle is ON AND saved templates exist. */}
       {showPickerBody && (
         <div className="flex flex-col gap-3">
+          {locked && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+              <Lock className="mt-px size-3.5 shrink-0 text-[#AFAFAF]" />
+              <p className="text-[12px] leading-relaxed text-[#b0b0b6]">
+                Template and campaign name are locked while this automation
+                exists — you can still update budget and call-to-action. To
+                change them, create a new automation.
+              </p>
+            </div>
+          )}
           <Field
             label="Ad template"
             empty={
@@ -361,7 +377,7 @@ export default function TemplatePicker({
               options={templateOptions}
               value={picked.id || ''}
               onChange={handlePick}
-              disabled={disabled || loadingList}
+              disabled={disabled || loadingList || locked}
             />
           </Field>
 
@@ -446,7 +462,7 @@ export default function TemplatePicker({
                   placeholder={templateCampaignName || 'Template default'}
                   value={picked.campaignName ?? ''}
                   onChange={(e) => handleCampaignNameChange(e.target.value)}
-                  disabled={disabled || pickedLoading}
+                  disabled={disabled || pickedLoading || locked}
                   className={`h-10 w-full rounded-full bg-[#383838]/50 px-4 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
                     campaignNameError ? 'ring-1 ring-red-500/60' : ''
                   }`}

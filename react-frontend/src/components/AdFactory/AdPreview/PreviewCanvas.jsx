@@ -420,14 +420,6 @@ const PreviewCanvas = ({
     update?.({ image: img.src }); // auto-select the freshly added image
   };
 
-  const handleRemoveImage = (id, src) => {
-    setUserImages((prev) => prev.filter((p) => p.id !== id));
-    // If the removed image was selected, fall back to the first available one.
-    if (creative?.image === src) {
-      update?.({ image: availableImages[0]?.src || '' });
-    }
-  };
-
   // Adds a manually-created copy (AI-generated or hand-written) to the current
   // platform tab, and selects it. Persisted on Save.
   const handleAddCopy = (copy) => {
@@ -532,6 +524,7 @@ const PreviewCanvas = ({
       {/* Mobile Preview Button */}
       <div className="ml-2 flex md:ml-5 lg:hidden">
         <button
+          type="button"
           onClick={() => setIsPreviewOpen(true)}
           className="flex items-center gap-2 rounded-full bg-black/5 dark:bg-white/10 px-4 py-2 text-xs font-semibold text-gray-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/20"
         >
@@ -569,7 +562,6 @@ const PreviewCanvas = ({
                 mockImages={displayImages}
                 selectedImage={creative?.image}
                 onSelect={(image) => update?.({ image })}
-                onRemoveImage={handleRemoveImage}
                 onAddImage={() => setAddImageOpen(true)}
               />
             </CreativeSection>
@@ -590,6 +582,7 @@ const PreviewCanvas = ({
                           {['meta', ...(enableGooglePosting ? ['google'] : [])].map((p) => (
                             <button
                               key={p}
+                              type="button"
                               onClick={() => setSelectedPlatformTab(p)}
                               className={`rounded-full px-3 py-0.5 text-xs font-medium transition-all ${
                                 selectedPlatformTab === p
@@ -635,6 +628,7 @@ const PreviewCanvas = ({
                   {CTA_OPTIONS?.map((cta) => (
                     <button
                       key={cta}
+                      type="button"
                       onClick={() => update?.({ cta })}
                       className={`rounded-lg border bg-black/5 dark:bg-white/10 px-4 py-1.5 text-xs font-medium text-gray-900 dark:text-white 2xl:text-sm ${
                         creative?.cta === cta
@@ -669,6 +663,7 @@ const PreviewCanvas = ({
 
             <div className="mt-auto flex flex-wrap justify-end gap-2 py-2">
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saveStatus === 'saving' || !creative?.canSave}
                 className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs font-semibold text-white dark:text-[#0F1010] 2xl:text-base ${
@@ -694,6 +689,7 @@ const PreviewCanvas = ({
                 {saveStatus === 'idle' && 'Save'}
               </button>
               <button
+                type="button"
                 onClick={async () => {
                   await persistCustomCreatives();
                   handleSaveAndContinue?.();
