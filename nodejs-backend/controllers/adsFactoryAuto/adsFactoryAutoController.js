@@ -236,9 +236,24 @@ class AdsFactoryAutoController {
             continue; // new platform — full template accepted, nothing to diff
           }
 
+          // The campaign name is normally locked — renaming wouldn't rename the
+          // already-created platform campaign (which is reused by
+          // createdCampaignId), so it would only cause confusion. BUT when this
+          // platform has NOT yet created a campaign (no createdCampaignId — e.g.
+          // the job auto-paused on its FIRST run due to a duplicate-name
+          // collision), renaming IS safe and is the intended recovery, so allow
+          // it. The name is stored in the payload as both `name` and
+          // `campaignName` (the frontend writes both); it may also arrive as a
+          // top-level template.name. Unlock all three in that case.
+          const hasCreatedCampaign = !!job.targets[platform]?.createdCampaignId;
+          const nameKeys = ["name", "campaignName"];
+
           // Top-level template fields (name, objective, conversionLocation, pageId/customerId)
+          const lockedTopLevel = hasCreatedCampaign
+            ? ["name", "objective", "conversionLocation", "pageId", "customerId"]
+            : ["objective", "conversionLocation", "pageId", "customerId"];
           const incomingTemplate = targetData.template || {};
-          for (const key of ["name", "objective", "conversionLocation", "pageId", "customerId"]) {
+          for (const key of lockedTopLevel) {
             if (incomingTemplate[key] === undefined) continue;
             const savedVal = savedTemplate[key] ?? "";
             const incomingVal = incomingTemplate[key] ?? "";
@@ -247,10 +262,12 @@ class AdsFactoryAutoController {
             }
           }
 
-          // Payload fields — only EDITABLE_FIELDS[platform] may actually differ
+          // Payload fields — only EDITABLE_FIELDS[platform] (plus the campaign
+          // name, when no campaign has been created yet) may actually differ.
           const savedPayload    = savedTemplate.payload || {};
           const incomingPayload = incomingTemplate.payload || {};
           const editableSet = new Set(EDITABLE_FIELDS[platform] || []);
+          if (!hasCreatedCampaign) nameKeys.forEach((k) => editableSet.add(k));
           for (const key of Object.keys(incomingPayload)) {
             if (editableSet.has(key)) continue;
             const savedVal = savedPayload[key] ?? "";
@@ -292,10 +309,19 @@ class AdsFactoryAutoController {
             continue;
           }
           const editableSet = new Set(EDITABLE_FIELDS[platform] || []);
-          for (const key of Object.keys(targetData.template.payload)) {
+          // Campaign name is editable only while no campaign has been created
+          // yet (recovery from a first-run duplicate-name collision). Mirrors
+          // the validation gate above.
+          const hasCreatedCampaign = !!job.targets[platform]?.createdCampaignId;
+          if (!hasCreatedCampaign) { editableSet.add("name"); editableSet.add("campaignName"); }
+          for (const key of Object.keys(targetData.template.payload || {})) {
             if (editableSet.has(key)) {
               job.targets[platform].template.payload[key] = targetData.template.payload[key];
             }
+          }
+          // Also apply a top-level template.name rename when allowed.
+          if (!hasCreatedCampaign && targetData.template?.name !== undefined) {
+            job.targets[platform].template.name = targetData.template.name;
           }
         }
         job.markModified("targets");
@@ -676,8 +702,8 @@ class AdsFactoryAutoController {
           // What Autopilot actually generated + attempted to post this run.
           generatedCreatives: (run.automationCreatives || []).map((c) => ({
             creativeId:   c.creativeId,
-            headline:     c.headline || null,
-            message:      c.message || null,
+            meta:         c.platformText?.meta   || null,
+            google:       c.platformText?.google || null,
             description:  c.description || null,
             imageUrl:     c.imageUrl || null,
             callToAction: c.callToAction || null,
@@ -847,6 +873,12 @@ class AdsFactoryAutoController {
       let totalImagesRequested = 0, totalImagesGenerated = 0;
       let totalTextsRequested = 0,  totalTextsGenerated = 0;
       let totalCreativesAssembled = 0, totalCreativesPosted = 0, totalCreativesNotPosted = 0;
+      // Per-platform posted/failed — a run where Meta succeeds but Google
+      // fails (or vice versa) is invisible in the combined "posted" count
+      // above (any platform succeeding marks the whole run's creatives as
+      // posted). Tracked here so the same failing platform across many runs
+      // is visible without opening each run's detail.
+      const platformPostCounts = {}; // { meta: { posted: N, failed: N }, google: {...} }
 
       for (const run of history) {
         if (counts[run.status] !== undefined) counts[run.status]++;
@@ -871,6 +903,15 @@ class AdsFactoryAutoController {
           if (!adId) continue;
           if (!platformAdSummary[platform]) platformAdSummary[platform] = [];
           platformAdSummary[platform].push(adId);
+        }
+
+        // Per-platform posted/failed — only counts platforms this job has
+        // configured (so a never-attempted platform doesn't show as failed).
+        for (const platform of Object.keys(job.targets || {})) {
+          if (!job.targets[platform]?.template) continue;
+          if (!platformPostCounts[platform]) platformPostCounts[platform] = { posted: 0, failed: 0 };
+          if (ids[platform]) platformPostCounts[platform].posted++;
+          else platformPostCounts[platform].failed++;
         }
 
         // Calculate health metrics
@@ -910,6 +951,7 @@ class AdsFactoryAutoController {
         totalCreativesAssembled,
         totalCreativesPosted,
         totalCreativesNotPosted,
+        platformPostCounts,
       };
 
       const totalRuns   = job.totalRuns || history.length;
@@ -1054,20 +1096,49 @@ class AdsFactoryAutoController {
             return { index: i, generated: img.status === 200, status: img.status, url: imgUrl, aspectRatio, prompt: img.prompt || null, error: img.error || null };
           });
 
-          const generatedTexts = rawTexts.map((txt, i) => ({
-            index:       i,
-            generated:   txt.status === 200,
-            status:      txt.status,
-            headline:    typeof txt.data === "object" ? txt.data?.meta?.headline || txt.data?.google?.headline || txt.data?.headline : txt.data || null,
-            body:        typeof txt.data === "object" ? txt.data?.meta?.primary_text || txt.data?.google?.description || txt.data?.body || txt.data?.message : null,
-            description: typeof txt.data === "object" ? txt.data?.meta?.description || txt.data?.description : null,
-            error:       txt.error || null,
-          }));
+          // Split one raw text-generation result into its per-platform copies.
+          // Generation produces distinct copy per platform (data.meta.* vs
+          // data.google.*); we surface both explicitly rather than collapsing
+          // to a single winner. When the raw data isn't platform-shaped (plain
+          // string, or a generic object with no meta/google keys), fall back to
+          // one flat entry so older/unusual generation results still show
+          // something. Single source of truth for both generatedTexts[] and
+          // creatives[].ad.platformText below.
+          const splitPlatformText = (txt) => {
+            const data = txt?.data;
+            const isObj = typeof data === "object" && data !== null;
+            const meta = isObj && (data?.meta?.headline || data?.meta?.primary_text)
+              ? { headline: data.meta.headline || null, body: data.meta.primary_text || null }
+              : null;
+            const google = isObj && (data?.google?.headline || data?.google?.description)
+              ? { headline: data.google.headline || null, body: data.google.description || null }
+              : null;
+            const fallback = (!meta && !google)
+              ? {
+                  headline: isObj ? (data?.headline || null) : (data || null),
+                  body:     isObj ? (data?.body || data?.message || null) : null,
+                }
+              : null;
+            return { meta, google, fallback };
+          };
+
+          const generatedTexts = rawTexts.map((txt, i) => {
+            const { meta, google, fallback } = splitPlatformText(txt);
+            return {
+              index:     i,
+              generated: txt.status === 200,
+              status:    txt.status,
+              meta,
+              google,
+              fallback,
+              error:     txt.error || null,
+            };
+          });
 
           const imagesRequested = job.pairsPerCycle || 1;
           const textsRequested  = job.pairsPerCycle || 1;
           const imagesGenerated = runCreatives.filter(c => c.imageUrl).length;
-          const textsGenerated  = runCreatives.filter(c => c.headline || c.message).length;
+          const textsGenerated  = runCreatives.filter(c => c.platformText?.meta || c.platformText?.google).length;
 
           return {
             runId:       run.runId,
@@ -1084,23 +1155,73 @@ class AdsFactoryAutoController {
             postingSummary: { posted, platforms: Object.keys(adsPosted), adIds: adsPosted },
             generatedImages,
             generatedTexts,
-            creatives: runCreatives.map((c, i) => ({
-              creativeId: c.creativeId, imageIndex: i, textIndex: i,
-              runStatus: run.status, runError: run.error,
-              ad: {
-                imageUrl: c.imageUrl, imageStatus: c.imageUrl ? "generated" : "missing",
-                headline: c.headline, body: c.message, description: c.description,
-                textStatus: (c.headline || c.message) ? "generated" : "missing",
-                callToAction: c.callToAction, linkUrl: c.linkUrl, platform: c.platform,
-              },
-              posting: { posted, postedAdIds: adsPosted, postedAt: posted ? (run.completedAt || null) : null },
-            })),
+            // One creative is posted to every targeted platform, but each
+            // platform gets its OWN generated copy (Meta uses platformText.meta,
+            // Google uses platformText.google) and its own ad id. Expand each
+            // creative into one entry PER PLATFORM so the activity view shows a
+            // separate Meta card and Google card — same split as generatedTexts[].
+            creatives: runCreatives.flatMap((c, i) => {
+              const { meta: metaText, google: googleText, fallback } = splitPlatformText(rawTexts[i] || {});
+              const perPlatformText = { meta: metaText, google: googleText };
+
+              // Which platforms this creative went to: prefer the real
+              // per-creative ad ids; fall back to the run-level posted platforms.
+              const creativePosted = c.postedAdIds instanceof Map
+                ? Object.fromEntries(c.postedAdIds)
+                : (c.postedAdIds || {});
+              const platformsForCreative = Object.keys(creativePosted).length
+                ? Object.keys(creativePosted)
+                : Object.keys(adsPosted);
+              // Nothing posted (e.g. failed run) — still emit the platforms this
+              // job targets so the card shows what was attempted.
+              const platforms = platformsForCreative.length
+                ? platformsForCreative
+                : Object.keys(job.targets || {}).filter((p) => job.targets[p]?.template);
+
+              return platforms.map((platform) => {
+                // That platform's own copy only — fall back to the
+                // non-platform-shaped `fallback` (raw text wasn't split by
+                // platform at all) but never to another platform's copy.
+                const txt = perPlatformText[platform] || fallback || null;
+                const headline = txt?.headline || "";
+                const body     = txt?.body     || "";
+                const platformAdId = creativePosted[platform] || (adsPosted[platform] || null);
+
+                return {
+                  creativeId: c.creativeId,
+                  imageIndex: i,
+                  textIndex:  i,
+                  platform,                       // "meta" | "google"
+                  runStatus:  run.status,
+                  runError:   run.error,
+                  ad: {
+                    imageUrl:     c.imageUrl,
+                    imageStatus:  c.imageUrl ? "generated" : "missing",
+                    headline,                     // this platform's headline
+                    body,                         // this platform's body
+                    description:  c.description,
+                    textStatus:   (headline || body) ? "generated" : "missing",
+                    callToAction: c.callToAction,
+                    linkUrl:      c.linkUrl,
+                    platform,
+                  },
+                  posting: {
+                    posted:   !!platformAdId,
+                    adId:     platformAdId,       // this platform's ad id
+                    postedAt: platformAdId ? (run.completedAt || null) : null,
+                  },
+                };
+              });
+            }),
           };
         });
 
         let totalImagesRequested = 0, totalImagesGenerated = 0;
         let totalTextsRequested  = 0, totalTextsGenerated  = 0;
         let totalCreativesAssembled = 0, totalCreativesPosted = 0, totalCreativesNotPosted = 0;
+        // Per-platform posted/failed — see comment on the equivalent block in
+        // getJobStats; only counts platforms this job has configured.
+        const platformPostCounts = {};
         for (const run of allRuns) {
           const ri = run.rawImages || [], rt = run.rawTexts || [];
           totalImagesRequested += job.pairsPerCycle || 1;
@@ -1111,6 +1232,16 @@ class AdsFactoryAutoController {
           totalCreativesAssembled += cLen;
           const p = run.platformAdIds && (run.platformAdIds instanceof Map ? run.platformAdIds.size > 0 : Object.keys(run.platformAdIds).length > 0);
           if (p) totalCreativesPosted += cLen; else totalCreativesNotPosted += cLen;
+
+          const runIds = run.platformAdIds
+            ? (run.platformAdIds instanceof Map ? Object.fromEntries(run.platformAdIds) : run.platformAdIds)
+            : {};
+          for (const platform of Object.keys(job.targets || {})) {
+            if (!job.targets[platform]?.template) continue;
+            if (!platformPostCounts[platform]) platformPostCounts[platform] = { posted: 0, failed: 0 };
+            if (runIds[platform]) platformPostCounts[platform].posted++;
+            else platformPostCounts[platform].failed++;
+          }
         }
 
         // Only include platforms that are currently active (have a template configured)
@@ -1185,6 +1316,7 @@ class AdsFactoryAutoController {
             totalImagesRequested, totalImagesGenerated, totalImagesFailed: Math.max(0, totalImagesRequested - totalImagesGenerated),
             totalTextsRequested,  totalTextsGenerated,  totalTextsFailed:  Math.max(0, totalTextsRequested  - totalTextsGenerated),
             totalCreativesAssembled, totalCreativesPosted, totalCreativesNotPosted,
+            platformPostCounts,
           },
           platforms: platformDetails,
           data: runActivity,

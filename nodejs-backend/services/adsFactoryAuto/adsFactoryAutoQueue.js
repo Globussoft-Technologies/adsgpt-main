@@ -288,9 +288,10 @@ function startWorker() {
     },
     {
       connection,
-      // concurrency: 1 — process one tick at a time so the same AdsFactoryJob
-      // can never run in parallel with itself and post two ads simultaneously.
-      concurrency: 1,
+      // Every due job (different users/campaigns) runs immediately, no cap —
+      // BullMQ requires a finite concurrency number (no "unlimited" sentinel),
+      // so this is set as high as BullMQ allows to never be the bottleneck.
+      concurrency: Number.MAX_SAFE_INTEGER,
     }
   );
 
@@ -320,13 +321,74 @@ async function reloadActiveJobs() {
   const campaignObjectIds = [...new Set(activeJobs.map((j) => j.campaignId).filter(Boolean))]
     .map((id) => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
     .filter(Boolean);
+  // Jobs recovered by the interrupted-run block below are re-enqueued for an
+  // immediate retry there — they must be skipped by the missed-run check
+  // further down, otherwise the same job gets a second, contradictory
+  // "missed" runHistory entry appended right after its "interrupted" one.
+  const interruptedJobIds = new Set();
   if (campaignObjectIds.length) {
-    const result = await Campaign.updateMany(
+    const stuckCampaigns = await Campaign.find(
       { _id: { $in: campaignObjectIds }, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
-      { $set: { status: "error", "results.status": "error" } }
-    );
-    if (result.modifiedCount > 0) {
-      logger.warn(`[adsFactoryAuto] reset ${result.modifiedCount} stuck in-progress campaign(s) to error on startup`);
+      { _id: 1 }
+    ).lean();
+    if (stuckCampaigns.length) {
+      const stuckIds = stuckCampaigns.map((c) => c._id);
+      await Campaign.updateMany(
+        { _id: { $in: stuckIds } },
+        { $set: { status: "error", "results.status": "error" } }
+      );
+      logger.warn(`[adsFactoryAuto] reset ${stuckCampaigns.length} stuck in-progress campaign(s) to error on startup`);
+
+      // The job that owns each stuck campaign was interrupted mid-run (server
+      // restarted while generation/posting was in flight) — record that in its
+      // runHistory (otherwise it silently stays "active" with lastRunAt still
+      // null/stale, looking like it never ran at all) and, for does_not_repeat
+      // jobs, re-enqueue an immediate retry so the user isn't stuck waiting on
+      // a run that will never come back on its own.
+      const stuckIdSet = new Set(stuckIds.map((id) => id.toString()));
+      const interruptedJobs = activeJobs.filter(
+        (j) => j.campaignId && stuckIdSet.has(j.campaignId.toString())
+      );
+      interruptedJobs.forEach((j) => interruptedJobIds.add(j._id.toString()));
+      for (const job of interruptedJobs) {
+        await AdsFactoryJob.updateOne(
+          { _id: job._id },
+          {
+            $push: {
+              runHistory: {
+                runId:       `interrupted-${Date.now()}`,
+                startedAt:   job.schedule?.nextRunAt || new Date(),
+                completedAt: new Date(),
+                status:      "failed",
+                error:       "Run was interrupted by a server restart mid-cycle",
+              },
+            },
+          }
+        );
+        logger.warn(`[adsFactoryAuto] job ${job._id} was interrupted mid-run by a server restart`);
+        if (job.schedule?.frequency === "does_not_repeat") {
+          await scheduleJob(job._id, { type: "once", runAt: new Date(), timezone: job.schedule.timezone });
+          logger.warn(`[adsFactoryAuto] re-enqueued interrupted does_not_repeat job ${job._id} for immediate retry`);
+        } else {
+          // Repeating job (daily/weekly/fast-cron) interrupted mid-run. Before,
+          // it was left to wait for its next scheduled tick — so an interruption
+          // silently lost that cycle. Retry it immediately, but only if the
+          // interruption is recent (within the same grace window one-shot reloads
+          // use); if it's been down longer, skip the retry and let the job's
+          // normal repeating schedule (re-registered below) take over so we don't
+          // fire a stale cycle late. The one-off retry doesn't disturb the future
+          // cadence — the repeating schedule is re-enqueued in the reload loop.
+          const GRACE_MS = (IS_DEV_MODE ? 120 : 10) * 60 * 1000;
+          const interruptedAt = job.schedule?.nextRunAt || job.schedule?.lastRunAt || null;
+          const overdueMs = interruptedAt ? (Date.now() - new Date(interruptedAt).getTime()) : 0;
+          if (overdueMs <= GRACE_MS) {
+            await scheduleJob(job._id, { type: "once", runAt: new Date(), timezone: job.schedule?.timezone });
+            logger.warn(`[adsFactoryAuto] re-enqueued interrupted repeating job ${job._id} for immediate retry (interrupted ${Math.round(overdueMs / 1000)}s ago, within grace window)`);
+          } else {
+            logger.warn(`[adsFactoryAuto] interrupted repeating job ${job._id} overdue by ${Math.round(overdueMs / 1000)}s (beyond grace window) — its next scheduled run will proceed normally`);
+          }
+        }
+      }
     }
   }
 
@@ -386,7 +448,8 @@ async function reloadActiveJobs() {
   const validJobs = activeJobs.filter(
     (j) =>
       (!j.campaignId || existingCampaignIds.has(j.campaignId.toString())) &&
-      !staleOneShotIds.has(j._id.toString())
+      !staleOneShotIds.has(j._id.toString()) &&
+      !interruptedJobIds.has(j._id.toString())
   );
 
   let count = 0;
@@ -412,11 +475,16 @@ async function reloadActiveJobs() {
         // Check if the scheduled time has already passed
         const scheduledAt = resolved.runAt ? new Date(resolved.runAt) : null;
         if (scheduledAt && scheduledAt < new Date()) {
-          // Grace window: if the job was scheduled within the last 10 minutes,
+          // Grace window: if the job was scheduled within the last N minutes,
           // run it immediately instead of marking it missed. This handles the case
           // where nodemon/deployment restarts the server seconds before/after the
-          // scheduled time and the job never got a chance to fire.
-          const GRACE_MS = 10 * 60 * 1000; // 10 minutes
+          // scheduled time and the job never got a chance to fire. In dev mode
+          // nodemon can cycle every 1-10 minutes while files are being edited —
+          // a 10-minute window is routinely blown by that alone even though the
+          // job never had a real chance to run, so dev gets a much longer window.
+          // Production keeps the strict 10-minute window (fail visibly rather
+          // than fire hours late).
+          const GRACE_MS = (IS_DEV_MODE ? 120 : 10) * 60 * 1000;
           const overdueMs = Date.now() - scheduledAt.getTime();
           if (overdueMs <= GRACE_MS) {
             logger.info(`[adsFactoryAuto] does_not_repeat job ${job._id} missed by ${Math.round(overdueMs / 1000)}s — within grace window, running immediately`);
@@ -438,7 +506,7 @@ async function reloadActiveJobs() {
                   startedAt:   scheduledAt,
                   completedAt: new Date(),
                   status:      "failed",
-                  error:       `Scheduled run was missed — server was not running at ${scheduledAt.toISOString()}`,
+                  error:       `This run never started — the server was down at its scheduled time (${scheduledAt.toISOString()}) for longer than the recovery window. Please retry manually.`,
                 },
               },
             }

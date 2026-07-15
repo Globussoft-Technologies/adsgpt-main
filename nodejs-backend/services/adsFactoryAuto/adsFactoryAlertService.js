@@ -139,6 +139,51 @@ function friendlyPlatformError(platform, rawMessage) {
   return rawMessage;
 }
 
+// Whole-run errors that aren't tied to a single platform (generation failures,
+// server interruptions, credits, name collisions). These reach the email as a
+// bare run.error string with no "platform: " prefix, so they'd otherwise show
+// raw developer text. Translate them into plain language a marketer can act on.
+const FRIENDLY_GENERAL_PATTERNS = [
+  {
+    test: /campaign generation failed|generation failed|status updated to error/i,
+    friendly: () =>
+      "We couldn't finish creating the ad creatives for this run. No credits were charged for the ads that didn't post. The automation will try again on its next scheduled run.",
+  },
+  {
+    test: /interrupted mid-run|server restart|stuck in-progress/i,
+    friendly: () =>
+      "This run was interrupted before it could finish. The automation will try again on its next scheduled run.",
+  },
+  {
+    test: /insufficient credits|not enough credits/i,
+    friendly: () =>
+      "This run was paused because your account is out of credits. Add more credits, then resume the automation from its settings.",
+  },
+  {
+    test: /campaign with this name already exists|duplicate campaign name/i,
+    friendly: () =>
+      "A campaign with this name already exists on your ad account, so we paused the automation. Open its settings, choose a different campaign name, and resume it.",
+  },
+  {
+    test: /account not connected|reconnect it or remove/i,
+    friendly: () =>
+      "One of your connected ad accounts is no longer linked, so we paused the automation. Reconnect the account (or remove that platform) in the automation's settings, then resume it.",
+  },
+];
+
+// Turn any run-level error into user-friendly copy. Platform-prefixed segments
+// ("meta: ...") go through friendlyPlatformError; otherwise we try the general
+// patterns; and as a last resort we hide the raw text behind a generic line so
+// a marketer never sees internal error strings.
+function friendlyRunError(rawMessage) {
+  if (!rawMessage) return rawMessage;
+  for (const { test, friendly } of FRIENDLY_GENERAL_PATTERNS) {
+    if (test.test(rawMessage)) return friendly();
+  }
+  // Unmapped — don't leak developer text; give a safe, generic explanation.
+  return "Something went wrong on this run. The automation will try again on its next scheduled run — no action is needed unless this keeps happening.";
+}
+
 const escapeHtml = (s) =>
   String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -270,6 +315,9 @@ function buildRunEmailHtml(job, campaign, run) {
   const nextRunLabel  = job.schedule && job.schedule.nextRunAt
     ? new Date(job.schedule.nextRunAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
+  const endDateLabel  = job.schedule && job.schedule.endDate
+    ? new Date(job.schedule.endDate).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : null;
 
   // A single section wrapper: uppercase eyebrow label + inner content, divided
   // from the previous block by a hairline. Keeps vertical rhythm consistent.
@@ -307,13 +355,6 @@ function buildRunEmailHtml(job, campaign, run) {
   html += `</td></tr></table>`;
   html += `</td></tr>`;
 
-  // ── Run meta — next run, as a quiet caption row ─────────────────────────────
-  if (nextRunLabel) {
-    html += `<tr><td style="padding:14px 32px 20px 32px;">`;
-    html += `<span style="font-size:12px;color:${MUTE};">next run: ${escapeHtml(nextRunLabel)}</span>`;
-    html += `</td></tr>`;
-  }
-
   // Parses run.error's "platform: message" segments (joined with " | " by
   // the orchestrator) back into a per-platform list. Used both by the
   // top-level error banner and the "Posted ads" failed-platform cards below,
@@ -331,7 +372,7 @@ function buildRunEmailHtml(job, campaign, run) {
   if (run.error) {
     const friendlyLines = failedPlatformEntries.length
       ? failedPlatformEntries.map((f) => friendlyPlatformError(f.platform, f.message))
-      : [run.error];
+      : [friendlyRunError(run.error)];
     html += `<tr><td style="padding:0 32px 4px 32px;">`;
     html += `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdecec;border:1px solid #f6cccc;border-radius:10px;"><tr>`;
     html += `<td style="width:4px;background:#d64545;"></td>`;
@@ -348,9 +389,17 @@ function buildRunEmailHtml(job, campaign, run) {
   const durationDisplay = durationMs != null
     ? (durationMs < 1000 ? "less than a second" : `${(durationMs / 1000).toFixed(1)}s`)
     : "—";
-  const imgFailed = Math.max(0, health.imagesRequested - health.imagesGenerated);
-  const txtFailed = Math.max(0, health.textsRequested - health.textsGenerated);
   const postedCount = Object.keys(adIds).reduce((acc, p) => acc + (adIds[p] ? adIds[p].split(",").length : 0), 0);
+  // Platforms that actually got at least one ad this run — one creative posted
+  // to both Meta + Google is 2 ads, so show the total plus which platforms
+  // rather than the misleading "N of <creatives>" (ads and creatives are
+  // different units).
+  const postedPlatforms = Object.keys(adIds)
+    .filter((p) => adIds[p])
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+  const postedValue = postedPlatforms.length
+    ? `${postedCount} (${postedPlatforms.join(" + ")})`
+    : String(postedCount);
 
   const RESULT_LABEL = { success: "Success", partial: "Partially completed", failed: "Failed", skipped: "Skipped" };
   const resultLabel = RESULT_LABEL[run.status] || run.status;
@@ -359,15 +408,15 @@ function buildRunEmailHtml(job, campaign, run) {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CARD};border:1px solid ${HAIR};border-radius:10px;margin:-4px 0 8px 0;">` +
     `<tr>` +
       `<td style="padding:14px 16px;border-bottom:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Result</div><div style="font-size:15px;font-weight:700;color:${run.status === "success" ? TEAL : '#d93025'};margin-top:4px;">${escapeHtml(resultLabel)}</div></td>` +
-      `<td style="padding:14px 16px;border-bottom:1px solid ${HAIR};border-left:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Ads posted</div><div style="font-size:15px;font-weight:700;color:${INK};margin-top:4px;">${postedCount} of ${health.creativesAssembled}</div></td>` +
+      `<td style="padding:14px 16px;border-bottom:1px solid ${HAIR};border-left:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Ads posted</div><div style="font-size:15px;font-weight:700;color:${INK};margin-top:4px;">${escapeHtml(postedValue)}</div></td>` +
     `</tr>` +
     `<tr>` +
       `<td style="padding:14px 16px;border-bottom:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Started</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${startDateStr}</div></td>` +
       `<td style="padding:14px 16px;border-bottom:1px solid ${HAIR};border-left:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Duration</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${escapeHtml(durationDisplay)}</div></td>` +
     `</tr>` +
     `<tr>` +
-      `<td style="padding:14px 16px;"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Images created</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${health.imagesGenerated} of ${health.imagesRequested}${imgFailed ? ` <span style="color:#d93025;">(${imgFailed} didn't generate)</span>` : ""}</div></td>` +
-      `<td style="padding:14px 16px;border-left:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Ad text created</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${health.textsGenerated} of ${health.textsRequested}${txtFailed ? ` <span style="color:#d93025;">(${txtFailed} didn't generate)</span>` : ""}</div></td>` +
+      `<td style="padding:14px 16px;"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">Next run</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${nextRunLabel ? escapeHtml(nextRunLabel) : "—"}</div></td>` +
+      `<td style="padding:14px 16px;border-left:1px solid ${HAIR};"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};">End date</div><div style="font-size:14px;font-weight:600;color:${INK};margin-top:4px;">${endDateLabel ? escapeHtml(endDateLabel) : "—"}</div></td>` +
     `</tr>` +
     `</table>`;
 
@@ -379,47 +428,72 @@ function buildRunEmailHtml(job, campaign, run) {
   // just repeated the same information a third time.
 
   // ── Creatives — bordered, zebra-striped table of this cycle's output ───────
+  // One row PER PLATFORM AD, not per creative — a single creative posts a
+  // separate Meta ad and Google ad, each with its own generated headline/body,
+  // so each gets its own row/status/link instead of being collapsed together.
   const creatives = run.automationCreatives || [];
-  if (creatives.length) {
+  const platformRows = [];
+  creatives.forEach((c) => {
+    const creativePostedIds = c.postedAdIds instanceof Map
+      ? Object.fromEntries(c.postedAdIds)
+      : (c.postedAdIds || {});
+
+    [
+      { key: "meta",   label: "Meta",   text: c.platformText?.meta },
+      { key: "google", label: "Google", text: c.platformText?.google },
+    ].forEach(({ key, label: platformLabel, text }) => {
+      if (!text?.headline && !text?.message) return; // this platform had no copy for this creative
+
+      const adId = creativePostedIds[key] || null;
+      const posted = !!adId;
+      platformRows.push({ platformLabel, key, text, adId, posted });
+    });
+  });
+
+  if (platformRows.length) {
+    // Long message bodies collapse behind a native <details> toggle so the
+    // table stays scannable — clients that support <details> (Gmail app/web,
+    // Apple Mail) get a real "View more"/"View less"; clients that don't
+    // (Outlook) just render it permanently expanded, which is a safe
+    // degrade since the full text is never actually hidden from those users.
+    // Slice the RAW text first, then escape each piece separately — slicing
+    // after escapeHtml() could cut an entity in half (e.g. "ROG&#39;s" →
+    // "ROG&#3…") whenever the 140-char boundary lands inside one.
+    const buildMessageBlock = (rawMsg) => {
+      const rawPreview = rawMsg.length > 140 ? rawMsg.slice(0, 140).replace(/\s+\S*$/, "") : rawMsg;
+      const msgText = escapeHtml(rawMsg);
+      const previewCut = escapeHtml(rawPreview);
+      return rawMsg.length > 140
+        ? `<details style="margin-top:3px;">` +
+            `<summary style="font-size:12px;color:${BODY};line-height:1.45;list-style:none;cursor:pointer;">` +
+              `${previewCut}&hellip; <span style="color:${TEAL};font-weight:600;">View more</span>` +
+            `</summary>` +
+            `<div style="font-size:12px;color:${BODY};line-height:1.45;margin-top:4px;">${msgText}</div>` +
+          `</details>`
+        : `<div style="font-size:12px;color:${BODY};line-height:1.45;margin-top:3px;">${msgText}</div>`;
+    };
+
     let rows = "";
-    creatives.forEach((c, idx) => {
+    platformRows.forEach((r, idx) => {
       const zebra = idx % 2 ? `background:${CARD};` : "background:#ffffff;";
 
-      // Real per-creative ad ids (tagged by the orchestrator at post time) —
-      // only the platform(s) this specific creative was actually posted to
-      // show a link, never a platform it wasn't sent to.
-      let adLinks = "";
-      const creativePostedIds = c.postedAdIds instanceof Map
-        ? Object.fromEntries(c.postedAdIds)
-        : (c.postedAdIds || {});
-      const myMetaId = creativePostedIds.meta || null;
-      const myGoogleId = creativePostedIds.google || null;
-
-      if (myMetaId || myGoogleId) {
-        adLinks += `<div style="margin-top:6px;font-size:11px;">`;
-        if (myMetaId) {
-          const url = platformAdUrl("meta", resolveAdAccountId(job, "meta"), myMetaId, (run.platformContext && run.platformContext.meta) || null);
-          if (url) adLinks += `<a href="${escapeHtml(url)}" style="color:${TEAL};text-decoration:none;font-weight:600;margin-right:8px;">Meta ad &rarr;</a>`;
-        }
-        if (myGoogleId) {
-          const url = platformAdUrl("google", resolveAdAccountId(job, "google"), myGoogleId, (run.platformContext && run.platformContext.google) || null);
-          if (url) adLinks += `<a href="${escapeHtml(url)}" style="color:${TEAL};text-decoration:none;font-weight:600;">Google ad &rarr;</a>`;
-        }
-        adLinks += `</div>`;
-      }
-
-      // Status chip — posted (to ≥1 platform) vs failed to post anywhere.
-      const postedToAny = Object.keys(creativePostedIds).length > 0;
-      const statusChip = postedToAny
+      const statusChip = r.posted
         ? `<span style="display:inline-block;background:#eaf7f0;color:#0f9d63;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:20px;">Posted</span>`
         : `<span style="display:inline-block;background:#fdecec;color:#b23636;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:20px;">Failed</span>`;
+
+      let adLink = "";
+      if (r.adId) {
+        const url = platformAdUrl(r.key, resolveAdAccountId(job, r.key), r.adId, (run.platformContext && run.platformContext[r.key]) || null);
+        if (url) adLink = `<div style="margin-top:6px;font-size:11px;"><a href="${escapeHtml(url)}" style="color:${TEAL};text-decoration:none;font-weight:600;">${r.platformLabel} ad &rarr;</a></div>`;
+      }
 
       rows +=
         `<tr style="${zebra}">` +
         `<td style="padding:12px;border-top:1px solid ${HAIR};vertical-align:middle;">` +
-          `<div style="font-size:13px;font-weight:600;color:${INK};line-height:1.35;">${escapeHtml(c.headline || "—")}</div>` +
-          `<div style="font-size:12px;color:${BODY};line-height:1.45;margin-top:3px;">${escapeHtml(c.message || "")}</div>` +
-          adLinks +
+          `<div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${MUTE};">${r.platformLabel}</div>` +
+          `<div style="font-size:13px;font-weight:600;color:${INK};line-height:1.35;margin-top:2px;">${escapeHtml(r.text.headline || "—")}</div>` +
+          buildMessageBlock(r.text.message || "") +
+          adLink +
         `</td>` +
         `<td width="90" style="padding:12px;border-top:1px solid ${HAIR};vertical-align:middle;text-align:right;white-space:nowrap;">${statusChip}</td>` +
         `</tr>`;
@@ -430,7 +504,7 @@ function buildRunEmailHtml(job, campaign, run) {
       `<td style="${label}padding:10px 12px;">Headline &amp; text</td>` +
       `<td width="90" style="${label}padding:10px 12px;text-align:right;">Status</td>` +
       `</tr>${rows}</table>`;
-    html += section(`Ads created this run (${creatives.length})`, crInner);
+    html += section(`Ads created this run (${platformRows.length})`, crInner);
   }
 
   // ── Footer ─────────────────────────────────────────────────────────────────
@@ -466,7 +540,15 @@ function buildRunEmailText(job, campaign, run) {
   lines.push("");
 
   if (run.error) {
-    lines.push(`ERROR: ${run.error}`);
+    // Same friendly translation as the HTML "What went wrong" banner.
+    const entries = String(run.error).split(" | ").map((seg) => {
+      const idx = seg.indexOf(": ");
+      return idx === -1 ? null : { platform: seg.slice(0, idx).trim(), message: seg.slice(idx + 2).trim() };
+    }).filter(Boolean);
+    const friendly = entries.length
+      ? entries.map((e) => friendlyPlatformError(e.platform, e.message)).join(" ")
+      : friendlyRunError(run.error);
+    lines.push(`What went wrong: ${friendly}`);
     lines.push("");
   }
 
@@ -490,10 +572,20 @@ function buildRunEmailText(job, campaign, run) {
 
   const creatives = run.automationCreatives || [];
   if (creatives.length) {
-    lines.push("");
-    lines.push(`Creatives this cycle (${creatives.length}):`);
+    const textLines = [];
     for (const c of creatives) {
-      lines.push(`  - ${c.headline || "(no headline)"} [${c.callToAction || "no CTA"}]${c.imageUrl ? " +image" : " (no image)"}`);
+      const postedIds = c.postedAdIds instanceof Map ? Object.fromEntries(c.postedAdIds) : (c.postedAdIds || {});
+      for (const [key, platformLabel] of [["meta", "Meta"], ["google", "Google"]]) {
+        const text = c.platformText?.[key];
+        if (!text?.headline && !text?.message) continue;
+        const posted = !!postedIds[key];
+        textLines.push(`  - [${platformLabel}] ${text.headline || "(no headline)"} [${c.callToAction || "no CTA"}]${posted ? " — posted" : " — failed"}`);
+      }
+    }
+    if (textLines.length) {
+      lines.push("");
+      lines.push(`Ads this cycle (${textLines.length}):`);
+      lines.push(...textLines);
     }
   }
 

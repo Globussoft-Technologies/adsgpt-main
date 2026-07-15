@@ -32,6 +32,19 @@ function adFactoryCtrl() { return require("../../controllers/adFactory"); }
 
 const _runningJobs = new Set();
 
+// Dev/testing-only override — same gate the queue's fast-cron + grace-window
+// use (MODE=DEV or NODE_ENV=development). Kept local to avoid importing the
+// queue module (circular dep).
+const IS_DEV_MODE =
+  String(process.env.MODE || "").toUpperCase() === "DEV" ||
+  process.env.NODE_ENV === "development";
+
+// Releases the in-memory in-flight marker. Every exit path from run() —
+// early return or final completion — must call this.
+function releaseRunLock(jobId) {
+  _runningJobs.delete(jobId);
+}
+
 // ─── Platform Posters Registry ────────────────────────────────────────────────
 // Each entry:
 //   isConfigured(target) → bool   has the user filled in the required fields?
@@ -52,17 +65,56 @@ const PLATFORM_POSTERS = {
 
     // isConfigured only checks the saved template has the required fields
     // filled in — it says nothing about whether the user's Facebook account
-    // is actually linked right now. Checked separately (and cheaply, before
-    // spending a generation cycle) so an unlinked account is skipped instead
-    // of failing the whole run every single tick.
+    // is actually linked right now.
+    //
+    // Two layers (mirrors Google's isConnected below):
+    //   1) Cheap local check — a decryptable access token must exist.
+    //   2) Live token probe — GET /me against the Graph API. A Meta token can
+    //      be revoked/expired/de-permissioned on Facebook's side while still
+    //      sitting decryptable in our DB; only a real call detects that. Doing
+    //      it here (Step 2b) pauses the job BEFORE credits are frozen and
+    //      creatives generated, instead of wasting a generation cycle only to
+    //      fail at post time every tick.
     isConnected: async (job) => {
       const rawFbUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
       const fbUser = await FBUsers.findOne({ $or: [{ userId: job.userId }, { userId: rawFbUserId }] }).lean();
       if (!fbUser) return false;
+      let accessToken;
       try {
-        return !!decrypt(fbUser.accessToken);
+        accessToken = decrypt(fbUser.accessToken);
       } catch {
         return false;
+      }
+      if (!accessToken) return false;
+
+      // Live token probe — /me is the cheapest Graph call that fails cleanly
+      // (OAuthException) on a revoked/expired token.
+      try {
+        const axios = require("axios");
+        await axios.get("https://graph.facebook.com/v24.0/me", {
+          params: { access_token: accessToken, fields: "id" },
+          timeout: 10000,
+        });
+        return true;
+      } catch (e) {
+        const status = e.response?.status;
+        const fbErr  = e.response?.data?.error;
+        // 400/401 with an OAuthException (type OAuthException or code 190)
+        // means the token is dead — treat as disconnected so the job pauses.
+        const isAuthFailure =
+          status === 401 ||
+          fbErr?.type === "OAuthException" ||
+          fbErr?.code === 190;
+        if (isAuthFailure) {
+          logger.warn(`[adsFactoryAuto][2b] Meta token probe failed for ${job.userId} — status=${status} error="${fbErr?.message || e.message}"`);
+          return false;
+        }
+        // Anything else (network blip, rate limit, transient 5xx) is ambiguous
+        // — do NOT pause a healthy job on it; the Step 9 permanent-error
+        // classifier remains the safety net if a real problem surfaces at post
+        // time.
+        logger.warn(`[adsFactoryAuto][2b] Meta token probe errored for ${job.userId} (treating as connected, will rely on post-time classifier): ${e.message}`);
+        return true;
       }
     },
 
@@ -299,7 +351,11 @@ const PLATFORM_POSTERS = {
 
       for (let i = 0; i < creativesToProcess.length; i++) {
         const creative = creativesToProcess[i];
-        
+        // Meta always uses its own generated copy — no shared/generic fallback.
+        const metaText = creative.platformText?.meta;
+        const metaHeadline = metaText?.headline || "";
+        const metaMessage  = metaText?.message  || "";
+
         logger.debug(`[adsFactoryAuto:meta] creative[${i}] uploading image  url="${(creative.imageUrl || "").slice(0, 120)}"`);
         const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
         logger.debug(`[adsFactoryAuto:meta] creative[${i}] image uploaded  hash=${imageHash}`);
@@ -315,8 +371,8 @@ const PLATFORM_POSTERS = {
           status: "ACTIVE",
           ...(p.instagramUserId ? { instagramUserId: p.instagramUserId } : {}),
           imageHash: imageHash,
-          headline: (creative.headline || "").slice(0, 40),
-          primaryText: (creative.message || "").slice(0, 125),
+          headline: (metaHeadline || "").slice(0, 40),
+          primaryText: (metaMessage || "").slice(0, 125),
           description: (creative.description || "").slice(0, 30),
           // Meta's own template CTA takes priority — creative.callToAction
           // is shared across platforms and may have been built from a
@@ -347,8 +403,8 @@ const PLATFORM_POSTERS = {
           pageId,
           status:       "ACTIVE",
           content: {
-            headline:     creative.headline,
-            message:      creative.message,
+            headline:     metaHeadline,
+            message:      metaMessage,
             linkUrl:      creative.linkUrl,
             callToAction: template.payload.callToAction || creative.callToAction || "LEARN_MORE",
             imageUrl:     creative.imageUrl || null,
@@ -386,15 +442,117 @@ const PLATFORM_POSTERS = {
 
     // Same rationale as Meta's isConnected — isConfigured only reflects the
     // saved template, not whether the Google account is actually linked.
+    //
+    // Two layers:
+    //   1) Cheap local check — a decryptable refresh token must exist. Fast
+    //      fail, no network call, when the account was never connected.
+    //   2) Live access check — call Google's listAccessibleCustomers (via the
+    //      existing checkGoogleAdsAccount controller). This catches a token
+    //      that exists in our DB but has been REVOKED or EXPIRED on Google's
+    //      side, so the job auto-pauses at Step 2b BEFORE any credits are
+    //      frozen or creatives generated — instead of wasting a full
+    //      generation cycle only to fail at post time every tick.
+    //
+    // A specific-customer USER_PERMISSION_DENIED (the template's customerId is
+    // no longer accessible even though the account itself is reachable) can
+    // still slip past this account-level check; the permanent-error classifier
+    // in Step 9 (isPermanentConfigError) remains the safety net for that.
     isConnected: async (job) => {
       const GoogleUsers = require("../../Module/adPosting/googleUsers");
       const googleUser = await GoogleUsers.findOne({ userId: job.userId }).lean();
       if (!googleUser) return false;
       try {
         const { decrypt: decryptToken } = require("../../utils/crypto");
-        return !!decryptToken(googleUser.refreshToken);
+        if (!decryptToken(googleUser.refreshToken)) return false;
       } catch {
         return false;
+      }
+
+      // Live access probe — reuse checkGoogleAdsAccount with the same mock
+      // req/res pattern the poster uses below.
+      try {
+        const googleAdController = require("../../controllers/adPosting/googleAdController");
+        const req = { body: {}, query: {}, user: { user_id: job.userId } };
+        let statusCode = 200;
+        let responseData = null;
+        const res = {
+          status: (code) => { statusCode = code; return res; },
+          json:   (data)  => { responseData = data; return res; },
+        };
+        await googleAdController.checkGoogleAdsAccount(req, res);
+
+        // Non-2xx (typically 401) means the token is expired/revoked on
+        // Google's side — treat as disconnected so the job pauses.
+        if (statusCode >= 400) {
+          logger.warn(`[adsFactoryAuto][2b] Google access probe failed for ${job.userId} — status=${statusCode} details="${responseData?.details || responseData?.error || ""}"`);
+          return false;
+        }
+        // Explicit isConnected:false from the controller (no account linked).
+        if (responseData && responseData.isConnected === false) return false;
+        return true;
+      } catch (e) {
+        // A probe error (network blip, unexpected throw) is ambiguous — do NOT
+        // pause on it. Let the run proceed; a genuine permission problem will
+        // still be caught by the Step 9 permanent-error classifier. This avoids
+        // pausing a healthy job because of a transient probe failure.
+        logger.warn(`[adsFactoryAuto][2b] Google access probe errored for ${job.userId} (treating as connected, will rely on post-time classifier): ${e.message}`);
+        return true;
+      }
+    },
+
+    // Google Ads (unlike Meta) rejects a campaign whose name already exists on
+    // the account. That only ever bites on the FIRST run of a job — once a
+    // campaign is created, createdCampaignId is saved and reused, so the name
+    // is never submitted again. So we only pre-check when no campaign has been
+    // created yet.
+    //
+    // Returns the conflicting campaign name (string) when the name is taken by
+    // a campaign this job does NOT already own — i.e. a real "please choose a
+    // different name" collision that will fail at post time. Returns null when
+    // there is no conflict, when the poster isn't the first run, or when the
+    // existing campaign is this job's own (the post-time recovery would adopt
+    // it, so it's not a hard failure). A probe error also returns null — don't
+    // pause a healthy job over an ambiguous lookup failure; the post-time path
+    // still handles a genuine collision.
+    preflightNameConflict: async (target, job) => {
+      if (target?.createdCampaignId) return null; // not the first run — name already claimed by this job
+
+      const p = target?.template?.payload || {};
+      const name = p.name || p.campaignName;
+      if (!name) return null; // controller would auto-name; no user-chosen name to collide
+
+      const customerId = p.adAccountId || target?.template?.customerId || p.customerId;
+      if (!customerId) return null; // no account resolved — post-time will surface the config error
+
+      try {
+        const googleAdController = require("../../controllers/adPosting/googleAdController");
+        const req = { body: { adAccountId: customerId, name }, query: {}, user: { user_id: job.userId } };
+        let statusCode = 200;
+        let responseData = null;
+        const res = {
+          status: (code) => { statusCode = code; return res; },
+          json:   (data)  => { responseData = data; return res; },
+        };
+        await googleAdController.findCampaignByNameAPI(req, res);
+        if (statusCode >= 400) return null; // lookup failed — don't pause; defer to post-time
+
+        const foundId = responseData?.campaignId;
+        if (!foundId) return null; // name is free
+
+        // Name exists. Mirror the post-time recovery's decision (see the
+        // createCampaignAPI catch block below): it ADOPTS an existing campaign
+        // unless another job already owns that id, in which case it throws.
+        // So a hard collision the user must rename around == owned by a
+        // different job. Anything else is recoverable at post time.
+        const claimedByOther = await AdsFactoryJob.findOne({
+          _id: { $ne: job._id },
+          "targets.google.createdCampaignId": String(foundId),
+        }).select("_id").lean();
+        if (claimedByOther) return name;
+        return null;
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2c] Google name-conflict probe errored for ${job.userId} (skipping pre-check): ${e.message}`);
+        return null;
       }
     },
 
@@ -583,7 +741,7 @@ const PLATFORM_POSTERS = {
       if (!adGroupId) throw new Error("Google ad group creation did not return an adGroupId");
 
       // ── 3. One ad per creative ────────────────────────────────────────────
-      const creativesToProcess = creatives.filter((c) => c.imageUrl || c.headline);
+      const creativesToProcess = creatives.filter((c) => c.imageUrl || c.platformText?.google?.headline);
       if (creativesToProcess.length === 0) throw new Error("No valid creatives for Google posting");
 
       // SEARCH: needs arrays of unique headlines (≥3) + descriptions (≥2)
@@ -608,8 +766,10 @@ const PLATFORM_POSTERS = {
       };
 
       const adsArray = creativesToProcess.map((creative) => {
-        const rawHeadline = (creative.headline || "").trim();
-        const rawDesc     = (creative.message || creative.description || "").trim();
+        // Google always uses its own generated copy — no shared/generic fallback.
+        const googleText = creative.platformText?.google;
+        const rawHeadline = (googleText?.headline || "").trim();
+        const rawDesc     = (googleText?.message  || creative.description || "").trim();
 
         if (isSearch) {
           // Google requires ≥3 unique headlines (max 30 chars each) and ≥2 unique descriptions (max 90 chars each).
@@ -680,7 +840,7 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
   const POLL_INTERVAL = 5_000;
   const start = Date.now();
   let tick = 0;
-
+  let lastServices = [];
 
   while (Date.now() - start < timeoutMs) {
     tick++;
@@ -690,6 +850,7 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
     }
 
     const services = campaign.services?.servicesSelected || [];
+    lastServices = services;
     const elapsedSec = Math.round((Date.now() - start) / 1000);
     const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
     logger.debug(`[adsFactoryAuto][poll] tick=${tick}  elapsed=${elapsedSec}s  progress=[${progress}]  results.status=${campaign.results?.status}`);
@@ -717,7 +878,25 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
   }
   const timeoutMin = Math.round(timeoutMs / 60000);
   logger.error(`[adsFactoryAuto][poll] TIMEOUT after ${tick} ticks (${Math.round(timeoutMs / 1000)}s)  campaignId=${campaignId}`);
-  throw new Error(`Timeout: generation did not complete within ${timeoutMin} minutes`);
+  // Point at exactly which service stalled instead of a generic timeout —
+  // e.g. "text generation finished (2/2) but image generation stalled at 0/2"
+  // tells the user (and us) where to look, rather than "run did not complete
+  // in time" which reads identically whether Python never started or was 99%
+  // done when the clock ran out.
+  const stalled = lastServices.filter((s) => (s.generated || 0) < (s.serviceParams?.quantity || 0));
+  const finished = lastServices.filter((s) => (s.generated || 0) >= (s.serviceParams?.quantity || 0));
+  let detail;
+  if (lastServices.length === 0) {
+    detail = "generation never started";
+  } else {
+    const stalledDesc  = stalled.map((s) => `${s.serviceName} stalled at ${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(", ");
+    const finishedDesc = finished.map((s) => s.serviceName).join(", ");
+    detail = [
+      stalledDesc || null,
+      finishedDesc ? `${finishedDesc} finished OK` : null,
+    ].filter(Boolean).join(" — ");
+  }
+  throw new Error(`Generation timed out after ${timeoutMin} minutes (${detail})`);
 }
 
 // Matches known Google/Meta account- or object-level limit errors that will
@@ -752,6 +931,16 @@ const PERMANENT_CONFIG_ERROR_PATTERNS = [
   /(re-?connect|re-?authenticate).* (facebook|google|meta|account)/i,
   /campaign with this name already exists/i,
   /duplicate campaign name/i,
+  // Google Ads permission failures — the account is linked but the OAuth
+  // grant no longer has access to that customer (revoked, wrong login-customer,
+  // or manager-link removed). These never recover on retry, so auto-pause
+  // instead of failing + emailing every tick. Kept in sync with the
+  // "account isn't connected properly" branch of FRIENDLY_ERROR_PATTERNS in
+  // adsFactoryAlertService.js.
+  /doesn.?t have permission to access customer/i,
+  /login-customer-id/i,
+  /USER_PERMISSION_DENIED/i,
+  /OAuthException/i,
   // Meta error codes embedded as "[code=N]" / "[subcode=N]" by the meta
   // poster (see errMsg construction above) — these are well-documented
   // permanent failures per Meta's Graph API error reference:
@@ -777,10 +966,16 @@ function isPermanentConfigError(errorMessage) {
 function buildCreativesFromResults(campaign, callToActionList, destinationUrl, pairsPerCycle) {
   const allTexts  = (campaign.results?.text  || []).filter((t) => t.status === 200 && t.data);
   const allImages = (campaign.results?.image || []).filter((i) => i.status === 200 && i.data);
-  
+
   // Extract only the latest results to avoid duplicating old creatives
   const texts = allTexts.slice(-pairsPerCycle);
   const images = allImages.slice(-pairsPerCycle);
+
+  // Log Python's raw text payload as-received, before any per-platform
+  // extraction below — lets us confirm from the logs alone whether Python
+  // actually sent distinct meta/google variants for this run, rather than
+  // inferring it indirectly from what got posted.
+  logger.info(`[adsFactoryAuto][text-raw] campaignId=${campaign.metadata?.campaignId}  rawTexts=${JSON.stringify(texts.map((t) => t.data))}`);
   
   const count = Math.min(Math.max(texts.length, images.length, 1), pairsPerCycle);
 
@@ -792,16 +987,17 @@ function buildCreativesFromResults(campaign, callToActionList, destinationUrl, p
   const creatives = [];
   for (let i = 0; i < count; i++) {
     const textData = texts[i]?.data;
-    const headline =
-      (typeof textData === "object" 
-        ? textData?.meta?.headline || textData?.google?.headline || textData?.headline 
-        : textData) ||
-      campaign.brandInfo?.brandName || "New Offer";
-    const message =
-      (typeof textData === "object" 
-        ? textData?.meta?.primary_text || textData?.google?.description || textData?.body || textData?.message 
-        : null) ||
-      campaign.objectives?.coreIdea || "";
+    const isObj = typeof textData === "object" && textData !== null;
+
+    // Python's text generation produces distinct copy per platform
+    // (textData.meta.* vs textData.google.*) — each platform's poster reads
+    // its own platformText.<platform> only, no shared/generic fallback that
+    // could let one platform's copy leak into another's ad.
+    const metaHeadline   = isObj ? textData?.meta?.headline      : null;
+    const metaMessage    = isObj ? textData?.meta?.primary_text  : null;
+    const googleHeadline = isObj ? textData?.google?.headline    : null;
+    const googleMessage  = isObj ? textData?.google?.description : null;
+
     const rawImage = images[i]?.data;
     const imgData =
       (typeof rawImage === "string"
@@ -816,12 +1012,16 @@ function buildCreativesFromResults(campaign, callToActionList, destinationUrl, p
     creatives.push({
       creativeId:   uuidv4(),
       imageUrl:     fullImageUrl,
-      headline,
-      message,
       linkUrl:      destinationUrl || "",
       callToAction: ctaList[i % ctaList.length], // rotate through campaign CTAs
       description:  campaign.objectives?.additionalGuidelines || "",
       platform:     "multi",
+      // Each platform's own generated copy — null when that platform has no
+      // dedicated copy for this text index. No shared/generic fallback here.
+      platformText: {
+        meta:   (metaHeadline || metaMessage)     ? { headline: metaHeadline,   message: metaMessage }   : null,
+        google: (googleHeadline || googleMessage) ? { headline: googleHeadline, message: googleMessage } : null,
+      },
     });
   }
   return creatives;
@@ -846,6 +1046,7 @@ async function run(jobId) {
     logger.warn(`[adsFactoryAuto] job ${jobId} is already running — skipping duplicate dispatch`);
     return;
   }
+
   _runningJobs.add(jobId);
 
   logger.info(`[adsFactoryAuto] ▶ run START  jobId=${jobId}  runId=${runId}`);
@@ -870,7 +1071,7 @@ async function run(jobId) {
       } catch (e) {
         logger.warn(`[adsFactoryAuto][1] could not cancel ${job.status} job's stale queue entry: ${e.message}`);
       }
-      _runningJobs.delete(jobId);
+      await releaseRunLock(jobId);
       return;
     }
 
@@ -883,7 +1084,7 @@ async function run(jobId) {
         logger.warn(
           `[adsFactoryAuto][1] does_not_repeat job ${jobId} fired early — scheduled at ${nextRunAt.toISOString()} but now is ${new Date().toISOString()} — skipping stale BullMQ tick`
         );
-        _runningJobs.delete(jobId);
+        await releaseRunLock(jobId);
         return;
       }
     }
@@ -904,7 +1105,7 @@ async function run(jobId) {
           `[adsFactoryAuto][1] job ${jobId} skipping — only ${Math.round(elapsed / 86400000)}d elapsed ` +
           `of required ${sched.customFrequency.repeatEvery * 7}d (lastRunAt=${sched.lastRunAt})`
         );
-        _runningJobs.delete(jobId);
+        await releaseRunLock(jobId);
         return;
       }
     }
@@ -919,7 +1120,7 @@ async function run(jobId) {
       } catch (e) {
         logger.warn(`[adsFactoryAuto][1] could not cancel completed job from queue: ${e.message}`);
       }
-      _runningJobs.delete(jobId);
+      await releaseRunLock(jobId);
       return;
     }
 
@@ -932,7 +1133,7 @@ async function run(jobId) {
       await cancelJob(job._id.toString()).catch(() => {});
       await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "paused" } })
         .catch((e) => logger.warn(`[adsFactoryAuto][2] could not save paused status: ${e.message}`));
-      _runningJobs.delete(jobId);
+      await releaseRunLock(jobId);
       return;
     }
 
@@ -953,7 +1154,7 @@ async function run(jobId) {
       logger.warn(
         `[adsFactoryAuto][2] campaign ${campaign.metadata?.campaignId} still in-progress — skipping tick to avoid overlap`
       );
-      _runningJobs.delete(jobId);
+      await releaseRunLock(jobId);
       return;
     }
 
@@ -988,6 +1189,42 @@ async function run(jobId) {
         await cancelJob(jobId);
       } catch (e) {
         logger.warn(`[adsFactoryAuto][2b] could not cancel auto-paused job from queue: ${e.message}`);
+      }
+      throw new Error(reason);
+    }
+
+    // ── Step 2c: Pre-flight campaign-name conflict check ─────────────────────
+    // Google rejects a duplicate campaign name. Catch it here, before freezing
+    // credits or generating creatives, so a name collision pauses the job with
+    // an actionable "rename it" message instead of wasting a full generation
+    // cycle only to fail at post time. Only platforms that expose
+    // preflightNameConflict participate (Google today; Meta allows duplicate
+    // names so it doesn't).
+    const nameConflicts = [];
+    for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
+      if (!poster.isConfigured(targetsForConnCheck[platformName])) continue;
+      if (typeof poster.preflightNameConflict !== "function") continue;
+      const conflictName = await poster.preflightNameConflict(targetsForConnCheck[platformName], job);
+      if (conflictName) nameConflicts.push({ platformName, name: conflictName });
+    }
+    if (nameConflicts.length > 0) {
+      // Format as "platform: message" segments (joined with " | ") so the
+      // alert email parses them per-platform and runs each through
+      // friendlyPlatformError — same convention the post-time platformErrors
+      // use. The "campaign with this name already exists" phrasing also matches
+      // isPermanentConfigError so the job stays paused.
+      const reason = nameConflicts
+        .map((c) => `${c.platformName}: A campaign with this name already exists ("${c.name}"). Please choose a different campaign name in this automation's settings and resume it.`)
+        .join(" | ");
+      logger.warn(`[adsFactoryAuto][2c] job ${jobId} auto-pausing — ${reason}`);
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      await job.save({ validateBeforeSave: false });
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2c] could not cancel auto-paused job from queue: ${e.message}`);
       }
       throw new Error(reason);
     }
@@ -1082,6 +1319,17 @@ async function run(jobId) {
 
     logger.info(`[adsFactoryAuto][5] services  ${updatedServices.map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}`).join(", ")}`);
 
+    // Rebuild distribution.platforms from this job's currently-configured
+    // targets — Python's text generator only produces a platform-specific
+    // copy variant for platforms listed here (see gemini_service.py), so a
+    // stale/missing entry (e.g. left over from the campaign's original
+    // single-platform wizard setup) silently drops that platform's variant,
+    // causing both platforms to fall back to the same shared text.
+    const jobTargets = job.targets || {};
+    const distributionPlatforms = Object.keys(PLATFORM_POSTERS)
+      .filter((p) => PLATFORM_POSTERS[p].isConfigured(jobTargets[p]))
+      .map((p) => ({ platformName: p }));
+
     // Force all required nodes to "success" so sendAdFactoryRequest passes its
     // node-check — a draft/new campaign may have some nodes still in "draft" status.
     // Also clear accumulated stale creatives (empty imageUrl entries from past broken runs).
@@ -1094,6 +1342,7 @@ async function run(jobId) {
           "objectives.status":   "success",
           "assets.status":       "success",
           "distribution.status": "success",
+          ...(distributionPlatforms.length ? { "distribution.platforms": distributionPlatforms } : {}),
           "services.status":     "success",
           creatives:             [],  // wipe stale accumulated creatives — history is in runHistory
         },
@@ -1174,7 +1423,7 @@ async function run(jobId) {
     rawImages = (completedCampaign.results?.image || []).filter((i) => i.status === 200 && i.data).slice(-pairsPerCycle);
     logger.info(`[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  withImage=${newCreatives.filter((c) => c.imageUrl).length}`);
     newCreatives.forEach((c, i) => {
-      logger.debug(`[adsFactoryAuto][7b] creative[${i}]  imageUrl="${(c.imageUrl || "").slice(0, 80)}"  headline="${(c.headline || "").slice(0, 50)}"  cta="${c.callToAction}"  linkUrl="${c.linkUrl || ""}"`);
+      logger.debug(`[adsFactoryAuto][7b] creative[${i}]  imageUrl="${(c.imageUrl || "").slice(0, 80)}"  meta="${(c.platformText?.meta?.headline || "").slice(0, 50)}"  google="${(c.platformText?.google?.headline || "").slice(0, 50)}"  cta="${c.callToAction}"  linkUrl="${c.linkUrl || ""}"`);
     });
     // Mark campaign back to success — creatives are stored in runHistory, not pushed to campaign.creatives
     // (pushing to campaign.creatives on every run causes unbounded accumulation)
@@ -1297,22 +1546,30 @@ async function run(jobId) {
       job.schedule.lastRunAt = new Date();
       if (runStatus === "failed") {
         job.failedRuns = (job.failedRuns || 0) + 1;
+      }
 
-        // Platform account/campaign limits (too many ad groups, too many ads
-        // per ad set, etc.) or permanent config problems (no linked account,
-        // expired token, duplicate campaign name) will never succeed on retry
-        // — auto-pause instead of failing on every future tick and burning
-        // credits each time.
-        if (isPlatformLimitError(runError) || isPermanentConfigError(runError)) {
-          job.status = "paused";
-          job.schedule.nextRunAt = null;
-          logger.warn(`[adsFactoryAuto][9] job ${jobId} hit a platform limit — auto-pausing: "${runError}"`);
-          try {
-            const { cancelJob } = require("./adsFactoryAutoQueue");
-            await cancelJob(jobId);
-          } catch (e) {
-            logger.warn(`[adsFactoryAuto][9] could not cancel auto-paused job from queue: ${e.message}`);
-          }
+      // Platform account/campaign limits (too many ad groups, too many ads
+      // per ad set, etc.) or permanent config problems (no linked account,
+      // expired token, revoked Google permission, duplicate campaign name)
+      // will never succeed on retry — auto-pause instead of failing on every
+      // future tick and burning generation credits each time.
+      //
+      // Also fires on "partial" (e.g. Meta posted but Google's account
+      // permission is broken): one platform being permanently misconfigured
+      // still repeats the same failure + alert email every cycle, so pause the
+      // whole job until the user reconnects or removes that platform.
+      if (
+        (runStatus === "failed" || runStatus === "partial") &&
+        (isPlatformLimitError(runError) || isPermanentConfigError(runError))
+      ) {
+        job.status = "paused";
+        job.schedule.nextRunAt = null;
+        logger.warn(`[adsFactoryAuto][9] job ${jobId} hit a permanent config/limit error — auto-pausing: "${runError}"`);
+        try {
+          const { cancelJob } = require("./adsFactoryAutoQueue");
+          await cancelJob(jobId);
+        } catch (e) {
+          logger.warn(`[adsFactoryAuto][9] could not cancel auto-paused job from queue: ${e.message}`);
         }
       }
 
@@ -1371,7 +1628,7 @@ async function run(jobId) {
             : {};
 
           const imagesGenerated = newCreatives.filter((c) => c.imageUrl).length;
-          const textsGenerated  = newCreatives.filter((c) => c.headline || c.message).length;
+          const textsGenerated  = newCreatives.filter((c) => c.platformText?.meta || c.platformText?.google).length;
           const ppc             = job.pairsPerCycle || 1;
 
           // Cumulative health across ALL runs — matches getJobActivity exactly
@@ -1507,13 +1764,16 @@ async function run(jobId) {
                   ad: {
                     imageUrl:     c.imageUrl,
                     imageStatus:  c.imageUrl ? "generated" : "missing",
-                    headline:     c.headline,
-                    body:         c.message,
                     description:  c.description,
-                    textStatus:   (c.headline || c.message) ? "generated" : "missing",
+                    textStatus:   (c.platformText?.meta || c.platformText?.google) ? "generated" : "missing",
                     callToAction: c.callToAction,
                     linkUrl:      c.linkUrl,
                     platform:     c.platform,
+                    // Each platform's own generated copy — no shared/generic
+                    // text field. Callers (e.g. the alert email) must read
+                    // meta/google directly instead of a single collapsed value.
+                    meta:   c.platformText?.meta   || null,
+                    google: c.platformText?.google  || null,
                   },
                   posting: {
                     posted,
@@ -1558,7 +1818,7 @@ async function run(jobId) {
     }
   }
 
-  _runningJobs.delete(jobId);
+  await releaseRunLock(jobId);
   logger.info(`[adsFactoryAuto] ■ run END  jobId=${jobId}  runId=${runId}  finalStatus=${runStatus}  durationMs=${Date.now() - startedAt.getTime()}`);
 }
 

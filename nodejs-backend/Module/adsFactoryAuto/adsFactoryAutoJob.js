@@ -36,6 +36,8 @@ const RunHistorySchema = new mongoose.Schema(
           callToAction: { type: String, default: "", trim: true },
           description:  { type: String, default: "", trim: true },
           platform:     { type: String, default: "", trim: true },
+          // Each platform's own generated copy — { meta: {headline,message}, google: {headline,message} }.
+          platformText: { type: mongoose.Schema.Types.Mixed, default: null },
           // The real ad ID created for this specific creative on each
           // platform it was posted to — { meta: "1202...", google: "789..." }
           postedAdIds:  { type: Map, of: String, default: () => new Map() },
