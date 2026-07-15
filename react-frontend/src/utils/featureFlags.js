@@ -32,8 +32,22 @@ export const IS_PROMPT_CATEGORIES_ENABLED =
 //   import.meta.env.VITE_FEATURE_GOOGLE_AUTOMATION === 'true';
 export const IS_GOOGLE_AUTOMATION_ENABLED =
   import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
-// Meta Ads "Ads Chat" MCP chatbot — still in active development, hidden from
-// everyone until explicitly opted in. Set VITE_FEATURE_META_ADS_CHAT=true
-// locally/in a preview env to see the launcher icon.
+// Meta Ads "Ads Chat" MCP chatbot — still in active development. Gated two
+// ways: this master switch (build-wide off switch), AND — separately — an
+// explicit email allowlist (see isAdsChatAllowedForEmail below) so that even
+// with the switch on, only specific testers actually see the launcher icon.
+// Set VITE_FEATURE_META_ADS_CHAT=true to turn the feature on at all.
 export const IS_META_ADS_CHAT_ENABLED =
   import.meta.env.VITE_FEATURE_META_ADS_CHAT === 'true';
+
+// Comma-separated allowlist, e.g.
+// VITE_META_ADS_CHAT_ALLOWED_EMAILS=chethan.s@globussoft.in,someone@else.com
+const ADS_CHAT_ALLOWED_EMAILS = (import.meta.env.VITE_META_ADS_CHAT_ALLOWED_EMAILS || '')
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+
+export const isAdsChatAllowedForEmail = (email) => {
+  if (!email) return false;
+  return ADS_CHAT_ALLOWED_EMAILS.includes(String(email).trim().toLowerCase());
+};

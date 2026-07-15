@@ -32,7 +32,8 @@ import CreateCampaignWizard from './CreateCampaignWizard';
 import CreateCampaignWizardV2 from './CreateCampaignWizardV2';
 import LeadsTab from './LeadsTab';
 import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
-import { IS_META_ADS_CHAT_ENABLED } from '@/utils/featureFlags';
+import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
+import Cookies from 'js-cookie';
 
 // V2 wizard is gated on a build-time env var so V1 keeps running by
 // default. When V2 is ready for the migrated objectives we flip this
@@ -654,12 +655,13 @@ export default function MetaAdsDashboard() {
       </div>
 
       {/* ── docked Ads Chat sidebar (pushes the content when open) ─────────── */}
-      {/* Still in active development — hidden behind VITE_FEATURE_META_ADS_CHAT
-          until it's ready for anyone besides whoever has that flag set locally.
+      {/* Still in active development — double-gated: VITE_FEATURE_META_ADS_CHAT
+          is the build-wide switch, and on top of that only emails listed in
+          VITE_META_ADS_CHAT_ALLOWED_EMAILS actually see the launcher icon.
           campaignId/adSetId/adId read straight from the URL — the same params
           TableViewCampaigns drills into — so the chat always knows what's
           currently open, even after a refresh. */}
-      {IS_META_ADS_CHAT_ENABLED && (
+      {IS_META_ADS_CHAT_ENABLED && isAdsChatAllowedForEmail(Cookies.get('user_email')) && (
         <MetaAdsChatWidget
           adAccountId={selectedAccount?.id}
           adAccountName={selectedAccount?.name}
