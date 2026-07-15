@@ -94,6 +94,8 @@ export default function OverviewPage() {
     outputTokens: 0,
     thinkingTokens: 0,
     totalTokens: 0,
+    costUsd: 0,
+    unpricedCalls: 0,
   };
   const tokenByModel = tokenData?.byModel || [];
   const tokenDaily = tokenData?.daily || [];
@@ -275,7 +277,7 @@ export default function OverviewPage() {
             <LoadingState />
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <StatCard
                   label="Total tokens"
                   value={formatNumber(tokenTotals.totalTokens)}
@@ -294,6 +296,13 @@ export default function OverviewPage() {
                   value={formatNumber(tokenTotals.thinkingTokens)}
                   accent="amber"
                   icon={Brain}
+                />
+                <StatCard
+                  label="Est. cost"
+                  value={formatUsd(tokenTotals.costUsd)}
+                  hint={tokenTotals.unpricedCalls > 0 ? `${formatNumber(tokenTotals.unpricedCalls)} calls unpriced` : undefined}
+                  accent="rose"
+                  icon={DollarSign}
                 />
               </div>
 
@@ -395,7 +404,8 @@ export default function OverviewPage() {
                         <th className="px-5 py-3">Input</th>
                         <th className="px-5 py-3">Output</th>
                         <th className="px-5 py-3">Thinking</th>
-                        <th className="px-5 py-3 text-right">Total</th>
+                        <th className="px-5 py-3">Total</th>
+                        <th className="px-5 py-3 text-right">Est. cost</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -414,14 +424,17 @@ export default function OverviewPage() {
                           <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.inputTokens)}</td>
                           <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.outputTokens)}</td>
                           <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.thinkingTokens)}</td>
-                          <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
-                            {formatNumber(row.totalTokens)}
+                          <td className="px-5 py-3 tabular-nums text-slate-700">{formatNumber(row.totalTokens)}</td>
+                          <td className="px-5 py-3 text-right font-semibold tabular-nums text-rose-600">
+                            {row.unpricedCalls > 0 && row.unpricedCalls === row.calls
+                              ? "—"
+                              : formatUsd(row.costUsd)}
                           </td>
                         </tr>
                       ))}
                       {tokenByModel.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                          <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
                             No data in range
                           </td>
                         </tr>

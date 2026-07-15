@@ -371,8 +371,10 @@ async function streamTurn(chat, message, ctx) {
   let text = "";
   const functionCalls = [];
   let usageMetadata = null;
+  let resolvedModel = null;
   for await (const chunk of stream) {
     if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata;
+    if (chunk.modelVersion) resolvedModel = chunk.modelVersion;
     const fcs = chunk.functionCalls;
     if (fcs && fcs.length) {
       functionCalls.push(...fcs);
@@ -389,6 +391,7 @@ async function streamTurn(chat, message, ctx) {
     sessionId: ctx.sessionId,
     feature: "meta_chat",
     model: GEMINI_MODEL,
+    resolvedModel,
     sdk: "genai",
     usageMetadata,
   });

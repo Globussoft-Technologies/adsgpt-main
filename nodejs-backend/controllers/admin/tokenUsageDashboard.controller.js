@@ -29,6 +29,11 @@ const TOKEN_SUMS = {
   cachedTokens: { $sum: "$cachedTokens" },
   toolUseTokens: { $sum: "$toolUseTokens" },
   totalTokens: { $sum: "$totalTokens" },
+  // $sum treats null as 0, so a model with no pricing entry just contributes
+  // $0 rather than erroring — unpricedCalls flags when that makes the total
+  // an undercount rather than a true $0.
+  costUsd: { $sum: "$costUsd" },
+  unpricedCalls: { $sum: { $cond: [{ $eq: ["$costUsd", null] }, 1, 0] } },
 };
 
 // GET /admin/token-usage/overview?from&to&feature
@@ -73,6 +78,8 @@ exports.overview = async (req, res) => {
       cachedTokens: 0,
       toolUseTokens: 0,
       totalTokens: 0,
+      costUsd: 0,
+      unpricedCalls: 0,
     };
 
     return res.json({
@@ -131,6 +138,8 @@ exports.userDetail = async (req, res) => {
       cachedTokens: 0,
       toolUseTokens: 0,
       totalTokens: 0,
+      costUsd: 0,
+      unpricedCalls: 0,
     };
 
     return res.json({
@@ -155,5 +164,7 @@ function projectFields() {
     cachedTokens: 1,
     toolUseTokens: 1,
     totalTokens: 1,
+    costUsd: 1,
+    unpricedCalls: 1,
   };
 }

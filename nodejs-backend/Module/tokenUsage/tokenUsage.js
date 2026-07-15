@@ -20,6 +20,11 @@ const tokenUsageSchema = new mongoose.Schema(
     userId: { type: String, required: true },
     feature: { type: String, required: true },
     model: { type: String, required: true },
+    // The concrete model version the SDK actually served (response.modelVersion),
+    // as opposed to `model` which may be an alias (e.g. "gemini-flash-latest")
+    // that Google can silently repoint. Priced off this when present — see
+    // config/geminiPricing.js. Null on older SDK responses that don't report it.
+    resolvedModel: { type: String, default: null },
     sdk: { type: String, enum: ["genai", "generative-ai"], required: true },
 
     inputTokens: { type: Number, default: 0 },
@@ -28,6 +33,12 @@ const tokenUsageSchema = new mongoose.Schema(
     cachedTokens: { type: Number, default: 0 },
     toolUseTokens: { type: Number, default: 0 },
     totalTokens: { type: Number, default: 0 },
+
+    // Estimated USD cost for this call (see config/geminiPricing.js). Null
+    // when the model (or resolvedModel) has no pricing entry — distinct from
+    // 0, which would wrongly read as "free". Computed once at write time so
+    // a later pricing-table edit never rewrites the cost of past calls.
+    costUsd: { type: Number, default: null },
 
     // Correlates rows back to their conversation (e.g. MetaChatSession.sessionId).
     sessionId: { type: String, default: null },

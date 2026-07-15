@@ -1,5 +1,6 @@
 const TokenUsage = require("../Module/tokenUsage/tokenUsage");
 const logger = require("../utils/logger");
+const { estimateCostUsd } = require("../config/geminiPricing");
 
 /**
  * Fire-and-forget — logging token usage must never break or slow down the
@@ -11,21 +12,31 @@ const logger = require("../utils/logger");
  * GenerateContentResponseUsageMetadata) — field names line up directly,
  * `thoughtsTokenCount`/`toolUsePromptTokenCount` simply won't be present on
  * the older SDK's shape and default to 0.
+ *
+ * `resolvedModel` (response.modelVersion, when the caller has it) is priced
+ * in preference to `model`, since `model` may be an alias like
+ * "gemini-flash-latest" whose underlying version Google can repoint.
  */
-function logTokenUsage({ userId, feature, model, sdk, sessionId, usageMetadata }) {
+function logTokenUsage({ userId, feature, model, resolvedModel, sdk, sessionId, usageMetadata }) {
   if (!usageMetadata) return;
-  TokenUsage.create({
-    userId,
-    feature,
-    model,
-    sdk,
-    sessionId: sessionId || null,
+  const tokens = {
     inputTokens: usageMetadata.promptTokenCount || 0,
     outputTokens: usageMetadata.candidatesTokenCount || 0,
     thinkingTokens: usageMetadata.thoughtsTokenCount || 0,
     cachedTokens: usageMetadata.cachedContentTokenCount || 0,
     toolUseTokens: usageMetadata.toolUsePromptTokenCount || 0,
+  };
+  const costUsd = estimateCostUsd(resolvedModel || model, tokens);
+  TokenUsage.create({
+    userId,
+    feature,
+    model,
+    resolvedModel: resolvedModel || null,
+    sdk,
+    sessionId: sessionId || null,
+    ...tokens,
     totalTokens: usageMetadata.totalTokenCount || 0,
+    costUsd,
   }).catch((err) => {
     logger.error(`token usage log failed: ${err.message}`);
   });

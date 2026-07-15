@@ -173,6 +173,8 @@ export default function UserDetailPage() {
     outputTokens: 0,
     thinkingTokens: 0,
     totalTokens: 0,
+    costUsd: 0,
+    unpricedCalls: 0,
   };
   const tokenByModel = tokenData?.byModel || [];
   const tokenByDay = tokenData?.daily || [];
@@ -340,11 +342,18 @@ export default function UserDetailPage() {
         <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100/60" />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="Total tokens" value={formatNumber(tokenTotals.totalTokens)} accent="indigo" icon={Activity} />
             <StatCard label="Input tokens" value={formatNumber(tokenTotals.inputTokens)} accent="sky" icon={LogIn} />
             <StatCard label="Output tokens" value={formatNumber(tokenTotals.outputTokens)} accent="emerald" icon={LogOut} />
             <StatCard label="Thinking tokens" value={formatNumber(tokenTotals.thinkingTokens)} accent="amber" icon={Brain} />
+            <StatCard
+              label="Est. cost"
+              value={formatUsd(tokenTotals.costUsd)}
+              hint={tokenTotals.unpricedCalls > 0 ? `${formatNumber(tokenTotals.unpricedCalls)} calls unpriced` : undefined}
+              accent="rose"
+              icon={DollarSign}
+            />
           </div>
 
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -361,6 +370,7 @@ export default function UserDetailPage() {
                     <th className="px-5 py-3 text-right">Output</th>
                     <th className="px-5 py-3 text-right">Thinking</th>
                     <th className="px-5 py-3 text-right">Total</th>
+                    <th className="px-5 py-3 text-right">Est. cost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -374,11 +384,14 @@ export default function UserDetailPage() {
                       <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
                         {formatNumber(m.totalTokens)}
                       </td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-rose-600">
+                        {m.unpricedCalls > 0 && m.unpricedCalls === m.calls ? "—" : formatUsd(m.costUsd)}
+                      </td>
                     </tr>
                   ))}
                   {tokenByModel.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                      <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
                         No data in range
                       </td>
                     </tr>
@@ -402,6 +415,7 @@ export default function UserDetailPage() {
                     <th className="px-5 py-3 text-right">Output</th>
                     <th className="px-5 py-3 text-right">Thinking</th>
                     <th className="px-5 py-3 text-right">Total</th>
+                    <th className="px-5 py-3 text-right">Est. cost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -415,11 +429,14 @@ export default function UserDetailPage() {
                       <td className="px-5 py-3 text-right font-semibold tabular-nums text-indigo-600">
                         {formatNumber(d.totalTokens)}
                       </td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-rose-600">
+                        {d.unpricedCalls > 0 && d.unpricedCalls === d.calls ? "—" : formatUsd(d.costUsd)}
+                      </td>
                     </tr>
                   ))}
                   {tokenByDay.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                      <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
                         No data in range
                       </td>
                     </tr>
