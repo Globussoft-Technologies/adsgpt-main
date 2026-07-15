@@ -8,6 +8,7 @@ const { s3Client } = require('../storage/s3');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { runUserRuleCycle } = require('../services/autopilot/userRuleOrchestrator');
 const UnifiedCreditController = require('../controllers/UnifiedCreditController');
+const oauthSigningKeyService = require('../services/oauth/signingKeyService');
 require('dotenv').config();
 
 // -----------------------------------------------------------------------------
@@ -87,12 +88,71 @@ const registerCreditReservationSweepCron = () => {
     );
 };
 
+// -----------------------------------------------------------------------------
+// OAuth signing key rotation
+// Once a day the cron checks whether the newest active signing key is older
+// than OAUTH_SIGNING_KEY_ROTATION_DAYS (default 90). If so, it mints a new
+// active key and retires the old one — the retired key stays in JWKS until
+// its published_until so already-issued tokens keep verifying.
+//
+// Boot-time bootstrap: the first call to getActiveSigningKey() during a real
+// /oauth/token request will create the initial key if none exist. We ALSO
+// warm it up here on cron registration so the JWKS endpoint returns keys
+// immediately after boot, not only after the first token request.
+// -----------------------------------------------------------------------------
+const registerOAuthSigningKeyRotationCron = () => {
+    const enabled = String(process.env.OAUTH_ENABLED || 'true').toLowerCase() === 'true';
+    if (!enabled) {
+        console.log('[oauth-keyrot] disabled (OAUTH_ENABLED=false)');
+        return;
+    }
+    const schedule = process.env.OAUTH_SIGNING_KEY_ROTATION_CRON || '0 3 * * *';
+    const rotationDays = Math.max(
+        1,
+        parseInt(process.env.OAUTH_SIGNING_KEY_ROTATION_DAYS || '90', 10),
+    );
+    if (!cron.validate(schedule)) {
+        console.error(
+            `[oauth-keyrot] invalid OAUTH_SIGNING_KEY_ROTATION_CRON: ${schedule}. Cron not registered.`,
+        );
+        return;
+    }
+
+    // Warm-up: ensure a key exists so JWKS is populated at boot.
+    oauthSigningKeyService.getActiveSigningKey().catch((err) =>
+        console.error('[oauth-keyrot] boot warm-up failed:', err.message),
+    );
+
+    cron.schedule(schedule, async () => {
+        try {
+            const active = await oauthSigningKeyService.getActiveSigningKey();
+            const ageMs = Date.now() - new Date(active.activated_at).getTime();
+            const rotateAfterMs = rotationDays * 24 * 60 * 60 * 1000;
+            if (ageMs >= rotateAfterMs) {
+                console.log(
+                    `[oauth-keyrot] rotating (age=${Math.round(ageMs / 86400000)}d, threshold=${rotationDays}d)`,
+                );
+                const fresh = await oauthSigningKeyService.rotateSigningKey();
+                console.log(`[oauth-keyrot] new signing key kid=${fresh.kid}`);
+            }
+        } catch (err) {
+            console.error('[oauth-keyrot] cron tick failed:', err.message);
+        }
+    });
+    console.log(
+        `[oauth-keyrot] scheduler registered: cron="${schedule}" rotate>${rotationDays}d`,
+    );
+};
+
 const runCronJobs = () => {
     // Phase 3 — hourly Autopilot orchestrator
     registerAutopilotCron();
 
     // Orphan-reservation sweeper (every 10 min by default)
     registerCreditReservationSweepCron();
+
+    // OAuth signing key rotation (daily at 03:00 by default)
+    registerOAuthSigningKeyRotationCron();
 
     // Daily newsletter drip — runs at 09:00 UTC every day
     cron.schedule('0 9 * * *', async () => {

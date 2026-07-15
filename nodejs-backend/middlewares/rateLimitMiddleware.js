@@ -24,4 +24,32 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { apiLimiter, webhookLimiter };
+// Strict limiter for OAuth Dynamic Client Registration. DCR is anonymous and
+// creates a durable Mongo row per call, so it's spam-attractive. 20 per hour
+// per IP is generous for real MCP clients (which register once per install)
+// while shutting down bulk-registration abuse.
+const dcrLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.OAUTH_DCR_RATE_LIMIT_PER_HOUR || 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "too_many_registrations",
+    error_description: "Rate limit exceeded for /oauth/register",
+  },
+});
+
+// Token endpoint limiter — brute-force resistance for auth code + refresh
+// exchange. Applied on top of any per-client-id checks inside the handler.
+const oauthTokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.OAUTH_TOKEN_RATE_LIMIT_PER_MIN || 60),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "too_many_requests",
+    error_description: "Rate limit exceeded for /oauth/token",
+  },
+});
+
+module.exports = { apiLimiter, webhookLimiter, dcrLimiter, oauthTokenLimiter };

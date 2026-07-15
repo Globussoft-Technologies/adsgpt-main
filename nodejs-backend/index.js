@@ -141,6 +141,13 @@ async function createServer() {
   // * 7. AdsGPT routes
   App.use("/adsgpt", mainRoute);
 
+  // * 7a. OAuth 2.1 provider (see docs/OAUTH_PROVIDER_PLAN.md).
+  // Well-known discovery docs live at the app root by spec; the OAuth
+  // endpoints themselves live under /oauth. Kept in two routers so the
+  // path fragments in each file match their mount points 1:1.
+  App.use(require("./Router/oauthWellKnown"));
+  App.use("/oauth", require("./Router/oauth"));
+
   // * 8. Facebook oauth routes
   App.get("/api/auth/facebook", facebookAuthController.initiateAuth);
   App.get("/api/auth/facebook/callback", facebookAuthController.handleCallback);
