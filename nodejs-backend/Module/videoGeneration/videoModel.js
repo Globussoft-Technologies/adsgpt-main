@@ -1,5 +1,62 @@
 const mongoose = require("mongoose");
 
+// ─── Script line (shared by scenes + per-version result scripts) ──────────────
+const scriptLineSchema = new mongoose.Schema(
+  {
+    id: Number,
+    start: String,
+    end: String,
+    text: String,
+    voice: String,
+    wordCount: Number,
+    charCount: Number,
+    maxWords: Number,
+    minWords: Number,
+  },
+  { _id: false }
+);
+
+// ─── Per-version AI Ads state (voice regenerate) ──────────────────────────────
+// One results[] entry == one switchable "version" of the ad. doc.version points
+// at the entry My Space shows. `inputs` stays FROZEN as the original first-gen
+// state; each version's *changed* inputs (voice/language) and its *output*
+// (structured script) are co-located here so a version is fully self-contained —
+// no parallel arrays to keep in lockstep. results[0].aiAds mirrors the original
+// inputs' voice + the original script; regenerated entries carry the voice/lang/
+// regenType used and the re-rendered script. Regenerate operates relative to the
+// currently selected version (results[doc.version]), enabling chained flows
+// (e.g. translate → then re-voice the translated script).
+
+// Lighter per-version scene: only what changes across versions (script + timing).
+const resultSceneSchema = new mongoose.Schema(
+  {
+    segmentNumber: { type: Number },
+    durationSeconds: { type: Number },
+    script: [scriptLineSchema],
+  },
+  { _id: false }
+);
+
+const aiAdsResultSchema = new mongoose.Schema(
+  {
+    // null = the original render; otherwise which regenerate flow produced it.
+    regenType: {
+      type: String,
+      enum: ["voice", "translate", "rewrite", null],
+      default: null,
+    },
+    // The voice this version was rendered with ("modified input", per version).
+    voiceProvider: { type: String, default: null },
+    voiceId: { type: String, default: null },
+    voiceName: { type: String, default: null },
+    // This version's language (Python owns the actual value).
+    language: { type: String, default: null },
+    // Structured per-version script, mirroring scenes[].script.
+    scenes: [resultSceneSchema],
+  },
+  { _id: false }
+);
+
 const resultSchema = new mongoose.Schema(
   {
      model: {
@@ -22,26 +79,15 @@ const resultSchema = new mongoose.Schema(
       type: Number,
       enum: [200, 400, 429, 500, 529],
     },
+
+    // ── AI Ads per-version state (voice regenerate; null for other types) ──────
+    aiAds: { type: aiAdsResultSchema, default: null },
   },
   { _id: false }
 );
 
 // ─── Sub-schemas used by AI Ads ───────────────────────────────────────────────
-const scriptLineSchema = new mongoose.Schema(
-  {
-    id: Number,
-    start: String,
-    end: String,
-    text: String,
-    voice: String,
-    wordCount: Number,
-    charCount: Number,
-    maxWords: Number,
-    minWords: Number,
-  },
-  { _id: false }
-);
-
+// (scriptLineSchema is defined above — shared with per-version result scripts.)
 const sceneSchema = new mongoose.Schema(
   {
     segmentNumber: { type: Number, required: true },
@@ -163,6 +209,25 @@ const videoSchema = new mongoose.Schema(
     videoPrompt: { type: String, default: null },
     watermark: Boolean,
     results: [resultSchema],
+
+    // ── AI Ads version pointer (voice regenerate) ─────────────────────────────
+    // Index into results[] that My Space displays. Defaults to 0 (the original
+    // render). Only moved by an explicit "Keep this one"/revert (select-version);
+    // regenerated results are appended but do NOT auto-move this pointer.
+    version: { type: Number, default: 0 },
+    // Guards concurrent voice regens. Main `status` stays "completed" during a
+    // regen so the existing video keeps showing with a progress overlay.
+    regenState: {
+      type: String,
+      enum: ["idle", "processing", "failed"],
+      default: "idle",
+    },
+    // In-flight voice-regen stash. Node captures the voice delta (+ the base
+    // script as a fallback) here when firing Python, so the finished-callback
+    // can stamp the new version even before Python echoes the metadata back.
+    // Forward-compatible: the callback prefers Python's body fields over this
+    // stash when present. Cleared (null) on completion/failure.
+    pendingRegen: { type: aiAdsResultSchema, default: null },
 
     // ── AI Ads outputs ────────────────────────────────────────────────────────
     // Scenes delivered by Python /callback/scene-result

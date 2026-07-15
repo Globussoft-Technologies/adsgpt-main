@@ -7,6 +7,8 @@ const {
   regenerateSceneSchema,
   aiAdsBrandSchema,
   aiAdsProductSchema,
+  regenerateVoiceSchema,
+  selectVersionSchema,
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
@@ -618,16 +620,29 @@ exports.getAllVideos = async (req, res) => {
     const videos = await query.exec();
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
 
+    // Watermark helper: plan "8" (free) sees the watermarked URL when present.
+    const applyWm = plan === "8";
+    const pickUrl = (r) => (applyWm ? r?.waterMarkUrl || r?.url : r?.url);
+
     const formattedVideos = videos.map((v) => {
+      // AI Ads supports multiple switchable "versions" (voice regenerate).
+      // Return the FULL results[] array + the version pointer so the frontend
+      // can render results[version] as active and offer the rest in the
+      // version switcher. All other types keep the legacy results[0] collapse.
+      if (v?.inputs?.type === "ai_ads") {
+        return {
+          ...v,
+          version: typeof v.version === "number" ? v.version : 0,
+          results: (v.results || []).map((r) => ({ ...r, url: pickUrl(r) })),
+        };
+      }
+
       return {
         ...v,
         results: [
           {
             ...v.results[0],
-            url:
-              plan === "8"
-                ? v?.results?.[0]?.waterMarkUrl || v?.results?.[0]?.url
-                : v?.results?.[0]?.url,
+            url: pickUrl(v?.results?.[0]),
           },
         ],
       };
@@ -2189,6 +2204,17 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       error,              // error message (empty string on success)
       watermark,          // boolean — whether watermark was applied
       watermarkUrl,       // watermarked video URL (empty string if no watermark)
+
+      // ── Voice-regenerate fields (present only when isVoiceRegenerate) ───────
+      // The finished voice re-render lands on THIS same callback, distinguished
+      // by isVoiceRegenerate. These populate the new per-version results[].aiAds.
+      isVoiceRegenerate,  // true = voice re-render callback, not first-time video
+      regenType,          // "voice" | "translate" | "rewrite"
+      voiceProvider,      // voice used for this version
+      voiceId,
+      voiceName,
+      language,           // this version's language (Python owns the value)
+      scenes,             // structured per-version script (mirrors scenes[].script)
     } = req.body;
 
     logger.info(
@@ -2208,6 +2234,108 @@ exports.updateAiAdsVideoResult = async (req, res) => {
         `[credits] updateAiAdsVideoResult 404 session=${sessionId} — no AI Ads record`,
       );
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    }
+
+    // ── Voice-regenerate branch ────────────────────────────────────────────
+    // Handled BEFORE the status-based duplicate guard below: doc.status stays
+    // "completed" throughout a voice regen, so that guard would otherwise
+    // swallow this callback. Dedupe instead on regenState — a stray/duplicate
+    // callback finds regenState !== "processing". version is NOT moved here;
+    // the user commits it via /ai-ads/select-version ("Keep this one").
+    if (isVoiceRegenerate) {
+      if (record.regenState !== "processing") {
+        console.warn(
+          `[AI Ads] voice callback ignored session=${sessionId} regenState=${record.regenState}`,
+        );
+        return res.json({ success: true, duplicate: true });
+      }
+
+      const vModel = pythonModel || record.inputs?.model;
+      const vDuration = Number(duration) || 0;
+
+      if (videoStatus === 200) {
+        // Build the new version's state. Prefer Python's callback body when
+        // present; otherwise fall back to the stash Node captured at request
+        // time (pendingRegen). scenes: prefer Python's re-rendered script, else
+        // the stashed base script.
+        const pending = record.pendingRegen
+          ? (record.pendingRegen.toObject
+              ? record.pendingRegen.toObject()
+              : record.pendingRegen)
+          : {};
+        const aiAds = {
+          regenType: regenType || pending.regenType || null,
+          voiceProvider: voiceProvider ?? pending.voiceProvider ?? null,
+          voiceId: voiceId ?? pending.voiceId ?? null,
+          voiceName: voiceName ?? pending.voiceName ?? null,
+          language: language ?? pending.language ?? null,
+          scenes:
+            Array.isArray(scenes) && scenes.length ? scenes : pending.scenes || [],
+        };
+
+        // Built once — reused for the $push and the socket payload so the
+        // frontend can append the new version without a refetch.
+        const newResult = {
+          url: url || null,
+          waterMarkUrl: watermarkUrl || null,
+          model: vModel || null,
+          duration: String(vDuration || ""),
+          videoStatus: 200,
+          error: null,
+          aiAds,
+        };
+
+        const updated = await VideoGeneration.findByIdAndUpdate(
+          sessionId,
+          {
+            // status + version intentionally untouched — clear guard + stash.
+            $set: { regenState: "idle", pendingRegen: null },
+            $push: { results: newResult },
+          },
+          { new: true },
+        );
+
+        // Index of the entry we just appended. The frontend previews this one;
+        // the version pointer only moves on an explicit select-version.
+        const newIndex = (updated?.results?.length || 1) - 1;
+
+        // NOTE: voice regen is FREE today — no freeze/settle. When billing is
+        // switched on, deduct here keyed on regenType (voice < translate/rewrite)
+        // and record generated-media history, mirroring the initial-video path.
+
+        if (global.io) {
+          global.io.to(record.userId).emit("aiAdsVoiceReady", {
+            sessionId,
+            index: newIndex,
+            regenType: regenType || null,
+            totalDuration: vDuration,
+            // Carry the new version so the client appends without a refetch.
+            // waterMarkUrl included raw — the client applies plan-based watermark.
+            result: newResult,
+          });
+        }
+        return res.json({
+          success: true,
+          message: "AI Ads voice result processed",
+          index: newIndex,
+        });
+      }
+
+      // Failure — nothing was frozen (free), so no credit release. Reset the
+      // guard + clear the stash so the user can retry, and surface to the UI.
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        regenState: "failed",
+        pendingRegen: null,
+      });
+      if (global.io) {
+        global.io.to(record.userId).emit("aiAdsVoiceFailed", {
+          sessionId,
+          event: "voiceRegenFailed",
+          videoStatus: videoStatus || 500,
+          error: error || "Voice regeneration failed",
+        });
+      }
+      return res.json({ success: true, message: "AI Ads voice failure processed" });
     }
 
     // Duplicate-callback guard. If the record is already in a terminal state,
@@ -2239,6 +2367,8 @@ exports.updateAiAdsVideoResult = async (req, res) => {
           $set: {
             status: "completed",
             totalDuration: durationInSeconds || record.totalDuration,
+            // First render is version 0 and the default the pointer shows.
+            version: 0,
           },
           // Push into results[] — same field frontend reads for ugc/broll/avatar/clone
           $push: {
@@ -2249,6 +2379,20 @@ exports.updateAiAdsVideoResult = async (req, res) => {
               duration: String(durationInSeconds || ""),
               videoStatus: 200,
               error: null,
+              // Mirror the original voice + structured script so version 0 is a
+              // proper, labeled entry in the switcher (regenType=null = original).
+              aiAds: {
+                regenType: null,
+                voiceProvider: record.inputs?.voiceProvider ?? null,
+                voiceId: record.inputs?.voiceId ?? null,
+                voiceName: record.inputs?.voiceName ?? null,
+                language: record.inputs?.voiceFilters?.language ?? null,
+                scenes: (record.scenes || []).map((s) => ({
+                  segmentNumber: s.segmentNumber,
+                  durationSeconds: s.durationSeconds,
+                  script: s.script,
+                })),
+              },
             },
           },
         },
@@ -2562,6 +2706,241 @@ exports.copyAiAdsVideo = async (req, res) => {
   } catch (err) {
     console.error("Error in copyAiAdsVideo:", err);
     logger.error(`[AI Ads] copyAiAdsVideo error: ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- 3c. regenerateAiAdsVoice (voice-only re-render, no Veo) ------------------
+// Redoes the voice-over on an already-generated ad. Operates RELATIVE to the
+// currently selected version (results[doc.version]): that version's script is
+// the base Python re-voices, so chained flows work (translate → then re-voice
+// the translated script). `inputs` stays frozen as the original first-gen state.
+// Voice regen is FREE today (no credit freeze); a hook is marked for future
+// billing keyed on regenType.
+//
+// Unlike the other generate endpoints this AWAITS Python's accept/reject (it is
+// NOT pure fire-and-forget) so the 400 already_in_language guard is forwarded to
+// the client VERBATIM instead of surfacing as a generic 500. On accept (2xx),
+// completion arrives async on the shared video-result callback (isVoiceRegenerate).
+exports.regenerateAiAdsVoice = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Regenerate voice on an existing AI Ads video (voice-only, no Veo)'
+       #swagger.description = 'Redoes the voice-over on a completed AI Ads ad. regenType selects the flow: voice (same script, new voice), translate (new language), rewrite (new script, same language). Appends a new results[] version; the pointer is only moved by /ai-ads/select-version. Forwards Python 400 already_in_language verbatim.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['sessionId'] = { in: 'path', required: true, schema: { type: 'string' } }
+    */
+    const { sessionId } = req.params;
+
+    const { error, value } = regenerateVoiceSchema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+    });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join(", "),
+      });
+    }
+
+    const userId = req.user.user_id;
+
+    const record = await VideoGeneration.findOne({
+      _id: sessionId,
+      userId,
+      "inputs.type": "ai_ads",
+    });
+    if (!record) {
+      return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    }
+
+    // Only a finished video can have its voice regenerated.
+    if (record.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        error: "Voice can only be regenerated on a completed video.",
+      });
+    }
+
+    // Concurrency guard — one voice regen at a time per session.
+    if (record.regenState === "processing") {
+      return res.status(409).json({
+        success: false,
+        error: "regen_in_progress",
+        message: "A voice regeneration is already in progress for this ad.",
+      });
+    }
+
+    if (!process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API) {
+      return res.status(500).json({
+        success: false,
+        error: "AI Ads regenerate-voice Python API not configured",
+      });
+    }
+
+    // Base = the currently selected version. Its script is what Python re-voices.
+    // Fall back to the doc's original scenes if the selected entry has no aiAds.
+    const versionIdx =
+      typeof record.version === "number" && record.results?.[record.version]
+        ? record.version
+        : 0;
+    const baseVersion = record.results?.[versionIdx];
+    // Plain-object copy — stashing live subdocs into pendingRegen can trip
+    // Mongoose's "already has a parent" guard, so detach them first.
+    const toPlainScenes = (arr) =>
+      (arr || []).map((s) =>
+        s && typeof s.toObject === "function"
+          ? s.toObject()
+          : {
+              segmentNumber: s?.segmentNumber,
+              durationSeconds: s?.durationSeconds,
+              script: s?.script,
+            },
+      );
+    const baseScenes = baseVersion?.aiAds?.scenes?.length
+      ? toPlainScenes(baseVersion.aiAds.scenes)
+      : toPlainScenes(record.scenes);
+
+    const voiceDelta = value.inputs; // { voiceProvider, voiceId, voiceName, regenType, translateLang }
+
+    // Build Python inputs: frozen original inputs (brand/images/frames/model) +
+    // the selected version's script as the base + the new voice delta on top.
+    const { brandName, productName, productDescription, scenes: _dropScenes, ...restInputs } =
+      record.inputs.toObject ? record.inputs.toObject() : record.inputs;
+    const inputsForPython = {
+      ...restInputs,
+      ...(brandName || productName ? { name: brandName || productName } : {}),
+      ...(productDescription ? { description: productDescription } : {}),
+      // voice delta overrides the frozen original voice
+      voiceProvider: voiceDelta.voiceProvider,
+      voiceId: voiceDelta.voiceId ?? "",
+      voiceName: voiceDelta.voiceName ?? "",
+      regenType: voiceDelta.regenType,
+      translateLang: voiceDelta.translateLang ?? "",
+      scenes: baseScenes,
+    };
+
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+    const applyWatermark = plan === "8" ? true : (record.watermark ?? false);
+
+    // Mark processing up front so a concurrent request 409s. Reset on reject.
+    // Stash the voice delta + base script so the finished-callback can stamp the
+    // new version now (before Python echoes metadata back). scenes here is the
+    // BASE script — correct for "voice"; a stopgap for translate/rewrite until
+    // Python returns the re-rendered script (callback prefers Python's scenes).
+    record.regenState = "processing";
+    record.pendingRegen = {
+      regenType: voiceDelta.regenType,
+      voiceProvider: voiceDelta.voiceProvider ?? null,
+      voiceId: voiceDelta.voiceId ?? null,
+      voiceName: voiceDelta.voiceName ?? null,
+      language:
+        voiceDelta.regenType === "translate"
+          ? voiceDelta.translateLang || null
+          : baseVersion?.aiAds?.language ?? null,
+      scenes: baseScenes,
+    };
+    await record.save();
+
+    try {
+      await axios.post(process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API, {
+        sessionId,
+        userId,
+        watermark: applyWatermark,
+        subscription:
+          value.subscription || req.body.subscription || { plan: "pro", credits: "100" },
+        inputs: inputsForPython,
+      });
+
+      // Python accepted → completion arrives on the video-result callback.
+      return res.status(202).json({
+        status: "processing",
+        sessionId,
+        message: "Voice regeneration started. Listen on socket 'aiAdsVoiceReady'.",
+        regenType: voiceDelta.regenType,
+      });
+    } catch (pyErr) {
+      // Nothing is running — roll back the guard + clear the stash.
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        regenState: "idle",
+        pendingRegen: null,
+      }).catch(() => {});
+
+      const status = pyErr.response?.status;
+      const body = pyErr.response?.data;
+
+      // Forward the already_in_language guard VERBATIM (do NOT convert to 500).
+      if (status === 400) {
+        return res.status(400).json(
+          body || {
+            error: "already_in_language",
+            message: "This ad is already in the requested language.",
+          },
+        );
+      }
+
+      console.error("[AI Ads] regenerate-voice python call failed:", pyErr.message);
+      logger.error(`[AI Ads] regenerate-voice python call failed: ${pyErr.message}`);
+      return res.status(502).json({
+        success: false,
+        error: "Voice regeneration service failed. Please try again.",
+      });
+    }
+  } catch (err) {
+    console.error("Error in regenerateAiAdsVoice:", err);
+    logger.error(`[AI Ads] regenerateAiAdsVoice error: ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- 3d. selectAiAdsVersion ("Keep this one" / revert) -----------------------
+// Moves the version pointer to a previously generated results[] entry. This is
+// the ONLY action that changes what My Space shows; regenerated entries are
+// appended but never auto-selected.
+exports.selectAiAdsVersion = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Select which AI Ads version My Space shows (Keep this one / revert)'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['sessionId'] = { in: 'path', required: true, schema: { type: 'string' } }
+    */
+    const { sessionId } = req.params;
+
+    const { error, value } = selectVersionSchema.validate(req.body, {
+      abortEarly: false,
+    });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join(", "),
+      });
+    }
+
+    const userId = req.user.user_id;
+    const record = await VideoGeneration.findOne({
+      _id: sessionId,
+      userId,
+      "inputs.type": "ai_ads",
+    });
+    if (!record) {
+      return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    }
+
+    const count = record.results?.length || 0;
+    if (value.version < 0 || value.version >= count) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid version. Must be 0 <= version < ${count}.`,
+      });
+    }
+
+    record.version = value.version;
+    await record.save();
+
+    return res.status(200).json({ success: true, version: record.version });
+  } catch (err) {
+    console.error("Error in selectAiAdsVersion:", err);
+    logger.error(`[AI Ads] selectAiAdsVersion error: ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

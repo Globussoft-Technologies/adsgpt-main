@@ -185,6 +185,53 @@ const regenerateSceneSchema = Joi.object({
 });
 
 
+// ─── AI Ads voice regenerate (voice-only re-render, no Veo) ──────────────────
+
+// POST /video/ai-ads/regenerate-voice/:sessionId  (sessionId is a URL param).
+// Client sends only the delta; Node merges it onto the stored doc.inputs before
+// firing Python. Provider split: ElevenLabs uses voiceId (voiceName is a label),
+// Sarvam uses voiceName (voiceId stays ""). translateLang is required only for
+// regenType "translate". Language equality ("already_in_language") is enforced
+// by Python and forwarded verbatim — not validated here.
+const regenerateVoiceSchema = Joi.object({
+  userId: Joi.string().optional(),
+  watermark: Joi.boolean().optional(),
+  // forward-compat: voice regen is free today, but a subscription may be
+  // supplied so billing can be switched on later without a contract change.
+  subscription: Joi.object().optional(),
+  inputs: Joi.object({
+    voiceProvider: Joi.string().valid("elevenlabs", "sarvam").required(),
+    voiceId: Joi.when("voiceProvider", {
+      is: "elevenlabs",
+      then: Joi.string().required(),
+      otherwise: Joi.string().allow("", null),
+    }),
+    voiceName: Joi.when("voiceProvider", {
+      is: "sarvam",
+      then: Joi.string().required(),
+      otherwise: Joi.string().allow("", null),
+    }),
+    regenType: Joi.string().valid("voice", "translate", "rewrite").required(),
+    translateLang: Joi.when("regenType", {
+      is: "translate",
+      then: Joi.string().required(),
+      otherwise: Joi.string().allow("", null).optional(),
+    }),
+  }).required(),
+});
+
+// NOTE: the finished voice re-render arrives on the EXISTING AI-ads video
+// callback (updateAiAdsVideoResult), branched on isVoiceRegenerate. Like the
+// other AI-ads callbacks it is schemaless (reads req.body directly, secret-key
+// protected), so there is intentionally no Joi schema for it here.
+
+// PATCH /video/ai-ads/select-version/:sessionId  (JWT) — the "Keep this one" /
+// revert action. Range (0 <= version < results.length) is checked in the
+// controller against the actual doc; here we only enforce a non-negative int.
+const selectVersionSchema = Joi.object({
+  version: Joi.number().integer().min(0).required(),
+});
+
 
 // brand / product intelligence — only script or name required
 const aiAdsBrandSchema = Joi.object({
@@ -216,4 +263,6 @@ module.exports = {
   aiAdsProductSchema,
   generateSceneSchema,
   regenerateSceneSchema,
+  regenerateVoiceSchema,
+  selectVersionSchema,
 };

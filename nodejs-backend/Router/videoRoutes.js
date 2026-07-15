@@ -118,6 +118,21 @@ router.post(
   videoController.copyAiAdsVideo
 );
 
+// Voice-only re-render on a completed ad (no Veo). Appends a new results[]
+// version; forwards Python's 400 already_in_language verbatim.
+router.post(
+  "/ai-ads/regenerate-voice/:sessionId",
+  authenticateJWT,
+  videoController.regenerateAiAdsVoice
+);
+
+// "Keep this one" / revert — move the version pointer to a results[] entry.
+router.patch(
+  "/ai-ads/select-version/:sessionId",
+  authenticateJWT,
+  videoController.selectAiAdsVersion
+);
+
 // Python callbacks (secret-key protected, NOT JWT)
 router.patch(
   "/ai-ads/callback/scene-result/:sessionId",
