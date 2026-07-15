@@ -34,6 +34,7 @@ import {
   Pencil,
   X,
   AlertTriangle,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { FaTiktok } from 'react-icons/fa6';
 import CreateCampaignWizard from './CreateCampaignWizard';
@@ -366,6 +367,9 @@ const TikTokAdsDashboard = () => {
   const [connectionChecked, setConnectionChecked] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  // Ad whose creative is open in the preview modal (parity with the
+  // Meta/Google ad tables, where the thumbnail opens the creative).
+  const [previewAd, setPreviewAd] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [campaignCount, setCampaignCount] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
@@ -1007,6 +1011,7 @@ const TikTokAdsDashboard = () => {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500 dark:bg-white/[0.03] dark:text-white/50">
                     <tr>
+                      {view === 'ads' && <th className="w-20 px-4 py-2.5 font-semibold">Preview</th>}
                       <th className="px-4 py-2.5 font-semibold">{view === 'campaigns' ? 'Campaign' : view === 'adgroups' ? 'Ad Group' : 'Ad'}</th>
                       <th className="px-4 py-2.5 font-semibold">Status</th>
                       {view === 'campaigns' && <th className="px-4 py-2.5 font-semibold">Objective</th>}
@@ -1027,6 +1032,40 @@ const TikTokAdsDashboard = () => {
                         onClick={() => onRowClick(row)}
                         className={`${view !== 'ads' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.03]' : ''}`}
                       >
+                        {view === 'ads' && (
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              title="Preview ad"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewAd(row);
+                              }}
+                              className="relative block h-11 w-16 cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:ring-2 hover:ring-gray-300 dark:border-white/10 dark:bg-[#1e1e1e] dark:hover:ring-white/30"
+                            >
+                              {row.thumbnailUrl ? (
+                                <img
+                                  src={row.thumbnailUrl}
+                                  alt={row.name}
+                                  loading="lazy"
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
+                                </div>
+                              )}
+                              {row.mediaType === 'video' && (
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
+                                  <Play className="h-3 w-3 fill-white text-white" />
+                                </div>
+                              )}
+                            </button>
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="min-w-0">
                             <p className="truncate font-medium">{row.name}</p>
@@ -1171,6 +1210,82 @@ const TikTokAdsDashboard = () => {
                   Disconnect
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── ad creative preview modal (parity with Meta/Google ad previews) ── */}
+      <AnimatePresence>
+        {previewAd && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={() => setPreviewAd(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/8">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{previewAd.name}</p>
+                  <p className="truncate text-[11px] text-gray-400">ID: {previewAd.id}</p>
+                </div>
+                <button
+                  onClick={() => setPreviewAd(null)}
+                  className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="relative flex h-[55vh] w-full items-center justify-center bg-black">
+                {previewAd.previewVideoUrl ? (
+                  <video
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    src={previewAd.previewVideoUrl}
+                    poster={previewAd.thumbnailUrl || undefined}
+                    className="h-full w-full object-contain"
+                  />
+                ) : previewAd.thumbnailUrl ? (
+                  <img
+                    src={previewAd.thumbnailUrl}
+                    alt={previewAd.name}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-white/40">
+                    <ImageIcon className="h-6 w-6" />
+                    <span className="text-xs">No preview available</span>
+                  </div>
+                )}
+                {previewAd.mediaType === 'video' && !previewAd.previewVideoUrl && previewAd.thumbnailUrl && (
+                  <p className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-2 text-center text-[11px] text-white/80">
+                    Cover preview — TikTok didn't return a playable URL for this video
+                  </p>
+                )}
+              </div>
+              {(previewAd.raw?.ad_text || previewAd.raw?.call_to_action) && (
+                <div className="px-4 py-3">
+                  {previewAd.raw?.ad_text && (
+                    <p className="text-xs leading-relaxed text-gray-600 dark:text-[#BEBEBE]">{previewAd.raw.ad_text}</p>
+                  )}
+                  {previewAd.raw?.call_to_action && (
+                    <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-white/40">
+                      CTA: {String(previewAd.raw.call_to_action).replace(/_/g, ' ')}
+                    </p>
+                  )}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

@@ -516,11 +516,35 @@ const AD_GROUP_MIN_BUDGET_BY_CURRENCY = {
   PKR: 2000, PYG: 200000, PHP: 1000, UAH: 200, UYU: 200, VEF: 2000000,
   VND: 200000, HUF: 20,
 };
-const adGroupMinBudget = (currency) => AD_GROUP_MIN_BUDGET_BY_CURRENCY[currency] || 20;
-// Campaign-level minimum is base 50 (vs. the ad group's base 20) × the same
-// per-currency ratio — i.e. exactly 2.5x the ad group minimum for every
-// currency, per TikTok's daily budget value range tables.
-const campaignMinBudget = (currency) => adGroupMinBudget(currency) * 2.5;
+// Awareness/upper-funnel objectives (Reach, Video Views, Community Interaction)
+// enforce a higher minimum — 50 in base currency vs 20 for the others
+// (confirmed in-product: Reach shows "At least 50" at both campaign and
+// ad-group level; Traffic/Lead Gen/App Promotion/Sales show 20). 50 = 2.5× the
+// 20 floor, and the per-currency verification ratio is the same across tiers,
+// so the higher tier = base table × 2.5 for every currency.
+const HIGHER_MIN_OBJECTIVES = ['REACH', 'VIDEO_VIEWS', 'ENGAGEMENT'];
+const objectiveMinMultiplier = (objectiveKey) =>
+  HIGHER_MIN_OBJECTIVES.includes(objectiveKey) ? 2.5 : 1;
+
+// Minimum budget for a given objective + currency. The same value applies at
+// both campaign and ad-group level (confirmed in-product), and our wizard
+// creates a single ad group so the campaign floor equals the ad-group floor.
+const minBudgetFor = (objectiveKey, currency) =>
+  (AD_GROUP_MIN_BUDGET_BY_CURRENCY[currency] || 20) * objectiveMinMultiplier(objectiveKey);
+
+// Objective-aware minimums for both levels (same value).
+const adGroupMinBudget = (currency, objectiveKey) => minBudgetFor(objectiveKey, currency);
+const campaignMinBudget = (currency, objectiveKey) => minBudgetFor(objectiveKey, currency);
+
+// When the user targets "all locations" (selects none), we must NOT send every
+// region ID — /tool/region/ returns countries AND their sub-regions/cities
+// mixed, and TikTok rejects a location_ids list where a child (city) overlaps
+// its parent (country). Send only COUNTRY-level regions, which can't overlap.
+// Fall back to all IDs only if no country-level entries exist (shouldn't happen).
+const defaultLocationIds = (regions) => {
+  const countries = regions.filter((r) => r.level === 'COUNTRY').map((r) => r.id);
+  return countries.length ? countries : regions.map((r) => r.id);
+};
 
 // Whole days between two datetime-local strings (min 1). Used for lifetime
 // budget minimums, which TikTok computes as dailyMin × scheduled days.
@@ -559,6 +583,48 @@ const objectiveNeedsLandingUrl = (objectiveKey) => objectiveKey === 'TRAFFIC';
 //                  (page_id, same field Lead Gen's Instant Form uses)
 const isEngagementPageVisit = (objectiveKey, optimizationGoal) =>
   objectiveKey === 'ENGAGEMENT' && optimizationGoal === 'PAGE_VISIT';
+
+// TikTok requires `call_to_action` and a destination to exist TOGETHER: a CTA
+// may only be sent when the ad actually has a destination (landing URL or a
+// TikTok page_id). Sending a CTA alone — e.g. on Reach / Video Views / App
+// promotion, which have no ad-level destination — fails /ad/create/ with
+// "External_URL and Call_to_action must exist together" (40002). This mirrors
+// exactly the conditions under which the creative emits a URL/page below, so
+// the CTA is gated on the same truth. (source: TikTok CTA help + SDK — the
+// creative field is `landing_page_url`; "External_URL" is TikTok's internal
+// display name for it, not a real request field.)
+const adHasDestination = (form) => {
+  if (isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)) {
+    return (
+      (form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && !!form.landingPageUrl) ||
+      (form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && !!form.pageId)
+    );
+  }
+  if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType)) {
+    return !!form.pageId;
+  }
+  if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType)) {
+    return !!form.pageId;
+  }
+  if (objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType)) {
+    return !!form.landingPageUrl;
+  }
+  return false;
+};
+
+// Objective-level: could this objective EVER carry an ad destination? Drives
+// whether the CTA field is even shown. (adHasDestination is the value-level
+// check used when actually building the payload — here the destination fields
+// may still be empty, so we key on the objective/goal, not the values.)
+const objectiveCanHaveDestination = (form) => {
+  if (form.objectiveKey === 'ENGAGEMENT') {
+    return form.optimizationGoal === 'PAGE_VISIT';
+  }
+  if (isLeadGeneration(form.objectiveKey) || isProductSales(form.objectiveKey)) {
+    return true;
+  }
+  return objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType);
+};
 
 const TIKTOK_PAGE_CATEGORIES = [
   { value: 'PROFILE_PAGE', label: 'Account profile' },
@@ -775,12 +841,14 @@ function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaL
         <p className="mt-0.5 leading-tight text-white/80 drop-shadow line-clamp-2" style={{ fontSize: textFs }}>{adText}</p>
         <p className="mt-1 text-white/50" style={{ fontSize: textFs }}>Sponsored</p>
       </div>
-      {/* CTA button */}
-      <div className="absolute bottom-3 left-2 z-10">
-        <div className="rounded-sm bg-white/20 px-2 py-0.5 backdrop-blur-sm">
-          <span className="font-semibold text-white" style={{ fontSize: textFs }}>{ctaLabel} ›</span>
+      {/* CTA button — only shown when the ad carries a destination */}
+      {ctaLabel && (
+        <div className="absolute bottom-3 left-2 z-10">
+          <div className="rounded-sm bg-white/20 px-2 py-0.5 backdrop-blur-sm">
+            <span className="font-semibold text-white" style={{ fontSize: textFs }}>{ctaLabel} ›</span>
+          </div>
         </div>
-      </div>
+      )}
       {/* bottom nav */}
       <div className={`absolute bottom-0 left-0 right-0 z-10 flex items-center justify-around ${innerRadius.replace('rounded-[', 'rounded-b-[')} bg-black/60 py-1.5 backdrop-blur-sm`}>
         {['Home','Friends','+','Inbox','Me'].map((label) => (
@@ -833,7 +901,11 @@ function TikTokAdPreview({ form, identityName }) {
 
   const displayName = identityName || 'Your identity';
   const adText = form.adText || 'Your text will be shown here';
-  const ctaLabel = (form.cta || 'LEARN_MORE').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  // A real ad only shows a CTA button when it has a destination; mirror that
+  // in the preview so Reach / Video Views etc. don't show a phantom button.
+  const ctaLabel = objectiveCanHaveDestination(form)
+    ? (form.cta || 'LEARN_MORE').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : '';
 
   const mockupProps = {
     mediaSrc,
@@ -937,85 +1009,151 @@ function StepRail({ currentIndex }) {
   );
 }
 
-function getStepIssues(step, form, selectedObjective) {
-  const issues = [];
-  const stepNeedsPixel =
+// Single source of truth for step validation, shared by the sidebar issue
+// list, the Review step's "fix N steps" banner, and the Next/Create Campaign
+// button gates (canNext/canLaunch in the wizard component). Previously the
+// sidebar ran a second, hand-maintained copy of these rules (getStepIssues)
+// that drifted from this one — e.g. it once flagged a landing URL as
+// "recommended" on every objective, including Reach, which has no ad-level
+// destination at all and would show a misleading warning while the button
+// itself (gated on the rules below) was correctly enabled. Reusing this one
+// function for both keeps the displayed reason and the button state in sync.
+// `currency` defaults to 'USD' for callers (e.g. the sidebar) that don't have
+// the wizard's resolved account currency in scope — this only affects the
+// wording of a minimum-budget message, never whether a field is required.
+function getStepErrors(step, form, currentObjective, currency = 'USD') {
+  const errs = {};
+  const needsPixel =
     (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsPixel(form.leadGenSubType)) ||
     (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsPixel(form.productSalesSubType));
-  switch (step) {
-    case 0: // Objective
-      if (!form.objectiveKey) issues.push('Select an objective');
-      if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
-        issues.push('Select a lead generation path (Instant Form or Website)');
-      }
-      if (isProductSales(form.objectiveKey) && !form.productSalesSubType) {
-        issues.push('Select a sales destination (Website or TikTok Instant Page)');
-      }
-      break;
-    case 1: // Campaign
-      if (!form.campaignName.trim()) issues.push('Campaign name is required');
-      if (hasCampaignBudget(form) && (!form.budget || Number(form.budget) <= 0)) {
-        issues.push('Enter a valid campaign budget');
-      }
-      break;
-    case 2: // Ad Group
-      if (!form.adgroupName.trim()) issues.push('Ad group name is required');
-      if (!form.optimizationGoal) issues.push('Select an optimization goal');
-      if (!hasCampaignBudget(form) && (!form.adgroupBudget || Number(form.adgroupBudget) <= 0)) {
-        issues.push('Enter a valid ad group budget');
-      }
-      // locationIds empty = all locations (same as Meta Ads Manager behaviour)
-      if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
-        issues.push('Enter a valid bid price');
-      }
-      if (stepNeedsPixel) {
-        if (!form.pixelId) issues.push('Select a TikTok Pixel');
-        if (!form.optimizationEvent) issues.push('Select a conversion event');
-      }
-      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
-        issues.push('Select or enter a TikTok Instant Form Page ID');
-      }
-      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
-        issues.push('Select or enter a TikTok Instant Page ID');
-      }
-      if (!form.scheduleStartTime) issues.push('Set a start time');
-      if (scheduleNeedsEndDate(form) && !form.scheduleEndTime) {
-        issues.push('Set an end time');
-      }
-      break;
-    case 3: // Ad
-      if (!form.identityId) issues.push('Select a TikTok identity to publish the ad');
-      if (form.mediaType === 'video' && !form.videoUrl && !form.videoFile) {
-        issues.push('Provide a video URL or upload a video file');
-      }
-      if (form.mediaType === 'image' && !form.imageUrl && !form.imageFile) {
-        issues.push('Provide an image URL or upload an image file');
-      }
-      if (form.mediaType === 'carousel' && form.carouselFiles.length < MIN_CAROUSEL_IMAGES) {
-        issues.push(`Upload at least ${MIN_CAROUSEL_IMAGES} images for a carousel ad`);
-      }
-      if (mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && !form.musicId) {
-        issues.push('Select or upload music for this ad');
-      }
-      if (!form.adText.trim()) {
-        issues.push(
-          adTextIsRequired(form.objectiveKey, form.mediaType)
-            ? 'Ad text is required'
-            : 'Ad text is recommended'
-        );
-      }
-      if (!form.landingPageUrl.trim()) issues.push('Landing page URL is recommended');
-      break;
-    case 4: // Review
-      break;
-    default:
-      break;
+  if (step === 0) {
+    if (!form.objectiveKey) errs.objectiveKey = 'Select an objective';
+    if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
+      errs.leadGenSubType = 'Select a lead generation path';
+    }
+    if (isProductSales(form.objectiveKey) && !form.productSalesSubType) {
+      errs.productSalesSubType = 'Select a sales destination';
+    }
   }
-  return issues;
+  if (step === 1) {
+    if (!form.campaignName.trim()) errs.campaignName = 'Campaign name is required';
+    if (hasCampaignBudget(form)) {
+      const min = campaignMinBudget(currency, form.objectiveKey);
+      if (!form.budget || Number(form.budget) <= 0) {
+        errs.budget = 'Enter a valid budget';
+      } else if (Number(form.budget) < min) {
+        errs.budget = `Minimum budget is ${min} ${currency}`;
+      }
+    }
+  }
+  if (step === 2) {
+    if (!form.adgroupName.trim()) errs.adgroupName = 'Ad group name is required';
+    if (!form.optimizationGoal) errs.optimizationGoal = 'Optimization goal is required';
+    if (!form.budgetOptimizeOn) {
+      const min =
+        form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
+          ? lifetimeMinBudget(adGroupMinBudget(currency, form.objectiveKey), form.scheduleStartTime, form.scheduleEndTime)
+          : adGroupMinBudget(currency, form.objectiveKey);
+      const unit = form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'lifetime budget' : 'daily budget';
+      if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
+        errs.adgroupBudget = `A ${unit} is required`;
+      } else if (Number(form.adgroupBudget) < min) {
+        errs.adgroupBudget = `Minimum ${unit} is ${min} ${currency}`;
+      }
+    }
+    if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
+      errs.bidPrice = 'Bid price is required';
+    }
+    if (needsPixel) {
+      if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
+      if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
+    }
+    if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
+      errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
+    }
+    if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
+      errs.pageId = 'Select or enter a TikTok Instant Page ID';
+    }
+    if (!form.scheduleStartTime) {
+      errs.scheduleStartTime = 'A start time is required';
+    }
+    if (scheduleNeedsEndDate(form)) {
+      if (!form.scheduleEndTime) {
+        errs.scheduleEndTime = lifetimeForcesStartEnd(form)
+          ? 'A lifetime budget requires an end date'
+          : 'An end time is required';
+      }
+    }
+    if (form.scheduleStartTime && form.scheduleEndTime) {
+      if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
+        errs.scheduleEndTime = 'End time must be after start time';
+      }
+    }
+  }
+  if (step === 3) {
+    const videoOnly = currentObjective?.videoOnly;
+    const effectiveMediaType = videoOnly ? 'video' : form.mediaType;
+
+    if (!form.identityId) {
+      errs.identityId = 'Select a TikTok identity to publish the ad';
+    }
+    if (!form.adName.trim()) {
+      errs.adName = 'Ad name is required';
+    }
+    if (effectiveMediaType === 'video' && !form.videoUrl && !form.videoFile) {
+      errs.video = 'Upload a video or provide a video URL';
+    }
+    if (effectiveMediaType === 'image' && !form.imageUrl && !form.imageFile) {
+      errs.image = 'Upload an image or provide an image URL';
+    }
+    if (effectiveMediaType === 'carousel' && form.carouselFiles.length < MIN_CAROUSEL_IMAGES) {
+      errs.carousel = `Upload at least ${MIN_CAROUSEL_IMAGES} images (up to ${MAX_CAROUSEL_IMAGES}) for a carousel ad`;
+    }
+    if (mediaTypeNeedsMusic(form.objectiveKey, effectiveMediaType) && !form.musicId) {
+      errs.music = 'Select or upload music for this ad';
+    }
+    {
+      const adText = form.adText.trim();
+      if (!adText) {
+        if (adTextIsRequired(form.objectiveKey, effectiveMediaType)) {
+          errs.adText = 'Ad text is required';
+        }
+      } else if (adText.length > adTextMaxLength(adText)) {
+        errs.adText = AD_TEXT_LENGTH_ERROR;
+      }
+    }
+    if (
+      objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) &&
+      !form.landingPageUrl.trim()
+    ) {
+      errs.landingPageUrl = 'Destination URL is required';
+    }
+    if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
+      errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
+    }
+    if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
+      errs.pageId = 'Select or enter a TikTok Instant Page ID';
+    }
+    if (isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)) {
+      if (form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && !form.landingPageUrl.trim()) {
+        errs.landingPageUrl = 'Enter the TikTok page URL';
+      }
+      if (form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && !form.pageId) {
+        errs.pageId = 'Enter the TikTok Instant Page ID';
+      }
+    }
+  }
+  return errs;
 }
 
-function CampaignSetupSidebar({ currentStep, form, selectedObjective, onStepClick }) {
-  const currentIssues = getStepIssues(currentStep, form, selectedObjective);
+// String-list adapter over getStepErrors, for the sidebar/review UI which
+// displays free-text issues rather than field-keyed errors.
+function getStepIssues(step, form, selectedObjective, currency) {
+  return Object.values(getStepErrors(step, form, selectedObjective, currency));
+}
+
+function CampaignSetupSidebar({ currentStep, form, selectedObjective, onStepClick, currency }) {
+  const currentIssues = getStepIssues(currentStep, form, selectedObjective, currency);
 
   return (
     <div className="hidden lg:flex w-72 shrink-0 flex-col gap-4 border-l border-gray-100 bg-gray-50/50 px-5 py-5 dark:border-white/5 dark:bg-white/[0.02]">
@@ -1026,7 +1164,7 @@ function CampaignSetupSidebar({ currentStep, form, selectedObjective, onStepClic
       <div className="flex flex-col gap-1">
         {STEPS.map((s, i) => {
           const isActive = i === currentStep;
-          const stepIssues = getStepIssues(i, form, selectedObjective);
+          const stepIssues = getStepIssues(i, form, selectedObjective, currency);
           const isDone = i < currentStep && stepIssues.length === 0;
           const hasIssue = stepIssues.length > 0 && !isDone;
           const isInvalidPast = i < currentStep && stepIssues.length > 0;
@@ -1544,8 +1682,14 @@ const CreateCampaignWizard = ({
     update({ videoFile: file });
   };
 
-  // Same idea for images — TikTok rejects images over 2340px (longer side) /
-  // 1242px (shorter side), confirmed via a live upload error.
+  // Same idea for images. Checks both bounds TikTok's asset pipeline enforces:
+  // a MAX (images over 2340px longer / 1242px shorter side, confirmed via a
+  // live upload error) and a MIN — the same orientation-aware floor as video
+  // (960×540 / 540×960 / 640×640, confirmed via TikTok's official in-feed ad
+  // specs). The min check was missing here, so a too-small image (e.g. a
+  // small square logo under 640×640) passed this gate and TikTok's server
+  // rejected it later with "Unsupported image size" — a confusing failure
+  // late in the launch flow instead of an instant, actionable one here.
   const handleImageFileSelect = async (file) => {
     if (!file) {
       update({ imageFile: null });
@@ -1562,6 +1706,21 @@ const CreateCampaignWizard = ({
         }));
         return;
       }
+      if (!meetsMinResolution(dims.width, dims.height)) {
+        setErrors((e) => ({
+          ...e,
+          image:
+            'Cannot be delivered to TikTok: Resolution too low. Minimum is 960×540 (horizontal), 540×960 (vertical), or 640×640 (square).',
+        }));
+        return;
+      }
+      if (!isSupportedAspectRatio(dims.width, dims.height)) {
+        setErrors((e) => ({
+          ...e,
+          image: 'Cannot be delivered to TikTok: Image ratio must be 16:9/1:1/9:16.',
+        }));
+        return;
+      }
     }
     setErrors((e) => ({ ...e, image: undefined }));
     update({ imageFile: file });
@@ -1569,7 +1728,8 @@ const CreateCampaignWizard = ({
 
   // Carousel takes 2-35 images (TikTok's documented range for the standard,
   // non-catalog Carousel format). Each added file gets the same dimension
-  // check as a single image; the count check runs against the combined total.
+  // checks as a single image (max, min, aspect ratio — see
+  // handleImageFileSelect); the count check runs against the combined total.
   const handleCarouselFilesSelect = async (files) => {
     const incoming = Array.from(files || []);
     if (!incoming.length) return;
@@ -1583,6 +1743,21 @@ const CreateCampaignWizard = ({
           setErrors((e) => ({
             ...e,
             carousel: `Not supported by TikTok. The longer side must be ${MAX_IMAGE_LONG_SIDE} or less, and the shorter side must be ${MAX_IMAGE_SHORT_SIDE} or less.`,
+          }));
+          return;
+        }
+        if (!meetsMinResolution(dims.width, dims.height)) {
+          setErrors((e) => ({
+            ...e,
+            carousel:
+              'Cannot be delivered to TikTok: Resolution too low. Minimum is 960×540 (horizontal), 540×960 (vertical), or 640×640 (square).',
+          }));
+          return;
+        }
+        if (!isSupportedAspectRatio(dims.width, dims.height)) {
+          setErrors((e) => ({
+            ...e,
+            carousel: 'Cannot be delivered to TikTok: Image ratio must be 16:9/1:1/9:16.',
           }));
           return;
         }
@@ -1853,145 +2028,11 @@ const CreateCampaignWizard = ({
   };
 
   // ── validation per step ──
-  const validateStep = (targetStep = step) => {
-    const errs = {};
-    if (targetStep === 0) {
-      if (!form.objectiveKey) errs.objectiveKey = 'Select an objective';
-      if (isLeadGeneration(form.objectiveKey) && !form.leadGenSubType) {
-        errs.leadGenSubType = 'Select a lead generation path';
-      }
-      if (isProductSales(form.objectiveKey) && !form.productSalesSubType) {
-        errs.productSalesSubType = 'Select a sales destination';
-      }
-    }
-    if (targetStep === 1) {
-      if (!form.campaignName.trim()) errs.campaignName = 'Campaign name is required';
-      // Only validate a campaign budget when one is actually being set.
-      if (hasCampaignBudget(form)) {
-        const min = campaignMinBudget(currency);
-        if (!form.budget || Number(form.budget) <= 0) {
-          errs.budget = 'Enter a valid budget';
-        } else if (Number(form.budget) < min) {
-          errs.budget = `Minimum budget is ${min} ${currency}`;
-        }
-      }
-    }
-    if (targetStep === 2) {
-      if (!form.adgroupName.trim()) errs.adgroupName = 'Ad group name is required';
-      if (!form.optimizationGoal) errs.optimizationGoal = 'Optimization goal is required';
-      // The ad group sets its own budget only when the campaign has none.
-      if (!hasCampaignBudget(form)) {
-        const min =
-          form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
-            ? lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)
-            : adGroupMinBudget(currency);
-        const unit = form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'lifetime budget' : 'daily budget';
-        if (!form.adgroupBudget || Number(form.adgroupBudget) <= 0) {
-          errs.adgroupBudget = `A ${unit} is required`;
-        } else if (Number(form.adgroupBudget) < min) {
-          errs.adgroupBudget = `Minimum ${unit} is ${min} ${currency}`;
-        }
-      }
-      // locationIds empty = all locations selected — no validation error needed
-      if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
-        errs.bidPrice = 'Bid price is required';
-      }
-      if (needsPixel) {
-        if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
-        if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
-      }
-      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
-        errs.pageId = 'Select or enter a TikTok Instant Page ID';
-      }
-      // TikTok always requires a start time for an ad group (both schedule types).
-      if (!form.scheduleStartTime) {
-        errs.scheduleStartTime = 'A start time is required';
-      }
-      // An end time is required in the fixed start-end mode (which a lifetime
-      // budget forces), and must be after the start time.
-      if (scheduleNeedsEndDate(form)) {
-        if (!form.scheduleEndTime) {
-          errs.scheduleEndTime = lifetimeForcesStartEnd(form)
-            ? 'A lifetime budget requires an end date'
-            : 'An end time is required';
-        }
-      }
-      if (form.scheduleStartTime && form.scheduleEndTime) {
-        if (new Date(form.scheduleEndTime) <= new Date(form.scheduleStartTime)) {
-          errs.scheduleEndTime = 'End time must be after start time';
-        }
-      }
-    }
-    if (targetStep === 3) {
-      // TikTok requires a complete ad to publish a campaign — identity,
-      // creative, ad text, and (for destination objectives) a landing page.
-      // This mirrors TikTok Ads Manager, which blocks publish otherwise, and
-      // prevents a prod /ad/create/ API failure that would leave a campaign +
-      // ad group with no ad.
-      const videoOnly = currentObjective?.videoOnly;
-      const effectiveMediaType = videoOnly ? 'video' : form.mediaType;
-
-      if (!form.identityId) {
-        errs.identityId = 'Select a TikTok identity to publish the ad';
-      }
-      if (!form.adName.trim()) {
-        errs.adName = 'Ad name is required';
-      }
-      if (effectiveMediaType === 'video' && !form.videoUrl && !form.videoFile) {
-        errs.video = 'Upload a video or provide a video URL';
-      }
-      if (effectiveMediaType === 'image' && !form.imageUrl && !form.imageFile) {
-        errs.image = 'Upload an image or provide an image URL';
-      }
-      if (effectiveMediaType === 'carousel' && form.carouselFiles.length < MIN_CAROUSEL_IMAGES) {
-        errs.carousel = `Upload at least ${MIN_CAROUSEL_IMAGES} images (up to ${MAX_CAROUSEL_IMAGES}) for a carousel ad`;
-      }
-      if (mediaTypeNeedsMusic(form.objectiveKey, effectiveMediaType) && !form.musicId) {
-        errs.music = 'Select or upload music for this ad';
-      }
-      // Ad text: required per adTextIsRequired() (Video Views always; image /
-      // carousel on every objective except Community Interaction). The length
-      // rule (1-100 chars, or 1-50 for CJK fullwidth text) applies whenever
-      // text is present, even where the field itself is optional.
-      {
-        const adText = form.adText.trim();
-        if (!adText) {
-          if (adTextIsRequired(form.objectiveKey, effectiveMediaType)) {
-            errs.adText = 'Ad text is required';
-          }
-        } else if (adText.length > adTextMaxLength(adText)) {
-          errs.adText = AD_TEXT_LENGTH_ERROR;
-        }
-      }
-      if (
-        objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) &&
-        !form.landingPageUrl.trim()
-      ) {
-        errs.landingPageUrl = 'Destination URL is required';
-      }
-      // Lead Generation's Instant Form path routes through a TikTok page
-      // instead of a landing URL — that page reference is mandatory too.
-      if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
-        errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
-      }
-      // Sales' Instant Page path is the same idea — a TikTok page reference
-      // instead of a landing URL.
-      if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
-        errs.pageId = 'Select or enter a TikTok Instant Page ID';
-      }
-      // Community Interaction with the "TikTok page visits" goal requires a
-      // destination pick, and (except for Account profile) a value for it.
-      if (isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)) {
-        if (form.tiktokPageCategory === 'OTHER_TIKTOK_PAGE' && !form.landingPageUrl.trim()) {
-          errs.landingPageUrl = 'Enter the TikTok page URL';
-        }
-        if (form.tiktokPageCategory === 'TIKTOK_INSTANT_PAGE' && !form.pageId) {
-          errs.pageId = 'Enter the TikTok Instant Page ID';
-        }
-      }
-    }
-    return errs;
-  };
+  // Delegates to the module-level getStepErrors (shared with the sidebar and
+  // Review banner) so this component's Next/Create Campaign gates and the
+  // displayed issue text can never drift apart again.
+  const validateStep = (targetStep = step) =>
+    getStepErrors(targetStep, form, currentObjective, currency);
 
   const canNext = () => Object.keys(validateStep(step)).length === 0;
 
@@ -2057,7 +2098,7 @@ const CreateCampaignWizard = ({
           adgroup_name: form.adgroupName,
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
           ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
-          location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
+          location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
           age_groups: form.ageGroups,
           gender: form.gender,
           interest_category_ids: form.interestCategoryIds,
@@ -2068,8 +2109,15 @@ const CreateCampaignWizard = ({
           // ...(form.brandSafetyType && form.brandSafetyType !== 'NO_BRAND_SAFETY'
           //   ? { brand_safety_type: form.brandSafetyType }
           //   : {}),
-          budget: Number(form.adgroupBudget),
-          budget_mode: form.adgroupBudgetMode || 'BUDGET_MODE_DAY',
+          // Same rule as create: only true CBO (budget_optimize_on) lets the ad
+          // group defer with BUDGET_MODE_INFINITE; otherwise it carries its own
+          // mode + amount, regardless of any campaign-level budget.
+          ...(form.budgetOptimizeOn
+            ? { budget_mode: 'BUDGET_MODE_INFINITE' }
+            : {
+                budget: Number(form.adgroupBudget),
+                budget_mode: form.adgroupBudgetMode || 'BUDGET_MODE_DAY',
+              }),
           optimization_goal: form.optimizationGoal,
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? { promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType) }
@@ -2106,9 +2154,8 @@ const CreateCampaignWizard = ({
               ad_id: context.id,
               ad_name: form.adName,
               ad_text: form.adText,
-              ...(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS'
-                ? {}
-                : { call_to_action: form.cta }),
+              // CTA only when the ad has a destination (see adHasDestination).
+              ...(adHasDestination(form) ? { call_to_action: form.cta } : {}),
               ...(isEngagementPageVisit(form.objectiveKey, form.optimizationGoal)
                 ? {
                     tiktok_page_category: form.tiktokPageCategory,
@@ -2149,7 +2196,7 @@ const CreateCampaignWizard = ({
     setLaunching(true);
     setError(null);
     try {
-      let { campaignId, adgroupId, videoId, imageId, carouselImageIds, adId } = created;
+      let { campaignId, adgroupId, videoId, videoCoverImageId, imageId, carouselImageIds, adId } = created;
       carouselImageIds = carouselImageIds || [];
 
       // 1. Campaign
@@ -2179,7 +2226,7 @@ const CreateCampaignWizard = ({
           placement_type: 'PLACEMENT_TYPE_NORMAL',
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
           ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
-          location_ids: form.locationIds.length ? form.locationIds : regions.map((r) => r.id),
+          location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
           ...(form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
           ...(form.gender && form.gender !== 'GENDER_UNLIMITED' ? { gender: form.gender } : {}),
           ...(form.interestCategoryIds.length
@@ -2205,10 +2252,14 @@ const CreateCampaignWizard = ({
                 promotion_target_type: promotionTargetTypeForProductSalesSubType(form.productSalesSubType),
               }
             : {}),
-          // Ad group sets its own budget only when the campaign has none;
-          // otherwise it inherits/shares the campaign budget (no ad-group budget).
-          ...(hasCampaignBudget(form)
-            ? {}
+          // budget_mode is ALWAYS required by /adgroup/create/. The valid value
+          // is keyed strictly to CBO (budget_optimize_on), NOT to whether a
+          // campaign-level budget exists: only true CBO makes the ad group
+          // defer with BUDGET_MODE_INFINITE. When CBO is off (even if a
+          // non-optimized campaign budget was set), the ad group MUST carry its
+          // own budget_mode (DAY/TOTAL) + amount.
+          ...(form.budgetOptimizeOn
+            ? { budget_mode: 'BUDGET_MODE_INFINITE' }
             : {
                 budget_mode: form.adgroupBudgetMode,
                 budget: Number(form.adgroupBudget),
@@ -2252,11 +2303,13 @@ const CreateCampaignWizard = ({
           if (form.videoFile) {
             const res = await uploadTiktokVideo({ advertiserId, file: form.videoFile });
             videoId = res.videos?.[0]?.videoId;
+            videoCoverImageId = res.videos?.[0]?.coverImageId || '';
           } else if (form.videoUrl) {
             const res = await uploadTiktokVideo({ advertiserId, videoUrl: form.videoUrl });
             videoId = res.videos?.[0]?.videoId;
+            videoCoverImageId = res.videos?.[0]?.coverImageId || '';
           }
-          if (videoId) setCreated((c) => ({ ...c, videoId }));
+          if (videoId) setCreated((c) => ({ ...c, videoId, videoCoverImageId }));
         }
 
         if (form.mediaType === 'image' && !imageId) {
@@ -2292,12 +2345,19 @@ const CreateCampaignWizard = ({
           ad_name: form.adName || form.campaignName,
           identity_id: form.identityId,
           identity_type: selectedIdentity?.identityType || 'CUSTOMIZED_USER',
+          // A BC-authorized TikTok account (BC_AUTH_TT) must also carry the
+          // Business Center id that authorized it, or TikTok rejects the ad
+          // with "Identity_type and Identity_bc_ID don't match". The backend
+          // surfaces it as authorizedBcId from /identity/get/.
+          ...(selectedIdentity?.identityType === 'BC_AUTH_TT' && selectedIdentity?.authorizedBcId
+            ? { identity_authorized_bc_id: String(selectedIdentity.authorizedBcId) }
+            : {}),
           ad_text: form.adText,
-          // Community Interaction's Follow goal disallows call_to_action
-          // entirely (destination is fixed to the TikTok profile).
-          ...(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS'
-            ? {}
-            : { call_to_action: form.cta }),
+          // A CTA may only be sent alongside a destination (TikTok pairs
+          // External_URL + Call_to_action). Objectives with no ad-level
+          // destination — Reach, Video Views, App promotion, Engagement/Follow
+          // — must omit call_to_action entirely.
+          ...(adHasDestination(form) ? { call_to_action: form.cta } : {}),
           // Community Interaction's "TikTok page visits" goal picks one of 3
           // destinations; Lead-gen instant-form ads route to a TikTok page;
           // objectives that drive to a website send the landing URL;
@@ -2326,6 +2386,10 @@ const CreateCampaignWizard = ({
         if (form.mediaType === 'video' && videoId) {
           creative.ad_format = 'SINGLE_VIDEO';
           creative.video_id = videoId;
+          // A SINGLE_VIDEO ad also needs a cover image, supplied via image_ids
+          // — otherwise TikTok rejects with "You must upload an image." The
+          // cover image id comes from the video upload (suggestcover).
+          if (videoCoverImageId) creative.image_ids = [videoCoverImageId];
         } else if (form.mediaType === 'image' && imageId) {
           creative.ad_format = 'SINGLE_IMAGE';
           creative.image_ids = [imageId];
@@ -2728,18 +2792,18 @@ const CreateCampaignWizard = ({
               onChange={(v) => update({ deviceTypes: v })}
               options={DEVICE_TYPES}
             />
-            {/* When the campaign carries a budget (CBO or a set campaign
-                budget), all ad groups share it — TikTok doesn't let you set a
-                separate ad-group budget. Only when there's no campaign budget
-                does the ad group define its own. */}
-            {hasCampaignBudget(form) ? (
+            {/* Ad groups share the campaign budget ONLY under Campaign Budget
+                Optimization (CBO). When CBO is off, TikTok requires each ad
+                group to set its own budget — even if a non-optimized campaign
+                budget was also set. So the "inherited" display is CBO-only. */}
+            {form.budgetOptimizeOn ? (
               <FieldShell label="Budget">
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
                   From campaign settings:{' '}
                   <span className="font-medium">
                     {form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} · {form.budget} {currency}
-                  </span>
-                  {form.budgetOptimizeOn && ' (shared across ad groups)'}
+                  </span>{' '}
+                  (shared across ad groups)
                 </div>
               </FieldShell>
             ) : (
@@ -2756,19 +2820,19 @@ const CreateCampaignWizard = ({
                   onChange={(v) => update({ adgroupBudget: v })}
                   min={
                     form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
-                      ? lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)
-                      : adGroupMinBudget(currency)
+                      ? lifetimeMinBudget(adGroupMinBudget(currency, form.objectiveKey), form.scheduleStartTime, form.scheduleEndTime)
+                      : adGroupMinBudget(currency, form.objectiveKey)
                   }
                   required
                   error={errors.adgroupBudget}
                   hint={
                     form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
-                      ? `Lifetime minimum = ${adGroupMinBudget(currency)} ${currency} × scheduled days${
+                      ? `Lifetime minimum = ${adGroupMinBudget(currency, form.objectiveKey)} ${currency} × scheduled days${
                           scheduledDays(form.scheduleStartTime, form.scheduleEndTime)
-                            ? ` = ${lifetimeMinBudget(adGroupMinBudget(currency), form.scheduleStartTime, form.scheduleEndTime)} ${currency}`
+                            ? ` = ${lifetimeMinBudget(adGroupMinBudget(currency, form.objectiveKey), form.scheduleStartTime, form.scheduleEndTime)} ${currency}`
                             : ' (set start & end dates below)'
                         }.`
-                      : `TikTok requires at least ${adGroupMinBudget(currency)} ${currency}/day at the ad-group level.`
+                      : `TikTok requires at least ${adGroupMinBudget(currency, form.objectiveKey)} ${currency}/day at the ad-group level.`
                   }
                 />
               </>
@@ -3259,7 +3323,12 @@ const CreateCampaignWizard = ({
               hint={`${form.adText.length}/${adTextMaxLength(form.adText)} characters`}
             />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {!(form.objectiveKey === 'ENGAGEMENT' && form.optimizationGoal === 'FOLLOWERS') && (
+              {/* A CTA can only be sent with a destination, so only show it for
+                  objectives that can carry one. Reach / Video Views / App
+                  promotion / Engagement-Follow have no destination — TikTok
+                  rejects a lone CTA ("External_URL and Call_to_action must
+                  exist together"). */}
+              {objectiveCanHaveDestination(form) && (
                 <SelectField
                   label="Call to action"
                   value={form.cta}
@@ -3437,7 +3506,7 @@ const CreateCampaignWizard = ({
             : 'Not selected';
 
           const issueGroups = STEPS.slice(0, -1)
-            .map((label, i) => ({ label, issues: getStepIssues(i, form, selectedObjective) }))
+            .map((label, i) => ({ label, issues: getStepIssues(i, form, selectedObjective, currency) }))
             .filter((g) => g.issues.length > 0);
 
           return (
@@ -3553,8 +3622,8 @@ const CreateCampaignWizard = ({
                       value={BRAND_SAFETY_TYPES.find((b) => b.value === form.brandSafetyType)?.label || form.brandSafetyType}
                     />
                   )} */}
-                  {hasCampaignBudget(form) ? (
-                    <ReviewField label="Budget" value="Shared from campaign" />
+                  {form.budgetOptimizeOn ? (
+                    <ReviewField label="Budget" value="Shared from campaign (CBO)" />
                   ) : (
                     <>
                       <ReviewField
@@ -3621,7 +3690,9 @@ const CreateCampaignWizard = ({
                         />
                       )}
                       <ReviewField label="Ad text" value={form.adText} />
-                      <ReviewField label="CTA" value={form.cta} />
+                      {objectiveCanHaveDestination(form) && (
+                        <ReviewField label="CTA" value={form.cta} />
+                      )}
                       {form.pageId ? (
                         <ReviewField label="Instant Form Page ID" value={form.pageId} />
                       ) : (
@@ -3727,6 +3798,7 @@ const CreateCampaignWizard = ({
                 form={form}
                 selectedObjective={selectedObjective}
                 onStepClick={setStep}
+                currency={currency}
               />
             ) : null}
           </div>

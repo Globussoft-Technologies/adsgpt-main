@@ -102,6 +102,8 @@ class TiktokAdController {
     this.appealAdGroup = this.appealAdGroup.bind(this);
     this.getMusicList = this.getMusicList.bind(this);
     this.uploadMusic = this.uploadMusic.bind(this);
+    this.deriveVideoCoverImageId = this.deriveVideoCoverImageId.bind(this);
+    this.attachAdThumbnails = this.attachAdThumbnails.bind(this);
   }
 
   /**
@@ -667,7 +669,7 @@ class TiktokAdController {
        #swagger.responses[200] = {
          description: "Ads",
          schema: {
-           ads: [{ id: "1789012345678903", name: "Ad Creative 1", adgroupId: "1789012345678902", adgroupName: "US - 18-34", campaignId: "1789012345678901", campaignName: "Summer Sale", status: "ACTIVE", createTime: "2026-06-01 10:10:00", modifyTime: "2026-06-02 09:00:00" }],
+           ads: [{ id: "1789012345678903", name: "Ad Creative 1", adgroupId: "1789012345678902", adgroupName: "US - 18-34", campaignId: "1789012345678901", campaignName: "Summer Sale", status: "ACTIVE", createTime: "2026-06-01 10:10:00", modifyTime: "2026-06-02 09:00:00", mediaType: "video", thumbnailUrl: "https://p16-ad-sg.tiktokcdn.com/poster.jpeg" }],
            pageInfo: { page: 1, page_size: 100, total_number: 1, total_page: 1 }
          }
        }
@@ -682,7 +684,11 @@ class TiktokAdController {
         return res.status(400).json({ error: "advertiserId is required" });
       }
 
-      const cacheKey = `tiktokAds:${userId}:${advertiserId}:${adgroupId || "all"}`;
+      // v3: rows now carry thumbnailUrl/mediaType/previewVideoUrl — keep
+      // older-shaped cache entries from being served for up to REDIS_TTL
+      // after deploy. The version segment sits AFTER userId so the
+      // invalidation scan (`tiktokAds:${userId}:*`) still matches on writes.
+      const cacheKey = `tiktokAds:${userId}:v3:${advertiserId}:${adgroupId || "all"}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.json(JSON.parse(cached));
 
@@ -717,6 +723,14 @@ class TiktokAdController {
         modifyTime: a.modify_time,
         raw: a,
       }));
+
+      // Resolve creative thumbnails for the dashboard's Preview column.
+      // Nice-to-have — a failure here must never block the ad list itself.
+      try {
+        await this.attachAdThumbnails(advertiserId, ads, accessToken);
+      } catch (thumbErr) {
+        logger.warn(`TikTok getAds: thumbnail enrichment skipped — ${thumbErr.message}`);
+      }
 
       const result = {
         ads,
@@ -766,7 +780,11 @@ class TiktokAdController {
         return res.status(400).json({ error: "advertiserId is required" });
       }
 
-      const cacheKey = `tiktokIdentities:${userId}:${advertiserId}`;
+      // v2 segment busts any stale cache so the authorizedBcId field takes
+      // effect on the next fetch. It sits AFTER userId so the invalidation
+      // scan pattern (`tiktokIdentities:${userId}:*`) still matches — with
+      // the version first, disconnect/OAuth would never bust this key.
+      const cacheKey = `tiktokIdentities:${userId}:v2:${advertiserId}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.json(JSON.parse(cached));
 
@@ -782,6 +800,11 @@ class TiktokAdController {
         identityType: i.identity_type,
         displayName: i.display_name,
         profileImage: i.profile_image_url || i.profile_image || "",
+        // A BC-authorized TikTok account (BC_AUTH_TT) requires its authorizing
+        // Business Center id (identity_authorized_bc_id) in the ad creative,
+        // or /ad/create/ fails with "Identity_type and Identity_bc_ID don't
+        // match". TikTok returns it right here on the identity object.
+        authorizedBcId: i.identity_authorized_bc_id || null,
         raw: i,
       }));
 
@@ -1517,6 +1540,151 @@ class TiktokAdController {
   }
 
   /**
+   * Derive a usable cover IMAGE ID for a just-uploaded video, so a
+   * SINGLE_VIDEO ad can pass it as creative.image_ids (TikTok requires an
+   * image there — a video ad without a cover fails with "You must upload an
+   * image").
+   *
+   * There is no /file/video/suggestcover/ in v1.3. The documented path is:
+   *   1. Obtain the video's auto-generated poster URL (from the upload
+   *      response's video_cover_url, or /file/video/ad/info/ if absent).
+   *   2. Upload that poster URL as an ad image (UPLOAD_BY_URL) — the response
+   *      `data.id` is the image id usable in image_ids.
+   * Using the video's own poster guarantees the cover matches the video's
+   * aspect ratio, avoiding "Unsupported image size".
+   *
+   * @returns {Promise<string>} the cover image id, or "" if none could be derived
+   */
+  async deriveVideoCoverImageId(advertiserId, video, accessToken) {
+    // Prefer the cover URL already returned by the video upload; only call
+    // /file/video/ad/info/ if it wasn't present.
+    let posterUrl = video.coverUrl || "";
+    if (!posterUrl) {
+      const info = await tiktokApiRequest({
+        endpoint: "/file/video/ad/info/",
+        accessToken,
+        params: {
+          advertiser_id: String(advertiserId),
+          video_ids: JSON.stringify([video.videoId]),
+        },
+      });
+      const infoList = info?.data?.list || [];
+      posterUrl = infoList[0]?.poster_url || infoList[0]?.video_cover_url || "";
+    }
+    if (!posterUrl) {
+      logger.warn(
+        `TikTok cover: no poster_url for video ${video.videoId} — cannot derive cover image id`
+      );
+      return "";
+    }
+
+    // Upload the poster URL as an ad image → data.id is the usable image id.
+    const upload = await tiktokApiRequest({
+      method: "POST",
+      endpoint: "/file/image/ad/upload/",
+      accessToken,
+      data: {
+        advertiser_id: String(advertiserId),
+        upload_type: "UPLOAD_BY_URL",
+        image_url: posterUrl,
+      },
+    });
+    return upload?.data?.image_id || upload?.data?.id || "";
+  }
+
+  /**
+   * Attach a creative thumbnail to each ad row for the dashboard's Preview
+   * column (same UX as the Meta/Google ad tables). /ad/get/ returns only
+   * media IDs — the CDN URLs live behind GET /file/video/ad/info/
+   * (poster_url, ≤60 ids/request) and GET /file/image/ad/info/
+   * (image_url, ≤100 ids/request) — so the IDs are batch-resolved here.
+   * Mutates each ad in place: adds `mediaType` ("video"|"image"|"carousel")
+   * and `thumbnailUrl` ("" when no lookup succeeds — the UI then falls back
+   * to a placeholder icon). Never throws for a single failed batch.
+   */
+  async attachAdThumbnails(advertiserId, ads, accessToken) {
+    const chunk = (arr, size) => {
+      const out = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+
+    const videoIds = [...new Set(ads.map((a) => a.raw?.video_id).filter(Boolean))];
+    // First image of image/carousel ads; for video ads image_ids[0] is the
+    // cover image, kept as a fallback when the video lookup yields no poster.
+    const imageIds = [...new Set(ads.map((a) => a.raw?.image_ids?.[0]).filter(Boolean))];
+    if (!videoIds.length && !imageIds.length) return;
+
+    const posterByVideoId = new Map();
+    const playableByVideoId = new Map();
+    const urlByImageId = new Map();
+
+    await Promise.all([
+      ...chunk(videoIds, 60).map((ids) =>
+        tiktokApiRequest({
+          endpoint: "/file/video/ad/info/",
+          accessToken,
+          params: {
+            advertiser_id: String(advertiserId),
+            video_ids: JSON.stringify(ids),
+          },
+        })
+          .then((info) => {
+            for (const v of info?.data?.list || []) {
+              posterByVideoId.set(v.video_id, v.poster_url || v.video_cover_url || "");
+              // Playable source when TikTok returns one (field availability
+              // varies by account/API version) — passed through defensively;
+              // the UI only renders a player when this is non-empty.
+              playableByVideoId.set(v.video_id, v.preview_url || v.url || "");
+            }
+          })
+          .catch((err) =>
+            logger.warn(`TikTok ad-thumbnail video batch failed: ${err.message}`)
+          )
+      ),
+      ...chunk(imageIds, 100).map((ids) =>
+        tiktokApiRequest({
+          endpoint: "/file/image/ad/info/",
+          accessToken,
+          params: {
+            advertiser_id: String(advertiserId),
+            image_ids: JSON.stringify(ids),
+          },
+        })
+          .then((info) => {
+            // Same normalization as uploadImage — image endpoints return both
+            // `data.list` and a bare `data` array/object shapes.
+            const list = info?.data?.list || info?.data || [];
+            for (const i of Array.isArray(list) ? list : [list]) {
+              if (i?.image_id) urlByImageId.set(i.image_id, i.image_url || "");
+            }
+          })
+          .catch((err) =>
+            logger.warn(`TikTok ad-thumbnail image batch failed: ${err.message}`)
+          )
+      ),
+    ]);
+
+    for (const ad of ads) {
+      const raw = ad.raw || {};
+      ad.mediaType =
+        raw.ad_format === "SINGLE_VIDEO" || raw.video_id
+          ? "video"
+          : raw.ad_format === "CAROUSEL_ADS"
+          ? "carousel"
+          : raw.image_ids?.length
+          ? "image"
+          : "";
+      ad.thumbnailUrl =
+        (raw.video_id && posterByVideoId.get(raw.video_id)) ||
+        (raw.image_ids?.[0] && urlByImageId.get(raw.image_ids[0])) ||
+        "";
+      ad.previewVideoUrl =
+        (raw.video_id && playableByVideoId.get(raw.video_id)) || "";
+    }
+  }
+
+  /**
    * Upload a video creative. Supports either a multipart file (field "video")
    * or a remote URL (body.videoUrl). Returns the TikTok video_id used by
    * createAd. Multipart is sent with native FormData/Blob (Node 18+).
@@ -1545,7 +1713,7 @@ class TiktokAdController {
        }
        #swagger.responses[200] = {
          description: "Video uploaded",
-         schema: { success: true, videos: [{ videoId: "v1023abc456def", coverUrl: "https://p16.tiktokcdn.com/cover.jpeg", url: "", width: 1080, height: 1920, duration: 15.2 }] }
+         schema: { success: true, videos: [{ videoId: "v1023abc456def", coverImageId: "img1023abc", coverUrl: "https://p16.tiktokcdn.com/cover.jpeg", url: "", width: 1080, height: 1920, duration: 15.2 }] }
        }
        #swagger.responses[400] = { description: "advertiserId is required, or neither a file nor videoUrl was provided" }
        #swagger.responses[500] = { description: "Failed to upload TikTok video" }
@@ -1617,6 +1785,31 @@ class TiktokAdController {
         duration: v.duration,
         raw: v,
       }));
+
+      // A SINGLE_VIDEO ad requires a cover IMAGE ID in the creative's
+      // image_ids — the upload only returns a cover URL, not a usable id.
+      // There is NO /file/video/suggestcover/ endpoint in v1.3; the documented
+      // flow is: read the video's auto-generated poster_url, then upload THAT
+      // url as an ad image to get a usable image id. Using the video's own
+      // poster guarantees the cover matches the video's aspect ratio (a
+      // mismatched cover triggers "Unsupported image size"). Best-effort: a
+      // failure here shouldn't fail the whole upload — the caller can still
+      // upload a matching image manually.
+      for (const video of videos) {
+        if (!video.videoId) continue;
+        try {
+          video.coverImageId = await this.deriveVideoCoverImageId(
+            advertiserId,
+            video,
+            accessToken
+          );
+        } catch (coverErr) {
+          logger.warn(
+            `TikTok cover-image derivation failed for ${video.videoId}: ${coverErr.message}`
+          );
+          video.coverImageId = "";
+        }
+      }
 
       await invalidateUserTiktokCache(userId).catch(() => {});
       return res.json({ success: true, videos });
@@ -2240,7 +2433,9 @@ class TiktokAdController {
         return res.status(400).json({ error: "advertiserId is required" });
       }
 
-      const cacheKey = `tiktokInterests:v2:${userId}:${advertiserId}:${placement}:${objectiveType}`;
+      // Version segment sits AFTER userId so the disconnect invalidation scan
+      // (`tiktokInterests:${userId}:*`) still matches this key.
+      const cacheKey = `tiktokInterests:${userId}:v2:${advertiserId}:${placement}:${objectiveType}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.json(JSON.parse(cached));
 

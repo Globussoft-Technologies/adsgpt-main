@@ -105,7 +105,10 @@ const TIKTOK_OBJECTIVES = [
     // use "ENGAGED_VIEW" (6-second focused view). CPV billing.
     optimizationGoals: ["ENGAGED_VIEW"],
     billingEvents: ["CPV", "CPM"],
-    requiresCta: true,
+    // Video Views ads have no ad-level destination, so a CTA cannot be sent
+    // (TikTok pairs call_to_action with a URL — see the wizard's
+    // adHasDestination). Same reason REACH is false.
+    requiresCta: false,
     defaultBudgetMode: BUDGET_MODES.DAILY,
     // TikTok Ads Manager only shows "Add videos" for this objective — no
     // image upload option (confirmed in the live UI).
