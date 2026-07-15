@@ -408,19 +408,25 @@ const updateNodeStatesFromCampaignData = (campaignData, dispatch, getState) => {
 
     const imageQuantity = getQuantityByServiceName(services?.servicesSelected, 'image');
     const textQuantity = getQuantityByServiceName(services?.servicesSelected, 'text');
-    const historytext = campaignData.history?.some(
-      (item) =>
-        (item.textCount && item.textCount > 0) ||
-        item?.previousData?.results?.text?.some((t) => t.status === 200)
+    // Only genuine MANUAL results (jobId == null) count toward unlocking the
+    // manual Image/Text generation nodes. Auto-Forge (automation) runs write
+    // into the SAME campaign.results / history arrays and force services to
+    // "success", but their result items carry a jobId. Without filtering them
+    // out, the next campaign hydration (on refresh/navigation) marks the manual
+    // nodes complete + 100% and unlocks them even though no manual creative
+    // exists — clicking then shows "No images generated yet" (the sanitized
+    // results view filters jobId out). The count-based history signals
+    // (textCount/imageCount) can't tell manual from automation apart, so we
+    // rely solely on the per-item jobId check.
+    const historytext = campaignData.history?.some((item) =>
+      item?.previousData?.results?.text?.some((t) => t.status === 200 && !t.jobId)
     );
-    const historyImage = campaignData.history?.some(
-      (item) =>
-        (item.imageCount && item.imageCount > 0) ||
-        item?.previousData?.results?.image?.some((i) => i.status === 200)
+    const historyImage = campaignData.history?.some((item) =>
+      item?.previousData?.results?.image?.some((i) => i.status === 200 && !i.jobId)
     );
 
-    const image = results?.image?.some((item) => item.status === 200);
-    const text = results?.text?.some((item) => item.status === 200);
+    const image = results?.image?.some((item) => item.status === 200 && !item.jobId);
+    const text = results?.text?.some((item) => item.status === 200 && !item.jobId);
 
     // The bar is the CURRENT run's progress — it should only peg to 100
     // when every slot in `results.text/image` has a final status (200 or
@@ -440,11 +446,22 @@ const updateNodeStatesFromCampaignData = (campaignData, dispatch, getState) => {
       results.image.length > 0 &&
       results.image.every((item) => isFinalStatus(item?.status));
 
-    // Sync selected services to ensure node locking logic is correct
+    // Sync selected services to ensure node locking logic is correct.
+    //
+    // Guard against automation "leaking" into the manual flow: an Auto-Forge
+    // run forces services.status="success" and fills servicesSelected with
+    // image/text quantities, so a pure quantity check (`textQuantity > 0`)
+    // would flip the manual nodes' `serviceSelected` true and unlock them even
+    // on an automation-only campaign. Require EITHER genuine manual output
+    // (jobId-null results/history) OR that the flag was already set this
+    // session by ServicesForm (manual "Generate Once", before results land).
+    // Automation never sets selectedServices, so an automation-only campaign
+    // stays locked; a real manual run stays unlocked both live and on reload.
+    const currentSelected = state?.adFactory?.selectedServices || {};
     dispatch(
       setSelectedServices({
-        text: textQuantity > 0,
-        image: imageQuantity > 0,
+        text: textQuantity > 0 && (text || historytext || !!currentSelected.text),
+        image: imageQuantity > 0 && (image || historyImage || !!currentSelected.image),
         video: false,
       })
     );
