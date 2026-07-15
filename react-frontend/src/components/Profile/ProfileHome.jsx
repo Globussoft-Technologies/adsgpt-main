@@ -3,17 +3,11 @@ import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import { ChevronDown, Loader2, MoreVertical } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import getCookies from '@/utils/getCookies';
 import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
@@ -338,42 +332,28 @@ export default function ProfileHome() {
             <div className="flex shrink-0 items-center gap-2">
               {subscriptionType !== '9' && subscriptionType !== '12' && (
                 <div className="inline-block rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
-                  <button className="rounded-[50px] bg-white px-4 py-1.5 text-sm hover:bg-gray-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]">
+                  <button className="rounded-[50px] bg-white px-3 py-1 text-xs hover:bg-gray-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]">
                     <a
                       href={import.meta.env.VITE_SIGNUP_URL}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-xs font-semibold whitespace-nowrap text-transparent hover:from-[#3F51B5] hover:to-[#3A91B7] 2xl:text-base dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
+                      className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-[11px] font-semibold whitespace-nowrap text-transparent hover:from-[#3F51B5] hover:to-[#3A91B7] 2xl:text-sm dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
                     >
                       Upgrade Plan
                     </a>
                   </button>
                 </div>
               )}
-              {/* more options (cancel subscription) */}
+              {/* cancel button */}
               {import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true' && subscriptionType !== '8' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-40">
-                    <DropdownMenuItem asChild>
-                      <a
-                        href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-red-500 cursor-pointer dark:text-red-400"
-                      >
-                        Cancel subscription
-                      </a>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <a
+                  href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[50px] cursor-pointer border border-red-500 px-3 py-1 text-[11px] font-medium whitespace-nowrap text-red-500 transition-colors hover:bg-red-50 2xl:text-sm dark:border-red-400 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  Cancel
+                </a>
               )}
             </div>
 
