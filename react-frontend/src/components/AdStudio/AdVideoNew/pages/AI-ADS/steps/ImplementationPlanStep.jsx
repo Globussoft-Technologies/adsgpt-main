@@ -60,7 +60,7 @@ const SceneImageFailed = ({ onRetry, disabled, message }) => (
 
 const SCENES_PER_PAGE = 1;
 
-const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGenerate }) => {
+const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToForm, handleGenerate }) => {
   const dispatch = useDispatch();
   const sceneData = useSelector((state) => state.adVideoNew.aiAdsSceneData);
   const isLoading = useSelector((state) => state.adVideoNew.aiAdsSceneLoading);
@@ -212,9 +212,14 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
     }
   };
 
+  // "Try Again" returns the user to the pre-filled Details form (same as the
+  // Back button), so they can review/tweak their inputs and hit Next to run a
+  // fresh generation — which mints a new sessionId, exactly like the first
+  // pass. Clears the error so the form isn't blocked. Falls back to onBack if
+  // the retry-to-form handler isn't provided.
   const handleRetry = () => {
     dispatch(setAiAdsSceneError(null));
-    onClose();
+    (onRetryToForm || onBack)?.();
   };
 
   const getLineText = (globalIdx, lineId, originalText) =>
@@ -291,7 +296,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, handleGene
             </p>
           </div>
 
-          {/* Try Again button */}
+          {/* Try Again button — returns to the pre-filled Details form */}
           <button
             type="button"
             onClick={handleRetry}

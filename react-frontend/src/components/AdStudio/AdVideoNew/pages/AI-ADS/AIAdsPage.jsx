@@ -167,6 +167,13 @@ const AIAdsPage = ({ handleGenerate }) => {
               dispatch(setAiAdsPrefillInputs(detailsInputs));
               handleBack('details');
             }}
+            onRetryToForm={() => {
+              // Try Again after a failure → same as Back: repopulate the form
+              // with the failed run's inputs and land on the Details step so the
+              // user can review/tweak and re-run (a fresh Next mints a new id).
+              dispatch(setAiAdsPrefillInputs(detailsInputs));
+              dispatch(setAIAdsStep('details'));
+            }}
             onNext={handleClose}
             onClose={handleClose}
             handleGenerate={handleGenerate}

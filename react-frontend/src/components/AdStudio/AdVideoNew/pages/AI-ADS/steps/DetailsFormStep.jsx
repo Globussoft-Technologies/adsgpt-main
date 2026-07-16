@@ -317,6 +317,14 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
   const hasFormChanged = () => {
     if (!originalInputs || !existingSceneData) return true;
+    // The "no changes → copy session" shortcut only makes sense when the
+    // existing session actually succeeded (has scenes to clone). After a failed
+    // generation the session has status "failed" / no scenes — copying it would
+    // clone an empty doc and land on a blank Implementation Plan. In that case
+    // force the fresh generate-scene path by reporting the form as changed.
+    const existing = existingSceneData?.data || existingSceneData;
+    const existingScenes = existing?.scenes || [];
+    if (existing?.status === 'failed' || existingScenes.length === 0) return true;
     const orig = originalInputs;
 
     // URL images
