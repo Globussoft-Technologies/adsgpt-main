@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Plus,
   Pencil,
+  Search,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getAdSets,
@@ -66,6 +68,22 @@ function AddButton({ label, onClick, busy = false, disabled = false }) {
     >
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
       {label}
+    </button>
+  );
+}
+
+// Bypasses the backend's Redis cache (refresh=true) and re-fetches straight
+// from Meta — a plain refetch would just re-serve the same cached response.
+function RefreshButton({ onClick, busy = false, title = 'Refresh' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={title}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} />
     </button>
   );
 }
@@ -262,7 +280,17 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(campaigns, 'name');
+  // Search by campaign name — client-side over the already-fetched list
+  // (same list `useSortedRows` sorts), not a separate API call. Matches
+  // the search-input pattern already used in DetailedTargetingPicker.jsx
+  // / LocationTargeting.jsx for visual consistency.
+  const [query, setQuery] = useState('');
+  const filteredCampaigns = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return campaigns;
+    return campaigns.filter((c) => (c.name || '').toLowerCase().includes(q));
+  }, [campaigns, query]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredCampaigns, 'name');
 
   // Edit — read FRESH campaign settings (the list is cached + budgets are
   // formatted strings, useless for editing) then open the wizard prefilled.
@@ -330,6 +358,30 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
 
+      <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 p-3 dark:border-white/12">
+        <div className="relative max-w-xs flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search campaigns…"
+            className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <RefreshButton onClick={onRefresh} busy={loading} title="Refresh campaigns" />
+      </div>
+
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
@@ -348,7 +400,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               <tr><td colSpan={7} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={7} className="py-14"><EmptyState message="No campaigns found for this account" /></td></tr>
+              <tr><td colSpan={7} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const status  = getStatus(c);
@@ -503,11 +555,18 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId }) {
   const [adSets,  setAdSets]  = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [statuses, setStatuses] = useState({});
   const [toggling, setToggling] = useState({});
   const [resolvingAdd, setResolvingAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(adSets, 'name');
+  const [query, setQuery] = useState('');
+  const filteredAdSets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return adSets;
+    return adSets.filter((s) => (s.name || '').toLowerCase().includes(q));
+  }, [adSets, query]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredAdSets, 'name');
   // CBO campaigns own the budget — adsets show 0/empty daily_budget. We
   // surface this explicitly instead of rendering a confusing "₹0.00".
   const cboParent = hasBudget(campaign?.daily_budget) || hasBudget(campaign?.lifetime_budget);
@@ -527,6 +586,18 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [campaign.id, adAccountId, manageNonce]);
+
+  // Manual refresh — bypasses the Redis cache so it pulls straight from Meta,
+  // unlike the mount/manageNonce effect above which is happy to serve cached.
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const r = await getAdSets(campaign.id, adAccountId, { refresh: true });
+      setAdSets(r.adSets || []);
+    } catch { /* noop */ } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Restore a drilled-in ad set from the URL (e.g. after a page refresh) —
   // once the list has loaded, re-run the same drill handler a click would,
@@ -667,7 +738,30 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ad sets in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
         </p>
-        {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
+        <div className="flex items-center gap-2">
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search ad sets…"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <RefreshButton onClick={handleRefresh} busy={refreshing} title="Refresh ad sets" />
+          {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
+        </div>
       </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-[680px] border-collapse">
@@ -687,7 +781,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
               <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message="No ad sets in this campaign" /></td></tr>
+              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
             )}
             {sorted.map((s, idx) => {
               const status = getStatus(s);
@@ -1056,12 +1150,19 @@ function AdDrawer({ ad, onClose }) {
 function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange }) {
   const [ads,       setAds]       = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedAd, setSelectedAd] = useState(null);
   const [statuses,  setStatuses]  = useState({});
   const [toggling,  setToggling]  = useState({});
   const [resolving, setResolving] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(ads, 'name');
+  const [query, setQuery] = useState('');
+  const filteredAds = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return ads;
+    return ads.filter((a) => (a.name || '').toLowerCase().includes(q));
+  }, [ads, query]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredAds, 'name');
   // Add Ad / Edit only when V2 wizard is on AND the campaign objective is
   // V2-supported (see AdSetTable's canAdd for the rationale).
   const canAdd = V2_SUPPORTED_OBJECTIVES.has(campaign?.objective) && !!onLaunchWizard;
@@ -1076,6 +1177,18 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [adSet.id, manageNonce]);
+
+  // Manual refresh — bypasses the Redis cache so it pulls straight from Meta,
+  // unlike the mount/manageNonce effect above which is happy to serve cached.
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const r = await getAdSetAds(adSet.id, { refresh: true });
+      setAds(r.ads || []);
+    } catch { /* noop */ } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Restore a selected ad (drawer open) from the URL after a page refresh —
   // mirrors AdSetTable's restore effect. Fires at most once per mount.
@@ -1199,7 +1312,30 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
           <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
             Ads in <span className="text-gray-900 dark:text-white">{adSet.name}</span>
           </p>
-          {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
+          <div className="flex items-center gap-2">
+            <div className="relative w-56">
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search ads…"
+                className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <RefreshButton onClick={handleRefresh} busy={refreshing} title="Refresh ads" />
+            {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
+          </div>
         </div>
         <div className="scrollbar-thin flex-1 overflow-auto">
           <table className="w-full min-w-140 border-collapse">
@@ -1219,7 +1355,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                 <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
               )}
               {!loading && sorted.length === 0 && (
-                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message="No ads in this ad set" /></td></tr>
+                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
               )}
               {sorted.map((a, idx) => {
                 const status     = getStatus(a);

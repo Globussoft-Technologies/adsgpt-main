@@ -104,7 +104,7 @@ export default function MetaAdsDashboard() {
     if (!selectedAccount) return;
     setLoadingCampaigns(true);
     try {
-      const r = await getCampaigns(selectedAccount.id);
+      const r = await getCampaigns(selectedAccount.id, { refresh: true });
       setCampaigns(r.campaigns || []);
     } catch { /* noop */ } finally {
       setLoadingCampaigns(false);

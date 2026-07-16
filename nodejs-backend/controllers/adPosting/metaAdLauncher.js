@@ -1069,11 +1069,15 @@ class MetaAdLauncher {
 
       // -------- REDIS CACHE --------
       const cacheKey = `metaCampaigns:${userId}:${adAccountId}`;
+      const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
-      const cached = await redisClient.get(cacheKey);
-
-      if (cached) {
-        return res.status(200).json(JSON.parse(cached));
+      if (!refresh) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.status(200).json(JSON.parse(cached));
+        }
+      } else {
+        await redisClient.del(cacheKey).catch(() => {});
       }
       // -----------------------------
 
@@ -1161,11 +1165,15 @@ class MetaAdLauncher {
 
       // ---------- REDIS CACHE ----------
       const cacheKey = `metaAdsets:${userId}:${adAccountId}:${campaignId || "all"}`;
+      const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
-      const cached = await redisClient.get(cacheKey);
-
-      if (cached) {
-        return res.status(200).json(JSON.parse(cached));
+      if (!refresh) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.status(200).json(JSON.parse(cached));
+        }
+      } else {
+        await redisClient.del(cacheKey).catch(() => {});
       }
       // --------------------------------
 
@@ -1329,10 +1337,15 @@ class MetaAdLauncher {
 
       // -------- REDIS CACHE --------
       const cacheKey = `metaAdSetAds:${userId}:${adSetId}`;
+      const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
-      const cached = await redisClient.get(cacheKey);
-      if (cached) {
-        return res.status(200).json(JSON.parse(cached));
+      if (!refresh) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.status(200).json(JSON.parse(cached));
+        }
+      } else {
+        await redisClient.del(cacheKey).catch(() => {});
       }
       // -----------------------------
 

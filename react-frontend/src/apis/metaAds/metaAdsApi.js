@@ -15,17 +15,17 @@ export const getAdAccounts = async ({ refresh = false } = {}) => {
   return data;
 };
 
-export const getCampaigns = async (adAccountId) => {
+export const getCampaigns = async (adAccountId, { refresh = false } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-campaigns`, {
-    params: { adAccountId },
+    params: refresh ? { adAccountId, refresh: 'true' } : { adAccountId },
     headers: getAuthHeaders(),
   });
   return data;
 };
 
-export const getAdSets = async (campaignId, adAccountId) => {
+export const getAdSets = async (campaignId, adAccountId, { refresh = false } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-ad-sets`, {
-    params: { campaignId, adAccountId },
+    params: refresh ? { campaignId, adAccountId, refresh: 'true' } : { campaignId, adAccountId },
     headers: getAuthHeaders(),
   });
   return data;
@@ -39,9 +39,9 @@ export const getCampaignAds = async (campaignId) => {
   return data;
 };
 
-export const getAdSetAds = async (adSetId) => {
+export const getAdSetAds = async (adSetId, { refresh = false } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-ad-set-ads`, {
-    params: { adSetId },
+    params: refresh ? { adSetId, refresh: 'true' } : { adSetId },
     headers: getAuthHeaders(),
   });
   return data;
