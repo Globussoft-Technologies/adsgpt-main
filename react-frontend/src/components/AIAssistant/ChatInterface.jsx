@@ -174,7 +174,7 @@ const ChatInterface = () => {
         sessionId,
         message: text,
         attachments: attachments?.length
-          ? attachments.map((a) => ({ file_type: a.file_type, url: a.url }))
+          ? attachments.map((a) => ({ file_type: a.file_type, url: a.url, filename: a.filename }))
           : null,
         enabledTools,
         formResponse: formResponse || null,
