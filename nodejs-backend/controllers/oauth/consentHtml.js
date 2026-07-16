@@ -266,17 +266,17 @@ function renderConsentPage(ctx) {
   .actions {
     display: flex;
     justify-content: center;
-    gap: 14px;
+    gap: 10px;
     margin-bottom: 22px;
   }
   .btn {
-    min-width: 148px;
-    height: 52px;
+    min-width: 120px;
+    height: 42px;
     border: none;
-    border-radius: 30px;
+    border-radius: 24px;
     cursor: pointer;
     font-family: inherit;
-    padding: 0 24px;
+    padding: 0 20px;
     transition: transform 0.05s ease, filter 0.15s ease;
   }
   .btn:active { transform: translateY(1px); }
@@ -285,14 +285,14 @@ function renderConsentPage(ctx) {
     background: #3B3C3D;
     color: #FFFFFF;
     font-weight: 400;
-    font-size: 16px;
+    font-size: 14px;
   }
   .btn-deny:hover { filter: brightness(1.15); }
   .btn-allow {
     background: #FFFFFF;
     color: #000000;
     font-weight: 500;
-    font-size: 20px;
+    font-size: 15px;
   }
   .btn-allow:hover { filter: brightness(0.95); }
 
