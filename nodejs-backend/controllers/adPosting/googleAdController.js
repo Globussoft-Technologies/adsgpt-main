@@ -404,9 +404,29 @@ async function initGoogleApiForUser(userId) {
         redisClient.set(tokenCacheKey, JSON.stringify({ accessToken }), "EX", Math.max(expiresIn - 300, 60)).catch(() => {});
       }
     } catch (refreshErr) {
-      logger.error(`Google token refresh failed for userId ${userId}: ${refreshErr.response?.data?.error || refreshErr.message}`);
-      const err = new Error("Google access token expired. Please reconnect your Google account.");
-      err.statusCode = 401;
+      const oauthError = refreshErr.response?.data?.error || "";
+      const httpStatus = refreshErr.response?.status;
+      logger.error(`Google token refresh failed for userId ${userId}: ${oauthError || refreshErr.message} (http=${httpStatus || "n/a"})`);
+
+      // Distinguish a genuinely dead grant from a transient refresh failure.
+      // Google returns `invalid_grant` (usually HTTP 400) ONLY when the refresh
+      // token is actually revoked/expired — that's a real "please reconnect"
+      // and must surface as 401. A network blip, timeout, or Google 5xx while
+      // refreshing does NOT mean the account is disconnected; classifying those
+      // as 401 made the Ads Factory Autopilot falsely auto-pause a healthy job
+      // with "google account not connected". Surface transient failures as 503
+      // so callers (and the autopilot connection probe) treat them as retryable,
+      // not as a broken connection.
+      const isRevokedGrant =
+        /invalid_grant|invalid_rapt|token has been expired or revoked|unauthorized_client/i.test(
+          oauthError,
+        );
+      const err = new Error(
+        isRevokedGrant
+          ? "Google access token expired. Please reconnect your Google account."
+          : "Could not refresh Google access token right now (temporary). Please try again shortly.",
+      );
+      err.statusCode = isRevokedGrant ? 401 : 503;
       throw err;
     }
   } else if (redisClient && accessToken) {
@@ -1940,6 +1960,12 @@ class GoogleAdController {
 
         return res.status(status || 500).json({
           status: false,
+          // Only a 401 is a genuine "reconnect" case; a 5xx/429/network error is
+          // transient and must NOT read as disconnected (callers key off
+          // isConnected, and a false `false` here auto-pauses a healthy autopilot
+          // job). Leave isConnected undefined on transient errors so the caller
+          // falls through to its status-based transient handling.
+          ...(status === 401 ? { isConnected: false } : {}),
           error: status === 401 ? "Google access token expired. Please reconnect your Google account." : "Failed to check Google Ads account",
           details: detail,
         });

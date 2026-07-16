@@ -68,6 +68,16 @@ class AdsFactoryAutoController {
         status:         "active",
       });
 
+      // Link the campaign back to its automation job. The campaign schema has
+      // carried a `metadata.jobId` field since automation was introduced
+      // (Module/adFactory/adFactory.js) precisely for this, but nothing ever
+      // populated it — so it stayed null and the campaign looked "manual".
+      // Store it here at job creation so the campaign is tagged from the start.
+      await Campaign.updateOne(
+        { _id: value.campaignId },
+        { $set: { "metadata.jobId": job._id.toString() } }
+      );
+
       await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
 
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);

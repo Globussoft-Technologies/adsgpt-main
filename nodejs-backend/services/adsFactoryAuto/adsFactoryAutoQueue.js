@@ -351,43 +351,53 @@ async function reloadActiveJobs() {
       );
       interruptedJobs.forEach((j) => interruptedJobIds.add(j._id.toString()));
       for (const job of interruptedJobs) {
-        await AdsFactoryJob.updateOne(
-          { _id: job._id },
-          {
-            $push: {
-              runHistory: {
-                runId:       `interrupted-${Date.now()}`,
-                startedAt:   job.schedule?.nextRunAt || new Date(),
-                completedAt: new Date(),
-                status:      "failed",
-                error:       "Run was interrupted by a server restart mid-cycle",
+        // Decide FIRST whether we're going to retry this interrupted cycle
+        // immediately, because that decides whether we should record a failed
+        // "interrupted-*" run at all.
+        //
+        // The conflict this avoids: if we ALWAYS push an "interrupted-*" failed
+        // entry AND then re-enqueue an immediate retry, the one logical cycle
+        // ends up with TWO runHistory entries — a phantom "failed" immediately
+        // followed by the retry's real "success". That's the duplicate /
+        // confusing history. So: when we WILL retry, we do NOT push a separate
+        // failed entry — the retry produces the single authoritative entry for
+        // this cycle (the "existing one is updated by the new one"). We only
+        // record the interrupted-failed marker when we are NOT retrying (beyond
+        // the grace window), so an genuinely-lost cycle is still visible instead
+        // of the job silently looking like it never ran.
+        const GRACE_MS = (IS_DEV_MODE ? 120 : 10) * 60 * 1000;
+        const isOneShot = job.schedule?.frequency === "does_not_repeat";
+        const interruptedAt = job.schedule?.nextRunAt || job.schedule?.lastRunAt || null;
+        const overdueMs = interruptedAt ? (Date.now() - new Date(interruptedAt).getTime()) : 0;
+        // One-shot jobs always retry (the user asked for exactly one run — we
+        // must deliver it). Repeating jobs retry only if the interruption is
+        // recent; otherwise the normal schedule (re-registered below) takes over.
+        const willRetry = isOneShot || overdueMs <= GRACE_MS;
+
+        if (!willRetry) {
+          await AdsFactoryJob.updateOne(
+            { _id: job._id },
+            {
+              $push: {
+                runHistory: {
+                  runId:       `interrupted-${Date.now()}`,
+                  startedAt:   job.schedule?.nextRunAt || new Date(),
+                  completedAt: new Date(),
+                  status:      "failed",
+                  error:       "Run was interrupted by a server restart mid-cycle",
+                },
               },
-            },
-          }
-        );
-        logger.warn(`[adsFactoryAuto] job ${job._id} was interrupted mid-run by a server restart`);
-        if (job.schedule?.frequency === "does_not_repeat") {
-          await scheduleJob(job._id, { type: "once", runAt: new Date(), timezone: job.schedule.timezone });
-          logger.warn(`[adsFactoryAuto] re-enqueued interrupted does_not_repeat job ${job._id} for immediate retry`);
-        } else {
-          // Repeating job (daily/weekly/fast-cron) interrupted mid-run. Before,
-          // it was left to wait for its next scheduled tick — so an interruption
-          // silently lost that cycle. Retry it immediately, but only if the
-          // interruption is recent (within the same grace window one-shot reloads
-          // use); if it's been down longer, skip the retry and let the job's
-          // normal repeating schedule (re-registered below) take over so we don't
-          // fire a stale cycle late. The one-off retry doesn't disturb the future
-          // cadence — the repeating schedule is re-enqueued in the reload loop.
-          const GRACE_MS = (IS_DEV_MODE ? 120 : 10) * 60 * 1000;
-          const interruptedAt = job.schedule?.nextRunAt || job.schedule?.lastRunAt || null;
-          const overdueMs = interruptedAt ? (Date.now() - new Date(interruptedAt).getTime()) : 0;
-          if (overdueMs <= GRACE_MS) {
-            await scheduleJob(job._id, { type: "once", runAt: new Date(), timezone: job.schedule?.timezone });
-            logger.warn(`[adsFactoryAuto] re-enqueued interrupted repeating job ${job._id} for immediate retry (interrupted ${Math.round(overdueMs / 1000)}s ago, within grace window)`);
-          } else {
-            logger.warn(`[adsFactoryAuto] interrupted repeating job ${job._id} overdue by ${Math.round(overdueMs / 1000)}s (beyond grace window) — its next scheduled run will proceed normally`);
-          }
+            }
+          );
+          logger.warn(`[adsFactoryAuto] interrupted repeating job ${job._id} overdue by ${Math.round(overdueMs / 1000)}s (beyond grace window) — recorded as failed; its next scheduled run will proceed normally`);
+          continue;
         }
+
+        // We ARE retrying — do NOT push a duplicate interrupted entry. Re-enqueue
+        // an immediate one-off run; when it completes, Step 9 of the orchestrator
+        // appends the single run entry that represents this cycle.
+        await scheduleJob(job._id, { type: "once", runAt: new Date(), timezone: job.schedule?.timezone });
+        logger.warn(`[adsFactoryAuto] job ${job._id} interrupted mid-run — re-enqueued immediate retry (${isOneShot ? "does_not_repeat" : `repeating, interrupted ${Math.round(overdueMs / 1000)}s ago, within grace window`}); no phantom failed entry recorded`);
       }
     }
   }

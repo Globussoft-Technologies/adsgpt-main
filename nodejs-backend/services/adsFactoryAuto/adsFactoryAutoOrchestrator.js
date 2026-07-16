@@ -77,15 +77,52 @@ const PLATFORM_POSTERS = {
     //      fail at post time every tick.
     isConnected: async (job) => {
       const rawFbUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
-      const fbUser = await FBUsers.findOne({ $or: [{ userId: job.userId }, { userId: rawFbUserId }] }).lean();
-      if (!fbUser) return false;
+      const fbQuery = { $or: [{ userId: job.userId }, { userId: rawFbUserId }] };
+      let fbUser;
+      try {
+        fbUser = await FBUsers.findOne(fbQuery).lean();
+      } catch (e) {
+        // A DB read error is NOT proof the account is disconnected — pausing a
+        // healthy job over a transient Mongo blip is exactly the false-positive
+        // we're avoiding. Treat an errored lookup as connected and let the
+        // post-time classifier catch a genuine problem.
+        logger.warn(`[adsFactoryAuto][2b] Meta isConnected — FBUsers lookup errored for userId="${job.userId}" (treating as connected, deferring to post-time): ${e.message}`);
+        return true;
+      }
+      // Transient null guard: the poster uses this exact same query and has
+      // succeeded for this user moments earlier, yet a later tick occasionally
+      // reads null (replica lag / momentary connection hiccup). A single retry
+      // distinguishes a genuinely-absent record (null twice) from a transient
+      // miss (resolves on retry) — so a connected account is no longer paused
+      // by a one-off empty read.
+      if (!fbUser) {
+        try {
+          fbUser = await FBUsers.findOne(fbQuery).lean();
+        } catch (_) { /* fall through to the null handling below */ }
+        if (fbUser) {
+          logger.warn(`[adsFactoryAuto][2b] Meta FBUsers record for userId="${job.userId}" was null on first read but present on retry — transient DB miss, treating as connected`);
+        }
+      }
+      // These early "return false" paths previously failed SILENTLY — a run
+      // would auto-pause with "meta account not connected" and no log line
+      // saying WHY. Log each so a false disconnect (e.g. the FBUsers record
+      // stores userId in a format neither "GPT-438" nor "438" matches) is
+      // diagnosable from the logs instead of looking like a genuine reconnect.
+      if (!fbUser) {
+        logger.warn(`[adsFactoryAuto][2b] Meta isConnected=false — no FBUsers record for userId="${job.userId}" or raw="${rawFbUserId}" (null on two reads)`);
+        return false;
+      }
       let accessToken;
       try {
         accessToken = decrypt(fbUser.accessToken);
-      } catch {
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2b] Meta isConnected=false — accessToken decrypt failed for userId="${job.userId}": ${e.message}`);
         return false;
       }
-      if (!accessToken) return false;
+      if (!accessToken) {
+        logger.warn(`[adsFactoryAuto][2b] Meta isConnected=false — decrypted accessToken is empty for userId="${job.userId}"`);
+        return false;
+      }
 
       // Live token probe — /me is the cheapest Graph call that fails cleanly
       // (OAuthException) on a revoked/expired token.
@@ -356,9 +393,7 @@ const PLATFORM_POSTERS = {
         const metaHeadline = metaText?.headline || "";
         const metaMessage  = metaText?.message  || "";
 
-        logger.debug(`[adsFactoryAuto:meta] creative[${i}] uploading image  url="${(creative.imageUrl || "").slice(0, 120)}"`);
         const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
-        logger.debug(`[adsFactoryAuto:meta] creative[${i}] image uploaded  hash=${imageHash}`);
         const adName = p.adName || p.name || p.campaignName || `Ad ${i+1}`;
         const adPayload = {
           adAccountId: p.adAccountId,
@@ -460,11 +495,20 @@ const PLATFORM_POSTERS = {
     isConnected: async (job) => {
       const GoogleUsers = require("../../Module/adPosting/googleUsers");
       const googleUser = await GoogleUsers.findOne({ userId: job.userId }).lean();
-      if (!googleUser) return false;
+      // Same silent-false-disconnect risk as Meta above — log WHY so a genuine
+      // "reconnect" is distinguishable from a lookup/format miss in the logs.
+      if (!googleUser) {
+        logger.warn(`[adsFactoryAuto][2b] Google isConnected=false — no GoogleUsers record for userId="${job.userId}"`);
+        return false;
+      }
       try {
         const { decrypt: decryptToken } = require("../../utils/crypto");
-        if (!decryptToken(googleUser.refreshToken)) return false;
-      } catch {
+        if (!decryptToken(googleUser.refreshToken)) {
+          logger.warn(`[adsFactoryAuto][2b] Google isConnected=false — decrypted refreshToken is empty for userId="${job.userId}"`);
+          return false;
+        }
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2b] Google isConnected=false — refreshToken decrypt failed for userId="${job.userId}": ${e.message}`);
         return false;
       }
 
@@ -481,14 +525,32 @@ const PLATFORM_POSTERS = {
         };
         await googleAdController.checkGoogleAdsAccount(req, res);
 
-        // Non-2xx (typically 401) means the token is expired/revoked on
-        // Google's side — treat as disconnected so the job pauses.
-        if (statusCode >= 400) {
-          logger.warn(`[adsFactoryAuto][2b] Google access probe failed for ${job.userId} — status=${statusCode} details="${responseData?.details || responseData?.error || ""}"`);
+        // Explicit isConnected:false from the controller (no account linked,
+        // or token confirmed dead) — the ONE authoritative "disconnected"
+        // signal. Pause on it.
+        if (responseData && responseData.isConnected === false) {
+          logger.warn(`[adsFactoryAuto][2b] Google reported not connected for ${job.userId} — reason="${responseData?.noAccountReason || responseData?.message || ""}"`);
           return false;
         }
-        // Explicit isConnected:false from the controller (no account linked).
-        if (responseData && responseData.isConnected === false) return false;
+
+        // A non-2xx status is NOT automatically "disconnected". checkGoogleAds-
+        // Account returns the UPSTREAM status verbatim — a transient Google API
+        // hiccup (500/503), a rate limit (429), or a developer-token/project
+        // restriction all come back non-2xx while the user's account is
+        // perfectly fine. Pausing on those produced the false "google account
+        // not connected — reconnect it" auto-pause. Only a genuine AUTH failure
+        // (401 / expired-revoked token) means the connection is actually dead;
+        // everything else is ambiguous, so stay connected and let the post-time
+        // permanent-error classifier (Step 9) catch a real problem. Mirrors the
+        // Meta probe's auth-failure-vs-transient discipline above.
+        if (statusCode === 401) {
+          logger.warn(`[adsFactoryAuto][2b] Google token expired/revoked for ${job.userId} (401) — pausing: "${responseData?.error || ""}"`);
+          return false;
+        }
+        if (statusCode >= 400) {
+          logger.warn(`[adsFactoryAuto][2b] Google access probe returned status=${statusCode} for ${job.userId} — treating as connected (transient/restricted, not an auth failure), will rely on post-time classifier. details="${responseData?.details || responseData?.error || ""}"`);
+          return true;
+        }
         return true;
       } catch (e) {
         // A probe error (network blip, unexpected throw) is ambiguous — do NOT
@@ -836,7 +898,7 @@ const PLATFORM_POSTERS = {
 
 // ─── Generation helpers ───────────────────────────────────────────────────────
 
-async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
+async function waitForGenerationComplete(campaignId, timeoutMs = 15 * 60 * 1000) {
   const POLL_INTERVAL = 5_000;
   const start = Date.now();
   let tick = 0;
@@ -853,8 +915,6 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 1000_000) {
     lastServices = services;
     const elapsedSec = Math.round((Date.now() - start) / 1000);
     const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
-    logger.debug(`[adsFactoryAuto][poll] tick=${tick}  elapsed=${elapsedSec}s  progress=[${progress}]  results.status=${campaign.results?.status}`);
-
     const allDone = services.every((srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0));
     if (allDone) {
       logger.info(`[adsFactoryAuto][poll] generation complete after ${tick} ticks (${elapsedSec}s)`);
@@ -1053,11 +1113,9 @@ async function run(jobId) {
 
   try {
     // ── Step 1: Load job ──────────────────────────────────────────────────────
-    logger.debug(`[adsFactoryAuto][1] loading job from DB  jobId=${jobId}`);
     job = await AdsFactoryJob.findById(jobId);
     if (!job) throw new Error(`AdsFactoryJob ${jobId} not found`);
     logger.info(`[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  campaignId=${job.campaignId}  frequency=${job.schedule?.frequency}`);
-    logger.debug(`[adsFactoryAuto][1] job detail  pairsPerCycle=${job.pairsPerCycle}  model=${job.model || "default"}  targets=${Object.keys(job.targets || {}).join(",") || "none"}  nextRunAt=${job.schedule?.nextRunAt || "null"}  lastRunAt=${job.schedule?.lastRunAt || "null"}`);
 
     if (job.status !== "active") {
       logger.info(`[adsFactoryAuto][1] job ${jobId} is ${job.status}, skipping`);
@@ -1125,7 +1183,6 @@ async function run(jobId) {
     }
 
     // ── Step 2: Load campaign ─────────────────────────────────────────────────
-    logger.debug(`[adsFactoryAuto][2] loading campaign  campaignId=${job.campaignId}`);
     campaign = await Campaign.findById(job.campaignId).lean();
     if (!campaign) {
       logger.warn(`[adsFactoryAuto][2] campaign ${job.campaignId} not found — pausing job ${jobId}`);
@@ -1145,7 +1202,6 @@ async function run(jobId) {
     }
 
     logger.info(`[adsFactoryAuto][2] campaign loaded  campaignId=${campaign.metadata?.campaignId}  status=${campaign.status}`);
-    logger.debug(`[adsFactoryAuto][2] campaign detail  name="${campaign.metadata?.campaignName}"  results.status=${campaign.results?.status}  services=${(campaign.services?.servicesSelected || []).map((s) => `${s.serviceName}×${s.serviceParams?.quantity || 0}(gen=${s.generated || 0})`).join(",")}`);
 
     // Guard: skip if a previous tick's generation is still in-progress — avoids
     // overlapping Python runs on the same campaign when the schedule fires faster
@@ -1162,7 +1218,6 @@ async function run(jobId) {
     const userId         = job.userId;
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
-    logger.debug(`[adsFactoryAuto][2] resolved  campaignId=${campaignId}  userId=${userId}  pairsPerCycle=${pairsPerCycle}  model=${model || "default"}`);
 
     // ── Step 2b: Verify every configured platform is actually connected ───────
     // isConfigured() only checks the saved template has fields filled in — it
@@ -1230,7 +1285,6 @@ async function run(jobId) {
     }
 
     // ── Step 3: Credit check ──────────────────────────────────────────────────
-    logger.debug(`[adsFactoryAuto][3] validating credits  userId=${userId}`);
     let created_from = "GPT";
     let rawUserId = userId;
     if (userId && userId.includes("-")) {
@@ -1246,7 +1300,6 @@ async function run(jobId) {
       campaign.services
     );
     logger.info(`[adsFactoryAuto][3] credits  required=${creditResult.totalRequired}  success=${creditResult.success}`);
-    logger.debug(`[adsFactoryAuto][3] credit detail  code=${creditResult.code}  available=${creditResult.available ?? "n/a"}  userId=${creditResult.userId || "n/a"}  message="${creditResult.message || ""}"`);
     if (!creditResult.success && creditResult.code === 400) {
       logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
       job.status = "paused";
@@ -1262,7 +1315,6 @@ async function run(jobId) {
     // campaignId; updateGenerationResult / deleteCampaign release the hold
     // after per-batch deducts settle the actual cost.
     if (creditResult?.totalRequired > 0 && creditResult?.userId) {
-      logger.debug(`[adsFactoryAuto][4] freezing ${creditResult.totalRequired} credits  userId=${creditResult.userId}  key=campaign:${campaign.metadata.campaignId}`);
       const freeze = await UnifiedCreditController.freezeCredits({
         userId: creditResult.userId,
         reservationKey: `campaign:${campaign.metadata.campaignId}`,
@@ -1272,7 +1324,6 @@ async function run(jobId) {
           campaignId: campaign.metadata.campaignId,
         },
       });
-      logger.debug(`[adsFactoryAuto][4] freeze result  ok=${freeze.ok}  reason=${freeze.reason || "none"}  idempotent=${freeze.idempotent}  remaining=${freeze.remaining ?? "n/a"}`);
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
         logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
         job.status = "paused";
@@ -1294,7 +1345,6 @@ async function run(jobId) {
     }
 
     // ── Step 5: Update campaign services ─────────────────────────────────────
-    logger.debug(`[adsFactoryAuto][5] updating campaign services  campaignId=${campaignId}  pairsPerCycle=${pairsPerCycle}`);
 
     // If the campaign has no services configured, default to text + image.
     // This happens when the campaign was created outside the full wizard flow.
@@ -1360,7 +1410,6 @@ async function run(jobId) {
     }
 
     if (Object.keys(pushUpdate).length > 0) {
-      logger.debug(`[adsFactoryAuto][5] pushing empty result slots  keys=${Object.keys(pushUpdate).join(",")}`);
       await Campaign.updateOne(
         { "metadata.campaignId": campaign.metadata.campaignId },
         { $push: pushUpdate, $set: { "results.status": "in-progress", status: "in-progress" } }
@@ -1372,7 +1421,6 @@ async function run(jobId) {
     let completedCampaign;
     try {
       const pythonResult = await ctrl.sendAdFactoryRequest(campaign.metadata.campaignId, "autopilot", "active", job._id.toString());
-      logger.debug(`[adsFactoryAuto][6] Python response  allNodesSuccess=${pythonResult?.allNodesSuccess}  message="${pythonResult?.message || ""}"  error="${pythonResult?.error || ""}"`);
       if (!pythonResult?.allNodesSuccess) {
         throw new Error(`Python API rejected: ${pythonResult?.message || pythonResult?.error || "unknown"}`);
       }
@@ -1394,7 +1442,6 @@ async function run(jobId) {
       // leaves the freeze stuck indefinitely.
       try {
         const release = await UnifiedCreditController.releaseCredits(`campaign:${campaign.metadata.campaignId}`);
-        logger.debug(`[adsFactoryAuto][6-7] released frozen credits on failure  ok=${release.ok}  reason=${release.reason || "none"}`);
       } catch (releaseErr) {
         logger.warn(`[adsFactoryAuto][6-7] failed to release frozen credits: ${releaseErr.message}`);
       }
@@ -1423,7 +1470,6 @@ async function run(jobId) {
     rawImages = (completedCampaign.results?.image || []).filter((i) => i.status === 200 && i.data).slice(-pairsPerCycle);
     logger.info(`[adsFactoryAuto][7b] creatives built  count=${newCreatives.length}  withImage=${newCreatives.filter((c) => c.imageUrl).length}`);
     newCreatives.forEach((c, i) => {
-      logger.debug(`[adsFactoryAuto][7b] creative[${i}]  imageUrl="${(c.imageUrl || "").slice(0, 80)}"  meta="${(c.platformText?.meta?.headline || "").slice(0, 50)}"  google="${(c.platformText?.google?.headline || "").slice(0, 50)}"  cta="${c.callToAction}"  linkUrl="${c.linkUrl || ""}"`);
     });
     // Mark campaign back to success — creatives are stored in runHistory, not pushed to campaign.creatives
     // (pushing to campaign.creatives on every run causes unbounded accumulation)
@@ -1600,9 +1646,6 @@ async function run(jobId) {
           ? await getNextRunTime(jobId) : null;
         if (nextTime) {
           job.schedule.nextRunAt = nextTime;
-          logger.debug(`[adsFactoryAuto][9] nextRunAt=${nextTime}`);
-        } else {
-          logger.debug(`[adsFactoryAuto][9] nextRunAt=null (does_not_repeat or no future run)`);
         }
       } catch (e) {
         logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);
@@ -1620,7 +1663,18 @@ async function run(jobId) {
     }
 
     // ── Step 10: Socket.IO emit ───────────────────────────────────────────────
-    logger.debug(`[adsFactoryAuto][10] emitting socket  global.io=${!!global.io}  room=${job.userId}`);
+    // Ordering note: Step 9 already persisted this run to the DB via
+    // job.save(), so GET /activity would return the new run before this emit
+    // fires — a client refetching in that window sees the run "before the
+    // socket". The socket is a live PUSH, not the source of truth (the DB is);
+    // the emit runs as early as possible after save so the gap is minimal, and
+    // it is NOT gated behind any further await. If global.io is missing (socket
+    // server never attached to this process), we log loudly instead of silently
+    // dropping the event — that silent drop was the "sometimes it doesn't emit"
+    // symptom.
+    if (!global.io) {
+      logger.warn(`[adsFactoryAuto][10] SKIPPED socket emit — global.io is not set on this process (jobId=${jobId} runId=${runId}). The client will only see this run on its next GET /activity refetch.`);
+    }
     if (global.io) {
       try {
           const adsPosted = Object.keys(postedAdIds).length > 0
@@ -1698,7 +1752,14 @@ async function run(jobId) {
           const socketPayload = {
             success: true,
             jobId:   job._id,
-            total:   job.runHistory.length,
+            // The authoritative run count for this job is job.totalRuns (it is
+            // incremented exactly once per real run in Step 9). runHistory.length
+            // can DRIFT from it — reloadActiveJobs pushes synthetic
+            // "interrupted-*"/"missed-*" entries into runHistory without bumping
+            // totalRuns, and history can be pruned — so total is derived from
+            // totalRuns (falling back to runHistory.length only if the counter is
+            // somehow unset on a legacy job).
+            total:   job.totalRuns || job.runHistory.length,
             skip:    0,
             limit:   1,
 
@@ -1785,13 +1846,56 @@ async function run(jobId) {
             ],
           };
 
+          // Deliver to the user room. Every socket joins a room named after its
+          // userId on connect (middlewares/authMiddleware.js:
+          // `socket.join(socket.user.user_id)`), UNCONDITIONALLY and for EVERY
+          // tab the user has open. So `global.io.to(job.userId).emit(...)`
+          // reaches all of the user's live clients — this is the room the
+          // original code targeted and it works.
+          //
+          // The prior attempt switched to a Redis socketId lookup
+          // (`user:<userId> → socketId` via saveSocketId) on the theory that no
+          // socket joined the userId room. That theory was wrong (authMiddleware
+          // joins it), and worse, saveSocketId only runs inside the connection
+          // handler's `if (socket.user.token)` branch and stores a SINGLE
+          // socketId — so it is unset for some connections and only ever points
+          // at the last tab. That is exactly why the event "was never listed":
+          // the lookup returned null and the emit went nowhere. The room is the
+          // correct, multi-tab-safe target; the Redis socketId is kept only as a
+          // best-effort secondary emit for parity with the other controllers.
+          const userRoomSize = (() => {
+            try { return global.io.sockets.adapter.rooms.get(job.userId)?.size || 0; }
+            catch { return "?"; }
+          })();
           global.io.to(job.userId).emit("adsFactory:runComplete", socketPayload);
-          logger.debug(`[adsFactoryAuto][10] emitted to user room  ${job.userId}`);
+          logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to user room ${job.userId} (${userRoomSize} client(s) in room)  runId=${runId}`);
 
+          // Secondary best-effort emit to the stored socketId (if saveSocketId
+          // ran for this user) — harmless duplicate for a client already in the
+          // room; covers any edge case where the room membership was dropped but
+          // the Redis mapping survived. Never the sole delivery path.
+          try {
+            const { redisGetSet } = require("../../controllers/adCopy");
+            const userSocketId = await redisGetSet.get(`user:${job.userId}`);
+            if (userSocketId && userSocketId !== job.userId) {
+              global.io.to(userSocketId).emit("adsFactory:runComplete", socketPayload);
+            }
+          } catch (e) {
+            logger.warn(`[adsFactoryAuto][10] secondary socketId emit skipped for ${job.userId}: ${e.message}`);
+          }
+
+          // Campaign room — clients that are actively viewing this AdFactory
+          // campaign join it via the existing `adFactoryRequest` handler
+          // (socket.join(campaignId)). Keep emitting here too so an open
+          // campaign view updates live even across multiple tabs/clients.
           if (job.campaignId) {
             const campIdStr = job.campaignId.toString();
+            const campRoomSize = (() => {
+              try { return global.io.sockets.adapter.rooms.get(campIdStr)?.size || 0; }
+              catch { return "?"; }
+            })();
             global.io.to(campIdStr).emit("adsFactory:runComplete", socketPayload);
-            logger.debug(`[adsFactoryAuto][10] emitted to campaign room  ${campIdStr}`);
+            logger.info(`[adsFactoryAuto][10] emitted adsFactory:runComplete to campaign room ${campIdStr} (${campRoomSize} client(s) in room)  runId=${runId}`);
           }
         } catch (e) {
           logger.error(`[adsFactoryAuto][10] failed to emit activity socket: ${e.message}`);
@@ -1811,7 +1915,6 @@ async function run(jobId) {
       const lastRun = job.runHistory[job.runHistory.length - 1];
       const result = await notifyAdsFactoryRun({ job, campaign, run: lastRun });
       if (result && result.reason && result.reason !== "no-recipient") {
-        logger.debug(`[adsFactoryAuto][11] alert email result: sent=${result.sent} reason=${result.reason || "ok"}`);
       }
     } catch (e) {
       logger.warn(`[adsFactoryAuto][11] alert email failed (non-fatal): ${e.message}`);
