@@ -1766,7 +1766,7 @@ async function run(jobId) {
             // Campaign identity — matches getJobActivity shape exactly
             campaign: campaign ? {
               _id:          campaign._id,
-              campaignId:   campaign.metadata?.campaignId || null,
+              campaignId:   campaign.metadata?.campaignId || campaign._id,
               campaignName: campaign.metadata?.campaignName || null,
               status:       campaign.status || null,
             } : null,

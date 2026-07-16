@@ -26,7 +26,7 @@ export { AUTOMATION_STATUS };
 // After this long without a socket completion, an in-flight pending placeholder
 // flips to `failed` so the modal doesn't spin forever when the worker silently
 // drops a job. Mirrors MyImagesPage's stale-pending convention.
-const STALE_PENDING_MS = 10 * 60 * 1000;
+const STALE_PENDING_MS = 20 * 60 * 1000;
 
 // Canonical shape for a per-job activity bucket. Used as the default when a
 // new bucket is being created (or partially mutated by .pending / .rejected)
