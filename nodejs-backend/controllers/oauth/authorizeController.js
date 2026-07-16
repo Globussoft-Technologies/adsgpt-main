@@ -33,9 +33,24 @@ const {
 const SUPPORTED_SCOPES = discoveryInternal.SUPPORTED_SCOPES;
 
 function loginUrl(returnToAbsoluteUrl) {
-  const base = (process.env.AMEMBER_URL || process.env.VITE_AMEMBER_URL || "").replace(/\/+$/, "");
-  if (!base) return null;
-  return `${base}/login?amember_redirect_url=${encodeURIComponent(returnToAbsoluteUrl)}`;
+  // Route the login bounce through the frontend's /oauth/relay page. It's
+  // the piece that turns aMember credentials into an AdsGPT `access-token`
+  // JWT — the AS backend only reads that cookie, it doesn't set it. Going
+  // straight to aMember (as the earlier revision did) creates a redirect
+  // loop because aMember bounces back to the AS with no JWT cookie set.
+  //
+  // Frontend relay: react-frontend/src/pages/OAuthRelay/OAuthRelayPage.jsx
+  const feBase = (process.env.FRONTEND_URL || "").replace(/\/+$/, "");
+  if (feBase) {
+    return `${feBase}/oauth/relay?returnTo=${encodeURIComponent(returnToAbsoluteUrl)}`;
+  }
+  // Fallback — direct aMember redirect. Used when FRONTEND_URL isn't set
+  // (rare — dev without a running React app). Will loop if the AS host
+  // and the aMember host don't share a cookie root, but at least it
+  // returns something instead of failing loudly.
+  const am = (process.env.AMEMBER_URL || "").replace(/\/+$/, "");
+  if (!am) return null;
+  return `${am}/login?amember_redirect_url=${encodeURIComponent(returnToAbsoluteUrl)}`;
 }
 
 function absoluteAuthorizeUrl(req) {

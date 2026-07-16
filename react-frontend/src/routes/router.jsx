@@ -21,6 +21,7 @@ import UserOnBoardPage from '@/pages/OnBoard/UserOnBoardPage';
 import UserProfilePage from '@/pages/Profile/UserProfilePage';
 import AuthWrapper from '@/utils/AuthWrapper';
 import DevAuthPage from '@/pages/DevAuth/DevAuthPage';
+import OAuthRelayPage from '@/pages/OAuthRelay/OAuthRelayPage';
 import RunBackLog from '@/utils/RunBackLog';
 import { IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
@@ -82,6 +83,16 @@ const router = createBrowserRouter([
     // aMember first. Usage: /dev-auth#t=<JWT>[&to=/autopilot]
     path: '/dev-auth',
     element: <DevAuthPage />,
+  },
+  {
+    // OAuth 2.1 login bridge. The AS backend 302s here when it needs the
+    // user signed into AdsGPT before rendering the consent screen.
+    // This page trades aMember credentials for a JWT (mirroring RunBackLog's
+    // logic) and then forwards to the returnTo URL. Mounted OUTSIDE
+    // RunBackLog / AuthWrapper — it owns its own auth lifecycle. See
+    // pages/OAuthRelay/OAuthRelayPage.jsx.
+    path: '/oauth/relay',
+    element: <OAuthRelayPage />,
   },
   {
     path: '/query-saver',

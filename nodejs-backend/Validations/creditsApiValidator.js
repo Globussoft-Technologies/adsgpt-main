@@ -43,7 +43,7 @@ const finalizeSchema = Joi.object({
   // legacy Agent-chat caller (which omits it) keeps its "aiAssistant" tag; the
   // MCP connector path sends "claudeAI" so those generations get their own
   // My Space filter. Free-form string (the schema mirrors GeneratedMedia.source).
-  source: Joi.string().max(64).default("aiAssistant"),
+  source: Joi.string().max(64).default(""),
 });
 
 module.exports = { freezeSchema, finalizeSchema };
