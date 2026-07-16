@@ -20,15 +20,8 @@ import {
   setActiveAdStudioTab,
   setAdCreativeNewActivePage,
 } from '@/store/reducers/adStudio/adStudioTabsSlice';
-import { checkCanvaAuth } from '@/apis/canva/canvaApi';
+import { useCanvaEdit } from '@/hooks/useCanvaEdit';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
-
-const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
-const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
-const CANVA_SCOPES = import.meta.env.VITE_CANVA_SCOPES;
-const CANVA_ALLOWED_USER_ID = import.meta.env.VITE_CANVA_ALLOWED_USER_ID;
-const isCanvaAllowedUser = (userId) => String(userId ?? '') === CANVA_ALLOWED_USER_ID;
-const BACKEND_URL = import.meta.env.VITE_SOCKET_URL;
 
 // Post Ad nav (Megaphone) visibility. Flip to false to hide the
 // "Post as ad" trigger on MySpace cards.
@@ -115,7 +108,7 @@ export default function ImageCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [activeNavIndex, setActiveNavIndex] = useState(imageIndex);
   const [activeImageUrl, setActiveImageUrl] = useState(item?.results?.[0]?.url ?? '');
-  const [canvaLoading, setCanvaLoading] = useState(false);
+  const { editInCanva, isCanvaLoading } = useCanvaEdit();
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
 
   // Open the logo editor on the current image. Closes the lightbox
@@ -155,35 +148,6 @@ export default function ImageCard({
         inputs: item?.inputs,
       })
     );
-  };
-
-  const handleEditWithCanva = async (e) => {
-    e.stopPropagation();
-    const imageUrl = item?.results?.[0]?.url;
-    if (!imageUrl) return;
-    setCanvaLoading(true);
-    try {
-      const result = await checkCanvaAuth(imageUrl);
-      if (result.status) {
-        window.location.href = `${BACKEND_URL}/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`;
-      } else {
-        const { state, codeChallenge } = result;
-        const params = new URLSearchParams({
-          response_type: 'code',
-          client_id: CANVA_CLIENT_ID,
-          redirect_uri: CANVA_REDIRECT_URI,
-          scope: CANVA_SCOPES,
-          state,
-          code_challenge: codeChallenge,
-          code_challenge_method: 'S256',
-        });
-        window.location.href = `https://www.canva.com/api/oauth/authorize?${params.toString()}`;
-      }
-      // keep loading=true — redirect is in progress, spinner stays until page unloads
-    } catch (err) {
-      console.error('Canva auth error:', err);
-      setCanvaLoading(false);
-    }
   };
 
   const isThisFullscreen =
@@ -590,11 +554,11 @@ export default function ImageCard({
             
             <button
               className="group flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/10 disabled:opacity-50"
-              onClick={handleEditWithCanva}
-              disabled={canvaLoading}
+              onClick={(e) => editInCanva(item?.results?.[0]?.url, e)}
+              disabled={isCanvaLoading(item?.results?.[0]?.url)}
               title="Edit in Canva"
             >
-              {canvaLoading ? (
+              {isCanvaLoading(item?.results?.[0]?.url) ? (
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />

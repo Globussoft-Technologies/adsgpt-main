@@ -17,6 +17,8 @@ import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/Crea
 import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 import MySpaceLogoEditor, { proxied as proxiedImageUrl } from './MySpaceLogoEditor';
+import { useCanvaEdit } from '@/hooks/useCanvaEdit';
+import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -40,6 +42,7 @@ const resolveImageUrl = (url) => {
 // ── Single card ─────────────────────────────────────────────────────────────
 function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPostAdModal, onOpenLogoEditor }) {
   const dispatch = useDispatch();
+  const { editInCanva, isCanvaLoading } = useCanvaEdit();
   const [showInfo, setShowInfo] = useState(false);
   const infoTimeout = useRef(null);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -187,6 +190,24 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPo
                 <Megaphone size={18} />
               </button>
             )}
+            <button
+              className="group flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/10 disabled:opacity-50"
+              onClick={(e) => editInCanva(url, e)}
+              disabled={isCanvaLoading(url)}
+              title="Edit in Canva"
+            >
+              {isCanvaLoading(url) ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <img src={canvaIconLogo} alt="" className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
+              <span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 group-hover:max-w-20">
+                Edit in Canva
+              </span>
+            </button>
             <button
               className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
               onClick={(e) => {
