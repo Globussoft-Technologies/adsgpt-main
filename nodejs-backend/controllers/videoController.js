@@ -2818,6 +2818,9 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       regenType: voiceDelta.regenType,
       translateLang: voiceDelta.translateLang ?? "",
       scenes: baseScenes,
+      // URL of the currently-pointed (last-selected) version — the render
+      // Python re-voices from. Same version baseScenes is taken from.
+      generatedUrl: baseVersion?.url || "",
     };
 
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];

@@ -478,15 +478,25 @@ export default function AdFactoryWorkflowDarkReal() {
   // the manual group would render locked even though Services is green-
   // checked. Fall back to the campaign's persisted services config (which
   // survives reload) so the manual fork stays unlockable post-refresh.
-  const hasConfiguredServices = (productionAndServices?.servicesSelected || []).some(
-    (s) => Number(s?.serviceParams?.quantity) > 0
-  );
+  // A result that genuinely belongs to the MANUAL flow — succeeded (status
+  // 200) and carries NO jobId. Auto-Forge (automation) results live in these
+  // same results arrays but carry a jobId, so they must not count toward
+  // manual activation.
+  const hasManualResults =
+    (results?.image || []).some((r) => r?.status === 200 && !r?.jobId) ||
+    (results?.text || []).some((r) => r?.status === 200 && !r?.jobId);
+
+  // Manual Fabrication is "active" only on genuine manual intent or output:
+  // the user submitted the Services form this session (selectedServices — which
+  // AutomationForm never sets, and hydration now only re-derives from manual,
+  // jobId-null results), or a real manual creative exists. It must NOT activate
+  // off servicesSelected quantities alone: an Auto-Forge run forces those
+  // quantities > 0 server-side, which previously lit up + unlocked the manual
+  // group on an automation-only campaign even though no manual ad was ever made.
   const isManualActive =
-    (results?.image?.length || 0) > 0 ||
-    (results?.text?.length || 0) > 0 ||
+    hasManualResults ||
     !!selectedServices?.image ||
-    !!selectedServices?.text ||
-    hasConfiguredServices;
+    !!selectedServices?.text;
   // Force-collapse the entire auto pipeline when the feature flag is off,
   // OR when the automation is dormant (Meta no longer in platforms). Every
   // downstream check (auto-group expansion, AutomationActiveNode isActive,
