@@ -17,6 +17,7 @@ import {
   updateTiktokAdGroup,
   updateTiktokAd,
   uploadTiktokVideo,
+  getTiktokVideoInfo,
   uploadTiktokImage,
   getTiktokMusic,
   uploadTiktokMusic,
@@ -93,6 +94,33 @@ const MAX_IMAGE_SHORT_SIDE = 1242;
 // from CATALOG_CAROUSEL (2-20, feed-driven), which is not implemented here.
 const MIN_CAROUSEL_IMAGES = 2;
 const MAX_CAROUSEL_IMAGES = 35;
+
+// Music/audio rules for the tracks attached to Carousel / Reach image ads,
+// confirmed verbatim from TikTok's official "Specifications for Carousel Ads"
+// help article: duration ≥ 2s, up to 10 MB, and only these container types.
+const MIN_MUSIC_DURATION_SECONDS = 2;
+const MAX_MUSIC_SIZE_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_MUSIC_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac'];
+
+// Reads an audio file's duration client-side via a throwaway <audio> element,
+// without uploading it. Resolves null if the browser can't read metadata (in
+// which case we don't block — TikTok's upload stays the source of truth).
+function readAudioDuration(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(audio.duration) ? audio.duration : null);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    audio.src = url;
+  });
+}
 
 // Reads a video file's duration + pixel dimensions client-side via a
 // throwaway <video> element, without uploading it. Resolves null fields if
@@ -1775,6 +1803,28 @@ const CreateCampaignWizard = ({
   // list so it shows as selected immediately (mirrors the pixel-create flow).
   const handleMusicFileSelect = async (file) => {
     if (!file) return;
+
+    // Pre-upload checks against TikTok's documented music rules, so an invalid
+    // track fails instantly with a clear reason instead of after a round-trip.
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!SUPPORTED_MUSIC_EXTENSIONS.includes(ext)) {
+      setErrors((e) => ({
+        ...e,
+        music: `Unsupported audio format. TikTok accepts ${SUPPORTED_MUSIC_EXTENSIONS.map((x) => `.${x}`).join(', ')}.`,
+      }));
+      return;
+    }
+    if (file.size > MAX_MUSIC_SIZE_BYTES) {
+      setErrors((e) => ({ ...e, music: 'Audio file is too large. TikTok allows up to 10 MB.' }));
+      return;
+    }
+    const duration = await readAudioDuration(file);
+    if (duration != null && duration < MIN_MUSIC_DURATION_SECONDS) {
+      setErrors((e) => ({ ...e, music: 'Audio must be at least 2 seconds long.' }));
+      return;
+    }
+    setErrors((e) => ({ ...e, music: undefined }));
+
     setUploadingMusic(true);
     try {
       const res = await uploadTiktokMusic({ advertiserId, file });
@@ -2191,6 +2241,33 @@ const CreateCampaignWizard = ({
     }
   };
 
+  // Wait until an uploaded video has finished TikTok's async transcoding
+  // before it's referenced in /ad/create/. Referencing a still-processing
+  // video fails with error 2200006 ("Video processing failed / referenced too
+  // early"). TikTok's /file/video/ad/info/ response has no documented
+  // is_ready/status flag, so readiness is inferred from the info object being
+  // populated (width/height/cover present) — a field-agnostic check that
+  // doesn't rely on an unverified status field. Best-effort: after the retry
+  // budget is exhausted we proceed anyway and let /ad/create/ be the final
+  // gate, so a slow-but-valid video is never permanently blocked.
+  const waitForVideoReady = async (vId, { attempts = 8, delayMs = 2500 } = {}) => {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const info = await getTiktokVideoInfo(advertiserId, vId);
+        const v = info.videos?.find((x) => x.videoId === vId) || info.videos?.[0];
+        // A fully-processed video reports its real dimensions (and a cover).
+        if (v && v.width && v.height) return true;
+      } catch {
+        // Transient read error — keep polling within the retry budget.
+      }
+      if (i < attempts - 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    return false;
+  };
+
   // ── idempotent sequential launch ──
   const handleLaunch = async () => {
     setLaunching(true);
@@ -2309,7 +2386,12 @@ const CreateCampaignWizard = ({
             videoId = res.videos?.[0]?.videoId;
             videoCoverImageId = res.videos?.[0]?.coverImageId || '';
           }
-          if (videoId) setCreated((c) => ({ ...c, videoId, videoCoverImageId }));
+          if (videoId) {
+            setCreated((c) => ({ ...c, videoId, videoCoverImageId }));
+            // Let TikTok finish transcoding before /ad/create/ references the
+            // video, avoiding error 2200006 on larger uploads.
+            await waitForVideoReady(videoId);
+          }
         }
 
         if (form.mediaType === 'image' && !imageId) {
