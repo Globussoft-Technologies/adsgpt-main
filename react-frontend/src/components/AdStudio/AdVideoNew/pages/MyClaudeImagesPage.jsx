@@ -12,15 +12,18 @@ import ImageCard from './ImageCard';
 import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
-// AI Assistant ("Sherry") image library, rendered through the SAME MySpace
-// card as every other image source (ImageCard) so the preview, edit-logo,
-// Canva, download, multi-select ZIP, and fullscreen nav all behave identically.
+// Claude AI image library — creatives the user generated through the Claude
+// connector (claude.ai calling our MCP tools over OAuth). Rendered through the
+// SAME MySpace card as every other image source (ImageCard) so preview,
+// edit-logo, Canva, download, multi-select ZIP, and fullscreen nav all behave
+// identically — this is a filter over the shared feed, NOT a parallel surface.
 //
 // Data comes from the slim /generated-media/library endpoint scoped to
-// source=aiAssistant (the credits-finalize path tags assistant media with that
+// source=claudeAI (the MCP credit-finalize path tags connector media with that
 // source). Those rows are slim — no generation `inputs`/prompt/status — so we
 // adapt each into the { status, results:[{url}] } shape ImageCard reads, and
-// opt out of Info + Recreate (nothing to show / nowhere to route).
+// opt out of Info + Recreate (nothing to show / nowhere to route). Mirrors
+// MyAssistantImagesPage exactly (source is the only functional difference).
 
 // Match the conventional MyImagesPage grid exactly.
 const breakpointColumnsObj = {
@@ -43,7 +46,7 @@ const adaptRow = (row) => {
     status: 'completed',
     model: row?.model,
     createdAt: row?.createdAt,
-    // Assistant rows carry no generation inputs; keep an empty object so
+    // Connector rows carry no generation inputs; keep an empty object so
     // ImageCard's optional reads (prompt for post-as-ad) stay safe.
     inputs: {},
     url: abs,
@@ -51,7 +54,7 @@ const adaptRow = (row) => {
   };
 };
 
-export default function MyAssistantImagesPage() {
+export default function MyClaudeImagesPage() {
   const dispatch = useDispatch();
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(0);
@@ -88,7 +91,7 @@ export default function MyAssistantImagesPage() {
       const data = await getMediaLibrary({
         userId,
         type: 'image',
-        source: 'aiAssistant',
+        source: 'claudeAI',
         page: nextPage,
         limit: PAGE_SIZE,
       });
@@ -135,13 +138,13 @@ export default function MyAssistantImagesPage() {
   };
 
   // Logo editor "Save as new". The editor already uploaded the composite to
-  // S3, so we surface it immediately by prepending an adapted card. Assistant
+  // S3, so we surface it immediately by prepending an adapted card. Connector
   // media isn't stored with generation metadata, so the default save-edited
   // endpoint can't persist it as a re-fetchable record — the edited copy shows
   // for this session; a fresh generation is what repopulates the feed.
   const handleLogoSaved = (newUrl) => {
     if (!newUrl) return;
-    const adapted = adaptRow({ url: newUrl, model: 'aiAssistant' });
+    const adapted = adaptRow({ url: newUrl, model: 'claudeAI' });
     setItems((prev) => [adapted, ...prev]);
   };
 
@@ -176,7 +179,7 @@ export default function MyAssistantImagesPage() {
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center text-gray-500 dark:text-white/60">
         <Sparkles className="h-8 w-8 opacity-50" />
         <p className="text-sm">
-          No AI Assistant images yet. Generate an ad in the assistant and it&apos;ll show up here.
+          No Claude AI images yet. Generate one through the Claude connector and it&apos;ll show up here.
         </p>
       </div>
     );
@@ -274,7 +277,7 @@ export default function MyAssistantImagesPage() {
             onOpenPostAdModal={(payload) =>
               setPostAdState({ open: true, payload, autoAdvance: false })
             }
-            // Assistant rows have no generation inputs to power these.
+            // Connector rows have no generation inputs to power these.
             enableInfo={false}
             enableRecreate={false}
             onLogoSaved={handleLogoSaved}

@@ -39,6 +39,11 @@ const finalizeSchema = Joi.object({
   // can't over-charge a freeze. Default of 0 means "refund the whole hold".
   actual_used: Joi.number().min(0).default(0),
   media: Joi.array().items(mediaItemSchema).default([]),
+  // My Space provenance tag written on each GeneratedMedia row. Optional so the
+  // legacy Agent-chat caller (which omits it) keeps its "aiAssistant" tag; the
+  // MCP connector path sends "claudeAI" so those generations get their own
+  // My Space filter. Free-form string (the schema mirrors GeneratedMedia.source).
+  source: Joi.string().max(64).default("aiAssistant"),
 });
 
 module.exports = { freezeSchema, finalizeSchema };

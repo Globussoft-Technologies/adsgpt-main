@@ -544,12 +544,16 @@ export const uploadMetaAdVideo = async ({ adAccountId, video, videoUrl }) => {
 export const getMediaLibrary = async ({
   userId,
   type,
+  source,
   page = 1,
   limit = 24,
 } = {}) => {
   if (!userId) throw new Error('getMediaLibrary: userId is required');
   const params = { page, limit };
   if (type) params.type = type;
+  // Optional provenance filter (e.g. source=aiAssistant → only AI Assistant
+  // generations). Omitted by the campaign-wizard callers, which want everything.
+  if (source) params.source = source;
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/generated-media/library/${encodeURIComponent(userId)}`,
     { params, headers: getAuthHeaders() },

@@ -20,7 +20,7 @@ class GeneratedMediaController {
    */
   static async saveGeneratedMedia(data) {
     try {
-      const { userId, model, type, image, video, credit_deduction, cost, duration } = data;
+      const { userId, model, type, image, video, credit_deduction, cost, duration, source } = data;
 
       if (!userId || !model) {
         return { success: false, message: "userId and model are required" };
@@ -31,6 +31,10 @@ class GeneratedMediaController {
         // user_name,
         model,
         type,
+        // Provenance tag (e.g. "aiAssistant") so callers can later isolate a
+        // single surface's media. Defaults to "" for the historical callers
+        // (imageController / videoController / adFactory) that don't pass it.
+        source: source || "",
         image: image || "",
         video: video || "",
         credit_deduction: credit_deduction || 0,
@@ -171,7 +175,7 @@ class GeneratedMediaController {
   static async getMediaLibrary(req, res) {
     try {
       const { userId } = req.params;
-      const { type, page = 1, limit = 24 } = req.query;
+      const { type, source, page = 1, limit = 24 } = req.query;
 
       if (!userId) {
         return res
@@ -247,8 +251,12 @@ class GeneratedMediaController {
       // to image/video rows; otherwise pin the type.
       const typeMatch = targetType === "all" ? {} : { type: targetType };
 
+      // Optional provenance filter (e.g. source=aiAssistant restricts the feed
+      // to AI Assistant generations). Omitted → all sources, as before.
+      const sourceMatch = source ? { source } : {};
+
       const pipeline = [
-        { $match: { userId, ...typeMatch, ...urlMatch } },
+        { $match: { userId, ...typeMatch, ...sourceMatch, ...urlMatch } },
         { $sort: { createdAt: -1 } },
         {
           $facet: {

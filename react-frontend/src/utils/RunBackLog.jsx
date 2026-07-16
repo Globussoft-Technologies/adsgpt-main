@@ -217,8 +217,9 @@ function RunBackLog({ children }) {
 
   // --- EXISTING amember login/token logic ---
   useEffect(() => {
-    const userName = Cookies.get('amember_login') || '';
-    const password = Cookies.get('amember_pass') || '';
+    // LOCAL TESTING ONLY — do not commit: auto-login as the dev test user.
+    const userName = Cookies.get('amember_login') || 'gajendratest';
+    const password = Cookies.get('amember_pass') || 'gajendratest';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
     const existingCookies = getCookies();

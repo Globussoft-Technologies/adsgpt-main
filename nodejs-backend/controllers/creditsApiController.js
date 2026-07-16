@@ -266,7 +266,7 @@ exports.finalize = async (req, res) => {
     });
   }
 
-  const { reservation_key, actual_used, media } = value;
+  const { reservation_key, actual_used, media, source } = value;
 
   console.log(
     `[credits-api] finalize ENTER key=${reservation_key} actual_used=${actual_used} media=${media.length}`,
@@ -314,6 +314,12 @@ exports.finalize = async (req, res) => {
           userId,
           model: m.model,
           type: m.type,
+          // Provenance tag for My Space's source filter, isolating these from
+          // Ad Studio / AdFactory media (which live untagged in the same
+          // collection). Defaults to "aiAssistant" (the legacy agent-chat path)
+          // when the caller omits `source`; the MCP connector path sends
+          // "claudeAI" so claude.ai generations get their own filter.
+          source,
           image: m.type === "image" ? m.url : "",
           video: m.type === "video" ? m.url : "",
           credit_deduction: m.credit_deduction || 0,

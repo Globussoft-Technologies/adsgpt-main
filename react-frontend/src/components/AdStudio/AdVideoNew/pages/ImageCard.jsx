@@ -98,6 +98,16 @@ export default function ImageCard({
   onFetchMore,
   onOpenRecreateAdsModal,
   onOpenPostAdModal,
+  // Conventional MySpace cards carry full generation metadata, so Info +
+  // Recreate are on by default. Surfaces backed by slim media rows (e.g. the
+  // AI Assistant library, which stores no prompt/inputs) opt out — there's
+  // nothing to show in the tooltip and nowhere for Recreate to route.
+  enableInfo = true,
+  enableRecreate = true,
+  // Optional override for the logo editor's "Save as new". Default: persist via
+  // the save-edited endpoint (needs generation inputs). Slim-row hosts pass
+  // this to own the save instead.
+  onLogoSaved,
 }) {
   const dispatch = useDispatch();
   const userId = useSelector((state) => state.socket?.userData?.user_id);
@@ -140,7 +150,17 @@ export default function ImageCard({
   // Save-as-new: the editor uploaded a flattened composite to S3; persist it
   // as a brand-new record (original untouched) so it appears immediately and
   // survives a refresh.
+  //
+  // `onLogoSaved` lets a host own this instead — needed for slim-row surfaces
+  // (AI Assistant library) where the default save-edited endpoint can't run:
+  // it requires the source record's generation inputs (type/model), which
+  // those rows don't carry, so it would 400. Those hosts take the new URL and
+  // handle display themselves.
   const handleLogoSaved = (newUrl) => {
+    if (onLogoSaved) {
+      onLogoSaved(newUrl);
+      return;
+    }
     dispatch(
       saveEditedImageAction({
         url: newUrl,
@@ -453,7 +473,7 @@ export default function ImageCard({
       )}
 
     <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
-      <InfoTooltip />
+      {enableInfo && <InfoTooltip />}
 
       {/* Selection Checkbox */}
       {item?.status === 'completed' && (
@@ -544,14 +564,16 @@ export default function ImageCard({
                 <Megaphone size={18} />
               </button>
             )}
-            <button
-              className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-              onClick={handleRecreate}
-              title="Recreate Image"
-            >
-              <Repeat size={18} />
-            </button>
-            
+            {enableRecreate && (
+              <button
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                onClick={handleRecreate}
+                title="Recreate Image"
+              >
+                <Repeat size={18} />
+              </button>
+            )}
+
             <button
               className="group flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/10 disabled:opacity-50"
               onClick={(e) => editInCanva(item?.results?.[0]?.url, e)}
@@ -591,13 +613,15 @@ export default function ImageCard({
           <p className="mt-2 text-xs text-gray-400">{errorMessage}</p>
 
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-linear-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            <button
-              className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-              onClick={handleRecreate}
-              title="Recreate Image"
-            >
-              <Repeat size={18} />
-            </button>
+            {enableRecreate && (
+              <button
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                onClick={handleRecreate}
+                title="Recreate Image"
+              >
+                <Repeat size={18} />
+              </button>
+            )}
           </div>
         </div>
       )}

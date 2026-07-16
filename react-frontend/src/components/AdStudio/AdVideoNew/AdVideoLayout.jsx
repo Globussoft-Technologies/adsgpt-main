@@ -34,6 +34,7 @@ import MyVideosPage from './pages/MyVideosPage';
 import MyImagesPage from './pages/MyImagesPage';
 import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
 import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
+import MyClaudeImagesPage from './pages/MyClaudeImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 
@@ -104,6 +105,7 @@ const selectImageSource = [
   { value: 'adCreative', label: 'AdCreative' },
   { value: 'adFactory', label: 'AdFactory' },
   { value: 'aiAssistant', label: 'AI Assistant' },
+  { value: 'claudeAI', label: 'Claude AI' },
 ];
 
 const AdVideoLayout = () => {
@@ -410,6 +412,8 @@ const AdVideoLayout = () => {
               <MyAdFactoryImagesPage startDate={startDate} endDate={endDate} />
             ) : imageSource === 'aiAssistant' ? (
               <MyAssistantImagesPage />
+            ) : imageSource === 'claudeAI' ? (
+              <MyClaudeImagesPage />
             ) : (
               <MyImagesPage imageType={imageType} startDate={startDate} endDate={endDate} />
             )
