@@ -19,6 +19,13 @@ const mongoose = require("mongoose");
  * confirmation (see services/metaChat/geminiMcpBridge.js) and cleared once
  * resolved. Only one pending action per session at a time — the chat loop
  * pauses on the first non-read-only tool call it encounters.
+ *
+ * `pendingInput` is the parallel state for an input-required pause — currently
+ * only pick_creative_media, where the model needs the user to choose/upload
+ * creative media before it can continue. Set while the in-chat media picker is
+ * open, cleared (atomically claimed) when the user picks or cancels. A session
+ * never has both pendingAction and pendingInput set at once — the loop pauses
+ * on whichever blocker it hits first.
  */
 const metaChatSessionSchema = new mongoose.Schema(
   {
@@ -39,6 +46,11 @@ const metaChatSessionSchema = new mongoose.Schema(
     transcript: { type: [mongoose.Schema.Types.Mixed], default: [] },
 
     pendingAction: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    pendingInput: {
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },

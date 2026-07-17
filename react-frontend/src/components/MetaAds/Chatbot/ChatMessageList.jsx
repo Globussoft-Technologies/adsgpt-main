@@ -4,6 +4,7 @@ import { Bot, Check, ChevronRight, Copy, Loader2, RotateCcw, ThumbsDown, ThumbsU
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ConfirmActionCard from './ConfirmActionCard';
+import MediaPickerCard from './MediaPickerCard';
 import CardBlock from './cards/CardBlock';
 
 // Shared markdown styling — same arbitrary-selector approach the AI Assistant
@@ -237,14 +238,18 @@ const ChatMessageList = ({
   onConfirm,
   onCancel,
   confirmBusy,
+  pendingPick,
+  onMediaPick,
+  onMediaCancel,
   onAction,
   onRegenerate,
   isStreaming,
+  currency,
 }) => {
   const bottomRef = useRef(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingConfirm]);
+  }, [messages, pendingConfirm, pendingPick]);
 
   // Regenerate only the most recent assistant message.
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
@@ -272,6 +277,22 @@ const ChatMessageList = ({
               busy={confirmBusy}
               onConfirm={onConfirm}
               onCancel={onCancel}
+              currency={currency}
+            />
+          </div>
+        </div>
+      )}
+
+      {pendingPick && (
+        <div className="flex w-full max-w-[92%] items-start gap-2 self-start">
+          <BotAvatar />
+          <div className="min-w-0 flex-1">
+            <MediaPickerCard
+              mediaType={pendingPick.mediaType}
+              purpose={pendingPick.purpose}
+              busy={confirmBusy}
+              onSubmit={onMediaPick}
+              onCancel={onMediaCancel}
             />
           </div>
         </div>

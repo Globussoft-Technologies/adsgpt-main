@@ -2,7 +2,7 @@ import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Plus, SendHorizonal, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { streamChat, confirmAction, getChatHistory } from '@/apis/metaAds/metaChatApi';
+import { streamChat, confirmAction, pickChatMedia, getChatHistory } from '@/apis/metaAds/metaChatApi';
 import ChatMessageList from './ChatMessageList';
 import SuggestionChips from './cards/SuggestionChips';
 import ChatHistoryMenu from './ChatHistoryMenu';
@@ -96,6 +96,8 @@ const MetaAdsChatPanel = ({
   const [isStreaming, setIsStreaming] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  // Parallel to pendingConfirm, for an input-required pause (media picker).
+  const [pendingPick, setPendingPick] = useState(null);
 
   const controllerRef = useRef(null);
   // id of the in-progress assistant message (steps + streamed text live on it)
@@ -116,6 +118,11 @@ const MetaAdsChatPanel = ({
           }
         : null,
     );
+    setPendingPick(
+      data.pendingInput
+        ? { mediaType: data.pendingInput.mediaType || 'image', purpose: data.pendingInput.purpose || null }
+        : null,
+    );
     setStoredSessionId(data.adAccountId, data.sessionId);
   }, []);
 
@@ -129,6 +136,7 @@ const MetaAdsChatPanel = ({
     setSessionId(null);
     setMessages([]);
     setPendingConfirm(null);
+    setPendingPick(null);
     setIsStreaming(false);
     setConfirmBusy(false);
 
@@ -164,6 +172,7 @@ const MetaAdsChatPanel = ({
       setIsStreaming(false);
       setConfirmBusy(false);
       setPendingConfirm(null);
+      setPendingPick(null);
       setInput('');
       getChatHistory(id)
         .then(applySessionData)
@@ -268,13 +277,25 @@ const MetaAdsChatPanel = ({
           finalizeAssistant();
           setConfirmBusy(false);
           setIsStreaming(false);
+          setPendingPick(null);
           setPendingConfirm({
             actions: data.actions || [{ toolName: data.toolName, args: data.args }],
+          });
+          break;
+        case 'pick_media':
+          finalizeAssistant();
+          setConfirmBusy(false);
+          setIsStreaming(false);
+          setPendingConfirm(null);
+          setPendingPick({
+            mediaType: data.mediaType === 'video' ? 'video' : 'image',
+            purpose: data.purpose || null,
           });
           break;
         case 'error':
           finalizeAssistant();
           setPendingConfirm(null);
+          setPendingPick(null);
           appendMessage({ role: 'error', text: data.detail || 'Something went wrong.' });
           resetTurnState();
           break;
@@ -300,7 +321,7 @@ const MetaAdsChatPanel = ({
   const sendText = useCallback(
     (raw) => {
       const text = (raw ?? '').trim();
-      if (!text || !adAccountId || isStreaming || pendingConfirm) return;
+      if (!text || !adAccountId || isStreaming || pendingConfirm || pendingPick) return;
 
       controllerRef.current?.abort();
       currentAsstRef.current = null;
@@ -326,6 +347,7 @@ const MetaAdsChatPanel = ({
       adId,
       isStreaming,
       pendingConfirm,
+      pendingPick,
       sessionId,
       appendMessage,
       handleStreamEvent,
@@ -340,6 +362,7 @@ const MetaAdsChatPanel = ({
     setSessionId(null);
     setMessages([]);
     setPendingConfirm(null);
+    setPendingPick(null);
     setIsStreaming(false);
     setConfirmBusy(false);
     setInput('');
@@ -370,6 +393,41 @@ const MetaAdsChatPanel = ({
     },
     [sessionId, handleStreamEvent]
   );
+
+  // Resume a media-picker pause. `url`/`mediaType` when the user picked
+  // something; call handleMediaCancel to back out. Mirrors handleConfirm: the
+  // card is dismissed immediately and the turn resumes streaming.
+  const handleMediaPick = useCallback(
+    (url, mediaType) => {
+      if (!sessionId || !url) return;
+      controllerRef.current?.abort();
+      currentAsstRef.current = null;
+      setConfirmBusy(true);
+      setPendingPick(null);
+      setIsStreaming(true);
+      controllerRef.current = pickChatMedia({
+        sessionId,
+        url,
+        mediaType,
+        onEvent: handleStreamEvent,
+      });
+    },
+    [sessionId, handleStreamEvent]
+  );
+
+  const handleMediaCancel = useCallback(() => {
+    if (!sessionId) return;
+    controllerRef.current?.abort();
+    currentAsstRef.current = null;
+    setConfirmBusy(true);
+    setPendingPick(null);
+    setIsStreaming(true);
+    controllerRef.current = pickChatMedia({
+      sessionId,
+      cancel: true,
+      onEvent: handleStreamEvent,
+    });
+  }, [sessionId, handleStreamEvent]);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
@@ -455,9 +513,13 @@ const MetaAdsChatPanel = ({
           confirmBusy={confirmBusy}
           onConfirm={() => handleConfirm(true)}
           onCancel={() => handleConfirm(false)}
+          pendingPick={pendingPick}
+          onMediaPick={handleMediaPick}
+          onMediaCancel={handleMediaCancel}
           onAction={sendText}
           onRegenerate={handleRegenerate}
           isStreaming={isStreaming}
+          currency={adAccountCurrency}
         />
       )}
 
@@ -473,8 +535,14 @@ const MetaAdsChatPanel = ({
                 handleSend();
               }
             }}
-            placeholder={adAccountId ? 'Ask about your Meta Ads account…' : 'Select an ad account first'}
-            disabled={!adAccountId || isStreaming || Boolean(pendingConfirm)}
+            placeholder={
+              pendingPick
+                ? 'Choose media above to continue…'
+                : adAccountId
+                  ? 'Ask about your Meta Ads account…'
+                  : 'Select an ad account first'
+            }
+            disabled={!adAccountId || isStreaming || Boolean(pendingConfirm) || Boolean(pendingPick)}
             rows={1}
             className="max-h-32 min-h-6 flex-1 resize-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
@@ -482,7 +550,7 @@ const MetaAdsChatPanel = ({
             size="icon"
             className="size-8 shrink-0 rounded-full border-0 bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] text-white hover:opacity-90"
             onClick={handleSend}
-            disabled={!input.trim() || !adAccountId || isStreaming || Boolean(pendingConfirm)}
+            disabled={!input.trim() || !adAccountId || isStreaming || Boolean(pendingConfirm) || Boolean(pendingPick)}
           >
             <SendHorizonal className="size-4" />
           </Button>

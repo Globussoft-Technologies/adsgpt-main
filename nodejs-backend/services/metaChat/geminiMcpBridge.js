@@ -7,6 +7,7 @@ const {
   LOCAL_TOOL_DECLARATIONS,
   localHandlers,
   LOCAL_TOOL_ANNOTATIONS,
+  INPUT_REQUIRED_TOOLS,
 } = require("./localTools");
 const { logTokenUsage } = require("../tokenUsage");
 
@@ -144,6 +145,15 @@ then wait — call the tool and let the confirmation card do that job.
 - Resolve names to concrete IDs using a read tool first if the user referred to something by
   name. Never invent account/campaign/ad set/ad/creative IDs — only use IDs returned by a tool
   call.
+- Creative media (the image/video for an ad): when you need media to build an ad creative and the
+  user has NOT already given you a usable media URL in this conversation, call pick_creative_media
+  (media_type 'image' or 'video') — it opens an in-chat picker where they choose from their media
+  library or upload a file. Do NOT ask the user to paste a URL as text. You'll get the chosen
+  media's public URL back as that tool's result; use that EXACT URL to build the creative — for an
+  image, pass it as image_url to ads_create_ad_creative; for a video, first call ads_upload_ad_video
+  with file_url set to that URL to get a video_id, then ads_create_ad_creative with that video_id
+  plus an image thumbnail. If the user already gave you a direct, usable media URL, use it directly
+  and do NOT call pick_creative_media. Never invent a media URL.
 - If the user's request is ambiguous about which resource to act on (e.g., two campaigns share
   a similar name, or "the ad set" could mean several), ask a clarifying question instead of
   guessing.
@@ -423,12 +433,48 @@ async function sendAndProcess({ chat, toolMap, message, ctx }) {
       };
     }
 
-    const writeCalls = calls.filter((c) => !isReadOnly(toolMap.get(c.name)));
-    const readCalls = calls.filter((c) => isReadOnly(toolMap.get(c.name)));
+    // Input-required calls (pick_creative_media) can't be answered until the
+    // user supplies a value in-chat, so they're intercepted by name BEFORE the
+    // read/write split (they're neither) and, if present, pause the whole turn.
+    const inputCalls = calls.filter((c) => INPUT_REQUIRED_TOOLS.has(c.name));
+    const otherCalls = calls.filter((c) => !INPUT_REQUIRED_TOOLS.has(c.name));
+    const writeCalls = otherCalls.filter((c) => !isReadOnly(toolMap.get(c.name)));
+    const readCalls = otherCalls.filter((c) => isReadOnly(toolMap.get(c.name)));
 
+    // Gemini requires exactly one function-response per call in a turn, so we
+    // execute the reads now and carry their responses forward into whichever
+    // pause we return — never partially answering the batch.
     const readResponseParts = [];
     for (const call of readCalls) {
       readResponseParts.push(await executeCall(call, ctx));
+    }
+
+    if (inputCalls.length > 0) {
+      // Only one media pick is handled per pause. The first input call is the
+      // one the user answers; any extras (and any write calls the model
+      // improbably emitted in the same turn, before having the media) are
+      // carried forward and answered on resume with a re-issue nudge, so the
+      // response count always matches the model turn and the session can't wedge.
+      const [inputCall, ...otherInputCalls] = inputCalls;
+      return {
+        status: "pending_input",
+        text: turn.text ?? "",
+        pendingInput: {
+          inputCall: { id: inputCall.id, name: inputCall.name, args: inputCall.args || {} },
+          otherInputCalls: otherInputCalls.map((c) => ({
+            id: c.id,
+            name: c.name,
+            args: c.args || {},
+          })),
+          deferredWriteCalls: writeCalls.map((c) => ({
+            id: c.id,
+            name: c.name,
+            args: c.args || {},
+          })),
+          readResponseParts,
+          historySoFar: chat.getHistory(),
+        },
+      };
     }
 
     if (writeCalls.length > 0) {
@@ -522,10 +568,97 @@ async function resumeAfterConfirmation({
   return sendAndProcess({ chat, toolMap, message, ctx });
 }
 
+/**
+ * Resume a turn that paused for a media pick (pick_creative_media). Rebuilds
+ * the chat from the persisted history and answers the picker call with the
+ * media the user chose (or a cancellation), plus a re-issue nudge for any
+ * extra picker/write calls the model emitted in the same turn — so the
+ * function-response count matches the paused model turn exactly. The model
+ * then typically proceeds to build the creative (a write), which surfaces as a
+ * normal pending_confirmation from sendAndProcess.
+ *
+ * `mediaUrl` is the chosen media's public URL, or null when the user cancelled.
+ */
+async function resumeAfterMediaPick({
+  toolMap,
+  functionDeclarations,
+  adAccountId,
+  currency,
+  scope,
+  pendingInput,
+  mediaUrl,
+  mediaType,
+  ctx,
+}) {
+  const chat = createChat({
+    adAccountId,
+    currency,
+    scope,
+    history: pendingInput.historySoFar,
+    functionDeclarations,
+  });
+
+  const parts = [...(pendingInput.readResponseParts || [])];
+
+  const { inputCall } = pendingInput;
+  if (mediaUrl) {
+    const instructions =
+      mediaType === "video"
+        ? `The user selected a video. Its public URL is ${mediaUrl}. To use it: call ` +
+          `ads_upload_ad_video with file_url set to this exact URL to get a video_id, then call ` +
+          `ads_create_ad_creative with that video_id plus an image thumbnail (image_url or ` +
+          `image_hash). Do not paste the URL to the user as text.`
+        : `The user selected an image. Its public URL is ${mediaUrl}. Use this exact URL as ` +
+          `image_url when calling ads_create_ad_creative. Do not paste the URL to the user as text.`;
+    parts.push(
+      createPartFromFunctionResponse(inputCall.id, inputCall.name, {
+        result: { provided: true, media_type: mediaType, url: mediaUrl, instructions },
+      })
+    );
+  } else {
+    parts.push(
+      createPartFromFunctionResponse(inputCall.id, inputCall.name, {
+        result: {
+          provided: false,
+          note:
+            "The user cancelled media selection and did not provide any media. Ask how they'd " +
+            "like to proceed rather than continuing — do not invent a media URL.",
+        },
+      })
+    );
+  }
+
+  // Extra picker calls in the same turn: only one is handled at a time.
+  for (const extra of pendingInput.otherInputCalls || []) {
+    parts.push(
+      createPartFromFunctionResponse(extra.id, extra.name, {
+        error:
+          "Only one media selection is handled at a time. Re-request this one after the current " +
+          "selection is used, if still needed.",
+      })
+    );
+  }
+
+  // Write calls the model emitted in the same turn as the picker (before it had
+  // the media): nudge it to re-issue them now that the media URL is available.
+  for (const w of pendingInput.deferredWriteCalls || []) {
+    parts.push(
+      createPartFromFunctionResponse(w.id, w.name, {
+        error:
+          "Deferred: the user has now selected media (see the pick_creative_media result above). " +
+          "Re-issue this call now using that media URL.",
+      })
+    );
+  }
+
+  return sendAndProcess({ chat, toolMap, message: parts, ctx });
+}
+
 module.exports = {
   createChat,
   loadTools,
   sendAndProcess,
   resumeAfterConfirmation,
+  resumeAfterMediaPick,
   trimHistory,
 };

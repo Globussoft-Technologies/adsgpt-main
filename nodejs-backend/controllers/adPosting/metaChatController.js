@@ -1,17 +1,40 @@
 const { v4: uuidv4 } = require("uuid");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
 
 const MetaChatSession = require("../../Module/metaChat/metaChatSession");
 const MetaChatAuditLog = require("../../Module/metaChat/metaChatAuditLog");
 const { getAccessTokenForAccount } = require("../../config/autopilotConfig");
 const { createMcpClient } = require("../../services/metaChat/mcpClient");
+const { s3Client } = require("../../storage/s3");
 const {
   createChat,
   loadTools,
   sendAndProcess,
   resumeAfterConfirmation,
+  resumeAfterMediaPick,
   trimHistory,
 } = require("../../services/metaChat/geminiMcpBridge");
 const logger = require("../../utils/logger");
+
+// Public host that serves objects written to app storage (same host the media
+// library's URLs resolve against — see react-frontend VITE_S3_BASE_URL). The
+// creative-media upload endpoint returns absolute URLs anchored here so the
+// Meta MCP tools (ads_upload_ad_image / ads_create_ad_creative) can fetch them.
+// Read lazily (not at module load) to avoid any dotenv-ordering fragility —
+// same hardening as mcpClient.js's lazy env reads.
+const mediaViewBase = () => (process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "");
+
+const CHAT_MEDIA_MIME = {
+  "image/jpeg": { ext: "jpg", kind: "image" },
+  "image/png": { ext: "png", kind: "image" },
+  "image/webp": { ext: "webp", kind: "image" },
+  "image/gif": { ext: "gif", kind: "image" },
+  "video/mp4": { ext: "mp4", kind: "video" },
+  "video/quicktime": { ext: "mov", kind: "video" },
+  "video/webm": { ext: "webm", kind: "video" },
+};
+const MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024; // matches Meta's image cap
+const MAX_CHAT_VIDEO_BYTES = 100 * 1024 * 1024; // practical web-upload cap
 
 // Independent of trimHistory's turn cap on the raw Gemini history — this
 // bounds the frontend-shaped transcript the same way (2 entries per turn:
@@ -54,6 +77,18 @@ function emitConfirm(res, sessionId, pendingAction) {
     actions,
     toolName: actions[0]?.toolName,
     args: actions[0]?.args,
+  });
+}
+
+// Emit the media-picker card. Only the slim {mediaType, purpose} is sent to
+// the client — the rest of pendingInput (carried tool responses, raw Gemini
+// history) is an internal resume detail the UI never needs.
+function emitPickMedia(res, sessionId, pendingInput) {
+  const args = pendingInput?.inputCall?.args || {};
+  sendEvent(res, "pick_media", {
+    sessionId,
+    mediaType: args.media_type === "video" ? "video" : "image",
+    purpose: args.purpose || null,
   });
 }
 
@@ -200,6 +235,15 @@ exports.streamChat = async (req, res) => {
       return;
     }
 
+    if (session.pendingInput) {
+      sendEvent(res, "error", {
+        detail:
+          "This session is waiting for you to choose creative media. Pick or cancel it before sending a new message.",
+      });
+      res.end();
+      return;
+    }
+
     mcpClient = await createMcpClient(accessToken);
     const { toolMap, functionDeclarations, localHandlers } = await loadTools(mcpClient);
     const scope = { campaignId: session.campaignId, adSetId: session.adSetId, adId: session.adId };
@@ -220,6 +264,7 @@ exports.streamChat = async (req, res) => {
 
     if (outcome.status === "pending_confirmation") {
       session.pendingAction = outcome.pendingAction;
+      session.pendingInput = null;
       if (outcome.text || turnCards.length) {
         session.transcript.push({
           role: "assistant",
@@ -232,9 +277,25 @@ exports.streamChat = async (req, res) => {
       session.transcript = session.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);
       await session.save();
       emitConfirm(res, sessionId, outcome.pendingAction);
+    } else if (outcome.status === "pending_input") {
+      session.pendingInput = outcome.pendingInput;
+      session.pendingAction = null;
+      if (outcome.text || turnCards.length) {
+        session.transcript.push({
+          role: "assistant",
+          text: outcome.text || "",
+          cards: turnCards,
+          pending: true,
+          ts: Date.now(),
+        });
+      }
+      session.transcript = session.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);
+      await session.save();
+      emitPickMedia(res, sessionId, outcome.pendingInput);
     } else {
       session.history = trimHistory(outcome.history);
       session.pendingAction = null;
+      session.pendingInput = null;
       session.transcript.push({
         role: "assistant",
         text: outcome.text,
@@ -364,11 +425,33 @@ exports.confirmAction = async (req, res) => {
         {
           $set: {
             pendingAction: outcome.pendingAction,
+            pendingInput: null,
             transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
           },
         }
       );
       emitConfirm(res, sessionId, outcome.pendingAction);
+    } else if (outcome.status === "pending_input") {
+      if (outcome.text || turnCards.length) {
+        transcript.push({
+          role: "assistant",
+          text: outcome.text || "",
+          cards: turnCards,
+          pending: true,
+          ts: Date.now(),
+        });
+      }
+      await MetaChatSession.updateOne(
+        { sessionId, userId },
+        {
+          $set: {
+            pendingInput: outcome.pendingInput,
+            pendingAction: null,
+            transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
+          },
+        }
+      );
+      emitPickMedia(res, sessionId, outcome.pendingInput);
     } else {
       transcript.push({
         role: "assistant",
@@ -382,6 +465,7 @@ exports.confirmAction = async (req, res) => {
           $set: {
             history: trimHistory(outcome.history),
             pendingAction: null,
+            pendingInput: null,
             transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
           },
         }
@@ -419,6 +503,239 @@ exports.confirmAction = async (req, res) => {
 };
 
 /**
+ * POST /meta-ads/chat/media-pick
+ * Body: { sessionId, url?, mediaType?, cancel? }
+ * Resumes a session paused on a media-picker (pick_creative_media). The chosen
+ * media's public URL (or a cancellation) is fed back to the model as the
+ * picker call's function-response; the model then typically proceeds to build
+ * the creative, which surfaces as a normal write-confirmation.
+ *
+ * Mirrors confirmAction's atomic-claim pattern: pendingInput is flipped
+ * set→null by exactly one request, so a double-submit / two-tab pick can't
+ * resume the same turn twice or wedge the session.
+ */
+exports.pickMedia = async (req, res) => {
+  const userId = req.user.user_id;
+  const { sessionId, url, mediaType, cancel } = req.body || {};
+
+  if (!sessionId) {
+    res.status(400).json({ error: "sessionId is required." });
+    return;
+  }
+  const cancelled = cancel === true;
+  if (!cancelled) {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url) || url.length > 2048) {
+      res.status(400).json({ error: "A valid media url (or cancel:true) is required." });
+      return;
+    }
+    if (mediaType !== "image" && mediaType !== "video") {
+      res.status(400).json({ error: "mediaType must be 'image' or 'video'." });
+      return;
+    }
+  }
+
+  openSse(res);
+
+  let mcpClient;
+  try {
+    const existing = await MetaChatSession.findOne({ sessionId, userId });
+    if (!existing || !existing.pendingInput) {
+      sendEvent(res, "error", { detail: "No pending media selection for this session." });
+      res.end();
+      return;
+    }
+    const adAccountId = existing.adAccountId;
+
+    // Resolve the token BEFORE claiming, so a token failure leaves the pending
+    // input intact for a later retry rather than silently dropping it.
+    const { accessToken } = await getAccessTokenForAccount({
+      adAccountId,
+      callerUserId: userId,
+    });
+
+    // Atomic claim: only the request that flips pendingInput set→null proceeds.
+    const claimed = await MetaChatSession.findOneAndUpdate(
+      { sessionId, userId, pendingInput: { $ne: null } },
+      { $set: { pendingInput: null } },
+      { new: false }
+    );
+    if (!claimed || !claimed.pendingInput) {
+      sendEvent(res, "error", {
+        detail: "This media selection is already being processed or was already resolved.",
+      });
+      res.end();
+      return;
+    }
+    const claimedInput = claimed.pendingInput;
+
+    mcpClient = await createMcpClient(accessToken);
+    const { toolMap, functionDeclarations, localHandlers } = await loadTools(mcpClient);
+
+    const turnCards = [];
+    const onEvent = makeOnEvent({
+      res,
+      sessionId,
+      userId,
+      adAccountId,
+      confirmedBy: userId,
+      cards: turnCards,
+    });
+
+    const ctx = { onEvent, mcpClient, localHandlers, userId, adAccountId, accessToken, sessionId };
+    const outcome = await resumeAfterMediaPick({
+      toolMap,
+      functionDeclarations,
+      adAccountId,
+      currency: existing.currency,
+      scope: {
+        campaignId: existing.campaignId,
+        adSetId: existing.adSetId,
+        adId: existing.adId,
+      },
+      pendingInput: claimedInput,
+      mediaUrl: cancelled ? null : url,
+      mediaType: cancelled ? null : mediaType,
+      ctx,
+    });
+
+    // Re-fetch so we append to (rather than overwrite) transcript entries
+    // written concurrently since the atomic claim above. No new "user" entry —
+    // picking media, like approve/cancel, is a decision on the turn already
+    // recorded by streamChat, not a chat message.
+    const forTranscript = await MetaChatSession.findOne({ sessionId, userId }).select("transcript");
+    const transcript = forTranscript?.transcript || [];
+
+    if (outcome.status === "pending_confirmation") {
+      if (outcome.text || turnCards.length) {
+        transcript.push({
+          role: "assistant",
+          text: outcome.text || "",
+          cards: turnCards,
+          pending: true,
+          ts: Date.now(),
+        });
+      }
+      await MetaChatSession.updateOne(
+        { sessionId, userId },
+        {
+          $set: {
+            pendingAction: outcome.pendingAction,
+            pendingInput: null,
+            transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
+          },
+        }
+      );
+      emitConfirm(res, sessionId, outcome.pendingAction);
+    } else if (outcome.status === "pending_input") {
+      if (outcome.text || turnCards.length) {
+        transcript.push({
+          role: "assistant",
+          text: outcome.text || "",
+          cards: turnCards,
+          pending: true,
+          ts: Date.now(),
+        });
+      }
+      await MetaChatSession.updateOne(
+        { sessionId, userId },
+        {
+          $set: {
+            pendingInput: outcome.pendingInput,
+            pendingAction: null,
+            transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
+          },
+        }
+      );
+      emitPickMedia(res, sessionId, outcome.pendingInput);
+    } else {
+      transcript.push({
+        role: "assistant",
+        text: outcome.text,
+        cards: turnCards,
+        ts: Date.now(),
+      });
+      await MetaChatSession.updateOne(
+        { sessionId, userId },
+        {
+          $set: {
+            history: trimHistory(outcome.history),
+            pendingAction: null,
+            pendingInput: null,
+            transcript: transcript.slice(-MAX_TRANSCRIPT_ENTRIES),
+          },
+        }
+      );
+      sendEvent(res, "message", { text: outcome.text });
+    }
+
+    sendEvent(res, "done", { sessionId });
+    res.end();
+  } catch (err) {
+    logger.error(`metaChat pickMedia failed: ${err.message}`);
+    // pendingInput was already claimed (cleared), so the session isn't wedged —
+    // the user can simply re-ask. Surface the failure.
+    sendEvent(res, "error", { detail: err.message });
+    res.end();
+  } finally {
+    if (mcpClient) await mcpClient.close().catch(() => {});
+  }
+};
+
+/**
+ * POST /meta-ads/chat/media/upload  (multipart: field "file")
+ * Stores a user-uploaded image/video in app storage and returns its public
+ * URL. This is PURE app storage — it never touches Meta. The model still does
+ * the Meta-side upload itself via the MCP tools (ads_upload_ad_image /
+ * ads_upload_ad_video / ads_create_ad_creative), which fetch this public URL.
+ */
+exports.uploadCreativeMedia = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const file = req.file;
+    if (!file || !file.buffer?.length) {
+      return res.status(400).json({ error: "No file uploaded (field name must be 'file')." });
+    }
+
+    const spec = CHAT_MEDIA_MIME[file.mimetype];
+    if (!spec) {
+      return res.status(400).json({
+        error: "Unsupported file type. Use JPG, PNG, WEBP, GIF (image) or MP4, MOV, WEBM (video).",
+      });
+    }
+    const maxBytes = spec.kind === "video" ? MAX_CHAT_VIDEO_BYTES : MAX_CHAT_IMAGE_BYTES;
+    if (file.size > maxBytes) {
+      const maxMb = Math.round(maxBytes / (1024 * 1024));
+      return res.status(400).json({ error: `File too large. Max ${maxMb} MB for ${spec.kind}s.` });
+    }
+
+    if (process.env.UPLOAD_TO_S3 !== "true") {
+      return res
+        .status(500)
+        .json({ error: "Media upload is not configured on this server (UPLOAD_TO_S3)." });
+    }
+    const viewBase = mediaViewBase();
+    if (!viewBase) {
+      return res.status(500).json({ error: "Media view host is not configured (AWS_IMAGE_VIEW_URL)." });
+    }
+
+    const key = `creatives/${userId}/chat/${Date.now()}-${uuidv4()}.${spec.ext}`;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      })
+    );
+
+    return res.json({ url: `${viewBase}/${key}`, mediaType: spec.kind });
+  } catch (err) {
+    logger.error(`metaChat uploadCreativeMedia failed: ${err.message}`);
+    return res.status(500).json({ error: "Failed to upload media." });
+  }
+};
+
+/**
  * GET /meta-ads/chat/history/:sessionId
  */
 exports.getHistory = async (req, res) => {
@@ -444,7 +761,28 @@ exports.getHistory = async (req, res) => {
       // `history` (raw Gemini Content[]) is intentionally NOT returned here;
       // it's an internal rehydration detail for the model, not a UI concern.
       transcript: session.transcript,
-      pendingAction: session.pendingAction,
+      // Slim shapes only — the frontend needs the pending write's tool
+      // name+args to render the confirmation card, and the media pick's
+      // type+purpose to render the picker. The rest of each pending object
+      // (carried tool responses, raw Gemini history) is an internal resume
+      // detail the UI never reads, so it's kept off the wire.
+      pendingAction: session.pendingAction
+        ? {
+            calls: (session.pendingAction.calls || []).map((c) => ({
+              name: c.name,
+              args: c.args,
+            })),
+          }
+        : null,
+      pendingInput: session.pendingInput
+        ? {
+            mediaType:
+              session.pendingInput.inputCall?.args?.media_type === "video"
+                ? "video"
+                : "image",
+            purpose: session.pendingInput.inputCall?.args?.purpose || null,
+          }
+        : null,
       updatedAt: session.updatedAt,
     });
   } catch (err) {

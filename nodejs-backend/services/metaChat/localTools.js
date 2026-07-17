@@ -530,7 +530,48 @@ const LOCAL_TOOL_DECLARATIONS = [
       required: ["events"],
     },
   },
+  {
+    // Input-required tool (NOT a render tool): it has no handler and is not
+    // auto-executed. The gateway intercepts it by name (see INPUT_REQUIRED_TOOLS
+    // + geminiMcpBridge.sendAndProcess) and pauses the turn so the user can pick
+    // or upload creative media in-chat; the chosen media's public URL comes back
+    // as this call's function-response.
+    name: "pick_creative_media",
+    description:
+      "Open an in-chat picker for the user to choose the image or video for an ad creative — they " +
+      "select from their media library or upload a file. Call this when you need creative media to " +
+      "build an ad and the user has NOT already given you a usable media URL earlier in the " +
+      "conversation. Do NOT ask the user to paste a media URL in text — call this instead. After " +
+      "they pick, you receive the media's public URL as this tool's result; use that EXACT URL to " +
+      "build the creative (for an image: pass it as image_url to ads_create_ad_creative; for a " +
+      "video: first call ads_upload_ad_video with file_url set to that URL to get a video_id, then " +
+      "ads_create_ad_creative with that video_id plus an image thumbnail). If the user already gave " +
+      "you a direct media URL, use it directly and do NOT call this.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        media_type: {
+          type: "string",
+          enum: ["image", "video"],
+          description: "Which kind of media the ad needs.",
+        },
+        purpose: {
+          type: "string",
+          description:
+            "Optional short note shown to the user about what the media is for, e.g. 'the main ad " +
+            "image for Summer Sale 2026'.",
+        },
+      },
+      required: ["media_type"],
+    },
+  },
 ];
+
+// Tools the model can call that require USER INPUT before they can be answered
+// (as opposed to render tools, which run instantly, or MCP write tools, which
+// just need a yes/no confirmation). The gateway intercepts these by name and
+// pauses the turn — they have no handler and are never auto-executed.
+const INPUT_REQUIRED_TOOLS = new Set(["pick_creative_media"]);
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 // Each emits a `card` event and returns an ack. The ack tells the model the
@@ -673,9 +714,19 @@ const localHandlers = new Map([
 ]);
 
 // Synthetic annotations so the gateway classifies these as auto-exec reads
-// (readOnlyHint:true = never gated by the write-confirmation flow).
+// (readOnlyHint:true = never gated by the write-confirmation flow). Excludes
+// input-required tools, which are neither reads nor writes — the gateway
+// intercepts them by name and must never treat them as auto-exec.
 const LOCAL_TOOL_ANNOTATIONS = new Map(
-  LOCAL_TOOL_DECLARATIONS.map((d) => [d.name, { readOnlyHint: true }])
+  LOCAL_TOOL_DECLARATIONS.filter((d) => !INPUT_REQUIRED_TOOLS.has(d.name)).map((d) => [
+    d.name,
+    { readOnlyHint: true },
+  ])
 );
 
-module.exports = { LOCAL_TOOL_DECLARATIONS, localHandlers, LOCAL_TOOL_ANNOTATIONS };
+module.exports = {
+  LOCAL_TOOL_DECLARATIONS,
+  localHandlers,
+  LOCAL_TOOL_ANNOTATIONS,
+  INPUT_REQUIRED_TOOLS,
+};

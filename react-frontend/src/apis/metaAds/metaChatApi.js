@@ -129,6 +129,27 @@ export const streamChat = ({
 export const confirmAction = ({ sessionId, approve, onEvent }) =>
   streamSse(`${CHAT_URL}/confirm`, { sessionId, approve }, onEvent);
 
+// Resume a turn paused on the in-chat media picker. Either pass the chosen
+// media ({ url, mediaType }) or cancel ({ cancel: true }). Streams the model's
+// continuation the same way as streamChat/confirmAction.
+export const pickChatMedia = ({ sessionId, url, mediaType, cancel, onEvent }) =>
+  streamSse(
+    `${CHAT_URL}/media-pick`,
+    cancel ? { sessionId, cancel: true } : { sessionId, url, mediaType },
+    onEvent,
+  );
+
+// Upload a creative file to app storage; resolves to its public URL (which the
+// picker then hands to the model). Not SSE — a plain multipart POST.
+export const uploadChatMedia = async (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await axios.post(`${CHAT_URL}/media/upload`, form, {
+    headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' },
+  });
+  return data; // { url, mediaType }
+};
+
 export const getChatHistory = async (sessionId) => {
   const { data } = await axios.get(`${CHAT_URL}/history/${encodeURIComponent(sessionId)}`, {
     headers: getAuthHeaders(),
