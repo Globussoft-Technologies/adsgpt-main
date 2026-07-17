@@ -510,15 +510,15 @@ const productSalesSubTypeNeedsForm = (subType) => subType === 'INSTANT_PAGE';
 const mediaTypeNeedsMusic = (objectiveKey, mediaType) =>
   mediaType === 'image' || mediaType === 'carousel';
 
-// Ad text becomes mandatory once a creative is attached, matching TikTok Ads
-// Manager: Video Views always requires it; for every other objective EXCEPT
-// Community Interaction, uploading an image or carousel makes it required
-// (single video keeps it optional). Community Interaction never forces it.
-const adTextIsRequired = (objectiveKey, mediaType) => {
-  if (objectiveKey === 'VIDEO_VIEWS') return true;
-  if (objectiveKey === 'ENGAGEMENT') return false; // Community Interaction
-  return mediaType === 'image' || mediaType === 'carousel';
-};
+// Ad text is required for EVERY objective and format. TikTok's request schema
+// marks ad_text [optional] and its help docs claim a blank caption is allowed
+// for Reach/Video Views, but the LIVE /ad/create/ API rejects a missing
+// caption with "Please insert text for your ad." (40002) — so the live API is
+// the source of truth here, not the docs. (The only real exception is Spark
+// Ads, where the caption is inherited from the organic post; our wizard uploads
+// fresh creative for every objective, so that path doesn't apply yet.)
+// eslint-disable-next-line no-unused-vars
+const adTextIsRequired = (objectiveKey, mediaType) => true;
 
 // App Promotion requires a campaign-level app_promotion_type (confirmed via
 // TikTok's official "App promotion" doc) — App Pre-Registration is left out
@@ -1142,9 +1142,12 @@ function getStepErrors(step, form, currentObjective, currency = 'USD') {
     }
     {
       const adText = form.adText.trim();
+      // Use TikTok's own single message for both empty and too-long cases —
+      // "between 1 and 100 characters" already covers the minimum (empty), so
+      // the message matches the wording Ads Manager shows for either problem.
       if (!adText) {
         if (adTextIsRequired(form.objectiveKey, effectiveMediaType)) {
-          errs.adText = 'Ad text is required';
+          errs.adText = AD_TEXT_LENGTH_ERROR;
         }
       } else if (adText.length > adTextMaxLength(adText)) {
         errs.adText = AD_TEXT_LENGTH_ERROR;
@@ -1596,6 +1599,12 @@ const CreateCampaignWizard = ({
   const [uploadingMusic, setUploadingMusic] = useState(false);
   const [manualPageId, setManualPageId] = useState('');
   const [launching, setLaunching] = useState(false);
+  // Synchronous re-entrancy guard for launch/save. `launching` state can't
+  // prevent a second concurrent call (React batches state, and StrictMode +
+  // re-renders can invoke the handler twice before the flag is committed),
+  // which otherwise fires each create endpoint twice — visible as duplicate
+  // create-campaign/ad-group calls and "Campaign name already exists" errors.
+  const inFlightRef = useRef(false);
   const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, carouselImageIds, adId}
   const [error, setError] = useState(null);
   const [errors, setErrors] = useState({}); // field-level validation errors
@@ -2130,6 +2139,10 @@ const CreateCampaignWizard = ({
 
   // ── edit save ──
   const handleSave = async () => {
+    // Same re-entrancy guard as handleLaunch — stop a concurrent second call
+    // from firing the update endpoints twice.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLaunching(true);
     setError(null);
     try {
@@ -2238,6 +2251,7 @@ const CreateCampaignWizard = ({
       toast.error(msg);
     } finally {
       setLaunching(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -2270,6 +2284,10 @@ const CreateCampaignWizard = ({
 
   // ── idempotent sequential launch ──
   const handleLaunch = async () => {
+    // Block a second concurrent run (StrictMode double-invoke / rapid re-render)
+    // before it can fire the create endpoints again.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLaunching(true);
     setError(null);
     try {
@@ -2503,6 +2521,7 @@ const CreateCampaignWizard = ({
       toast.error(msg);
     } finally {
       setLaunching(false);
+      inFlightRef.current = false;
     }
   };
 

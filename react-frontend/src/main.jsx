@@ -15,10 +15,12 @@ axios.interceptors.response.use(
   (error) => {
     const requestUrl = error?.config?.url || '';
 
-    // Don't logout if the 403 is from Meta's API
-    const isMetaApi = requestUrl.includes('meta-ads');
+    
+    const isProviderAdsApi =
+      requestUrl.includes('meta-ads') ||
+      requestUrl.includes('tiktok-ads');
 
-    if (error?.response?.status === 403 && !isMetaApi) {
+    if (error?.response?.status === 403 && !isProviderAdsApi) {
       window.location.href = '/logout';
     }
     return Promise.reject(error);
