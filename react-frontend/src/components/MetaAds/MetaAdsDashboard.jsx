@@ -14,7 +14,6 @@ import {
   LogOut,
   Info,
   Inbox,
-  Plus,
 } from 'lucide-react';
 import {
   getAdAccounts,
@@ -467,35 +466,16 @@ export default function MetaAdsDashboard() {
               transition={{ duration: 0.2 }}
               className="flex min-h-0 flex-1 flex-col gap-6"
             >
-              <div className="flex shrink-0 items-center justify-between gap-2">
-                <div>
-                  <p className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Campaigns</p>
-                  <p className="text-xs 2xl:text-sm text-gray-500 dark:text-[#BEBEBE]">Build and manage Meta Ads Manager campaigns end-to-end</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={reloadCampaigns}
-                    disabled={loadingCampaigns}
-                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 2xl:text-xs font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/6 dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${loadingCampaigns ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                  <button
-                    onClick={() => openWizard('create-full')}
-                    disabled={!selectedAccount}
-                    className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-10 2xl:text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black"
-                  >
-                    <Plus className="h-3 w-3" />
-                    New Campaign
-                  </button>
-                </div>
+              <div className="shrink-0">
+                <p className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Campaigns</p>
+                <p className="text-xs 2xl:text-sm text-gray-500 dark:text-[#BEBEBE]">Build and manage Meta Ads Manager campaigns end-to-end</p>
               </div>
               <TableViewCampaigns
                 campaigns={campaigns}
                 loadingCampaigns={loadingCampaigns}
                 adAccountId={selectedAccount?.id}
                 onRefresh={reloadCampaigns}
+                onNewCampaign={() => openWizard('create-full')}
                 // Add-Ad-Set / Add-Ad / Edit buttons all open the V2 wizard
                 // with mode/context — only expose them when V2 is enabled.
                 // (V1 wizard doesn't understand these modes.)

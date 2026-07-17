@@ -64,7 +64,7 @@ function AddButton({ label, onClick, busy = false, disabled = false }) {
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs"
+      className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs dark:bg-white dark:text-black"
     >
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
       {label}
@@ -274,7 +274,7 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onLaunchWizard }) {
+function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, onLaunchWizard, query, onQueryChange }) {
   const [statuses, setStatuses]   = useState({});
   const [toggling, setToggling]   = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -284,7 +284,9 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   // (same list `useSortedRows` sorts), not a separate API call. Matches
   // the search-input pattern already used in DetailedTargetingPicker.jsx
   // / LocationTargeting.jsx for visual consistency.
-  const [query, setQuery] = useState('');
+  // Lives in the parent (TableViewCampaigns), not local state — this table
+  // unmounts on drill-down/back (conditional render keyed by `level`), so
+  // local state would reset the search every time the user comes back.
   const filteredCampaigns = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return campaigns;
@@ -358,28 +360,44 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 p-3 dark:border-white/12">
-        <div className="relative max-w-xs flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search campaigns…"
-            className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
-          />
-          {query && (
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
+        <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+          {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'}
+        </p>
+        <div className="flex items-center gap-2">
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Search campaigns…"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange('')}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <RefreshButton onClick={onRefresh} busy={loading} title="Refresh campaigns" />
+          {onNewCampaign && (
             <button
               type="button"
-              onClick={() => setQuery('')}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
-              aria-label="Clear search"
+              onClick={onNewCampaign}
+              disabled={!adAccountId}
+              className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs dark:bg-white dark:text-black"
             >
-              <X className="h-4 w-4" />
+              <Plus className="h-3 w-3" />
+              New Campaign
             </button>
           )}
         </div>
-        <RefreshButton onClick={onRefresh} busy={loading} title="Refresh campaigns" />
       </div>
 
       <div className="scrollbar-thin flex-1 overflow-auto">
@@ -552,7 +570,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId }) {
+function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange }) {
   const [adSets,  setAdSets]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -560,7 +578,9 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
   const [toggling, setToggling] = useState({});
   const [resolvingAdd, setResolvingAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [query, setQuery] = useState('');
+  // `query` lives in the parent (TableViewCampaigns) — this table unmounts
+  // on drill-down/back (conditional render keyed by `level`), so local
+  // state would reset the search every time the user comes back.
   const filteredAdSets = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return adSets;
@@ -744,14 +764,14 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => onQueryChange(e.target.value)}
               placeholder="Search ad sets…"
               className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
             />
             {query && (
               <button
                 type="button"
-                onClick={() => setQuery('')}
+                onClick={() => onQueryChange('')}
                 className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
                 aria-label="Clear search"
               >
@@ -1147,7 +1167,7 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange }) {
+function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange }) {
   const [ads,       setAds]       = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1156,7 +1176,9 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
   const [toggling,  setToggling]  = useState({});
   const [resolving, setResolving] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [query, setQuery] = useState('');
+  // `query` lives in the parent (TableViewCampaigns) — this table unmounts
+  // on drill-down/back (conditional render keyed by `level`), so local
+  // state would reset the search every time the user comes back.
   const filteredAds = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return ads;
@@ -1318,14 +1340,14 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => onQueryChange(e.target.value)}
                 placeholder="Search ads…"
                 className="w-full rounded-full border border-gray-300 bg-gray-100 py-2 pl-9 pr-9 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
               />
               {query && (
                 <button
                   type="button"
-                  onClick={() => setQuery('')}
+                  onClick={() => onQueryChange('')}
                   className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
                   aria-label="Clear search"
                 >
@@ -1455,13 +1477,23 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
 // instead of bouncing back to the Campaigns list — and so the Meta Ads chat
 // widget (mounted alongside this dashboard) can scope its answers to
 // whatever's currently open. See docs/META_ADS_CHATBOT.md.
-export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh, onLaunchWizard, manageNonce }) {
+export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh, onNewCampaign, onLaunchWizard, manageNonce }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const campaignIdParam = searchParams.get('campaignId');
   const adSetIdParam = searchParams.get('adSetId');
   const adIdParam = searchParams.get('adId');
 
   const [selectedAdSet, setSelectedAdSet] = useState(null);
+
+  // Search queries live here, not inside CampaignTable/AdSetTable/AdsTable —
+  // those tables unmount on drill-down/back (conditionally rendered by
+  // `level`), so local state would silently reset the search every time the
+  // user returns to a list. Cleared only when the underlying context genuinely
+  // changes (a *different* campaign/ad set drilled into), not on a plain
+  // back-and-forth into the same one.
+  const [campaignQuery, setCampaignQuery] = useState('');
+  const [adSetQuery, setAdSetQuery] = useState('');
+  const [adQuery, setAdQuery] = useState('');
 
   const selectedCampaign = campaignIdParam
     ? campaigns.find((c) => c.id === campaignIdParam) || null
@@ -1487,10 +1519,16 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
 
   const drillToCampaign = (c) => {
     setSelectedAdSet(null);
+    // Entering a (possibly different) campaign's ad-set list — its search
+    // doesn't belong to whatever campaign was open last.
+    setAdSetQuery('');
+    setAdQuery('');
     updateParams({ campaignId: c.id, adSetId: null, adId: null });
   };
   const drillToAdSet = (s) => {
     setSelectedAdSet(s);
+    // Same reasoning — a fresh ad set means a fresh ad search.
+    setAdQuery('');
     updateParams({ adSetId: s.id, adId: null });
   };
   const goToCampaigns = () => {
@@ -1521,7 +1559,7 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onLaunchWizard={onLaunchWizard} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (
@@ -1533,6 +1571,8 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
                 onLaunchWizard={onLaunchWizard}
                 manageNonce={manageNonce}
                 restoreAdSetId={adSetIdParam}
+                query={adSetQuery}
+                onQueryChange={setAdSetQuery}
               />
             </motion.div>
           )}
@@ -1545,6 +1585,8 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
                 manageNonce={manageNonce}
                 restoreAdId={adIdParam}
                 onSelectAdChange={setAdId}
+                query={adQuery}
+                onQueryChange={setAdQuery}
               />
             </motion.div>
           )}
