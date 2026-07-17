@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Image as ImageIcon,
   Check,
+  Play,
 } from 'lucide-react';
 import { getMediaLibrary } from '@/apis/metaAds/metaAdsApi';
 
@@ -33,6 +34,17 @@ const absolutize = (path) => {
 const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
   const userId = useSelector((s) => s?.socket?.userData?.user_id) || null;
 
+  // The parent only ever passes a fixed 'image'/'video' when the cell
+  // itself locks the media kind (e.g. Engagement/VIDEO_VIEWS is video-only)
+  // — the filter toggle would just offer a choice Meta will reject, so it's
+  // only shown when the parent leaves it open ('all'). `kindFilter` is the
+  // user's own pick within that; re-synced if the parent's lock changes
+  // (e.g. switching cells mid-session).
+  const [kindFilter, setKindFilter] = useState(type);
+  useEffect(() => {
+    setKindFilter(type);
+  }, [type]);
+
   const [page, setPage] = useState(1);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -45,7 +57,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getMediaLibrary({ userId, type, page, limit: PAGE_SIZE })
+    getMediaLibrary({ userId, type: kindFilter, page, limit: PAGE_SIZE })
       .then((r) => {
         if (cancelled) return;
         setItems(Array.isArray(r?.data) ? r.data : []);
@@ -65,7 +77,12 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
     return () => {
       cancelled = true;
     };
-  }, [userId, type, page]);
+  }, [userId, kindFilter, page]);
+
+  const changeKindFilter = (next) => {
+    setKindFilter(next);
+    setPage(1);
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canPrev = page > 1 && !loading;
@@ -90,6 +107,32 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Kind filter — only offered when the parent leaves media kind open
+          ('all'); a cell that locks to image-only/video-only has nothing
+          to filter (see the note on kindFilter above). */}
+      {type === 'all' && (
+        <div className="flex items-center gap-1">
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'image', label: 'Image' },
+            { key: 'video', label: 'Video' },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => changeKindFilter(opt.key)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                kindFilter === opt.key
+                  ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                  : 'border border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/3 dark:text-white/55 dark:hover:text-white'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-red-300 bg-red-100 px-3 py-2 text-xs text-red-600 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-300">
           {error}
@@ -103,9 +146,9 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
       ) : !loading && items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm text-gray-600 dark:border-white/15 dark:bg-white/2 dark:text-white/60">
           <ImageIcon className="mx-auto mb-2 h-6 w-6 text-gray-400 dark:text-white/40" />
-          {type === 'all'
+          {kindFilter === 'all'
             ? 'No generated media yet. Create some from Ad Studio first.'
-            : `No generated ${type}s yet. Create some from Ad Studio first.`}
+            : `No generated ${kindFilter}s yet. Create some from Ad Studio first.`}
         </div>
       ) : (
         <div
@@ -117,7 +160,7 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
             const isSelected = url === selectedUrl;
             // In "all" mode each row carries its own type; otherwise the
             // whole grid is the single requested kind.
-            const itemType = doc?.type || type;
+            const itemType = doc?.type || kindFilter;
             return (
               <button
                 key={doc._id}
@@ -144,6 +187,11 @@ const LibraryPicker = ({ type = 'image', selectedUrl, onPick }) => {
                     className="h-full w-full object-cover transition-transform group-hover:scale-[1.03]"
                     loading="lazy"
                   />
+                )}
+                {itemType === 'video' && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                    <Play className="h-5 w-5 fill-white text-white drop-shadow" />
+                  </div>
                 )}
                 {isSelected && (
                   <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#15DCFF] text-black">

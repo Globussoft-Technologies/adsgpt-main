@@ -1498,6 +1498,8 @@ export default function CreateCampaignWizardV2({
                 currentStepId={currentStep?.id}
                 adAccountId={adAccountId}
                 form={form}
+                schema={schema}
+                pages={pages}
               />
             )}
           </div>
@@ -1630,6 +1632,103 @@ export default function CreateCampaignWizardV2({
 // `validateStep` / `validateAllSteps` are imported at the top of this file.
 // `StepErrorSummary` below renders an engine result as a live banner.
 
+// Live ad-in-feed mockup, built purely from the wizard's in-progress form
+// state. Mirrors AdDrawer's "simulated feed" card in MetaAdsTableView.jsx
+// (shown for an ALREADY-CREATED ad, fetched from Meta) — same visual
+// language, but driven by local form values so users see roughly what
+// they're building before they ever submit.
+function AdPreviewCard({ form, pages, schema }) {
+  const page = pages.find((p) => p.id === form.pageId);
+  const pageName = page?.name || 'Your Page';
+  const isVideo = form.mediaType === 'video';
+
+  // Manual-upload Files never get promoted onto form.imageUrl/videoUrl (see
+  // ImageField/VideoField) — mirror their own blob-URL memoisation so a
+  // just-picked local file still shows up here.
+  const localImageUrl = useMemo(
+    () => (form.imageFile ? URL.createObjectURL(form.imageFile) : null),
+    [form.imageFile],
+  );
+  useEffect(() => {
+    if (!localImageUrl) return undefined;
+    return () => URL.revokeObjectURL(localImageUrl);
+  }, [localImageUrl]);
+  const localVideoUrl = useMemo(
+    () => (form.videoFile ? URL.createObjectURL(form.videoFile) : null),
+    [form.videoFile],
+  );
+  useEffect(() => {
+    if (!localVideoUrl) return undefined;
+    return () => URL.revokeObjectURL(localVideoUrl);
+  }, [localVideoUrl]);
+
+  const mediaUrl = isVideo ? (form.videoUrl || localVideoUrl) : (form.imageUrl || localImageUrl);
+  const ctaLabel = form.callToAction
+    ? schema?.labels?.cta?.[form.callToAction] || form.callToAction
+    : null;
+
+  return (
+    <div>
+      <p className="text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
+        Ad preview
+      </p>
+      <div className="mt-2.5 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+        <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-white/5">
+          <div className="h-6 w-6 shrink-0 rounded-full bg-gray-200 dark:bg-white/10" />
+          <div className="min-w-0">
+            <p className="truncate text-11 font-semibold text-gray-900 dark:text-white">{pageName}</p>
+            <p className="text-10 text-gray-400 dark:text-[#555]">Sponsored</p>
+          </div>
+        </div>
+        {form.primaryText && (
+          <p className="line-clamp-3 px-3 py-2 text-11 leading-snug text-gray-700 dark:text-white/75">
+            {form.primaryText}
+          </p>
+        )}
+        <div className="relative aspect-square w-full bg-gray-100 dark:bg-[#1e1e1e]">
+          {mediaUrl ? (
+            isVideo ? (
+              <video
+                key={mediaUrl}
+                src={mediaUrl}
+                poster={form.videoThumbnailUrl || undefined}
+                className="h-full w-full object-cover"
+                muted
+                playsInline
+                controls
+              />
+            ) : (
+              <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
+            )
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2">
+              <ImageIcon className="h-6 w-6 text-gray-300 dark:text-white/15" />
+              <span className="text-10 text-gray-400 dark:text-white/30">Add media to preview</span>
+            </div>
+          )}
+        </div>
+        {(form.headline || form.description || ctaLabel) && (
+          <div className="flex items-center justify-between gap-2 border-t border-gray-200 px-3 py-2.5 dark:border-white/5">
+            <div className="min-w-0">
+              {form.headline && (
+                <p className="truncate text-11 font-bold text-gray-900 dark:text-white">{form.headline}</p>
+              )}
+              {form.description && (
+                <p className="truncate text-10 text-gray-400 dark:text-[#666]">{form.description}</p>
+              )}
+            </div>
+            {ctaLabel && (
+              <span className="shrink-0 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-10 font-semibold text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white">
+                {ctaLabel}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Validation side rail — a dedicated right-hand panel (Meta Ads Manager
 // style) showing the whole-wizard step checklist plus what's left to
 // complete on the current step. A separate column, so it never overlaps
@@ -1639,6 +1738,10 @@ export default function CreateCampaignWizardV2({
 // (size estimate + narrow/broad gauge) — Meta Ads Manager places this
 // in its right-hand sidebar too. Subscribes to the assembled targeting
 // blob so it re-estimates whenever any audience field changes.
+//
+// On the Ad step the rail hosts a live Ad Preview card instead (see
+// AdPreviewCard above) — same "dedicated right-hand panel" placement,
+// mirroring Meta Ads Manager's own creative-preview sidebar.
 function WizardSideRail({
   steps,
   stepIndex,
@@ -1648,9 +1751,12 @@ function WizardSideRail({
   currentStepId,
   adAccountId,
   form,
+  schema,
+  pages,
 }) {
   const currentMessages = Object.values(stepErrors || {});
   const showAudienceWidget = currentStepId === 'adSet' && adAccountId && form;
+  const showAdPreview = currentStepId === 'ad' && form;
   return (
     <aside className="scrollbar-thin hidden w-64 shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-200 bg-gray-50 px-4 py-5 dark:border-white/8 dark:bg-white/2 md:flex">
       {/* Whole-wizard checklist */}
@@ -1768,6 +1874,12 @@ function WizardSideRail({
             />
           </div>
         </div>
+      )}
+
+      {/* Ad preview — live mockup built from the Ad step's own form state,
+          shown only while that step is active (see AdPreviewCard above). */}
+      {showAdPreview && (
+        <AdPreviewCard form={form} pages={pages || []} schema={schema} />
       )}
     </aside>
   );
