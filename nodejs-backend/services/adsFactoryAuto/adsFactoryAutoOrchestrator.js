@@ -337,6 +337,52 @@ const PLATFORM_POSTERS = {
         }
       }
 
+      // Normalize the schedule window per run. Autopilot ad sets reuse the
+      // template's saved startTime/endTime, but both are FIXED calendar dates.
+      // As real time passes two things go stale:
+      //   (a) the startTime drifts into the PAST — Meta rejects an ad set whose
+      //       start_time is in the past, and our own validator plus the extend
+      //       math below would anchor to that past instant. Meta treats an
+      //       absent start_time as "start now", so the safest fix is to DROP a
+      //       past startTime and let Meta start delivery now (mirrors what the
+      //       Google autopilot path does by clamping to today).
+      //   (b) the endTime drifts to within (or before) 24h of the effective
+      //       start — buildAdSetSchemaV2 then rejects the ad set with "Campaign
+      //       schedule is too short — the run window must be at least 24 hours".
+      // Do (a) first so the 24h window in (b) is measured from the real
+      // effective start (now, once a past startTime is dropped).
+      const nowMs = Date.now();
+
+      // (a) Drop a past startTime → Meta starts "now".
+      if (adSetBase.startTime && new Date(adSetBase.startTime).getTime() <= nowMs) {
+        logger.info(
+          `[adsFactoryAuto:meta] template startTime ${adSetBase.startTime} is in the past — dropping it so Meta starts delivery now`
+        );
+        delete adSetBase.startTime;
+      }
+
+      // (b) Ensure the run window spans at least 24h. Effective start is
+      // startTime (now guaranteed future/absent) || now. Ad sets with no
+      // endTime run open-ended and are left untouched. Buffer clears the
+      // boundary rather than landing exactly on it.
+      if (adSetBase.endTime) {
+        const MIN_SCHEDULE_MS = 24 * 60 * 60 * 1000;
+        const SCHEDULE_BUFFER_MS = 5 * 60 * 1000;
+        const startMs = adSetBase.startTime
+          ? new Date(adSetBase.startTime).getTime()
+          : nowMs;
+        const endMs = new Date(adSetBase.endTime).getTime();
+        if (endMs - startMs < MIN_SCHEDULE_MS) {
+          const extendedEnd = new Date(
+            startMs + MIN_SCHEDULE_MS + SCHEDULE_BUFFER_MS
+          ).toISOString();
+          logger.info(
+            `[adsFactoryAuto:meta] template endTime ${adSetBase.endTime} is < 24h after start ${new Date(startMs).toISOString()} — auto-extending to ${extendedEnd} to satisfy Meta's minimum schedule window`
+          );
+          adSetBase.endTime = extendedEnd;
+        }
+      }
+
       // If specialAdCategoryCountries is present, we cannot use worldwide targeting.
       let finalTargeting = adSetBase.targeting || extractedTargeting;
       if (finalTargeting.worldwide && derivedSpecialAdCategoryCountries && derivedSpecialAdCategoryCountries.length > 0) {
