@@ -247,6 +247,93 @@ exports.generateVideo = async (req, res) => {
   }
 };
 
+// Shared: apply an AI Ads voice-regeneration completion.
+// Python delivers the re-rendered voice video on the GENERIC /video/update-result
+// endpoint (the same call it uses for a normal completion) — and, for translate/
+// rewrite, the new script separately via the scene-result callback (which updates
+// doc.scenes). We recognize the voice completion by an ai_ads record whose
+// regenState is "processing", and append a new switchable version instead of the
+// normal first-time-video handling: aiAds voice/lang/regenType come from the
+// pendingRegen stash, the script from the (freshest) doc.scenes. doc.version is
+// NOT moved — the user commits it via /ai-ads/select-version. Voice regen is FREE
+// today, so no credit settle happens here.
+async function applyAiAdsVoiceRegen(record, body) {
+  const sessionId = record._id.toString();
+  const videoStatus = body.videoStatus;
+  const vModel = body.model || record.inputs?.model;
+  const vDuration = parseInt(String(body.duration || "").replace("s", ""), 10) || 0;
+
+  if (videoStatus !== 200) {
+    await VideoGeneration.findByIdAndUpdate(sessionId, {
+      regenState: "failed",
+      pendingRegen: null,
+    });
+    if (global.io) {
+      global.io.to(record.userId).emit("aiAdsVoiceFailed", {
+        sessionId,
+        event: "voiceRegenFailed",
+        videoStatus: videoStatus || 500,
+        error: body.error || "Voice regeneration failed",
+      });
+    }
+    return;
+  }
+
+  const pending = record.pendingRegen
+    ? record.pendingRegen.toObject
+      ? record.pendingRegen.toObject()
+      : record.pendingRegen
+    : {};
+
+  // Freshest script: for translate/rewrite the scene-result callback has already
+  // updated doc.scenes; fall back to the stashed base for voice-only regens.
+  const currentScenes =
+    record.scenes && record.scenes.length
+      ? record.scenes.map((s) => ({
+          segmentNumber: s.segmentNumber,
+          durationSeconds: s.durationSeconds,
+          script: s.script,
+        }))
+      : pending.scenes || [];
+
+  const aiAds = {
+    regenType: pending.regenType || null,
+    voiceProvider: pending.voiceProvider ?? null,
+    voiceId: pending.voiceId ?? null,
+    voiceName: pending.voiceName ?? null,
+    language: pending.language ?? null,
+    scenes: currentScenes,
+  };
+
+  const watermarkUrl = body.watermarkUrl ?? body.waterMarkUrl ?? "";
+  const newResult = {
+    url: body.url || null,
+    waterMarkUrl: body.watermark ? watermarkUrl : "",
+    model: vModel || null,
+    duration: String(vDuration || ""),
+    videoStatus: 200,
+    error: null,
+    aiAds,
+  };
+
+  const updated = await VideoGeneration.findByIdAndUpdate(
+    sessionId,
+    { $set: { regenState: "idle", pendingRegen: null }, $push: { results: newResult } },
+    { new: true },
+  );
+  const newIndex = (updated?.results?.length || 1) - 1;
+
+  if (global.io) {
+    global.io.to(record.userId).emit("aiAdsVoiceReady", {
+      sessionId,
+      index: newIndex,
+      regenType: pending.regenType || null,
+      totalDuration: vDuration,
+      result: newResult,
+    });
+  }
+}
+
 exports.updateVideoResult = async (req, res) => {
   try {
     /* #swagger.tags = ['Video Generation']
@@ -269,6 +356,34 @@ exports.updateVideoResult = async (req, res) => {
     */
 
     const { sessionId } = req.params;
+
+    // AI Ads voice-regeneration completion lands on THIS generic endpoint
+    // (Python posts the re-rendered voice video here). Detect it BEFORE Joi
+    // validation — a voice regen is free and its callback need not carry the
+    // subscription/userId fields updateResultSchema requires. Recognized by an
+    // ai_ads record with a regen in flight (regenState="processing").
+    const preRecord = await VideoGeneration.findById(sessionId);
+    console.log(
+      `[updateVideoResult] session=${sessionId} type=${preRecord?.inputs?.type} ` +
+        `regenState=${preRecord?.regenState} videoStatus=${req.body?.videoStatus}`,
+    );
+    if (preRecord?.inputs?.type === "ai_ads" && preRecord.regenState === "processing") {
+      const b = req.body || {};
+      console.log(
+        `[AI Ads] voice-regen completion DETECTED session=${sessionId} ` +
+          `regenType=${preRecord.pendingRegen?.regenType} videoStatus=${b.videoStatus} — appending version`,
+      );
+      await applyAiAdsVoiceRegen(preRecord, {
+        url: b.url,
+        watermarkUrl: b.watermarkUrl ?? b.waterMarkUrl,
+        model: b.model,
+        duration: b.duration,
+        videoStatus: b.videoStatus,
+        error: b.error,
+        watermark: b.watermark,
+      });
+      return res.json({ success: true, voiceRegen: true });
+    }
 
     const { error, value } = updateResultSchema.validate(req.body, {
       abortEarly: false,
@@ -2242,100 +2357,30 @@ exports.updateAiAdsVideoResult = async (req, res) => {
     // swallow this callback. Dedupe instead on regenState — a stray/duplicate
     // callback finds regenState !== "processing". version is NOT moved here;
     // the user commits it via /ai-ads/select-version ("Keep this one").
-    if (isVoiceRegenerate) {
-      if (record.regenState !== "processing") {
-        console.warn(
-          `[AI Ads] voice callback ignored session=${sessionId} regenState=${record.regenState}`,
-        );
-        return res.json({ success: true, duplicate: true });
-      }
-
-      const vModel = pythonModel || record.inputs?.model;
-      const vDuration = Number(duration) || 0;
-
-      if (videoStatus === 200) {
-        // Build the new version's state. Prefer Python's callback body when
-        // present; otherwise fall back to the stash Node captured at request
-        // time (pendingRegen). scenes: prefer Python's re-rendered script, else
-        // the stashed base script.
-        const pending = record.pendingRegen
-          ? (record.pendingRegen.toObject
-              ? record.pendingRegen.toObject()
-              : record.pendingRegen)
-          : {};
-        const aiAds = {
-          regenType: regenType || pending.regenType || null,
-          voiceProvider: voiceProvider ?? pending.voiceProvider ?? null,
-          voiceId: voiceId ?? pending.voiceId ?? null,
-          voiceName: voiceName ?? pending.voiceName ?? null,
-          language: language ?? pending.language ?? null,
-          scenes:
-            Array.isArray(scenes) && scenes.length ? scenes : pending.scenes || [],
-        };
-
-        // Built once — reused for the $push and the socket payload so the
-        // frontend can append the new version without a refetch.
-        const newResult = {
-          url: url || null,
-          waterMarkUrl: watermarkUrl || null,
-          model: vModel || null,
-          duration: String(vDuration || ""),
-          videoStatus: 200,
-          error: null,
-          aiAds,
-        };
-
-        const updated = await VideoGeneration.findByIdAndUpdate(
-          sessionId,
-          {
-            // status + version intentionally untouched — clear guard + stash.
-            $set: { regenState: "idle", pendingRegen: null },
-            $push: { results: newResult },
-          },
-          { new: true },
-        );
-
-        // Index of the entry we just appended. The frontend previews this one;
-        // the version pointer only moves on an explicit select-version.
-        const newIndex = (updated?.results?.length || 1) - 1;
-
-        // NOTE: voice regen is FREE today — no freeze/settle. When billing is
-        // switched on, deduct here keyed on regenType (voice < translate/rewrite)
-        // and record generated-media history, mirroring the initial-video path.
-
-        if (global.io) {
-          global.io.to(record.userId).emit("aiAdsVoiceReady", {
-            sessionId,
-            index: newIndex,
-            regenType: regenType || null,
-            totalDuration: vDuration,
-            // Carry the new version so the client appends without a refetch.
-            // waterMarkUrl included raw — the client applies plan-based watermark.
-            result: newResult,
-          });
-        }
-        return res.json({
-          success: true,
-          message: "AI Ads voice result processed",
-          index: newIndex,
-        });
-      }
-
-      // Failure — nothing was frozen (free), so no credit release. Reset the
-      // guard + clear the stash so the user can retry, and surface to the UI.
-      await VideoGeneration.findByIdAndUpdate(sessionId, {
-        regenState: "failed",
-        pendingRegen: null,
+    // Voice-regen completion can arrive on EITHER callback endpoint. Detect it
+    // robustly by regenState (a regen is in flight) — no dependency on Python
+    // sending an isVoiceRegenerate flag. The generic /video/update-result path
+    // uses the same detection. Whichever endpoint Python actually calls, the
+    // voice regen is handled and never falls into the dup-guard below.
+    console.log(
+      `[updateAiAdsVideoResult] session=${sessionId} regenState=${record.regenState} ` +
+        `isVoiceRegenerate=${isVoiceRegenerate} videoStatus=${videoStatus}`,
+    );
+    if (record.regenState === "processing" || isVoiceRegenerate) {
+      console.log(
+        `[AI Ads] voice-regen completion DETECTED (ai-ads endpoint) session=${sessionId} ` +
+          `regenType=${record.pendingRegen?.regenType} — appending version`,
+      );
+      await applyAiAdsVoiceRegen(record, {
+        url,
+        watermarkUrl,
+        model: pythonModel,
+        duration,
+        videoStatus,
+        error,
+        watermark,
       });
-      if (global.io) {
-        global.io.to(record.userId).emit("aiAdsVoiceFailed", {
-          sessionId,
-          event: "voiceRegenFailed",
-          videoStatus: videoStatus || 500,
-          error: error || "Voice regeneration failed",
-        });
-      }
-      return res.json({ success: true, message: "AI Ads voice failure processed" });
+      return res.json({ success: true, message: "AI Ads voice result processed" });
     }
 
     // Duplicate-callback guard. If the record is already in a terminal state,
