@@ -11,6 +11,7 @@ import {
   Info,
   ChevronDown,
   RefreshCw,
+  RotateCcw,
   Globe,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -638,6 +639,10 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Snapshot of the brand fields as they were BEFORE the most recent change, so
+  // a user who accidentally picks (or clears) the wrong brand can restore their
+  // previous selection in one click instead of hunting for it again.
+  const [prevBrand, setPrevBrand] = useState(null);
   // "Add from website" — analyze a typed domain and hydrate the brand fields
   // from it (for brands that aren't in the saved list).
   const [siteDraft, setSiteDraft] = useState('');
@@ -667,7 +672,23 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const matched =
     brands.find((b) => (b?.name || '').trim().toLowerCase() === currentName.toLowerCase()) || null;
 
+  // Capture the current brand fields so a subsequent change can be undone. Only
+  // remembers a non-empty selection (nothing to restore from a blank state).
+  const rememberCurrentBrand = () => {
+    if (!currentName) return;
+    const snap = {};
+    ['brand_name', 'brand_description', 'brand_logo', 'brand_colors'].forEach((k) => {
+      if (fieldKeys.has(k)) snap[k] = values[k];
+    });
+    setPrevBrand(snap);
+  };
+
   const pick = (b) => {
+    // Remember the outgoing selection before overwriting it (unless re-picking
+    // the same brand, which isn't a change worth undoing).
+    if (currentName.toLowerCase() !== (b.name || '').trim().toLowerCase()) {
+      rememberCurrentBrand();
+    }
     const patch = {};
     if (fieldKeys.has('brand_name')) patch.brand_name = b.name || '';
     if (fieldKeys.has('brand_description')) patch.brand_description = b.description || '';
@@ -686,6 +707,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   // Clear a wrong selection — blanks every brand field the form has so the
   // user can re-pick (or leave brand-less) without restarting the workflow.
   const clear = () => {
+    rememberCurrentBrand();
     const patch = {};
     if (fieldKeys.has('brand_name')) patch.brand_name = '';
     if (fieldKeys.has('brand_description')) patch.brand_description = '';
@@ -693,6 +715,19 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     if (fieldKeys.has('brand_colors')) patch.brand_colors = [];
     onPick(patch);
   };
+
+  // Restore the brand selection that was active before the last pick/clear.
+  const restorePrevious = () => {
+    if (!prevBrand) return;
+    onPick(prevBrand);
+    setPrevBrand(null);
+  };
+
+  // Only offer "restore" when the remembered brand actually differs from what's
+  // currently selected (otherwise there's nothing to undo).
+  const canRestore =
+    !!prevBrand?.brand_name &&
+    prevBrand.brand_name.trim().toLowerCase() !== currentName.toLowerCase();
 
   const refresh = () => {
     if (!userId || refreshing) return;
@@ -744,17 +779,32 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
             <Info className="h-3 w-3" />
           </span>
         </Tip>
-        <Tip content="Refresh the brand list">
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={disabled || refreshing}
-            aria-label="Refresh brand list"
-            className="ml-auto rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-        </Tip>
+        <div className="ml-auto flex items-center gap-1">
+          {canRestore && (
+            <Tip content={`Restore previous brand (${prevBrand.brand_name})`}>
+              <button
+                type="button"
+                onClick={restorePrevious}
+                disabled={disabled}
+                aria-label="Restore previous brand"
+                className="rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+            </Tip>
+          )}
+          <Tip content="Refresh the brand list">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={disabled || refreshing}
+              aria-label="Refresh brand list"
+              className="rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </Tip>
+        </div>
       </label>
       <button
         type="button"

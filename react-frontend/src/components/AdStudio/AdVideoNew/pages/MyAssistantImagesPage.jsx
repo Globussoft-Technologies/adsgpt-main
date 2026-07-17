@@ -43,9 +43,17 @@ const adaptRow = (row) => {
     status: 'completed',
     model: row?.model,
     createdAt: row?.createdAt,
-    // Assistant rows carry no generation inputs; keep an empty object so
-    // ImageCard's optional reads (prompt for post-as-ad) stay safe.
-    inputs: {},
+    // ImageCard's Info tooltip reads `updatedAt` for the timestamp line.
+    updatedAt: row?.updatedAt || row?.createdAt,
+    creativeType: row?.creativeType || row?.type,
+    // Assistant rows carry no full generation inputs, but the slim library row
+    // does have a model (and sometimes a type) — surface those so the Image
+    // Info tooltip is useful. Missing fields degrade gracefully to "-".
+    inputs: {
+      model: row?.model,
+      modelLabel: row?.model,
+      type: row?.creativeType || row?.type,
+    },
     url: abs,
     results: [{ url: abs, imageStatus: 200, aspectRatio: null }],
   };
@@ -274,8 +282,10 @@ export default function MyAssistantImagesPage() {
             onOpenPostAdModal={(payload) =>
               setPostAdState({ open: true, payload, autoAdvance: false })
             }
-            // Assistant rows have no generation inputs to power these.
-            enableInfo={false}
+            // Info shows the slim metadata we do have (model/type/time).
+            // Recreate stays off: it needs generation `inputs.type` to route to
+            // an editor, which assistant rows don't carry.
+            enableInfo
             enableRecreate={false}
             onLogoSaved={handleLogoSaved}
           />

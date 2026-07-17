@@ -17,6 +17,19 @@ const extOf = (name) => {
   return dot >= 0 ? name.slice(dot).toLowerCase() : '';
 };
 
+// An image copied from a web page lands on the clipboard as `kind:'string'`
+// (an <img> HTML fragment and/or a bare image URL), NOT a binary file — so it
+// would otherwise paste into the textarea as raw text/URL. Pull an image URL
+// out of the HTML or plain-text flavours so we can turn it into a real preview.
+const IMAGE_URL_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i;
+const extractImageUrl = (html, text) => {
+  const fromHtml = (html || '').match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (fromHtml && /^https?:\/\//i.test(fromHtml[1])) return fromHtml[1];
+  const t = (text || '').trim();
+  if (/^https?:\/\/\S+$/i.test(t) && IMAGE_URL_RE.test(t)) return t;
+  return null;
+};
+
 // Client-side upload guard. The OS file picker's `accept` is only a hint (users
 // can switch to "All files"; drag/paste bypass it entirely), so validate here
 // too — otherwise a rejected file (e.g. an .exe) flashes in as a chip before the
@@ -193,16 +206,62 @@ const Composer = ({
     addFiles(files);
   };
 
+  // Turn a pasted remote image URL into a real attachment with a preview.
+  // Preferred path: fetch the bytes and run them through the normal upload flow
+  // so it's stored like any other attachment. If the fetch is blocked (most
+  // cross-origin images are), fall back to referencing the URL directly so the
+  // user still gets a thumbnail preview and can send it.
+  const addImageByUrl = async (url) => {
+    if (attachments.length >= MAX_ATTACHMENTS) {
+      toast.error(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      return;
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('not an image');
+      const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+      addFiles([new File([blob], `pasted-image.${ext}`, { type: blob.type })]);
+    } catch {
+      const tempId = nextTmpId();
+      setAttachments((prev) => [
+        ...prev,
+        {
+          tempId,
+          file_type: extOf(url.split('?')[0]) || '.png',
+          filename: url.split('/').pop()?.split('?')[0] || 'pasted-image',
+          url,
+          isImage: true,
+          preview: url,
+          pending: false,
+        },
+      ]);
+    }
+  };
+
   // Let users paste an image straight from the clipboard (screenshots, copied
-  // product photos) instead of only via the attach button.
+  // product photos, or an image copied from a web page) instead of only via the
+  // attach button. Screenshots/copied files arrive as binary `kind:'file'`
+  // items; web-page images arrive as an <img> HTML fragment or a bare URL.
   const handlePaste = (e) => {
-    const files = Array.from(e.clipboardData?.items || [])
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const files = Array.from(cd.items || [])
       .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
       .map((it) => it.getAsFile())
       .filter(Boolean);
     if (files.length) {
       e.preventDefault();
       addFiles(files);
+      return;
+    }
+    // No binary image — check for an image copied as HTML/URL and keep it out
+    // of the textarea (which is what made it show up as raw text before).
+    const url = extractImageUrl(cd.getData('text/html'), cd.getData('text/plain'));
+    if (url) {
+      e.preventDefault();
+      addImageByUrl(url);
     }
   };
 

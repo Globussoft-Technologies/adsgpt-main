@@ -205,19 +205,20 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
       {(ad.call_to_action || adUrl || canRecreate) && (
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
           {ad.call_to_action ? (
-            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-medium tracking-wide text-white/70 capitalize">
+            <span className="inline-flex h-7 items-center rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium tracking-wide text-white/70 capitalize">
               {ad.call_to_action}
             </span>
           ) : (
             <span />
           )}
+          {/* Action pills share one height/shape/size so they align on the row. */}
           <div className="flex items-center gap-2">
             {canRecreate && (
               <button
                 type="button"
                 onClick={() => onRecreate(ad)}
                 title="Recreate a similar ad with the AI Assistant"
-                className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2.5 py-1 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-3 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
               >
                 <Sparkles className="h-3 w-3 text-[#15DCFF]" />
                 Recreate
@@ -228,7 +229,8 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
                 href={adUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 text-[11.5px] font-medium text-white/55 transition-colors duration-150 hover:text-white"
+                title="View the original ad"
+                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/10 px-3 text-[11.5px] font-medium text-white/60 transition-colors duration-150 hover:border-white/25 hover:text-white"
               >
                 View ad
                 <ExternalLink className="h-3 w-3" />
