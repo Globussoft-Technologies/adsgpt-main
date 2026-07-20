@@ -14,11 +14,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Megaphone,
+  Mic,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import CustomVideoPlayer from '../../AdVideo/AdVideoChats/CustomVideoPlayer';
-import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
+import {
+  downloadMediaFromUrl,
+  selectAiAdsVersionAction,
+} from '@/store/actions/adVideoNew/Advideoactions';
 import { useDispatch, useSelector } from 'react-redux';
 import emitter from '@/utils/eventEmitter';
 import {
@@ -31,7 +35,11 @@ import {
   setAiAdsSceneData,
   setAiAdsSceneLoading,
   setAiAdsPrefillInputs,
+  setAiAdsPreviewVersion,
+  setAiAdsVersion,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
+import RegenerateVoiceModal from './RegenerateVoiceModal';
+import VideoVersionControls from './VideoVersionControls';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
@@ -102,6 +110,46 @@ export default function VideoCard({
   const [searchParams, setSearchParams] = useSearchParams();
   const { userData } = useSelector((state) => state.socket);
   const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
+
+  // ── AI Ads version switching (voice regenerate) ──────────────────────────
+  const isAiAds = item?.inputs?.type === 'ai_ads';
+  const committedVersion = typeof item?.version === 'number' ? item.version : 0;
+  const shownVersion = item?.previewVersion ?? committedVersion;
+  const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
+  // Idempotent for server results (which keep waterMarkUrl); correct for the
+  // socket-appended version (raw url).
+  const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url : r?.url);
+  const [regenOpen, setRegenOpen] = useState(false);
+
+  // Point the player at the shown version's URL when it changes.
+  useEffect(() => {
+    if (!isAiAds) return;
+    const u = pickUrl(item?.results?.[shownVersion]);
+    if (u) setActiveVideoUrl(u);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAiAds, shownVersion, item?.results, hasPlan8]);
+
+  const handlePreviewVersion = (idx) =>
+    dispatch(setAiAdsPreviewVersion({ sessionId: item._id, previewVersion: idx }));
+  const handleRevertVersion = () =>
+    dispatch(setAiAdsPreviewVersion({ sessionId: item._id, previewVersion: null }));
+  const handleKeepVersion = async (idx) => {
+    try {
+      await dispatch(selectAiAdsVersionAction(item._id, idx));
+      dispatch(setAiAdsVersion({ sessionId: item._id, version: idx }));
+    } catch {
+      /* error already toasted by the thunk */
+    }
+  };
+  // Prefer the shown version's stamped voice; fall back to the frozen original
+  // inputs so legacy videos (generated before per-version aiAds existed) still
+  // carry a valid voice for translate/rewrite.
+  const currentVoiceForModal = {
+    provider: shownResult?.aiAds?.voiceProvider || item?.inputs?.voiceProvider,
+    voiceId: shownResult?.aiAds?.voiceId || item?.inputs?.voiceId,
+    voiceName: shownResult?.aiAds?.voiceName || item?.inputs?.voiceName,
+    language: shownResult?.aiAds?.language || item?.inputs?.voiceFilters?.language,
+  };
 
   const isThisFullscreen = isFullscreen && (fullscreenIndex === videoIndex || fullscreenIndex === activeNavIndex);
 
@@ -697,6 +745,26 @@ export default function VideoCard({
             </>
           )}
 
+          {/* AI Ads: voice-regen overlay — the video stays visible underneath */}
+          {isAiAds && item?.regenState === 'processing' && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
+              <RefreshCw className="animate-spin text-white" size={28} />
+              <p className="text-sm text-white">Regenerating voice…</p>
+            </div>
+          )}
+
+          {/* AI Ads: version switcher (only when more than one version exists) */}
+          {isAiAds && (item?.results?.length || 0) > 1 && (
+            <VideoVersionControls
+              results={item.results}
+              shownVersion={shownVersion}
+              committedVersion={committedVersion}
+              onPreview={handlePreviewVersion}
+              onRevert={handleRevertVersion}
+              onKeep={handleKeepVersion}
+            />
+          )}
+
           {/* Controls Bar */}
           <div
             className={`absolute right-0 bottom-0 left-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 transition-opacity duration-300 ${isThisFullscreen ? (showControls ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}
@@ -752,7 +820,7 @@ export default function VideoCard({
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpenPostAdModal({
-                        url: item?.results?.[0]?.url,
+                        url: shownResult?.url,
                         isVideo: true,
                         prompt:
                           item?.inputs?.userPrompt ||
@@ -765,6 +833,18 @@ export default function VideoCard({
                     className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
                   >
                     <Megaphone size={18} />
+                  </button>
+                )}
+                {isAiAds && (
+                  <button
+                    title="Regenerate voice"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRegenOpen(true);
+                    }}
+                    className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                  >
+                    <Mic size={18} />
                   </button>
                 )}
                 <div className="group/volume relative flex items-center">
@@ -835,7 +915,7 @@ export default function VideoCard({
 
                 <button
                   className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-                  onClick={() => dispatch(downloadMediaFromUrl(`${item?.results?.[0]?.url}`))}
+                  onClick={() => dispatch(downloadMediaFromUrl(`${shownResult?.url}`))}
                 >
                   <Download size={18} />
                 </button>
@@ -888,6 +968,15 @@ export default function VideoCard({
             <Edit size={18} />
           </button>
         </div>
+      )}
+
+      {isAiAds && (
+        <RegenerateVoiceModal
+          open={regenOpen}
+          onOpenChange={setRegenOpen}
+          sessionId={item._id}
+          currentVoice={currentVoiceForModal}
+        />
       )}
     </div>
   );

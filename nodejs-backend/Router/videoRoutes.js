@@ -118,6 +118,15 @@ router.post(
   videoController.copyAiAdsVideo
 );
 
+// Translate/rewrite Step 1 — preview the new script only (no render). Python
+// returns the script via the scene-result callback; the committed video is
+// untouched. Frontend listens on socket 'aiAdsTranslateScriptReady'.
+router.post(
+  "/ai-ads/preview-regenerate-script/:sessionId",
+  authenticateJWT,
+  videoController.previewRegenerateScript
+);
+
 // Voice-only re-render on a completed ad (no Veo). Appends a new results[]
 // version; forwards Python's 400 already_in_language verbatim.
 router.post(

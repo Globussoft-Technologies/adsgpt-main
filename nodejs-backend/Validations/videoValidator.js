@@ -217,6 +217,10 @@ const regenerateVoiceSchema = Joi.object({
       then: Joi.string().required(),
       otherwise: Joi.string().allow("", null).optional(),
     }),
+    // Edited script for translate/rewrite Step 2. When present, the controller
+    // uses these scenes (user's edits) instead of the base version's script.
+    // Shape is passthrough — Python owns the per-line script schema.
+    scenes: Joi.array().items(Joi.object().unknown(true)).optional(),
   }).required(),
 });
 

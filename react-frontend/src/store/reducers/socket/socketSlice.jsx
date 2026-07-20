@@ -55,6 +55,8 @@ import {
   markAiAdsSceneImageFailed,
   setAiAdsSessionStatus,
   updateCloneImage,
+  appendAiAdsVersion,
+  setAiAdsRegenState,
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
@@ -528,6 +530,26 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     socket.on('aiAdsvideoReady', (data) => {
       console.log("Ai Ads video update: ", data);
+    });
+
+    // Voice-regenerate finished — a new version is appended and previewed on the
+    // My Space card. Payload: { sessionId, index, regenType, totalDuration, result }.
+    socket.on('aiAdsVoiceReady', (data) => {
+      if (!data?.sessionId || !data?.result) return;
+      dispatch(appendAiAdsVersion({
+        sessionId: data.sessionId,
+        index: data.index,
+        result: data.result,
+      }));
+    });
+
+    // Voice-regenerate failed — clear the overlay (so the user can retry) + toast.
+    socket.on('aiAdsVoiceFailed', (data) => {
+      console.error('AI Ads voice regen failed:', data);
+      if (data?.sessionId) {
+        dispatch(setAiAdsRegenState({ sessionId: data.sessionId, regenState: 'idle' }));
+      }
+      showFailureNotification('video', data?.error || 'Voice regeneration failed');
     });
 
     socket.on('aiAdsScenesFailed', (data) => {

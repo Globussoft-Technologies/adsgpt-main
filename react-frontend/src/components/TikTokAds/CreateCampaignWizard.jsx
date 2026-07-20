@@ -89,6 +89,16 @@ const isSupportedAspectRatio = (width, height) => {
 const MAX_IMAGE_LONG_SIDE = 2340;
 const MAX_IMAGE_SHORT_SIDE = 1242;
 
+// Images are far more permissive than video: the live Ads Manager accepts a
+// wide range of aspect ratios (it crops to fit the feed) and many everyday
+// photo/thumbnail sizes — so we do NOT apply the video's strict 16:9/1:1/9:16
+// ratio rule or its orientation-specific floor to images. The only real image
+// floors are the max above and a small minimum on the shorter side to catch a
+// genuinely tiny asset (e.g. a 150px logo) that TikTok would reject as
+// "Unsupported image size". 500px matches TikTok's lowest documented image
+// minimum (catalog/collection cards) and clears normal creatives easily.
+const MIN_IMAGE_SHORT_SIDE = 500;
+
 // Standard Carousel Ads take 2-35 images (confirmed via TikTok's official
 // "Specifications for Carousel Ads" help article). This is a distinct format
 // from CATALOG_CAROUSEL (2-20, feed-driven), which is not implemented here.
@@ -1719,14 +1729,11 @@ const CreateCampaignWizard = ({
     update({ videoFile: file });
   };
 
-  // Same idea for images. Checks both bounds TikTok's asset pipeline enforces:
-  // a MAX (images over 2340px longer / 1242px shorter side, confirmed via a
-  // live upload error) and a MIN — the same orientation-aware floor as video
-  // (960×540 / 540×960 / 640×640, confirmed via TikTok's official in-feed ad
-  // specs). The min check was missing here, so a too-small image (e.g. a
-  // small square logo under 640×640) passed this gate and TikTok's server
-  // rejected it later with "Unsupported image size" — a confusing failure
-  // late in the launch flow instead of an instant, actionable one here.
+  // Image validation is deliberately lighter than video (see MIN_IMAGE_SHORT_SIDE
+  // note): only a max bound (confirmed via a live upload error) and a small
+  // minimum on the shorter side to catch a genuinely tiny asset. No aspect-ratio
+  // gate — the live Ads Manager accepts many ratios and crops to the feed, so
+  // enforcing 16:9/1:1/9:16 here wrongly rejected ordinary photos/thumbnails.
   const handleImageFileSelect = async (file) => {
     if (!file) {
       update({ imageFile: null });
@@ -1743,18 +1750,10 @@ const CreateCampaignWizard = ({
         }));
         return;
       }
-      if (!meetsMinResolution(dims.width, dims.height)) {
+      if (shorter < MIN_IMAGE_SHORT_SIDE) {
         setErrors((e) => ({
           ...e,
-          image:
-            'Cannot be delivered to TikTok: Resolution too low. Minimum is 960×540 (horizontal), 540×960 (vertical), or 640×640 (square).',
-        }));
-        return;
-      }
-      if (!isSupportedAspectRatio(dims.width, dims.height)) {
-        setErrors((e) => ({
-          ...e,
-          image: 'Cannot be delivered to TikTok: Image ratio must be 16:9/1:1/9:16.',
+          image: `Image is too small. The shorter side must be at least ${MIN_IMAGE_SHORT_SIDE}px.`,
         }));
         return;
       }
@@ -1764,8 +1763,8 @@ const CreateCampaignWizard = ({
   };
 
   // Carousel takes 2-35 images (TikTok's documented range for the standard,
-  // non-catalog Carousel format). Each added file gets the same dimension
-  // checks as a single image (max, min, aspect ratio — see
+  // non-catalog Carousel format). Each added file gets the same light checks as
+  // a single image (max bound + small minimum, no aspect-ratio gate — see
   // handleImageFileSelect); the count check runs against the combined total.
   const handleCarouselFilesSelect = async (files) => {
     const incoming = Array.from(files || []);
@@ -1783,18 +1782,10 @@ const CreateCampaignWizard = ({
           }));
           return;
         }
-        if (!meetsMinResolution(dims.width, dims.height)) {
+        if (shorter < MIN_IMAGE_SHORT_SIDE) {
           setErrors((e) => ({
             ...e,
-            carousel:
-              'Cannot be delivered to TikTok: Resolution too low. Minimum is 960×540 (horizontal), 540×960 (vertical), or 640×640 (square).',
-          }));
-          return;
-        }
-        if (!isSupportedAspectRatio(dims.width, dims.height)) {
-          setErrors((e) => ({
-            ...e,
-            carousel: 'Cannot be delivered to TikTok: Image ratio must be 16:9/1:1/9:16.',
+            carousel: `An image is too small. The shorter side must be at least ${MIN_IMAGE_SHORT_SIDE}px.`,
           }));
           return;
         }

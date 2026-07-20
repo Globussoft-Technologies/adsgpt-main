@@ -257,6 +257,42 @@ const adVideoNewSlice = createSlice({
       updateScene(state.aiAdsSceneData.scenes) ||
         updateScene(state.aiAdsSceneData.data?.scenes);
     },
+    // ── AI Ads voice-regenerate / version switching (My Space card) ──────────
+    // Per-item client fields on allVideos: regenState ('idle'|'processing'|
+    // 'failed') drives the overlay while a regen runs; previewVersion is the
+    // freshly generated index shown but NOT yet committed. The committed pointer
+    // is item.version (from the server). Card shows previewVersion ?? version.
+    setAiAdsRegenState: (state, action) => {
+      const { sessionId, regenState } = action.payload;
+      const v = state.allVideos.find((x) => x._id === sessionId);
+      if (v) v.regenState = regenState;
+    },
+    // Socket 'aiAdsVoiceReady' — append the new version and preview it.
+    appendAiAdsVersion: (state, action) => {
+      const { sessionId, index, result } = action.payload;
+      const v = state.allVideos.find((x) => x._id === sessionId);
+      if (!v || !result) return;
+      if (!Array.isArray(v.results)) v.results = [];
+      // Idempotent against duplicate socket deliveries.
+      if (index != null && v.results[index]) v.results[index] = result;
+      else v.results.push(result);
+      v.regenState = 'idle';
+      v.previewVersion = index != null ? index : v.results.length - 1;
+    },
+    // select-version success — commit the pointer, clear the preview marker.
+    setAiAdsVersion: (state, action) => {
+      const { sessionId, version } = action.payload;
+      const v = state.allVideos.find((x) => x._id === sessionId);
+      if (!v) return;
+      v.version = version;
+      v.previewVersion = null;
+    },
+    // Preview a version locally without committing (switcher browsing).
+    setAiAdsPreviewVersion: (state, action) => {
+      const { sessionId, previewVersion } = action.payload;
+      const v = state.allVideos.find((x) => x._id === sessionId);
+      if (v) v.previewVersion = previewVersion;
+    },
     // Flip session-level status (e.g. "processing" → "completed")
     setAiAdsSessionStatus: (state, action) => {
       if (!state.aiAdsSceneData) return;
@@ -304,6 +340,10 @@ export const {
   patchAiAdsSceneImage,
   markAiAdsSceneImageFailed,
   setAiAdsSessionStatus,
+  setAiAdsRegenState,
+  appendAiAdsVersion,
+  setAiAdsVersion,
+  setAiAdsPreviewVersion,
 } = adVideoNewSlice.actions;
 
 export default adVideoNewSlice.reducer;

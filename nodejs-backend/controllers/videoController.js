@@ -1957,6 +1957,40 @@ exports.updateSceneResult = async (req, res) => {
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
     }
 
+    // ───── Script PREVIEW path (Step 1 of translate/rewrite) ────────────────
+    // previewRegenerateScript set previewState="processing" before firing
+    // Python. Python delivers the new script through THIS shared callback, but
+    // for a preview we must NOT touch the completed video — no scenes/status/
+    // version writes. Just forward the script to the modal and clear the flag.
+    if (record.previewState === "processing") {
+      const previewFailed = type === "error" || success === false || status === 400;
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        previewState: "idle",
+      }).catch(() => {});
+
+      if (previewFailed) {
+        if (global.io) {
+          global.io.to(record.userId).emit("aiAdsTranslateScriptFailed", {
+            sessionId,
+            error: error || "Failed to generate the script. Please try again.",
+          });
+        }
+        return res.json({ success: true, message: "Preview script failure recorded" });
+      }
+
+      // `text` carries the per-segment scenes (each with timestamped script
+      // lines + validation limits). Forward verbatim; the modal renders it.
+      if (global.io) {
+        global.io.to(record.userId).emit("aiAdsTranslateScriptReady", {
+          sessionId,
+          scenes: Array.isArray(text) ? text : [],
+          totalSegments,
+          totalDuration,
+        });
+      }
+      return res.json({ success: true, message: "Preview script delivered" });
+    }
+
     // ───── Regenerate path (smart merge per-scene, per-type) ────────────────
     if (isRegenerate === true) {
       // Build prior-state lookup BEFORE any merge so we can decide:
@@ -2846,7 +2880,12 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       ? toPlainScenes(baseVersion.aiAds.scenes)
       : toPlainScenes(record.scenes);
 
-    const voiceDelta = value.inputs; // { voiceProvider, voiceId, voiceName, regenType, translateLang }
+    const voiceDelta = value.inputs; // { voiceProvider, voiceId, voiceName, regenType, translateLang, scenes? }
+
+    // For translate/rewrite the user reviews (and may edit) the previewed script
+    // before committing. When the frontend sends those edited `scenes`, they are
+    // the source of truth — use them over the base version's script.
+    const finalScenes = voiceDelta.scenes?.length ? voiceDelta.scenes : baseScenes;
 
     // Build Python inputs: frozen original inputs (brand/images/frames/model) +
     // the selected version's script as the base + the new voice delta on top.
@@ -2862,7 +2901,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       voiceName: voiceDelta.voiceName ?? "",
       regenType: voiceDelta.regenType,
       translateLang: voiceDelta.translateLang ?? "",
-      scenes: baseScenes,
+      scenes: finalScenes,
       // URL of the currently-pointed (last-selected) version — the render
       // Python re-voices from. Same version baseScenes is taken from.
       generatedUrl: baseVersion?.url || "",
@@ -2886,7 +2925,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
         voiceDelta.regenType === "translate"
           ? voiceDelta.translateLang || null
           : baseVersion?.aiAds?.language ?? null,
-      scenes: baseScenes,
+      scenes: finalScenes,
     };
     await record.save();
 
@@ -2937,6 +2976,165 @@ exports.regenerateAiAdsVoice = async (req, res) => {
   } catch (err) {
     console.error("Error in regenerateAiAdsVoice:", err);
     logger.error(`[AI Ads] regenerateAiAdsVoice error: ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- 3c. previewRegenerateScript (Step 1 of the 2-step translate flow) --------
+// Asks Python to generate a translated/rewritten SCRIPT for a completed AI Ads
+// video. Python delivers the new script via the shared scene-result callback;
+// we set previewState="processing" so that callback forwards the script to the
+// modal (socket 'aiAdsTranslateScriptReady') WITHOUT touching the committed
+// video (scenes/status/version stay intact). Step 2 (regenerate-voice) actually
+// renders the new voice-over once the user confirms/edits the script.
+exports.previewRegenerateScript = async (req, res) => {
+  try {
+    /* #swagger.tags = ['Video Generation']
+       #swagger.summary = 'Preview a translated/rewritten AI Ads script (no render)'
+       #swagger.description = 'Step 1 of translate/rewrite. Generates only the script (via the scene-result callback) so the user can review/edit before committing to regenerate-voice. Does not modify the committed video.'
+       #swagger.security = [{ "BearerAuth": [] }]
+       #swagger.parameters['sessionId'] = { in: 'path', required: true, schema: { type: 'string' } }
+    */
+    const { sessionId } = req.params;
+
+    const { error, value } = regenerateVoiceSchema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+    });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join(", "),
+      });
+    }
+
+    const userId = req.user.user_id;
+
+    const record = await VideoGeneration.findOne({
+      _id: sessionId,
+      userId,
+      "inputs.type": "ai_ads",
+    });
+    if (!record) {
+      return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    }
+
+    // Only a finished video's script can be re-previewed.
+    if (record.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        error: "Script can only be regenerated on a completed video.",
+      });
+    }
+
+    // Concurrency guard — one preview at a time per session.
+    if (record.previewState === "processing") {
+      return res.status(409).json({
+        success: false,
+        error: "preview_in_progress",
+        message: "A script preview is already in progress for this ad.",
+      });
+    }
+
+    if (!process.env.AI_ADS_PREVIEW_REGENERATE_SCRIPT_PYTHON_API) {
+      return res.status(500).json({
+        success: false,
+        error: "AI Ads preview-regenerate-script Python API not configured",
+      });
+    }
+
+    // Base = the currently selected version's script (same logic as regen-voice).
+    const versionIdx =
+      typeof record.version === "number" && record.results?.[record.version]
+        ? record.version
+        : 0;
+    const baseVersion = record.results?.[versionIdx];
+    const toPlainScenes = (arr) =>
+      (arr || []).map((s) =>
+        s && typeof s.toObject === "function"
+          ? s.toObject()
+          : {
+              segmentNumber: s?.segmentNumber,
+              durationSeconds: s?.durationSeconds,
+              script: s?.script,
+            },
+      );
+    const baseScenes = baseVersion?.aiAds?.scenes?.length
+      ? toPlainScenes(baseVersion.aiAds.scenes)
+      : toPlainScenes(record.scenes);
+
+    const delta = value.inputs; // { voiceProvider, voiceId, voiceName, regenType, translateLang }
+
+    const { brandName, productName, productDescription, scenes: _dropScenes, ...restInputs } =
+      record.inputs.toObject ? record.inputs.toObject() : record.inputs;
+    const inputsForPython = {
+      ...restInputs,
+      ...(brandName || productName ? { name: brandName || productName } : {}),
+      ...(productDescription ? { description: productDescription } : {}),
+      voiceProvider: delta.voiceProvider,
+      voiceId: delta.voiceId ?? "",
+      voiceName: delta.voiceName ?? "",
+      regenType: delta.regenType,
+      translateLang: delta.translateLang ?? "",
+      scenes: baseScenes,
+      generatedUrl: baseVersion?.url || "",
+    };
+
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+    const applyWatermark = plan === "8" ? true : (record.watermark ?? false);
+
+    // Mark preview in-flight so the scene-result callback forwards the script
+    // without disturbing the committed video, and a concurrent request 409s.
+    record.previewState = "processing";
+    await record.save();
+
+    try {
+      await axios.post(process.env.AI_ADS_PREVIEW_REGENERATE_SCRIPT_PYTHON_API, {
+        sessionId,
+        userId,
+        watermark: applyWatermark,
+        subscription:
+          value.subscription || req.body.subscription || { plan: "pro", credits: "100" },
+        inputs: inputsForPython,
+      });
+
+      // Python accepted → script arrives on the scene-result callback, which
+      // (seeing previewState) emits 'aiAdsTranslateScriptReady'.
+      return res.status(202).json({
+        status: "processing",
+        sessionId,
+        message: "Script preview started. Listen on socket 'aiAdsTranslateScriptReady'.",
+        regenType: delta.regenType,
+      });
+    } catch (pyErr) {
+      // Roll back the guard so the user can retry.
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        previewState: "idle",
+      }).catch(() => {});
+
+      const status = pyErr.response?.status;
+      const body = pyErr.response?.data;
+
+      // Forward the already_in_language guard VERBATIM.
+      if (status === 400) {
+        return res.status(400).json(
+          body || {
+            error: "already_in_language",
+            message: "This ad is already in the requested language.",
+          },
+        );
+      }
+
+      console.error("[AI Ads] preview-regenerate-script python call failed:", pyErr.message);
+      logger.error(`[AI Ads] preview-regenerate-script python call failed: ${pyErr.message}`);
+      return res.status(502).json({
+        success: false,
+        error: "Script preview service failed. Please try again.",
+      });
+    }
+  } catch (err) {
+    console.error("Error in previewRegenerateScript:", err);
+    logger.error(`[AI Ads] previewRegenerateScript error: ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

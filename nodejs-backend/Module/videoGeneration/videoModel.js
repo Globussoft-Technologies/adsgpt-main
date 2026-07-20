@@ -222,6 +222,16 @@ const videoSchema = new mongoose.Schema(
       enum: ["idle", "processing", "failed"],
       default: "idle",
     },
+    // Guards an in-flight "translate/rewrite" script PREVIEW (Step 1 of the
+    // 2-step translate flow). Set to "processing" when Node fires
+    // preview_regenerate_script; the shared scene-result callback checks this to
+    // forward the new script to the modal WITHOUT touching the committed
+    // scenes/status/version. Cleared on the first callback (success or failure).
+    previewState: {
+      type: String,
+      enum: ["idle", "processing", "failed"],
+      default: "idle",
+    },
     // In-flight voice-regen stash. Node captures the voice delta (+ the base
     // script as a fallback) here when firing Python, so the finished-callback
     // can stamp the new version even before Python echoes the metadata back.

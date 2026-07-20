@@ -904,3 +904,45 @@ export const generateAiAdsVideoAction = (sessionId, overrides) => async () => {
     throw error;
   }
 };
+
+// Voice-only re-render on a completed AI Ads video. Returns 202 immediately;
+// the finished version arrives via socket 'aiAdsVoiceReady'. `inputs` is the
+// delta: { voiceProvider, voiceId, voiceName, regenType, translateLang }.
+// The backend forwards Python's 400 already_in_language verbatim — we rethrow
+// it with a code so the panel can show it inline instead of a generic toast.
+export const regenerateAiAdsVoiceAction = (sessionId, inputs) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/regenerate-voice/${sessionId}`,
+      { inputs },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    return response.data; // { status:'processing', sessionId, regenType }
+  } catch (error) {
+    const data = error.response?.data;
+    if (error.response?.status === 400 && data?.error === 'already_in_language') {
+      const e = new Error(data?.message || 'This ad is already in that language.');
+      e.code = 'already_in_language';
+      throw e;
+    }
+    const errorMsg = data?.error || data?.message || 'Failed to regenerate voice';
+    globalToast.error(errorMsg);
+    throw error;
+  }
+};
+
+// "Keep this one" / revert — move the version pointer to a results[] entry.
+export const selectAiAdsVersionAction = (sessionId, version) => async () => {
+  try {
+    const response = await axios.patch(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/select-version/${sessionId}`,
+      { version },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    return response.data; // { success:true, version }
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || 'Failed to select version';
+    globalToast.error(errorMsg);
+    throw error;
+  }
+};
