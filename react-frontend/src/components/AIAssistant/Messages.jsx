@@ -78,7 +78,9 @@ const MediaGrid = ({ urls = [], onOpenImage }) => {
 
   if (!urls.length) return null;
 
-  const live = urls.filter((u) => isVideoUrl(u) || !dead.has(u));
+  // Also drop empty/whitespace URLs — an <img src=""> renders a broken box that
+  // never fires onError, so it would never make it into `dead` (BUG 8).
+  const live = urls.filter((u) => u && String(u).trim() && (isVideoUrl(u) || !dead.has(u)));
   if (!live.length) return null;
 
   const total = live.length;

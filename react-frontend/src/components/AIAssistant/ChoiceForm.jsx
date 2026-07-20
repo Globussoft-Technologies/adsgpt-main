@@ -413,7 +413,11 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 // actually feed generation (selected = bordered); the first is selected by
 // default. Broken/unreachable images are dropped so only good ones show or ship.
 const ImageUploadField = ({ field, value, onChange, disabled }) => {
-  const arr = Array.isArray(value) ? value.map(asImgItem) : value ? [asImgItem(value)] : [];
+  // Drop empty/whitespace-URL items at render: an <img src=""> does NOT reliably
+  // fire onError in Chromium, so a blank entry would show a permanent broken box
+  // that the onError→removeAt path can never clear (BUG 8).
+  const arr = (Array.isArray(value) ? value.map(asImgItem) : value ? [asImgItem(value)] : [])
+    .filter((it) => it && it.url && String(it.url).trim());
   const [uploading, setUploading] = useState(false);
   // Full-screen preview (double-click / double-tap a thumbnail).
   const [preview, setPreview] = useState(null);
