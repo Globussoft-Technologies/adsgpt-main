@@ -931,6 +931,32 @@ export const regenerateAiAdsVoiceAction = (sessionId, inputs) => async () => {
   }
 };
 
+// Translate/Rewrite Step 1 — preview the new script (no render). Returns 202;
+// the translated/rewritten script arrives via socket 'aiAdsTranslateScriptReady'.
+// `inputs` is the delta: { voiceProvider, voiceId, voiceName, regenType, translateLang }.
+// Forwards Python's 400 already_in_language verbatim (rethrows with a code so the
+// modal can show it inline).
+export const previewRegenerateScriptAction = (sessionId, inputs) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/preview-regenerate-script/${sessionId}`,
+      { inputs },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    return response.data; // { status:'processing', sessionId, regenType }
+  } catch (error) {
+    const data = error.response?.data;
+    if (error.response?.status === 400 && data?.error === 'already_in_language') {
+      const e = new Error(data?.message || 'This ad is already in that language.');
+      e.code = 'already_in_language';
+      throw e;
+    }
+    const errorMsg = data?.error || data?.message || 'Failed to generate script';
+    globalToast.error(errorMsg);
+    throw error;
+  }
+};
+
 // "Keep this one" / revert — move the version pointer to a results[] entry.
 export const selectAiAdsVersionAction = (sessionId, version) => async () => {
   try {

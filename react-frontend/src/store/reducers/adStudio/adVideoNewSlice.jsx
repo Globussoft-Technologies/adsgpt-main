@@ -50,6 +50,11 @@ const initialState = {
   aiAdsSceneLoading: false,
   aiAdsSceneError: null,
   aiAdsPrefillInputs: null,
+  // Translate/Rewrite Step-1 preview scripts, keyed by sessionId:
+  //   { [sessionId]: { scenes: [...], error: null } }
+  // Populated by socket 'aiAdsTranslateScriptReady' / 'aiAdsTranslateScriptFailed';
+  // read by RegenerateVoiceModal to render the editable script box.
+  aiAdsTranslateScript: {},
 };
 
 const adVideoNewSlice = createSlice({
@@ -302,6 +307,25 @@ const adVideoNewSlice = createSlice({
         state.aiAdsSceneData.status = action.payload;
       }
     },
+    // Socket 'aiAdsTranslateScriptReady' — store the previewed script for a
+    // session so the modal can render it (editable). Keyed by sessionId.
+    setAiAdsTranslateScript: (state, action) => {
+      const { sessionId, scenes } = action.payload;
+      if (!sessionId) return;
+      state.aiAdsTranslateScript[sessionId] = { scenes: scenes || [], error: null };
+    },
+    // Socket 'aiAdsTranslateScriptFailed' — record the failure so the modal
+    // can surface it and let the user retry.
+    setAiAdsTranslateScriptError: (state, action) => {
+      const { sessionId, error } = action.payload;
+      if (!sessionId) return;
+      state.aiAdsTranslateScript[sessionId] = { scenes: null, error: error || 'Failed' };
+    },
+    // Clear a session's preview script (on modal close / mode switch / re-preview).
+    clearAiAdsTranslateScript: (state, action) => {
+      const { sessionId } = action.payload || {};
+      if (sessionId) delete state.aiAdsTranslateScript[sessionId];
+    },
   },
 });
 
@@ -344,6 +368,9 @@ export const {
   appendAiAdsVersion,
   setAiAdsVersion,
   setAiAdsPreviewVersion,
+  setAiAdsTranslateScript,
+  setAiAdsTranslateScriptError,
+  clearAiAdsTranslateScript,
 } = adVideoNewSlice.actions;
 
 export default adVideoNewSlice.reducer;

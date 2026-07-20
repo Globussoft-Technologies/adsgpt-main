@@ -57,6 +57,8 @@ import {
   updateCloneImage,
   appendAiAdsVersion,
   setAiAdsRegenState,
+  setAiAdsTranslateScript,
+  setAiAdsTranslateScriptError,
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
@@ -550,6 +552,27 @@ export const initSocket = (url) => (dispatch, getState) => {
         dispatch(setAiAdsRegenState({ sessionId: data.sessionId, regenState: 'idle' }));
       }
       showFailureNotification('video', data?.error || 'Voice regeneration failed');
+    });
+
+    // Translate/Rewrite Step-1 preview: the new script arrived. Store it so the
+    // RegenerateVoiceModal can render the editable script box. Does NOT touch
+    // the committed video (backend only forwards the script for a preview).
+    socket.on('aiAdsTranslateScriptReady', (data) => {
+      if (!data?.sessionId) return;
+      dispatch(setAiAdsTranslateScript({
+        sessionId: data.sessionId,
+        scenes: data.scenes || [],
+      }));
+    });
+
+    // Translate/Rewrite Step-1 preview failed — modal surfaces it + lets retry.
+    socket.on('aiAdsTranslateScriptFailed', (data) => {
+      console.error('AI Ads translate script preview failed:', data);
+      if (!data?.sessionId) return;
+      dispatch(setAiAdsTranslateScriptError({
+        sessionId: data.sessionId,
+        error: data.error || 'Failed to generate the script.',
+      }));
     });
 
     socket.on('aiAdsScenesFailed', (data) => {
