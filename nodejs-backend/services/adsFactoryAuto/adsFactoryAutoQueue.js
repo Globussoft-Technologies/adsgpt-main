@@ -11,6 +11,43 @@ function resolvePresetCron(frequency, hour = 0) {
   }
 }
 
+/**
+ * Resolve the INCLUSIVE end boundary for a schedule.
+ *
+ * The end-date picker stores a date only, which parses to midnight (00:00) of
+ * that day. But runs fire at schedule.hour (e.g. 2:00 PM). Using the raw
+ * midnight endDate as a cutoff drops the end date's OWN run — a job set
+ * "21 → 23 Jul, run at 2 PM" would stop after the 22nd, never running the
+ * 23rd's 2 PM fire the user expects. The end date is inclusive AT the chosen
+ * run hour, so we return the instant of `hour:00` ON the end date, in the job's
+ * timezone. A fire that lands exactly on this instant is still included by
+ * cron-parser (endDate is inclusive) and by the runtime `now > endBoundary`
+ * check (equal is not "past"), so the end date's own run always counts.
+ *
+ * @param {Date|string} endDate  the picked end date (date-only → midnight)
+ * @param {number}      hour     run hour 0-23
+ * @param {string}      tz       IANA timezone, e.g. "Asia/Calcutta"
+ * @returns {Date}      the inclusive end boundary instant
+ */
+function resolveInclusiveEndDate(endDate, hour = 0, tz = "UTC") {
+  const h = Number(hour) || 0;
+  const base = new Date(endDate);
+  try {
+    const cronParser = require("cron-parser");
+    // Anchor one ms before midnight of the end date so .next() returns THAT
+    // day's hour:00 fire (not the following day's) as the boundary instant.
+    const anchor = new Date(base.getTime() - 1);
+    return cronParser
+      .parseExpression(`0 ${h} * * *`, { currentDate: anchor, tz })
+      .next()
+      .toDate();
+  } catch (_) {
+    // Fallback: shift the raw endDate forward by the run hour in wall-clock ms.
+    // Not timezone-correct, but strictly better than a midnight cutoff.
+    return new Date(base.getTime() + h * 60 * 60 * 1000);
+  }
+}
+
 // BullMQ needs its own dedicated ioredis connection — cannot share pub/sub connections
 const connection = {
   host:     process.env.HOST,
@@ -550,4 +587,4 @@ async function reloadActiveJobs() {
   logger.info(`[adsFactoryAuto] reloaded ${count} active autopilot jobs into BullMQ  (skipped ${orphanJobs.length} orphan + ${skippedPast} already-ran does_not_repeat)`);
 }
 
-module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, resolvePresetCron, getNextRunTime };
+module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime };

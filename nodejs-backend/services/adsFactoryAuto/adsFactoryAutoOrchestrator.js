@@ -30,6 +30,44 @@ const { uploadImageFromUrl }                     = require("../../controllers/ad
 
 function adFactoryCtrl() { return require("../../controllers/adFactory"); }
 
+// Build a rich error string from a V2/Google controller's JSON error response.
+//
+// The controllers return { error, details, meta:{ code, subcode, fbtraceId } }.
+// Previously executeController threw only `responseData.error`, which for Meta
+// is often the generic fallback "Failed to create campaign" (metaErrorResponse
+// uses `m.title || "Failed to ..."`, and Meta frequently returns NO title —
+// e.g. an expired token sets only `message` + code 190). That dropped the one
+// thing the user (and our permanent-error classifiers) actually need: Meta's
+// real message + code/subcode. So the run-history card showed "Failed to create
+// campaign" with no way to tell an expired token from a bad field.
+//
+// Now we keep the informative `details` (Meta's real message) when it adds
+// signal over the generic title, and always append [code=N]/[subcode=N] so the
+// isPermanentConfigError / friendlyPlatformError matchers downstream — which key
+// off message text AND error codes — can classify it (e.g. code 190 → "reconnect
+// your account", auto-pause instead of retrying + emailing every tick).
+function buildControllerError(responseData) {
+  if (!responseData) return "Unknown error";
+  const title   = responseData.error;
+  const details = responseData.details;
+  const meta    = responseData.meta || {};
+  // Prefer the specific message. If `details` exists and isn't just a copy of
+  // the title, lead with it; otherwise fall back to the title. This turns a
+  // blank-title 190 into "Error validating access token: ... [code=190]"
+  // instead of the useless "Failed to create campaign".
+  let base;
+  if (details && details !== title) {
+    base = title && !/^Failed to /i.test(title) ? `${title}: ${details}` : details;
+  } else {
+    base = title || details || JSON.stringify(responseData);
+  }
+  const codeTag = [
+    meta.code    != null ? `[code=${meta.code}]`       : null,
+    meta.subcode != null ? `[subcode=${meta.subcode}]` : null,
+  ].filter(Boolean).join(" ");
+  return codeTag ? `${base} ${codeTag}` : base;
+}
+
 const _runningJobs = new Set();
 
 // Dev/testing-only override — same gate the queue's fast-cron + grace-window
@@ -186,10 +224,22 @@ const PLATFORM_POSTERS = {
       let pageId = null;
       let leadFormId = null;
 
-      // Helper to cleanly mock Express req/res and execute the V2 controllers locally
+      // Helper to cleanly mock Express req/res and execute the V2 controllers locally.
+      //
+      // Pass fbUser.userId — NOT the raw job.userId — as the mock user_id. The V2
+      // controllers call initApiForUser(userId), which does a STRICT
+      // FBUsers.findOne({ userId }) with no prefix fallback. job.userId may be
+      // prefixed ("GPT-438") while the FBUsers record is stored under the raw id
+      // ("438") — a mismatch that made initApiForUser throw "Facebook user not
+      // found", surfacing on the run card as the generic "Failed to create
+      // campaign". fbUser was just resolved above via the $or that tolerates both
+      // formats, so fbUser.userId is the EXACT value the record is stored under —
+      // handing it to the controllers guarantees their strict lookup matches.
+      // Keeps the fix entirely inside the autopilot flow; the shared
+      // metaAdLauncher controller is untouched.
       const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
       const executeController = async (controllerFn, body) => {
-        const req = { body, user: { user_id: job.userId } };
+        const req = { body, user: { user_id: fbUser.userId } };
         let statusCode = 200;
         let responseData = null;
         const res = {
@@ -198,7 +248,7 @@ const PLATFORM_POSTERS = {
         };
         await controllerFn(req, res);
         if (statusCode >= 400) {
-          throw new Error(responseData?.error || responseData?.details || JSON.stringify(responseData));
+          throw new Error(buildControllerError(responseData));
         }
         return responseData;
       };
@@ -693,7 +743,7 @@ const PLATFORM_POSTERS = {
         };
         await controllerFn.call(googleAdController, req, res);
         if (statusCode >= 400) {
-          throw new Error(responseData?.error || responseData?.details || JSON.stringify(responseData));
+          throw new Error(buildControllerError(responseData));
         }
         return responseData;
       };
@@ -1214,9 +1264,25 @@ async function run(jobId) {
       }
     }
 
-    // Auto-complete if endDate passed
-    if (job.schedule.endDate && new Date() > new Date(job.schedule.endDate)) {
-      logger.info(`[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate}, marking completed`);
+    // Auto-complete if endDate passed. The end date is INCLUSIVE at the chosen
+    // run hour — a job set "21 → 23 Jul, run at 2 PM" must still run the 23rd's
+    // 2 PM cycle. The raw endDate is a date-only value (midnight), so comparing
+    // now > midnight would auto-complete the job the moment the end day starts,
+    // killing that day's own run (the exact off-by-one the summary card showed:
+    // 2 cycles instead of 3). resolveInclusiveEndDate anchors the boundary to
+    // hour:00 on the end date in the job's timezone, matching the getJobSummary
+    // projection so runtime and preview agree.
+    let effectiveEndBoundary = null;
+    if (job.schedule.endDate) {
+      const { resolveInclusiveEndDate } = require("./adsFactoryAutoQueue");
+      effectiveEndBoundary = resolveInclusiveEndDate(
+        job.schedule.endDate,
+        job.schedule.hour,
+        job.schedule.timezone || "UTC"
+      );
+    }
+    if (effectiveEndBoundary && new Date() > effectiveEndBoundary) {
+      logger.info(`[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} (inclusive boundary ${effectiveEndBoundary.toISOString()}), marking completed`);
       await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "completed" } });
       try {
         const { cancelJob } = require("./adsFactoryAutoQueue");

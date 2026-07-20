@@ -1,7 +1,7 @@
 const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const Campaign      = require("../../Module/adFactory/adFactory");
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
-const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePresetCron, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
 const {
   createJobSchema,
   updateJobSchema,
@@ -1422,6 +1422,14 @@ class AdsFactoryAutoController {
 
       // ── 2. Cycles scheduled — cron fires from now until endDate ────────────
       // null = no endDate → job runs indefinitely
+      //
+      // The end-date picker gives a DATE only, which parses to midnight (00:00)
+      // of that day. But the run fires at schedule.hour (e.g. 2:00 PM). Left as
+      // midnight, cron-parser's endDate cuts off the end date's own run — a job
+      // set "21 → 23 Jul, run at 2 PM" would count only the 21st + 22nd (2),
+      // silently dropping the 23rd's 2 PM fire the user expects. The end date is
+      // inclusive AT the chosen run hour, so anchor the boundary to that hour on
+      // the end date (in the job's timezone) so the final day's run is counted.
       let cyclesScheduled = null;
       if (schedule.frequency === "does_not_repeat") {
         // Always exactly 1 run — end date is irrelevant for a one-shot.
@@ -1429,9 +1437,10 @@ class AdsFactoryAutoController {
       } else if (cronExpr && schedule.endDate) {
         try {
           const cronParser = require("cron-parser");
+          const endBoundary = resolveInclusiveEndDate(schedule.endDate, schedule.hour, tz);
           const iter = cronParser.parseExpression(cronExpr, {
             currentDate: fromDate,
-            endDate:     new Date(schedule.endDate),
+            endDate:     endBoundary,
             tz,
           });
           let count = 0;
