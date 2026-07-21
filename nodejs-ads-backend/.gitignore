@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 *.env
+!example.env
 package-lock.json
 swagger-api-view.json
 controllers/Loggers/*.log.*
