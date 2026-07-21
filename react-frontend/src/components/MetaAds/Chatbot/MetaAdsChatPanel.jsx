@@ -102,6 +102,28 @@ const MetaAdsChatPanel = ({
   const controllerRef = useRef(null);
   // id of the in-progress assistant message (steps + streamed text live on it)
   const currentAsstRef = useRef(null);
+  const composerRef = useRef(null);
+  // Only restore focus after this panel initiated a chat turn. This avoids
+  // stealing focus when a user merely opens the panel or resumes a session.
+  const restoreComposerFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !restoreComposerFocusRef.current ||
+      !adAccountId ||
+      isStreaming ||
+      pendingConfirm ||
+      pendingPick
+    ) {
+      return undefined;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      restoreComposerFocusRef.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [adAccountId, isStreaming, pendingConfirm, pendingPick]);
 
   // Applies a GET /history/:sessionId response to local state — shared by the
   // account-restore effect below and the history dropdown's session picker.
@@ -114,6 +136,7 @@ const MetaAdsChatPanel = ({
             actions: (data.pendingAction.calls || []).map((c) => ({
               toolName: c.name,
               args: c.args,
+              displayName: c.displayName,
             })),
           }
         : null,
@@ -327,6 +350,7 @@ const MetaAdsChatPanel = ({
       currentAsstRef.current = null;
       appendMessage({ role: 'user', text });
       setInput('');
+      restoreComposerFocusRef.current = true;
       setIsStreaming(true);
       controllerRef.current = streamChat({
         sessionId,
@@ -527,6 +551,7 @@ const MetaAdsChatPanel = ({
       <div className="relative z-10 shrink-0 border-t border-gray-200 p-3 dark:border-white/10">
         <div className="flex items-end gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 transition-all focus-within:border-[#15DCFF]/60 focus-within:shadow-[0_0_0_3px_rgba(21,220,255,0.12)] dark:border-white/15 dark:bg-white/5 dark:focus-within:border-[#15DCFF]/50">
           <Textarea
+            ref={composerRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {

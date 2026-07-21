@@ -9,16 +9,19 @@ import { summarizeAction } from './actionSummaries';
 // being sent.
 const ActionSummary = ({ action, currency }) => {
   const { title, rows } = summarizeAction(action.toolName, action.args, currency);
+  const displayTitle = action.displayName
+    ? title.replace(String(action.args?.campaign_id ?? ''), `“${action.displayName}” (${action.args.campaign_id})`)
+    : title;
   const hasArgs = action.args && Object.keys(action.args).length > 0;
   return (
-    <div className="mt-1 flex flex-col gap-1.5 rounded-lg bg-black/5 p-2.5 dark:bg-white/5">
-      <p className="text-sm font-medium text-gray-900 dark:text-white">{title}</p>
+    <div className="mt-1 min-w-0 flex flex-col gap-1.5 rounded-lg bg-black/5 p-2.5 dark:bg-white/5">
+      <p className="break-words text-sm font-medium text-gray-900 dark:text-white">{displayTitle}</p>
       {rows.length > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
           {rows.map((r, i) => (
             <React.Fragment key={i}>
               <dt className="text-gray-500 dark:text-gray-400">{r.label}</dt>
-              <dd className="wrap-break-word text-gray-800 dark:text-gray-200">{String(r.value)}</dd>
+              <dd className="min-w-0 break-all text-gray-800 dark:text-gray-200">{String(r.value)}</dd>
             </React.Fragment>
           ))}
         </dl>
@@ -46,10 +49,10 @@ const ActionSummary = ({ action, currency }) => {
 const ConfirmActionCard = ({ actions = [], onConfirm, onCancel, busy, currency }) => {
   const multiple = actions.length > 1;
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+    <div className="min-w-0 max-w-full flex flex-col gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10">
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <div className="flex w-full flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="text-sm font-medium text-gray-900 dark:text-white">
             {multiple
               ? `AdsGPT wants to run ${actions.length} actions`

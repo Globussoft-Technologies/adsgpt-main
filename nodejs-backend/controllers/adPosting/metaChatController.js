@@ -71,6 +71,7 @@ function emitConfirm(res, sessionId, pendingAction) {
   const actions = (pendingAction.calls || []).map((c) => ({
     toolName: c.name,
     args: c.args,
+    displayName: c.displayName,
   }));
   sendEvent(res, "confirm_action", {
     sessionId,
@@ -78,6 +79,44 @@ function emitConfirm(res, sessionId, pendingAction) {
     toolName: actions[0]?.toolName,
     args: actions[0]?.args,
   });
+}
+
+// A delete-campaign tool call deliberately accepts only an immutable campaign
+// ID, so its raw arguments do not carry the human-readable name needed by the
+// confirmation UI. Fetch it immediately before displaying the card. This is a
+// best-effort read: a lookup failure must never block a user from reviewing or
+// cancelling a pending action, and the card still shows the exact ID.
+function campaignNameFromToolResult(result) {
+  for (const part of result?.content || []) {
+    if (part?.type !== "text" || typeof part.text !== "string") continue;
+    try {
+      const parsed = JSON.parse(part.text);
+      if (typeof parsed?.name === "string" && parsed.name.trim()) return parsed.name.trim();
+    } catch {
+      const match = part.text.match(/^Campaign:\s*(.+)$/m);
+      if (match?.[1]?.trim()) return match[1].trim();
+    }
+  }
+  return null;
+}
+
+async function addPendingActionDisplayNames(pendingAction, mcpClient) {
+  const calls = pendingAction?.calls || [];
+  await Promise.all(
+    calls.map(async (call) => {
+      if (call.name !== "ads_delete_campaign" || !call.args?.campaign_id || call.displayName) return;
+      try {
+        const result = await mcpClient.callTool({
+          name: "ads_get_campaign_details",
+          arguments: { campaign_id: call.args.campaign_id, fields: ["id", "name"] },
+        });
+        call.displayName = campaignNameFromToolResult(result);
+      } catch (err) {
+        logger.warn(`metaChat campaign-name lookup failed: ${err.message}`);
+      }
+    })
+  );
+  return pendingAction;
 }
 
 // Emit the media-picker card. Only the slim {mediaType, purpose} is sent to
@@ -263,6 +302,7 @@ exports.streamChat = async (req, res) => {
     session.transcript.push({ role: "user", text: message, ts: Date.now() });
 
     if (outcome.status === "pending_confirmation") {
+      await addPendingActionDisplayNames(outcome.pendingAction, mcpClient);
       session.pendingAction = outcome.pendingAction;
       session.pendingInput = null;
       if (outcome.text || turnCards.length) {
@@ -411,6 +451,7 @@ exports.confirmAction = async (req, res) => {
     const transcript = forTranscript?.transcript || [];
 
     if (outcome.status === "pending_confirmation") {
+      await addPendingActionDisplayNames(outcome.pendingAction, mcpClient);
       if (outcome.text || turnCards.length) {
         transcript.push({
           role: "assistant",
@@ -606,6 +647,7 @@ exports.pickMedia = async (req, res) => {
     const transcript = forTranscript?.transcript || [];
 
     if (outcome.status === "pending_confirmation") {
+      await addPendingActionDisplayNames(outcome.pendingAction, mcpClient);
       if (outcome.text || turnCards.length) {
         transcript.push({
           role: "assistant",
@@ -771,6 +813,7 @@ exports.getHistory = async (req, res) => {
             calls: (session.pendingAction.calls || []).map((c) => ({
               name: c.name,
               args: c.args,
+              displayName: c.displayName,
             })),
           }
         : null,

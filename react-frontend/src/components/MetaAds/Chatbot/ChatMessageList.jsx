@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Check, ChevronRight, Copy, Loader2, RotateCcw, ThumbsDown, ThumbsUp, User } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, Loader2, RotateCcw, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ConfirmActionCard from './ConfirmActionCard';
@@ -103,10 +103,9 @@ const WorkedTrace = ({ steps = [], activeStep, streaming, elapsedMs }) => {
   );
 };
 
-// Copy / regenerate / thumbs row under a finished assistant message.
+// Copy / regenerate controls under a finished assistant message.
 const MessageActions = ({ text, onRegenerate }) => {
   const [copied, setCopied] = useState(false);
-  const [vote, setVote] = useState(null); // local only (no feedback endpoint yet)
   const iconBtn =
     'rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10 dark:hover:text-gray-200';
   return (
@@ -129,22 +128,6 @@ const MessageActions = ({ text, onRegenerate }) => {
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
       )}
-      <button
-        type="button"
-        title="Good response"
-        className={`${iconBtn} ${vote === 'up' ? 'text-[#15DCFF]' : ''}`}
-        onClick={() => setVote((v) => (v === 'up' ? null : 'up'))}
-      >
-        <ThumbsUp className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        title="Bad response"
-        className={`${iconBtn} ${vote === 'down' ? 'text-red-500' : ''}`}
-        onClick={() => setVote((v) => (v === 'down' ? null : 'down'))}
-      >
-        <ThumbsDown className="h-3.5 w-3.5" />
-      </button>
     </div>
   );
 };
@@ -212,8 +195,8 @@ const MessageBubble = ({ message, onAction, onRegenerate, streaming }) => {
   const isUser = message.role === 'user';
   if (isUser) {
     return (
-      <div className="flex max-w-[85%] items-start gap-2 self-end">
-        <div className="rounded-2xl rounded-tr-sm bg-gray-900 px-3.5 py-2.5 text-sm whitespace-pre-wrap text-white dark:bg-white/10">
+      <div className="flex min-w-0 max-w-[85%] items-start gap-2 self-end">
+        <div className="min-w-0 break-all rounded-2xl rounded-tr-sm bg-gray-900 px-3.5 py-2.5 text-sm whitespace-pre-wrap text-white dark:bg-white/10">
           {message.text}
         </div>
         <UserAvatar />
@@ -255,7 +238,7 @@ const ChatMessageList = ({
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-4 py-4">
       {messages.map((message) => (
         <MessageBubble
           key={message.id}
