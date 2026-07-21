@@ -165,8 +165,11 @@ exports.register = async (req, res) => {
     }
     allowedScopes = requestedScopes;
   } else {
-    // If the client didn't ask for anything, default to identity-only.
-    allowedScopes = ["openid", "profile", "email"];
+    // If the client didn't ask for anything, grant everything we support.
+    // Some clients (e.g. ChatGPT connectors) omit `scope` at registration but
+    // request scopes like `offline_access` later at /authorize — defaulting to
+    // identity-only would permanently lock them out.
+    allowedScopes = [...SUPPORTED_SCOPES];
   }
 
   // ----- optional name allowlist (soft gate against random name-hijacks) -----
