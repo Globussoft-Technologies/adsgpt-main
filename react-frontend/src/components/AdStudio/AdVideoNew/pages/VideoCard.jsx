@@ -854,7 +854,11 @@ export default function VideoCard({
                   >
                     {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
                   </button>
-                  <div className="h-0 w-0 overflow-hidden transition-all duration-300 group-hover/volume:h-auto group-hover/volume:w-24 group-hover/volume:pr-2">
+                  {/* Vertical (up/down) volume slider — same thin white slider
+                      as before, just oriented vertically and floated above the
+                      mute icon on hover. `pb-2` is an invisible hover bridge so
+                      the slider doesn't vanish when the cursor moves up to it. */}
+                  <div className="invisible absolute bottom-full left-1/2 z-20 flex -translate-x-1/2 justify-center pb-2 opacity-0 transition-opacity duration-200 group-hover/volume:visible group-hover/volume:opacity-100">
                     <input
                       type="range"
                       min="0"
@@ -863,7 +867,8 @@ export default function VideoCard({
                       value={isMuted ? 0 : volume}
                       onChange={handleVolumeChange}
                       onClick={(e) => e.stopPropagation()}
-                      className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-white/30 accent-white"
+                      style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+                      className="h-24 w-1 cursor-pointer appearance-none rounded-lg bg-white/30 accent-white"
                     />
                   </div>
                 </div>

@@ -9,6 +9,7 @@ const {
   aiAdsProductSchema,
   regenerateVoiceSchema,
   selectVersionSchema,
+  finalMergeSchema,
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
@@ -265,8 +266,9 @@ async function applyAiAdsVoiceRegen(record, body) {
 
   if (videoStatus !== 200) {
     await VideoGeneration.findByIdAndUpdate(sessionId, {
-      regenState: "failed",
+      regenState: "idle",
       pendingRegen: null,
+      voicePreview: null,
     });
     if (global.io) {
       global.io.to(record.userId).emit("aiAdsVoiceFailed", {
@@ -285,16 +287,17 @@ async function applyAiAdsVoiceRegen(record, body) {
       : record.pendingRegen
     : {};
 
-  // Freshest script: for translate/rewrite the scene-result callback has already
-  // updated doc.scenes; fall back to the stashed base for voice-only regens.
+  // The stashed scenes are the exact script submitted for re-voicing, including
+  // any edits the user made after translate/rewrite preview. Fall back to the
+  // session scenes only for older records that do not have a pending stash.
   const currentScenes =
-    record.scenes && record.scenes.length
-      ? record.scenes.map((s) => ({
+    pending.scenes?.length
+      ? pending.scenes
+      : (record.scenes || []).map((s) => ({
           segmentNumber: s.segmentNumber,
           durationSeconds: s.durationSeconds,
           script: s.script,
-        }))
-      : pending.scenes || [];
+        }));
 
   const aiAds = {
     regenType: pending.regenType || null,
@@ -318,7 +321,7 @@ async function applyAiAdsVoiceRegen(record, body) {
 
   const updated = await VideoGeneration.findByIdAndUpdate(
     sessionId,
-    { $set: { regenState: "idle", pendingRegen: null }, $push: { results: newResult } },
+    { $set: { regenState: "idle", pendingRegen: null, voicePreview: null }, $push: { results: newResult } },
     { new: true },
   );
   const newIndex = (updated?.results?.length || 1) - 1;
@@ -2400,7 +2403,7 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       `[updateAiAdsVideoResult] session=${sessionId} regenState=${record.regenState} ` +
         `isVoiceRegenerate=${isVoiceRegenerate} videoStatus=${videoStatus}`,
     );
-    if (record.regenState === "processing" || isVoiceRegenerate) {
+    if (record.regenState === "processing") {
       console.log(
         `[AI Ads] voice-regen completion DETECTED (ai-ads endpoint) session=${sessionId} ` +
           `regenType=${record.pendingRegen?.regenType} — appending version`,
@@ -2553,6 +2556,64 @@ exports.updateAiAdsVideoResult = async (req, res) => {
 };
 
 
+// --- 3. generateAiAdsVideo (Step 2 — dedicated, mirrors generateAvatarVideo) ------
+exports.updateAiAdsAudioResult = async (req, res) => {
+  const { sessionId } = req.params;
+  try {
+    const {
+      sessionId: callbackSessionId,
+      userId: callbackUserId,
+      url,
+      previewVideoUrl,
+      duration,
+      voiceProvider,
+      error,
+      audioStatus,
+      isVoiceRegenerate,
+      regenType,
+    } = req.body || {};
+    const record = await VideoGeneration.findOne({ _id: sessionId, "inputs.type": "ai_ads" });
+
+    if (!record || (callbackSessionId && callbackSessionId !== sessionId) ||
+      (callbackUserId && record.userId !== callbackUserId) || isVoiceRegenerate !== true) {
+      logger.warn(`[AI Ads] ignored invalid audio callback for ${sessionId}`);
+      return res.json({ status: "success" });
+    }
+
+    const resolvedAudioStatus = Number(audioStatus);
+    const pending = record.pendingRegen?.toObject ? record.pendingRegen.toObject() : record.pendingRegen;
+    const resolvedRegenType = pending?.regenType || regenType || "voice";
+    if (resolvedAudioStatus !== 200 || error || !url) {
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        $set: { regenState: "idle", voicePreview: null },
+        $unset: { pendingRegen: 1 },
+      });
+      global.io?.to(record.userId).emit("audio-result", {
+        sessionId,
+        error: error || "Voice preview generation failed",
+        audioStatus: Number.isFinite(resolvedAudioStatus) ? resolvedAudioStatus : 500,
+      });
+      return res.json({ status: "success" });
+    }
+
+    const preview = {
+      audioUrl: url,
+      videoUrl: previewVideoUrl,
+      duration: String(duration || ""),
+      voiceProvider: voiceProvider || pending?.voiceProvider || null,
+      regenType: resolvedRegenType,
+      audioStatus: resolvedAudioStatus,
+    };
+    await VideoGeneration.findByIdAndUpdate(sessionId, {
+      $set: { regenState: "idle", voicePreview: preview },
+    });
+    global.io?.to(record.userId).emit("audio-result", { sessionId, preview });
+    return res.json({ status: "success" });
+  } catch (err) {
+    logger.error(`[AI Ads] audio callback error for ${sessionId}: ${err.message}`);
+    return res.json({ status: "success" });
+  }
+};
 // --- 3. generateAiAdsVideo (Step 2 — dedicated, mirrors generateAvatarVideo) ------
 exports.generateAiAdsVideo = async (req, res) => {
   try {
@@ -2850,6 +2911,14 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       });
     }
 
+    if (record.voicePreview) {
+      return res.status(409).json({
+        success: false,
+        error: "voice_preview_pending",
+        message: "Accept or discard the current voice preview before starting another regeneration.",
+      });
+    }
+
     if (!process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API) {
       return res.status(500).json({
         success: false,
@@ -2917,7 +2986,8 @@ exports.regenerateAiAdsVoice = async (req, res) => {
     // Python returns the re-rendered script (callback prefers Python's scenes).
     record.regenState = "processing";
     record.pendingRegen = {
-      regenType: voiceDelta.regenType,
+      regenType: voiceDelta.sourceRegenType || voiceDelta.regenType,
+      translateLang: voiceDelta.translateLang || null,
       voiceProvider: voiceDelta.voiceProvider ?? null,
       voiceId: voiceDelta.voiceId ?? null,
       voiceName: voiceDelta.voiceName ?? null,
@@ -2980,6 +3050,88 @@ exports.regenerateAiAdsVoice = async (req, res) => {
   }
 };
 
+exports.discardAiAdsVoicePreview = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const record = await VideoGeneration.findOne({ _id: sessionId, userId: req.user.user_id, "inputs.type": "ai_ads" });
+    if (!record) return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    if (record.regenState === "processing") {
+      return res.status(409).json({ success: false, error: "regen_in_progress" });
+    }
+    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { voicePreview: null }, $unset: { pendingRegen: 1 } });
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error(`[AI Ads] discard voice preview failed: ${error.message}`);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.finalMergeAiAdsVoice = async (req, res) => {
+  try {
+    const { error, value } = finalMergeSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
+    if (error) return res.status(400).json({ success: false, error: error.details.map((detail) => detail.message).join(", ") });
+    if (!process.env.AI_ADS_FINAL_MERGE_PYTHON_API) {
+      return res.status(500).json({ success: false, error: "AI Ads final-merge Python API not configured" });
+    }
+
+    const { sessionId } = req.params;
+    const userId = req.user.user_id;
+    const record = await VideoGeneration.findOne({ _id: sessionId, userId, status: "completed", "inputs.type": "ai_ads" });
+    if (!record) return res.status(404).json({ success: false, error: "AI Ads session not found" });
+    if (record.regenState === "processing") return res.status(409).json({ success: false, error: "regen_in_progress" });
+    const preview = record.voicePreview?.toObject ? record.voicePreview.toObject() : record.voicePreview;
+    if (!preview) return res.status(409).json({ success: false, error: "voice_preview_missing" });
+    if (value.audioUrl !== preview.audioUrl || value.videoUrl !== preview.videoUrl) {
+      return res.status(400).json({ success: false, error: "Preview URLs do not match the saved voice preview." });
+    }
+
+    const pending = record.pendingRegen?.toObject ? record.pendingRegen.toObject() : record.pendingRegen || {};
+    const versionIndex = typeof record.version === "number" && record.results?.[record.version] ? record.version : 0;
+    const baseVersion = record.results?.[versionIndex];
+    const rawInputs = record.inputs.toObject ? record.inputs.toObject() : record.inputs;
+    const { brandName, productName, productDescription, scenes: _scenes, ...restInputs } = rawInputs;
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+    const watermark = plan === "8" ? true : (record.watermark ?? false);
+    const mergeVideoUrl = preview.videoUrl || baseVersion?.url || "";
+    if (!mergeVideoUrl) {
+      return res.status(409).json({
+        success: false,
+        error: "No source video is available for the final merge.",
+      });
+    }
+    const inputs = {
+      ...restInputs,
+      ...(brandName || productName ? { name: brandName || productName } : {}),
+      ...(productDescription ? { description: productDescription } : {}),
+      voiceProvider: pending.voiceProvider || preview.voiceProvider || restInputs.voiceProvider || "",
+      voiceId: pending.voiceId || "",
+      voiceName: pending.voiceName || "",
+      regenType: pending.regenType || preview.regenType,
+      translateLang: pending.translateLang || "",
+      generatedUrl: baseVersion?.url || "",
+      videoUrl: mergeVideoUrl,
+      audioUrl: preview.audioUrl,
+      scenes: pending.scenes || record.scenes || [],
+    };
+
+    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "processing" } });
+    try {
+      await axios.post(process.env.AI_ADS_FINAL_MERGE_PYTHON_API, {
+        sessionId, userId, watermark,
+        subscription: req.body.subscription || { plan: "pro", credits: "100" },
+        inputs,
+      });
+      return res.status(202).json({ status: "processing", sessionId, message: "Final merge started." });
+    } catch (pythonError) {
+      await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "idle" } });
+      logger.error(`[AI Ads] final merge Python call failed: ${pythonError.message}`);
+      return res.status(502).json({ success: false, error: "Final merge service failed. Please try again." });
+    }
+  } catch (error) {
+    logger.error(`[AI Ads] final merge failed: ${error.message}`);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
 // --- 3c. previewRegenerateScript (Step 1 of the 2-step translate flow) --------
 // Asks Python to generate a translated/rewritten SCRIPT for a completed AI Ads
 // video. Python delivers the new script via the shared scene-result callback;

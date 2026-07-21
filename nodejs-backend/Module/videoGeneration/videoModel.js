@@ -51,10 +51,23 @@ const aiAdsResultSchema = new mongoose.Schema(
     voiceName: { type: String, default: null },
     // This version's language (Python owns the actual value).
     language: { type: String, default: null },
+    translateLang: { type: String, default: null },
     // Structured per-version script, mirroring scenes[].script.
     scenes: [resultSceneSchema],
   },
   { _id: false }
+);
+
+const aiAdsVoicePreviewSchema = new mongoose.Schema(
+  {
+    audioUrl: { type: String, required: true },
+    videoUrl: { type: String, default: "" },
+    duration: { type: String, default: "" },
+    voiceProvider: { type: String, default: null },
+    regenType: { type: String, enum: ["voice", "translate", "rewrite"], required: true },
+    audioStatus: { type: Number, default: 200 },
+  },
+  { _id: false, timestamps: true }
 );
 
 const resultSchema = new mongoose.Schema(
@@ -238,6 +251,7 @@ const videoSchema = new mongoose.Schema(
     // Forward-compatible: the callback prefers Python's body fields over this
     // stash when present. Cleared (null) on completion/failure.
     pendingRegen: { type: aiAdsResultSchema, default: null },
+    voicePreview: { type: aiAdsVoicePreviewSchema, default: null },
 
     // ── AI Ads outputs ────────────────────────────────────────────────────────
     // Scenes delivered by Python /callback/scene-result

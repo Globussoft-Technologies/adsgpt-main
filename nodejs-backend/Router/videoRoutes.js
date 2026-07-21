@@ -134,6 +134,16 @@ router.post(
   authenticateJWT,
   videoController.regenerateAiAdsVoice
 );
+router.post(
+  "/ai-ads/final-merge/:sessionId",
+  authenticateJWT,
+  videoController.finalMergeAiAdsVoice
+);
+router.post(
+  "/ai-ads/discard-voice-preview/:sessionId",
+  authenticateJWT,
+  videoController.discardAiAdsVoicePreview
+);
 
 // "Keep this one" / revert — move the version pointer to a results[] entry.
 router.patch(
@@ -152,6 +162,11 @@ router.patch(
   "/ai-ads/callback/video-result/:sessionId",
   verifySecretKey,
   videoController.updateAiAdsVideoResult
+);
+router.patch(
+  "/ai-ads/callback/audio-result/:sessionId",
+  verifySecretKey,
+  videoController.updateAiAdsAudioResult
 );
 
 router.post(

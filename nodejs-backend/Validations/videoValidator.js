@@ -212,6 +212,7 @@ const regenerateVoiceSchema = Joi.object({
       otherwise: Joi.string().allow("", null),
     }),
     regenType: Joi.string().valid("voice", "translate", "rewrite").required(),
+    sourceRegenType: Joi.string().valid("voice", "translate", "rewrite").optional(),
     translateLang: Joi.when("regenType", {
       is: "translate",
       then: Joi.string().required(),
@@ -234,6 +235,11 @@ const regenerateVoiceSchema = Joi.object({
 // controller against the actual doc; here we only enforce a non-negative int.
 const selectVersionSchema = Joi.object({
   version: Joi.number().integer().min(0).required(),
+});
+
+const finalMergeSchema = Joi.object({
+  audioUrl: Joi.string().trim().required(),
+  videoUrl: Joi.string().trim().allow("").required(),
 });
 
 
@@ -269,4 +275,5 @@ module.exports = {
   regenerateSceneSchema,
   regenerateVoiceSchema,
   selectVersionSchema,
+  finalMergeSchema,
 };
