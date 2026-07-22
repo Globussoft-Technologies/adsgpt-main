@@ -46,7 +46,7 @@ router.post(
   "/ai-ads/upload/audio",
   verifySecretKey,
   upload.single("audio"),
-  videoController.uploadVoice
+  videoController.uploadAiAdsAudio
 );
 router.post(
   "/generate-image-and-script",

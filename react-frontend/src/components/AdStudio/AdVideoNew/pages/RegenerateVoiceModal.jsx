@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Mic, Languages, PenLine, Loader2, X } from 'lucide-react';
+import { Mic, Languages, PenLine, Loader2, Music2, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,11 +15,24 @@ import { labelForLanguage } from '@/apis/voiceSelector/voiceSelectorApi';
 import {
   regenerateAiAdsVoiceAction,
   previewRegenerateScriptAction,
+  finalMergeAiAdsVoiceAction,
+  discardAiAdsVoicePreviewAction,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import {
   setAiAdsRegenState,
   clearAiAdsTranslateScript,
+  clearAiAdsVoicePreview,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
+
+const S3_BASE_URL = (import.meta.env.VITE_S3_BASE_URL || '').replace(/\/$/, '');
+
+const resolveMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  return S3_BASE_URL ? `${S3_BASE_URL}/${url.replace(/^\/+/, '')}` : url;
+};
 
 // Curated translate targets (mock's set), labelled via the shared LANGUAGE_NAMES.
 const TRANSLATE_LANG_CODES = ['en', 'hi', 'ta', 'te', 'mr', 'kn', 'gu', 'ml'];
@@ -47,6 +60,13 @@ const seedVoice = (cv) => {
 };
 
 const countWords = (t) => (t && t.trim() ? t.trim().split(/\s+/).length : 0);
+
+const formatPreviewTime = (seconds) => {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = Math.floor(safeSeconds % 60);
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+};
 
 // Trim the trailing ".xx" frame fraction off "0:02.88" → "0:02" for display.
 const shortTs = (ts) => (typeof ts === 'string' ? ts.replace(/\.\d+$/, '') : ts);
@@ -80,10 +100,20 @@ export default function RegenerateVoiceModal({
   const [submitting, setSubmitting] = useState(false); // Step-2 in flight
   const [langError, setLangError] = useState('');
   const [voiceError, setVoiceError] = useState('');
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+  const [previewDuration, setPreviewDuration] = useState(0);
+  const [awaitingVoicePreview, setAwaitingVoicePreview] = useState(false);
+  const [discardingPreview, setDiscardingPreview] = useState(false);
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
 
   // Preview script for this session (populated by the socket via redux).
   const preview = useSelector(
     (s) => s.adVideoNew.aiAdsTranslateScript?.[sessionId],
+  );
+  const voicePreview = useSelector(
+    (s) => s.adVideoNew.aiAdsVoicePreview?.[sessionId],
   );
 
   const resetAll = () => {
@@ -95,7 +125,12 @@ export default function RegenerateVoiceModal({
     setSubmitting(false);
     setLangError('');
     setVoiceError('');
+    setIsPreviewPlaying(false);
+    setPreviewCurrentTime(0);
+    setPreviewDuration(0);
+    setAwaitingVoicePreview(false);
     dispatch(clearAiAdsTranslateScript({ sessionId }));
+    dispatch(clearAiAdsVoicePreview({ sessionId }));
   };
 
   // Re-seed each time the modal opens (or the source version changes).
@@ -138,6 +173,13 @@ export default function RegenerateVoiceModal({
       setPreviewing(false);
     }
   }, [preview, previewing]);
+
+  useEffect(() => {
+    if (!awaitingVoicePreview) return;
+    if (voicePreview?.preview || voicePreview?.error) {
+      setAwaitingVoicePreview(false);
+    }
+  }, [awaitingVoicePreview, voicePreview]);
 
   // Offer every curated language. We can't reliably filter out the ad's current
   // SCRIPT language — the stored `language` is the VOICE language, not the
@@ -255,16 +297,20 @@ export default function RegenerateVoiceModal({
     const inputs = {
       ...keepVoice(),
       regenType: 'voice',
+      sourceRegenType: mode,
+      ...(mode === 'translate' ? { translateLang } : {}),
       scenes,
     };
     try {
       setSubmitting(true);
+      setAwaitingVoicePreview(true);
+      dispatch(clearAiAdsVoicePreview({ sessionId }));
       // Optimistic overlay before awaiting (socket may beat the await).
       dispatch(setAiAdsRegenState({ sessionId, regenState: 'processing' }));
       await dispatch(regenerateAiAdsVoiceAction(sessionId, inputs));
       dispatch(clearAiAdsTranslateScript({ sessionId }));
-      onOpenChange(false);
     } catch (e) {
+      setAwaitingVoicePreview(false);
       dispatch(setAiAdsRegenState({ sessionId, regenState: 'idle' }));
       if (e?.code === 'already_in_language') setLangError(e.message);
     } finally {
@@ -289,11 +335,13 @@ export default function RegenerateVoiceModal({
     };
     try {
       setSubmitting(true);
+      setAwaitingVoicePreview(true);
       setLangError('');
+      dispatch(clearAiAdsVoicePreview({ sessionId }));
       dispatch(setAiAdsRegenState({ sessionId, regenState: 'processing' }));
       await dispatch(regenerateAiAdsVoiceAction(sessionId, inputs));
-      onOpenChange(false);
     } catch (e) {
+      setAwaitingVoicePreview(false);
       dispatch(setAiAdsRegenState({ sessionId, regenState: 'idle' }));
       if (e?.code === 'already_in_language') setLangError(e.message);
     } finally {
@@ -301,7 +349,69 @@ export default function RegenerateVoiceModal({
     }
   };
 
-  const busy = previewing || submitting;
+  const acceptVoicePreview = async () => {
+    if (!voicePreview?.preview) return;
+    try {
+      setSubmitting(true);
+      dispatch(setAiAdsRegenState({ sessionId, regenState: 'processing' }));
+      await dispatch(finalMergeAiAdsVoiceAction(sessionId, voicePreview.preview));
+      dispatch(clearAiAdsVoicePreview({ sessionId }));
+      onOpenChange(false);
+    } catch {
+      dispatch(setAiAdsRegenState({ sessionId, regenState: 'idle' }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const discardVoicePreview = async () => {
+    try {
+      setDiscardingPreview(true);
+      await dispatch(discardAiAdsVoicePreviewAction(sessionId));
+      dispatch(clearAiAdsVoicePreview({ sessionId }));
+      setScenes(null);
+      setIsPreviewPlaying(false);
+      setPreviewCurrentTime(0);
+      setPreviewDuration(0);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setDiscardingPreview(false);
+    }
+  };
+
+  const discardAndClose = async () => {
+    if (discardingPreview) return;
+    const discarded = await discardVoicePreview();
+    if (discarded) onOpenChange(false);
+  };
+
+  const syncAudio = () => {
+    if (audioRef.current && videoRef.current) audioRef.current.currentTime = videoRef.current.currentTime;
+  };
+
+  const togglePreview = async () => {
+    const player = videoRef.current || audioRef.current;
+    if (!player) return;
+    if (player.paused) {
+      syncAudio();
+      await player.play();
+      if (player === videoRef.current) await audioRef.current?.play();
+    } else {
+      player.pause();
+      audioRef.current?.pause();
+    }
+  };
+
+  const seekPreview = (event) => {
+    const nextTime = Number(event.target.value);
+    if (!Number.isFinite(nextTime)) return;
+    if (audioRef.current) audioRef.current.currentTime = nextTime;
+    if (videoRef.current) videoRef.current.currentTime = nextTime;
+    setPreviewCurrentTime(nextTime);
+  };
+  const busy = previewing || submitting || awaitingVoicePreview || discardingPreview;
 
   // Close policy:
   //  • Outside-click / Esc → ALWAYS blocked (user must use Cancel/✕ to leave).
@@ -311,12 +421,161 @@ export default function RegenerateVoiceModal({
   // we swallow the false while busy. The interaction handlers below additionally
   // preventDefault outside-click/Esc so they never close, busy or not.
   const guardedOpenChange = (next) => {
-    if (next === false && busy) return; // ignore close attempts while loading
-    onOpenChange(next);
+    if (next === false) {
+      if (!busy) void discardAndClose();
+      return;
+    }
+    onOpenChange(true);
   };
   const blockOutsideClose = (e) => e.preventDefault();
 
+  if (voicePreview?.preview) {
+    const previewAsset = voicePreview.preview;
+    const previewVideoUrl = resolveMediaUrl(previewAsset.videoUrl);
+    const previewAudioUrl = resolveMediaUrl(previewAsset.audioUrl);
+    const audioFileName = decodeURIComponent(
+      String(previewAsset.audioUrl || '').split('/').pop() || 'Regenerated voice.mp3',
+    );
+    const totalPreviewDuration = previewDuration || Number(previewAsset.duration) || 0;
+    return (
+      <Dialog open={open} onOpenChange={guardedOpenChange}>
+        <DialogContent
+          className="flex h-[min(85vh,760px)] flex-col overflow-hidden border-black/10 bg-white text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
+          showCloseButton={!busy}
+        >
+          <DialogHeader>
+            <DialogTitle>Preview regenerated voice</DialogTitle>
+            <DialogDescription>Review the new voice before creating the final video version.</DialogDescription>
+          </DialogHeader>
+          {previewVideoUrl ? (
+            <video
+              ref={videoRef}
+              src={previewVideoUrl}
+              muted
+              playsInline
+              className="min-h-0 w-full flex-1 rounded-lg bg-black object-contain"
+              onPlay={() => { setIsPreviewPlaying(true); syncAudio(); audioRef.current?.play(); }}
+              onPause={() => { setIsPreviewPlaying(false); audioRef.current?.pause(); }}
+              onSeeked={syncAudio}
+              onEnded={() => audioRef.current?.pause()}
+            />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg bg-black/5 text-sm text-gray-500 dark:bg-white/5 dark:text-white/60">
+              Video preview is unavailable. You can still listen to the regenerated audio.
+            </div>
+          )}
+          <audio
+            ref={audioRef}
+            src={previewAudioUrl}
+            onLoadedMetadata={(event) => setPreviewDuration(event.currentTarget.duration || 0)}
+            onTimeUpdate={(event) => setPreviewCurrentTime(event.currentTarget.currentTime || 0)}
+            onPlay={() => setIsPreviewPlaying(true)}
+            onPause={() => setIsPreviewPlaying(false)}
+            onEnded={() => { setIsPreviewPlaying(false); videoRef.current?.pause(); }}
+          />
+          <div className="rounded-lg border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-white dark:text-black">
+                <Music2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-gray-500 dark:text-white/55">Regenerated voice audio</p>
+                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{audioFileName}</p>
+              </div>
+              <span className="shrink-0 text-xs tabular-nums text-gray-500 dark:text-white/55">
+                {formatPreviewTime(previewCurrentTime)} / {formatPreviewTime(totalPreviewDuration)}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={Math.max(totalPreviewDuration, 0)}
+              step="0.1"
+              value={Math.min(previewCurrentTime, totalPreviewDuration || previewCurrentTime)}
+              onChange={seekPreview}
+              disabled={!totalPreviewDuration}
+              aria-label="Voice preview position"
+              className="mt-3 h-1.5 w-full cursor-pointer accent-gray-900 disabled:cursor-not-allowed dark:accent-white"
+            />
+          </div>
+          <button type="button" onClick={togglePreview} className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold dark:border-white/20">
+            {isPreviewPlaying ? 'Pause preview' : 'Preview'}
+          </button>
+          <DialogFooter>
+            <button type="button" onClick={discardVoicePreview} disabled={busy} className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium disabled:opacity-50 dark:border-white/20">Try again</button>
+            <button type="button" onClick={acceptVoicePreview} disabled={busy} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-black">{submitting ? 'Merging…' : 'Accept & merge'}</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  if (voicePreview?.error) {
+    return (
+      <Dialog open={open} onOpenChange={guardedOpenChange}>
+        <DialogContent
+          className="border-black/10 bg-white text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
+          showCloseButton={!busy}
+        >
+          <DialogHeader>
+            <DialogTitle>Voice preview failed</DialogTitle>
+            <DialogDescription>{voicePreview.error}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button type="button" onClick={discardVoicePreview} className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium dark:border-white/20">
+              Try again
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   // translate & rewrite are both 2-step (preview → review/edit → generate).
+  if (awaitingVoicePreview) {
+    const loadingMessage =
+      mode === 'translate'
+        ? 'Generating the translated voice preview…'
+        : mode === 'rewrite'
+          ? 'Generating the rewritten voice preview…'
+          : 'Generating your new voice preview…';
+
+    return (
+      <Dialog open={open} onOpenChange={guardedOpenChange}>
+        <DialogContent
+          className="flex h-[min(85vh,760px)] flex-col overflow-hidden border-black/10 bg-white text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
+          showCloseButton={false}
+          onPointerDownOutside={blockOutsideClose}
+          onInteractOutside={blockOutsideClose}
+          onEscapeKeyDown={blockOutsideClose}
+        >
+          <DialogHeader>
+            <DialogTitle>Preparing voice preview</DialogTitle>
+            <DialogDescription>{loadingMessage}</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-black/10 bg-black/[0.03] dark:border-white/10 dark:bg-white/5">
+              <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-white/60">
+                <Loader2 className="h-7 w-7 animate-spin" />
+                <p className="text-sm">Video preview is being prepared…</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 dark:bg-white/10">
+                <Music2 className="h-4 w-4 animate-pulse" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="h-2.5 w-32 animate-pulse rounded bg-gray-200 dark:bg-white/10" />
+                <div className="h-1.5 w-full animate-pulse rounded bg-gray-200 dark:bg-white/10" />
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-xs text-gray-500 dark:text-white/50">
+            Keep this window open. The preview will appear here automatically.
+          </p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const isScriptMode = mode === 'translate' || mode === 'rewrite';
 
   // Switch to the full step screen the moment the preview is fired (previewing)
@@ -351,7 +610,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-2xl"
+          className="flex h-[min(85vh,760px)] flex-col gap-0 overflow-hidden border-black/10 bg-white p-0 text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
           showCloseButton={false}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
@@ -474,7 +733,7 @@ export default function RegenerateVoiceModal({
   return (
     <Dialog open={open} onOpenChange={guardedOpenChange}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="overflow-visible border-black/10 bg-white text-gray-900 sm:max-w-xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
         showCloseButton={!busy}
         onPointerDownOutside={blockOutsideClose}
         onInteractOutside={blockOutsideClose}
@@ -565,7 +824,7 @@ export default function RegenerateVoiceModal({
         <DialogFooter>
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={discardAndClose}
             disabled={busy}
             className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:text-white dark:hover:bg-white/5"
           >

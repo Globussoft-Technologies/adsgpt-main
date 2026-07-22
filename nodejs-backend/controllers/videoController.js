@@ -964,6 +964,63 @@ exports.uploadVoice = async (req, res) => {
   }
 };
 
+exports.uploadAiAdsAudio = async (req, res) => {
+  /* #swagger.tags = ['Video Generation']
+     #swagger.summary = 'Upload AI Ads regenerated audio to S3'
+     #swagger.description = 'Service-to-service endpoint used by the Python AI Ads worker. Uploads an MP3 using the existing voice uploader and returns its relative S3 path. Requires x-secret-key authentication.'
+     #swagger.security = []
+     #swagger.parameters['x-secret-key'] = {
+       in: 'header',
+       required: true,
+       type: 'string',
+       description: 'Shared Python ↔ Node result-update secret.'
+     }
+     #swagger.requestBody = {
+       required: true,
+       content: {
+         'multipart/form-data': {
+           schema: {
+             type: 'object',
+             required: ['userId', 'audio'],
+             properties: {
+               userId: {
+                 type: 'string',
+                 description: 'User ID used in the S3 object path.',
+                 example: 'GPT-165'
+               },
+               audio: {
+                 type: 'string',
+                 format: 'binary',
+                 description: 'Regenerated MP3 audio file.'
+               }
+             }
+           }
+         }
+       }
+     }
+     #swagger.responses[200] = {
+       description: 'Audio uploaded successfully',
+       content: {
+         'application/json': {
+           schema: {
+             type: 'object',
+             properties: {
+               data: {
+                 type: 'string',
+                 example: '/voices/GPT-165/1750000000000.mp3'
+               }
+             }
+           }
+         }
+       }
+     }
+     #swagger.responses[400] = { description: 'No audio file received' }
+     #swagger.responses[401] = { description: 'Invalid or missing secret key' }
+     #swagger.responses[500] = { description: 'Internal server error' }
+  */
+  return exports.uploadVoice(req, res);
+};
+
 exports.generateImageAndScript = async (req, res) => {
   try {
     /* #swagger.tags = ['Video Generation']
@@ -2912,11 +2969,11 @@ exports.regenerateAiAdsVoice = async (req, res) => {
     }
 
     if (record.voicePreview) {
-      return res.status(409).json({
-        success: false,
-        error: "voice_preview_pending",
-        message: "Accept or discard the current voice preview before starting another regeneration.",
-      });
+      logger.info(
+        `[AI Ads] replacing stale voice preview before regeneration session=${sessionId}`,
+      );
+      record.voicePreview = null;
+      record.pendingRegen = null;
     }
 
     if (!process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API) {

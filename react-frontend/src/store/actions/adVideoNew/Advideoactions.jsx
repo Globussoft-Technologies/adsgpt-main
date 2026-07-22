@@ -957,6 +957,32 @@ export const previewRegenerateScriptAction = (sessionId, inputs) => async () => 
   }
 };
 
+export const finalMergeAiAdsVoiceAction = (sessionId, preview) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/final-merge/${sessionId}`,
+      { audioUrl: preview.audioUrl, videoUrl: preview.videoUrl },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } },
+    );
+    return response.data;
+  } catch (error) {
+    globalToast.error(error.response?.data?.error || 'Failed to merge the voice preview');
+    throw error;
+  }
+};
+
+export const discardAiAdsVoicePreviewAction = (sessionId) => async () => {
+  try {
+    await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/discard-voice-preview/${sessionId}`,
+      {},
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } },
+    );
+  } catch (error) {
+    globalToast.error(error.response?.data?.error || 'Failed to discard voice preview');
+    throw error;
+  }
+};
 // "Keep this one" / revert — move the version pointer to a results[] entry.
 export const selectAiAdsVersionAction = (sessionId, version) => async () => {
   try {

@@ -55,6 +55,7 @@ const initialState = {
   // Populated by socket 'aiAdsTranslateScriptReady' / 'aiAdsTranslateScriptFailed';
   // read by RegenerateVoiceModal to render the editable script box.
   aiAdsTranslateScript: {},
+  aiAdsVoicePreview: {},
 };
 
 const adVideoNewSlice = createSlice({
@@ -307,7 +308,16 @@ const adVideoNewSlice = createSlice({
         state.aiAdsSceneData.status = action.payload;
       }
     },
-    // Socket 'aiAdsTranslateScriptReady' — store the previewed script for a
+        setAiAdsVoicePreview: (state, action) => {
+      const { sessionId, preview, error } = action.payload;
+      if (!sessionId) return;
+      state.aiAdsVoicePreview[sessionId] = { preview: preview || null, error: error || null };
+    },
+    clearAiAdsVoicePreview: (state, action) => {
+      const { sessionId } = action.payload || {};
+      if (sessionId) delete state.aiAdsVoicePreview[sessionId];
+    },
+// Socket 'aiAdsTranslateScriptReady' — store the previewed script for a
     // session so the modal can render it (editable). Keyed by sessionId.
     setAiAdsTranslateScript: (state, action) => {
       const { sessionId, scenes } = action.payload;
@@ -371,6 +381,8 @@ export const {
   setAiAdsTranslateScript,
   setAiAdsTranslateScriptError,
   clearAiAdsTranslateScript,
+  setAiAdsVoicePreview,
+  clearAiAdsVoicePreview,
 } = adVideoNewSlice.actions;
 
 export default adVideoNewSlice.reducer;

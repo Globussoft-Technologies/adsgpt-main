@@ -59,6 +59,7 @@ import {
   setAiAdsRegenState,
   setAiAdsTranslateScript,
   setAiAdsTranslateScriptError,
+  setAiAdsVoicePreview,
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
@@ -545,7 +546,12 @@ export const initSocket = (url) => (dispatch, getState) => {
       }));
     });
 
-    // Voice-regenerate failed — clear the overlay (so the user can retry) + toast.
+        socket.on('audio-result', (data) => {
+      if (!data?.sessionId) return;
+      dispatch(setAiAdsRegenState({ sessionId: data.sessionId, regenState: 'idle' }));
+      dispatch(setAiAdsVoicePreview({ sessionId: data.sessionId, preview: data.preview, error: data.error || null }));
+    });
+// Voice-regenerate failed — clear the overlay (so the user can retry) + toast.
     socket.on('aiAdsVoiceFailed', (data) => {
       console.error('AI Ads voice regen failed:', data);
       if (data?.sessionId) {
