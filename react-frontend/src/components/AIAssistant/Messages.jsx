@@ -18,6 +18,8 @@ import toMediaUrl from '@/utils/mediaUrl';
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
+const META_CONNECT_LINK = 'adsgpt://connect/meta';
+const SOCKET_BASE_URL = (import.meta.env.VITE_SOCKET_URL || '').replace(/\/$/, '');
 
 // A chat attachment is an image when its file_type or URL/filename says so.
 // Attachments arrive as a string URL, or { url, filename, file_type }.
@@ -181,8 +183,33 @@ const Messages = ({
   onRecreate,
 }) => {
   const endRef = useRef(null);
+  const navigate = useNavigate();
   const sessionId = useSelector((state) => state.aiAssistant.sessionId);
+  const userId = useSelector((state) => state.socket.userData?.user_id);
   const [lightboxSrc, setLightboxSrc] = useState(null);
+
+  // Assistant-authored product links stay inside the SPA. The special Meta
+  // connect action launches the same Facebook OAuth flow used by Ads Manager,
+  // with this chat as the return URL. No token ever passes through the model.
+  const handleAssistantLink = (event, href) => {
+    if (href === META_CONNECT_LINK) {
+      event.preventDefault();
+      if (!userId || !SOCKET_BASE_URL) {
+        navigate('/ads-manager');
+        return;
+      }
+      const returnUrl = window.location.href;
+      window.location.assign(
+        `${SOCKET_BASE_URL}/api/auth/facebook?userId=${encodeURIComponent(userId)}` +
+          `&feUrl=${encodeURIComponent(returnUrl)}`,
+      );
+      return;
+    }
+    if (href?.startsWith('/')) {
+      event.preventDefault();
+      navigate(href);
+    }
+  };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -301,9 +328,23 @@ const Messages = ({
                       img: ({ node, src, ...props }) => (
                         <img src={toMediaUrl(src)} loading="lazy" {...props} />
                       ),
-                      a: ({ node, href, ...props }) => (
-                        <a href={toMediaUrl(href)} target="_blank" rel="noreferrer" {...props} />
-                      ),
+                      a: ({ node, href, ...props }) => {
+                        const internal = href?.startsWith('/') || href === META_CONNECT_LINK;
+                        return (
+                          <a
+                            href={internal ? href : toMediaUrl(href)}
+                            onClick={(event) => handleAssistantLink(event, href)}
+                            target={internal ? undefined : '_blank'}
+                            rel={internal ? undefined : 'noreferrer'}
+                            className={
+                              href === META_CONNECT_LINK
+                                ? 'not-prose inline-flex rounded-full bg-[#1877F2] px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-[#166FE5]'
+                                : undefined
+                            }
+                            {...props}
+                          />
+                        );
+                      },
                     }}
                   >
                     {m.text}
