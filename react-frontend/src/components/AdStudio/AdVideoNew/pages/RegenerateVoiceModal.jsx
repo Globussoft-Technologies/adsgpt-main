@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Mic, Languages, PenLine, Loader2, Music2, X } from 'lucide-react';
+import { Mic, Languages, PenLine, Loader2, Music2, Pause, Play, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -501,8 +501,22 @@ export default function RegenerateVoiceModal({
               className="mt-3 h-1.5 w-full cursor-pointer accent-gray-900 disabled:cursor-not-allowed dark:accent-white"
             />
           </div>
-          <button type="button" onClick={togglePreview} className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold dark:border-white/20">
-            {isPreviewPlaying ? 'Pause preview' : 'Preview'}
+          <button
+            type="button"
+            onClick={togglePreview}
+            className="flex items-center justify-center gap-2 rounded-md border border-black/20 px-4 py-2 text-sm font-semibold dark:border-white/20"
+          >
+            {isPreviewPlaying ? (
+              <>
+                <Pause className="h-4 w-4 fill-current" />
+                Pause preview
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 fill-current" />
+                Play preview
+              </>
+            )}
           </button>
           <DialogFooter>
             <button type="button" onClick={discardVoicePreview} disabled={busy} className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium disabled:opacity-50 dark:border-white/20">Try again</button>
@@ -747,9 +761,9 @@ export default function RegenerateVoiceModal({
       >
         <DialogHeader>
           <DialogTitle>Regenerate voice-over</DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Redo the voice-over without re-rendering the video. Your original stays saved as a version.
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
 
         {/* Mode selector */}
@@ -777,9 +791,22 @@ export default function RegenerateVoiceModal({
         </div>
 
         {/* Mode content */}
-        <div className="min-h-24 py-1">
+        <div className="min-h-24 pt-3 pb-1">
           {mode === 'voice' && (
-            <VoiceSelector value={voice} onChange={setVoice} error={voiceError} />
+            <div className="flex flex-col gap-4">
+              <VoiceSelector value={voice} onChange={setVoice} error={voiceError} />
+              <div className="flex items-start gap-2 rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 text-xs text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
+                <Languages className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <p>
+                  <span className="font-semibold text-gray-800 dark:text-white/85">
+                    Voice language does not translate the script.
+                  </span>{' '}
+                  It selects the narrator&apos;s voice profile. Use{' '}
+                  <span className="font-semibold text-gray-800 dark:text-white/85">Translate</span>{' '}
+                  to change the spoken script language.
+                </p>
+              </div>
+            </div>
           )}
 
           {mode === 'translate' && (
@@ -799,6 +826,7 @@ export default function RegenerateVoiceModal({
                   setLangError('');
                 }}
                 side="bottom"
+                triggerVariant="voice-chip"
               />
               {langError && <p className="text-xs text-red-500">{langError}</p>}
               {previewing && (

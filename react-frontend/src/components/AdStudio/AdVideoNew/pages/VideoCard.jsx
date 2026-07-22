@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Megaphone,
-  Mic,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
@@ -844,7 +843,7 @@ export default function VideoCard({
                     }}
                     className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
                   >
-                    <Mic size={18} />
+                    <RefreshCw size={18} />
                   </button>
                 )}
                 <div className="group/volume relative flex items-center">
