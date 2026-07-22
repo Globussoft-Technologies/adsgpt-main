@@ -19,7 +19,10 @@ import toMediaUrl from '@/utils/mediaUrl';
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
-const META_CONNECT_LINK = 'adsgpt://connect/meta';
+// Keep this as a normal SPA path. react-markdown sanitizes custom URI schemes
+// before custom renderers receive them, which previously turned adsgpt:// into
+// an empty href (current page in a new tab) and bypassed MetaConnectCard.
+const META_CONNECT_LINK = '/ads-manager?connect=meta';
 
 // A chat attachment is an image when its file_type or URL/filename says so.
 // Attachments arrive as a string URL, or { url, filename, file_type }.
@@ -199,7 +202,7 @@ const Messages = ({
   const handleAssistantLink = (event, href) => {
     if (href === META_CONNECT_LINK) {
       event.preventDefault();
-      navigate('/ads-manager?connect=meta');
+      navigate(META_CONNECT_LINK);
       return;
     }
     if (href?.startsWith('/')) {
