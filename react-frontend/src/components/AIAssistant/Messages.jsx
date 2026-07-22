@@ -13,13 +13,13 @@ import ConceptCards from './ConceptCards';
 import DownloadMenu from './DownloadMenu';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
+import MetaConnectCard from './MetaConnectCard';
 import toMediaUrl from '@/utils/mediaUrl';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
 const META_CONNECT_LINK = 'adsgpt://connect/meta';
-const SOCKET_BASE_URL = (import.meta.env.VITE_SOCKET_URL || '').replace(/\/$/, '');
 
 // A chat attachment is an image when its file_type or URL/filename says so.
 // Attachments arrive as a string URL, or { url, filename, file_type }.
@@ -39,9 +39,15 @@ const QuotedBlock = ({ quote, align = 'left' }) => {
       <div className="rounded-lg border-l-2 border-white/40 bg-white/[0.04] px-3 py-1.5">
         <div className="flex items-center gap-1 text-[10px] font-medium tracking-wide text-white/70 uppercase">
           <Quote className="h-2.5 w-2.5" />
-          {quote.role === 'assistant' ? 'Replying to assistant' : quote.role === 'user' ? 'Replying to you' : 'Replying to'}
+          {quote.role === 'assistant'
+            ? 'Replying to assistant'
+            : quote.role === 'user'
+              ? 'Replying to you'
+              : 'Replying to'}
         </div>
-        <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/55">{quote.text}</div>
+        <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/55">
+          {quote.text}
+        </div>
       </div>
     </div>
   );
@@ -185,24 +191,15 @@ const Messages = ({
   const endRef = useRef(null);
   const navigate = useNavigate();
   const sessionId = useSelector((state) => state.aiAssistant.sessionId);
-  const userId = useSelector((state) => state.socket.userData?.user_id);
   const [lightboxSrc, setLightboxSrc] = useState(null);
 
-  // Assistant-authored product links stay inside the SPA. The special Meta
-  // connect action launches the same Facebook OAuth flow used by Ads Manager,
-  // with this chat as the return URL. No token ever passes through the model.
+  // Assistant-authored product links stay inside the SPA. Meta connection is
+  // intentionally handed off to Ads Manager so its established account checks
+  // and OAuth flow remain the single source of truth.
   const handleAssistantLink = (event, href) => {
     if (href === META_CONNECT_LINK) {
       event.preventDefault();
-      if (!userId || !SOCKET_BASE_URL) {
-        navigate('/ads-manager');
-        return;
-      }
-      const returnUrl = window.location.href;
-      window.location.assign(
-        `${SOCKET_BASE_URL}/api/auth/facebook?userId=${encodeURIComponent(userId)}` +
-          `&feUrl=${encodeURIComponent(returnUrl)}`,
-      );
+      navigate('/ads-manager?connect=meta');
       return;
     }
     if (href?.startsWith('/')) {
@@ -222,7 +219,7 @@ const Messages = ({
           return (
             <div key={m.id} className="group flex flex-col items-end">
               <QuotedBlock quote={m.quote} align="right" />
-              <div className="ml-12 min-w-0 max-w-3xl">
+              <div className="ml-12 max-w-3xl min-w-0">
                 {/* Only render the text bubble when there's actual text — a
                     message with just an attachment (image upload) must not show
                     an empty grey bubble. */}
@@ -231,7 +228,9 @@ const Messages = ({
                     className="border border-solid border-[#2A2A2A] bg-[#212121]/60 px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
                     style={{ borderRadius: '30px 30px 1px 30px' }}
                   >
-                    <QuotableText onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}>
+                    <QuotableText
+                      onQuote={(text) => onQuote?.({ text, role: 'user', messageId: m.id })}
+                    >
                       {m.text}
                     </QuotableText>
                   </div>
@@ -302,7 +301,7 @@ const Messages = ({
             <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#15DCFF] to-[#5E66F5]">
               <Bot className="h-4 w-4 text-black" />
             </div>
-            <div className="min-w-0 max-w-3xl flex-1">
+            <div className="max-w-3xl min-w-0 flex-1">
               {showLiveSteps && (
                 <StepsIndicator
                   doneLabels={pendingDoneLabels}
@@ -321,7 +320,7 @@ const Messages = ({
               {m.text ? (
                 <QuotableText
                   onQuote={(text) => onQuote?.({ text, role: 'assistant', messageId: m.id })}
-                  className="prose prose-invert prose-lg max-w-none break-words [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_li]:text-[17px] [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_code]:text-[15px] [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_a]:break-words [&_img]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
+                  className="prose prose-invert prose-lg max-w-none break-words [&_a]:break-words [&_code]:text-[15px] [&_code]:break-words [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_img]:max-w-full [&_li]:text-[17px] [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:break-words [&_pre]:whitespace-pre-wrap [&_table]:block [&_table]:overflow-x-auto"
                 >
                   <ReactMarkdown
                     components={{
@@ -329,18 +328,20 @@ const Messages = ({
                         <img src={toMediaUrl(src)} loading="lazy" {...props} />
                       ),
                       a: ({ node, href, ...props }) => {
-                        const internal = href?.startsWith('/') || href === META_CONNECT_LINK;
+                        if (href === META_CONNECT_LINK) {
+                          return (
+                            <MetaConnectCard
+                              onClick={(event) => handleAssistantLink(event, href)}
+                            />
+                          );
+                        }
+                        const internal = href?.startsWith('/');
                         return (
                           <a
                             href={internal ? href : toMediaUrl(href)}
                             onClick={(event) => handleAssistantLink(event, href)}
                             target={internal ? undefined : '_blank'}
                             rel={internal ? undefined : 'noreferrer'}
-                            className={
-                              href === META_CONNECT_LINK
-                                ? 'not-prose inline-flex rounded-full bg-[#1877F2] px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-[#166FE5]'
-                                : undefined
-                            }
                             {...props}
                           />
                         );

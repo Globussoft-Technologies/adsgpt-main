@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
@@ -35,6 +35,8 @@ const PlatformPicker = ({
   tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON !== 'true',
 }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedPlatform = searchParams.get('connect');
   const [metaConnected, setMetaConnected] = useState(false);
   const [checkingMeta, setCheckingMeta] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -135,49 +137,36 @@ const PlatformPicker = ({
     {
       id: 'meta',
       name: 'Meta',
-      description:
-        'Best for massive reach that converts broad audiences into loyal customers',
+      description: 'Best for massive reach that converts broad audiences into loyal customers',
       enabled: true,
       logo: (
         <div className="flex items-center gap-3">
           <img src={metaIcon} alt="Meta" className="h-10 w-10 shrink-0" />
-          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">
-            Meta
-          </span>
+          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">Meta</span>
         </div>
       ),
     },
     {
       id: 'google',
       name: 'Google Ads',
-      description:
-        'Reach customers across Google Search, YouTube, and the web',
+      description: 'Reach customers across Google Search, YouTube, and the web',
       enabled: !googleComingSoon,
       logo: (
         <div className="flex items-center gap-3">
-          <img
-            src={googleAdsIcon}
-            alt="Google Ads"
-            className="h-12 w-12 shrink-0"
-          />
-          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">
-            Google Ads
-          </span>
+          <img src={googleAdsIcon} alt="Google Ads" className="h-12 w-12 shrink-0" />
+          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">Google Ads</span>
         </div>
       ),
     },
     {
       id: 'tiktok',
       name: 'TikTok',
-      description:
-        'Best for turning entertainment into viral demand and purchases',
+      description: 'Best for turning entertainment into viral demand and purchases',
       enabled: !tiktokComingSoon,
       logo: (
         <div className="flex items-center gap-3">
           <img src={tiktokIcon} alt="TikTok" className="h-12 w-12 shrink-0" />
-          <span className="text-2xl font-bold tracking-tight text-[#1C2B33]">
-            TikTok
-          </span>
+          <span className="text-2xl font-bold tracking-tight text-[#1C2B33]">TikTok</span>
         </div>
       ),
     },
@@ -206,28 +195,30 @@ const PlatformPicker = ({
             const isGooglePlatform = platform.id === 'google' && !googleComingSoon;
             const isTiktokPlatform = platform.id === 'tiktok' && !tiktokComingSoon;
             const isHovered = hoveredCard === platform.id;
+            const isRequested = requestedPlatform === platform.id;
             const isConnected = isMetaPlatform
               ? metaConnected
               : isGooglePlatform
-              ? googleConnected
-              : isTiktokPlatform
-              ? tiktokConnected
-              : false;
+                ? googleConnected
+                : isTiktokPlatform
+                  ? tiktokConnected
+                  : false;
             const isChecking = isMetaPlatform
               ? checkingMeta
               : isGooglePlatform
-              ? checkingGoogle
-              : isTiktokPlatform
-              ? checkingTiktok
-              : false;
+                ? checkingGoogle
+                : isTiktokPlatform
+                  ? checkingTiktok
+                  : false;
 
-            const handleClick = isMetaPlatform && metaConnected
-              ? handleMetaCardClick
-              : isGooglePlatform && googleConnected
-              ? handleGoogleCardClick
-              : isTiktokPlatform && tiktokConnected
-              ? handleTiktokCardClick
-              : undefined;
+            const handleClick =
+              isMetaPlatform && metaConnected
+                ? handleMetaCardClick
+                : isGooglePlatform && googleConnected
+                  ? handleGoogleCardClick
+                  : isTiktokPlatform && tiktokConnected
+                    ? handleTiktokCardClick
+                    : undefined;
 
             return (
               <motion.div
@@ -248,38 +239,43 @@ const PlatformPicker = ({
                 <div className="relative flex h-40 items-center justify-center bg-white transition-all duration-300">
                   {platform.logo}
 
-                  {/* Connect overlay on hover — for Meta or Google when not connected */}
-                  {(isMetaPlatform || isGooglePlatform || isTiktokPlatform) && !isConnected && !isChecking && isHovered && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute inset-0 flex items-center justify-center bg-black/40"
-                    >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isMetaPlatform) handleMetaConnect();
-                          else if (isGooglePlatform) handleGoogleConnect();
-                          else if (isTiktokPlatform) handleTiktokConnect();
-                        }}
-                        className="rounded-lg bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg transition-transform duration-150 hover:scale-105"
+                  {/* A routed connection request keeps the action visible; normal
+                      platform browsing reveals it on hover. */}
+                  {(isMetaPlatform || isGooglePlatform || isTiktokPlatform) &&
+                    !isConnected &&
+                    !isChecking &&
+                    (isHovered || isRequested) && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute inset-0 flex items-center justify-center bg-black/40"
                       >
-                        Connect
-                      </button>
-                    </motion.div>
-                  )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isMetaPlatform) handleMetaConnect();
+                            else if (isGooglePlatform) handleGoogleConnect();
+                            else if (isTiktokPlatform) handleTiktokConnect();
+                          }}
+                          className="rounded-lg bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg transition-transform duration-150 hover:scale-105 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+                        >
+                          Connect {platform.name}
+                        </button>
+                      </motion.div>
+                    )}
                 </div>
 
                 {/* Dark info area */}
                 <div className="bg-gray-50 p-4 dark:bg-[#1A1A1A]">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm 2xl:text-base font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
                       {platform.name}
                     </h3>
                     {!platform.enabled && (
-                      <span className="rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md 2xl:text-5">
+                      <span className="2xl:text-5 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md">
                         Coming Soon
                       </span>
                     )}
@@ -290,7 +286,7 @@ const PlatformPicker = ({
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-xs 2xl:text-sm leading-relaxed text-gray-500 dark:text-[#AFAFAF]">
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500 2xl:text-sm dark:text-[#AFAFAF]">
                     {platform.description}
                   </p>
                 </div>
