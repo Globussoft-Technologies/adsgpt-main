@@ -215,6 +215,23 @@ const aiAssistantSlice = createSlice({
         msg.metaCards = [...(msg.metaCards || []), ...cards];
       }
     },
+    appendMetaConnectionStatus: {
+      reducer: (state, action) => {
+        state.messages.push(action.payload);
+      },
+      prepare: () => ({
+        payload: {
+          id: nanoid(),
+          role: 'assistant',
+          text: '',
+          steps: [],
+          images: [],
+          competitorAds: [],
+          metaCards: [{ kind: 'connection_status' }],
+          complete: true,
+        },
+      }),
+    },
     // Records which concept the user picked (so the card can show a chosen state).
     selectConcept: (state, action) => {
       const { messageId, conceptId } = action.payload || {};
@@ -382,6 +399,7 @@ export const {
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
   attachAssistantMetaCards,
+  appendMetaConnectionStatus,
   selectConcept,
   submitAssistantChoiceForm,
   updateStoryboardScene,

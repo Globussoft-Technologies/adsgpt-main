@@ -24,6 +24,16 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
 // before custom renderers receive them, which previously turned adsgpt:// into
 // an empty href (current page in a new tab) and bypassed MetaConnectCard.
 const META_CONNECT_LINK = '/ads-manager?connect=meta';
+const META_OAUTH_RESUME_KEY = 'aia1_meta_oauth_resume';
+
+const isMetaConnectLink = (href) => {
+  if (!href?.startsWith('/ads-manager')) return false;
+  try {
+    return new URL(href, window.location.origin).searchParams.get('connect') === 'meta';
+  } catch {
+    return false;
+  }
+};
 
 // A chat attachment is an image when its file_type or URL/filename says so.
 // Attachments arrive as a string URL, or { url, filename, file_type }.
@@ -202,9 +212,15 @@ const Messages = ({
   // intentionally handed off to Ads Manager so its established account checks
   // and OAuth flow remain the single source of truth.
   const handleAssistantLink = (event, href) => {
-    if (href?.startsWith('/ads-manager')) {
+    if (isMetaConnectLink(href)) {
       event.preventDefault();
-      navigate(META_CONNECT_LINK);
+      try {
+        sessionStorage.setItem(META_OAUTH_RESUME_KEY, JSON.stringify({ sessionId }));
+      } catch {
+        /* The route still works when storage is unavailable. */
+      }
+      const returnTo = '/assistant?meta_connected=1';
+      navigate(`${META_CONNECT_LINK}&returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
     if (href?.startsWith('/')) {
@@ -322,6 +338,19 @@ const Messages = ({
                 />
               )}
 
+              {Array.isArray(m.metaCards) && m.metaCards.length > 0 && (
+                <div className="mb-3 flex flex-col gap-3">
+                  {m.metaCards.map((card, index) => (
+                    <CardBlock
+                      key={`${card.kind || 'meta-card'}-${index}`}
+                      card={card}
+                      onAction={onMetaAction}
+                      disabled={pending && isLast}
+                    />
+                  ))}
+                </div>
+              )}
+
               {m.text ? (
                 <QuotableText
                   onQuote={(text) => onQuote?.({ text, role: 'assistant', messageId: m.id })}
@@ -333,7 +362,7 @@ const Messages = ({
                         <img src={toMediaUrl(src)} loading="lazy" {...props} />
                       ),
                       a: ({ node, href, ...props }) => {
-                        if (href?.startsWith('/ads-manager')) {
+                        if (isMetaConnectLink(href)) {
                           return (
                             <MetaConnectCard
                               onClick={(event) => handleAssistantLink(event, href)}
@@ -370,19 +399,6 @@ const Messages = ({
               <MediaGrid urls={m.images || []} onOpenImage={setLightboxSrc} />
 
               <CompetitorAdsGrid ads={m.competitorAds || []} onRecreate={onRecreate} />
-
-              {Array.isArray(m.metaCards) && m.metaCards.length > 0 && (
-                <div className="mt-3 flex flex-col gap-3">
-                  {m.metaCards.map((card, index) => (
-                    <CardBlock
-                      key={`${card.kind || 'meta-card'}-${index}`}
-                      card={card}
-                      onAction={onMetaAction}
-                      disabled={pending && isLast}
-                    />
-                  ))}
-                </div>
-              )}
 
               {m.conceptCards && Array.isArray(m.conceptCards.concepts) && (
                 <ConceptCards

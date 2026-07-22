@@ -18,12 +18,18 @@ import AdRulesCard from './AdRulesCard';
 import AbTestResultsCard from './AbTestResultsCard';
 import BillingSummaryCard from './BillingSummaryCard';
 import ActivityTimelineCard from './ActivityTimelineCard';
+import AccountPickerCard from './AccountPickerCard';
+import ConnectionStatusCard from './ConnectionStatusCard';
 
 // Dispatches a `card` payload (from the backend's render tools) to its
 // renderer by `kind`. `onAction` is used by action chips to seed a new turn;
 // `disabled` freezes chips while a turn is streaming.
 const CardBlock = ({ card, onAction, disabled }) => {
   switch (card.kind) {
+    case 'account_picker':
+      return <AccountPickerCard title={card.title} accounts={card.accounts} onAction={onAction} disabled={disabled} />;
+    case 'connection_status':
+      return <ConnectionStatusCard />;
     case 'stat':
       return (
         <StatCard title={card.title} subtitle={card.subtitle} badge={card.badge} stats={card.stats} />

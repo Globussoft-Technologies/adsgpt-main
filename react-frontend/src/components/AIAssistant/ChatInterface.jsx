@@ -7,9 +7,10 @@ import Composer from './Composer';
 import Messages from './Messages';
 import GenCanvas from './GenCanvas';
 import BlurText from './BlurText';
-import { streamChat } from '@/apis/aiAssistant/aiAssistantApi';
+import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
 import {
   appendAssistantText,
+  appendMetaConnectionStatus,
   resetAssistantText,
   attachAssistantAds,
   attachAssistantChoiceForm,
@@ -19,6 +20,7 @@ import {
   attachAssistantStoryboard,
   failAssistantStream,
   finishAssistantStream,
+  loadConversation,
   pushStep,
   pushUserMessage,
   selectConcept,
@@ -162,8 +164,36 @@ const ChatInterface = () => {
   useEffect(() => {
     if (freshSessionRef.current) return;
     freshSessionRef.current = true;
-    dispatch(startNewSession());
-    // Mount-only: reset to a clean session on entering the module.
+    const params = new URLSearchParams(window.location.search);
+    const returnedFromMeta = params.get('meta_connected') === '1';
+    let resumeSessionId = null;
+    if (returnedFromMeta) {
+      try {
+        resumeSessionId = JSON.parse(
+          sessionStorage.getItem('aia1_meta_oauth_resume') || '{}',
+        ).sessionId;
+        sessionStorage.removeItem('aia1_meta_oauth_resume');
+      } catch {
+        resumeSessionId = null;
+      }
+      window.history.replaceState(null, '', '/assistant');
+    }
+
+    if (!returnedFromMeta || !resumeSessionId) {
+      dispatch(startNewSession());
+      return;
+    }
+
+    (async () => {
+      try {
+        const history = await getHistory(resumeSessionId);
+        dispatch(loadConversation({ sessionId: resumeSessionId, messages: history || [] }));
+      } catch {
+        dispatch(startNewSession());
+      } finally {
+        dispatch(appendMetaConnectionStatus());
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

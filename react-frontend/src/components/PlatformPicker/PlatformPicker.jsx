@@ -37,6 +37,10 @@ const PlatformPicker = ({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedPlatform = searchParams.get('connect');
+  const requestedReturnTo = searchParams.get('returnTo');
+  const safeReturnTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
+    ? requestedReturnTo
+    : null;
   const [metaConnected, setMetaConnected] = useState(false);
   const [checkingMeta, setCheckingMeta] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -94,8 +98,19 @@ const PlatformPicker = ({
     }
   }, [userData?.user_id]);
 
+  useEffect(() => {
+    if (requestedPlatform !== 'meta' || checkingMeta || !metaConnected || !safeReturnTo) return;
+    const destination = new URL(safeReturnTo, window.location.origin);
+    destination.searchParams.set('meta_connected', '1');
+    navigate(`${destination.pathname}${destination.search}`, { replace: true });
+  }, [checkingMeta, metaConnected, navigate, requestedPlatform, safeReturnTo]);
+
   const handleMetaConnect = () => {
-    const feUrl = window.location.href;
+    const destination = safeReturnTo
+      ? new URL(safeReturnTo, window.location.origin)
+      : new URL(window.location.href);
+    if (safeReturnTo) destination.searchParams.set('meta_connected', '1');
+    const feUrl = destination.toString();
     const userId = userData?.user_id;
     if (!userId) return;
     window.location.href = `${BASE_URL}/api/auth/facebook?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
