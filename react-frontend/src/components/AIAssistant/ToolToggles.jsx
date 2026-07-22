@@ -1,5 +1,13 @@
 import { useDispatch, useSelector } from 'react-redux';
-import { Globe, LibraryBig, PenLine, Image as ImageIcon, Film, X } from 'lucide-react';
+import {
+  BadgeDollarSign,
+  Film,
+  Globe,
+  Image as ImageIcon,
+  LibraryBig,
+  PenLine,
+  X,
+} from 'lucide-react';
 import { toggleTool, TOGGLEABLE_TOOLS } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import Tip from './Tip';
 
@@ -20,6 +28,13 @@ const TOOL_META = {
     title: 'Search PowerAdSpy for real competitor ads across every platform.',
     Icon: LibraryBig,
     accent: '#F59E0B',
+  },
+  metaAdsManager: {
+    label: 'Meta Ads',
+    title:
+      'Analyze your connected Meta Ads account. Every live-account change requires fresh approval.',
+    Icon: BadgeDollarSign,
+    accent: '#1877F2',
   },
   adCopyGenerator: {
     label: 'Ad Copy',

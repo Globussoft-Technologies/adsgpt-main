@@ -15,6 +15,7 @@ const VIDEO_ENABLED = import.meta.env.VITE_VIDEO_ENABLED === 'true';
 export const TOGGLEABLE_TOOLS = [
   'searchTheWeb',
   'searchTheAdLibrary',
+  'metaAdsManager',
   'adCopyGenerator',
   'adCreativeGenerator',
   ...(VIDEO_ENABLED ? ['adVideoGenerator'] : []),
