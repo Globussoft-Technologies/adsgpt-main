@@ -43,6 +43,12 @@ router.post(
   videoController.uploadVoice
 );
 router.post(
+  "/ai-ads/upload/audio",
+  verifySecretKey,
+  upload.single("audio"),
+  videoController.uploadVoice
+);
+router.post(
   "/generate-image-and-script",
   authenticateJWT,
   requireBasePlan,

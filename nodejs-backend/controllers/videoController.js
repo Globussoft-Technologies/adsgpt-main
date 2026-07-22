@@ -957,7 +957,7 @@ exports.uploadVoice = async (req, res) => {
 
     await s3Client.send(new PutObjectCommand(uploadParams));
     const s3Url = `/${uploadParams.Key}`;
-    return res.status(200).json({ data: s3Url });
+    return res.status(200).json({ data: s3Url});
   } catch (error) {
     console.error("Error in uploadVoice:", error);
     return res.status(500).json({ success: false, error: error.message });
