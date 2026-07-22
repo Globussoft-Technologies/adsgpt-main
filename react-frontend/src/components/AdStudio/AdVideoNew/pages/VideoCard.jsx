@@ -749,7 +749,7 @@ export default function VideoCard({
           {isAiAds && item?.regenState === 'processing' && (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
               <RefreshCw className="animate-spin text-white" size={28} />
-              <p className="text-sm text-white">Regenerating voice…</p>
+              <p className="text-sm text-white">Merging video…</p>
             </div>
           )}
 

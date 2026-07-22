@@ -442,6 +442,9 @@ export default function RegenerateVoiceModal({
         <DialogContent
           className="flex h-[min(85vh,760px)] flex-col overflow-hidden border-black/10 bg-white text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
           showCloseButton={!busy}
+          onPointerDownOutside={blockOutsideClose}
+          onInteractOutside={blockOutsideClose}
+          onEscapeKeyDown={blockOutsideClose}
         >
           <DialogHeader>
             <DialogTitle>Preview regenerated voice</DialogTitle>
@@ -515,6 +518,9 @@ export default function RegenerateVoiceModal({
         <DialogContent
           className="border-black/10 bg-white text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
           showCloseButton={!busy}
+          onPointerDownOutside={blockOutsideClose}
+          onInteractOutside={blockOutsideClose}
+          onEscapeKeyDown={blockOutsideClose}
         >
           <DialogHeader>
             <DialogTitle>Voice preview failed</DialogTitle>
@@ -610,7 +616,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="flex h-[min(85vh,760px)] flex-col gap-0 overflow-hidden border-black/10 bg-white p-0 text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
+          className="flex max-h-[85vh] flex-col gap-0 border-black/10 bg-white p-0 text-gray-900 sm:max-w-2xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
           showCloseButton={false}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
