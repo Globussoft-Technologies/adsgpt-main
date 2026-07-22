@@ -15,6 +15,7 @@ import {
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
   attachAssistantImage,
+  attachAssistantMetaCards,
   attachAssistantStoryboard,
   failAssistantStream,
   finishAssistantStream,
@@ -219,6 +220,11 @@ const ChatInterface = () => {
                 dispatch(attachAssistantConceptCards(data));
               }
               break;
+            case 'meta_cards':
+              if (Array.isArray(data.cards) && data.cards.length > 0) {
+                dispatch(attachAssistantMetaCards(data.cards));
+              }
+              break;
             case 'done':
               dispatch(
                 finishAssistantStream({
@@ -315,6 +321,13 @@ const ChatInterface = () => {
     [pending, handleSend],
   );
 
+  const handleMetaCardAction = useCallback(
+    (prompt) => {
+      if (typeof prompt === 'string' && prompt.trim()) handleSend(prompt.trim(), null);
+    },
+    [handleSend],
+  );
+
   // ── Right-side canvas (genCards / creative briefs) ──────────────────────────
   // The genCards are every assistant message carrying a choiceForm. The canvas
   // shows one at a time; auto-opens to the newest when a fresh brief arrives.
@@ -392,6 +405,7 @@ const ChatInterface = () => {
                 onOpenCanvas={handleOpenCanvas}
                 onQuote={handleQuote}
                 onRecreate={handleRecreate}
+                onMetaAction={handleMetaCardAction}
               />
             </div>
           </div>

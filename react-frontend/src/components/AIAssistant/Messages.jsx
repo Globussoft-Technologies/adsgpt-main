@@ -14,6 +14,7 @@ import DownloadMenu from './DownloadMenu';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
 import MetaConnectCard from './MetaConnectCard';
+import CardBlock from '@/components/MetaAds/Chatbot/cards/CardBlock';
 import toMediaUrl from '@/utils/mediaUrl';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
@@ -190,6 +191,7 @@ const Messages = ({
   onOpenCanvas,
   onQuote,
   onRecreate,
+  onMetaAction,
 }) => {
   const endRef = useRef(null);
   const navigate = useNavigate();
@@ -200,7 +202,7 @@ const Messages = ({
   // intentionally handed off to Ads Manager so its established account checks
   // and OAuth flow remain the single source of truth.
   const handleAssistantLink = (event, href) => {
-    if (href === META_CONNECT_LINK) {
+    if (href?.startsWith('/ads-manager')) {
       event.preventDefault();
       navigate(META_CONNECT_LINK);
       return;
@@ -331,7 +333,7 @@ const Messages = ({
                         <img src={toMediaUrl(src)} loading="lazy" {...props} />
                       ),
                       a: ({ node, href, ...props }) => {
-                        if (href === META_CONNECT_LINK) {
+                        if (href?.startsWith('/ads-manager')) {
                           return (
                             <MetaConnectCard
                               onClick={(event) => handleAssistantLink(event, href)}
@@ -368,6 +370,19 @@ const Messages = ({
               <MediaGrid urls={m.images || []} onOpenImage={setLightboxSrc} />
 
               <CompetitorAdsGrid ads={m.competitorAds || []} onRecreate={onRecreate} />
+
+              {Array.isArray(m.metaCards) && m.metaCards.length > 0 && (
+                <div className="mt-3 flex flex-col gap-3">
+                  {m.metaCards.map((card, index) => (
+                    <CardBlock
+                      key={`${card.kind || 'meta-card'}-${index}`}
+                      card={card}
+                      onAction={onMetaAction}
+                      disabled={pending && isLast}
+                    />
+                  ))}
+                </div>
+              )}
 
               {m.conceptCards && Array.isArray(m.conceptCards.concepts) && (
                 <ConceptCards

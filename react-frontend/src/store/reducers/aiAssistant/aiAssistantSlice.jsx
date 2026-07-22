@@ -134,6 +134,7 @@ const aiAssistantSlice = createSlice({
           choiceFormResult: null,
           conceptCards: null,
           conceptResult: null,
+          metaCards: [],
           complete: false,
         },
       }),
@@ -204,6 +205,14 @@ const aiAssistantSlice = createSlice({
       const msg = state.messages[state.messages.length - 1];
       if (msg && msg.role === 'assistant') {
         msg.conceptCards = cards;
+      }
+    },
+    attachAssistantMetaCards: (state, action) => {
+      const cards = action.payload;
+      if (!Array.isArray(cards) || cards.length === 0) return;
+      const msg = state.messages[state.messages.length - 1];
+      if (msg && msg.role === 'assistant') {
+        msg.metaCards = [...(msg.metaCards || []), ...cards];
       }
     },
     // Records which concept the user picked (so the card can show a chosen state).
@@ -328,6 +337,7 @@ const aiAssistantSlice = createSlice({
             ? m.conceptCards
             : null,
         conceptResult: m.conceptResult || null,
+        metaCards: Array.isArray(m.metaCards) ? m.metaCards : [],
       }));
       state.pending = false;
       state.pendingActiveLabel = null;
@@ -371,6 +381,7 @@ export const {
   attachAssistantStoryboard,
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
+  attachAssistantMetaCards,
   selectConcept,
   submitAssistantChoiceForm,
   updateStoryboardScene,
