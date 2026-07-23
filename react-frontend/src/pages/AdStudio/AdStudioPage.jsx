@@ -12,6 +12,7 @@ import AdVideoHome from '@/components/AdStudio/AdVideo/AdVideoHome';
 import AdVideoHomeNew from '@/components/AdStudio/AdVideoNew/AdVideoHomeNew';
 import AdVideoLayout from '@/components/AdStudio/AdVideoNew/AdVideoLayout';
 import AdCreativeNewLayout from '@/components/AdStudio/AdCreativeNew/AdCreativeNewLayout';
+import AdLibraryPage from '@/pages/AdLibrary/AdLibraryPage';
 import AdPromptComponent from '@/components/common/AdPrompt/AdPromptComponent';
 import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
@@ -151,6 +152,12 @@ const AdStudioPage = () => {
             }`}
           >
             <AdCreativeNewLayout />
+          </div>
+        )}
+
+        {activeAdStudioTabId === 'adLibrary' && (
+          <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-112px)]">
+            <AdLibraryPage />
           </div>
         )}
       </div>

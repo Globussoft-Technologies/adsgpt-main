@@ -6,7 +6,7 @@ import {
   Gauge,
   HelpCircle,
   History,
-  Image,
+  //  Image,
   Library,
   ScanSearch,
 } from 'lucide-react';
@@ -66,14 +66,14 @@ const navigationItems = [
     label: 'Ad Studio',
     link: '/adstudio',
   },
-  {
-    id: 'adlibrary',
-    icon: adStudioDarkLogo,
-    activeIcon: adStudioDarkLogoActive,
-    label: 'Ad Library',
-    link: '/ad-library',
-    lucideIcon: Image,
-  },
+  // {
+  //   id: 'adlibrary',
+  //   icon: adStudioDarkLogo,
+  //   activeIcon: adStudioDarkLogoActive,
+  //   label: 'Ad Library',
+  //   link: '/ad-library',
+  //   lucideIcon: Image,
+  // },
   {
     id: 'brandiq',
     icon: brandIQDarkLogo,

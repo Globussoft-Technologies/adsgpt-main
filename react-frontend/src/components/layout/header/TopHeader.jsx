@@ -99,6 +99,11 @@ const adVideoNewTab = {
   label: 'Ad Video',
   icon: Video,
 };
+const adLibraryTab = {
+  id: 'adLibrary',
+  label: 'Ad Library',
+  icon: Image,
+};
 const brandIQTabs = [
   { id: 'myBrands', label: 'My Brands', icon: Zap },
   { id: 'competitors', label: 'Competitors', icon: Users },
@@ -205,6 +210,7 @@ export default function TopHeader() {
   // ) {
   // adStudioTabs[2] = adVideoTab;
   adStudioTabs[2] = adVideoNewTab;
+  adStudioTabs[3] = adLibraryTab;
   // HIDE-MARK — the new Ad Creative tab is now defined inline in the
   // static adStudioTabs array above (slot 1), so no runtime append is
   // needed here. Restore alongside the legacy entry if reverting.
@@ -399,10 +405,10 @@ export default function TopHeader() {
                 </Button>
               )}
             {((currentRoute === '/adstudio' &&
-              activeAdStudioTabId === 'adCreative' &&
-              Array.isArray(creativeConversations) &&
-              creativeConversations.length === 0) ||
-              currentRoute === '/ad-library') && (
+              ((activeAdStudioTabId === 'adCreative' &&
+                Array.isArray(creativeConversations) &&
+                creativeConversations.length === 0) ||
+                activeAdStudioTabId === 'adLibrary'))) && (
               <>
                 {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
               <Input

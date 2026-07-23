@@ -71,8 +71,13 @@ const AdCreativesCard = ({
   const [isRecreateModalOpen, setIsRecreateModalOpen] = useState(false);
   const { userData } = useSelector((state) => state.socket);
   const { currentSessionId } = useSelector((state) => state.userInteractions);
+  const activeAdStudioTabId = useSelector(
+    (state) => state.adStudioTabs.activeAdStudioTabId,
+  );
   const location = useLocation();
-  const isAdLibraryRoute = location.pathname === '/ad-library';
+  const isAdLibrarySurface =
+    location.pathname === '/ad-library' ||
+    (location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary');
 
   const gotoNextSlide = () => {
     if (swiperInstance) swiperInstance.slideNext();
@@ -255,7 +260,7 @@ const AdCreativesCard = ({
           {/* AdLibrary surfaces Recreate via the slide-up action bar below
               the media instead — keep the inline icon only for the Ad
               Studio "find similar" flow. */}
-          {!isAdLibraryRoute && (
+          {!isAdLibrarySurface && (
             <ShadcnTooltip label="Recreate successful ad">
               <button
                 className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/10 p-0.5 transition-all duration-200 hover:scale-110 2xl:h-7 2xl:w-7 dark:bg-[#3B3B3B]"
@@ -357,7 +362,7 @@ const AdCreativesCard = ({
         {/* AdLibrary-only: gradient bridge sitting at the bottom of the
             media. Fades the image into the action-bar background so the
             seam between media and bar is invisible. Hidden until hover. */}
-        {isAdLibraryRoute && (
+        {isAdLibrarySurface && (
           <div
             aria-hidden
             className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
@@ -373,7 +378,7 @@ const AdCreativesCard = ({
           to its full 56 px height, pushing the card taller. The bar
           background (#2A2A2A) matches the bridge's gradient stop so the
           two read as one continuous surface. */}
-      {isAdLibraryRoute && (
+      {isAdLibrarySurface && (
         <div
           className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100"
         >
@@ -428,7 +433,7 @@ const AdCreativesCard = ({
         ) : (
           ''
         ))}
-      {isAdLibraryRoute && (
+      {isAdLibrarySurface && (
         <RecreateAdModal
           open={isRecreateModalOpen}
           onOpenChange={setIsRecreateModalOpen}

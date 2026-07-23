@@ -115,6 +115,11 @@ export default function VideoCard({
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
+  const canEditAiAdsOriginal =
+    isAiAds &&
+    item?.status === 'completed' &&
+    committedVersion === 0 &&
+    shownVersion === 0;
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).
   const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url : r?.url);
@@ -149,6 +154,15 @@ export default function VideoCard({
     voiceName: shownResult?.aiAds?.voiceName || item?.inputs?.voiceName,
     language: shownResult?.aiAds?.language || item?.inputs?.voiceFilters?.language,
   };
+  const currentScenesForModal =
+    shownResult?.aiAds?.scenes?.length > 0
+      ? shownResult.aiAds.scenes
+      : item?.scenes || [];
+  const currentScriptLanguageForModal =
+    shownResult?.aiAds?.language ||
+    shownResult?.aiAds?.translateLang ||
+    item?.inputs?.voiceFilters?.language ||
+    '';
 
   const isThisFullscreen = isFullscreen && (fullscreenIndex === videoIndex || fullscreenIndex === activeNavIndex);
 
@@ -499,7 +513,11 @@ export default function VideoCard({
   if (isStillGeneratingScriptOrImage) return null;
 
   return (
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
+    <div
+      className={`group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f] ${
+        isAiAds && item?.status === 'completed' ? 'flex flex-col' : ''
+      }`}
+    >
       <InfoTooltip />
 
       {/* Selection Checkbox */}
@@ -686,15 +704,23 @@ export default function VideoCard({
           </div>
         </div>
       ) : item?.status === 'completed' ? (
-        <div ref={containerRef} className="relative h-full w-full bg-black">
+        <>
+        <div
+          ref={containerRef}
+          className={`relative w-full bg-black ${isAiAds ? 'shrink-0' : 'h-full'}`}
+        >
           {!videoLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
           <video
             ref={videoRef}
             src={`${S3_BASE_URL}${activeVideoUrl}`}
-            className={`h-full w-full cursor-pointer transition-opacity duration-300 ${
-              isThisFullscreen ? 'object-contain' : 'object-cover'
+            className={`w-full cursor-pointer transition-opacity duration-300 ${
+              isThisFullscreen
+                ? 'h-full object-contain'
+                : isAiAds
+                  ? 'h-auto max-h-[800px] object-cover'
+                  : 'h-full max-h-[800px] object-cover'
             } ${videoLoaded ? 'opacity-100' : 'opacity-0'} ${
-              !isThisFullscreen ? 'max-h-[800px] rounded-2xl' : ''
+              !isThisFullscreen ? 'rounded-2xl' : ''
             }`}
             preload="metadata"
             muted={isMuted}
@@ -746,9 +772,14 @@ export default function VideoCard({
 
           {/* AI Ads: voice-regen overlay — the video stays visible underneath */}
           {isAiAds && item?.regenState === 'processing' && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
-              <RefreshCw className="animate-spin text-white" size={28} />
-              <p className="text-sm text-white">Merging video…</p>
+            <div role="status" aria-live="polite" className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
+              <RefreshCw aria-hidden="true" className="animate-spin text-emerald-300" size={28} />
+              <div className="text-center">
+                <p className="text-sm font-semibold text-white">Merging video…</p>
+                <p className="mt-1 text-xs text-white/55">
+                  Combining the approved voice-over and video.
+                </p>
+              </div>
             </div>
           )}
 
@@ -834,9 +865,9 @@ export default function VideoCard({
                     <Megaphone size={18} />
                   </button>
                 )}
-                {isAiAds && (
+                {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
-                    title="Regenerate voice"
+                    title="Edit Script & Voice-over"
                     onClick={(e) => {
                       e.stopPropagation();
                       setRegenOpen(true);
@@ -927,6 +958,33 @@ export default function VideoCard({
             </div>
           </div>
         </div>
+        {isAiAds && item?.status === 'completed' && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+            style={{
+              background: 'linear-gradient(to bottom, transparent 0%, #2A2A2A 100%)',
+            }}
+          />
+        )}
+        {canEditAiAdsOriginal && (
+          <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100">
+            <div className="flex h-14 w-full items-center px-3" style={{ backgroundColor: '#2A2A2A' }}>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setRegenOpen(true);
+                }}
+                className="group/regen flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-[#F2F2F2] active:bg-[#E5E5E5]"
+              >
+                <RefreshCw size={16} className="transition-transform duration-500 group-hover/regen:rotate-180" />
+                Edit Script & Voice-over
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       ) : (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
           {videoStatus ? (
@@ -974,12 +1032,14 @@ export default function VideoCard({
         </div>
       )}
 
-      {isAiAds && (
+      {canEditAiAdsOriginal && (
         <RegenerateVoiceModal
           open={regenOpen}
           onOpenChange={setRegenOpen}
           sessionId={item._id}
           currentVoice={currentVoiceForModal}
+          currentScenes={currentScenesForModal}
+          currentScriptLanguage={currentScriptLanguageForModal}
         />
       )}
     </div>
