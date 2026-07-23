@@ -36,7 +36,7 @@ export const getGoogleCampaigns = async (adAccountId, { refresh = false, adType,
       });
       return parts.join('&');
     },
-    headers: { ...authHeaders(), 'Cache-Control': 'no-cache' },
+    headers: authHeaders(),
   });
   return data;
 };
@@ -49,9 +49,9 @@ export const parseGoogleCampaignsResponse = (res) => {
   return [];
 };
 
-export const getGoogleAnalyticsData = async ({ adAccountId, datePreset = 'last_30d' } = {}) => {
+export const getGoogleAnalyticsData = async ({ adAccountId, datePreset = 'last_30d', refresh = false } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/google-ads/get-analytics-data`, {
-    params: { adAccountId, datePreset },
+    params: { adAccountId, datePreset, ...(refresh ? { refresh: 'true', _t: Date.now() } : {}) },
     headers: authHeaders(),
   });
   return data;

@@ -1,5 +1,9 @@
 const axios = require("axios");
 const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+dayjs.extend(utc);
+dayjs.extend(timezone);
 // ── Suppress Harmless MetadataLookupWarning ────────────────────────────────
 const originalEmitWarning = process.emitWarning;
 process.emitWarning = (warning, ...args) => {
@@ -461,8 +465,13 @@ function getCustomerClient(client, customerId, loginCustomerId, refreshToken) {
 }
 
 // Map Google Ads GAQL datePreset → date range
-function datePresetToRange(preset) {
-  const today = dayjs();
+function datePresetToRange(preset, timeZone) {
+  let today;
+  try {
+    today = timeZone ? dayjs().tz(timeZone) : dayjs();
+  } catch {
+    today = dayjs();
+  }
   const quarter = Math.floor(today.month() / 3);
   const thisQStart = today.startOf("year").add(quarter * 3, "month");
   const lastQStart = thisQStart.subtract(3, "month");
@@ -472,12 +481,12 @@ function datePresetToRange(preset) {
   const map = {
     today: [today.format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
     yesterday: [today.subtract(1, "day").format("YYYY-MM-DD"), today.subtract(1, "day").format("YYYY-MM-DD")],
-    last_3d: [today.subtract(3, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
-    last_7d: [today.subtract(7, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
-    last_14d: [today.subtract(14, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
-    last_28d: [today.subtract(28, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
-    last_30d: [today.subtract(30, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
-    last_90d: [today.subtract(90, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_3d: [today.subtract(2, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_7d: [today.subtract(6, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_14d: [today.subtract(13, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_28d: [today.subtract(27, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_30d: [today.subtract(29, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
+    last_90d: [today.subtract(89, "day").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
     this_month: [today.startOf("month").format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
     last_month: [today.subtract(1, "month").startOf("month").format("YYYY-MM-DD"), today.subtract(1, "month").endOf("month").format("YYYY-MM-DD")],
     this_quarter: [thisQStart.format("YYYY-MM-DD"), today.format("YYYY-MM-DD")],
@@ -2139,9 +2148,9 @@ class GoogleAdController {
         return res.status(400).json({ status: false, error: "adAccountId is required" });
       }
 
-      const cacheKey = `googleAnalytics:${userId}:${adAccountId}:${datePreset}`;
+      const cacheKey = `googleAnalytics:v3:${userId}:${adAccountId}:${datePreset}`;
       const cached = await redisClient.get(cacheKey);
-      if (cached) return res.status(200).json(JSON.parse(cached));
+      if (cached && !wantsCacheRefresh(req)) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
       const tid = normalizeCustomerId(adAccountId);
@@ -2149,63 +2158,98 @@ class GoogleAdController {
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
 
-      const [startDate, endDate] = datePresetToRange(datePreset);
+      let [startDate, endDate] = datePresetToRange(datePreset);
+
+      const search = async (query) => {
+        const { data } = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
+          { query },
+          { headers },
+        );
+        return (Array.isArray(data) ? data : [data]).flatMap((batch) => batch?.results || []);
+      };
+
+      const accountRows = await search(
+        "SELECT customer.currency_code, customer.time_zone FROM customer LIMIT 1",
+      );
+      const account = accountRows[0]?.customer || {};
+      [startDate, endDate] = datePresetToRange(datePreset, account.timeZone || account.time_zone);
       const prevEnd = dayjs(startDate).subtract(1, "day");
-      const prevStart = prevEnd.subtract(dayjs(endDate).diff(dayjs(startDate), "day"), "day");
+      const periodDays = dayjs(endDate).diff(dayjs(startDate), "day");
+      const prevStart = prevEnd.subtract(periodDays, "day");
 
-      const search = (query) => axios.post(
-        `https://googleads.googleapis.com/v23/customers/${tid}/googleAds:searchStream`,
-        { query },
-        { headers }
-      ).then(r => r.data?.[0]?.results || []);
-
+      const audienceMetricsAllowed = dayjs(endDate).diff(dayjs(startDate), "day") <= 91;
+      const audienceMetricsFields = audienceMetricsAllowed ? ", metrics.unique_users, metrics.average_impression_frequency_per_user" : "";
       const metricsQuery = (start, end) => `
         SELECT metrics.cost_micros, metrics.impressions, metrics.clicks,
-               metrics.conversions, metrics.conversions_value, metrics.view_through_conversions
+               metrics.conversions, metrics.all_conversions, metrics.conversions_value,
+               metrics.all_conversions_value, metrics.view_through_conversions${audienceMetricsFields}
         FROM campaign
         WHERE segments.date BETWEEN '${start}' AND '${end}'
       `;
 
-      const [currRows, prevRows, dailyRows] = await Promise.all([
+      const [currRows, prevRows, dailyRows, actionRows] = await Promise.all([
         search(metricsQuery(startDate, endDate)),
-        search(metricsQuery(prevStart.format("YYYY-MM-DD"), prevEnd.format("YYYY-MM-DD"))),
+        ["lifetime", "maximum"].includes(datePreset)
+          ? Promise.resolve([])
+          : search(metricsQuery(prevStart.format("YYYY-MM-DD"), prevEnd.format("YYYY-MM-DD"))),
         search(`SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`),
+        search(`SELECT segments.conversion_action_name, segments.conversion_action_category,
+                      metrics.conversions, metrics.all_conversions, metrics.conversions_value
+               FROM campaign
+               WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`),
       ]);
+
+      const metricNumber = (value) => Number(value) || 0;
 
       const aggregate = (rows) => rows.reduce((acc, r) => {
         const m = r.metrics || {};
         return {
-          spend: acc.spend + (m.costMicros || m.cost_micros || 0) / 1e6,
-          impressions: acc.impressions + (m.impressions || 0),
-          clicks: acc.clicks + (m.clicks || 0),
-          conversions: acc.conversions + (m.conversions || 0),
-          conversionsValue: acc.conversionsValue + (m.conversionsValue || m.conversions_value || 0),
-          viewThroughConversions: acc.viewThroughConversions + (m.viewThroughConversions || m.view_through_conversions || 0),
+          spend: acc.spend + metricNumber(m.costMicros ?? m.cost_micros) / 1e6,
+          impressions: acc.impressions + metricNumber(m.impressions),
+          clicks: acc.clicks + metricNumber(m.clicks),
+          conversions: acc.conversions + metricNumber(m.conversions),
+          allConversions: acc.allConversions + metricNumber(m.allConversions ?? m.all_conversions),
+          conversionsValue: acc.conversionsValue + metricNumber(m.conversionsValue ?? m.conversions_value),
+          allConversionsValue: acc.allConversionsValue + metricNumber(m.allConversionsValue ?? m.all_conversions_value),
+          viewThroughConversions: acc.viewThroughConversions + metricNumber(m.viewThroughConversions ?? m.view_through_conversions),
         };
-      }, { spend: 0, impressions: 0, clicks: 0, conversions: 0, conversionsValue: 0, viewThroughConversions: 0 });
+      }, { spend: 0, impressions: 0, clicks: 0, conversions: 0, allConversions: 0, conversionsValue: 0, allConversionsValue: 0, viewThroughConversions: 0 });
 
       const curr = aggregate(currRows);
       const prev = aggregate(prevRows);
 
-      const change = (c, p) => p === 0 ? 0 : parseFloat((((c - p) / p) * 100).toFixed(1));
+      const change = (c, p) => c == null || p == null || p === 0 ? null : parseFloat((((c - p) / p) * 100).toFixed(1));
 
-      const currCtr = curr.impressions > 0 ? parseFloat(((curr.clicks / curr.impressions) * 100).toFixed(2)) : 0;
-      const prevCtr = prev.impressions > 0 ? parseFloat(((prev.clicks / prev.impressions) * 100).toFixed(2)) : 0;
-      const currCpc = curr.clicks > 0 ? parseFloat((curr.spend / curr.clicks).toFixed(2)) : 0;
-      const prevCpc = prev.clicks > 0 ? parseFloat((prev.spend / prev.clicks).toFixed(2)) : 0;
-      const currCpm = curr.impressions > 0 ? parseFloat(((curr.spend / curr.impressions) * 1000).toFixed(2)) : 0;
-      const prevCpm = prev.impressions > 0 ? parseFloat(((prev.spend / prev.impressions) * 1000).toFixed(2)) : 0;
+      const currCtr = curr.impressions > 0 ? parseFloat(((curr.clicks / curr.impressions) * 100).toFixed(2)) : null;
+      const prevCtr = prev.impressions > 0 ? parseFloat(((prev.clicks / prev.impressions) * 100).toFixed(2)) : null;
+      const currCpc = curr.clicks > 0 ? parseFloat((curr.spend / curr.clicks).toFixed(2)) : null;
+      const prevCpc = prev.clicks > 0 ? parseFloat((prev.spend / prev.clicks).toFixed(2)) : null;
+      const currCpm = curr.impressions > 0 ? parseFloat(((curr.spend / curr.impressions) * 1000).toFixed(2)) : null;
+      const prevCpm = prev.impressions > 0 ? parseFloat(((prev.spend / prev.impressions) * 1000).toFixed(2)) : null;
+      const currCostPerConversion = curr.conversions > 0 ? parseFloat((curr.spend / curr.conversions).toFixed(2)) : null;
+      const prevCostPerConversion = prev.conversions > 0 ? parseFloat((prev.spend / prev.conversions).toFixed(2)) : null;
+      const metricPrecision = (value) => value == null ? null : parseFloat(metricNumber(value).toFixed(2));
+      const currReach = currRows.length === 1 ? (currRows[0].metrics?.uniqueUsers ?? currRows[0].metrics?.unique_users ?? null) : null;
+      const prevReach = prevRows.length === 1 ? (prevRows[0].metrics?.uniqueUsers ?? prevRows[0].metrics?.unique_users ?? null) : null;
+      const currFrequency = currReach > 0 ? parseFloat((curr.impressions / Number(currReach)).toFixed(2)) : null;
+      const prevFrequency = prevReach > 0 ? parseFloat((prev.impressions / Number(prevReach)).toFixed(2)) : null;
+
 
       const stats = {
         spend: { val: parseFloat(curr.spend.toFixed(2)), change: change(curr.spend, prev.spend) },
         impressions: { val: curr.impressions, change: change(curr.impressions, prev.impressions) },
         clicks: { val: curr.clicks, change: change(curr.clicks, prev.clicks) },
-        conversions: { val: Math.round(curr.conversions), change: change(curr.conversions, prev.conversions) },
+        reach: { val: currReach, change: change(currReach, prevReach) },
+        conversions: { val: metricPrecision(curr.conversions), change: change(curr.conversions, prev.conversions) },
         ctr: { val: currCtr, change: change(currCtr, prevCtr) },
         cpc: { val: currCpc, change: change(currCpc, prevCpc) },
         cpm: { val: currCpm, change: change(currCpm, prevCpm) },
-        conversionsValue: { val: parseFloat(curr.conversionsValue.toFixed(2)), change: change(curr.conversionsValue, prev.conversionsValue) },
-        viewThroughConversions: { val: Math.round(curr.viewThroughConversions), change: change(curr.viewThroughConversions, prev.viewThroughConversions) },
+        frequency: { val: currFrequency, change: change(currFrequency, prevFrequency) },
+        costPerConversion: { val: currCostPerConversion, change: change(currCostPerConversion, prevCostPerConversion) },
+        conversionValue: { val: metricPrecision(curr.conversionsValue), change: change(curr.conversionsValue, prev.conversionsValue) },
+        allConversions: { val: metricPrecision(curr.allConversions), change: change(curr.allConversions, prev.allConversions) },
+        viewThroughConversions: { val: metricPrecision(curr.viewThroughConversions), change: change(curr.viewThroughConversions, prev.viewThroughConversions) },
       };
 
       const dailyMap = {};
@@ -2214,11 +2258,23 @@ class GoogleAdController {
         if (!date) return;
         if (!dailyMap[date]) dailyMap[date] = { spend: 0, impressions: 0, clicks: 0, conversions: 0 };
         const m = r.metrics || {};
-        dailyMap[date].spend += (m.costMicros || m.cost_micros || 0) / 1e6;
-        dailyMap[date].impressions += m.impressions || 0;
-        dailyMap[date].clicks += m.clicks || 0;
-        dailyMap[date].conversions += m.conversions || 0;
+        dailyMap[date].spend += metricNumber(m.costMicros ?? m.cost_micros) / 1e6;
+        dailyMap[date].impressions += metricNumber(m.impressions);
+        dailyMap[date].clicks += metricNumber(m.clicks);
+        dailyMap[date].conversions += metricNumber(m.conversions);
       });
+
+      const chartSpanDays = dayjs(endDate).diff(dayjs(startDate), "day");
+      if (chartSpanDays <= 366) {
+        for (
+          let cursor = dayjs(startDate);
+          !cursor.isAfter(dayjs(endDate), "day");
+          cursor = cursor.add(1, "day")
+        ) {
+          const date = cursor.format("YYYY-MM-DD");
+          if (!dailyMap[date]) dailyMap[date] = { spend: 0, impressions: 0, clicks: 0, conversions: 0 };
+        }
+      }
 
       const chartData = Object.keys(dailyMap).sort().map((date) => ({
         name: dayjs(date).format("DD MMM"),
@@ -2226,11 +2282,43 @@ class GoogleAdController {
         spend: parseFloat(dailyMap[date].spend.toFixed(2)),
         impressions: dailyMap[date].impressions,
         clicks: dailyMap[date].clicks,
-        conversions: Math.round(dailyMap[date].conversions),
+        conversions: metricPrecision(dailyMap[date].conversions),
         ctr: dailyMap[date].impressions > 0 ? parseFloat(((dailyMap[date].clicks / dailyMap[date].impressions) * 100).toFixed(2)) : 0,
       }));
+      const actionMap = new Map();
+      actionRows.forEach((row) => {
+        const segments = row.segments || {};
+        const name = segments.conversionActionName || segments.conversion_action_name;
+        if (!name) return;
+        const metrics = row.metrics || {};
+        const current = actionMap.get(name) || {
+          name,
+          category: segments.conversionActionCategory || segments.conversion_action_category || "UNSPECIFIED",
+          conversions: 0,
+          allConversions: 0,
+          conversionValue: 0,
+        };
+        current.conversions += metricNumber(metrics.conversions);
+        current.allConversions += metricNumber(metrics.allConversions ?? metrics.all_conversions);
+        current.conversionValue += metricNumber(metrics.conversionsValue ?? metrics.conversions_value);
+        actionMap.set(name, current);
+      });
+      const actions = [...actionMap.values()]
+        .map((action) => ({
+          ...action,
+          conversions: metricPrecision(action.conversions),
+          allConversions: metricPrecision(action.allConversions),
+          conversionValue: metricPrecision(action.conversionValue),
+        }))
+        .sort((a, b) => b.conversions - a.conversions || b.allConversions - a.allConversions);
 
-      const response = { status: true, stats, chartData };
+      const response = {
+        status: true, stats, chartData, actions,
+        currencyCode: account.currencyCode || account.currency_code || null,
+        timeZone: account.timeZone || account.time_zone || null,
+        dateRange: { startDate, endDate },
+      };
+
 
       await redisClient.set(cacheKey, JSON.stringify(response), "EX", VOLATILE_TTL);
       return res.status(200).json(response);

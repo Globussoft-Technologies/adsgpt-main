@@ -48,6 +48,7 @@ export default function GoogleAdsDashboard() {
   const [campaignsLevel, setCampaignsLevel] = useState('campaigns');
   const [analyticsData, setAnalyticsData] = useState(null);
   const [datePreset, setDatePreset]       = useState('last_14d');
+  const [analyticsError, setAnalyticsError] = useState('');
   const [activeTab, setActiveTab]         = useState('analytics');
 
   const [loadingAccounts, setLoadingAccounts] = useState(true);
@@ -179,14 +180,17 @@ export default function GoogleAdsDashboard() {
   }, [selectedAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── analytics ─────────────────────────────────────────────────────────────
-  const loadAnalytics = useCallback(async () => {
+  const loadAnalytics = useCallback(async ({ refresh = false } = {}) => {
     if (!selectedAccount) return;
     setLoadingInsights(true);
     setAnalyticsData(null);
+    setAnalyticsError('');
     try {
-      const res = await getGoogleAnalyticsData({ adAccountId: selectedAccount.id, datePreset });
+      const res = await getGoogleAnalyticsData({ adAccountId: selectedAccount.id, datePreset, refresh });
       setAnalyticsData(res);
-    } catch { /* noop */ } finally {
+    } catch (error) {
+      setAnalyticsError(error?.response?.data?.details || error?.response?.data?.error || 'Unable to load Google Ads analytics');
+    } finally {
       setLoadingInsights(false);
     }
   }, [selectedAccount, datePreset]);
@@ -491,7 +495,7 @@ export default function GoogleAdsDashboard() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Account Analytics</p>
                 <button
-                  onClick={loadAnalytics}
+                  onClick={() => loadAnalytics({ refresh: true })}
                   disabled={loadingInsights}
                   className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/6 dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
                 >
@@ -499,7 +503,7 @@ export default function GoogleAdsDashboard() {
                   Refresh
                 </button>
               </div>
-              <GoogleAdsAnalyticsPanel analyticsData={analyticsData} loading={loadingInsights} />
+              <GoogleAdsAnalyticsPanel analyticsData={analyticsData} loading={loadingInsights} error={analyticsError} currencyCode={selectedAccount?.currency} />
             </motion.div>
           )}
 
