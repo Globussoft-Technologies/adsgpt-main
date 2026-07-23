@@ -201,7 +201,14 @@ const ChatInterface = () => {
   // Real network turn — extracted so form/concept follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.
   const runStreamingTurn = useCallback(
-    ({ text, attachments, formResponse, conceptResponse, quote: turnQuote }) => {
+    ({
+      text,
+      attachments,
+      formResponse,
+      conceptResponse,
+      metaAccountSelection,
+      quote: turnQuote,
+    }) => {
       const controller = streamChat({
         sessionId,
         message: text,
@@ -211,6 +218,7 @@ const ChatInterface = () => {
         enabledTools,
         formResponse: formResponse || null,
         conceptResponse: conceptResponse || null,
+        metaAccountSelection: metaAccountSelection || null,
         quote: turnQuote || null,
         onEvent: (event, data) => {
           switch (event) {
@@ -288,7 +296,7 @@ const ChatInterface = () => {
   );
 
   const handleSend = useCallback(
-    (text, attachments) => {
+    (text, attachments, options = {}) => {
       if (pending) return;
 
       const activeQuote = quote;
@@ -296,7 +304,12 @@ const ChatInterface = () => {
 
       dispatch(pushUserMessage({ text, attachments, quote: activeQuote }));
       dispatch(startAssistantStream());
-      runStreamingTurn({ text, attachments, quote: activeQuote });
+      runStreamingTurn({
+        text,
+        attachments,
+        quote: activeQuote,
+        metaAccountSelection: options.metaAccountSelection || null,
+      });
     },
     [dispatch, pending, quote, runStreamingTurn],
   );
@@ -358,8 +371,11 @@ const ChatInterface = () => {
   );
 
   const handleMetaCardAction = useCallback(
-    (prompt) => {
-      if (typeof prompt === 'string' && prompt.trim()) handleSend(prompt.trim(), null);
+    (prompt, metadata = {}) => {
+      if (typeof prompt !== 'string' || !prompt.trim()) return;
+      handleSend(prompt.trim(), null, {
+        metaAccountSelection: metadata.metaAccountSelection || null,
+      });
     },
     [handleSend],
   );

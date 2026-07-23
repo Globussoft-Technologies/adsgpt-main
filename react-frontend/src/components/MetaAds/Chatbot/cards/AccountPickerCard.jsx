@@ -17,7 +17,12 @@ const AccountPickerCard = ({ title = 'Choose a Meta ad account', accounts = [], 
             key={id || index}
             type="button"
             disabled={disabled || !id}
-            onClick={() => onAction?.(`Use Meta ad account "${name}" (${id}) for this conversation, then continue my request.`)}
+            onClick={() =>
+              onAction?.(
+                `Use Meta ad account "${name}" (${id}) for this conversation, then continue my request.`,
+                { metaAccountSelection: { account_id: id, account_name: name } },
+              )
+            }
             className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-white/[0.06]"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#1877F2]/10 text-[#1877F2]">

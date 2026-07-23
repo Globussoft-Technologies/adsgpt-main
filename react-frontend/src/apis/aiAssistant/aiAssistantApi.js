@@ -47,6 +47,7 @@ export const streamChat = ({
   enabledTools,
   formResponse,
   conceptResponse,
+  metaAccountSelection,
   quote,
   onEvent,
 }) => {
@@ -74,6 +75,9 @@ export const streamChat = ({
           // When an ad-concept card is picked, the chosen concept object is sent
           // so the agent opens a creative brief pre-filled from it.
           concept_response: conceptResponse || null,
+          // Account picker choices are sent as data, not parsed back from the
+          // human-readable message.
+          meta_account_selection: metaAccountSelection || null,
           // A message/selection the user is replying to → { text, role, messageId }.
           // Maps to the backend QuoteItem (message_id). null when not replying.
           quote: quote
