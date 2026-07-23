@@ -20,6 +20,7 @@ import BillingSummaryCard from './BillingSummaryCard';
 import ActivityTimelineCard from './ActivityTimelineCard';
 import AccountPickerCard from './AccountPickerCard';
 import ConnectionStatusCard from './ConnectionStatusCard';
+import AdWorkspaceCard from './AdWorkspaceCard';
 
 // Dispatches a `card` payload (from the backend's render tools) to its
 // renderer by `kind`. `onAction` is used by action chips to seed a new turn;
@@ -30,6 +31,8 @@ const CardBlock = ({ card, onAction, disabled }) => {
       return <AccountPickerCard title={card.title} accounts={card.accounts} onAction={onAction} disabled={disabled} />;
     case 'connection_status':
       return <ConnectionStatusCard />;
+    case 'ad_workspace':
+      return <AdWorkspaceCard workspace={card} onAction={onAction} disabled={disabled} />;
     case 'stat':
       return (
         <StatCard title={card.title} subtitle={card.subtitle} badge={card.badge} stats={card.stats} />

@@ -13,6 +13,7 @@ import {
   appendMetaConnectionStatus,
   resetAssistantText,
   attachAssistantAds,
+  attachAssistantAdCreative,
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
   attachAssistantImage,
@@ -253,6 +254,11 @@ const ChatInterface = () => {
             case 'meta_cards':
               if (Array.isArray(data.cards) && data.cards.length > 0) {
                 dispatch(attachAssistantMetaCards(data.cards));
+              }
+              break;
+            case 'ad_creative':
+              if (data.pack && Array.isArray(data.pack.variants)) {
+                dispatch(attachAssistantAdCreative(data.pack));
               }
               break;
             case 'done':

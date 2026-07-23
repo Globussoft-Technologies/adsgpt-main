@@ -10,6 +10,7 @@ import MessageActions from './MessageActions';
 import CompetitorAdsGrid from './CompetitorAdsGrid';
 import VideoStoryboard from './VideoStoryboard';
 import ConceptCards from './ConceptCards';
+import AdCreativePackage from './AdCreativePackage';
 import DownloadMenu from './DownloadMenu';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
@@ -396,7 +397,21 @@ const Messages = ({
                 )
               )}
 
-              <MediaGrid urls={m.images || []} onOpenImage={setLightboxSrc} />
+              {m.adCreative && (
+                <AdCreativePackage
+                  pack={m.adCreative}
+                  onPrepare={(workspaceId) =>
+                    onMetaAction?.(
+                      `Prepare ad workspace ${workspaceId} for Meta posting. Check that every selected creative has complete copy and ask me only for missing posting details.`,
+                    )
+                  }
+                />
+              )}
+
+              <MediaGrid
+                urls={m.adCreative ? [] : m.images || []}
+                onOpenImage={setLightboxSrc}
+              />
 
               <CompetitorAdsGrid ads={m.competitorAds || []} onRecreate={onRecreate} />
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, Download, Sparkles } from 'lucide-react';
+import { Check, Copy, Download, Megaphone, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import toMediaUrl from '@/utils/mediaUrl';
 import { handleDownload } from '@/utils/download';
@@ -141,7 +141,7 @@ const VariantCard = ({ variant, index, onOpenImage }) => {
   );
 };
 
-const AdCreativePackage = ({ pack }) => {
+const AdCreativePackage = ({ pack, onPrepare }) => {
   const [lightboxSrc, setLightboxSrc] = useState(null);
   if (!pack || !Array.isArray(pack.variants) || pack.variants.length === 0) return null;
   return (
@@ -156,6 +156,16 @@ const AdCreativePackage = ({ pack }) => {
           />
         ))}
       </div>
+      {pack.workspace_id && onPrepare && (
+        <button
+          type="button"
+          onClick={() => onPrepare(pack.workspace_id)}
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] px-4 py-2 text-[12px] font-semibold text-black transition-opacity hover:opacity-90"
+        >
+          <Megaphone className="h-3.5 w-3.5" />
+          Prepare for posting
+        </button>
+      )}
       <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
