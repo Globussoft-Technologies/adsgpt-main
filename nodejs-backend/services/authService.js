@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { features } = require('../utils/features');
 const { default: Redis } = require('ioredis');
+const { parseCookies } = require('./oauth/sessionCheck');
 require('dotenv').config();
 const redisTokenConnect = new Redis({
   host: process.env.HOST,
@@ -23,13 +24,19 @@ const verifyTokenSocket = (token, callback) => {
     callback(null, decoded);
   });
 };
-const authenticateJWT = (req, res, next) => {
-  
-  const authHeader = req.headers.authorization;
-  const options = { algorithms: ['HS512'] };
-  if (authHeader) {
-    const token = authHeader.split(' ')[1];
+const requestToken = (req) => {
+  const authHeader = String(req.headers?.authorization || '');
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const bearer = match?.[1]?.trim();
+  if (bearer && bearer !== 'null' && bearer !== 'undefined') return bearer;
 
+  const cookies = parseCookies(req.headers?.cookie);
+  return cookies['adsgpt-session'] || cookies['access-token'] || '';
+};
+const authenticateJWT = (req, res, next) => {
+  const token = requestToken(req);
+  const options = { algorithms: ['HS512'] };
+  if (token) {
     jwt.verify(token, process.env.JWT_SECRET_KEY, options, (err, user) => {
       if (err) {
         return res.sendStatus(403);
@@ -185,11 +192,10 @@ function restrictChartBottomeBasedOnSubscription(response, features, subscriptio
 
 const authenticateJWTInteraction = (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = requestToken(req);
     const options = { algorithms: ['HS512'] };
 
-    if (authHeader) {
-      const token = authHeader.split(' ')[1];
+    if (token) {
       return jwt.verify(token, process.env.JWT_SECRET_KEY, options, (err, user) => {
         if (err) return res.sendStatus(403);
 

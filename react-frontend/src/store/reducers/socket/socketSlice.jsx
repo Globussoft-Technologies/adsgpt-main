@@ -148,6 +148,7 @@ export const initSocket = (url) => (dispatch, getState) => {
       auth: {
         token: getCookies(),
       },
+      withCredentials: true,
     });
 
     socket.on('connect', () => {
@@ -171,7 +172,7 @@ export const initSocket = (url) => (dispatch, getState) => {
       }
     });
 
-    socket.on(getCookies(), (data) => {
+    const handleAuthenticatedSession = (data) => {
       if (data?.user_id) {
         Cookies.set('user_id', data.user_id, { expires: 1, path: '/' });
         Cookies.set('user_name', data.user_name, { expires: 1, path: '/' });
@@ -179,7 +180,11 @@ export const initSocket = (url) => (dispatch, getState) => {
         setGA4User(data.user_id, data.user_name);
         dispatch(setUserData(data));
       }
-    });
+    };
+
+    socket.on('session', handleAuthenticatedSession);
+    const legacyToken = getCookies();
+    if (legacyToken) socket.on(legacyToken, handleAuthenticatedSession);
 
     socket.on('credits', (data) => {
       dispatch(setCredits(data));

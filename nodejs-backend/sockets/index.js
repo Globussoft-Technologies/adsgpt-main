@@ -39,7 +39,17 @@ const initializeSockets = (Socket, pub, sub) => {
         allowedPlans.includes(plan) ||
         process.env.ACCESS_ADCREATIVE_ALL === "true";
       socket.user.isAdVideo = allowedVideoPlans?.includes(plan);
-      socket.emit(socket.user.token, socket.user);
+      // Stable event for sessions authenticated with an HttpOnly cookie.
+      // Never include the JWT in this event or HttpOnly would be defeated.
+      const sessionUser = { ...socket.user };
+      delete sessionUser.token;
+      socket.emit("session", sessionUser);
+      // Keep the token-named event only when the browser explicitly supplied
+      // that legacy token. Cookie-authenticated sessions must never receive
+      // the JWT in an event name or payload.
+      if (socket.usesLegacyClientToken) {
+        socket.emit(socket.user.token, socket.user);
+      }
 
       // Get credit status from MongoDB (no more Redis)
       const creditStatus = await UnifiedCreditController.getCreditStatus(

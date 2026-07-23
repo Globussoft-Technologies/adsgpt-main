@@ -1,7 +1,15 @@
 const { verifyTokenSocket } = require('../services/authService');
+const { parseCookies } = require('../services/oauth/sessionCheck');
 
 const verifyTokenSocketMain = (socket, next) => {
-  const token = socket.handshake.auth.token;
+  const supplied = socket.handshake.auth.token;
+  const suppliedToken =
+    supplied && supplied !== "null" && supplied !== "undefined" ? supplied : "";
+  const cookies = parseCookies(socket.handshake?.headers?.cookie);
+  const token =
+    suppliedToken ||
+    cookies["adsgpt-session"] ||
+    cookies["access-token"];
   const sessionId = socket.handshake?.auth?.sessionId ?? ""
   verifyTokenSocket(token, (err, decoded) => {
     if (err) {
@@ -21,6 +29,7 @@ const verifyTokenSocketMain = (socket, next) => {
     } 
     socket.user = decoded;
     socket.token = token;
+    socket.usesLegacyClientToken = Boolean(suppliedToken);
     socket.sessionId = sessionId ?? "";
     socket.join(socket.user.user_id); 
     next();

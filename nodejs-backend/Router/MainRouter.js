@@ -54,6 +54,7 @@ const creditsApiRoutes = require("./creditsApiRoutes");
 const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnalyzerRoutes");
 const deviceTokenRoutes = require("./deviceTokenRoutes");
 const partnerMetaAdsRoutes = require("./partnerApi/metaAdsRoutes");
+const amemberSsoRoute = require("./auth/amemberSsoRoute");
 
 const app = express();
 app.use("/adcopy", authenticateJWT, adCopyRouter);
@@ -72,6 +73,7 @@ app.use("/trending", authenticateJWT, trendingRoute);
 app.use("/chat-settings", authenticateJWT, chatPageRoutes);
 app.use("/track", tracksRoutes);
 app.use("/check-access", checkAuth);
+app.use("/auth/amember", amemberSsoRoute);
 app.use("/advertiser-search", advertiserSearch);
 app.use("/amember", amemberRoute);
 app.use(

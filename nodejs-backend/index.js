@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const bodyParser = require("body-parser");
 const http = require("node:http");
 const fs = require("fs");
@@ -28,10 +27,16 @@ const connectMongoDB = require("./db/mongo");
 async function createServer() {
   const App = express();
   App.use(require("./middlewares/corsMiddleware"));
+  const socketCorsOrigins = String(
+    process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const server = http.createServer(App);
   const Socket = new Server(server, {
     cors: {
-      origin: "*",
+      origin: socketCorsOrigins.length ? socketCorsOrigins : true,
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -123,7 +128,6 @@ async function createServer() {
   App.use(mongoSanitize());
   App.use(bodyParser.json({ limit: "50mb" }));
   App.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
-  App.use(cors());
   App.use(express.json());
   App.use(express.urlencoded({ extended: true }));
 

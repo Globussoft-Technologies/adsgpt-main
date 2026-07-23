@@ -710,6 +710,95 @@ const fetchUserDataByName_Email = async (login, res, email) => {
 };
 
 /**
+ * Create an AdsGPT session from a trusted aMember user id.
+ *
+ * The id must only come from a server-verified source (currently the signed
+ * aMember SSO assertion). Never call this with a user id supplied directly by
+ * an unauthenticated browser request.
+ */
+const createAdsGptSessionForAmemberUserId = async (amemberUserId) => {
+  const requestedId = String(amemberUserId || "").trim();
+  if (!/^\d+$/.test(requestedId)) {
+    const error = new Error("Invalid aMember user id");
+    error.code = "INVALID_AMEMBER_USER_ID";
+    error.status = 400;
+    throw error;
+  }
+
+  const params = new URLSearchParams({ _key: apiKey });
+  const response = await fetch(
+    `${baseUrl}/users/${encodeURIComponent(requestedId)}?${params}`,
+  );
+  if (!response.ok) {
+    const error = new Error(`aMember user lookup failed (${response.status})`);
+    error.code = "AMEMBER_LOOKUP_FAILED";
+    error.status = 502;
+    throw error;
+  }
+
+  const rawUser = await response.json();
+  const user = Array.isArray(rawUser)
+    ? rawUser[0]
+    : rawUser?.[0] || rawUser?.[requestedId] || rawUser;
+
+  if (!user?.login || String(user.user_id) !== requestedId) {
+    const error = new Error("Authenticated aMember user was not found");
+    error.code = "AMEMBER_USER_NOT_FOUND";
+    error.status = 401;
+    throw error;
+  }
+
+  const userData = await fetchUserDataByName(user.login);
+  if (!userData?.ok || String(userData.user_id) !== requestedId) {
+    const error = new Error("aMember access lookup did not match the authenticated user");
+    error.code = "AMEMBER_ACCESS_MISMATCH";
+    error.status = 401;
+    throw error;
+  }
+  if (!isPlanActive(userData)) {
+    const error = new Error("Your AdsGPT plan has expired");
+    error.code = "PLAN_EXPIRED";
+    error.status = 403;
+    throw error;
+  }
+
+  await syncUserProfile(userData);
+
+  const tokenPayload = {
+    status: userData.ok,
+    user_id: userData.user_id,
+    login: userData.login,
+    user_name: `${userData.name_f ?? ""} ${userData.name_l ?? ""}`.trim(),
+    user_email: userData.email,
+    name_f: userData.name_f ?? "",
+    name_l: userData.name_l ?? "",
+    userSubscriptionType: Object.fromEntries(
+      Object.entries(userData.subscriptions || {}).filter(
+        ([key]) => String(key) !== String(topUpPlanID),
+      ),
+    ),
+    created_from: "GPT",
+  };
+
+  const firstPlanId = Object.keys(userData.subscriptions || {})[0];
+  if (String(firstPlanId) === String(customPlanID)) {
+    tokenPayload.customPlan = await getCustomPlanDetails(userData.user_id);
+    tokenPayload.applyCustomPlan = true;
+  } else if (String(firstPlanId) === String(TRIAL_PLAN_ID)) {
+    tokenPayload.TrailPlanDetails = await getTrialPlanDetails(userData.user_id);
+    tokenPayload.TrailPlan = true;
+  } else if (String(firstPlanId) === String(topUpPlanID)) {
+    tokenPayload.topUpPlan = await getTopUpPlanDetails(userData.user_id);
+    tokenPayload.applyTopUpPlan = true;
+  }
+
+  return {
+    token: generateToken(tokenPayload, secretKey, tokenExpiryTime),
+    user: tokenPayload,
+  };
+};
+
+/**
  * Resolve the plan snapshot ({ credits, durationDays, planName, source }) for
  * a given subscription plan id. Prefers aMember product meta; falls back to
  * creditConfig if the aMember field is missing (logged loudly).
@@ -1177,4 +1266,5 @@ module.exports = {
   getFromAmemberUserDetails,
   fetchUserDataByName,
   fetchUserDataByName_Email,
+  createAdsGptSessionForAmemberUserId,
 };

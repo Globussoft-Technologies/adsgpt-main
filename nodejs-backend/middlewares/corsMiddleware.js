@@ -14,11 +14,20 @@
 // preflight with a 204 so the real request is allowed through.
 module.exports = (req, res, next) => {
   const origin = req.headers.origin;
-  if (origin) {
+  const allowedOrigins = String(
+    process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const originAllowed =
+    !origin ||
+    allowedOrigins.includes(origin) ||
+    (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production");
+
+  if (origin && originAllowed) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Vary", "Origin");
-  } else {
-    res.header("Access-Control-Allow-Origin", "*");
   }
   res.header(
     "Access-Control-Allow-Methods",
@@ -28,7 +37,7 @@ module.exports = (req, res, next) => {
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept, Authorization",
   );
-  res.header("Access-Control-Allow-Credentials", "true");
+  if (originAllowed) res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Max-Age", "86400");
 
   // Answer the preflight directly — no downstream route handles OPTIONS.

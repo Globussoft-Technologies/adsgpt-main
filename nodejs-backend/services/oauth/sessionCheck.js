@@ -41,7 +41,9 @@ function parseCookies(header) {
  */
 function verifyAdsGptSession(req) {
   const cookies = parseCookies(req.headers?.cookie);
-  const token = cookies["access-token"];
+  // New SSO sessions use an HttpOnly cookie. Keep accepting the legacy
+  // client-readable cookie during the password-login migration.
+  const token = cookies["adsgpt-session"] || cookies["access-token"];
   if (!token) return null;
 
   try {

@@ -161,6 +161,7 @@ function RunBackLog({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isLoadingQueryBacklog, setIsLoadingQueryBcklog] = useState(false);
+  const [hasServerSession, setHasServerSession] = useState(false);
 
   // --- NEW API-based query handling ---
   useEffect(() => {
@@ -217,17 +218,11 @@ function RunBackLog({ children }) {
 
   // --- EXISTING amember login/token logic ---
   useEffect(() => {
-    // LOCAL TESTING ONLY — do not commit: auto-login as the dev test user.
     const userName = Cookies.get('amember_login') || '';
     const password = Cookies.get('amember_pass') || '';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
     const existingCookies = getCookies();
-
-    if (!(userName && password) && !existingCookies && !forwardKey) {
-      window.location.href = REDIRECT_LOGIN;
-      return;
-    }
 
     async function checkAccess() {
       try {
@@ -283,11 +278,45 @@ function RunBackLog({ children }) {
       }
     }
 
-    if (userName && password) {
-      checkAccess();
-    } else {
+    async function resolveSession() {
+      if (existingCookies) {
+        setIsLoading(false);
+        return;
+      }
+
+      if (userName && password) {
+        await checkAccess();
+        return;
+      }
+
+      // Google SSO stores the JWT in an HttpOnly cookie, so ask Node whether
+      // the browser has a valid session instead of trying to read it here.
+      try {
+        const response = await fetch(`${HOST}/adsgpt/auth/amember/session`, {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result?.authenticated) {
+            setHasServerSession(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (sessionError) {
+        console.error('Failed to check AdsGPT session:', sessionError);
+      }
+
+      if (!forwardKey) {
+        const returnPath = `${window.location.pathname}${window.location.search}`;
+        const bridge = `${AMEMBER_HOST}/adsgpt-sso.php?return_path=${encodeURIComponent(returnPath)}`;
+        window.location.href = `${REDIRECT_LOGIN}?amember_redirect_url=${encodeURIComponent(bridge)}`;
+        return;
+      }
       setIsLoading(false);
     }
+
+    resolveSession();
   }, []);
 
   if (isLoading || isLoadingQueryBacklog) {
@@ -304,7 +333,7 @@ function RunBackLog({ children }) {
 
   const accessToken = Cookies.get('access-token');
 
-  if (accessToken) {
+  if (accessToken || hasServerSession) {
     dispatch(initSocket(import.meta.env.VITE_SOCKET_URL));
     return <>{children}</>;
   }
