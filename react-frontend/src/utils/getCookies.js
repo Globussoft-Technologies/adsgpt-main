@@ -1,7 +1,7 @@
 import Cookies from 'js-cookie';
 
 function getCookies() {
-  return Cookies.get('access-token') || null;
+  return Cookies.get('access-token') || Cookies.get('adsgpt-session') || null;
 }
 
 export function deleteCookie(name, path = '/') {

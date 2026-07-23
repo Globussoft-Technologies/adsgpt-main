@@ -81,8 +81,18 @@ function assertion(overrides = {}) {
   assert.match(cookie, /Domain=\.example\.test/);
   assert.doesNotMatch(cookie, /Secure/);
 
+  const legacyCookie = controller.serializeLegacyAccessTokenCookie("jwt-value");
+  assert.match(legacyCookie, /^access-token=jwt-value;/);
+  assert.doesNotMatch(legacyCookie, /HttpOnly/);
+  assert.match(legacyCookie, /SameSite=Lax/);
+  assert.match(legacyCookie, /Domain=\.example\.test/);
+
   const cleared = controller.clearSessionCookie();
   assert.match(cleared, /Max-Age=0/);
+
+  const clearedLegacy = controller.clearLegacyAccessTokenCookie();
+  assert.match(clearedLegacy, /^access-token=/);
+  assert.match(clearedLegacy, /Max-Age=0/);
 
   console.log("amemberSso tests passed");
 })().catch((error) => {

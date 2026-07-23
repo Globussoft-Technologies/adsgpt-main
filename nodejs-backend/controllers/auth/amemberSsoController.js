@@ -51,6 +51,24 @@ function serializeSessionCookie(token) {
   return parts.join("; ");
 }
 
+function serializeLegacyAccessTokenCookie(token) {
+  const expiryMinutes = Math.max(
+    1,
+    Number.parseInt(process.env.TOKEN_EXPIRY_TIME || "1440", 10) || 1440,
+  );
+  const parts = [
+    `access-token=${encodeURIComponent(token)}`,
+    "Path=/",
+    `Max-Age=${expiryMinutes * 60}`,
+    "SameSite=Lax",
+  ];
+  if (process.env.NODE_ENV !== "test") parts.push("Secure");
+
+  const domain = String(process.env.AUTH_COOKIE_DOMAIN || "").trim();
+  if (domain) parts.push(`Domain=${domain}`);
+  return parts.join("; ");
+}
+
 function clearSessionCookie() {
   const parts = [
     "adsgpt-session=",
@@ -58,6 +76,20 @@ function clearSessionCookie() {
     "Max-Age=0",
     "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
     "HttpOnly",
+    "SameSite=Lax",
+  ];
+  if (process.env.NODE_ENV !== "test") parts.push("Secure");
+  const domain = String(process.env.AUTH_COOKIE_DOMAIN || "").trim();
+  if (domain) parts.push(`Domain=${domain}`);
+  return parts.join("; ");
+}
+
+function clearLegacyAccessTokenCookie() {
+  const parts = [
+    "access-token=",
+    "Path=/",
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
     "SameSite=Lax",
   ];
   if (process.env.NODE_ENV !== "test") parts.push("Secure");
@@ -120,7 +152,10 @@ async function callback(req, res) {
     const payload = await consumeAssertion(assertion);
     const session = await createAdsGptSessionForAmemberUserId(payload.sub);
 
-    res.setHeader("Set-Cookie", serializeSessionCookie(session.token));
+    res.setHeader("Set-Cookie", [
+      serializeSessionCookie(session.token),
+      serializeLegacyAccessTokenCookie(session.token),
+    ]);
     return res.redirect(303, successRedirect(payload.return_path));
   } catch (error) {
     const status = Number(error.status) || 401;
@@ -154,7 +189,10 @@ function session(req, res) {
 
 function logout(req, res) {
   res.set("Cache-Control", "no-store");
-  res.setHeader("Set-Cookie", clearSessionCookie());
+  res.setHeader("Set-Cookie", [
+    clearSessionCookie(),
+    clearLegacyAccessTokenCookie(),
+  ]);
   return res.status(204).end();
 }
 
@@ -165,5 +203,7 @@ module.exports = {
   consumeAssertion,
   safeReturnPath,
   serializeSessionCookie,
+  serializeLegacyAccessTokenCookie,
   clearSessionCookie,
+  clearLegacyAccessTokenCookie,
 };
