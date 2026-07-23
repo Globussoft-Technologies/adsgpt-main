@@ -23,20 +23,29 @@ const googleAuthController = require("./controllers/adPosting/googleAuthControll
 const tiktokAuthController = require("./controllers/adPosting/tiktokAuthController");
 const { pub, sub } = require("./db/redis");
 const connectMongoDB = require("./db/mongo");
+const {
+  parseAllowedOrigins,
+  isOriginAllowed,
+} = require("./utils/corsOrigins");
 
 async function createServer() {
   const App = express();
   App.use(require("./middlewares/corsMiddleware"));
-  const socketCorsOrigins = String(
+  const socketCorsOrigins = parseAllowedOrigins(
     process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",
-  )
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  );
   const server = http.createServer(App);
   const Socket = new Server(server, {
     cors: {
-      origin: socketCorsOrigins.length ? socketCorsOrigins : true,
+      origin(origin, callback) {
+        const allowed =
+          isOriginAllowed(origin, socketCorsOrigins) ||
+          (socketCorsOrigins.length === 0 && process.env.NODE_ENV !== "production");
+        callback(
+          allowed ? null : new Error("Origin is not allowed by CORS"),
+          allowed,
+        );
+      },
       methods: ["GET", "POST"],
       credentials: true,
     },

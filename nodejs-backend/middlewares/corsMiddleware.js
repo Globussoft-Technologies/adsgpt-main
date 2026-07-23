@@ -12,17 +12,19 @@
 // We now echo the requesting Origin (required when credentials may be present),
 // allow the headers/methods the app actually uses, and short-circuit the
 // preflight with a 204 so the real request is allowed through.
+const {
+  parseAllowedOrigins,
+  isOriginAllowed,
+} = require("../utils/corsOrigins");
+
 module.exports = (req, res, next) => {
   const origin = req.headers.origin;
-  const allowedOrigins = String(
+  const allowedOrigins = parseAllowedOrigins(
     process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",
-  )
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  );
   const originAllowed =
     !origin ||
-    allowedOrigins.includes(origin) ||
+    isOriginAllowed(origin, allowedOrigins) ||
     (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production");
 
   if (origin && originAllowed) {
