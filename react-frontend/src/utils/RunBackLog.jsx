@@ -143,7 +143,7 @@
 // export default RunBackLog;
 
 // ! new
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Cookies from 'js-cookie'; // Include the js-cookie library
 import getCookies, { deleteCookie } from '@/utils/getCookies';
 import { Loader } from 'lucide-react';
@@ -162,6 +162,7 @@ function RunBackLog({ children }) {
   const [error, setError] = useState(null);
   const [isLoadingQueryBacklog, setIsLoadingQueryBcklog] = useState(false);
   const [hasServerSession, setHasServerSession] = useState(false);
+  const authResolutionStarted = useRef(false);
 
   // --- NEW API-based query handling ---
   useEffect(() => {
@@ -218,6 +219,9 @@ function RunBackLog({ children }) {
 
   // --- EXISTING amember login/token logic ---
   useEffect(() => {
+    if (authResolutionStarted.current) return;
+    authResolutionStarted.current = true;
+
     const userName = Cookies.get('amember_login') || '';
     const password = Cookies.get('amember_pass') || '';
     const urlParams = new URLSearchParams(window.location.search);
@@ -246,6 +250,8 @@ function RunBackLog({ children }) {
         const result = JSON.parse(rawText);
 
         if (!result?.ok) {
+          deleteCookie('amember_login');
+          deleteCookie('amember_pass');
           window.location.href = REDIRECT_LOGIN;
           return;
         }
@@ -284,13 +290,9 @@ function RunBackLog({ children }) {
         return;
       }
 
-      if (userName && password) {
-        await checkAccess();
-        return;
-      }
-
       // Google SSO stores the JWT in an HttpOnly cookie, so ask Node whether
-      // the browser has a valid session instead of trying to read it here.
+      // the browser has a valid session before using any stale password-login
+      // cookies that may remain after an unsuccessful form submission.
       try {
         const response = await fetch(`${HOST}/adsgpt/auth/amember/session`, {
           credentials: 'include',
@@ -298,6 +300,8 @@ function RunBackLog({ children }) {
         if (response.ok) {
           const result = await response.json();
           if (result?.authenticated) {
+            deleteCookie('amember_login');
+            deleteCookie('amember_pass');
             setHasServerSession(true);
             setIsLoading(false);
             return;
@@ -305,6 +309,11 @@ function RunBackLog({ children }) {
         }
       } catch (sessionError) {
         console.error('Failed to check AdsGPT session:', sessionError);
+      }
+
+      if (userName && password) {
+        await checkAccess();
+        return;
       }
 
       if (!forwardKey) {
@@ -319,6 +328,12 @@ function RunBackLog({ children }) {
     resolveSession();
   }, []);
 
+  const accessToken = Cookies.get('access-token');
+  useEffect(() => {
+    if (!accessToken && !hasServerSession) return;
+    dispatch(initSocket(import.meta.env.VITE_SOCKET_URL));
+  }, [accessToken, dispatch, hasServerSession]);
+
   if (isLoading || isLoadingQueryBacklog) {
     return (
       <div className="bg-background text-foreground flex h-screen w-screen items-center justify-center">
@@ -331,10 +346,7 @@ function RunBackLog({ children }) {
     return <div>Error: {error}</div>;
   }
 
-  const accessToken = Cookies.get('access-token');
-
   if (accessToken || hasServerSession) {
-    dispatch(initSocket(import.meta.env.VITE_SOCKET_URL));
     return <>{children}</>;
   }
 }
