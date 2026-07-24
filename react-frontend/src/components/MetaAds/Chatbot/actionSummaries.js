@@ -387,12 +387,18 @@ export function summarizeAction(toolName, args, currency) {
   // formatCurrency renders the account's real currency (₹ for INR, etc.) rather
   // than a hardcoded $.
   _activeCurrency = currency || 'USD';
-  const summarizer = SUMMARIZERS[toolName];
+  // MCP-hub tools are namespaced as `meta_ads_*`; the original Meta chat uses
+  // `ads_*`. Reuse the detailed summaries for both contracts.
+  const unprefixedName = String(toolName || '').replace(/^meta_ads_/, '');
+  const summaryToolName = unprefixedName.startsWith('ads_')
+    ? unprefixedName
+    : `ads_${unprefixedName}`;
+  const summarizer = SUMMARIZERS[summaryToolName];
   try {
     if (summarizer) return summarizer(args || {});
   } catch {
     // fall through to the generic summary if a tool's args don't match what
     // the dedicated summarizer expected (e.g. a schema changed upstream)
   }
-  return genericSummary(toolName, args || {});
+  return genericSummary(summaryToolName, args || {});
 }

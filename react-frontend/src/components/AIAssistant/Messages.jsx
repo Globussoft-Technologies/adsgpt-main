@@ -16,9 +16,36 @@ import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
 import MetaConnectCard from './MetaConnectCard';
 import CardBlock from '@/components/MetaAds/Chatbot/cards/CardBlock';
+import ConfirmActionCard from '@/components/MetaAds/Chatbot/ConfirmActionCard';
+import MediaPickerCard from '@/components/MetaAds/Chatbot/MediaPickerCard';
+import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import toMediaUrl from '@/utils/mediaUrl';
 
 const isVideoUrl = (url) => /\.(mp4|webm|mov)(\?|$)/i.test(url || '');
+const normalizeAccountId = (value) => String(value || '').replace(/^act_/, '');
+
+const findMetaActionCurrency = (messages, pendingAction) => {
+  const targetId = (pendingAction?.actions || [])
+    .map((action) =>
+      normalizeAccountId(
+        action.args?.account_id || action.args?.ad_account_id || action.args?.act_id,
+      ),
+    )
+    .find(Boolean);
+  if (!targetId) return undefined;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const cards = messages[index]?.metaCards || [];
+    for (const card of cards) {
+      if (card.kind !== 'account_picker') continue;
+      const account = (card.accounts || []).find(
+        (item) => normalizeAccountId(item.id || item.accountId) === targetId,
+      );
+      if (account?.currency) return account.currency;
+    }
+  }
+  return undefined;
+};
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
 // Keep this as a normal SPA path. react-markdown sanitizes custom URI schemes
@@ -203,6 +230,10 @@ const Messages = ({
   onQuote,
   onRecreate,
   onMetaAction,
+  onMetaConfirm,
+  onMetaCancel,
+  onMetaMediaPick,
+  onMetaMediaCancel,
 }) => {
   const endRef = useRef(null);
   const navigate = useNavigate();
@@ -349,6 +380,44 @@ const Messages = ({
                       disabled={pending && isLast}
                     />
                   ))}
+                </div>
+              )}
+
+              {m.metaPendingAction?.status === 'pending' && (
+                <div className="mb-3">
+                  <ConfirmActionCard
+                    actions={m.metaPendingAction.actions || []}
+                    busy={pending}
+                    currency={findMetaActionCurrency(messages, m.metaPendingAction)}
+                    onConfirm={() => onMetaConfirm?.(m.metaPendingAction)}
+                    onCancel={() => onMetaCancel?.(m.metaPendingAction)}
+                  />
+                </div>
+              )}
+
+              {m.metaPendingAction?.status &&
+                m.metaPendingAction.status !== 'pending' && (
+                  <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/60">
+                    {m.metaPendingAction.status === 'executed'
+                      ? 'Meta Ads action approved and completed.'
+                      : m.metaPendingAction.status === 'declined'
+                        ? 'Meta Ads action cancelled. Nothing changed.'
+                        : 'The approved Meta Ads action did not complete.'}
+                  </div>
+                )}
+
+              {m.metaMediaPicker?.status === 'pending' && (
+                <div className="mb-3">
+                  <MediaPickerCard
+                    mediaType={m.metaMediaPicker.mediaType}
+                    purpose={m.metaMediaPicker.purpose}
+                    busy={pending}
+                    uploadMedia={uploadFile}
+                    onSubmit={(url, mediaType) =>
+                      onMetaMediaPick?.(m.metaMediaPicker, url, mediaType)
+                    }
+                    onCancel={() => onMetaMediaCancel?.(m.metaMediaPicker)}
+                  />
                 </div>
               )}
 

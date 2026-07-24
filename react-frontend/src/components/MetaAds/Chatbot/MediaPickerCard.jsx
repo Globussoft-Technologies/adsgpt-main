@@ -52,7 +52,14 @@ const TabButton = ({ active, onClick, disabled, icon: Icon, children }) => (
 // creative media (library / upload) and confirms, or cancels. On confirm the
 // media's public URL is sent back to resume the turn (see MetaAdsChatPanel's
 // handleMediaPick → pickChatMedia).
-const MediaPickerCard = ({ mediaType = 'image', purpose, busy, onSubmit, onCancel }) => {
+const MediaPickerCard = ({
+  mediaType = 'image',
+  purpose,
+  busy,
+  onSubmit,
+  onCancel,
+  uploadMedia = uploadChatMedia,
+}) => {
   const [tab, setTab] = useState('library'); // 'library' | 'upload'
   const [selectedUrl, setSelectedUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -69,7 +76,7 @@ const MediaPickerCard = ({ mediaType = 'image', purpose, busy, onSubmit, onCance
     if (!file || !validateFile(file, mediaType)) return;
     setUploading(true);
     try {
-      const { url } = await uploadChatMedia(file);
+      const { url } = await uploadMedia(file);
       if (url) setSelectedUrl(url);
       else globalToast.error('Upload failed — no URL returned.');
     } catch (err) {

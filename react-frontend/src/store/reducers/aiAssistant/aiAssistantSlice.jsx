@@ -135,6 +135,8 @@ const aiAssistantSlice = createSlice({
           conceptCards: null,
           conceptResult: null,
           metaCards: [],
+          metaPendingAction: null,
+          metaMediaPicker: null,
           complete: false,
         },
       }),
@@ -214,6 +216,36 @@ const aiAssistantSlice = createSlice({
       if (msg && msg.role === 'assistant') {
         msg.metaCards = [...(msg.metaCards || []), ...cards];
       }
+    },
+    attachAssistantMetaConfirmation: (state, action) => {
+      const pendingAction = action.payload;
+      if (!pendingAction?.actionId || !Array.isArray(pendingAction.actions)) return;
+      const msg = state.messages[state.messages.length - 1];
+      if (msg && msg.role === 'assistant') {
+        msg.metaPendingAction = pendingAction;
+      }
+    },
+    attachAssistantMetaMediaPicker: (state, action) => {
+      const picker = action.payload;
+      if (!picker?.inputId) return;
+      const msg = state.messages[state.messages.length - 1];
+      if (msg && msg.role === 'assistant') {
+        msg.metaMediaPicker = picker;
+      }
+    },
+    resolveAssistantMetaAction: (state, action) => {
+      const { actionId, status } = action.payload || {};
+      if (!actionId) return;
+      const msg = state.messages.find(
+        (item) => item.metaPendingAction?.actionId === actionId,
+      );
+      if (msg?.metaPendingAction) msg.metaPendingAction.status = status;
+    },
+    resolveAssistantMetaMedia: (state, action) => {
+      const { inputId, status } = action.payload || {};
+      if (!inputId) return;
+      const msg = state.messages.find((item) => item.metaMediaPicker?.inputId === inputId);
+      if (msg?.metaMediaPicker) msg.metaMediaPicker.status = status;
     },
     appendMetaConnectionStatus: {
       reducer: (state, action) => {
@@ -355,6 +387,8 @@ const aiAssistantSlice = createSlice({
             : null,
         conceptResult: m.conceptResult || null,
         metaCards: Array.isArray(m.metaCards) ? m.metaCards : [],
+        metaPendingAction: m.metaPendingAction || null,
+        metaMediaPicker: m.metaMediaPicker || null,
       }));
       state.pending = false;
       state.pendingActiveLabel = null;
@@ -399,6 +433,10 @@ export const {
   attachAssistantChoiceForm,
   attachAssistantConceptCards,
   attachAssistantMetaCards,
+  attachAssistantMetaConfirmation,
+  attachAssistantMetaMediaPicker,
+  resolveAssistantMetaAction,
+  resolveAssistantMetaMedia,
   appendMetaConnectionStatus,
   selectConcept,
   submitAssistantChoiceForm,

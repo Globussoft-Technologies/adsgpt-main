@@ -48,6 +48,8 @@ export const streamChat = ({
   formResponse,
   conceptResponse,
   metaAccountSelection,
+  metaActionResponse,
+  metaMediaResponse,
   quote,
   onEvent,
 }) => {
@@ -78,6 +80,10 @@ export const streamChat = ({
           // Account picker choices are sent as data, not parsed back from the
           // human-readable message.
           meta_account_selection: metaAccountSelection || null,
+          // Meta writes are resumed by opaque server-stored ids. Tool names and
+          // arguments are never accepted from the browser.
+          meta_action_response: metaActionResponse || null,
+          meta_media_response: metaMediaResponse || null,
           // A message/selection the user is replying to → { text, role, messageId }.
           // Maps to the backend QuoteItem (message_id). null when not replying.
           quote: quote

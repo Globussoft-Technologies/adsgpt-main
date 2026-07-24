@@ -18,12 +18,16 @@ import {
   attachAssistantConceptCards,
   attachAssistantImage,
   attachAssistantMetaCards,
+  attachAssistantMetaConfirmation,
+  attachAssistantMetaMediaPicker,
   attachAssistantStoryboard,
   failAssistantStream,
   finishAssistantStream,
   loadConversation,
   pushStep,
   pushUserMessage,
+  resolveAssistantMetaAction,
+  resolveAssistantMetaMedia,
   selectConcept,
   setSessionId,
   startAssistantStream,
@@ -117,6 +121,15 @@ const ChatInterface = () => {
     enabledTools,
   } = useSelector((state) => state.aiAssistant);
   const { userData } = useSelector((state) => state.socket);
+  const hasPendingMetaControl = useMemo(
+    () =>
+      messages.some(
+        (message) =>
+          message.metaPendingAction?.status === 'pending' ||
+          message.metaMediaPicker?.status === 'pending',
+      ),
+    [messages],
+  );
 
   const greeting = (userData?.user_name?.split(' ')?.[0] || 'there').replace(/^./, (c) =>
     c.toUpperCase(),
@@ -143,6 +156,7 @@ const ChatInterface = () => {
 
   // Cancel any in-flight stream when this component unmounts.
   const controllerRef = useRef(null);
+  const metaControlRequestRef = useRef(new Set());
   useEffect(
     () => () => {
       controllerRef.current?.abort?.();
@@ -156,6 +170,7 @@ const ChatInterface = () => {
   useEffect(() => {
     controllerRef.current?.abort?.();
     controllerRef.current = null;
+    metaControlRequestRef.current.clear();
   }, [abortRequestId]);
 
   // Start fresh every time the module is entered. Navigating away and back (or
@@ -207,6 +222,8 @@ const ChatInterface = () => {
       formResponse,
       conceptResponse,
       metaAccountSelection,
+      metaActionResponse,
+      metaMediaResponse,
       quote: turnQuote,
     }) => {
       const controller = streamChat({
@@ -219,6 +236,8 @@ const ChatInterface = () => {
         formResponse: formResponse || null,
         conceptResponse: conceptResponse || null,
         metaAccountSelection: metaAccountSelection || null,
+        metaActionResponse: metaActionResponse || null,
+        metaMediaResponse: metaMediaResponse || null,
         quote: turnQuote || null,
         onEvent: (event, data) => {
           switch (event) {
@@ -264,12 +283,51 @@ const ChatInterface = () => {
                 dispatch(attachAssistantMetaCards(data.cards));
               }
               break;
+            case 'meta_confirmation':
+              if (data.actionId && Array.isArray(data.actions)) {
+                dispatch(attachAssistantMetaConfirmation(data));
+              }
+              break;
+            case 'meta_media_picker':
+              if (data.inputId) {
+                dispatch(attachAssistantMetaMediaPicker(data));
+              }
+              break;
+            case 'meta_control_resolved':
+              if (data.control === 'action' && data.id) {
+                metaControlRequestRef.current.delete(`action:${data.id}`);
+                dispatch(
+                  resolveAssistantMetaAction({
+                    actionId: data.id,
+                    status: data.status,
+                  }),
+                );
+              } else if (data.control === 'media' && data.id) {
+                metaControlRequestRef.current.delete(`media:${data.id}`);
+                dispatch(
+                  resolveAssistantMetaMedia({
+                    inputId: data.id,
+                    status: data.status,
+                  }),
+                );
+              }
+              break;
             case 'ad_creative':
               if (data.pack && Array.isArray(data.pack.variants)) {
                 dispatch(attachAssistantAdCreative(data.pack));
               }
               break;
             case 'done':
+              if (metaActionResponse?.action_id) {
+                metaControlRequestRef.current.delete(
+                  `action:${metaActionResponse.action_id}`,
+                );
+              }
+              if (metaMediaResponse?.input_id) {
+                metaControlRequestRef.current.delete(
+                  `media:${metaMediaResponse.input_id}`,
+                );
+              }
               dispatch(
                 finishAssistantStream({
                   messageId: data.message_id,
@@ -280,6 +338,32 @@ const ChatInterface = () => {
               );
               break;
             case 'error': {
+              if (metaActionResponse?.action_id) {
+                metaControlRequestRef.current.delete(
+                  `action:${metaActionResponse.action_id}`,
+                );
+              }
+              if (metaMediaResponse?.input_id) {
+                metaControlRequestRef.current.delete(
+                  `media:${metaMediaResponse.input_id}`,
+                );
+              }
+              if (data.status && metaActionResponse?.action_id) {
+                dispatch(
+                  resolveAssistantMetaAction({
+                    actionId: metaActionResponse.action_id,
+                    status: 'failed',
+                  }),
+                );
+              }
+              if (data.status && metaMediaResponse?.input_id) {
+                dispatch(
+                  resolveAssistantMetaMedia({
+                    inputId: metaMediaResponse.input_id,
+                    status: 'failed',
+                  }),
+                );
+              }
               const friendly = friendlyErrorMessage(data.detail);
               dispatch(failAssistantStream(friendly));
               toast.error(friendly);
@@ -297,7 +381,7 @@ const ChatInterface = () => {
 
   const handleSend = useCallback(
     (text, attachments, options = {}) => {
-      if (pending) return;
+      if (pending || hasPendingMetaControl) return;
 
       const activeQuote = quote;
       setQuote(null); // consume the quote — one reply per quote
@@ -311,14 +395,14 @@ const ChatInterface = () => {
         metaAccountSelection: options.metaAccountSelection || null,
       });
     },
-    [dispatch, pending, quote, runStreamingTurn],
+    [dispatch, pending, hasPendingMetaControl, quote, runStreamingTurn],
   );
 
   // Called by ChoiceForm when the user submits picks — forwards the values to
   // the agent via streamChat's `form_response` field.
   const handleChoiceFormSubmit = useCallback(
     ({ formId, values, regenerate }) => {
-      if (pending) return;
+      if (pending || hasPendingMetaControl) return;
 
       dispatch(startAssistantStream());
       runStreamingTurn({
@@ -327,7 +411,7 @@ const ChatInterface = () => {
         formResponse: { form_id: formId, values, regenerate: !!regenerate },
       });
     },
-    [dispatch, pending, runStreamingTurn],
+    [dispatch, pending, hasPendingMetaControl, runStreamingTurn],
   );
 
   // Called by ConceptCards when the user picks a concept. Marks the chosen card,
@@ -335,12 +419,12 @@ const ChatInterface = () => {
   // brief (genCard) pre-filled from that concept, which auto-opens the canvas.
   const handleConceptSelect = useCallback(
     ({ messageId, concept }) => {
-      if (pending || !concept) return;
+      if (pending || hasPendingMetaControl || !concept) return;
       dispatch(selectConcept({ messageId, conceptId: concept.id }));
       dispatch(startAssistantStream());
       runStreamingTurn({ text: '', attachments: null, conceptResponse: concept });
     },
-    [dispatch, pending, runStreamingTurn],
+    [dispatch, pending, hasPendingMetaControl, runStreamingTurn],
   );
 
   // Called by an Ad Library result card's "Recreate" button. Sends a turn that
@@ -348,7 +432,7 @@ const ChatInterface = () => {
   // as an attachment so the agent can use it as visual reference (→ brief card).
   const handleRecreate = useCallback(
     (ad) => {
-      if (pending || !ad) return;
+      if (pending || hasPendingMetaControl || !ad) return;
       const img =
         ad.image_url ||
         ad.thumbnail_url ||
@@ -367,7 +451,7 @@ const ChatInterface = () => {
         : [];
       handleSend(text, attachments);
     },
-    [pending, handleSend],
+    [pending, hasPendingMetaControl, handleSend],
   );
 
   const handleMetaCardAction = useCallback(
@@ -378,6 +462,46 @@ const ChatInterface = () => {
       });
     },
     [handleSend],
+  );
+
+  const handleMetaConfirmation = useCallback(
+    (pendingAction, approve) => {
+      if (pending || !pendingAction?.actionId) return;
+      const requestKey = `action:${pendingAction.actionId}`;
+      if (metaControlRequestRef.current.has(requestKey)) return;
+      metaControlRequestRef.current.add(requestKey);
+      dispatch(startAssistantStream());
+      runStreamingTurn({
+        text: '',
+        attachments: null,
+        metaActionResponse: {
+          action_id: pendingAction.actionId,
+          approve,
+        },
+      });
+    },
+    [dispatch, pending, runStreamingTurn],
+  );
+
+  const handleMetaMediaResponse = useCallback(
+    (picker, url, mediaType, cancel = false) => {
+      if (pending || !picker?.inputId) return;
+      const requestKey = `media:${picker.inputId}`;
+      if (metaControlRequestRef.current.has(requestKey)) return;
+      metaControlRequestRef.current.add(requestKey);
+      dispatch(startAssistantStream());
+      runStreamingTurn({
+        text: '',
+        attachments: null,
+        metaMediaResponse: {
+          input_id: picker.inputId,
+          media_type: mediaType || picker.mediaType || 'image',
+          url: cancel ? null : url,
+          cancel,
+        },
+      });
+    },
+    [dispatch, pending, runStreamingTurn],
   );
 
   // ── Right-side canvas (genCards / creative briefs) ──────────────────────────
@@ -435,7 +559,7 @@ const ChatInterface = () => {
           <div className="mt-7 w-full max-w-[820px] px-3 sm:px-0">
             <Composer
               onSend={handleSend}
-              disabled={pending}
+              disabled={pending || hasPendingMetaControl}
               variant="centered"
               quote={quote}
               onClearQuote={() => setQuote(null)}
@@ -458,6 +582,14 @@ const ChatInterface = () => {
                 onQuote={handleQuote}
                 onRecreate={handleRecreate}
                 onMetaAction={handleMetaCardAction}
+                onMetaConfirm={(action) => handleMetaConfirmation(action, true)}
+                onMetaCancel={(action) => handleMetaConfirmation(action, false)}
+                onMetaMediaPick={(picker, url, mediaType) =>
+                  handleMetaMediaResponse(picker, url, mediaType, false)
+                }
+                onMetaMediaCancel={(picker) =>
+                  handleMetaMediaResponse(picker, null, picker.mediaType, true)
+                }
               />
             </div>
           </div>
@@ -465,7 +597,7 @@ const ChatInterface = () => {
             <div className="mx-auto w-full max-w-[820px]">
               <Composer
                 onSend={handleSend}
-                disabled={pending}
+                disabled={pending || hasPendingMetaControl}
                 variant="docked"
                 placeholder="Ask anything..."
                 quote={quote}
