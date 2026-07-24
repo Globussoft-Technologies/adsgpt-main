@@ -57,6 +57,7 @@ exports.updateVideoResultPayload = {
   userId: "GPT-4096",
   model: "veo-2",
   url: "https://cdn.site.com/output.mp4",
+  cleanVideoUrl: "https://cdn.site.com/output-clean.mp4",
   duration: "15s",
   error: null,
   videoStatus: 200,

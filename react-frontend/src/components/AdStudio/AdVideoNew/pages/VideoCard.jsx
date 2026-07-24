@@ -865,6 +865,7 @@ export default function VideoCard({
                     <Megaphone size={18} />
                   </button>
                 )}
+                {/* Development-only: restore when Script & Voice-over editing is production-ready.
                 {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
                     title="Edit Script & Voice-over"
@@ -876,7 +877,7 @@ export default function VideoCard({
                   >
                     <RefreshCw size={18} />
                   </button>
-                )}
+                )} */}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}
@@ -958,6 +959,7 @@ export default function VideoCard({
             </div>
           </div>
         </div>
+        {/* Development-only: hover bridge and CTA stay hidden until the feature ships.
         {isAiAds && item?.status === 'completed' && (
           <div
             aria-hidden
@@ -983,7 +985,7 @@ export default function VideoCard({
               </button>
             </div>
           </div>
-        )}
+        )} */}
         </>
       ) : (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">

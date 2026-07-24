@@ -33,6 +33,61 @@ const getFileName = (extension) => `${Date.now()}${extension}`;
 const AI_ADS_REGEN_IMAGE_CREDIT =
   parseFloat(process.env.AI_ADS_REGEN_IMAGE_CREDIT_DEDUCTION) || 2;
 
+const normalizeAiAdsCleanVideoUrl = (value) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized || /^(?:data|blob|javascript|file):/i.test(normalized)) return null;
+  if (normalized.includes("\\") || normalized.includes("..")) return null;
+  if (
+    /^https?:\/\//i.test(normalized) ||
+    /^\/?[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(normalized)
+  ) {
+    return normalized;
+  }
+  return null;
+};
+
+const persistAiAdsCleanVideoUrl = async (record, candidate) => {
+  const current = normalizeAiAdsCleanVideoUrl(record?.cleanVideoUrl);
+  if (current) return current;
+
+  const cleanVideoUrl = normalizeAiAdsCleanVideoUrl(candidate);
+  if (!record || record.inputs?.type !== "ai_ads" || !cleanVideoUrl) return null;
+
+  const updated = await VideoGeneration.findOneAndUpdate(
+    {
+      _id: record._id,
+      "inputs.type": "ai_ads",
+      $or: [
+        { cleanVideoUrl: { $exists: false } },
+        { cleanVideoUrl: null },
+        { cleanVideoUrl: "" },
+      ],
+    },
+    { $set: { cleanVideoUrl } },
+    { new: true },
+  );
+
+  let effectiveUrl = normalizeAiAdsCleanVideoUrl(updated?.cleanVideoUrl);
+  if (!effectiveUrl) {
+    const latest = await VideoGeneration.findById(record._id)
+      .select("cleanVideoUrl")
+      .lean();
+    effectiveUrl =
+      normalizeAiAdsCleanVideoUrl(latest?.cleanVideoUrl) || cleanVideoUrl;
+  }
+  record.cleanVideoUrl = effectiveUrl;
+  return effectiveUrl;
+};
+
+const resolveAiAdsCaptionLanguage = ({ pending, baseVersion, inputs }) =>
+  pending?.language ||
+  (pending?.regenType === "translate" ? pending?.translateLang : null) ||
+  baseVersion?.aiAds?.language ||
+  inputs?.voiceFilters?.language ||
+  inputs?.language ||
+  "en";
+
 const emitCreditStatus = async (userId) => {
   try {
     const creditStatus = await UnifiedCreditController.getCreditStatus(userId);
@@ -366,6 +421,9 @@ exports.updateVideoResult = async (req, res) => {
     // subscription/userId fields updateResultSchema requires. Recognized by an
     // ai_ads record with a regen in flight (regenState="processing").
     const preRecord = await VideoGeneration.findById(sessionId);
+    if (preRecord?.inputs?.type === "ai_ads") {
+      await persistAiAdsCleanVideoUrl(preRecord, req.body?.cleanVideoUrl);
+    }
     console.log(
       `[updateVideoResult] session=${sessionId} type=${preRecord?.inputs?.type} ` +
         `regenState=${preRecord?.regenState} videoStatus=${req.body?.videoStatus}`,
@@ -404,7 +462,13 @@ exports.updateVideoResult = async (req, res) => {
         value,
       )}`,
     );
-    const { videoStatus, userId, watermark, ...resultData } = value;
+    const {
+      videoStatus,
+      userId,
+      watermark,
+      cleanVideoUrl: _cleanVideoUrl,
+      ...resultData
+    } = value;
 
     // map python status -> video status
     let finalStatus;
@@ -2444,7 +2508,6 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       );
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
     }
-
     // ── Voice-regenerate branch ────────────────────────────────────────────
     // Handled BEFORE the status-based duplicate guard below: doc.status stays
     // "completed" throughout a voice regen, so that guard would otherwise
@@ -3007,6 +3070,20 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       : toPlainScenes(record.scenes);
 
     const voiceDelta = value.inputs; // { voiceProvider, voiceId, voiceName, regenType, translateLang, scenes? }
+    const effectiveRegenType =
+      voiceDelta.sourceRegenType || voiceDelta.regenType;
+    const captionLanguage = resolveAiAdsCaptionLanguage({
+      pending: {
+        regenType: effectiveRegenType,
+        translateLang: voiceDelta.translateLang || null,
+        language:
+          effectiveRegenType === "translate"
+            ? voiceDelta.translateLang || null
+            : null,
+      },
+      baseVersion,
+      inputs: record.inputs,
+    });
 
     // For translate/rewrite the user reviews (and may edit) the previewed script
     // before committing. When the frontend sends those edited `scenes`, they are
@@ -3028,6 +3105,8 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       regenType: voiceDelta.regenType,
       translateLang: voiceDelta.translateLang ?? "",
       scenes: finalScenes,
+      cleanVideoUrl: normalizeAiAdsCleanVideoUrl(record.cleanVideoUrl) || "",
+      captionLanguage,
       // URL of the currently-pointed (last-selected) version — the render
       // Python re-voices from. Same version baseScenes is taken from.
       generatedUrl: baseVersion?.url || "",
@@ -3043,15 +3122,12 @@ exports.regenerateAiAdsVoice = async (req, res) => {
     // Python returns the re-rendered script (callback prefers Python's scenes).
     record.regenState = "processing";
     record.pendingRegen = {
-      regenType: voiceDelta.sourceRegenType || voiceDelta.regenType,
+      regenType: effectiveRegenType,
       translateLang: voiceDelta.translateLang || null,
       voiceProvider: voiceDelta.voiceProvider ?? null,
       voiceId: voiceDelta.voiceId ?? null,
       voiceName: voiceDelta.voiceName ?? null,
-      language:
-        voiceDelta.regenType === "translate"
-          ? voiceDelta.translateLang || null
-          : baseVersion?.aiAds?.language ?? null,
+      language: captionLanguage,
       scenes: finalScenes,
     };
     await record.save();
@@ -3149,7 +3225,10 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
     const { brandName, productName, productDescription, scenes: _scenes, ...restInputs } = rawInputs;
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
     const watermark = plan === "8" ? true : (record.watermark ?? false);
-    const mergeVideoUrl = preview.videoUrl || baseVersion?.url || "";
+    const cleanVideoUrl =
+      normalizeAiAdsCleanVideoUrl(record.cleanVideoUrl) || "";
+    const mergeVideoUrl =
+      cleanVideoUrl || preview.videoUrl || baseVersion?.url || "";
     if (!mergeVideoUrl) {
       return res.status(409).json({
         success: false,
@@ -3166,8 +3245,14 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
       regenType: pending.regenType || preview.regenType,
       translateLang: pending.translateLang || "",
       generatedUrl: baseVersion?.url || "",
+      cleanVideoUrl,
       videoUrl: mergeVideoUrl,
       audioUrl: preview.audioUrl,
+      captionLanguage: resolveAiAdsCaptionLanguage({
+        pending,
+        baseVersion,
+        inputs: rawInputs,
+      }),
       scenes: pending.scenes || record.scenes || [],
     };
 

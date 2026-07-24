@@ -99,6 +99,7 @@ const updateResultSchema = Joi.object({
     then: Joi.string().required(),
     otherwise: Joi.string().allow(null, ""),
   }),
+  cleanVideoUrl: Joi.string().allow(null, ""),
   duration: Joi.string(),
   error: Joi.string().allow(null, ""),
   videoStatus: Joi.number().valid(200, 400, 429, 500, 529),

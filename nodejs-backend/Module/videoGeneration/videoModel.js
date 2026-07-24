@@ -222,6 +222,7 @@ const videoSchema = new mongoose.Schema(
     videoPrompt: { type: String, default: null },
     watermark: Boolean,
     results: [resultSchema],
+    cleanVideoUrl: { type: String, default: null },
 
     // ── AI Ads version pointer (voice regenerate) ─────────────────────────────
     // Index into results[] that My Space displays. Defaults to 0 (the original
