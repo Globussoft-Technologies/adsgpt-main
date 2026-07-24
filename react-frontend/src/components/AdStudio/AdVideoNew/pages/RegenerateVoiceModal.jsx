@@ -23,7 +23,11 @@ import {
 } from '@/components/ui/dialog';
 import LockedVoiceCardSelector from '@/components/VoiceSelector/LockedVoiceCardSelector';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
-import { labelForLanguage } from '@/apis/voiceSelector/voiceSelectorApi';
+import {
+  getSarvamVoices,
+  getVoices,
+  labelForLanguage,
+} from '@/apis/voiceSelector/voiceSelectorApi';
 import {
   regenerateAiAdsVoiceAction,
   previewRegenerateScriptAction,
@@ -37,6 +41,8 @@ import {
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 
 const S3_BASE_URL = (import.meta.env.VITE_S3_BASE_URL || '').replace(/\/$/, '');
+const GLASS_DIALOG_CLASS =
+  "border border-blue-300/20 bg-[radial-gradient(circle_at_78%_0%,rgba(47,86,145,0.28),transparent_42%),linear-gradient(145deg,rgba(25,27,31,0.90),rgba(8,11,16,0.84))] text-white shadow-[0_28px_100px_rgba(0,0,0,0.62),0_0_38px_rgba(59,130,246,0.08),inset_0_1px_0_rgba(255,255,255,0.09)] backdrop-blur-2xl backdrop-saturate-125";
 
 const resolveMediaUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -90,6 +96,14 @@ const seedVoice = (cv) => {
     voiceId: cv?.voiceId || '',
     voiceName: cv?.voiceName || '',
   };
+};
+
+const normalizeVoiceLanguage = (language, provider) => {
+  const baseLanguage = String(language || 'en')
+    .trim()
+    .toLowerCase()
+    .split('-')[0];
+  return provider === 'sarvam' ? `${baseLanguage}-IN` : baseLanguage;
 };
 
 const countWords = (t) => (t && t.trim() ? t.trim().split(/\s+/).length : 0);
@@ -146,6 +160,9 @@ export default function RegenerateVoiceModal({
   const [submitting, setSubmitting] = useState(false); // Step-2 in flight
   const [langError, setLangError] = useState('');
   const [voiceError, setVoiceError] = useState('');
+  const [defaultVoiceLoading, setDefaultVoiceLoading] = useState(false);
+  const [translateVoiceAutoSelected, setTranslateVoiceAutoSelected] = useState(false);
+  const [voiceSamplePlaying, setVoiceSamplePlaying] = useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(0);
@@ -153,6 +170,7 @@ export default function RegenerateVoiceModal({
   const [discardingPreview, setDiscardingPreview] = useState(false);
   const videoRef = useRef(null);
   const audioRef = useRef(null);
+  const voiceSampleRef = useRef(null);
 
   // Preview script for this session (populated by the socket via redux).
   const preview = useSelector(
@@ -208,6 +226,9 @@ export default function RegenerateVoiceModal({
     setSubmitting(false);
     setLangError('');
     setVoiceError('');
+    setDefaultVoiceLoading(false);
+    setTranslateVoiceAutoSelected(false);
+    setVoiceSamplePlaying(false);
     setIsPreviewPlaying(false);
     setPreviewCurrentTime(0);
     setPreviewDuration(0);
@@ -229,6 +250,99 @@ export default function RegenerateVoiceModal({
     resetAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, currentVoiceKey]);
+
+  useEffect(() => {
+    if (!open || mode !== 'translate' || !translateLang) return undefined;
+
+    let cancelled = false;
+    const provider = currentVoice?.provider || 'elevenlabs';
+    const language = normalizeVoiceLanguage(translateLang, provider);
+
+    setDefaultVoiceLoading(true);
+    setTranslateVoiceAutoSelected(false);
+    setVoiceError('');
+    setVoice({
+      provider,
+      language,
+      languageLabel: labelForLanguage(translateLang),
+      gender: '',
+      accent: '',
+      age: '',
+      voiceId: '',
+      voiceName: '',
+      previewUrl: '',
+    });
+
+    const request =
+      provider === 'sarvam'
+        ? getSarvamVoices({ lang: language })
+        : getVoices({ language });
+
+    request
+      .then((items) => {
+        if (cancelled) return;
+        const defaultVoice = items[0];
+        if (!defaultVoice) {
+          setVoiceError(`No ${labelForLanguage(translateLang)} voices are available.`);
+          return;
+        }
+        setVoice({
+          provider,
+          language,
+          languageLabel: labelForLanguage(translateLang),
+          gender: defaultVoice.gender || '',
+          accent: defaultVoice.accent || '',
+          age: defaultVoice.age || '',
+          voiceId: defaultVoice.voice_id || '',
+          voiceName: defaultVoice.voice_name || defaultVoice.name || '',
+          previewUrl: defaultVoice.preview_url || '',
+        });
+        setTranslateVoiceAutoSelected(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVoiceError(`Unable to load ${labelForLanguage(translateLang)} voices.`);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultVoiceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentVoice?.provider, mode, open, translateLang]);
+
+  useEffect(() => {
+    if (voiceSampleRef.current) {
+      voiceSampleRef.current.pause();
+      voiceSampleRef.current = null;
+    }
+    setVoiceSamplePlaying(false);
+    return () => {
+      voiceSampleRef.current?.pause();
+      voiceSampleRef.current = null;
+    };
+  }, [voice.previewUrl]);
+
+  const toggleVoiceSample = () => {
+    if (voiceSamplePlaying) {
+      voiceSampleRef.current?.pause();
+      voiceSampleRef.current = null;
+      setVoiceSamplePlaying(false);
+      return;
+    }
+    if (!voice.previewUrl) return;
+    const sample = new Audio(resolveMediaUrl(voice.previewUrl));
+    sample.onended = () => {
+      voiceSampleRef.current = null;
+      setVoiceSamplePlaying(false);
+    };
+    sample.onerror = sample.onended;
+    voiceSampleRef.current = sample;
+    setVoiceSamplePlaying(true);
+    sample.play().catch(sample.onended);
+  };
 
   // While a preview is in flight, watch the redux entry the socket fills.
   useEffect(() => {
@@ -287,6 +401,10 @@ export default function RegenerateVoiceModal({
   const activeVoiceLanguageLabel = activeVoiceLanguage
     ? labelForLanguage(String(activeVoiceLanguage).toLowerCase().split('-')[0])
     : 'Current script language';
+  const hasSelectedVoice =
+    (voice.provider || 'elevenlabs') === 'sarvam'
+      ? Boolean(voice.voiceName)
+      : Boolean(voice.voiceId);
   const currentScriptLanguageLabel = currentScriptLanguage
     ? labelForLanguage(String(currentScriptLanguage).toLowerCase().split('-')[0])
     : 'Current script language';
@@ -558,7 +676,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="flex h-[min(85dvh,760px)] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden border-white/10 bg-[#1C1C1F] text-white sm:max-w-2xl sm:scale-100 lg:max-h-[calc(100dvh-2rem)]"
+          className={`${GLASS_DIALOG_CLASS} flex h-[min(85dvh,760px)] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl sm:scale-100 lg:max-h-[calc(100dvh-2rem)]`}
           showCloseButton={!busy}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
@@ -566,7 +684,7 @@ export default function RegenerateVoiceModal({
         >
           {submitting && (
             <div role="status" aria-live="polite" className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#111]/90 backdrop-blur-sm">
-              <RefreshCw aria-hidden="true" className="h-7 w-7 animate-spin text-emerald-300" />
+              <RefreshCw aria-hidden="true" className="h-7 w-7 animate-spin text-blue-300" />
               <p className="text-sm font-semibold text-white">Starting final merge…</p>
               <p className="text-xs text-white/45">Your approved preview is being prepared.</p>
             </div>
@@ -574,7 +692,7 @@ export default function RegenerateVoiceModal({
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
               <DialogTitle>Preview voice-over</DialogTitle>
-              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                 Preview
               </span>
             </div>
@@ -617,7 +735,7 @@ export default function RegenerateVoiceModal({
                 aria-pressed={isPreviewPlaying}
                 aria-label={isPreviewPlaying ? 'Pause synchronized preview' : 'Play synchronized preview'}
                 title={isPreviewPlaying ? 'Pause synchronized preview' : 'Play synchronized preview'}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300 transition hover:bg-emerald-400/20"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-400/10 text-blue-300 transition hover:bg-blue-400/20"
               >
                 {isPreviewPlaying ? (
                   <Pause className="h-4 w-4 fill-current" />
@@ -642,7 +760,7 @@ export default function RegenerateVoiceModal({
               onChange={seekPreview}
               disabled={!totalPreviewDuration}
               aria-label="Voice preview position"
-              className="mt-3 h-1.5 w-full cursor-pointer accent-emerald-400 disabled:cursor-not-allowed"
+              className="mt-3 h-1.5 w-full cursor-pointer accent-blue-400 disabled:cursor-not-allowed"
             />
           </div>
           <DialogFooter>
@@ -657,7 +775,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="border-white/10 bg-[#1C1C1F] text-white sm:max-w-xl"
+          className={`${GLASS_DIALOG_CLASS} sm:max-w-xl`}
           showCloseButton={!busy}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
@@ -692,7 +810,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="flex h-[min(85vh,760px)] flex-col overflow-hidden border-white/10 bg-[#1C1C1F] text-white sm:max-w-2xl"
+          className={`${GLASS_DIALOG_CLASS} flex h-[min(85vh,760px)] flex-col overflow-hidden sm:max-w-2xl`}
           showCloseButton={false}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
@@ -701,7 +819,7 @@ export default function RegenerateVoiceModal({
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
               <DialogTitle>Preparing voice preview</DialogTitle>
-              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                 Generating audio
               </span>
             </div>
@@ -710,12 +828,12 @@ export default function RegenerateVoiceModal({
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div role="status" aria-live="polite" className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-white/10 bg-black">
               <div className="flex flex-col items-center gap-3 text-white/55">
-                <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin text-emerald-300" />
+                <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin text-blue-300" />
                 <p className="text-sm">Preparing synchronized video preview…</p>
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-400/10 text-blue-300">
                 <Music2 className="h-4 w-4 animate-pulse" />
               </div>
               <div className="flex-1 space-y-2">
@@ -811,7 +929,7 @@ export default function RegenerateVoiceModal({
 
         return (
           <div key={`${sceneIndex}-${line.id ?? lineIndex}`} className="flex gap-3">
-            <span className="mt-2.5 w-20 shrink-0 text-right text-xs tabular-nums leading-tight text-gray-400 dark:text-white/40">
+            <span className="mt-2.5 w-20 shrink-0 text-right text-xs tabular-nums leading-tight text-white/40">
               {shortTs(line.start)}
               {line.end ? (
                 <>
@@ -826,21 +944,21 @@ export default function RegenerateVoiceModal({
                 value={line.text}
                 onChange={(event) => updateLine(sceneIndex, lineIndex, event.target.value)}
                 aria-label={`Script line ${line.id ?? lineIndex + 1}${timingLabel}`}
-                className={`w-full resize-none rounded-lg border bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none dark:bg-[#909294]/15 dark:text-white ${
+                className={`w-full resize-none rounded-lg border bg-white/[0.06] px-3 py-2 text-sm text-white outline-none ${
                   invalid
                     ? 'border-red-500'
-                    : 'border-black/10 focus:border-black/20 dark:border-white/5 dark:focus:border-white/20'
+                    : 'border-white/10 focus:border-blue-400/35'
                 }`}
               />
               {(line.maxWords || line.maxChars) && (
                 <div className="mt-1 flex gap-3 text-[11px]">
                   {line.maxWords ? (
-                    <span className={overWords ? 'text-red-500' : 'text-gray-400 dark:text-white/40'}>
+                    <span className={overWords ? 'text-red-500' : 'text-white/40'}>
                       {words}/{line.maxWords} words
                     </span>
                   ) : null}
                   {line.maxChars ? (
-                    <span className={overChars ? 'text-red-500' : 'text-gray-400 dark:text-white/40'}>
+                    <span className={overChars ? 'text-red-500' : 'text-white/40'}>
                       {chars}/{line.maxChars} chars
                     </span>
                   ) : null}
@@ -857,7 +975,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className={`flex max-h-[85vh] flex-col gap-0 border-black/10 bg-white p-0 text-gray-900 dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white ${
+          className={`${GLASS_DIALOG_CLASS} flex max-h-[85vh] flex-col gap-0 p-0 ${
             mode === 'rewrite' ? 'sm:max-w-4xl' : 'sm:max-w-2xl'
           }`}
           showCloseButton={false}
@@ -865,17 +983,17 @@ export default function RegenerateVoiceModal({
           onInteractOutside={blockOutsideClose}
           onEscapeKeyDown={blockOutsideClose}
         >
-          <div className="flex items-start justify-between border-b border-black/10 px-6 py-4 dark:border-white/5">
+          <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-base font-semibold text-white">
                   {stepTitle}
                 </h2>
-                <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                   Script step 2 of 2
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-white/55">
+              <p className="mt-0.5 text-xs text-white/55">
                 {mode === 'rewrite'
                   ? 'Compare and edit the recreated script before generating its voice-over.'
                   : 'Review and edit the translated script before generating its voice-over.'}
@@ -888,7 +1006,7 @@ export default function RegenerateVoiceModal({
               onClick={() => onOpenChange(false)}
               disabled={busy}
               aria-label="Close"
-              className="shrink-0 rounded-sm p-1 text-gray-500 opacity-70 transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white/70 dark:hover:text-white"
+              className="shrink-0 rounded-sm p-1 text-white/70 opacity-70 transition hover:text-white hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <X className="h-5 w-5" />
             </button>
@@ -901,7 +1019,7 @@ export default function RegenerateVoiceModal({
                   {currentScriptLanguageLabel}
                 </span>
                 <span className="text-sm text-white/35">→</span>
-                <span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
                   {labelForLanguage(translateLang)}
                 </span>
               </div>
@@ -909,7 +1027,7 @@ export default function RegenerateVoiceModal({
             {/* Loading state — card is open immediately on click; the script
                 fills in when the socket delivers it. */}
             {!scriptReady ? (
-              <div className="flex h-40 flex-col items-center justify-center gap-3 text-gray-500 dark:text-white/55">
+              <div className="flex h-40 flex-col items-center justify-center gap-3 text-white/55">
                 <Loader2 className="h-6 w-6 animate-spin" />
                 <p className="text-sm">
                   {mode === 'translate'
@@ -949,9 +1067,9 @@ export default function RegenerateVoiceModal({
                   </div>
                 </section>
 
-                <section className="min-w-0 rounded-xl border border-emerald-400/35 bg-emerald-400/[0.035] p-4">
+                <section className="min-w-0 rounded-xl border border-blue-400/35 bg-blue-400/[0.035] p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-300">
+                    <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-blue-300">
                       NEW · EDITABLE
                     </span>
                     <span className="text-[11px] text-white/35">Timing retained</span>
@@ -962,10 +1080,10 @@ export default function RegenerateVoiceModal({
             ) : (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-gray-800 dark:text-white/80">
+                  <p className="text-sm font-medium text-white/80">
                     Translated script · editable
                   </p>
-                  <span className="text-[11px] text-gray-400 dark:text-white/35">
+                  <span className="text-[11px] text-white/35">
                     Video timing retained
                   </span>
                 </div>
@@ -974,10 +1092,10 @@ export default function RegenerateVoiceModal({
             )}
             {scriptReady && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
                   {reviewWordCount} words
                 </span>
-                <span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
                   ≈ {reviewDurationSeconds} sec
                 </span>
                 <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/60">
@@ -989,28 +1107,55 @@ export default function RegenerateVoiceModal({
             )}
             {mode === 'translate' && scriptReady && (
               <section className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300">
-                  <Music2 className="h-4 w-4" />
-                </span>
+                <button
+                  type="button"
+                  onClick={toggleVoiceSample}
+                  disabled={defaultVoiceLoading || !voice.previewUrl}
+                  aria-label={voiceSamplePlaying ? 'Pause narrator preview' : 'Play narrator preview'}
+                  title={
+                    voice.previewUrl
+                      ? voiceSamplePlaying
+                        ? 'Pause narrator preview'
+                        : 'Play narrator preview'
+                      : 'Preview unavailable'
+                  }
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-400/10 text-blue-300 transition hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:text-white/25"
+                >
+                  {voiceSamplePlaying ? (
+                    <Pause className="h-4 w-4 fill-current" />
+                  ) : (
+                    <Play className="h-4 w-4 fill-current" />
+                  )}
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-white">
-                    {voice.voiceName || 'Current narrator voice'}
+                    {defaultVoiceLoading
+                      ? `Selecting a ${activeVoiceLanguageLabel} narrator…`
+                      : voice.voiceName || `Choose a ${activeVoiceLanguageLabel} narrator`}
                   </p>
                   <p className="mt-0.5 truncate text-xs capitalize text-white/45">
-                    {[
-                      voice.gender && voice.gender.replace(/_/g, ' '),
-                      voice.accent && voice.accent.replace(/_/g, ' '),
-                      voice.age && voice.age.replace(/_/g, ' '),
-                      activeVoiceLanguageLabel,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {mode === 'translate'
+                      ? `${activeVoiceLanguageLabel} script · ${
+                          defaultVoiceLoading
+                            ? 'Loading compatible voices'
+                            : translateVoiceAutoSelected
+                              ? 'Default narrator'
+                              : 'Selected narrator'
+                        }`
+                      : [
+                          voice.gender && voice.gender.replace(/_/g, ' '),
+                          voice.accent && voice.accent.replace(/_/g, ' '),
+                          voice.age && voice.age.replace(/_/g, ' '),
+                          activeVoiceLanguageLabel,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={continueToVoiceSelection}
-                  disabled={busy}
+                  disabled={busy || defaultVoiceLoading}
                   className="shrink-0 rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Change voice
@@ -1023,20 +1168,25 @@ export default function RegenerateVoiceModal({
             {langError && <p className="text-sm text-red-500">{langError}</p>}
           </div>
 
-          <div className="flex items-center justify-between border-t border-black/10 px-6 py-4 dark:border-white/5">
+          <div className="flex items-center justify-between border-t border-white/10 px-6 py-4">
             <button
               type="button"
               onClick={backToStart}
               disabled={busy}
-              className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:text-white dark:hover:bg-white/5"
+              className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ← Back
             </button>
             <button
               type="button"
               onClick={mode === 'translate' ? submitScript : continueToVoiceSelection}
-              disabled={busy || !scriptReady || scriptHasErrors}
-              className="rounded-md border border-black/20 bg-gray-900 px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:bg-white dark:text-black"
+              disabled={
+                busy ||
+                !scriptReady ||
+                scriptHasErrors ||
+                (mode === 'translate' && (defaultVoiceLoading || !hasSelectedVoice))
+              }
+              className="rounded-md border border-white/20 bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting
                 ? 'Starting…'
@@ -1054,7 +1204,7 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="overflow-visible border-white/10 bg-[#1C1C1F] text-white sm:max-w-2xl"
+          className={`${GLASS_DIALOG_CLASS} overflow-visible sm:max-w-2xl`}
           showCloseButton={!busy}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
@@ -1063,7 +1213,7 @@ export default function RegenerateVoiceModal({
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
               <DialogTitle>Change voice</DialogTitle>
-              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                 Regenerate voice-over
               </span>
             </div>
@@ -1093,6 +1243,7 @@ export default function RegenerateVoiceModal({
             onChange={(nextVoice) => {
               setVoice(nextVoice);
               setVoiceError('');
+              setTranslateVoiceAutoSelected(false);
             }}
             error={voiceError}
             lockedLanguage={activeVoiceLanguage}
@@ -1100,7 +1251,7 @@ export default function RegenerateVoiceModal({
           />
 
           {/* <div className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-xs text-white/60">
-            <Languages className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+            <Languages className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-300" />
             <p>
               {mode === 'translate'
                 ? 'This only updates the selected narrator. Generation starts from the translation review.'
@@ -1145,13 +1296,13 @@ export default function RegenerateVoiceModal({
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto border-white/10 bg-[#1C1C1F] p-0 text-white sm:max-w-2xl"
+          className={`${GLASS_DIALOG_CLASS} max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl`}
           showCloseButton={!busy}
           onPointerDownOutside={blockOutsideClose}
           onInteractOutside={blockOutsideClose}
           onEscapeKeyDown={blockOutsideClose}
         >
-          <DialogHeader className="border-b border-white/10 px-4 pt-6 pb-5 sm:px-6">
+          <DialogHeader className="border-b border-blue-300/10 bg-[linear-gradient(90deg,transparent,rgba(59,130,246,0.05))] px-4 pt-6 pb-5 sm:px-6">
             <DialogTitle className="text-xl">What would you like to change?</DialogTitle>
             <DialogDescription className="text-white/55">
               Choose one option. You can review all changes before applying them.
@@ -1167,24 +1318,24 @@ export default function RegenerateVoiceModal({
                   type="button"
                   disabled={busy}
                   onClick={() => chooseAction(action.id)}
-                  className="group flex w-full items-start gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-left transition hover:border-emerald-400/40 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-4 sm:p-4"
+                  className="group flex w-full items-start gap-3 rounded-xl border border-white/12 bg-[#25282E]/60 p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/40 hover:bg-[#293141]/75 hover:shadow-[0_12px_30px_rgba(59,130,246,0.09),inset_0_1px_0_rgba(255,255,255,0.08)] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-4 sm:p-4"
                 >
-                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/15 bg-blue-400/15 text-blue-300 shadow-[0_0_22px_rgba(59,130,246,0.10)]">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400/10 px-2 text-xs font-semibold text-emerald-300">
+                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full border border-blue-300/10 bg-blue-400/15 px-2 text-xs font-semibold text-blue-300">
                         {action.number}
                       </span>
                       <span className="text-base font-semibold text-white">{action.label}</span>
                     </span>
                     <span className="mt-2 block text-sm text-white/55">{action.description}</span>
-                    <span className="mt-3 inline-flex rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-white/55">
+                    <span className="mt-3 inline-flex rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs font-medium text-white/60">
                       {action.impact}
                     </span>
                   </span>
-                  <span aria-hidden="true" className="mt-0.5 hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition group-hover:border-emerald-400/40 group-hover:text-emerald-200 sm:inline-flex">
+                  <span aria-hidden="true" className="mt-0.5 hidden shrink-0 rounded-lg border border-white/20 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white transition group-hover:border-blue-300/50 group-hover:bg-blue-300/10 group-hover:text-blue-100 sm:inline-flex">
                     Choose
                   </span>
                 </button>
@@ -1192,8 +1343,8 @@ export default function RegenerateVoiceModal({
             })}
           </div>
 
-          <div className="mx-4 mb-6 flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.035] px-3 py-3 text-xs text-white/55 sm:mx-6">
-            <Info aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-300" />
+          <div className="mx-4 mb-6 flex items-center gap-2 rounded-lg border border-blue-300/15 bg-[#172033]/70 px-3 py-3 text-xs text-blue-50/70 backdrop-blur-md sm:mx-6">
+            <Info aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-300" />
             Nothing changes until you review and confirm.
           </div>
         </DialogContent>
@@ -1216,17 +1367,17 @@ export default function RegenerateVoiceModal({
   return (
     <Dialog open={open} onOpenChange={guardedOpenChange}>
       <DialogContent
-        className="overflow-visible border-black/10 bg-white text-gray-900 sm:max-w-xl dark:border-white/10 dark:bg-[#1C1C1F] dark:text-white"
+        className={`${GLASS_DIALOG_CLASS} overflow-visible sm:max-w-xl`}
         showCloseButton={!busy}
         onPointerDownOutside={blockOutsideClose}
         onInteractOutside={blockOutsideClose}
         onEscapeKeyDown={blockOutsideClose}
       >
-        <DialogHeader className={mode === 'translate' ? 'border-b border-black/10 pb-4 pr-10 dark:border-white/10' : ''}>
+        <DialogHeader className={mode === 'translate' ? 'border-b border-white/10 pb-4 pr-10' : ''}>
           <div className="flex items-center justify-between gap-3">
             <DialogTitle>{modeHeader.title}</DialogTitle>
             {mode === 'translate' && (
-              <span className="shrink-0 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+              <span className="shrink-0 rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                 Script step 1 of 2
               </span>
             )}
@@ -1240,15 +1391,15 @@ export default function RegenerateVoiceModal({
             <div className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700 dark:text-white/70">
+                  <p className="text-xs font-medium text-white/70">
                     Current language
                   </p>
-                  <div className="flex min-h-10 items-center rounded-lg border border-black/10 bg-black/[0.03] px-3 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/70">
+                  <div className="flex min-h-10 items-center rounded-lg border border-white/10 bg-white/[0.035] px-3 text-sm text-white/70">
                     {currentScriptLanguageLabel}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700 dark:text-white/70">
+                  <p className="text-xs font-medium text-white/70">
                     Translate to
                   </p>
                   <CommonDropdown
@@ -1261,18 +1412,19 @@ export default function RegenerateVoiceModal({
                     }}
                     side="bottom"
                     triggerVariant="field"
+                    className="!border-blue-400/55 !bg-blue-400/[0.06] shadow-[0_0_0_1px_rgba(96,165,250,0.08)] hover:!bg-blue-400/[0.09] focus-visible:!border-blue-400/70 focus-visible:!ring-blue-400/20"
                   />
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-3 text-xs text-emerald-800 dark:text-emerald-100">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+              <div className="flex items-start gap-2 rounded-lg border border-blue-400/20 bg-blue-400/[0.06] px-3 py-3 text-xs text-blue-100">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-400" />
                 <p>The meaning, tone, and video timing will be preserved.</p>
               </div>
 
               {langError && <p className="text-xs text-red-500">{langError}</p>}
               {previewing && (
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-white/55">
+                <div className="flex items-center gap-2 text-xs text-white/55">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Generating the {labelForLanguage(translateLang)} script…
                 </div>
@@ -1283,7 +1435,7 @@ export default function RegenerateVoiceModal({
           {mode === 'rewrite' && (
             <div className="flex flex-col gap-4">
               <div className="flex justify-end">
-                <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
                   Script step 1 of 2
                 </span>
               </div>
@@ -1298,12 +1450,12 @@ export default function RegenerateVoiceModal({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              {/* <div className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span>The video visuals will remain unchanged.</span>
-              </div>
+              </div> */}
               {previewing && (
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-white/55">
+                <div className="flex items-center gap-2 text-xs text-white/55">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Writing a fresh script…
                 </div>
@@ -1318,7 +1470,7 @@ export default function RegenerateVoiceModal({
             type="button"
             onClick={backToActionSelector}
             disabled={busy}
-            className="rounded-md border border-black/20 px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:text-white dark:hover:bg-white/5"
+            className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -1331,7 +1483,7 @@ export default function RegenerateVoiceModal({
               type="button"
               onClick={startPreview}
               disabled={busy || (mode === 'translate' && !translateLang)}
-              className="rounded-md border border-black/20 bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:bg-white dark:text-black"
+              className="rounded-md border border-white/20 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {previewing
                 ? 'Generating…'

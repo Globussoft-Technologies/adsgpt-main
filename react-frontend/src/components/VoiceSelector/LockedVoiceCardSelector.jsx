@@ -199,6 +199,7 @@ export default function LockedVoiceCardSelector({
       age: '',
       voiceId: '',
       voiceName: '',
+      previewUrl: '',
     });
   };
 
@@ -210,6 +211,7 @@ export default function LockedVoiceCardSelector({
       [field]: nextValue,
       voiceId: '',
       voiceName: '',
+      previewUrl: '',
     };
     if (field === 'gender') {
       next.accent = '';
@@ -231,6 +233,7 @@ export default function LockedVoiceCardSelector({
       age: selectedVoice.age || value.age || '',
       voiceId: selectedVoice.voice_id || '',
       voiceName: selectedVoice.name || '',
+      previewUrl: selectedVoice.preview_url || '',
     });
   };
 
@@ -382,7 +385,7 @@ export default function LockedVoiceCardSelector({
                 key={voiceId}
                 className={`flex items-center gap-3 rounded-xl border px-3 py-3 transition ${
                   selected
-                    ? 'border-emerald-400 bg-emerald-400/[0.06] shadow-[0_0_12px_rgba(52,211,153,0.12)]'
+                    ? 'border-blue-400 bg-blue-400/[0.07] shadow-[0_0_14px_rgba(59,130,246,0.14)]'
                     : 'border-white/10 bg-white/[0.025] hover:border-white/20'
                 }`}
               >
@@ -392,7 +395,7 @@ export default function LockedVoiceCardSelector({
                   disabled={!catalogVoice.preview_url}
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                     catalogVoice.preview_url
-                      ? 'bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20'
+                      ? 'bg-blue-400/10 text-blue-300 hover:bg-blue-400/20'
                       : 'cursor-not-allowed bg-white/5 text-white/20'
                   }`}
                   aria-label={`${playing ? 'Pause' : 'Play'} ${catalogVoice.name} preview`}
@@ -416,7 +419,7 @@ export default function LockedVoiceCardSelector({
                   onClick={() => selectVoice(catalogVoice)}
                   className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
                     selected
-                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                      ? 'border-blue-400/30 bg-blue-400/10 text-blue-300'
                       : 'border-white/15 text-white/75 hover:bg-white/5 hover:text-white'
                   }`}
                 >
