@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   AlertTriangle,
@@ -54,6 +54,23 @@ const resolveMediaUrl = (url) => {
 
 // Curated translate targets (mock's set), labelled via the shared LANGUAGE_NAMES.
 const TRANSLATE_LANG_CODES = ['en', 'hi', 'ta', 'te', 'mr', 'kn', 'gu', 'ml'];
+
+const normalizeTranslateLanguageCode = (language) => {
+  const normalized = String(language || '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return '';
+
+  const baseCode = normalized.split(/[-_]/)[0];
+  if (TRANSLATE_LANG_CODES.includes(baseCode)) return baseCode;
+
+  const languageName = normalized.replace(/\s*\(.*\)\s*$/, '');
+  return (
+    TRANSLATE_LANG_CODES.find(
+      (code) => labelForLanguage(code).toLowerCase() === languageName,
+    ) || baseCode
+  );
+};
 
 const ACTIONS = [
   {
@@ -172,6 +189,18 @@ export default function RegenerateVoiceModal({
   const audioRef = useRef(null);
   const voiceSampleRef = useRef(null);
 
+  const stopVoiceSample = useCallback(() => {
+    const sample = voiceSampleRef.current;
+    if (sample) {
+      sample.pause();
+      sample.currentTime = 0;
+      sample.onended = null;
+      sample.onerror = null;
+      voiceSampleRef.current = null;
+    }
+    setVoiceSamplePlaying(false);
+  }, []);
+
   // Preview script for this session (populated by the socket via redux).
   const preview = useSelector(
     (s) => s.adVideoNew.aiAdsTranslateScript?.[sessionId],
@@ -216,6 +245,7 @@ export default function RegenerateVoiceModal({
   }, [approvedScriptLines, reviewWordCount]);
 
   const resetAll = () => {
+    stopVoiceSample();
     setShowActionSelector(true);
     setShowVoiceSelection(false);
     setMode('voice');
@@ -314,22 +344,16 @@ export default function RegenerateVoiceModal({
   }, [currentVoice?.provider, mode, open, translateLang]);
 
   useEffect(() => {
-    if (voiceSampleRef.current) {
-      voiceSampleRef.current.pause();
-      voiceSampleRef.current = null;
-    }
-    setVoiceSamplePlaying(false);
+    stopVoiceSample();
     return () => {
       voiceSampleRef.current?.pause();
       voiceSampleRef.current = null;
     };
-  }, [voice.previewUrl]);
+  }, [stopVoiceSample, voice.previewUrl]);
 
   const toggleVoiceSample = () => {
     if (voiceSamplePlaying) {
-      voiceSampleRef.current?.pause();
-      voiceSampleRef.current = null;
-      setVoiceSamplePlaying(false);
+      stopVoiceSample();
       return;
     }
     if (!voice.previewUrl) return;
@@ -378,18 +402,27 @@ export default function RegenerateVoiceModal({
     }
   }, [awaitingVoicePreview, voicePreview]);
 
-  // Offer every curated language. We can't reliably filter out the ad's current
-  // SCRIPT language — the stored `language` is the VOICE language, not the
-  // script's — so we show all and let Python's already_in_language guard reject
-  // a same-language pick if it ever matches.
+  const currentScriptLanguageCode = normalizeTranslateLanguageCode(
+    currentScriptLanguage || currentVoice?.language,
+  );
   const langOptions = useMemo(
     () =>
-      TRANSLATE_LANG_CODES.map((c) => ({
-        value: c,
-        label: labelForLanguage(c),
-      })),
-    [],
+      TRANSLATE_LANG_CODES.filter((code) => code !== currentScriptLanguageCode).map(
+        (code) => ({
+          value: code,
+          label: labelForLanguage(code),
+        }),
+      ),
+    [currentScriptLanguageCode],
   );
+
+  useEffect(() => {
+    if (translateLang && translateLang === currentScriptLanguageCode) {
+      setTranslateLang('');
+      setLangError('');
+    }
+  }, [currentScriptLanguageCode, translateLang]);
+
   const selectedLangObj = translateLang
     ? { value: translateLang, label: labelForLanguage(translateLang) }
     : null;
@@ -429,6 +462,7 @@ export default function RegenerateVoiceModal({
   // ── Mode switching — clear any previewed script when leaving translate ──────
   const switchMode = (next) => {
     if (next === mode) return;
+    stopVoiceSample();
     setMode(next);
     setScenes(null);
     setPreviewing(false);
@@ -444,6 +478,7 @@ export default function RegenerateVoiceModal({
   };
 
   const backToActionSelector = () => {
+    stopVoiceSample();
     setScenes(null);
     setPreviewing(false);
     setLangError('');
@@ -534,6 +569,7 @@ export default function RegenerateVoiceModal({
       setVoiceError('Please pick a voice.');
       return;
     }
+    stopVoiceSample();
     const inputs = {
       ...selectedVoice,
       regenType: 'voice',
@@ -565,6 +601,7 @@ export default function RegenerateVoiceModal({
       setVoiceError('Please pick a voice.');
       return;
     }
+    stopVoiceSample();
     const inputs = {
       ...selectedVoice,
       regenType: 'voice',
@@ -619,6 +656,7 @@ export default function RegenerateVoiceModal({
 
   const discardAndClose = async () => {
     if (discardingPreview) return;
+    stopVoiceSample();
     const discarded = await discardVoicePreview();
     if (discarded) onOpenChange(false);
   };
@@ -865,6 +903,7 @@ export default function RegenerateVoiceModal({
   // (a late socket result is ignored because previewing is false — see the
   // preview useEffect guard).
   const backToStart = () => {
+    stopVoiceSample();
     setPreviewing(false);
     setScenes(null);
     setShowVoiceSelection(false);
@@ -874,11 +913,13 @@ export default function RegenerateVoiceModal({
 
   const continueToVoiceSelection = () => {
     if (!scriptReady || scriptHasErrors) return;
+    stopVoiceSample();
     setVoiceError('');
     setShowVoiceSelection(true);
   };
 
   const backFromVoiceSelection = () => {
+    stopVoiceSample();
     setVoiceError('');
     setShowVoiceSelection(false);
     if (mode === 'voice') setShowActionSelector(true);
