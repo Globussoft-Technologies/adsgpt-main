@@ -865,10 +865,10 @@ export default function VideoCard({
                     <Megaphone size={18} />
                   </button>
                 )}
-                {/* Development-only: restore when Script & Voice-over editing is production-ready.
+                {/* Development-only: restore when Script & Voice-over editing is production-ready. */}
                 {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
-                    title="Edit Script & Voice-over"
+                    title="Customize Script & Voice-over"
                     onClick={(e) => {
                       e.stopPropagation();
                       setRegenOpen(true);
@@ -877,7 +877,7 @@ export default function VideoCard({
                   >
                     <RefreshCw size={18} />
                   </button>
-                )} */}
+                )}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}
@@ -959,7 +959,7 @@ export default function VideoCard({
             </div>
           </div>
         </div>
-        {/* Development-only: hover bridge and CTA stay hidden until the feature ships.
+        {/* Development-only: hover bridge and CTA stay hidden until the feature ships. */}
         {isAiAds && item?.status === 'completed' && (
           <div
             aria-hidden
@@ -981,11 +981,11 @@ export default function VideoCard({
                 className="group/regen flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-[#F2F2F2] active:bg-[#E5E5E5]"
               >
                 <RefreshCw size={16} className="transition-transform duration-500 group-hover/regen:rotate-180" />
-                Edit Script & Voice-over
+                Customize Script & Voice-over
               </button>
             </div>
           </div>
-        )} */}
+        )}
         </>
       ) : (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
