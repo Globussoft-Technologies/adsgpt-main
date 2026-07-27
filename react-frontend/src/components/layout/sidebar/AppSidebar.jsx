@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Bot,
+  // Bot,
   ChartNoAxesColumn,
   ChevronsLeft,
   Gauge,
@@ -53,12 +53,12 @@ const navigationItems = [
     label: 'Ad Factory',
     link: '/adfactory',
   },
-  {
-    id: 'ai',
-    label: 'AI',
-    link: '/assistant',
-    lucideIcon: Bot,
-  },
+  // {
+  //   id: 'ai',
+  //   label: 'AI',
+  //   link: '/assistant',
+  //   lucideIcon: Bot,
+  // },
   {
     id: 'adstudio',
     icon: adStudioDarkLogo,
