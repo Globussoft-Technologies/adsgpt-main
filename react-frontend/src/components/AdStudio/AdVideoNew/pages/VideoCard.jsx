@@ -883,7 +883,7 @@ export default function VideoCard({
                   </button>
                 )}
                 {/* Development-only: restore when Script & Voice-over editing is production-ready. */}
-                {canEditAiAdsOriginal && isThisFullscreen && (
+                {/* {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
                     title="Customize Script & Voice-over"
                     onClick={(e) => {
@@ -894,7 +894,7 @@ export default function VideoCard({
                   >
                     <RefreshCw size={18} />
                   </button>
-                )}
+                )} */}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}
@@ -975,7 +975,7 @@ export default function VideoCard({
               </div>
             </div>
 
-            {canEditAiAdsOriginal && !isThisFullscreen && (
+            {/* {canEditAiAdsOriginal && !isThisFullscreen && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -990,7 +990,7 @@ export default function VideoCard({
                 />
                 Customize Script & Voice-over
               </button>
-            )}
+            )} */}
           </div>
         </div>
         </>
