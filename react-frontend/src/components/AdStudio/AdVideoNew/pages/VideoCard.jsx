@@ -43,6 +43,15 @@ import VideoVersionControls from './VideoVersionControls';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 
+const resolveVideoUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  const baseUrl = String(S3_BASE_URL || '').replace(/\/$/, '');
+  return baseUrl ? `${baseUrl}/${url.replace(/^\/+/, '')}` : url;
+};
+
 // Post Ad nav (Megaphone) visibility. Flip to false to hide the
 // "Post as ad" trigger on MySpace cards.
 const SHOW_POST_AD_NAV = true;
@@ -96,6 +105,7 @@ export default function VideoCard({
   const [duration, setDuration] = useState(0);
   const [activeNavIndex, setActiveNavIndex] = useState(videoIndex);
   const [activeVideoUrl, setActiveVideoUrl] = useState(item?.results?.[0]?.url ?? '');
+  const activeVideoSrc = resolveVideoUrl(activeVideoUrl);
   const [showControls, setShowControls] = useState(false);
 
   useEffect(() => {
@@ -104,6 +114,13 @@ export default function VideoCard({
       setActiveVideoUrl(url);
     }
   }, [item?.results?.[0]?.url]);
+
+  useEffect(() => {
+    setVideoLoaded(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [activeVideoSrc]);
 
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -332,8 +349,6 @@ export default function VideoCard({
     const video = videoRef.current;
     if (video) {
       pendingPlayRef.current = true;
-      video.src = `${S3_BASE_URL}${newUrl}`;
-      video.currentTime = 0;
       setCurrentTime(0);
       setDuration(0);
     }
@@ -711,8 +726,9 @@ export default function VideoCard({
         >
           {!videoLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
           <video
+            key={activeVideoSrc}
             ref={videoRef}
-            src={`${S3_BASE_URL}${activeVideoUrl}`}
+            src={activeVideoSrc || undefined}
             className={`w-full cursor-pointer transition-opacity duration-300 ${
               isThisFullscreen
                 ? 'h-full object-contain'
@@ -728,6 +744,7 @@ export default function VideoCard({
             playsInline
             onLoadedData={() => setVideoLoaded(true)}
             onCanPlay={() => {
+              setVideoLoaded(true);
               if (pendingPlayRef.current) {
                 pendingPlayRef.current = false;
                 videoRef.current?.play();
