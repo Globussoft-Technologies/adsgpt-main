@@ -180,10 +180,6 @@ export default function VideoCard({
     shownResult?.aiAds?.translateLang ||
     item?.inputs?.voiceFilters?.language ||
     '';
-  // const currentCaptionsEnabledForModal =
-  //   shownResult?.aiAds?.captionsEnabled ??
-  //   item?.inputs?.captionsEnabled ??
-  //   false;
 
   const isThisFullscreen = isFullscreen && (fullscreenIndex === videoIndex || fullscreenIndex === activeNavIndex);
 
@@ -886,7 +882,7 @@ export default function VideoCard({
                     <Megaphone size={18} />
                   </button>
                 )}
-                {/* Development-only: restore when Script & Voice-over editing is production-ready.
+                {/* Development-only: restore when Script & Voice-over editing is production-ready. */}
                 {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
                     title="Customize Script & Voice-over"
@@ -898,7 +894,7 @@ export default function VideoCard({
                   >
                     <RefreshCw size={18} />
                   </button>
-                )} */}
+                )}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}
@@ -978,35 +974,25 @@ export default function VideoCard({
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-        {/* Development-only: restore the hover bridge and CTA when the feature ships.
-        {isAiAds && item?.status === 'completed' && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-            style={{
-              background: 'linear-gradient(to bottom, transparent 0%, #2A2A2A 100%)',
-            }}
-          />
-        )}
-        {canEditAiAdsOriginal && (
-          <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100">
-            <div className="flex h-14 w-full items-center px-3" style={{ backgroundColor: '#2A2A2A' }}>
+
+            {canEditAiAdsOriginal && !isThisFullscreen && (
               <button
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
                   setRegenOpen(true);
                 }}
-                className="group/regen flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-[#F2F2F2] active:bg-[#E5E5E5]"
+                className="group/regen mx-1 flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/95 px-4 py-2 text-sm font-bold tracking-tight text-black shadow-[0_8px_24px_rgba(0,0,0,0.3)] backdrop-blur-md transition-all duration-200 hover:bg-white active:scale-[0.99]"
               >
-                <RefreshCw size={16} className="transition-transform duration-500 group-hover/regen:rotate-180" />
+                <RefreshCw
+                  size={16}
+                  className="transition-transform duration-500 group-hover/regen:rotate-180"
+                />
                 Customize Script & Voice-over
               </button>
-            </div>
+            )}
           </div>
-        )} */}
+        </div>
         </>
       ) : (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
@@ -1063,7 +1049,6 @@ export default function VideoCard({
           currentVoice={currentVoiceForModal}
           currentScenes={currentScenesForModal}
           currentScriptLanguage={currentScriptLanguageForModal}
-          // currentCaptionsEnabled={currentCaptionsEnabledForModal}
         />
       )}
     </div>
