@@ -368,7 +368,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="fixed top-0 right-0 bottom-0 z-100 flex w-full max-w-[680px] flex-col overflow-hidden border-l border-gray-200 bg-white shadow-[-12px_0_40px_rgba(0,0,0,0.5)] sm:w-[680px] dark:border-white/10 dark:bg-[#14181D]"
+        className="fixed inset-0 z-100 flex w-full flex-col overflow-hidden bg-white dark:bg-[#14181D]"
       >
         {/* header */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5 sm:py-3.5 dark:border-white/12 dark:bg-white/3">
@@ -392,7 +392,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
 
         {/* body */}
         <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex flex-col gap-5 lg:gap-6">
+          <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 lg:gap-6">
             {/* Basics */}
             <div>
               <FieldLabel>Name</FieldLabel>
@@ -637,7 +637,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         </div>
 
         {/* footer */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-5 dark:border-white/12 dark:bg-white/3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 dark:border-white/12 dark:bg-white/3">
           {/* Test button is always clickable while not loading — onTest
                 handles the "must save first" case in create mode by
                 surfacing an inline message. Disabled-only-on-loading
@@ -1248,7 +1248,7 @@ function AttachmentPicker({ attachments, onChange }) {
             />
           </div>
         </div>
-        <div className="max-h-72 overflow-y-auto">
+        <div className="max-h-[55vh] min-h-72 overflow-y-auto">
           {accountsLoading && (
             <p className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/55">
               Loading ad accounts…
