@@ -230,7 +230,12 @@ const ChatInterface = () => {
         sessionId,
         message: text,
         attachments: attachments?.length
-          ? attachments.map((a) => ({ file_type: a.file_type, url: a.url, filename: a.filename }))
+          ? attachments.map((a) => ({
+              file_type: a.file_type,
+              url: a.url,
+              filename: a.filename,
+              role: a.role || null,
+            }))
           : null,
         enabledTools,
         formResponse: formResponse || null,
@@ -437,17 +442,24 @@ const ChatInterface = () => {
         ad.image_url ||
         ad.thumbnail_url ||
         (Array.isArray(ad.image_candidates) ? ad.image_candidates[0] : '');
-      const brand = ad.brand ? ` this ${ad.brand}` : ' this';
-      const bits = [ad.headline, ad.call_to_action].filter(Boolean).join(' — ');
+      const sourceBrand = (ad.brand || '').trim();
+      const sourceDescription = (ad.snippet || ad.headline || '').trim();
+      const sourceCta = (ad.call_to_action || '').trim();
       const text =
-        `Recreate${brand} ad as inspiration — keep the overall style and layout, ` +
-        `but make it an original creative I can use.` +
-        (bits ? ` (Reference: ${bits})` : '');
+        `Recreate the selected ad as an original creative with a similar visual direction. ` +
+        `Use only these source-ad details in Creative Studio: ` +
+        `brand name "${sourceBrand}", brand description "${sourceDescription}", ` +
+        `CTA "${sourceCta}". Do not substitute a saved or unrelated brand.`;
       // Derive a sane image extension; ad-CDN URLs often omit one, so default jpg.
       const clean = (img || '').split('?')[0];
       const m = clean.match(/\.(png|jpe?g|webp|gif|bmp)$/i);
       const attachments = img
-        ? [{ file_type: m ? `.${m[1].toLowerCase()}` : '.jpg', url: img, filename: 'reference-ad' }]
+        ? [{
+            file_type: m ? `.${m[1].toLowerCase()}` : '.jpg',
+            url: img,
+            filename: 'reference-ad',
+            role: 'reference_image',
+          }]
         : [];
       handleSend(text, attachments);
     },

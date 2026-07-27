@@ -1,10 +1,12 @@
 const UnifiedCreditController = require("./UnifiedCreditController");
 const GeneratedMediaController = require("./generatedMedia.controller");
 const CreditReservation = require("../Module/credit/creditReservationModel");
+const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
 const {
   MODEL_REGISTRY,
   findModel,
   getCreditDeduction,
+  getCreditDeductionByQuality,
 } = require("../config/modelRegistry");
 const {
   freezeSchema,
@@ -310,7 +312,7 @@ exports.finalize = async (req, res) => {
   if (userId && Array.isArray(media) && media.length > 0) {
     for (const m of media) {
       try {
-        await GeneratedMediaController.saveGeneratedMedia({
+        const saved = await GeneratedMediaController.saveGeneratedMedia({
           userId,
           model: m.model,
           type: m.type,
@@ -325,7 +327,22 @@ exports.finalize = async (req, res) => {
           credit_deduction: m.credit_deduction || 0,
           cost: m.cost || 0,
           duration: m.duration || 0,
+          aspect_ratio: m.aspect_ratio || "",
+          quality: m.quality || "",
         });
+        if (!saved?.success) {
+          throw new Error(saved?.error || saved?.message || "GeneratedMedia write failed");
+        }
+        // Profile's generation graph counts successful images from
+        // GeneratedCount. Agent generations used to write only GeneratedMedia,
+        // so they appeared in My Space but never in that graph.
+        if (m.type === "image" && m.url) {
+          await GeneratedCount.updateOne(
+            { userId, type: "image", url: m.url, model: m.model },
+            { $setOnInsert: { userId, type: "image", url: m.url, model: m.model } },
+            { upsert: true },
+          );
+        }
         mediaWritten += 1;
       } catch (e) {
         console.error(
@@ -352,17 +369,38 @@ exports.finalize = async (req, res) => {
 // Minimal shape for Python: just what's needed to decide cost.
 //   model:  canonical key (the string to pass to the model/router)
 //   type:   "image" | "video"
-//   credit: per-unit credit (env-override applied)
+//   credit: default per-unit credit (image defaults to the high-quality tier)
+//   quality_tiers: effective per-quality image credits (env overrides applied)
 //   price:  per-unit USD (per_image for image, per_second for video)
-const _publicModel = (entry) => ({
-  model: entry.canonicalKey,
-  type: entry.type,
-  credit: getCreditDeduction(entry.canonicalKey),
-  price:
-    entry.type === "video"
-      ? entry.pricing?.per_second ?? 0
-      : entry.pricing?.per_image ?? 0,
-});
+const _publicModel = (entry) => {
+  const isImage = entry.type === "image";
+  const qualityTiers =
+    isImage && Array.isArray(entry.qualityTiers)
+      ? entry.qualityTiers.map((tier) => ({
+          quality: tier.quality,
+          credit: getCreditDeductionByQuality(
+            entry.canonicalKey,
+            tier.quality,
+          ),
+          price: tier.pricing?.per_image ?? entry.pricing?.per_image ?? 0,
+        }))
+      : [];
+
+  return {
+    model: entry.canonicalKey,
+    type: entry.type,
+    // Profile and Ad Creative both default an omitted quality to "high".
+    // Matching that here removes the stale flat image value from Agent billing.
+    credit: isImage
+      ? getCreditDeductionByQuality(entry.canonicalKey, "high")
+      : getCreditDeduction(entry.canonicalKey),
+    quality_tiers: qualityTiers,
+    price:
+      entry.type === "video"
+        ? entry.pricing?.per_second ?? 0
+        : entry.pricing?.per_image ?? 0,
+  };
+};
 
 /**
  * GET /api/v1/credits/models
@@ -421,6 +459,7 @@ exports.getModels = async (req, res) => {
                                      model: { type: 'string', example: 'veo-3.1-fast', description: 'Canonical model key. Pass this exact string when invoking the model.' },
                                      type: { type: 'string', example: 'video', enum: ['image', 'video'] },
                                      credit: { type: 'number', example: 13, description: 'Per-unit credit cost (per image OR per second of video).' },
+                                     quality_tiers: { type: 'array', description: 'Image-only per-quality credit and price rows.', items: { type: 'object', properties: { quality: { type: 'string' }, credit: { type: 'number' }, price: { type: 'number' } } } },
                                      price: { type: 'number', example: 0.15, description: 'Per-unit USD cost (per image OR per second of video).' }
                                  }
                              }

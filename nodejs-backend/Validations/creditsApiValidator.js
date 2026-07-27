@@ -21,6 +21,8 @@ const mediaItemSchema = Joi.object({
   cost: Joi.number().min(0).default(0),
   // Seconds — only meaningful for video; ignored for image.
   duration: Joi.number().min(0).default(0),
+  aspect_ratio: Joi.string().max(32).allow("").default(""),
+  quality: Joi.string().max(32).allow("").default(""),
 });
 
 // POST /api/v1/credits/finalize — settle (charge actual + refund rest) OR

@@ -168,7 +168,8 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
   const opts = normaliseOptions(field.options);
   const costFor = (v) => {
     if (!creditCosts) return null;
-    return creditCosts[v] != null ? creditCosts[v] : creditCosts.auto ?? null;
+    if (Object.prototype.hasOwnProperty.call(creditCosts, v)) return creditCosts[v];
+    return creditCosts.auto ?? null;
   };
   return (
     <div className="flex flex-col gap-1.5">
@@ -953,7 +954,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   // Seed from the form spec; once the user starts editing this is the
   // authoritative state. After submission `result.values` is the truth.
   const initialValues = useMemo(() => {
-    if (result?.values) return result.values;
+    if (result?.values) {
+      return {
+        ...result.values,
+        quality: result.values.quality === 'standard' ? 'medium' : result.values.quality,
+      };
+    }
     const out = {};
     for (const f of form.fields || []) out[f.key] = initialValueForField(f);
     return out;
@@ -971,7 +977,34 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   // lock only applies while collapsed (or disabled / mid-submit), not forever.
   const isLocked = (isSubmitted && !editing) || disabled || submitting;
 
-  const setField = (key, val) => setValues((prev) => ({ ...prev, [key]: val }));
+  const setField = (key, val) =>
+    setValues((prev) => {
+      const next = { ...prev, [key]: val };
+      if (key === 'model') {
+        const costs = form.credit_costs_by_quality?.[val];
+        const currentQuality = prev.quality === 'standard' ? 'medium' : prev.quality;
+        if (costs && costs[currentQuality] == null) {
+          next.quality =
+            costs.high != null ? 'high' : Object.keys(costs)[0] || currentQuality || 'high';
+        }
+      }
+      return next;
+    });
+
+  const creditCostsForQuality = useMemo(() => {
+    const tiered = form.credit_costs_by_quality;
+    if (!tiered) return form.credit_costs || null;
+    const quality = values.quality === 'standard' ? 'medium' : values.quality || 'high';
+    const modelKeys = new Set([
+      ...Object.keys(form.credit_costs || {}),
+      ...Object.keys(tiered),
+    ]);
+    const resolved = {};
+    modelKeys.forEach((model) => {
+      resolved[model] = tiered[model]?.[quality] ?? null;
+    });
+    return resolved;
+  }, [form.credit_costs, form.credit_costs_by_quality, values.quality]);
 
   // What the "Submitted with" summary should show for a field. Prefer the
   // submitted `result.values`, but fall back to the card's live `values` when
@@ -1014,7 +1047,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   // at 3 variants regardless of the stepper. Falls back to the server's static
   // `estimated_credits` only when the live cost map is unavailable.
   const creditInfo = useMemo(() => {
-    const costs = form.credit_costs || null;
+    const costs = creditCostsForQuality;
     const isPack = values.creative_type === 'ad_pack';
     const ratiosRaw = values.aspect_ratios;
     const ratios = Math.max(
@@ -1031,7 +1064,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     const totalCredits =
       perImage != null ? perImage * totalImages : form.estimated_credits ?? null;
     return { isPack, ratios, perRatio, totalImages, perImage, totalCredits };
-  }, [values, form.credit_costs, form.estimated_credits]);
+  }, [values, creditCostsForQuality, form.estimated_credits]);
 
   const handleSubmit = async () => {
     if (isLocked || validationError) return;
@@ -1138,6 +1171,19 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         )}
         {(form.fields || []).map((field) => {
           const model = isModelField(field);
+          const qualityCosts =
+            field.key === 'quality'
+              ? form.credit_costs_by_quality?.[values.model || 'auto']
+              : null;
+          const renderedField =
+            qualityCosts && Object.keys(qualityCosts).length > 0
+              ? {
+                  ...field,
+                  options: normaliseOptions(field.options).filter(
+                    (option) => qualityCosts[option.value] != null,
+                  ),
+                }
+              : field;
           const Renderer = model ? ModelSelectField : FIELD_RENDERERS[field.type] || TextField;
           const full = isFullWidth(field);
           return (
@@ -1164,11 +1210,11 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 )}
               </div>
               <Renderer
-                field={field}
+                field={renderedField}
                 value={values[field.key]}
                 onChange={(v) => setField(field.key, v)}
                 disabled={isLocked}
-                creditCosts={model ? form.credit_costs : undefined}
+                creditCosts={model ? creditCostsForQuality : undefined}
               />
             </div>
           );

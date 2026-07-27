@@ -53,9 +53,17 @@ const adaptRow = (row) => {
       model: row?.model,
       modelLabel: row?.model,
       type: row?.creativeType || row?.type,
+      aspectRatio: row?.aspect_ratio || row?.aspectRatio || '',
+      quality: row?.quality || '',
     },
     url: abs,
-    results: [{ url: abs, imageStatus: 200, aspectRatio: null }],
+    results: [
+      {
+        url: abs,
+        imageStatus: 200,
+        aspectRatio: row?.aspect_ratio || row?.aspectRatio || null,
+      },
+    ],
   };
 };
 

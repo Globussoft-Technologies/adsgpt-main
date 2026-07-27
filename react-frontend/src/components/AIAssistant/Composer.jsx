@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { Loader2, Paperclip, Send, X, Quote } from 'lucide-react';
+import { Link2, Loader2, Paperclip, Send, X, Quote } from 'lucide-react';
 import { uploadFile } from '@/apis/aiAssistant/aiAssistantApi';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
@@ -12,6 +12,8 @@ import ImageLightbox from './ImageLightbox';
 let _tmpId = 0;
 const nextTmpId = () => `att_${++_tmpId}`;
 const isImageFile = (file) => (file?.type || '').startsWith('image/');
+const looksLikeLogoName = (name = '') =>
+  /(logo|logotype|wordmark|brand[\s_-]*mark)/i.test(name);
 const extOf = (name) => {
   const dot = (name || '').lastIndexOf('.');
   return dot >= 0 ? name.slice(dot).toLowerCase() : '';
@@ -62,11 +64,16 @@ const Composer = ({
   onClearQuote,
 }) => {
   const [text, setText] = useState('');
-  // Each attachment: { tempId, file_type, filename, url, isImage, preview?, pending }.
+  // Each attachment: { tempId, file_type, filename, url, isImage, role,
+  // preview?, pending }. Image role is sent to the backend so Reference Image
+  // and Brand Logo mapping never has to guess from upload order.
   // Images get an instant local `preview` (object URL) + a spinner while they
   // upload to S3 in the background — like ChatGPT — so the user never waits on a
   // blank composer.
   const [attachments, setAttachments] = useState([]);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [urlAdding, setUrlAdding] = useState(false);
   // Full-screen preview of an attached image (double-click a thumbnail).
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const userId = useSelector((s) => s.socket?.userData?.user_id);
@@ -120,11 +127,16 @@ const Composer = ({
       file_type: a.file_type,
       url: a.url,
       filename: a.filename,
+      role: a.role || null,
     }));
-    attachments.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+    attachments.forEach(
+      (a) => a.preview?.startsWith?.('blob:') && URL.revokeObjectURL(a.preview),
+    );
     onSend?.(text.trim(), payload);
     setText('');
     setAttachments([]);
+    setImageUrl('');
+    setShowUrlInput(false);
   };
 
   const handleKeyDown = (e) => {
@@ -171,6 +183,11 @@ const Composer = ({
           filename: file.name,
           url: '',
           isImage,
+          role: isImage
+            ? looksLikeLogoName(file.name)
+              ? 'brand_logo'
+              : 'reference_image'
+            : null,
           preview,
           pending: true,
         },
@@ -211,11 +228,20 @@ const Composer = ({
   // so it's stored like any other attachment. If the fetch is blocked (most
   // cross-origin images are), fall back to referencing the URL directly so the
   // user still gets a thumbnail preview and can send it.
-  const addImageByUrl = async (url) => {
+  const addImageByUrl = async (rawUrl) => {
     if (attachments.length >= MAX_ATTACHMENTS) {
       toast.error(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
-      return;
+      return false;
     }
+    const url = rawUrl.trim();
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    } catch {
+      toast.error('Enter a valid public http(s) image URL.');
+      return false;
+    }
+    setUrlAdding(true);
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('fetch failed');
@@ -233,11 +259,22 @@ const Composer = ({
           filename: url.split('/').pop()?.split('?')[0] || 'pasted-image',
           url,
           isImage: true,
+          role: 'reference_image',
           preview: url,
           pending: false,
         },
       ]);
+    } finally {
+      setUrlAdding(false);
     }
+    return true;
+  };
+
+  const handleAddImageUrl = async () => {
+    const added = await addImageByUrl(imageUrl);
+    if (!added) return;
+    setImageUrl('');
+    setShowUrlInput(false);
   };
 
   // Let users paste an image straight from the clipboard (screenshots, copied
@@ -268,8 +305,28 @@ const Composer = ({
   const removeAttachment = (idx) =>
     setAttachments((prev) => {
       const target = prev[idx];
-      if (target?.preview) URL.revokeObjectURL(target.preview);
+      if (target?.preview?.startsWith?.('blob:')) URL.revokeObjectURL(target.preview);
       return prev.filter((_, i) => i !== idx);
+    });
+
+  const toggleImageRole = (tempId) =>
+    setAttachments((prev) => {
+      const target = prev.find((item) => item.tempId === tempId);
+      const nextRole =
+        target?.role === 'brand_logo' ? 'reference_image' : 'brand_logo';
+      return prev.map((item) => {
+        if (item.tempId === tempId) return { ...item, role: nextRole };
+        // The Creative Studio logo field is singular. Choosing a new logo
+        // deterministically returns the old one to the reference-image group.
+        if (
+          nextRole === 'brand_logo' &&
+          item.isImage &&
+          item.role === 'brand_logo'
+        ) {
+          return { ...item, role: 'reference_image' };
+        }
+        return item;
+      });
     });
 
   const radius = variant === 'centered' ? 28 : 24;
@@ -338,14 +395,27 @@ const Composer = ({
                     </div>
                   )}
                   {!a.pending && (
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(i)}
-                      className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white/80 hover:bg-black hover:text-white"
-                      aria-label="Remove attachment"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(i)}
+                        className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white/80 hover:bg-black hover:text-white"
+                        aria-label="Remove attachment"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleImageRole(a.tempId)}
+                        className="absolute right-1 bottom-1 left-1 truncate rounded bg-black/75 px-1 py-0.5 text-[8.5px] font-semibold tracking-wide text-white/85 uppercase hover:bg-black"
+                        title="Click to switch between reference image and brand logo"
+                        aria-label={`Use ${a.filename} as ${
+                          a.role === 'brand_logo' ? 'reference image' : 'brand logo'
+                        }`}
+                      >
+                        {a.role === 'brand_logo' ? 'Logo' : 'Reference'}
+                      </button>
+                    </>
                   )}
                 </div>
               ) : (
@@ -385,6 +455,47 @@ const Composer = ({
           </span>
         )}
 
+        {showUrlInput && (
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
+            <Link2 className="ml-1 h-4 w-4 shrink-0 text-white/45" />
+            <input
+              type="url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddImageUrl();
+                } else if (e.key === 'Escape') {
+                  setShowUrlInput(false);
+                }
+              }}
+              autoFocus
+              placeholder="https://example.com/image.png"
+              className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
+            />
+            <button
+              type="button"
+              onClick={handleAddImageUrl}
+              disabled={urlAdding || !imageUrl.trim()}
+              className="inline-flex h-7 items-center rounded-full bg-white px-3 text-[11px] font-semibold text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {urlAdding ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowUrlInput(false);
+                setImageUrl('');
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+              aria-label="Close image URL input"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           value={text}
@@ -405,6 +516,18 @@ const Composer = ({
           <ToolToggles />
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowUrlInput((open) => !open)}
+              disabled={disabled}
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50 ${
+                showUrlInput ? 'bg-white/10 text-white' : 'text-white/60'
+              }`}
+              aria-label="Attach image from URL"
+              title="Attach image from URL"
+            >
+              <Link2 className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={handleAttachClick}

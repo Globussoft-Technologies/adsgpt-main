@@ -17,6 +17,8 @@ const GeneratedMediaSchema = new Schema({
     credit_deduction: { type: Number, default: 0 },
     cost: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
+    aspect_ratio: { type: String, default: "" },
+    quality: { type: String, default: "" },
     image: { type: mongoose.Schema.Types.Mixed, default: "" },
     video: { type: mongoose.Schema.Types.Mixed, default: "" }
 }, { timestamps: true });

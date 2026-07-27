@@ -20,7 +20,19 @@ class GeneratedMediaController {
    */
   static async saveGeneratedMedia(data) {
     try {
-      const { userId, model, type, image, video, credit_deduction, cost, duration, source } = data;
+      const {
+        userId,
+        model,
+        type,
+        image,
+        video,
+        credit_deduction,
+        cost,
+        duration,
+        source,
+        aspect_ratio,
+        quality,
+      } = data;
 
       if (!userId || !model) {
         return { success: false, message: "userId and model are required" };
@@ -39,7 +51,9 @@ class GeneratedMediaController {
         video: video || "",
         credit_deduction: credit_deduction || 0,
         cost: cost || 0,
-        duration: duration || 0
+        duration: duration || 0,
+        aspect_ratio: aspect_ratio || "",
+        quality: quality || "",
       });
 
       await newMedia.save();
@@ -268,6 +282,8 @@ class GeneratedMediaController {
                   _id: 1,
                   type: 1,
                   model: 1,
+                  aspect_ratio: 1,
+                  quality: 1,
                   createdAt: 1,
                   url: urlProject,
                 },
