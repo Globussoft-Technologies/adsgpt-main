@@ -855,12 +855,12 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
             </div>
 
             <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className={`flex w-full items-center justify-between gap-3 rounded-xl border border-black/10 bg-gray-100 px-3 py-2.5 dark:border-white/5 dark:bg-[#909294]/10 sm:max-w-[360px] ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            <div className={`flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   Captions
                 </p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-white/50">
+                <p className="mt-0.5 whitespace-nowrap text-[11px] text-gray-500 dark:text-white/50">
                   Add subtitles to the final video.
                 </p>
               </div>
@@ -898,7 +898,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         </span>
                       </ShadcnTooltip>
                     ) : (
-                      <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                      <span className="shrink-0 whitespace-nowrap rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-[11px] font-medium text-white">
                         Not enough credits — need {est}, you have {availableCredits}
                       </span>
                     );

@@ -177,7 +177,7 @@ export default function AspectRatioTiles({
             role="listbox"
             data-aspect-quantity-menu=""
             style={{ position: 'fixed', left: menu.left, top: menu.top, bottom: menu.bottom, width: MENU_W }}
-            className={`z-[80] overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-xl ring-1 ring-black/5 transition-all duration-200 ease-out will-change-transform dark:border-white/10 dark:bg-[#232323] dark:ring-white/5 ${
+            className={`pointer-events-auto z-[80] overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-xl ring-1 ring-black/5 transition-all duration-200 ease-out will-change-transform dark:border-white/10 dark:bg-[#232323] dark:ring-white/5 ${
               menu.below ? 'origin-top' : 'origin-bottom'
             } ${
               visible
