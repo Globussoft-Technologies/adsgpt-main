@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   Palette,
   Mic2,
+  Plus,
   Sparkles,
   Timer,
 } from 'lucide-react';
@@ -201,6 +202,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     model: data?.model || '',
     duration: data?.duration || '',
     aspectRatio: data?.aspectRatio || '9:16',
+    captionsEnabled: data?.captionsEnabled ?? false,
     voice: {
       // Voice data may arrive in two shapes:
       //   (a) Runtime/formData shape (on Back navigation): data.voice.{...}
@@ -267,6 +269,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       model: inputs.model || '',
       duration: normalizeDuration(inputs.duration, durationOptions),
       aspectRatio: inputs.aspectRatio || '9:16',
+      captionsEnabled: inputs.captionsEnabled ?? false,
       voice: {
         // Same dual-shape handling as the useState initializer above.
         // Runtime shape (inputs.voice) wins over saved shape (inputs.voiceFilters).
@@ -367,6 +370,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       formData.model !== (orig.model || '') ||
       formData.duration !== normalizeDuration(orig.duration, durationOptions) ||
       formData.aspectRatio !== (orig.aspectRatio || '') ||
+      formData.captionsEnabled !== (orig.captionsEnabled ?? false) ||
       formData.voice?.voiceId !== (orig.voice?.voiceId || orig.voiceId || '') ||
       imagesChanged ||
       logoChanged
@@ -633,35 +637,45 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               title="Click here and press Ctrl+V to paste an image"
             >
-              <FileUpload
-                id="images-upload"
-                label="Product Images"
-                required
-                fileName={uploadedImages.length > 0 ? `${uploadedImages.length} file(s)` : urlImages.length > 0 ? `${urlImages.length} file(s)` : ''}
-                onChange={handleImageUpload}
-                onClear={() => { setUploadedImages([]); setUrlImages([]); }}
-                error={errors.images}
-                disabled={submitting}
-              />
-
-              {(urlImages.length > 0 || uploadedImages.length > 0) && (
-                <div className="mt-3 flex flex-wrap gap-2">
+              {urlImages.length + uploadedImages.length === 0 ? (
+                <FileUpload
+                  id="images-upload"
+                  label="Product Images"
+                  required
+                  fileName=""
+                  onChange={handleImageUpload}
+                  onClear={() => { setUploadedImages([]); setUrlImages([]); }}
+                  error={errors.images}
+                  disabled={submitting}
+                />
+              ) : (
+                <>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
+                    Product Images*
+                  </label>
+                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-gray-100 px-2.5 py-2 dark:bg-[#909294]/15 ${
+                    errors.images
+                      ? 'border-red-500'
+                      : 'border-black/10 dark:border-white/5'
+                  } ${submitting ? 'opacity-50' : ''}`}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {urlImages.map((img, index) => (
                     <div
                       key={`url-${index}`}
-                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-black/10 dark:border-white/10"
+                      className="group relative h-11 w-11 cursor-pointer rounded-lg border border-black/10 dark:border-white/10"
                     >
                       <img
                         src={img.preview}
-                        alt="preview"
-                        className="h-full w-full rounded-md object-cover"
+                        alt={`Product image ${index + 1}`}
+                        className="h-full w-full rounded-lg object-cover"
                         onClick={() => openLightbox([...urlImages.map((i) => i.preview), ...uploadedImages.map((i) => i.preview)], index)}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                       <button
+                        type="button"
                         onClick={() => setUrlImages((prev) => prev.filter((_, i) => i !== index))}
                         disabled={submitting}
-                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
+                        className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -670,24 +684,53 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   {uploadedImages.map((img, index) => (
                     <div
                       key={`file-${index}`}
-                      className="group relative h-12 w-12 cursor-pointer rounded-sm border border-black/10 dark:border-white/10"
+                      className="group relative h-11 w-11 cursor-pointer rounded-lg border border-black/10 dark:border-white/10"
                     >
                       <img
                         src={img.preview}
-                        alt="preview"
-                        className="h-full w-full rounded-md object-cover"
+                        alt={`Product image ${urlImages.length + index + 1}`}
+                        className="h-full w-full rounded-lg object-cover"
                         onClick={() => openLightbox([...urlImages.map((i) => i.preview), ...uploadedImages.map((i) => i.preview)], urlImages.length + index)}
                       />
                       <button
+                        type="button"
                         onClick={() => removeImage(index)}
                         disabled={submitting}
-                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
+                        className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
                       >
                         <X className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
-                </div>
+                      {urlImages.length + uploadedImages.length < 5 && (
+                        <label
+                          htmlFor={submitting ? undefined : 'images-upload-more'}
+                          title="Add more product images"
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-black/20 bg-black/[0.025] text-gray-500 transition dark:border-white/20 dark:bg-white/[0.035] dark:text-white/50 ${
+                            submitting
+                              ? 'cursor-not-allowed'
+                              : 'cursor-pointer hover:border-emerald-400/60 hover:text-emerald-500 dark:hover:text-emerald-300'
+                          }`}
+                        >
+                          <Plus className="h-4 w-4" />
+                          <input
+                            id="images-upload-more"
+                            type="file"
+                            className="hidden"
+                            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                            onChange={handleImageUpload}
+                            multiple
+                            disabled={submitting}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-1 text-[10px] font-medium text-gray-500 dark:bg-white/10 dark:text-white/50">
+                      {urlImages.length + uploadedImages.length}/5
+                    </span>
+                  </div>
+                  {errors.images && <p className="mt-1 text-xs text-red-400">{errors.images}</p>}
+                </>
               )}
             </div>
             <div
@@ -696,34 +739,70 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               title="Click here and press Ctrl+V to paste an image"
             >
-              <FileUpload
-                id="logo-upload"
-                label={isBrand ? 'Brand Logo' : 'Product Logo'}
-                fileName={uploadedLogo?.name || urlLogo?.name || ''}
-                onChange={handleLogoUpload}
-                onClear={() => { removeLogo(); setUrlLogo(null); }}
-                error={errors.logo}
-                disabled={submitting}
-              />
-              {(uploadedLogo || urlLogo) && (
-                <div className="mt-3">
-                  <div className="group relative h-12 w-12 cursor-pointer border border-black/10 dark:border-white/10">
-                    <img
-                      src={uploadedLogo?.preview || urlLogo?.preview}
-                      alt="logo-preview"
-                      className="h-full w-full rounded-md object-cover"
-                      onClick={() => openLightbox([uploadedLogo?.preview || urlLogo?.preview], 0)}
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                    <button
-                      onClick={() => { removeLogo(); setUrlLogo(null); }}
-                      disabled={submitting}
-                      className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+              {!uploadedLogo && !urlLogo ? (
+                <FileUpload
+                  id="logo-upload"
+                  label={isBrand ? 'Brand Logo' : 'Product Logo'}
+                  fileName=""
+                  onChange={handleLogoUpload}
+                  onClear={() => { removeLogo(); setUrlLogo(null); }}
+                  error={errors.logo}
+                  disabled={submitting}
+                />
+              ) : (
+                <>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
+                    {isBrand ? 'Brand Logo' : 'Product Logo'}
+                  </label>
+                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-gray-100 px-2.5 py-2 dark:bg-[#909294]/15 ${
+                    errors.logo
+                      ? 'border-red-500'
+                      : 'border-black/10 dark:border-white/5'
+                  } ${submitting ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="group relative h-11 w-11 cursor-pointer rounded-lg border border-black/10 dark:border-white/10">
+                        <img
+                          src={uploadedLogo?.preview || urlLogo?.preview}
+                          alt={`${isBrand ? 'Brand' : 'Product'} logo`}
+                          className="h-full w-full rounded-lg object-cover"
+                          onClick={() => openLightbox([uploadedLogo?.preview || urlLogo?.preview], 0)}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { removeLogo(); setUrlLogo(null); }}
+                          disabled={submitting}
+                          className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <label
+                        htmlFor={submitting ? undefined : 'logo-upload-replace'}
+                        title="Replace logo"
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-black/20 bg-black/[0.025] text-gray-500 transition dark:border-white/20 dark:bg-white/[0.035] dark:text-white/50 ${
+                          submitting
+                            ? 'cursor-not-allowed'
+                            : 'cursor-pointer hover:border-emerald-400/60 hover:text-emerald-500 dark:hover:text-emerald-300'
+                        }`}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <input
+                          id="logo-upload-replace"
+                          type="file"
+                          className="hidden"
+                          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                          onChange={handleLogoUpload}
+                          disabled={submitting}
+                        />
+                      </label>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-1 text-[10px] font-medium text-gray-500 dark:bg-white/10 dark:text-white/50">
+                      1/1
+                    </span>
                   </div>
-                </div>
+                  {errors.logo && <p className="mt-1 text-xs text-red-400">{errors.logo}</p>}
+                </>
               )}
             </div>
           </div>
@@ -766,15 +845,46 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
           {/* Settings Divider */}
           <div>
-            <div className={`mb-4 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 xl:mb-3 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            <div className={`mb-3 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               <VoiceSelector
                 value={formData.voice}
                 onChange={(next) => { updateField('voice', next); setErrors((prev) => ({ ...prev, voice: '' })); }}
                 error={errors.voice}
+                compactHeader
               />
             </div>
 
-            <div className="mt-4 flex w-full min-w-0 flex-col sm:mt-6">
+            <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className={`flex w-full items-center justify-between gap-3 rounded-xl border border-black/10 bg-gray-100 px-3 py-2.5 dark:border-white/5 dark:bg-[#909294]/10 sm:max-w-[360px] ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Captions
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-white/50">
+                  Add subtitles to the final video.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={formData.captionsEnabled}
+                aria-label="Enable captions"
+                onClick={() => updateField('captionsEnabled', !formData.captionsEnabled)}
+                className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors ${
+                  formData.captionsEnabled
+                    ? 'border-emerald-400 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.3)]'
+                    : 'border-black/20 bg-black/10 dark:border-white/15 dark:bg-white/10'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${
+                    formData.captionsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex min-w-0 flex-col sm:ml-auto">
               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   {(() => {
@@ -878,6 +988,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   </button>
                 </div>
               </div>
+            </div>
             </div>
           </div>
           </div>

@@ -672,6 +672,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
+          captionsEnabled: formData.captionsEnabled ?? false,
           ...voicePayload,
         }
       : {
@@ -692,6 +693,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
+          captionsEnabled: formData.captionsEnabled ?? false,
           ...voicePayload,
         };
 

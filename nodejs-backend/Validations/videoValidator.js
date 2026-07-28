@@ -133,6 +133,7 @@ const aiAdsCommonInputFields = {
   logoUrl: Joi.string().uri().optional().allow(""),
   tagline: Joi.string().optional().allow(""),
   userPrompt: Joi.string().required(),
+  captionsEnabled: Joi.boolean().default(false),
 };
 
 const brandInputSchema = Joi.object({
@@ -158,6 +159,7 @@ const generateSceneSchema = Joi.object({
   watermark: Joi.boolean().optional(),
   inputs: Joi.object({
     aiAdsType: Joi.string().valid("brand", "product").required(),
+    captionsEnabled: Joi.boolean().default(false),
   })
     .unknown(true)
     .required(),

@@ -1720,6 +1720,7 @@ exports.generateScene = async (req, res) => {
     const { brandName, productName, productDescription, ...restInputs } = inputs;
     const pythonInputs = {
       ...restInputs,
+      captionsEnabled: inputs.captionsEnabled ?? false,
       // Frontend sends brandName (brand) or productName (product) → Python expects "name"
       ...(brandName || productName ? { name: brandName || productName } : {}),
       ...(productDescription ? { description: productDescription } : {}),
@@ -2806,6 +2807,7 @@ exports.generateAiAdsVideo = async (req, res) => {
     const { brandName, productName, productDescription, scenes: dbScenes, ...restInputs } = record.inputs;
     const inputsForPython = {
       ...restInputs,
+      captionsEnabled: record.inputs?.captionsEnabled ?? false,
       ...(brandName || productName ? { name: brandName || productName } : {}),
       ...(productDescription ? { description: productDescription } : {}),
     };
@@ -3084,7 +3086,6 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       baseVersion,
       inputs: record.inputs,
     });
-
     // For translate/rewrite the user reviews (and may edit) the previewed script
     // before committing. When the frontend sends those edited `scenes`, they are
     // the source of truth — use them over the base version's script.
@@ -3667,6 +3668,7 @@ exports.generateImageAndScriptClone = async (req, res) => {
       userId,
       watermark: inputs.watermark ?? false,
       inputs: {
+        model: inputs.model,
         person_images: inputs.uploadedAvatars || [],
         product_img: inputs.image ? [inputs.image] : [],
         productName: inputs.productName,
@@ -3869,6 +3871,7 @@ exports.regenerateScriptClone = async (req, res) => {
       userId: video.userId,
       watermark: video.watermark ?? false,
       inputs: {
+        model: inputs.model,
         person_images: inputs.uploadedAvatars || [],
         product_img: inputs.image ? [inputs.image] : [],
         productName: inputs.productName,

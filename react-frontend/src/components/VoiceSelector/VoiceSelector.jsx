@@ -50,7 +50,7 @@ const prettify = (s) =>
  * as `voiceProvider` (Advideoactions.jsx voicePayload + videoModel.js schema)
  * once the Python team confirms the exact key/values — see integration notes.
  */
-const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
+const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader = false }) => {
   // Which TTS provider's catalog to browse. Persisted on `value.provider` so a
   // resumed/saved selection reopens on the right provider; defaults to
   // ElevenLabs so existing behaviour is unchanged when nothing is set.
@@ -372,12 +372,20 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot }) => {
 
   return (
     <div className="w-full">
-      <div className="mb-1.5 sm:mb-2">
+      <div
+        className={`mb-1.5 sm:mb-2 ${
+          compactHeader ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5' : ''
+        }`}
+      >
         <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
           <Mic2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           Narrator Voice <span className="text-red-400">*</span>
         </label>
-        <p className="mt-0.5 text-[10px] text-gray-500 dark:text-white/40 sm:text-[11px]">
+        <p
+          className={`text-[10px] text-gray-500 dark:text-white/40 sm:text-[11px] ${
+            compactHeader ? '' : 'mt-0.5'
+          }`}
+        >
           Pick the AI voice for the audio narration in your video
         </p>
       </div>
