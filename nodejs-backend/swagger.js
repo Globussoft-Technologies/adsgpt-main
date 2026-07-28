@@ -41,6 +41,22 @@ const {
   autopilotRunHistoryResponse,
 } = require("./resources/payloadBody/adsFactoryAutoPilotPayload");
 
+const {
+  mobileSignupPayload,
+  googleSignupPayload,
+  googleLoginPayload,
+  appleSignupPayload,
+  appleLoginPayload,
+  deleteAccountPayload,
+  verifyApplePaymentPayload,
+  verifyGooglePaymentPayload,
+  appleWebhookPayload,
+  googleWebhookPayload,
+  mobileAuthResponse,
+  mobilePaymentVerifyResponse,
+  mobileWebhookResponse,
+} = require("./resources/payloadBody/mobilePayload");
+
 // For local development on port 7000, detect if MODE=DEV
 const isLocalDev = process.env.MODE === "local" || !process.env.SWAGGER_HOST;
 const SwaggerHost = isLocalDev ? "http://localhost:7000" : process.env.SWAGGER_HOST;
@@ -62,6 +78,10 @@ const doc = {
   ],
 
   tags: [
+    {
+      name: "Mobile Native Auth & Payments",
+      description: "Mobile native email signup, Google & Apple social sign-in, StoreKit 2 & Google Play billing verifications, and webhooks",
+    },
     {
       name: "Ad Factory",
       description: "Campaign creation and management",
@@ -139,6 +159,21 @@ const doc = {
     },
 
     schemas: {
+      // Mobile Native Auth & Payments
+      mobileSignupPayload,
+      googleSignupPayload,
+      googleLoginPayload,
+      appleSignupPayload,
+      appleLoginPayload,
+      deleteAccountPayload,
+      verifyApplePaymentPayload,
+      verifyGooglePaymentPayload,
+      appleWebhookPayload,
+      googleWebhookPayload,
+      mobileAuthResponse,
+      mobilePaymentVerifyResponse,
+      mobileWebhookResponse,
+
       // Dashboard
       access_Routes,
       User_Management,

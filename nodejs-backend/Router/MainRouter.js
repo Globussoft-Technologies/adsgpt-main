@@ -55,8 +55,10 @@ const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnal
 const deviceTokenRoutes = require("./deviceTokenRoutes");
 const partnerMetaAdsRoutes = require("./partnerApi/metaAdsRoutes");
 const amemberSsoRoute = require("./auth/amemberSsoRoute");
+const mobileRoutes = require("./auth/mobileRoutes");
 
 const app = express();
+app.use("/mobile", mobileRoutes);
 app.use("/adcopy", authenticateJWT, adCopyRouter);
 app.use("/adCreative", authenticateJWT, adCretiveRouter);
 app.use("/adVideo", authenticateJWT, adVideoRouter);

@@ -56,6 +56,13 @@ const userProfileSchema = new mongoose.Schema(
     is_deleted: { type: Boolean, default: false },
     deleted_at: { type: Date, default: null },
     delete_reason: { type: String, default: "" },
+
+    // === Mobile & Social Auth Fields ===
+    firebase_uid: { type: String, default: "" },
+    loginProviders: [{ type: String }], // e.g. ["general", "google", "apple"]
+    last_login_at: { type: Date, default: null },
+    platform: { type: String, default: "" },
+    accepted_terms: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

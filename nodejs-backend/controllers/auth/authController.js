@@ -1267,4 +1267,5 @@ module.exports = {
   fetchUserDataByName,
   fetchUserDataByName_Email,
   createAdsGptSessionForAmemberUserId,
+  syncUserProfile,
 };
