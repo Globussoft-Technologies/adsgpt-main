@@ -171,20 +171,20 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
         credit: '9 CREDITS/SECOND',
       },
-      // {
-      //   value: 'veo',
-      //   label: 'Veo 3 (Cinematic Quality)',
-      //   tier: 'premium',
-      //   Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      // },
-      // {
-      //   value: 'veo_4k',
-      //   label: 'Veo 4K (Cinematic 4K Quality)',
-      //   tier: 'premium',
-      //   Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      // },
+      {
+        value: 'veo',
+        label: 'Veo 3 (Cinematic Quality)',
+        tier: 'premium',
+        Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
+      },
+      {
+        value: 'veo_4k',
+        label: 'Veo 4K (Cinematic 4K Quality)',
+        tier: 'premium',
+        Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
+      },
       // {
       //   value: 'kling_3.0',
       //   label: 'Kling 3.0',
@@ -199,8 +199,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
   const videoTimer = useMemo(() => {
     const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-    if (videoModel === 'veo_4k' || videoModel === 'veo-3.1-fast') return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
-    if (videoModel === 'veo' ) {
+    if (videoModel === 'veo-3.1-fast' || videoModel === 'veo' || videoModel === 'veo_4k') {
       return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
     }
     if (videoModel === 'kling_3.0') {
@@ -495,8 +494,11 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     { value: '16:9', label: '16:9', icon: RectangleHorizontal },
   ];
 
-  const CLONE_CREDITS_PER_SECOND = 9;
-  const est = Math.ceil(CLONE_CREDITS_PER_SECOND * (parseFloat(videoDuration) || 0));
+  const selectedModelCredit = parseFloat(
+    videoChatModels.find((model) => model.value === videoModel)?.credit
+  );
+  const creditsPerSecond = Number.isFinite(selectedModelCredit) ? selectedModelCredit : 9;
+  const est = Math.ceil(creditsPerSecond * (parseFloat(videoDuration) || 0));
   const enough = availableCredits >= est;
 
   return (

@@ -58,7 +58,9 @@ const SURFACE_CATALOG = {
     "kling_3.0": { durations: [8, 12], aspectRatios: ["9:16", "16:9", "1:1"] },
   },
   clone: {
-    "veo-3.1-fast": { durations: [8,15], aspectRatios: ["9:16", "16:9"] },
+    "veo-3.1-fast": { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
+    veo: { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
+    veo_4k: { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
   },
 };
 

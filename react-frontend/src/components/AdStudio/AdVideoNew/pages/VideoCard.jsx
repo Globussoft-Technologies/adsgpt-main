@@ -39,6 +39,7 @@ import {
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import RegenerateVoiceModal from './RegenerateVoiceModal';
 import VideoVersionControls from './VideoVersionControls';
+import { IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED } from '@/utils/featureFlags';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
@@ -133,6 +134,7 @@ export default function VideoCard({
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
   const canEditAiAdsOriginal =
+    IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED &&
     isAiAds &&
     item?.status === 'completed' &&
     committedVersion === 0 &&
@@ -883,7 +885,7 @@ export default function VideoCard({
                   </button>
                 )}
                 {/* Development-only: restore when Script & Voice-over editing is production-ready. */}
-                {/* {canEditAiAdsOriginal && isThisFullscreen && (
+                {canEditAiAdsOriginal && isThisFullscreen && (
                   <button
                     title="Customize Script & Voice-over"
                     onClick={(e) => {
@@ -894,7 +896,7 @@ export default function VideoCard({
                   >
                     <RefreshCw size={18} />
                   </button>
-                )} */}
+                )}
                 <div className="group/volume relative flex items-center">
                   <button
                     onClick={toggleMute}
@@ -975,7 +977,7 @@ export default function VideoCard({
               </div>
             </div>
 
-            {/* {canEditAiAdsOriginal && !isThisFullscreen && (
+            {canEditAiAdsOriginal && !isThisFullscreen && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -990,7 +992,7 @@ export default function VideoCard({
                 />
                 Customize Script & Voice-over
               </button>
-            )} */}
+            )}
           </div>
         </div>
         </>

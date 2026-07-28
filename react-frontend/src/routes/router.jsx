@@ -3,7 +3,7 @@ import QuerySaverRedirector from '@/backLogs/QuerySaverRedirector';
 // import AdFactoryWorkflowDarkReal2 from '@/components/AdFactory2/AdFactoryWorkflow';
 import AdFactoryWorkflowDarkReal from '@/components/AdFactory/AdFactoryWorkflow';
 import Layout from '@/layout/Layout';
-// import AIAssistantPage from '@/pages/AIAssistant/AIAssistantPage';
+import AIAssistantPage from '@/pages/AIAssistant/AIAssistantPage';
 import AdFactoryPage from '@/pages/AdFactory/AdFactoryPage';
 import AdInsightsPage from '@/pages/AdInsights/AdInsightsPage';
 import AdLibraryPage from '@/pages/AdLibrary/AdLibraryPage';
@@ -23,7 +23,10 @@ import AuthWrapper from '@/utils/AuthWrapper';
 import DevAuthPage from '@/pages/DevAuth/DevAuthPage';
 import OAuthRelayPage from '@/pages/OAuthRelay/OAuthRelayPage';
 import RunBackLog from '@/utils/RunBackLog';
-import { IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
+import {
+  IS_AI_ASSISTANT_ENABLED,
+  IS_LANDING_ANALYZER_ENABLED,
+} from '@/utils/featureFlags';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 const REDIRECT_TO_LOGOUT = import.meta.env.VITE_AMEMBER_URL;
 
@@ -67,7 +70,9 @@ const router = createBrowserRouter([
       // home once those integrations exist.
       { path: 'autopilot', element: <AutopilotHomePage /> },
       { path: 'autopilot/meta', element: <AutopilotPage /> },
-      // { path: 'assistant', element: <AIAssistantPage /> },
+      ...(IS_AI_ASSISTANT_ENABLED
+        ? [{ path: 'assistant', element: <AIAssistantPage /> }]
+        : []),
       { path: '/profile', element: <UserProfilePage /> },
       { path: 'onboarding', element: <UserOnBoardPage /> },
       // { path: 'adfactory-demo', element: <AdFactoryWorkflowDarkReal2 /> },

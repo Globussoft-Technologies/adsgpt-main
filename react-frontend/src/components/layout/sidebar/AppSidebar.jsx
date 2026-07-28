@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  // Bot,
+  Bot,
   ChartNoAxesColumn,
   ChevronsLeft,
   Gauge,
@@ -43,7 +43,10 @@ import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { resetAdFactorNewSlice } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
-import { IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
+import {
+  IS_AI_ASSISTANT_ENABLED,
+  IS_LANDING_ANALYZER_ENABLED,
+} from '@/utils/featureFlags';
 
 const navigationItems = [
   {
@@ -53,12 +56,12 @@ const navigationItems = [
     label: 'Ad Factory',
     link: '/adfactory',
   },
-  // {
-  //   id: 'ai',
-  //   label: 'AI',
-  //   link: '/assistant',
-  //   lucideIcon: Bot,
-  // },
+  IS_AI_ASSISTANT_ENABLED && {
+    id: 'ai',
+    label: 'AI',
+    link: '/assistant',
+    lucideIcon: Bot,
+  },
   {
     id: 'adstudio',
     icon: adStudioDarkLogo,
