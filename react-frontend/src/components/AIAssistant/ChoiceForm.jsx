@@ -970,6 +970,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const [editing, setEditing] = useState(false);
   // Double-clicking the header collapses the brief to just its title bar.
   const [collapsed, setCollapsed] = useState(false);
+  const modelConfigs = useMemo(
+    () => (Array.isArray(form.ad_creative_models) ? form.ad_creative_models : []),
+    [form.ad_creative_models],
+  );
+  const modelConfigByValue = useMemo(
+    () => new Map(modelConfigs.map((config) => [config.value, config])),
+    [modelConfigs],
+  );
 
   const isSubmitted = !!result;
   // After submitting, the card collapses to a summary — but the user can reopen
@@ -987,9 +995,70 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           next.quality =
             costs.high != null ? 'high' : Object.keys(costs)[0] || currentQuality || 'high';
         }
+        const allowedRatios = modelConfigByValue.get(val)?.aspect_ratios;
+        if (Array.isArray(allowedRatios) && allowedRatios.length) {
+          const selectedRatios = Array.isArray(prev.aspect_ratios)
+            ? prev.aspect_ratios
+            : prev.aspect_ratios
+              ? [prev.aspect_ratios]
+              : [];
+          const supportedRatios = selectedRatios.filter((ratio) =>
+            allowedRatios.includes(ratio),
+          );
+          next.aspect_ratios = supportedRatios.length
+            ? supportedRatios
+            : [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]];
+        }
       }
       return next;
     });
+
+  // Reconcile older/persisted briefs when the live Ad Creative catalog arrives:
+  // a removed model, quality, or ratio must not remain hidden in state and still
+  // influence the displayed total or submitted generation request.
+  useEffect(() => {
+    if (!modelConfigs.length) return;
+    setValues((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      const model = modelConfigByValue.has(prev.model) ? prev.model : 'auto';
+      if (model !== prev.model) {
+        next.model = model;
+        changed = true;
+      }
+
+      const qualityCosts = form.credit_costs_by_quality?.[model];
+      const quality = prev.quality === 'standard' ? 'medium' : prev.quality;
+      if (qualityCosts && qualityCosts[quality] == null) {
+        next.quality =
+          qualityCosts.high != null ? 'high' : Object.keys(qualityCosts)[0] || 'high';
+        changed = true;
+      }
+
+      const allowedRatios = modelConfigByValue.get(model)?.aspect_ratios;
+      if (Array.isArray(allowedRatios) && allowedRatios.length) {
+        const selectedRatios = Array.isArray(prev.aspect_ratios)
+          ? prev.aspect_ratios
+          : prev.aspect_ratios
+            ? [prev.aspect_ratios]
+            : [];
+        const supportedRatios = selectedRatios.filter((ratio) =>
+          allowedRatios.includes(ratio),
+        );
+        const reconciledRatios = supportedRatios.length
+          ? supportedRatios
+          : [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]];
+        if (
+          reconciledRatios.length !== selectedRatios.length ||
+          reconciledRatios.some((ratio, index) => ratio !== selectedRatios[index])
+        ) {
+          next.aspect_ratios = reconciledRatios;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [form.credit_costs_by_quality, modelConfigByValue, modelConfigs.length]);
 
   const creditCostsForQuality = useMemo(() => {
     const tiered = form.credit_costs_by_quality;
@@ -1175,15 +1244,30 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             field.key === 'quality'
               ? form.credit_costs_by_quality?.[values.model || 'auto']
               : null;
-          const renderedField =
-            qualityCosts && Object.keys(qualityCosts).length > 0
-              ? {
-                  ...field,
-                  options: normaliseOptions(field.options).filter(
-                    (option) => qualityCosts[option.value] != null,
-                  ),
-                }
-              : field;
+          const selectedModelConfig = modelConfigByValue.get(values.model || 'auto');
+          let renderedField = field;
+          if (model && modelConfigs.length) {
+            renderedField = {
+              ...renderedField,
+              options: modelConfigs.map(({ value, label }) => ({ value, label })),
+            };
+          } else if (
+            field.key === 'aspect_ratios' &&
+            Array.isArray(selectedModelConfig?.aspect_ratios) &&
+            selectedModelConfig.aspect_ratios.length
+          ) {
+            renderedField = {
+              ...renderedField,
+              options: selectedModelConfig.aspect_ratios,
+            };
+          } else if (qualityCosts && Object.keys(qualityCosts).length > 0) {
+            renderedField = {
+              ...renderedField,
+              options: normaliseOptions(renderedField.options).filter(
+                (option) => qualityCosts[option.value] != null,
+              ),
+            };
+          }
           const Renderer = model ? ModelSelectField : FIELD_RENDERERS[field.type] || TextField;
           const full = isFullWidth(field);
           return (

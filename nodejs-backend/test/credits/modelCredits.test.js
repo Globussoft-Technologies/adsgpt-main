@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 
 const creditsApi = require("../../controllers/creditsApiController");
+const { SURFACE_CATALOG } = require("../../config/surfaceCatalog");
 const { finalizeSchema } = require("../../Validations/creditsApiValidator");
 
 async function getImageModels() {
@@ -41,11 +42,27 @@ async function getImageModels() {
     nanoBanana2.quality_tiers.find((tier) => tier.quality === "high").credit,
     "the model's default credit must match its high-quality tier",
   );
+  assert.equal(nanoBanana2.label, "Nano Banana 2");
+  assert.deepEqual(
+    nanoBanana2.surface_capabilities.ad_creative.aspect_ratios,
+    SURFACE_CATALOG.ad_creative[
+      "gemini-3.1-flash-image-preview"
+    ].aspectRatios,
+    "Assistant ratios must come from the exact Ad Creative surface catalog",
+  );
+  assert.equal(
+    nanoBanana2.surface_capabilities.ad_creative.aspect_ratios.length,
+    14,
+  );
 
   for (const model of models) {
     assert.ok(
       Array.isArray(model.quality_tiers) && model.quality_tiers.length > 0,
       `${model.model} should expose quality-specific credits`,
+    );
+    assert.ok(
+      model.surface_capabilities.ad_creative,
+      `${model.model} should be available on the Ad Creative surface`,
     );
   }
 

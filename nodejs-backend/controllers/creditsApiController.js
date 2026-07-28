@@ -8,6 +8,7 @@ const {
   getCreditDeduction,
   getCreditDeductionByQuality,
 } = require("../config/modelRegistry");
+const { SURFACE_CATALOG } = require("../config/surfaceCatalog");
 const {
   freezeSchema,
   finalizeSchema,
@@ -366,12 +367,15 @@ exports.finalize = async (req, res) => {
   });
 };
 
-// Minimal shape for Python: just what's needed to decide cost.
+// Minimal shape for Python: billing fields plus the shared AdStudio surface
+// capabilities needed to render the same model/ratio choices in AI Assistant.
 //   model:  canonical key (the string to pass to the model/router)
 //   type:   "image" | "video"
 //   credit: default per-unit credit (image defaults to the high-quality tier)
 //   quality_tiers: effective per-quality image credits (env overrides applied)
 //   price:  per-unit USD (per_image for image, per_second for video)
+//   surface_capabilities: model availability and caps from surfaceCatalog.js
+//                         (the same source used by Profile / Ad Creative)
 const _publicModel = (entry) => {
   const isImage = entry.type === "image";
   const qualityTiers =
@@ -385,9 +389,24 @@ const _publicModel = (entry) => {
           price: tier.pricing?.per_image ?? entry.pricing?.per_image ?? 0,
         }))
       : [];
+  const surfaceCapabilities = Object.fromEntries(
+    Object.entries(SURFACE_CATALOG)
+      .filter(([, catalog]) => catalog[entry.canonicalKey])
+      .map(([surface, catalog]) => {
+        const caps = catalog[entry.canonicalKey];
+        return [
+          surface,
+          {
+            durations: [...(caps.durations || [])],
+            aspect_ratios: [...(caps.aspectRatios || [])],
+          },
+        ];
+      }),
+  );
 
   return {
     model: entry.canonicalKey,
+    label: entry.label,
     type: entry.type,
     // Profile and Ad Creative both default an omitted quality to "high".
     // Matching that here removes the stale flat image value from Agent billing.
@@ -399,6 +418,7 @@ const _publicModel = (entry) => {
       entry.type === "video"
         ? entry.pricing?.per_second ?? 0
         : entry.pricing?.per_image ?? 0,
+    surface_capabilities: surfaceCapabilities,
   };
 };
 
@@ -411,12 +431,13 @@ const _publicModel = (entry) => {
  *   includeDisabled=1   optional — include `enabled: false` entries
  *
  * Returns the full registry (filtered as requested) so Python knows the
- * credit cost per model without hardcoding env vars on its side.
+ * credit cost and AdStudio surface capabilities per model without hardcoding
+ * either contract on its side.
  */
 exports.getModels = async (req, res) => {
   /* #swagger.tags = ['Credits']
      #swagger.summary = 'List model registry — credit costs, pricing, capabilities'
-     #swagger.description = 'Read-only view of the model registry. Python uses this to compute how much to freeze BEFORE invoking a model. Returns the effective per-unit credit (env override applied) plus pricing, type, aliases, and capability hints. Requires the x-secret-key header.'
+     #swagger.description = 'Read-only view of the model registry. Python uses this to compute how much to freeze BEFORE invoking a model and to reuse the same surface model/aspect-ratio contract as AdStudio. Returns the effective per-unit credit (env override applied), per-quality tiers, and surface capabilities. Requires the x-secret-key header.'
      #swagger.parameters['x-secret-key'] = {
          in: 'header',
          required: true,
@@ -457,10 +478,12 @@ exports.getModels = async (req, res) => {
                                  type: 'object',
                                  properties: {
                                      model: { type: 'string', example: 'veo-3.1-fast', description: 'Canonical model key. Pass this exact string when invoking the model.' },
+                                     label: { type: 'string', example: 'Veo 3.1 fast' },
                                      type: { type: 'string', example: 'video', enum: ['image', 'video'] },
                                      credit: { type: 'number', example: 13, description: 'Per-unit credit cost (per image OR per second of video).' },
                                      quality_tiers: { type: 'array', description: 'Image-only per-quality credit and price rows.', items: { type: 'object', properties: { quality: { type: 'string' }, credit: { type: 'number' }, price: { type: 'number' } } } },
-                                     price: { type: 'number', example: 0.15, description: 'Per-unit USD cost (per image OR per second of video).' }
+                                     price: { type: 'number', example: 0.15, description: 'Per-unit USD cost (per image OR per second of video).' },
+                                     surface_capabilities: { type: 'object', description: 'Per-surface durations and aspect ratios from the shared AdStudio surface catalog.' }
                                  }
                              }
                          }
