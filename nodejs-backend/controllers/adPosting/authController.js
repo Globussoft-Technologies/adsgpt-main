@@ -3,6 +3,19 @@ const User = require("../../Module/adPosting/facebookUsers");
 const { encrypt } = require("../../utils/crypto");
 const { redisClient } = require("../../db/redis");
 
+function safeFrontendUrl(candidate) {
+  const fallback = process.env.FRONTEND_URL;
+  try {
+    const allowed = new URL(fallback);
+    const target = new URL(candidate || fallback, allowed);
+    return target.origin === allowed.origin
+      ? target.toString()
+      : allowed.toString();
+  } catch {
+    return fallback;
+  }
+}
+
 // Cache prefixes that are scoped per-user and embed Meta data which becomes
 // stale the moment a user re-auths Facebook (new ad accounts granted, token
 // refreshed, etc.). Bust them after every successful OAuth callback so the
@@ -59,7 +72,7 @@ class AuthController {
 
     const state = JSON.stringify({
       userId: userId || null,
-      feUrl: feUrl || process.env.FRONTEND_URL,
+      feUrl: safeFrontendUrl(feUrl),
     });
 
     const appId = process.env.FACEBOOK_APP_ID;
@@ -120,7 +133,7 @@ class AuthController {
       if (state) {
         const decodedState = JSON.parse(state);
         userId = decodedState.userId;
-        feUrl = decodedState.feUrl || feUrl;
+        feUrl = safeFrontendUrl(decodedState.feUrl);
       }
     } catch (e) {
       console.error("Failed to parse state", e);
@@ -160,11 +173,17 @@ class AuthController {
 
       const { id, name, email } = userResponse.data;
 
-      // Save or Update User in MongoDB
+      // Save or update this Facebook connection. Multiple Facebook rows may
+      // belong to the same AdsGPT user; facebookId identifies the connection.
       let user = await User.findOne({ facebookId: id });
       const encryptedToken = encrypt(accessToken);
 
       if (user) {
+        if (userId && user.userId !== userId) {
+          throw new Error(
+            "This Facebook account is already connected to another AdsGPT user",
+          );
+        }
         user.accessToken = encryptedToken;
         user.name = name;
         user.email = email;
@@ -172,9 +191,11 @@ class AuthController {
         user.tokenExpiresAt = new Date(
           Date.now() + (expiresIn || 5184000) * 1000
         );
-        if (userId) user.userId = userId; // Update userId if provided
         await user.save();
       } else {
+        if (!userId) {
+          throw new Error("AdsGPT userId is required to connect Facebook");
+        }
         user = await User.create({
           facebookId: id,
           name,
@@ -193,7 +214,13 @@ class AuthController {
 
       // Redirect back to frontend with MongoDB User ID
       // The frontend will then call /api/auth/me/:id to get details
-      res.redirect(`${feUrl}`);
+      const redirectUrl = new URL(
+        safeFrontendUrl(feUrl),
+        process.env.FRONTEND_URL,
+      );
+      redirectUrl.searchParams.set("auth", "success");
+      redirectUrl.searchParams.set("facebookId", id);
+      res.redirect(redirectUrl.toString());
     } catch (error) {
       console.error(
         "Auth callback error:",

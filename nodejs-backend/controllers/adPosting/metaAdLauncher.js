@@ -6,8 +6,11 @@ const Campaign = bizSdk.Campaign;
 const AdSet = bizSdk.AdSet;
 const Ad = bizSdk.Ad;
 const { redisClient } = require("../../db/redis");
-const FBUsers = require("../../Module/adPosting/facebookUsers");
-const { decrypt } = require("../../utils/crypto");
+const {
+  getFacebookIdFromRequest,
+  resolveFacebookConnection,
+  metaCacheScope,
+} = require("../../utils/metaConnection");
 const logger = require("../../utils/logger");
 const {
   formatBudget,
@@ -203,22 +206,17 @@ function logMetaError(prefix, error) {
 
 // Resolve the FB OAuth token + initialize the Meta SDK for the calling user.
 // Throws an Error tagged with `.statusCode` so handlers can map cleanly to HTTP.
-async function initApiForUser(userId) {
-  const fbUser = await FBUsers.findOne({ userId });
-  if (!fbUser) {
-    const err = new Error("Facebook user not found");
-    err.statusCode = 404;
-    throw err;
-  }
-  const accessToken = decrypt(fbUser?.accessToken);
-  if (!accessToken) {
-    const err = new Error("Access token is missing");
-    err.statusCode = 401;
-    throw err;
-  }
+async function initApiForUser(userId, facebookId) {
+  const resolved = await resolveFacebookConnection({
+    userId,
+    facebookId,
+    allowSingleFallback: false,
+  });
+  const fbUser = resolved.connection;
+  const accessToken = resolved.accessToken;
   const api = bizSdk.FacebookAdsApi.init(accessToken);
   bizSdk.FacebookAdsApi.setDefaultApi(api);
-  return { fbUser, accessToken };
+  return { fbUser, accessToken, facebookId: resolved.facebookId, api };
 }
 
 // Page-scoped access token lookup. Meta's leadgen_forms edge enforces a
@@ -453,16 +451,16 @@ async function getPagePhone(pageId) {
 async function invalidateAfterCreate(userId, { adAccountId, campaignId, adSetId } = {}) {
   const keys = [];
   if (adAccountId) {
-    keys.push(`metaCampaigns:${userId}:${adAccountId}`);
-    keys.push(`metaDashboard:${userId}:${adAccountId}:*`);
-    keys.push(`metaAnalytics:${userId}:${adAccountId}:*`);
+    keys.push(`metaCampaigns:${userId}:*:${adAccountId}`);
+    keys.push(`metaDashboard:${userId}:*:${adAccountId}:*`);
+    keys.push(`metaAnalytics:${userId}:*:${adAccountId}:*`);
   }
   if (campaignId) {
-    keys.push(`metaAdsets:${userId}:*:${campaignId}`);
-    keys.push(`metaCampaignAds:${userId}:${campaignId}`);
+    keys.push(`metaAdsets:${userId}:*:*:${campaignId}`);
+    keys.push(`metaCampaignAds:${userId}:*:${campaignId}`);
   }
   if (adSetId) {
-    keys.push(`metaAdSetAds:${userId}:${adSetId}`);
+    keys.push(`metaAdSetAds:${userId}:*:${adSetId}`);
   }
   // Resolve any wildcards via SCAN, exact keys via direct DEL.
   const concrete = [];
@@ -612,7 +610,7 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // ---------- REDIS CACHE KEY ----------
-      const cacheKey = `metaAnalytics:${userId}:${adAccountId}:${datePreset}`;
+      const cacheKey = `metaAnalytics:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${datePreset}`;
 
       const cached = await redisClient.get(cacheKey);
 
@@ -621,10 +619,10 @@ class MetaAdLauncher {
       }
       // -------------------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -771,7 +769,7 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaDashboard:${userId}:${adAccountId || "all"}:${datePreset}`;
+      const cacheKey = `metaDashboard:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId || "all"}:${datePreset}`;
 
       const cached = await redisClient.get(cacheKey);
 
@@ -780,12 +778,10 @@ class MetaAdLauncher {
       }
       // -----------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       if (!accessToken)
         return res.status(401).json({ error: "Access token is required" });
@@ -945,7 +941,7 @@ class MetaAdLauncher {
         return res.status(400).json({ error: "User ID is required" });
 
       // ---------- REDIS CACHE ----------
-      const cacheKey = `metaAdAccounts:${userId}`;
+      const cacheKey = `metaAdAccounts:${metaCacheScope(userId, getFacebookIdFromRequest(req))}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
@@ -960,12 +956,10 @@ class MetaAdLauncher {
       }
       // --------------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken, facebookId } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       if (!accessToken)
         return res.status(401).json({ error: "Access token is required" });
@@ -1025,6 +1019,7 @@ class MetaAdLauncher {
 
       const response = {
         status: true,
+        facebookId,
         adAccounts: formattedAccounts,
         count: formattedAccounts.length,
       };
@@ -1068,7 +1063,7 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaCampaigns:${userId}:${adAccountId}`;
+      const cacheKey = `metaCampaigns:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
@@ -1081,12 +1076,10 @@ class MetaAdLauncher {
       }
       // -----------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       if (!accessToken)
         return res.status(400).json({ error: "Access Token are required" });
@@ -1164,7 +1157,7 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // ---------- REDIS CACHE ----------
-      const cacheKey = `metaAdsets:${userId}:${adAccountId}:${campaignId || "all"}`;
+      const cacheKey = `metaAdsets:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${campaignId || "all"}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
@@ -1177,13 +1170,10 @@ class MetaAdLauncher {
       }
       // --------------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1265,7 +1255,7 @@ class MetaAdLauncher {
       }
 
       // ---------- REDIS CACHE ----------
-      const cacheKey = `metaCampaignAds:${userId}:${campaignId}`;
+      const cacheKey = `metaCampaignAds:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${campaignId}`;
 
       const cached = await redisClient.get(cacheKey);
 
@@ -1274,13 +1264,10 @@ class MetaAdLauncher {
       }
       // --------------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1336,7 +1323,7 @@ class MetaAdLauncher {
       }
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaAdSetAds:${userId}:${adSetId}`;
+      const cacheKey = `metaAdSetAds:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adSetId}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
@@ -1349,13 +1336,10 @@ class MetaAdLauncher {
       }
       // -----------------------------
 
-      const fbUser = await FBUsers.findOne({ userId });
-
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1443,18 +1427,17 @@ class MetaAdLauncher {
       const { adAccountId, datePreset, adId, campaignId, adsetId, level } =
         req.query;
       const userId = req.user.user_id;
-      const fbUser = await FBUsers.findOne({ userId: req.user.user_id });
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        userId,
+        getFacebookIdFromRequest(req),
+      );
 
       if (!adAccountId || !accessToken)
         return res.status(400).json({
           error: "Ad Account ID and Access Token are required",
         });
 
-      const cacheKey = `metaInsights:${userId}:${adAccountId}:${datePreset || "last_30d"}:${level || "account"}:${campaignId || "none"}:${adsetId || "none"}:${adId || "none"}`;
+      const cacheKey = `metaInsights:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${datePreset || "last_30d"}:${level || "account"}:${campaignId || "none"}:${adsetId || "none"}:${adId || "none"}`;
 
       // ---------- CACHE CHECK ----------
       const cached = await redisClient.get(cacheKey);
@@ -1547,11 +1530,10 @@ class MetaAdLauncher {
 
       const { level, id, status } = value;
 
-      const fbUser = await FBUsers.findOne({ userId: req.user.user_id });
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await initApiForUser(
+        req.user.user_id,
+        getFacebookIdFromRequest(req),
+      );
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1615,7 +1597,7 @@ class MetaAdLauncher {
     try {
       const userId = req.user.user_id;
       const { adAccountId } = req.query;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       // App discovery in Meta v24 — scoped strictly to the selected ad
       // account via `act_<id>/applications`. This matches what Meta's own
@@ -1713,12 +1695,12 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "adAccountId is required" });
       }
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       // 30-min cache — catalog list rarely changes vs the volatile
       // metrics on `VOLATILE_TTL`. Standard `metaCatalogs:` prefix so a
       // disconnect-from-FB clears it.
-      const cacheKey = `metaCatalogs:${userId}:${adAccountId}`;
+      const cacheKey = `metaCatalogs:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
@@ -1847,9 +1829,9 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "catalogId is required" });
       }
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
-      const cacheKey = `metaProductSets:${userId}:${catalogId}`;
+      const cacheKey = `metaProductSets:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${catalogId}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
@@ -1913,12 +1895,12 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "adId is required" });
       }
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       // 30-min cache — these URLs are CDN-signed but stable for the
       // creative's lifetime. Image URLs are valid 24h+, video source URLs
       // are valid for hours. Keep TTL conservative.
-      const cacheKey = `metaAdPreview:${userId}:${adId}`;
+      const cacheKey = `metaAdPreview:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adId}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
@@ -2083,7 +2065,7 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "adAccountId is required" });
       }
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const account = new AdAccount(`act_${adAccountId}`);
       // Meta renamed `adspixels` → `dataset` in recent versions; both
@@ -2140,7 +2122,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
       const result = await api.call(
@@ -2192,7 +2174,7 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "pixelId is required" });
       }
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
       // Pixel stats fires events back in the format the JS snippet used —
@@ -2315,7 +2297,7 @@ class MetaAdLauncher {
         return res.status(400).json({ status: false, error: "pageId is required" });
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const pageToken = await getPageAccessToken(pageId);
       if (!pageToken) {
@@ -2436,7 +2418,7 @@ class MetaAdLauncher {
         });
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const pageToken = await getPageAccessToken(pageId);
       if (!pageToken) {
@@ -2533,7 +2515,7 @@ class MetaAdLauncher {
           .json({ status: false, error: "formId and pageId are both required" });
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const pageToken = await getPageAccessToken(pageId);
       if (!pageToken) {
@@ -2589,7 +2571,7 @@ class MetaAdLauncher {
           .json({ status: false, error: "formId and pageId are both required" });
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const pageToken = await getPageAccessToken(pageId);
       if (!pageToken) {
@@ -2706,7 +2688,7 @@ class MetaAdLauncher {
           error: "adAccountId is required",
         });
       }
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
       // IG account fields pulled inline so the wizard can offer a per-page
@@ -2873,7 +2855,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
 
       const audiences = await account.getSavedAudiences([
@@ -2995,7 +2977,7 @@ class MetaAdLauncher {
       );
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       const params = {
@@ -3147,7 +3129,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       let data;
@@ -3297,7 +3279,7 @@ class MetaAdLauncher {
       let api = null;
       try {
         const userId = req.user.user_id;
-        await initApiForUser(userId);
+        await initApiForUser(userId, getFacebookIdFromRequest(req));
         api = bizSdk.FacebookAdsApi.getDefaultApi();
       } catch {
         /* Meta init failed — reverseGeocodeLatLng falls back to Nominatim
@@ -3390,13 +3372,13 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
       // Cache scoped by ad account — same query on different accounts may
       // return different results when account region differs.
-      const cacheKey = `metaDTSearch:${userId}:${adAccountId}:${q.toLowerCase()}:${requestedClasses.join(",") || "all"}:${limit}`;
+      const cacheKey = `metaDTSearch:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${q.toLowerCase()}:${requestedClasses.join(",") || "all"}:${limit}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         return res.status(200).json(JSON.parse(cached));
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       // Per Meta docs: `limit_type` is the single-class filter param;
@@ -3508,13 +3490,13 @@ class MetaAdLauncher {
       // cell doesn't also require a backend change.
       const isExclusion = String(req.query.isExclusion || "").trim() === "true";
 
-      const cacheKey = `metaDTBrowse:${userId}:${adAccountId}:${rootId || "ROOT"}:${limitType || "all"}:${isExclusion ? "excl" : "incl"}`;
+      const cacheKey = `metaDTBrowse:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${rootId || "ROOT"}:${limitType || "all"}:${isExclusion ? "excl" : "incl"}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         return res.status(200).json(JSON.parse(cached));
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       // include_headers=false is Meta's recommended setting per the docs
@@ -3603,13 +3585,13 @@ class MetaAdLauncher {
 
       const userId = req.user.user_id;
       const sig = targetingList.map((i) => `${i.type}:${i.id}`).sort().join("|");
-      const cacheKey = `metaDTSuggest:${userId}:${adAccountId}:${sig}`;
+      const cacheKey = `metaDTSuggest:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${sig}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         return res.status(200).json(JSON.parse(cached));
       }
 
-      await initApiForUser(userId);
+        await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       // targeting_list goes URL-encoded per Meta docs — JSON-stringify
@@ -3725,7 +3707,7 @@ class MetaAdLauncher {
         .update(JSON.stringify(metaTargeting) + "|" + (optimizationGoal || ""))
         .digest("hex")
         .slice(0, 16);
-      const cacheKey = `metaReachEstimate:${userId}:${adAccountId}:${targetingHash}`;
+      const cacheKey = `metaReachEstimate:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${targetingHash}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         return res.status(200).json(JSON.parse(cached));
@@ -3733,9 +3715,9 @@ class MetaAdLauncher {
       // Fallback cache — last-known estimate per (account, hash) regardless
       // of TTL. Lets us serve a stale value with `degraded: true` when
       // Meta returns rate-limit error #17.
-      const fallbackKey = `metaReachEstimateLast:${userId}:${adAccountId}:${targetingHash}`;
+      const fallbackKey = `metaReachEstimateLast:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${targetingHash}`;
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
       // Meta v24 /reachestimate accepts only `targeting_spec` (required)
       // and `currency` (optional). `optimize_for` belongs to the newer
@@ -3890,7 +3872,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
       let rows = [];
@@ -3947,7 +3929,7 @@ class MetaAdLauncher {
         status,
       } = value;
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
 
       const params = {
@@ -4060,7 +4042,7 @@ class MetaAdLauncher {
         });
       }
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
 
       // Build targeting. If a saved audience is provided we resolve its
@@ -4169,7 +4151,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
 
       let bytes;
@@ -4241,7 +4223,7 @@ class MetaAdLauncher {
       }
 
       const userId = req.user.user_id;
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       // The resumable-upload protocol below hits Meta's raw HTTP
       // endpoint directly, so we don't need an SDK `AdAccount` instance
       // here. `initApiForUser` is still required to seed the
@@ -4440,7 +4422,7 @@ class MetaAdLauncher {
         status,
       } = value;
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
 
       // Only include optional copy fields when non-empty. Meta's create-ad
@@ -4524,7 +4506,7 @@ class MetaAdLauncher {
       const { adAccountId, campaignId } = value;
       const userId = req.user.user_id;
 
-      await initApiForUser(userId);
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const campaign = new bizSdk.Campaign(campaignId);
       await campaign.delete();
@@ -4573,7 +4555,7 @@ class MetaAdLauncher {
         return res.status(400).json({ error: "Account ID is required" });
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaAudit:${userId}:${adAccountId}`;
+      const cacheKey = `metaAudit:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
       const cached = await redisClient.get(cacheKey);
 
       if (cached) {
@@ -4588,6 +4570,7 @@ class MetaAdLauncher {
         const resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
         accessToken = resolved.accessToken;
       } catch (err) {

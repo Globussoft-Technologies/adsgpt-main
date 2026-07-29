@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
-import { getAdAccounts, getUserAdPostingInfo } from '@/apis/metaAds/metaAdsApi';
+import { getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import { checkTiktokAccount } from '@/apis/tikTokAds/tikTokAdsApi';
 import getCookies from '@/utils/getCookies';
 import metaIcon from '@/assets/layouts/appsidebar/meta-icon.svg';
@@ -57,10 +57,16 @@ const PlatformPicker = ({
     // Meta connection check
     (async () => {
       try {
-        await getUserAdPostingInfo(userId);
-        const res = await getAdAccounts();
-        setMetaConnected(!!(res.adAccounts && res.adAccounts.length > 0));
-      } catch (err) {
+        // Connection state is about connected Facebook identities, not
+        // whether one identity has already been selected or has visible ad
+        // accounts. Calling getAdAccounts() here incorrectly asks the
+        // multi-account backend for a selected facebookId and makes two
+        // valid connections look disconnected on the platform picker.
+        const res = await getFacebookAccounts(userId);
+        setMetaConnected(
+          (res?.accounts || []).some((account) => account.isUsable),
+        );
+      } catch {
         setMetaConnected(false);
       } finally {
         setCheckingMeta(false);

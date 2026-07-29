@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getLeadForms, getMetaPages } from '@/apis/metaAds/metaAdsApi';
 import { Wallet, Users, Check, AlertTriangle, Info, Rocket, Loader2, ChevronLeft } from 'lucide-react';
 import {
@@ -13,6 +13,7 @@ import InputCommonDropdown from '../NodeForms/InputCommonDropdown';
 import FbAdCarousel from './FbAdCarousel';
 import { useDispatch, useSelector } from 'react-redux';
 import {
+  fetchAdAccounts,
   fetchAdsets,
   fetchCampaign,
   fetchCampaignById,
@@ -25,6 +26,7 @@ import {
   setCompletedNodes,
   updateNodeEnabledStatus,
 } from '@/store/reducers/AdFactory/AdFactorySlice';
+import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 
 const validationSchema = Yup.object({
   selectedAccount: Yup.string().required('Ad Account is required'),
@@ -265,8 +267,14 @@ const FbAccountReady = ({ onBack }) => {
   // while its list is being fetched.
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [adsetsLoading, setAdsetsLoading] = useState(false);
+  const [facebookAccountsLoading, setFacebookAccountsLoading] = useState(true);
+  const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
+  const facebookAccountsRequestRef = useRef(null);
   const dispatch = useDispatch();
-  const { fbUser, postnodecreatives: allCreatives } = useSelector((state) => state.adFactoryNew);
+  const { userData } = useSelector((state) => state.socket);
+  const { postnodecreatives: allCreatives } = useSelector((state) => state.adFactoryNew);
+  const facebookId = selectedFacebookAccount?.facebookId || '';
+  const facebookConnectionId = selectedFacebookAccount?._id || '';
   // Meta posts get Meta creatives only. A creative with no platform tag
   // is treated as Meta (legacy default); anything tagged 'google' belongs
   // on the Google posting screen, not here.
@@ -332,14 +340,14 @@ const FbAccountReady = ({ onBack }) => {
     }
     setPagesLoading(true);
     try {
-      const r = await getMetaPages(adAccountId);
+      const r = await getMetaPages(adAccountId, { facebookId });
       setPages(r?.pages || []);
     } catch {
       setPages([]);
     } finally {
       setPagesLoading(false);
     }
-  }, []);
+  }, [facebookId]);
 
   const campaignOptions = useMemo(() => {
     return campaignsDropdown.map((c) => ({
@@ -370,14 +378,49 @@ const FbAccountReady = ({ onBack }) => {
     }
     setLeadFormsLoading(true);
     try {
-      const r = await getLeadForms(pageId);
+      const r = await getLeadForms(pageId, { facebookId });
       setLeadForms(r?.forms || []);
     } catch {
       setLeadForms([]);
     } finally {
       setLeadFormsLoading(false);
     }
-  }, []);
+  }, [facebookId]);
+
+  const handleFacebookAccountChange = useCallback(
+    (account) => {
+      if (account?.facebookId && account.facebookId === facebookId) return;
+      setSelectedFacebookAccount(account);
+      setPages([]);
+      setLeadForms([]);
+      facebookAccountsRequestRef.current?.abort();
+      if (!account?._id || !account?.facebookId) {
+        setFacebookAccountsLoading(false);
+        return;
+      }
+      setFacebookAccountsLoading(true);
+      const request = dispatch(
+        fetchAdAccounts({
+          accountId: account._id,
+          facebookId: account.facebookId,
+        }),
+      );
+      facebookAccountsRequestRef.current = request;
+      request.finally(() => {
+        if (facebookAccountsRequestRef.current === request) {
+          setFacebookAccountsLoading(false);
+        }
+      });
+    },
+    [dispatch, facebookId],
+  );
+
+  useEffect(
+    () => () => {
+      facebookAccountsRequestRef.current?.abort();
+    },
+    [],
+  );
 
   // Returns true iff the campaign with this id is a Leads campaign — the
   // backend's getCampaigns endpoint includes `objective` per campaign, so
@@ -699,7 +742,9 @@ const FbAccountReady = ({ onBack }) => {
   }
   return (
     <Formik
+      enableReinitialize
       initialValues={{
+        selectedFacebookIdentity: facebookId,
         selectedAccount: '',
         selectedPage: '',
         selectedCampaign: '',
@@ -716,7 +761,8 @@ const FbAccountReady = ({ onBack }) => {
         // call launch campaign API here
         setisloading(true);
         const payload = {
-          accountId: fbUser?._id,
+          accountId: facebookConnectionId,
+          facebookId,
           adAccountId: values.selectedAccount,
           pageId: values.selectedPage,
           adFactoryCampaignId: campaignId,
@@ -763,6 +809,8 @@ const FbAccountReady = ({ onBack }) => {
         const isLeadsBlocked = isLeadsCampaign && !LEADS_POSTING_ENABLED;
         const canLaunch =
           Boolean(values.selectedAccount) &&
+          Boolean(facebookId) &&
+          Boolean(facebookConnectionId) &&
           Boolean(values.selectedPage) &&
           Boolean(values.selectedCampaign) &&
           Boolean(values.selectedAdSet) &&
@@ -789,8 +837,18 @@ const FbAccountReady = ({ onBack }) => {
                 {/* Account & Page Section */}
                 <SectionContainer
                   title="Account & Page Selection"
-                  subtitle="Select your Facebook Ad Account and Page to proceed"
+                  subtitle="Select your Facebook account, Ad Account and Page to proceed"
                 >
+                  <div className="mb-6 flex max-w-md flex-col gap-2">
+                    <label className="text-sm text-gray-500 2xl:text-[18px] dark:text-[#AFAFAF]">
+                      Select Your Facebook Account *
+                    </label>
+                    <FacebookAccountSelector
+                      userId={userData?.user_id}
+                      onChange={handleFacebookAccountChange}
+                      className="w-full"
+                    />
+                  </div>
                   <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
                     {/* Ad Account */}
                     <div className="flex flex-col gap-2">
@@ -815,12 +873,13 @@ const FbAccountReady = ({ onBack }) => {
                           // returned every Page the user could access).
                           fetchPagesForAccount(adAccountId);
 
-                          if (fbUser?._id && adAccountId) {
+                          if (facebookConnectionId && facebookId && adAccountId) {
                             setCampaignsLoading(true);
                             dispatch(
                               fetchCampaign({
                                 adAccountId,
-                                accountId: fbUser._id,
+                                accountId: facebookConnectionId,
+                                facebookId,
                               })
                             ).finally(() => setCampaignsLoading(false));
                           }
@@ -832,6 +891,7 @@ const FbAccountReady = ({ onBack }) => {
                             : 'Choose Ad Account'
                         }
                         type="account"
+                        disabled={!facebookId || facebookAccountsLoading}
                       />
                     </div>
 
@@ -887,12 +947,18 @@ const FbAccountReady = ({ onBack }) => {
                         setFieldValue('selectedAdSet', '');
                         setFieldValue('selectedLeadForm', '');
 
-                        if (campaignId && values.selectedAccount && fbUser?._id) {
+                        if (
+                          campaignId &&
+                          values.selectedAccount &&
+                          facebookConnectionId &&
+                          facebookId
+                        ) {
                           setAdsetsLoading(true);
                           dispatch(
                             fetchAdsets({
                               adAccountId: values.selectedAccount,
-                              accountId: fbUser._id,
+                              accountId: facebookConnectionId,
+                              facebookId,
                               campaignId,
                             })
                           ).finally(() => setAdsetsLoading(false));
@@ -1029,7 +1095,7 @@ const FbAccountReady = ({ onBack }) => {
                   ) : (
                     <>
                       <Rocket className="h-4 w-4" />
-                      Launch Campaign
+                      Launch Ads
                     </>
                   )}
                 </button>

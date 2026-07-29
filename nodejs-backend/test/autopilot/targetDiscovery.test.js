@@ -56,6 +56,8 @@ const stubs = {
   enabledSettings: [], // [{userId}]
   fbUsers: [], // [{userId, accessToken, tokenExpiresAt?}]
   adAccountsByUser: {}, // {userId: [{id, name, currency, timezone}]} — Meta API result
+  adAccountsByToken: {}, // {decryptedToken: [{id, name, currency, timezone}]}
+  activeAccessToken: null,
   redisCache: {}, // {key: stringValue}
   meCallLog: [], // record [{accessToken}]
   decryptCallLog: [],
@@ -133,7 +135,10 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === FAKE_BIZSDK) {
     return {
       FacebookAdsApi: {
-        init: () => ({}),
+        init: (accessToken) => {
+          stubs.activeAccessToken = accessToken;
+          return {};
+        },
         setDefaultApi: () => {},
       },
       User: class {
@@ -150,7 +155,10 @@ Module._load = function patchedLoad(request, parent, isMain) {
           if (userId === "ERR_USER") {
             throw new Error("simulated meta /me/adaccounts failure");
           }
-          const accs = stubs.adAccountsByUser[userId] || [];
+          const accs =
+            stubs.adAccountsByToken[stubs.activeAccessToken] ||
+            stubs.adAccountsByUser[userId] ||
+            [];
           return accs.map((a) => ({
             id: a.id.startsWith("act_") ? a.id : `act_${a.id}`,
             name: a.name,
@@ -177,6 +185,8 @@ function resetStubs() {
   stubs.enabledSettings = [];
   stubs.fbUsers = [];
   stubs.adAccountsByUser = {};
+  stubs.adAccountsByToken = {};
+  stubs.activeAccessToken = null;
   stubs.redisCache = {};
   stubs.meCallLog = [];
   stubs.decryptCallLog = [];
@@ -546,6 +556,49 @@ function resetStubs() {
         assert.equal(parsed.status, true);
         assert.equal(parsed.count, 1);
         assert.equal(parsed.adAccounts[0].id, "1");
+      },
+    );
+
+    await testAsync(
+      "multiple Facebook identities resolve selected accounts with the newest visible token",
+      async () => {
+        resetStubs();
+        stubs.enabledSettings = [
+          { userId: "u1", selectedAdAccountIds: ["1", "2", "3"] },
+        ];
+        stubs.fbUsers = [
+          {
+            userId: "u1",
+            facebookId: "fb-old",
+            accessToken: "tok-old",
+            updatedAt: new Date("2026-01-01"),
+          },
+          {
+            userId: "u1",
+            facebookId: "fb-new",
+            accessToken: "tok-new",
+            updatedAt: new Date("2026-02-01"),
+          },
+        ];
+        stubs.adAccountsByToken = {
+          "decrypted:tok-new": [
+            { id: "1", name: "shared-new" },
+            { id: "2", name: "new-only" },
+          ],
+          "decrypted:tok-old": [
+            { id: "1", name: "shared-old" },
+            { id: "3", name: "old-only" },
+          ],
+        };
+
+        const out = await discoverAutopilotTargets();
+        assert.equal(out.length, 3);
+        const byId = new Map(out.map((row) => [row.adAccountId, row]));
+        assert.equal(byId.get("act_1").facebookId, "fb-new");
+        assert.equal(byId.get("act_1").accessToken, "decrypted:tok-new");
+        assert.equal(byId.get("act_1").name, "shared-new");
+        assert.equal(byId.get("act_2").facebookId, "fb-new");
+        assert.equal(byId.get("act_3").facebookId, "fb-old");
       },
     );
   });

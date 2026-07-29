@@ -28,6 +28,9 @@ const AutopilotActionLog = require("../../Module/autopilot/autopilotActionLog");
 
 const logger = require("../../utils/logger");
 const { redisClient } = require("../../db/redis");
+const {
+  getFacebookIdFromRequest,
+} = require("../../utils/metaConnection");
 
 const {
   getAdFields,
@@ -454,6 +457,7 @@ class LLMAuditController {
         resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });
@@ -852,6 +856,7 @@ class LLMAuditController {
         resolved = await getAccessTokenForAccount({
           adAccountId: finding.adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });
@@ -1005,6 +1010,7 @@ class LLMAuditController {
         resolved = await getAccessTokenForAccount({
           adAccountId: finding.adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });

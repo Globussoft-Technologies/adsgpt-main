@@ -30,6 +30,16 @@ const {
 
 async function createServer() {
   const App = express();
+  // Production traffic reaches this service through a reverse proxy, which
+  // appends X-Forwarded-For. Trust only the configured number of proxy hops so
+  // Express (and express-rate-limit) can resolve the real client IP without
+  // blindly trusting arbitrary forwarded headers.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || "1");
+  if (!Number.isInteger(trustProxyHops) || trustProxyHops < 1) {
+    throw new Error("TRUST_PROXY_HOPS must be a positive integer");
+  }
+  App.set("trust proxy", trustProxyHops);
+
   App.use(require("./middlewares/corsMiddleware"));
   const socketCorsOrigins = parseAllowedOrigins(
     process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",

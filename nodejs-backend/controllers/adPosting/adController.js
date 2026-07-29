@@ -16,6 +16,18 @@ const {
   invalidateAfterCreate,
   formatMetaError,
 } = require("./metaAdLauncher");
+const {
+  getFacebookIdFromRequest,
+  resolveFacebookConnectionForRecord,
+} = require("../../utils/metaConnection");
+
+async function resolvePostAdConnection(req, accountId) {
+  return resolveFacebookConnectionForRecord({
+    userId: req.user.user_id,
+    facebookId: getFacebookIdFromRequest(req),
+    connectionId: accountId,
+  });
+}
 
 class AdController {
   constructor() {
@@ -102,11 +114,8 @@ class AdController {
         });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { connection: fbUser, accessToken } =
+        await resolvePostAdConnection(req, accountId);
 
       // Validation
       if (!adAccountId || !accessToken || !pageId) {
@@ -561,11 +570,7 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       if (!accessToken) {
         return res.status(401).json({ error: "Access token is required" });
@@ -604,8 +609,11 @@ class AdController {
         "Get ad accounts error:",
         error.response?.data || error.message
       );
-      res.status(500).json({
-        error: "Failed to fetch ad accounts",
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode
+          ? error.message
+          : "Failed to fetch ad accounts",
+        code: error.code,
         details: error.response?.data?.error?.message || error.message,
       });
     }
@@ -622,11 +630,7 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       if (!adAccountId || !accessToken) {
         return res
@@ -662,9 +666,11 @@ class AdController {
       });
     } catch (error) {
       console.error("Get campaigns error:", error);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch campaigns", details: error.message });
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : "Failed to fetch campaigns",
+        code: error.code,
+        details: error.message,
+      });
     }
   }
 
@@ -679,11 +685,7 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       if (!adAccountId || !accessToken) {
         return res
@@ -737,9 +739,11 @@ class AdController {
       });
     } catch (error) {
       console.error("Get ad sets error:", error);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch ad sets", details: error.message });
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : "Failed to fetch ad sets",
+        code: error.code,
+        details: error.message,
+      });
     }
   }
 

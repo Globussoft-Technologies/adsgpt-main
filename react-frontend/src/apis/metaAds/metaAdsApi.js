@@ -1,24 +1,33 @@
 import axios from 'axios';
 import getCookies from '@/utils/getCookies';
+import { facebookAccountHeader } from '@/utils/metaFacebookAccount';
 
 const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
-const getAuthHeaders = () => ({
+const getAuthHeaders = (facebookId) => ({
   Authorization: `Bearer ${getCookies()}`,
+  ...(facebookId === undefined
+    ? facebookAccountHeader()
+    : facebookId
+      ? { 'X-Facebook-Id': String(facebookId) }
+      : {}),
 });
 
-export const getAdAccounts = async ({ refresh = false } = {}) => {
+export const getAdAccounts = async ({ refresh = false, facebookId } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-ad-accounts`, {
     params: refresh ? { refresh: 'true' } : undefined,
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders(facebookId),
   });
   return data;
 };
 
-export const getCampaigns = async (adAccountId, { refresh = false } = {}) => {
+export const getCampaigns = async (
+  adAccountId,
+  { refresh = false, facebookId } = {},
+) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-campaigns`, {
     params: refresh ? { adAccountId, refresh: 'true' } : { adAccountId },
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders(facebookId),
   });
   return data;
 };
@@ -67,18 +76,30 @@ export const getAuditData = async (adAccountId) => {
   return data;
 };
 
-export const getAnalyticsData = async ({ adAccountId, datePreset = 'last_30d' } = {}) => {
+export const getAnalyticsData = async ({
+  adAccountId,
+  datePreset = 'last_30d',
+  facebookId,
+} = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-analytics-data`, {
     params: { adAccountId, datePreset },
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders(facebookId),
   });
   return data;
 };
 
-export const getUserAdPostingInfo = async (userId) => {
+export const getUserAdPostingInfo = async (userId, { facebookId } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/ad-posting/users/${userId}`, {
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders(facebookId),
   });
+  return data;
+};
+
+export const getFacebookAccounts = async (userId) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/ad-posting/users/${userId}/accounts`,
+    { headers: getAuthHeaders() },
+  );
   return data;
 };
 
@@ -118,8 +139,9 @@ export const updateAdStatus = async (level,id,status) => {
   });
   return data;
 };
-export const metaDisconnect = async (userId) => {
-  const { data } = await axios.delete(`${BASE_URL}/adsgpt/ad-posting/users/${userId}`, {
+export const metaDisconnect = async (userId, facebookId) => {
+  const suffix = facebookId ? `/${encodeURIComponent(facebookId)}` : '';
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/ad-posting/users/${userId}${suffix}`, {
     headers: getAuthHeaders(),
   });
   return data;
@@ -132,11 +154,11 @@ export const metaDisconnect = async (userId) => {
 // Ads Manager's own picker; if a user expects to see a page that's
 // missing, the fix is to assign it at Business Settings → Ad Accounts →
 // Pages, not to widen the API scope.
-export const getMetaPages = async (adAccountId) => {
+export const getMetaPages = async (adAccountId, { facebookId } = {}) => {
   if (!adAccountId) throw new Error('getMetaPages: adAccountId is required');
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-pages`, {
     params: { adAccountId },
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders(facebookId),
   });
   return data;
 };
@@ -328,10 +350,10 @@ export const getPromotableApps = async (adAccountId) => {
 // Lead Forms (Instant Forms) on a Facebook Page. Returns active forms
 // the user can attach to a Leads/Instant Form ad. Each form is
 // { id, name, status, createdTime, locale, leadsCount }.
-export const getLeadForms = async (pageId) => {
+export const getLeadForms = async (pageId, { facebookId } = {}) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/get-lead-forms`,
-    { params: { pageId }, headers: getAuthHeaders() },
+    { params: { pageId }, headers: getAuthHeaders(facebookId) },
   );
   return data;
 };

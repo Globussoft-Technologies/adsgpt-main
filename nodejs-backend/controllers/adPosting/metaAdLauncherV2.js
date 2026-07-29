@@ -56,6 +56,9 @@ const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 const v1Controller = require("./metaAdLauncher");
 const { initApiForUser, invalidateAfterCreate, logMetaError, formatMetaError, getPagePhone, reverseGeocodeLatLng, pickAppStoreUrl, rawErrorDump } = v1Controller;
 const logger = require("../../utils/logger");
+const {
+  getFacebookIdFromRequest,
+} = require("../../utils/metaConnection");
 
 const CAPPED_BID_STRATEGIES = new Set([
   "LOWEST_COST_WITH_BID_CAP",
@@ -280,7 +283,7 @@ async function createCampaignV2(req, res) {
   } = value;
 
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${adAccountId}`);
 
     const params = {
@@ -391,7 +394,7 @@ async function createAdSetV2(req, res) {
   }
 
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${value.adAccountId}`);
 
     // Read the parent campaign — the ad set INHERITS the campaign's bid
@@ -968,7 +971,7 @@ async function createAdV2(req, res) {
   const userId = req.user.user_id;
 
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${value.adAccountId}`);
 
     const built = await buildAdCreativeOr400(account, cell, value);
@@ -1182,7 +1185,7 @@ async function resolveCellForAdSet(req, res) {
         .json({ status: false, error: "adSetId is required" });
     }
     const userId = req.user.user_id;
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
 
     let adSetData;
     let campaignData;
@@ -1292,7 +1295,7 @@ async function resolveCampaignForAdd(req, res) {
         .json({ status: false, error: "campaignId is required" });
     }
     const userId = req.user.user_id;
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
 
     let d = {};
     try {
@@ -1387,7 +1390,7 @@ async function updateCampaignV2(req, res) {
   }
   const userId = req.user.user_id;
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
 
     const params = {};
     if (value.name !== undefined) params.name = value.name;
@@ -1591,7 +1594,7 @@ async function resolveAdSetForEdit(req, res) {
       return res.status(400).json({ status: false, error: "adSetId is required" });
     }
     const userId = req.user.user_id;
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
     const api = bizSdk.FacebookAdsApi.getDefaultApi();
 
     let adSetData;
@@ -1744,7 +1747,7 @@ async function updateAdSetV2(req, res) {
   }
   const userId = req.user.user_id;
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
 
     // Read existing context (campaign for CBO, targeting for user_os).
     let existing = {};
@@ -1887,7 +1890,7 @@ async function resolveAdForEdit(req, res) {
       return res.status(400).json({ status: false, error: "adId is required" });
     }
     const userId = req.user.user_id;
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
 
     let adData;
     let adSetData;
@@ -2030,7 +2033,7 @@ async function updateAdV2(req, res) {
 
   const userId = req.user.user_id;
   try {
-    await initApiForUser(userId);
+    await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${value.adAccountId}`);
 
     const built = await buildAdCreativeOr400(account, cell, value);

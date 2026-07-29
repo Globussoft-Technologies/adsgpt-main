@@ -468,8 +468,8 @@ const getRouteSteps = (pathname, isAddieChatVisible) => {
       ),
       makeStep(
         '#tour_post-ad',
-        'Launch Campaign',
-        'Once satisfied with the generated ads, launch your campaign to deploy the creatives to your selected platforms.'
+        'Launch Ads',
+        'Once satisfied with the generated ads, launch them on your selected platforms.'
       ),
     ],
     '/default': [],

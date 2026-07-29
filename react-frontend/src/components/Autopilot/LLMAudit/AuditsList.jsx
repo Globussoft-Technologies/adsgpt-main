@@ -153,7 +153,13 @@ function AuditRow({ audit, onSelect }) {
   );
 }
 
-export default function AuditsList({ adAccountId, onSelect, onRunNew, running }) {
+export default function AuditsList({
+  adAccountId,
+  facebookId,
+  onSelect,
+  onRunNew,
+  running,
+}) {
   const [loading, setLoading] = useState(false);
   const [audits, setAudits] = useState([]);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -162,14 +168,14 @@ export default function AuditsList({ adAccountId, onSelect, onRunNew, running })
     if (!adAccountId) return;
     setLoading(true);
     try {
-      const res = await listAIAudits(adAccountId);
+      const res = await listAIAudits(adAccountId, facebookId);
       setAudits(res.audits || []);
     } catch {
       /* noop */
     } finally {
       setLoading(false);
     }
-  }, [adAccountId]);
+  }, [adAccountId, facebookId]);
 
   useEffect(() => {
     load();

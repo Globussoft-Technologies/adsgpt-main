@@ -4,7 +4,7 @@ import FbAccountReady from './FbAccountReady';
 import GoogleAccount from './GoogleAccount';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { fetchAdAccounts, fetchFacebookPages, fetchGoogleAdAccounts } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { fetchGoogleAdAccounts } from '@/store/actions/adFactoryNew/adFactoryActions';
 
 export const PostAdDialogContent = () => {
   const { fbUser, googleUser } = useSelector((state) => state.adFactoryNew);
@@ -26,13 +26,6 @@ export const PostAdDialogContent = () => {
       }, { replace: true });
     }
   }, [googleAuth, setSearchParams]);
-
-  useEffect(() => {
-    if (fbUser?._id) {
-      dispatch(fetchAdAccounts(fbUser._id));
-      dispatch(fetchFacebookPages(fbUser._id));
-    }
-  }, [fbUser?._id, dispatch]);
 
   useEffect(() => {
     if (googleUser?.userId) {

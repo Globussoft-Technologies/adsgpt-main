@@ -9,6 +9,7 @@ import {
 } from '@/apis/autopilot/llmAuditApi';
 import { globalToast } from '@/utils/globalToast';
 import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
+import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 import ApplyFixModal from './ApplyFixModal';
 import AuditsList from './AuditsList';
 import AuditFindings from './AuditFindings';
@@ -66,21 +67,34 @@ function FetchingSpinner() {
 
 // ─── main router ─────────────────────────────────────────────────────────────
 
-export default function AutopilotLLMAudit({ adAccounts = [] }) {
+export default function AutopilotLLMAudit({
+  userId,
+  facebookAccounts = [],
+  adAccountsByFacebook = {},
+}) {
   // The AI Audit tab is the only place that needs a per-account scope, so
   // its picker lives here (was previously page-level — confusingly implied
   // a global filter that didn't exist for the other tabs).
+  const [facebookId, setFacebookId] = useState('');
   const [adAccountId, setAdAccountId] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
+  const adAccounts = facebookId ? adAccountsByFacebook[facebookId] || [] : [];
+
+  useEffect(() => {
+    setFacebookId((current) =>
+      current && facebookAccounts.some((account) => account.facebookId === current)
+        ? current
+        : facebookAccounts[0]?.facebookId || '',
+    );
+  }, [facebookAccounts]);
 
   // Default the selection to the first account on mount / when the list
   // hydrates. Preserve a still-valid prior pick if the list refreshes.
   useEffect(() => {
-    if (!adAccounts.length) return;
     setAdAccountId((prev) =>
-      prev && adAccounts.find((a) => a.id === prev) ? prev : adAccounts[0].id,
+      prev && adAccounts.find((a) => a.id === prev) ? prev : adAccounts[0]?.id || '',
     );
-  }, [adAccounts]);
+  }, [facebookId, adAccountsByFacebook]);
 
   const selectedAccount = adAccounts.find((a) => a.id === adAccountId) || null;
   const currency = selectedAccount?.currency || 'INR';
@@ -115,7 +129,7 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
     if (!adAccountId) return;
     setRunning(true);
     try {
-      const res = await runLLMAudit(adAccountId);
+      const res = await runLLMAudit(adAccountId, facebookId);
       setSelectedAudit(res);
       setView('findings');
       setListRefreshKey((k) => k + 1);
@@ -125,12 +139,12 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
     } finally {
       setRunning(false);
     }
-  }, [adAccountId]);
+  }, [adAccountId, facebookId]);
 
   const handleSelectAudit = useCallback(async (summary) => {
     setFetchingDetail(true);
     try {
-      const res = await getAIFindings(summary.auditId);
+      const res = await getAIFindings(summary.auditId, facebookId);
       setSelectedAudit({
         auditId: summary.auditId,
         findings: res.findings || [],
@@ -143,7 +157,7 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
     } finally {
       setFetchingDetail(false);
     }
-  }, []);
+  }, [facebookId]);
 
   const handleBack = useCallback(() => {
     setSelectedAudit(null);
@@ -167,21 +181,25 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
   const refreshFindings = useCallback(async () => {
     if (!selectedAudit?.auditId) return;
     try {
-      const res = await getAIFindings(selectedAudit.auditId);
+      const res = await getAIFindings(selectedAudit.auditId, facebookId);
       setSelectedAudit((prev) =>
         prev ? { ...prev, findings: res.findings || prev.findings } : prev,
       );
     } catch {
       /* noop */
     }
-  }, [selectedAudit?.auditId]);
+  }, [facebookId, selectedAudit?.auditId]);
 
   const handleConfirmFix = async ({ acknowledgeRisk, paramOverrides }) => {
     if (!activeFinding) return;
     const findingId = activeFinding._id;
     setBusyFindingId(findingId);
     try {
-      const res = await applyAuditFix(findingId, { acknowledgeRisk, paramOverrides });
+      const res = await applyAuditFix(
+        findingId,
+        { acknowledgeRisk, paramOverrides },
+        facebookId,
+      );
       updateFindingLocally(res.finding);
       setActiveFinding(null);
       globalToast.success(res.message || 'Fix applied');
@@ -198,7 +216,7 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
   const handleDismiss = async (finding) => {
     setBusyFindingId(finding._id);
     try {
-      const res = await dismissAuditFinding(finding._id);
+      const res = await dismissAuditFinding(finding._id, facebookId);
       updateFindingLocally(res.finding);
       globalToast.success('Finding dismissed');
     } catch {
@@ -211,7 +229,7 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
   const handleUndo = async (finding) => {
     setBusyFindingId(finding._id);
     try {
-      const res = await undoAuditFix(finding._id);
+      const res = await undoAuditFix(finding._id, facebookId);
       updateFindingLocally(res.finding);
       globalToast.success('Fix reverted');
     } catch (err) {
@@ -280,6 +298,16 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
             </div>
           </div>
         </Dropdown>
+        <FacebookAccountSelector
+          userId={userId}
+          onChange={(account) => {
+            const nextFacebookId = account?.facebookId || '';
+            if (nextFacebookId === facebookId) return;
+            setFacebookId(nextFacebookId);
+            setAdAccountId('');
+            setAccountOpen(false);
+          }}
+        />
       </div>
       {selectedAccount && (
         <div className="flex flex-wrap items-center gap-2">
@@ -334,6 +362,7 @@ export default function AutopilotLLMAudit({ adAccounts = [] }) {
         <AuditsList
           key={`list-${adAccountId}-${listRefreshKey}`}
           adAccountId={adAccountId}
+          facebookId={facebookId}
           running={running}
           onRunNew={handleRunNew}
           onSelect={handleSelectAudit}

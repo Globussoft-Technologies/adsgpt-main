@@ -46,7 +46,7 @@ const normalizeAccountId = (id) =>
  * batch matching server-side filters (account / action / outcome / time),
  * then layers client-side severity + free-text filters and pagination.
  */
-const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
+const AutopilotActionLog = ({ selectedAdAccountId, adAccounts } = {}) => {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +72,10 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
 
   // Hydrate the account-filter dropdown.
   useEffect(() => {
+    if (adAccounts) {
+      setUserAccounts(adAccounts);
+      return undefined;
+    }
     let alive = true;
     (async () => {
       try {
@@ -84,7 +88,7 @@ const AutopilotActionLog = ({ selectedAdAccountId } = {}) => {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [adAccounts]);
 
   // Pre-fill the account filter when the page-level picker changes.
   useEffect(() => {

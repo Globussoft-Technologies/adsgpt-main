@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSelector } from 'react-redux';
 import { X, Plus, Trash2, Loader2, ChevronDown, Search, Check } from 'lucide-react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +21,11 @@ import {
   updateUserRule,
   testUserRule,
 } from '@/apis/autopilot/autopilotApi';
-import { getAdAccounts, getCampaigns } from '@/apis/metaAds/metaAdsApi';
+import {
+  getAdAccounts,
+  getCampaigns,
+  getFacebookAccounts,
+} from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 
 /**
@@ -1094,6 +1099,10 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
 // Inline accordion (no floating dropdown). Same pattern as the wizard's
 // in-form group panels — never clipped by the modal scroll container.
 function AttachmentPicker({ attachments, onChange }) {
+  const userId = useSelector((state) => state.socket.userData?.user_id);
+  const [facebookAccounts, setFacebookAccounts] = useState([]);
+  const [facebookAccountsLoading, setFacebookAccountsLoading] = useState(true);
+  const [selectedFacebookId, setSelectedFacebookId] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [campaignsByAccount, setCampaignsByAccount] = useState({});
@@ -1102,13 +1111,52 @@ function AttachmentPicker({ attachments, onChange }) {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
+    if (!userId) return undefined;
     let alive = true;
     (async () => {
       try {
-        const r = await getAdAccounts();
-        if (alive) setAccounts(r?.adAccounts || []);
+        const response = await getFacebookAccounts(userId);
+        if (!alive) return;
+        const list = (response?.accounts || []).filter(
+          (account) => account.isUsable,
+        );
+        setFacebookAccounts(list);
+        setSelectedFacebookId((current) =>
+          list.some((account) => account.facebookId === current)
+            ? current
+            : list[0]?.facebookId || '',
+        );
       } catch {
-        // non-fatal
+        if (alive) setFacebookAccounts([]);
+      } finally {
+        if (alive) setFacebookAccountsLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let alive = true;
+    setAccounts([]);
+    setOpenAccount(null);
+    setSearch('');
+    if (!selectedFacebookId) {
+      setAccountsLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+    setAccountsLoading(true);
+    (async () => {
+      try {
+        const response = await getAdAccounts({
+          facebookId: selectedFacebookId,
+        });
+        if (alive) setAccounts(response?.adAccounts || []);
+      } catch {
+        if (alive) setAccounts([]);
       } finally {
         if (alive) setAccountsLoading(false);
       }
@@ -1116,14 +1164,16 @@ function AttachmentPicker({ attachments, onChange }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [selectedFacebookId]);
 
   const ensureCampaigns = async (acctKey) => {
     if (campaignsByAccount[acctKey]) return;
     setLoadingAccount(acctKey);
     try {
       const bareId = acctKey.replace(/^act_/, '');
-      const r = await getCampaigns(bareId);
+      const r = await getCampaigns(bareId, {
+        facebookId: selectedFacebookId,
+      });
       const list = r?.campaigns || r?.data || [];
       setCampaignsByAccount((prev) => ({ ...prev, [acctKey]: list }));
     } catch {
@@ -1236,7 +1286,37 @@ function AttachmentPicker({ attachments, onChange }) {
 
       {/* Inline picker */}
       <div className="rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/3">
-        <div className="border-b border-gray-200 p-2.5 dark:border-white/10">
+        <div className="flex flex-col gap-2.5 border-b border-gray-200 p-2.5 dark:border-white/10">
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold text-gray-600 dark:text-white/65">
+              Facebook account
+            </p>
+            <SelectInput
+              value={selectedFacebookId}
+              onChange={setSelectedFacebookId}
+              options={facebookAccounts.map((account) => ({
+                value: account.facebookId,
+                label: account.name,
+                hint: account.email || `Facebook ID: ${account.facebookId}`,
+              }))}
+              disabled={facebookAccountsLoading || facebookAccounts.length === 0}
+              placeholder={
+                facebookAccountsLoading
+                  ? 'Loading Facebook accounts…'
+                  : 'No Facebook account connected'
+              }
+            />
+          </div>
+          {attachments.length > 0 && (
+            <p className="text-[11px] text-gray-500 dark:text-white/50">
+              {attachments.length} campaign{attachments.length === 1 ? '' : 's'} selected across{' '}
+              {new Set(attachments.map((attachment) => attachment.adAccountId)).size} ad account
+              {new Set(attachments.map((attachment) => attachment.adAccountId)).size === 1
+                ? ''
+                : 's'}
+              . Switching Facebook accounts keeps these selections.
+            </p>
+          )}
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45" />
             <input

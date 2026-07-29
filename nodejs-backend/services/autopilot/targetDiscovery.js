@@ -49,7 +49,7 @@ const ACCOUNTS_CACHE_TTL_SECONDS = 2 * 60 * 60; // 2h, matches HTTP endpoint
  * @param {string} args.accessToken  decrypted FB OAuth token
  * @returns {Promise<Array<{id, name, currency, timezone, status}>>}
  */
-async function listUserAdAccounts({ userId, accessToken }) {
+async function listUserAdAccounts({ userId, facebookId, accessToken }) {
   // Cron + manual cycle paths always fetch FRESH from Meta — no Redis read.
   // Caching here used to mask newly granted (or revoked) ad accounts for up
   // to 2 hours, and obscured live entity-status changes from rule
@@ -57,19 +57,35 @@ async function listUserAdAccounts({ userId, accessToken }) {
   // UI's HTTP `/get-ad-accounts` endpoint (which reads the same key) stays
   // warm — that path can keep using the cache because it only feeds picker
   // dropdowns, not action decisions.
-  const cacheKey = `metaAdAccounts:${userId}`;
+  const cacheKey = facebookId
+    ? `metaAdAccounts:${userId}:${facebookId}`
+    : `metaAdAccounts:${userId}`;
 
   try {
     const api = bizSdk.FacebookAdsApi.init(accessToken);
     bizSdk.FacebookAdsApi.setDefaultApi(api);
     const user = new bizSdk.User("me");
-    const accounts = await user.getAdAccounts([
-      "id",
-      "name",
-      "account_status",
-      "currency",
-      "timezone_name",
-    ]);
+    let cursor = await user.getAdAccounts(
+      [
+        "id",
+        "name",
+        "account_status",
+        "currency",
+        "timezone_name",
+      ],
+      { limit: 100 },
+    );
+    const accounts = [...cursor];
+    let pages = 1;
+    while (
+      typeof cursor?.hasNext === "function" &&
+      cursor.hasNext() &&
+      pages < 50
+    ) {
+      cursor = await cursor.next();
+      accounts.push(...cursor);
+      pages += 1;
+    }
     const formatted = accounts.map((a) => ({
       id: a.id.replace("act_", ""),
       name: a.name,
@@ -174,7 +190,20 @@ async function discoverAutopilotTargets(opts = {}) {
 
   // 2. Resolve each user's FB row + token.
   const fbRows = await FBUsers.find({ userId: { $in: userIds } }).lean();
-  const byUserId = new Map(fbRows.map((u) => [u.userId, u]));
+  fbRows.sort(
+    (a, b) =>
+      new Date(b.updatedAt || 0).getTime() -
+      new Date(a.updatedAt || 0).getTime(),
+  );
+  const connectionsByUserId = new Map();
+  const byUserId = new Map();
+  for (const row of fbRows) {
+    if (!connectionsByUserId.has(row.userId)) {
+      connectionsByUserId.set(row.userId, []);
+      byUserId.set(row.userId, row);
+    }
+    connectionsByUserId.get(row.userId).push(row);
+  }
 
   const targets = [];
   for (const userId of userIds) {
@@ -183,6 +212,66 @@ async function discoverAutopilotTargets(opts = {}) {
       logger.warn(
         `[autopilot] target discovery: userId=${userId} opted-in but selectedAdAccountIds is empty — skipped (no accounts chosen)`,
       );
+      continue;
+    }
+
+    const facebookConnections = connectionsByUserId.get(userId) || [];
+    if (facebookConnections.length > 1) {
+      const overrides = overridesByUser.get(userId) || {};
+      const resolvedAccountIds = new Set();
+
+      // Rows are newest-first. If two identities can see the same ad
+      // account, use the most recently refreshed valid token.
+      for (const connection of facebookConnections) {
+        if (
+          connection.tokenExpiresAt &&
+          connection.tokenExpiresAt < new Date()
+        ) {
+          continue;
+        }
+        let connectionToken;
+        try {
+          connectionToken = decrypt(connection.accessToken);
+        } catch (err) {
+          logger.warn(
+            `[autopilot] target discovery: userId=${userId} facebookId=${connection.facebookId} token decrypt failed: ${err.message}`,
+          );
+          continue;
+        }
+        if (!connectionToken) continue;
+
+        const connectionAccounts = await listUserAdAccounts({
+          userId,
+          facebookId: connection.facebookId,
+          accessToken: connectionToken,
+        });
+        for (const acct of connectionAccounts) {
+          if (!selected.has(acct.id) || resolvedAccountIds.has(acct.id)) {
+            continue;
+          }
+          resolvedAccountIds.add(acct.id);
+          const acctKey = `act_${acct.id}`;
+          targets.push({
+            userId,
+            facebookId: connection.facebookId,
+            adAccountId: acctKey,
+            accessToken: connectionToken,
+            name: acct.name,
+            currency: acct.currency,
+            timezone: acct.timezone,
+            severityFloor: severityByUser.get(userId) || "critical",
+            thresholdOverrides:
+              (overrides && overrides[acctKey]) ||
+              (overrides && overrides[acct.id]) ||
+              {},
+          });
+        }
+      }
+      if (resolvedAccountIds.size === 0) {
+        logger.warn(
+          `[autopilot] target discovery: userId=${userId} selected accounts were not visible through any connected Facebook account`,
+        );
+      }
       continue;
     }
 
@@ -220,7 +309,11 @@ async function discoverAutopilotTargets(opts = {}) {
     //    appears in /me/adaccounts (revoked, archived, lost permission) is
     //    silently dropped — the cron must never act on an account Meta
     //    didn't return for the caller.
-    const adAccounts = await listUserAdAccounts({ userId, accessToken });
+    const adAccounts = await listUserAdAccounts({
+      userId,
+      facebookId: fbUser.facebookId,
+      accessToken,
+    });
     const overrides = overridesByUser.get(userId) || {};
     let matched = 0;
     for (const acct of adAccounts) {
@@ -237,6 +330,7 @@ async function discoverAutopilotTargets(opts = {}) {
         {};
       targets.push({
         userId,
+        ...(fbUser.facebookId ? { facebookId: fbUser.facebookId } : {}),
         adAccountId: acctKey,
         accessToken,
         name: acct.name,

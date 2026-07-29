@@ -58,6 +58,9 @@ const { runAuditForAccount } = require("../metaAuditService");
 const { evaluateRule } = require("./userRuleEvaluator");
 const { pickMetricsSnapshot } = require("./metricsSnapshot");
 const { notifyAutopilotCycle } = require("./alertService");
+const {
+  _internals: { listUserAdAccounts },
+} = require("./targetDiscovery");
 
 let _bizSdk;
 function bizSdk() {
@@ -517,30 +520,86 @@ async function runUserRuleCycle({
       }
 
       // Token resolution — same per-user OAuth model as v3.
-      const fbUser = await FBUsers.findOne({ userId }).lean();
-      if (!fbUser || !fbUser.accessToken) {
+      let fbUser = await FBUsers.findOne({ userId }).lean();
+      let fbUsers = fbUser ? [fbUser] : [];
+      if (typeof FBUsers.find === "function") {
+        fbUsers = await FBUsers.find({ userId }).lean();
+        fbUsers.sort(
+          (a, b) =>
+            new Date(b.updatedAt || 0).getTime() -
+            new Date(a.updatedAt || 0).getTime(),
+        );
+        fbUser = fbUsers[0] || null;
+      }
+      if (!fbUser || fbUsers.length === 0) {
         logger.warn(
           `[autopilot v4] userId=${userId} has no FacebookUsers row or empty token — skipped`,
         );
         continue;
       }
-      if (fbUser.tokenExpiresAt && fbUser.tokenExpiresAt < new Date()) {
-        logger.warn(
-          `[autopilot v4] userId=${userId} token expired — skipped`,
-        );
-        continue;
-      }
+      // Pick the newest connection that is both unexpired and decryptable.
+      // A broken newest connection must not suppress older valid identities.
       let accessToken;
-      try {
-        accessToken = decrypt(fbUser.accessToken);
-      } catch (err) {
+      for (const candidate of fbUsers) {
+        if (
+          !candidate.accessToken ||
+          (candidate.tokenExpiresAt && candidate.tokenExpiresAt < new Date())
+        ) {
+          continue;
+        }
+        try {
+          const candidateToken = decrypt(candidate.accessToken);
+          if (candidateToken) {
+            fbUser = candidate;
+            accessToken = candidateToken;
+            break;
+          }
+        } catch {
+          // Try the next connected identity.
+        }
+      }
+      if (!accessToken) {
         logger.warn(
-          `[autopilot v4] userId=${userId} token decrypt failed: ${err.message}`,
+          `[autopilot v4] userId=${userId} has no unexpired, decryptable Facebook token — skipped`,
         );
         continue;
       }
 
+      const accessTokensByAccount = new Map();
+      const requiresAccountResolution = fbUsers.length > 1;
+      if (requiresAccountResolution) {
+        for (const connection of fbUsers) {
+          if (
+            connection.tokenExpiresAt &&
+            connection.tokenExpiresAt < new Date()
+          ) {
+            continue;
+          }
+          let connectionToken;
+          try {
+            connectionToken = decrypt(connection.accessToken);
+          } catch {
+            continue;
+          }
+          if (!connectionToken) continue;
+          const visibleAccounts = await listUserAdAccounts({
+            userId,
+            facebookId: connection.facebookId,
+            accessToken: connectionToken,
+          });
+          for (const account of visibleAccounts) {
+            const key = normalizeAdAccountId(account.id);
+            if (!accessTokensByAccount.has(key)) {
+              accessTokensByAccount.set(key, connectionToken);
+            }
+          }
+        }
+      }
+
       for (const [acctKey, rulesAtAccount] of byAccount.entries()) {
+        const accountAccessToken = requiresAccountResolution
+          ? accessTokensByAccount.get(acctKey)
+          : accessToken;
         const acctSummary = {
           adAccountId: acctKey,
           name: null,
@@ -595,6 +654,11 @@ async function runUserRuleCycle({
         };
 
         try {
+          if (!accountAccessToken) {
+            throw new Error(
+              `No connected Facebook account can access ${acctKey}`,
+            );
+          }
           // Group this account's rules by lookbackDays. Rules sharing the
           // same window share a single Meta fetch — keeps insights API
           // cost bounded by the number of *distinct* windows in play, not
@@ -656,7 +720,7 @@ async function runUserRuleCycle({
             const audit = await runAuditForAccount({
               userId,
               adAccountId: acctKey,
-              accessToken,
+              accessToken: accountAccessToken,
               options: {
                 enforceAgeGuard: false,
                 enforceSpendFloor: false,

@@ -1,10 +1,12 @@
 import axios from 'axios';
 import getCookies from '@/utils/getCookies';
+import { facebookAccountHeader } from '@/utils/metaFacebookAccount';
 
 const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
 const headers = () => ({
   Authorization: `Bearer ${getCookies()}`,
+  ...facebookAccountHeader(),
 });
 
 // -----------------------------------------------------------------------------

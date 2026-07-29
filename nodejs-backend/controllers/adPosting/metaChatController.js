@@ -4,6 +4,9 @@ const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const MetaChatSession = require("../../Module/metaChat/metaChatSession");
 const MetaChatAuditLog = require("../../Module/metaChat/metaChatAuditLog");
 const { getAccessTokenForAccount } = require("../../config/autopilotConfig");
+const {
+  getFacebookIdFromRequest,
+} = require("../../utils/metaConnection");
 const { createMcpClient } = require("../../services/metaChat/mcpClient");
 const { s3Client } = require("../../storage/s3");
 const {
@@ -237,6 +240,7 @@ exports.streamChat = async (req, res) => {
     const { accessToken } = await getAccessTokenForAccount({
       adAccountId,
       callerUserId: userId,
+      facebookId: getFacebookIdFromRequest(req),
     });
 
     let session = sessionId
@@ -396,6 +400,7 @@ exports.confirmAction = async (req, res) => {
     const { accessToken } = await getAccessTokenForAccount({
       adAccountId,
       callerUserId: userId,
+      facebookId: getFacebookIdFromRequest(req),
     });
 
     // Atomic claim: only the request that flips pendingAction from set→null
@@ -592,6 +597,7 @@ exports.pickMedia = async (req, res) => {
     const { accessToken } = await getAccessTokenForAccount({
       adAccountId,
       callerUserId: userId,
+      facebookId: getFacebookIdFromRequest(req),
     });
 
     // Atomic claim: only the request that flips pendingInput set→null proceeds.

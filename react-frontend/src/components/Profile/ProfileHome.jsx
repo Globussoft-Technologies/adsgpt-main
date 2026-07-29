@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
@@ -13,8 +13,10 @@ import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
 import { fetchModelCredits, fetchAdCreativeImageTiers } from '@/utils/fetchModelCredits';
 import { getCanvaStatus, disconnectCanva, checkCanvaAuth } from '@/apis/canva/canvaApi';
-import { getUserAdPostingInfo, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
+import { getFacebookAccounts, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
 import { getGoogleUser, googleDisconnect } from '@/apis/googleAds/googleAdsApi';
+import { clearSelectedFacebookId } from '@/utils/metaFacebookAccount';
+import { globalToast } from '@/utils/globalToast';
 
 const CANVA_CLIENT_ID = import.meta.env.VITE_CANVA_CLIENT_ID;
 const CANVA_REDIRECT_URI = import.meta.env.VITE_CANVA_REDIRECT_URI;
@@ -146,15 +148,23 @@ export default function ProfileHome() {
   };
 
   // ── Meta ──
-  const [metaUser, setMetaUser] = useState(undefined); // undefined=loading, null=not connected, obj=connected
+  const [metaAccounts, setMetaAccounts] = useState(undefined);
   const [metaActionLoading, setMetaActionLoading] = useState(false);
+  const [metaRemovingId, setMetaRemovingId] = useState('');
+
+  const loadMetaAccounts = useCallback(async () => {
+    if (!userData?.user_id) return;
+    try {
+      const data = await getFacebookAccounts(userData.user_id);
+      setMetaAccounts(data?.accounts || []);
+    } catch {
+      setMetaAccounts([]);
+    }
+  }, [userData?.user_id]);
 
   useEffect(() => {
-    if (!userData?.user_id) return;
-    getUserAdPostingInfo(userData.user_id)
-      .then((data) => setMetaUser(data || null))
-      .catch(() => setMetaUser(null));
-  }, [userData?.user_id]);
+    loadMetaAccounts();
+  }, [loadMetaAccounts]);
 
   const handleConnectMeta = () => {
     setMetaActionLoading(true);
@@ -162,17 +172,25 @@ export default function ProfileHome() {
     window.location.href = `${BACKEND_HOST_AUTH}/api/auth/facebook?userId=${userData?.user_id}&feUrl=${encodeURIComponent(feUrl)}`;
   };
 
-  const handleDisconnectMeta = async () => {
-    setMetaActionLoading(true);
+  const handleDisconnectMeta = async (facebookId) => {
+    setMetaRemovingId(facebookId);
     try {
-      await metaDisconnect(userData?.user_id);
-      setMetaUser(null);
+      await metaDisconnect(userData?.user_id, facebookId);
+      clearSelectedFacebookId(userData?.user_id, facebookId);
+      setMetaAccounts((accounts) =>
+        (accounts || []).filter((account) => account.facebookId !== facebookId),
+      );
+      globalToast.success('Facebook account removed');
     } catch (err) {
       console.error('Meta disconnect error:', err);
+      globalToast.error('Failed to remove Facebook account');
     } finally {
-      setMetaActionLoading(false);
+      setMetaRemovingId('');
     }
   };
+
+  const usableMetaAccounts =
+    metaAccounts?.filter((account) => account.isUsable) || [];
 
   // ── Google ──
   const [googleUser, setGoogleUser] = useState(undefined);
@@ -509,43 +527,87 @@ export default function ProfileHome() {
           <div className="flex flex-col divide-y divide-black/5 dark:divide-white/5">
 
             {/* ── Meta ── */}
-            <div className="flex items-center justify-between gap-3 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1877F2]/10">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073C24 5.404 18.628 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+            <div className="py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1877F2]/10">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073C24 5.404 18.628 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-900 dark:text-white">Meta</p>
+                    {metaAccounts === undefined ? (
+                      <div className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-zinc-200 dark:bg-white/10" />
+                    ) : usableMetaAccounts.length === 0 ? (
+                      <p className="text-10 text-zinc-400 dark:text-white/40">Not connected</p>
+                    ) : (
+                      <p className="text-10 text-zinc-500 dark:text-white/50">
+                        {usableMetaAccounts.length} connected Facebook {usableMetaAccounts.length === 1 ? 'account' : 'accounts'}
+                      </p>
+                    )}
+                  </div>
+                  {usableMetaAccounts.length > 0 && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-10 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      Connected
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-zinc-900 dark:text-white">Meta</p>
-                  {metaUser === undefined ? (
-                    <div className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-zinc-200 dark:bg-white/10" />
-                  ) : !metaUser ? (
-                    <p className="text-10 text-zinc-400 dark:text-white/40">Not connected</p>
-                  ) : null}
-                </div>
-                {metaUser && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-10 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Connected</span>
+
+                {metaAccounts === undefined ? null : (
+                  <div className="inline-block shrink-0 rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
+                    <button
+                      onClick={handleConnectMeta}
+                      disabled={metaActionLoading}
+                      className="flex items-center gap-1.5 rounded-[50px] bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]"
+                    >
+                      {metaActionLoading ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-[#3F51B5]" />
+                      ) : usableMetaAccounts.length > 0 ? (
+                        <Plus className="h-3 w-3 text-[#3F51B5] dark:text-[#7EA7F3]" />
+                      ) : null}
+                      <span className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-xs font-medium whitespace-nowrap text-transparent dark:from-[#7EA7F3] dark:to-[#6FD3F7]">
+                        {usableMetaAccounts.length === 0 ? 'Connect' : 'Add account'}
+                      </span>
+                    </button>
+                  </div>
                 )}
               </div>
-              {metaUser === undefined ? null : metaUser ? (
-                <button
-                  onClick={handleDisconnectMeta}
-                  disabled={metaActionLoading}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
-                >
-                  {metaActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Disconnect'}
-                </button>
-              ) : (
-                <div className="inline-block shrink-0 rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
-                  <button
-                    onClick={handleConnectMeta}
-                    disabled={metaActionLoading}
-                    className="flex items-center gap-1.5 rounded-[50px] bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]"
-                  >
-                    {metaActionLoading && <Loader2 className="h-3 w-3 animate-spin text-[#3F51B5]" />}
-                    <span className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-xs font-medium whitespace-nowrap text-transparent dark:from-[#7EA7F3] dark:to-[#6FD3F7]">
-                      Connect
-                    </span>
-                  </button>
+
+              {metaAccounts?.length > 0 && (
+                <div className="mt-3 ml-10 space-y-1.5">
+                  {metaAccounts.map((account) => (
+                    <div
+                      key={account.facebookId}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-black/5 bg-zinc-50 px-3 py-2 dark:border-white/5 dark:bg-white/[0.03]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-zinc-800 dark:text-white/90">
+                          {account.name}
+                        </p>
+                        <p className="truncate text-10 text-zinc-500 dark:text-white/45">
+                          {account.email || `Facebook ID: ${account.facebookId}`}
+                        </p>
+                        {!account.isUsable && (
+                          <p className="mt-0.5 text-10 font-medium text-amber-600 dark:text-amber-400">
+                            Reconnect required
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${account.name}`}
+                        title={`Remove ${account.name}`}
+                        onClick={() => handleDisconnectMeta(account.facebookId)}
+                        disabled={metaRemovingId === account.facebookId}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-white/40 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                      >
+                        {metaRemovingId === account.facebookId ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

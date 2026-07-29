@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { FaFacebookF } from 'react-icons/fa6';
-import { CheckCircle2, LogOut, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, LogOut, AlertTriangle, Settings } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import googleAdsIcon from '@/assets/layouts/google-ads-icon.png';
 import getCookies from '@/utils/getCookies';
-import { metaDisconnect } from '@/apis/metaAds/metaAdsApi';
 import {
   checkFbUser,
   checkGoogleUser,
   disconnectGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
-import { clearFbUser } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const getGoogleAuthUrl = (feUrl) =>
   `${import.meta.env.VITE_SOCKET_URL}/api/auth/google?token=${getCookies()}&feUrl=${encodeURIComponent(feUrl)}`;
@@ -81,7 +80,7 @@ const DisconnectModal = ({ platformLabel, onConfirm, onCancel, isLoading }) => (
   </div>
 );
 
-const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelectPlatform, onDisconnect, connectedActionLabel }) => {
+const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelectPlatform, onDisconnect, connectedActionLabel, manageOnly = false }) => {
   const Icon = platform.icon;
   const renderIcon = (sizeClass) =>
     platform.iconImg ? (
@@ -132,8 +131,12 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
             onClick={() => onDisconnect(platform.key)}
             className="flex h-10 items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-sm font-medium text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
           >
-            <LogOut className="h-3.5 w-3.5" />
-            Disconnect
+            {manageOnly ? (
+              <Settings className="h-3.5 w-3.5" />
+            ) : (
+              <LogOut className="h-3.5 w-3.5" />
+            )}
+            {manageOnly ? 'Manage accounts' : 'Disconnect'}
           </button>
         )}
         <Button
@@ -180,6 +183,7 @@ const PlatformCard = ({ platform, payload, isConnected, isDisconnecting, onSelec
 // button itself nudges the user to proceed.
 const FbConnectStep = ({ onSelectPlatform, connectedActionLabel }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { userData } = useSelector((state) => state.socket);
   const { fbUser, googleUser } = useSelector((state) => state.adFactoryNew);
   const feUrl = window.location.href;
@@ -203,19 +207,17 @@ const FbConnectStep = ({ onSelectPlatform, connectedActionLabel }) => {
   };
 
   const handleDisconnect = (platformKey) => {
+    if (platformKey === 'facebook') {
+      navigate('/profile');
+      return;
+    }
     setConfirmPlatform(platformKey);
   };
 
   const handleConfirmDisconnect = async () => {
     setIsDisconnecting(true);
     try {
-      if (confirmPlatform === 'facebook') {
-        await metaDisconnect(userData?.user_id);
-        dispatch(clearFbUser());
-        setDisconnectedKeys((prev) => new Set(prev).add('facebook'));
-        dispatch(checkFbUser(userData?.user_id));
-        toast.success('Facebook account disconnected successfully');
-      } else if (confirmPlatform === 'google') {
+      if (confirmPlatform === 'google') {
         await dispatch(disconnectGoogleUser(userData?.user_id)).unwrap();
         setDisconnectedKeys((prev) => new Set(prev).add('google'));
         dispatch(checkGoogleUser(userData?.user_id));
@@ -258,6 +260,7 @@ const FbConnectStep = ({ onSelectPlatform, connectedActionLabel }) => {
               platform={platform}
               payload={payload}
               isConnected={(connectedKeys[platform.key] ?? false) && !disconnectedKeys.has(platform.key)}
+              manageOnly={platform.key === 'facebook'}
               isDisconnecting={isDisconnecting && confirmPlatform === platform.key}
               onSelectPlatform={onSelectPlatform}
               onDisconnect={handleDisconnect}

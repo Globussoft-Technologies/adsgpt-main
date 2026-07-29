@@ -2,15 +2,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaFacebook } from 'react-icons/fa6';
 import {
   Compass,
   TrendingUp,
   ClipboardList,
   Sparkles,
   Settings,
-  LogOut,
-  Loader2,
   // Repeat,  // ROTATION HIDDEN — re-add when uncommenting the rotation tab
 } from 'lucide-react';
 import AutopilotOverview from '@/components/Autopilot/AutopilotOverview';
@@ -22,14 +19,11 @@ import AutopilotSettings from '@/components/Autopilot/AutopilotSettings';
 // below, in three places marked "ROTATION HIDDEN".
 // import AutopilotRotationQueue from '@/components/Autopilot/AutopilotRotationQueue';
 import AutopilotLLMAudit from '@/components/Autopilot/LLMAudit/AutopilotLLMAudit';
-import { getAdAccounts, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
+import { getAdAccounts, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import {
   getAutopilotConfig,
   getAutopilotSettings,
 } from '@/apis/autopilot/autopilotApi';
-import { globalToast } from '@/utils/globalToast';
-
-const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
 /**
  * /autopilot page.
@@ -56,6 +50,8 @@ const AutopilotPage = () => {
   const userId = userData?.user_id;
 
   const [adAccounts, setAdAccounts] = useState([]);
+  const [facebookAccounts, setFacebookAccounts] = useState([]);
+  const [adAccountsByFacebook, setAdAccountsByFacebook] = useState({});
   // `loading` is the first-mount spinner that takes over the whole page
   // chrome. The OAuth callback path triggers a silent in-place reload via
   // `loadAccounts({ refresh: true })` without flipping `loading` — that's
@@ -81,44 +77,6 @@ const AutopilotPage = () => {
   // "View" for "Tivra Jagatap" lands on the log already scoped to that
   // account instead of the unfiltered list.
   const [logAccountFilter, setLogAccountFilter] = useState('');
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
-
-  const handleMetaConnect = useCallback(() => {
-    if (!userId) return;
-    const feUrl = window.location.href;
-    window.location.href = `${BASE_URL}/api/auth/facebook?userId=${userId}&feUrl=${encodeURIComponent(feUrl)}`;
-  }, [userId]);
-
-  // Disconnect — same flow as Ads Manager. After success we wipe the local
-  // account list so the page falls through to its "Connect your Meta
-  // account" empty state without a navigation hop.
-  const handleDisconnect = async () => {
-    if (!userId) return;
-    setDisconnecting(true);
-    try {
-      const res = await metaDisconnect(userId);
-      globalToast.success(res?.message || 'Disconnected successfully');
-      setAdAccounts([]);
-      setConnectError('not-connected');
-    } catch {
-      globalToast.error('Failed to disconnect Meta account');
-    } finally {
-      setDisconnecting(false);
-    }
-  };
-
-  const ConnectFacebookButton = ({ label }) => (
-    <button
-      type="button"
-      onClick={handleMetaConnect}
-      disabled={!userId}
-      className="flex items-center gap-1.5 rounded-xl bg-[#1877F2] px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-[#1465d4] disabled:opacity-50"
-    >
-      <FaFacebook className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
 
   // Hydrate the global live-actions flag AND the user's per-account
   // autopilot settings (enabled + dryRunGlobal). Both feed the resolved
@@ -159,21 +117,52 @@ const AutopilotPage = () => {
       ? 'dry-run'
       : 'live';
 
-  // Hydrate the ad-account list from the user's own FB OAuth token.
-  // `refresh: true` is an in-place reload (driven by the post-OAuth
-  // callback today; previously also by a Refresh button) — it must NOT
-  // flip `loading`, because that triggers the early-return that
-  // remounts the entire tab tree and wipes the Overview's dry-run
-  // results.
+  // Auto Pilot itself is not scoped to one Facebook identity. Load every
+  // connected identity silently and keep both a combined ad-account list
+  // (Overview / Action log) and an identity-scoped map (AI Audit).
   const loadAccounts = useCallback(
     async ({ refresh = false } = {}) => {
       if (!userId) return;
       if (!refresh) setLoading(true);
       setConnectError(null);
       try {
-        const res = await getAdAccounts({ refresh });
-        const accounts = res?.adAccounts || [];
-        setAdAccounts(accounts);
+        const identitiesResponse = await getFacebookAccounts(userId);
+        const identities = (identitiesResponse?.accounts || []).filter(
+          (identity) => identity.isUsable,
+        );
+        setFacebookAccounts(identities);
+
+        if (identities.length === 0) {
+          setAdAccounts([]);
+          setAdAccountsByFacebook({});
+          setConnectError('not-connected');
+          return;
+        }
+
+        const results = await Promise.allSettled(
+          identities.map((identity) =>
+            getAdAccounts({
+              refresh,
+              facebookId: identity.facebookId,
+            }),
+          ),
+        );
+
+        const nextByFacebook = {};
+        identities.forEach((identity, index) => {
+          const result = results[index];
+          nextByFacebook[identity.facebookId] =
+            result.status === 'fulfilled' ? result.value?.adAccounts || [] : [];
+        });
+        setAdAccountsByFacebook(nextByFacebook);
+
+        const uniqueAccounts = new Map();
+        Object.values(nextByFacebook)
+          .flat()
+          .forEach((account) => {
+            if (!uniqueAccounts.has(account.id)) uniqueAccounts.set(account.id, account);
+          });
+        setAdAccounts([...uniqueAccounts.values()]);
       } catch (err) {
         const status = err?.response?.status;
         if (status === 404 || status === 401) {
@@ -226,9 +215,6 @@ const AutopilotPage = () => {
           <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#15DCFF]" />
         </div>
         <p className="mt-3 text-sm text-gray-500 dark:text-white/75 2xl:text-15">Loading ad accounts…</p>
-        <div className="mt-3">
-          <ConnectFacebookButton label="Connect Facebook" />
-        </div>
       </FullCenter>
     );
   }
@@ -240,17 +226,30 @@ const AutopilotPage = () => {
   // have its own ad-hoc empty state. `replace` avoids leaving the
   // dashboard URL in the history stack, which would back-button-loop the
   // user back to this redirect.
-  if (connectError === 'not-connected' || adAccounts.length === 0) {
+  if (
+    connectError === 'not-connected' ||
+    facebookAccounts.length === 0
+  ) {
     return <Navigate to="/autopilot" replace />;
+  }
+
+  if (adAccounts.length === 0) {
+    return (
+      <FullCenter>
+        <p className="text-sm font-medium text-gray-700 dark:text-white">
+          No Meta ad accounts are available for the connected Facebook accounts.
+        </p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
+          Assign an ad account in Meta, then return here and refresh.
+        </p>
+      </FullCenter>
+    );
   }
 
   if (connectError) {
     return (
       <FullCenter>
         <p className="text-sm text-red-600 dark:text-red-400">Failed to load ad accounts: {connectError}</p>
-        <div className="mt-3">
-          <ConnectFacebookButton label="Connect Facebook" />
-        </div>
       </FullCenter>
     );
   }
@@ -309,26 +308,6 @@ const AutopilotPage = () => {
             </span>
           )}
 
-          {/* Refresh button hidden — narrow purpose (only refreshes the
-              cached ad-account list, not summary/log data) and the
-              account list reliably refreshes via OAuth callback or
-              2-hour TTL. `loadAccounts({ refresh: true })` and the
-              `refreshing` state stay wired up in case we want to
-              re-expose this later or repurpose it as a page-wide
-              refresh. */}
-          <button
-            type="button"
-            onClick={() => setShowDisconnectModal(true)}
-            disabled={disconnecting}
-            className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 dark:border-red-500/20 dark:text-red-400 2xl:px-3.5 2xl:py-2 2xl:text-13"
-          >
-            {disconnecting ? (
-              <Loader2 className="h-3 w-3 animate-spin 2xl:h-3.5 2xl:w-3.5" />
-            ) : (
-              <LogOut className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" />
-            )}
-            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-          </button>
         </div>
         </div>
       </div>
@@ -406,7 +385,11 @@ const AutopilotPage = () => {
               className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto"
             >
               <div className="flex w-full flex-col gap-4 px-4 py-5 sm:px-5 sm:py-6 lg:px-6 2xl:py-8">
-                <AutopilotLLMAudit adAccounts={adAccounts} />
+                <AutopilotLLMAudit
+                  userId={userId}
+                  facebookAccounts={facebookAccounts}
+                  adAccountsByFacebook={adAccountsByFacebook}
+                />
               </div>
             </motion.div>
           )}
@@ -420,7 +403,10 @@ const AutopilotPage = () => {
               transition={{ duration: 0.2 }}
               className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto"
             >
-              <AutopilotActionLog selectedAdAccountId={logAccountFilter} />
+              <AutopilotActionLog
+                selectedAdAccountId={logAccountFilter}
+                adAccounts={adAccounts}
+              />
             </motion.div>
           )}
 
@@ -454,60 +440,6 @@ const AutopilotPage = () => {
         </AnimatePresence>
       </div>
 
-      {/* ── disconnect confirmation modal ─────────────────────────────────── */}
-      <AnimatePresence>
-        {showDisconnectModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowDisconnectModal(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
-            >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
-                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">
-                Disconnect Meta Account?
-              </h2>
-              <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
-                Autopilot will stop running for this account and all per-account
-                settings will be hidden. You can reconnect any time from the
-                Ads Manager.
-              </p>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDisconnectModal(false)}
-                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDisconnectModal(false);
-                    handleDisconnect();
-                  }}
-                  disabled={disconnecting}
-                  className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
-                >
-                  {disconnecting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Disconnect
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

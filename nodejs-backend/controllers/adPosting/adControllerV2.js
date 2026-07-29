@@ -28,10 +28,8 @@ const axios = require("axios");
 const bizSdk = require("facebook-nodejs-business-sdk");
 const AdAccount = bizSdk.AdAccount;
 
-const FBUsers = require("../../Module/adPosting/facebookUsers");
 const PostedAd = require("../../Module/adPosting/postedAds");
 const CampaignModel = require("../../Module/adFactory/adFactory");
-const { decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
 const { waitForVideoThumbnail } = require("../../utils/videoThumbnail");
@@ -43,6 +41,10 @@ const {
   invalidateAfterCreate,
   formatMetaError,
 } = require("./metaAdLauncher");
+const {
+  getFacebookIdFromRequest,
+  resolveFacebookConnectionForRecord,
+} = require("../../utils/metaConnection");
 
 // ── Joi: batch request shape ────────────────────────────────────────────
 const adFactoryV2Schema = Joi.object({
@@ -247,13 +249,13 @@ async function createAdV2(req, res) {
     }
 
     // ── Facebook user + access token ──────────────────────────────────────
-    const fbUser = await FBUsers.findById(accountId);
-    if (!fbUser) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Facebook user not found" });
-    }
-    const accessToken = decrypt(fbUser.accessToken);
+    const resolvedConnection = await resolveFacebookConnectionForRecord({
+      userId: req.user.user_id,
+      facebookId: getFacebookIdFromRequest(req),
+      connectionId: accountId,
+    });
+    const fbUser = resolvedConnection.connection;
+    const accessToken = resolvedConnection.accessToken;
     if (!accessToken) {
       return res
         .status(401)

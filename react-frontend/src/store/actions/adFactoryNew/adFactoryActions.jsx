@@ -1,4 +1,5 @@
 import getCookies from '@/utils/getCookies';
+import { facebookAccountHeader } from '@/utils/metaFacebookAccount';
 import axios from 'axios';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
@@ -748,13 +749,16 @@ export const disconnectGoogleUser = createAsyncThunk(
 
 export const checkFbUser = createAsyncThunk(
   'adFactory/checkFbUser',
-  async (userId, { rejectWithValue, dispatch }) => {
+  async (input, { rejectWithValue }) => {
     try {
+      const { userId, facebookId } =
+        typeof input === 'object' ? input : { userId: input };
       const token = getCookies();
       const res = await axios.get(`${BACKEND_HOST}/adsgpt/ad-posting/users/${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...facebookAccountHeader(facebookId || null),
         },
       });
       // console.log(res)
@@ -767,13 +771,18 @@ export const checkFbUser = createAsyncThunk(
 
 export const fetchAdAccounts = createAsyncThunk(
   'adFactory/fetchAdAccounts',
-  async (id, { rejectWithValue, dispatch }) => {
+  async (input, { rejectWithValue }) => {
     try {
+      const { accountId, facebookId } =
+        typeof input === 'object'
+          ? input
+          : { accountId: input, facebookId: undefined };
       const token = getCookies();
-      const res = await axios.get(`${BACKEND_HOST}/adsgpt/ad-posting/ads/accounts/${id}`, {
+      const res = await axios.get(`${BACKEND_HOST}/adsgpt/ad-posting/ads/accounts/${accountId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...facebookAccountHeader(facebookId || null),
         },
       });
       return res?.data?.adAccounts;
@@ -785,13 +794,18 @@ export const fetchAdAccounts = createAsyncThunk(
 
 export const fetchFacebookPages = createAsyncThunk(
   'adFactory/fetchFacebookPages',
-  async (id, { rejectWithValue, dispatch }) => {
+  async (input, { rejectWithValue }) => {
     try {
+      const { accountId, facebookId } =
+        typeof input === 'object'
+          ? input
+          : { accountId: input, facebookId: undefined };
       const token = getCookies();
-      const res = await axios.get(`${BACKEND_HOST}/adsgpt/ad-posting/pages/${id}`, {
+      const res = await axios.get(`${BACKEND_HOST}/adsgpt/ad-posting/pages/${accountId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...facebookAccountHeader(facebookId || null),
         },
       });
       return res?.data?.pages;
@@ -815,6 +829,7 @@ export const fetchLeadForms = createAsyncThunk(
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...facebookAccountHeader(),
         },
       });
       return res?.data?.forms || [];
@@ -829,13 +844,14 @@ export const fetchCampaign = createAsyncThunk(
   async (payload, { rejectWithValue, dispatch }) => {
     try {
       const token = getCookies();
-      const { adAccountId, accountId } = payload;
+      const { adAccountId, accountId, facebookId } = payload;
       const res = await axios.get(
         `${BACKEND_HOST}/adsgpt/ad-posting/ads/campaigns?adAccountId=${adAccountId}&accountId=${accountId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
+            ...facebookAccountHeader(facebookId || null),
           },
         }
       );
@@ -851,13 +867,14 @@ export const fetchAdsets = createAsyncThunk(
   async (payload, { rejectWithValue, dispatch }) => {
     try {
       const token = getCookies();
-      const { adAccountId, accountId, campaignId } = payload;
+      const { adAccountId, accountId, campaignId, facebookId } = payload;
       const res = await axios.get(
         `${BACKEND_HOST}/adsgpt/ad-posting/ads/adsets?adAccountId=${adAccountId}&accountId=${accountId}&campaignId=${campaignId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
+            ...facebookAccountHeader(facebookId || null),
           },
         }
       );
@@ -876,14 +893,16 @@ export const launchcampaign = createAsyncThunk(
   'adFactory/launchcampaign',
   async (payload, { rejectWithValue }) => {
     try {
+      const { facebookId, ...body } = payload;
       const token = getCookies();
       const res = await axios.post(
         `${BACKEND_HOST}/adsgpt/ad-posting/ads/v2/create`,
-        payload,
+        body,
         {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
+            ...facebookAccountHeader(facebookId || null),
           },
         },
       );

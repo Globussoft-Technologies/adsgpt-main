@@ -41,6 +41,9 @@ const {
 } = require("../../services/autopilot/runOptions");
 const { listAuditRulesForUI } = require("../../config/auditRuleMetadata");
 const logger = require("../../utils/logger");
+const {
+  getFacebookIdFromRequest,
+} = require("../../utils/metaConnection");
 
 /**
  * Thin HTTP layer over services/autopilot/*. All routes assume authenticateJWT
@@ -123,6 +126,7 @@ class AutopilotController {
         resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });
@@ -452,6 +456,7 @@ class AutopilotController {
         resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });
@@ -746,6 +751,7 @@ class AutopilotController {
         resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });
@@ -875,6 +881,7 @@ class AutopilotController {
         resolved = await getAccessTokenForAccount({
           adAccountId,
           callerUserId: userId,
+          facebookId: getFacebookIdFromRequest(req),
         });
       } catch (err) {
         return res.status(404).json({ status: false, error: err.message });

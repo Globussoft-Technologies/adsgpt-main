@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 // eslint-disable-next-line no-unused-vars -- motion is used as <motion.div> below; the project's lint rule doesn't track JSX dotted access.
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -31,8 +31,10 @@ import CreateCampaignWizard from './CreateCampaignWizard';
 import CreateCampaignWizardV2 from './CreateCampaignWizardV2';
 import LeadsTab from './LeadsTab';
 import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
+import FacebookAccountSelector from './FacebookAccountSelector';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
 import Cookies from 'js-cookie';
+import { clearSelectedFacebookId } from '@/utils/metaFacebookAccount';
 
 // V2 wizard is gated on a build-time env var so V1 keeps running by
 // default. When V2 is ready for the migrated objectives we flip this
@@ -66,6 +68,15 @@ export default function MetaAdsDashboard() {
   const [dateOpen, setDateOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
+  const activeFacebookId =
+    selectedFacebookAccount?.userId === userData?.user_id
+      ? selectedFacebookAccount.facebookId
+      : '';
+  const [facebookSelectorKey, setFacebookSelectorKey] = useState(0);
+  const accountsRequestRef = useRef(0);
+  const campaignsRequestRef = useRef(0);
+  const analyticsRequestRef = useRef(0);
   // Wizard launcher — one modal serves create (full), add-ad-set, and
   // add-ad flows. `mode` + `context` drive which steps render.
   const [wizard, setWizard] = useState({ open: false, mode: 'create-full', context: null });
@@ -100,30 +111,44 @@ export default function MetaAdsDashboard() {
   }, [autoOpenWizardMode, openWizard, searchParams, setSearchParams]);
 
   const reloadCampaigns = useCallback(async () => {
-    if (!selectedAccount) return;
+    const facebookId = activeFacebookId;
+    if (!selectedAccount || !facebookId) return;
+    const requestId = ++campaignsRequestRef.current;
     setLoadingCampaigns(true);
     try {
-      const r = await getCampaigns(selectedAccount.id, { refresh: true });
-      setCampaigns(r.campaigns || []);
+      const r = await getCampaigns(selectedAccount.id, {
+        refresh: true,
+        facebookId,
+      });
+      if (requestId === campaignsRequestRef.current) {
+        setCampaigns(r.campaigns || []);
+      }
     } catch { /* noop */ } finally {
-      setLoadingCampaigns(false);
+      if (requestId === campaignsRequestRef.current) {
+        setLoadingCampaigns(false);
+      }
     }
-  }, [selectedAccount]);
+  }, [selectedAccount, activeFacebookId]);
 
   // verify user token on mount — redirect to /ads-manager on 404
   useEffect(() => {
     const userId = userData?.user_id;
-    if (!userId) return;
+    const facebookId = activeFacebookId;
+    if (!userId || !facebookId) return;
+    let cancelled = false;
     (async () => {
       try {
-        await getUserAdPostingInfo(userId);
+        await getUserAdPostingInfo(userId, { facebookId });
       } catch (err) {
-        if (err?.response?.status === 404) {
+        if (!cancelled && err?.response?.status === 404) {
           navigate('/ads-manager');
         }
       }
     })();
-  }, [userData?.user_id, navigate]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userData?.user_id, activeFacebookId, navigate]);
 
   // Switch the active ad account — updates the URL (`adAccountId`) so a
   // refresh restores the same account instead of falling back to the first
@@ -146,13 +171,23 @@ export default function MetaAdsDashboard() {
   );
 
   // load ad accounts — restore the one named in the URL (if any/still valid),
-  // otherwise fall back to the first account. Only reads searchParams at
-  // mount time; deliberately not a dependency so switching accounts later
-  // (which itself rewrites the URL) doesn't re-trigger this fetch.
+  // otherwise fall back to the first account. This reruns for Facebook
+  // identity changes; searchParams itself stays out of the dependency list
+  // because selecting an ad account rewrites the URL.
   useEffect(() => {
+    const facebookId = activeFacebookId;
+    const requestId = ++accountsRequestRef.current;
+    if (!facebookId) {
+      setAdAccounts([]);
+      setSelectedAccount(null);
+      setLoadingAccounts(false);
+      return;
+    }
+    setLoadingAccounts(true);
     (async () => {
       try {
-        const res = await getAdAccounts();
+        const res = await getAdAccounts({ facebookId });
+        if (requestId !== accountsRequestRef.current) return;
         const accounts = res.adAccounts || [];
         setAdAccounts(accounts);
         if (accounts.length) {
@@ -178,59 +213,99 @@ export default function MetaAdsDashboard() {
       } catch {
         /* noop */
       } finally {
-        setLoadingAccounts(false);
+        if (requestId === accountsRequestRef.current) {
+          setLoadingAccounts(false);
+        }
       }
     })();
+    return () => {
+      if (requestId === accountsRequestRef.current) {
+        accountsRequestRef.current += 1;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeFacebookId]);
 
   // load campaigns when account changes
   useEffect(() => {
-    if (!selectedAccount) return;
+    const facebookId = activeFacebookId;
+    if (!selectedAccount || !facebookId) return;
+    const requestId = ++campaignsRequestRef.current;
     (async () => {
       setLoadingCampaigns(true);
       setCampaigns([]);
       setAnalyticsData(null);
       try {
-        const res = await getCampaigns(selectedAccount.id);
-        setCampaigns(res.campaigns || []);
+        const res = await getCampaigns(selectedAccount.id, { facebookId });
+        if (requestId === campaignsRequestRef.current) {
+          setCampaigns(res.campaigns || []);
+        }
       } catch {
         /* noop */
       } finally {
-        setLoadingCampaigns(false);
+        if (requestId === campaignsRequestRef.current) {
+          setLoadingCampaigns(false);
+        }
       }
     })();
-  }, [selectedAccount]);
+    return () => {
+      if (requestId === campaignsRequestRef.current) {
+        campaignsRequestRef.current += 1;
+      }
+    };
+  }, [selectedAccount, activeFacebookId]);
 
   // load analytics
   const loadAnalytics = useCallback(async () => {
-    if (!selectedAccount) return;
+    const facebookId = activeFacebookId;
+    if (!selectedAccount || !facebookId) return;
+    const requestId = ++analyticsRequestRef.current;
     setLoadingInsights(true);
     setAnalyticsData(null);
     try {
-      const res = await getAnalyticsData({ adAccountId: selectedAccount.id, datePreset });
-      setAnalyticsData(res);
+      const res = await getAnalyticsData({
+        adAccountId: selectedAccount.id,
+        datePreset,
+        facebookId,
+      });
+      if (requestId === analyticsRequestRef.current) {
+        setAnalyticsData(res);
+      }
     } catch {
       /* noop */
     } finally {
-      setLoadingInsights(false);
+      if (requestId === analyticsRequestRef.current) {
+        setLoadingInsights(false);
+      }
     }
-  }, [selectedAccount, datePreset]);
+  }, [selectedAccount, datePreset, activeFacebookId]);
 
   useEffect(() => {
-    if (activeTab === 'analytics') loadAnalytics();
+    if (activeTab !== 'analytics') return undefined;
+    loadAnalytics();
+    return () => {
+      analyticsRequestRef.current += 1;
+    };
   }, [activeTab, loadAnalytics]);
 
   const handleDisconnect = async () => {
     const userId = userData?.user_id;
-    if (!userId) return;
+    if (!userId || !activeFacebookId) return;
     setDisconnecting(true);
     try {
-      const res = await metaDisconnect(userId);
+      const facebookId = activeFacebookId;
+      const res = await metaDisconnect(userId, facebookId);
       globalToast.success(res?.message || 'Disconnected successfully');
-      navigate('/ads-manager');
+      clearSelectedFacebookId(userId, facebookId);
+      setSelectedFacebookAccount(null);
+      setAdAccounts([]);
+      setSelectedAccount(null);
+      setCampaigns([]);
+      setFacebookSelectorKey((value) => value + 1);
+      setShowDisconnectModal(false);
     } catch {
       globalToast.error('Failed to disconnect Meta account');
+    } finally {
       setDisconnecting(false);
     }
   };
@@ -278,6 +353,22 @@ export default function MetaAdsDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <FacebookAccountSelector
+            key={facebookSelectorKey}
+            userId={userData?.user_id}
+            onChange={(account) => {
+              const nextId = account?.facebookId || '';
+              if (
+                nextId === activeFacebookId &&
+                selectedFacebookAccount?.userId === userData?.user_id
+              ) return;
+              setSelectedFacebookAccount(account);
+              setAdAccounts([]);
+              setSelectedAccount(null);
+              setCampaigns([]);
+              setAnalyticsData(null);
+            }}
+          />
           {/* account picker */}
           <Dropdown
             open={accountOpen}
@@ -411,7 +502,7 @@ export default function MetaAdsDashboard() {
             ) : (
               <LogOut className="h-3 w-3" />
             )}
-            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            {disconnecting ? 'Removing…' : 'Remove account'}
           </button>
         </div>
       )}
@@ -604,10 +695,10 @@ export default function MetaAdsDashboard() {
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
                 <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Disconnect Meta Account?</h2>
+              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Remove Facebook Account?</h2>
               <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
-                This will remove the connection to your Meta Ads account. You can reconnect at any
-                time from the Ads Manager.
+                This removes {selectedFacebookAccount?.name || 'the selected Facebook account'} from
+                AdsGPT. Your other connected Facebook accounts are not affected.
               </p>
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -625,7 +716,7 @@ export default function MetaAdsDashboard() {
                   className="flex items-center gap-1.5 rounded-xl font-bold bg-red-500/80 px-4 py-2 text-xs  text-white transition-all hover:bg-red-500 disabled:opacity-50"
                 >
                   {disconnecting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Disconnect
+                  Remove account
                 </button>
               </div>
             </motion.div>

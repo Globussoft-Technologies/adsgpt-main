@@ -55,6 +55,7 @@ const stubs = {
   rules: [],          // AutopilotUserRule docs
   ruleUpdateLog: [],  // markAttachmentOrphan calls
   fbUsers: [],        // FacebookUsers docs
+  visibleAccountsByFacebookId: {},
   settingsByUser: {}, // userId → autopilotSettings doc | null
   redisStore: new Map(),
   auditByAccount: new Map(),  // acctKey → return shape for runAuditForAccount
@@ -72,6 +73,7 @@ function resetStubs() {
   stubs.rules = [];
   stubs.ruleUpdateLog = [];
   stubs.fbUsers = [];
+  stubs.visibleAccountsByFacebookId = {};
   stubs.settingsByUser = {};
   stubs.redisStore = new Map();
   stubs.auditByAccount = new Map();
@@ -109,6 +111,10 @@ Module._load = function patched(request, parent, isMain) {
       findOne: (q) => ({
         lean: async () =>
           stubs.fbUsers.find((u) => u.userId === q.userId) || null,
+      }),
+      find: (q) => ({
+        lean: async () =>
+          stubs.fbUsers.filter((u) => u.userId === q.userId),
       }),
     };
   }
@@ -156,10 +162,15 @@ Module._load = function patched(request, parent, isMain) {
   }
   if (request.endsWith("services/metaAuditService") || request.endsWith("../metaAuditService")) {
     return {
-      runAuditForAccount: async ({ adAccountId, options = {} } = {}) => {
+      runAuditForAccount: async ({
+        adAccountId,
+        accessToken,
+        options = {},
+      } = {}) => {
         // Record every call so tests can assert dedupe + per-lookback fetch.
         stubs.auditCalls.push({
           adAccountId,
+          accessToken,
           lookbackDays: options.lookbackDays,
           prevLookbackDays: options.prevLookbackDays,
         });
@@ -172,6 +183,17 @@ Module._load = function patched(request, parent, isMain) {
           throw new Error(`no audit fixture for ${adAccountId}`);
         }
         return fixture;
+      },
+    };
+  }
+  if (
+    request.endsWith("services/autopilot/targetDiscovery") ||
+    request === "./targetDiscovery"
+  ) {
+    return {
+      _internals: {
+        listUserAdAccounts: async ({ facebookId }) =>
+          stubs.visibleAccountsByFacebookId[facebookId] || [],
       },
     };
   }
@@ -968,6 +990,107 @@ const { runUserRuleCycle } = orchestrator;
         await runUserRuleCycle({ dryRun: false });
         assert.equal(stubs.actionLogWrites.length, 0);
         assert.equal(stubs.pauseCalls.length, 0);
+      },
+    );
+    await testAsync(
+      "newest expired connection falls back to an older valid identity",
+      async () => {
+        resetStubs();
+        stubs.rules = [
+          {
+            _id: "rFallback",
+            userId: "u1",
+            enabled: true,
+            name: "fallback",
+            severity: "high",
+            evaluateOn: "campaign",
+            conditions: {
+              operator: "AND",
+              rules: [{ field: "spend", op: ">", value: 1 }],
+            },
+            action: { type: "pause" },
+            attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+          },
+        ];
+        stubs.fbUsers = [
+          {
+            userId: "u1",
+            facebookId: "fb-new",
+            accessToken: "tok-new",
+            tokenExpiresAt: new Date(Date.now() - 60_000),
+            updatedAt: new Date("2026-02-01"),
+          },
+          {
+            userId: "u1",
+            facebookId: "fb-old",
+            accessToken: "tok-old",
+            tokenExpiresAt: new Date(Date.now() + 60_000),
+            updatedAt: new Date("2026-01-01"),
+          },
+        ];
+        stubs.visibleAccountsByFacebookId = {
+          "fb-old": [{ id: "42" }],
+        };
+        stubs.auditByAccount.set("act_42", auditFixture());
+
+        const result = await runUserRuleCycle({ dryRun: false });
+        assert.equal(result.accounts[0].ok, true);
+        assert.equal(stubs.auditCalls.length, 1);
+        assert.equal(
+          stubs.auditCalls[0].accessToken,
+          "decrypted:tok-old",
+        );
+        assert.equal(stubs.actionLogWrites.length, 1);
+      },
+    );
+    await testAsync(
+      "does not use another identity's token for an inaccessible account",
+      async () => {
+        resetStubs();
+        stubs.rules = [
+          {
+            _id: "rInvisible",
+            userId: "u1",
+            enabled: true,
+            name: "invisible",
+            severity: "high",
+            evaluateOn: "campaign",
+            conditions: {
+              operator: "AND",
+              rules: [{ field: "spend", op: ">", value: 1 }],
+            },
+            action: { type: "pause" },
+            attachments: [{ adAccountId: "act_99", campaignId: "camp_1" }],
+          },
+        ];
+        stubs.fbUsers = [
+          {
+            userId: "u1",
+            facebookId: "fb-one",
+            accessToken: "tok-one",
+            updatedAt: new Date("2026-02-01"),
+          },
+          {
+            userId: "u1",
+            facebookId: "fb-two",
+            accessToken: "tok-two",
+            updatedAt: new Date("2026-01-01"),
+          },
+        ];
+        stubs.visibleAccountsByFacebookId = {
+          "fb-one": [{ id: "42" }],
+          "fb-two": [{ id: "43" }],
+        };
+        stubs.auditByAccount.set("act_99", auditFixture());
+
+        const result = await runUserRuleCycle({ dryRun: false });
+        assert.equal(stubs.auditCalls.length, 0);
+        assert.equal(result.accounts.length, 1);
+        assert.equal(result.accounts[0].ok, false);
+        assert.match(
+          result.accounts[0].error,
+          /No connected Facebook account can access act_99/,
+        );
       },
     );
   });

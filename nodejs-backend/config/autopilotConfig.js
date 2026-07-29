@@ -28,7 +28,7 @@
 
 // Lazy-loaded inside getAccessTokenForAccount so this config module stays
 // pure for unit tests (no mongoose / no crypto module needed at import).
-let _FBUsers, _decrypt;
+let _resolveFacebookConnection;
 
 const defaults = {
   // Ads younger than this are never acted on — protects Meta's learning phase.
@@ -199,29 +199,29 @@ function getEffectiveSettings(adAccountId) {
  * @param {string} args.callerUserId  AdsGPT user_id of the HTTP caller
  * @returns {Promise<{accessToken: string, userId: string, source: 'caller'}>}
  */
-async function getAccessTokenForAccount({ adAccountId, callerUserId } = {}) {
-  if (!_FBUsers) _FBUsers = require("../Module/adPosting/facebookUsers");
-  if (!_decrypt) _decrypt = require("../utils/crypto").decrypt;
-
+async function getAccessTokenForAccount({
+  adAccountId,
+  callerUserId,
+  facebookId,
+} = {}) {
   if (!callerUserId) {
     throw new Error(
       `Cannot resolve token: callerUserId is required (account ${adAccountId})`,
     );
   }
-  const fbUser = await _FBUsers.findOne({ userId: callerUserId });
-  if (!fbUser) {
-    throw new Error(
-      `No FacebookUsers record for userId=${callerUserId} (account ${adAccountId})`,
-    );
+  if (!_resolveFacebookConnection) {
+    _resolveFacebookConnection =
+      require("../utils/metaConnection").resolveFacebookConnection;
   }
-  if (!fbUser.accessToken) {
-    throw new Error(
-      `FacebookUsers record for userId=${callerUserId} has no accessToken`,
-    );
-  }
-  return {
-    accessToken: _decrypt(fbUser.accessToken),
+  const resolved = await _resolveFacebookConnection({
     userId: callerUserId,
+    facebookId,
+    allowSingleFallback: false,
+  });
+  return {
+    accessToken: resolved.accessToken,
+    userId: callerUserId,
+    facebookId: resolved.facebookId,
     source: "caller",
   };
 }

@@ -260,7 +260,7 @@ const GoogleAccount = ({ onBack }) => {
           ) : (
             <>
               <Rocket className="h-4 w-4" />
-              Launch Campaign
+              Launch Ads
             </>
           )}
         </button>
