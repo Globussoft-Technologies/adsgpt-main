@@ -91,7 +91,7 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
-async function createAmemberUser({ login, email, password, firstName, lastName, acceptedTerms }) {
+async function createAmemberUser({ login, email, password, firstName, lastName }) {
   const url = `${baseUrl}/users`;
   const params = new URLSearchParams({
     _key: apiKey,
@@ -102,10 +102,6 @@ async function createAmemberUser({ login, email, password, firstName, lastName, 
     name_l: lastName || "",
   });
 
-  if (acceptedTerms) {
-    params.append("i_agree", "1");
-    params.append("accepted_terms", "1");
-  }
 
   const response = await axios.post(url, params.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -313,10 +309,7 @@ const MobileSignup = async (req, res) => {
     }
   */
   try {
-    const { email, password, firstName, lastName, platform, acceptedTerms } = req.body;
-    if (acceptedTerms !== true) {
-      return res.status(400).json({ ok: false, code: "TERMS_NOT_ACCEPTED", error: "You must accept the terms and conditions." });
-    }
+    const { email, password, firstName, lastName, platform } = req.body;
     if (!email || !password) {
       return res.status(400).json({ ok: false, code: "INVALID_INPUT", error: "Email and password are required." });
     }
@@ -333,7 +326,7 @@ const MobileSignup = async (req, res) => {
       });
     }
 
-    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName, acceptedTerms });
+    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName });
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
     await UserProfile.create({
@@ -348,7 +341,6 @@ const MobileSignup = async (req, res) => {
       loginProviders: ["general"],
       last_login_at: new Date(),
       platform: platform || "",
-      accepted_terms: true,
     });
 
     const tokenPayload = {
@@ -411,10 +403,7 @@ const GoogleSignup = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, firstName, lastName, platform, acceptedTerms, email: bodyEmail } = req.body;
-    if (acceptedTerms !== true) {
-      return res.status(400).json({ ok: false, code: "TERMS_NOT_ACCEPTED", error: "You must accept the terms and conditions." });
-    }
+    const { firebaseIdToken, firstName, lastName, platform, email: bodyEmail } = req.body;
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "google.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Google to sign in to this endpoint." });
@@ -448,7 +437,6 @@ const GoogleSignup = async (req, res) => {
       password: generateRandomString(16),
       firstName: derivedFirstName,
       lastName: derivedLastName,
-      acceptedTerms,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -466,7 +454,6 @@ const GoogleSignup = async (req, res) => {
       loginProviders: ["google"],
       last_login_at: new Date(),
       platform: platform || "",
-      accepted_terms: true,
     });
 
     const tokenPayload = {
@@ -637,10 +624,7 @@ const AppleSignup = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, firstName, lastName, platform, acceptedTerms, email: bodyEmail } = req.body;
-    if (acceptedTerms !== true) {
-      return res.status(400).json({ ok: false, code: "TERMS_NOT_ACCEPTED", error: "You must accept the terms and conditions." });
-    }
+    const { firebaseIdToken, firstName, lastName, platform, email: bodyEmail } = req.body;
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "apple.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
@@ -674,7 +658,6 @@ const AppleSignup = async (req, res) => {
       password: generateRandomString(16),
       firstName: derivedFirstName,
       lastName: derivedLastName,
-      acceptedTerms,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -692,7 +675,6 @@ const AppleSignup = async (req, res) => {
       loginProviders: ["apple"],
       last_login_at: new Date(),
       platform: platform || "",
-      accepted_terms: true,
     });
 
     const tokenPayload = {
@@ -1511,6 +1493,106 @@ const handleGoogleWebhook = async (req, res) => {
   }
 };
 
+const AcceptMobileTerms = async (req, res) => {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'Accept the current mobile terms and conditions'
+    #swagger.description = 'Records consent in aMember for the authenticated user. Consent is not stored in MongoDB.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/acceptMobileTermsPayload' }
+        }
+      }
+    }
+    #swagger.responses[200] = { description: 'Consent recorded in aMember' }
+    #swagger.responses[400] = { description: 'Explicit acceptance is required' }
+    #swagger.responses[404] = { description: 'Authenticated user was not found' }
+    #swagger.responses[502] = { description: 'aMember consent update failed' }
+  */
+  try {
+    if (req.body?.accepted !== true) {
+      return res.status(400).json({
+        ok: false,
+        code: "TERMS_ACCEPTANCE_REQUIRED",
+        error: "Set accepted to true to accept the terms and conditions.",
+      });
+    }
+
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    if (!rawUserId) {
+      return res.status(401).json({
+        ok: false,
+        code: "AUTH_USER_REQUIRED",
+        error: "An authenticated user is required.",
+      });
+    }
+
+    const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
+    const userProfile = await UserProfile.findOne({
+      amember_user_id: amemberUserId,
+    });
+    if (!userProfile || userProfile.is_deleted === true) {
+      return res.status(404).json({
+        ok: false,
+        code: "USER_NOT_FOUND",
+        error: "The authenticated user account was not found.",
+      });
+    }
+
+    const amemberUser = await fetchUserDataByName(
+      userProfile.login || req.user?.login,
+    );
+    if (!amemberUser?.ok || String(amemberUser.user_id) !== amemberUserId) {
+      return res.status(404).json({
+        ok: false,
+        code: "AMEMBER_USER_NOT_FOUND",
+        error: "The authenticated aMember account was not found.",
+      });
+    }
+
+    const termsVersion = process.env.MOBILE_TERMS_VERSION || "mobile-terms-v1";
+    const acceptedAt = new Date().toISOString();
+    const params = new URLSearchParams({
+      _key: apiKey,
+      accepted_terms: "1",
+      terms_version: termsVersion,
+      terms_accepted_at: acceptedAt,
+    });
+
+    try {
+      await axios.put(
+        `${baseUrl}/users/${amemberUserId}`,
+        params.toString(),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      );
+    } catch (error) {
+      console.error("[AcceptMobileTerms] aMember update failed:", error.message);
+      return res.status(502).json({
+        ok: false,
+        code: "AMEMBER_TERMS_SYNC_FAILED",
+        error: "Failed to record terms acceptance in aMember.",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      accepted: true,
+      termsVersion,
+      acceptedAt,
+    });
+  } catch (error) {
+    console.error("[AcceptMobileTerms] error:", error);
+    return res.status(500).json({
+      ok: false,
+      code: "INTERNAL_ERROR",
+      error: "Failed to record terms acceptance.",
+    });
+  }
+};
+
 const getMobilePlans = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
@@ -1584,6 +1666,7 @@ module.exports = {
   AppleSignup,
   AppleLogin,
   DeleteAccount,
+  AcceptMobileTerms,
   getMobilePlans,
   verifyApplePayment,
   verifyGooglePayment,

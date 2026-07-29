@@ -68,6 +68,19 @@ function buildControllerError(responseData) {
   return codeTag ? `${base} ${codeTag}` : base;
 }
 
+function deriveSpecialAdCategoryCountries(locations = []) {
+  const countryCodes = new Set();
+  for (const location of Array.isArray(locations) ? locations : []) {
+    if (!location || location.mode === "exclude") continue;
+    const rawCode =
+      location.type === "country" ? location.key : location.countryCode;
+    const countryCode =
+      typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
+    if (/^[A-Z]{2}$/.test(countryCode)) countryCodes.add(countryCode);
+  }
+  return Array.from(countryCodes);
+}
+
 const _runningJobs = new Set();
 
 // Dev/testing-only override — same gate the queue's fast-cron + grace-window
@@ -295,22 +308,30 @@ const PLATFORM_POSTERS = {
       // Clean up undefined fields
       Object.keys(extractedTargeting).forEach(k => extractedTargeting[k] === undefined && delete extractedTargeting[k]);
 
-      let derivedSpecialAdCategoryCountries = cleanPayload.specialAdCategoryCountries || p.specialAdCategoryCountries || [];
-      const hasRealSpecialCategory = cleanPayload.specialAdCategories?.length && !cleanPayload.specialAdCategories.includes("NONE");
+      // Use the saved Meta template as the source of truth. The wizard saves
+      // [] when no Special Ad Category was selected.
+      const templateSpecialAdCategories = Array.isArray(cleanPayload.specialAdCategories)
+        ? cleanPayload.specialAdCategories
+        : [];
+      let derivedSpecialAdCategoryCountries =
+        cleanPayload.specialAdCategoryCountries || [];
 
-      if (hasRealSpecialCategory && derivedSpecialAdCategoryCountries.length === 0) {
-        // Infer from targeting locations
-        const locs = extractedTargeting.locations || [];
-        derivedSpecialAdCategoryCountries = locs.filter(l => l.type === "country" && l.key).map(l => l.key);
+      if (templateSpecialAdCategories.length && derivedSpecialAdCategoryCountries.length === 0) {
+        // Templates save the wizard locations, while the country list is
+        // normally derived only in the wizard's live launch payload. Rebuild
+        // it here for Autopilot from countries and city/region countryCode
+        // metadata, ignoring excluded locations.
+        derivedSpecialAdCategoryCountries =
+          deriveSpecialAdCategoryCountries(extractedTargeting.locations);
       }
 
       const campaignPayload = {
         ...cleanPayload,
         name: p.name || p.campaignName || "Auto",
-        // If specialAdCategories is empty or not set, ensure specialAdCategoryCountries is also cleared
-        // to avoid Meta rejecting the adSet for location/country mismatch
-        specialAdCategories: cleanPayload.specialAdCategories?.length ? cleanPayload.specialAdCategories : ["NONE"],
-        specialAdCategoryCountries: cleanPayload.specialAdCategories?.length ? derivedSpecialAdCategoryCountries : [],
+        specialAdCategories: templateSpecialAdCategories,
+        specialAdCategoryCountries: templateSpecialAdCategories.length
+          ? derivedSpecialAdCategoryCountries
+          : [],
         // Autopilot-created campaigns always go live — ignore the template's
         // saved status (which defaults to PAUSED for manual wizard use).
         status: "ACTIVE",
@@ -489,7 +510,12 @@ const PLATFORM_POSTERS = {
         const metaHeadline = metaText?.headline || "";
         const metaMessage  = metaText?.message  || "";
 
-        const imageHash = await uploadImageFromUrl(account, creative.imageUrl);
+        const imageHash = await uploadImageFromUrl(
+          account,
+          creative.imageUrl.startsWith("http")
+            ? creative.imageUrl
+            : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${creative.imageUrl.startsWith("/") ? "" : "/"}${creative.imageUrl}`
+        );
         const adName = p.adName || p.name || p.campaignName || `Ad ${i+1}`;
         const adPayload = {
           adAccountId: p.adAccountId,
@@ -954,7 +980,11 @@ const PLATFORM_POSTERS = {
         return {
           ...(rawHeadline               ? { headline:     rawHeadline }                          : {}),
           ...(rawDesc                   ? { description:  rawDesc.slice(0, 90) }                 : {}),
-          ...(creative.imageUrl         ? { imageUrl:     creative.imageUrl }                   : {}),
+            ...(creative.imageUrl ? {
+              imageUrl: creative.imageUrl.startsWith("http")
+                ? creative.imageUrl
+                : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${creative.imageUrl.startsWith("/") ? "" : "/"}${creative.imageUrl}`,
+            } : {}),
           // Google's own template CTA takes priority — same cross-platform
           // CTA-vocabulary mismatch risk as Meta's poster below.
           ...(p.callToAction || creative.callToAction
@@ -1160,14 +1190,11 @@ function buildCreativesFromResults(campaign, callToActionList, destinationUrl, p
         ? rawImage
         : rawImage?.base_image || rawImage?.url || rawImage?.data) || "";
 
-    // Convert relative URLs to absolute so MetaAdLauncher can download them
-    const fullImageUrl = imgData
-      ? (imgData.startsWith("http") ? imgData : `https://contents.adsgpt.io${imgData.startsWith('/') ? '' : '/'}${imgData}`)
-      : "";
-
     creatives.push({
       creativeId:   uuidv4(),
-      imageUrl:     fullImageUrl,
+      // Store the original relative path. Resolve it only while posting or
+      // returning it to a client, so database values remain environment-free.
+      imageUrl:     imgData,
       linkUrl:      destinationUrl || "",
       callToAction: ctaList[i % ctaList.length], // rotate through campaign CTAs
       description:  campaign.objectives?.additionalGuidelines || "",
@@ -1928,32 +1955,62 @@ async function run(jobId) {
                 generatedImages,
                 generatedTexts,
 
-                creatives: newCreatives.map((c, i) => ({
-                  creativeId:  c.creativeId,
-                  imageIndex:  i,
-                  textIndex:   i,
-                  runStatus:   runStatus,
-                  runError:    runError || null,
-                  ad: {
-                    imageUrl:     c.imageUrl,
-                    imageStatus:  c.imageUrl ? "generated" : "missing",
-                    description:  c.description,
-                    textStatus:   (c.platformText?.meta || c.platformText?.google) ? "generated" : "missing",
-                    callToAction: c.callToAction,
-                    linkUrl:      c.linkUrl,
-                    platform:     c.platform,
-                    // Each platform's own generated copy — no shared/generic
-                    // text field. Callers (e.g. the alert email) must read
-                    // meta/google directly instead of a single collapsed value.
-                    meta:   c.platformText?.meta   || null,
-                    google: c.platformText?.google  || null,
-                  },
-                  posting: {
-                    posted,
-                    postedAdIds: adsPosted,
-                    postedAt:    posted ? completedAt : null,
-                  },
-                })),
+                // Match GET /activity exactly: one response card per platform
+                // with that platform's own copy and posting result. Previously
+                // the socket emitted one "multi" card with text nested under
+                // ad.meta/ad.google, while the fetched response emitted flat
+                // ad.headline/ad.body fields. The frontend therefore rendered
+                // mismatched live data until refresh replaced it.
+                creatives: newCreatives.flatMap((c, i) => {
+                  const creativePosted = c.postedAdIds instanceof Map
+                    ? Object.fromEntries(c.postedAdIds)
+                    : (c.postedAdIds || {});
+                  const platformsForCreative = Object.keys(creativePosted).length
+                    ? Object.keys(creativePosted)
+                    : Object.keys(adsPosted);
+                  const platforms = platformsForCreative.length
+                    ? platformsForCreative
+                    : Object.keys(job.targets || {}).filter((p) => job.targets[p]?.template);
+
+                  return platforms.map((platform) => {
+                    const platformText = c.platformText?.[platform] || null;
+                    const headline = platformText?.headline || "";
+                    const body = platformText?.message || "";
+                    const platformAdId = creativePosted[platform] || (adsPosted[platform] || null);
+
+                    return {
+                      // Stable, unique card id across socket merges and the
+                      // authoritative GET response. DB identity is unchanged.
+                      creativeId: `${c.creativeId}:${platform}`,
+                      sourceCreativeId: c.creativeId,
+                      imageIndex: i,
+                      textIndex: i,
+                      platform,
+                      runStatus,
+                      runError: runError || null,
+                      ad: {
+                        imageUrl: c.imageUrl
+                          ? (c.imageUrl.startsWith("http")
+                              ? c.imageUrl
+                              : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${c.imageUrl.startsWith("/") ? "" : "/"}${c.imageUrl}`)
+                          : c.imageUrl,
+                        imageStatus: c.imageUrl ? "generated" : "missing",
+                        headline,
+                        body,
+                        description: c.description,
+                        textStatus: (headline || body) ? "generated" : "missing",
+                        callToAction: c.callToAction,
+                        linkUrl: c.linkUrl,
+                        platform,
+                      },
+                      posting: {
+                        posted: !!platformAdId,
+                        adId: platformAdId,
+                        postedAt: platformAdId ? completedAt : null,
+                      },
+                    };
+                  });
+                }),
               },
             ],
           };

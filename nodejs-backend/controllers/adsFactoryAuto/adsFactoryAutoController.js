@@ -715,7 +715,11 @@ class AdsFactoryAutoController {
             meta:         c.platformText?.meta   || null,
             google:       c.platformText?.google || null,
             description:  c.description || null,
-            imageUrl:     c.imageUrl || null,
+            imageUrl: c.imageUrl
+              ? (c.imageUrl.startsWith("http")
+                  ? c.imageUrl
+                  : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${c.imageUrl.startsWith("/") ? "" : "/"}${c.imageUrl}`)
+              : null,
             callToAction: c.callToAction || null,
             linkUrl:      c.linkUrl || null,
             platform:     c.platform || null,
@@ -1103,7 +1107,19 @@ class AdsFactoryAutoController {
           const generatedImages = rawImages.map((img, i) => {
             const imgUrl = typeof img.data === "string" ? img.data : (img.data?.base_image || img.data?.url || img.data?.data || null);
             const aspectRatio = typeof img.data === "object" ? (img.data?.aspect_ratio || img.data?.aspectRatio || img.data?.aspectRatioString || null) : null;
-            return { index: i, generated: img.status === 200, status: img.status, url: imgUrl, aspectRatio, prompt: img.prompt || null, error: img.error || null };
+            return {
+              index: i,
+              generated: img.status === 200,
+              status: img.status,
+              url: imgUrl
+                ? (imgUrl.startsWith("http")
+                    ? imgUrl
+                    : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${imgUrl.startsWith("/") ? "" : "/"}${imgUrl}`)
+                : imgUrl,
+              aspectRatio,
+              prompt: img.prompt || null,
+              error: img.error || null,
+            };
           });
 
           // Split one raw text-generation result into its per-platform copies.
@@ -1198,14 +1214,22 @@ class AdsFactoryAutoController {
                 const platformAdId = creativePosted[platform] || (adsPosted[platform] || null);
 
                 return {
-                  creativeId: c.creativeId,
+                  // Response-card identity must be unique per platform. The
+                  // underlying stored creative id stays unchanged and is
+                  // exposed separately for tracing/posting reconciliation.
+                  creativeId: `${c.creativeId}:${platform}`,
+                  sourceCreativeId: c.creativeId,
                   imageIndex: i,
                   textIndex:  i,
                   platform,                       // "meta" | "google"
                   runStatus:  run.status,
                   runError:   run.error,
                   ad: {
-                    imageUrl:     c.imageUrl,
+                    imageUrl: c.imageUrl
+                      ? (c.imageUrl.startsWith("http")
+                          ? c.imageUrl
+                          : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${c.imageUrl.startsWith("/") ? "" : "/"}${c.imageUrl}`)
+                      : c.imageUrl,
                     imageStatus:  c.imageUrl ? "generated" : "missing",
                     headline,                     // this platform's headline
                     body,                         // this platform's body

@@ -62,7 +62,6 @@ const userProfileSchema = new mongoose.Schema(
     loginProviders: [{ type: String }], // e.g. ["general", "google", "apple"]
     last_login_at: { type: Date, default: null },
     platform: { type: String, default: "" },
-    accepted_terms: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

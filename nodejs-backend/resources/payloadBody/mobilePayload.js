@@ -6,7 +6,6 @@ exports.mobileSignupPayload = {
   firstName: "Alex",
   lastName: "Smith",
   platform: "ios",
-  acceptedTerms: true,
 };
 
 exports.googleSignupPayload = {
@@ -15,7 +14,6 @@ exports.googleSignupPayload = {
   firstName: "Alex",
   lastName: "Smith",
   platform: "android",
-  acceptedTerms: true,
 };
 
 exports.googleLoginPayload = {
@@ -29,7 +27,6 @@ exports.appleSignupPayload = {
   lastName: "Smith",
   email: "user@privaterelay.appleid.com",
   platform: "ios",
-  acceptedTerms: true,
 };
 
 exports.appleLoginPayload = {
@@ -39,6 +36,10 @@ exports.appleLoginPayload = {
 
 exports.deleteAccountPayload = {
   reason: "User requested deletion from mobile app settings",
+};
+
+exports.acceptMobileTermsPayload = {
+  accepted: true,
 };
 
 // ─── Mobile Payment Verification Payloads ────────────────────────────────────

@@ -9,6 +9,7 @@ const {
   AppleSignup,
   AppleLogin,
   DeleteAccount,
+  AcceptMobileTerms,
   getMobilePlans,
   verifyApplePayment,
   verifyGooglePayment,
@@ -26,6 +27,7 @@ router.post("/google-login", GoogleLogin);
 router.post("/apple-signup", AppleSignup);
 router.post("/apple-login", AppleLogin);
 router.post("/delete-account", authenticateJWT, DeleteAccount);
+router.post("/accept-terms", authenticateJWT, AcceptMobileTerms);
 
 // Plans Config Endpoint (JWT required — shown after signup)
 router.get("/plans", authenticateJWT, getMobilePlans);
