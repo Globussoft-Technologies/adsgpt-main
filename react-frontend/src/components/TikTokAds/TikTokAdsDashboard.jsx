@@ -52,6 +52,7 @@ import {
   getTiktokAdReviewInfo,
 } from '@/apis/tikTokAds/tikTokAdsApi';
 import toast from 'react-hot-toast';
+import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 
 // ─── formatting helpers ────────────────────────────────────────────────────
 // NOTE: TikTok's reporting `spend`/cpc/cpm/cpa come back in the account's main
@@ -708,7 +709,7 @@ const TikTokAdsDashboard = () => {
             <FaTiktok className="h-5 w-5 text-black" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">TikTok Ads Manager</h1>
+            <AdsManagerModeSwitcher activeMode="manager" platform="TikTok" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Manage · Analyse · Optimise</p>
           </div>
         </div>

@@ -3,7 +3,6 @@ import {
   Bot,
   ChartNoAxesColumn,
   ChevronsLeft,
-  Gauge,
   HelpCircle,
   History,
   //  Image,
@@ -102,15 +101,6 @@ const navigationItems = [
     lucideIcon: ChartNoAxesColumn,
     badge: 'BETA',
   },
-  {
-    id: 'autopilot',
-    icon: metaAdsDarkLogo,
-    activeIcon: metaAdsDarkLogoActive,
-    label: 'Autopilot',
-    link: '/autopilot',
-    lucideIcon: Gauge,
-    badge: 'BETA',
-  },
   // {
   //   id: 'insights',
   //   icon: adInsightDarkLogo,
@@ -151,6 +141,19 @@ const AppSidebar = () => {
   const navigate = useNavigate();
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
   const { activePage, savedCount } = useSelector((state) => state.adVideoNew);
+
+  const isNavigationItemActive = (item) => {
+    if (item.id === 'meta-ads') {
+      return (
+        currentRoute === '/ads-manager' ||
+        currentRoute.startsWith('/meta-ads') ||
+        currentRoute.startsWith('/google-ads') ||
+        currentRoute.startsWith('/tiktok-ads') ||
+        currentRoute.startsWith('/autopilot')
+      );
+    }
+    return currentRoute === item.link || (item.link !== '/' && currentRoute.startsWith(item.link));
+  };
 
   useEffect(() => {
     const fetchCount = () => {
@@ -289,10 +292,7 @@ const AppSidebar = () => {
                   activePage === 'myVideos';
 
                 const isActive =
-                  (currentRoute === item.link ||
-                    (item.link !== '/' && currentRoute.startsWith(item.link)) ||
-                    (item.id === 'meta-ads' && currentRoute.startsWith('/meta-ads'))) &&
-                  !(item.id === 'adstudio' && isMySpace);
+                  isNavigationItemActive(item) && !(item.id === 'adstudio' && isMySpace);
                 return (
                   <motion.div
                     key={item.id}
@@ -315,8 +315,7 @@ const AppSidebar = () => {
                       to={item.link}
                       className={({ isActive: navActive }) => {
                         const trulyActive =
-                          (navActive ||
-                            (item.link !== '/' && currentRoute.startsWith(item.link))) &&
+                          (navActive || isNavigationItemActive(item)) &&
                           !(item.id === 'adstudio' && isMySpace);
                         return `group flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-zinc-700 transition-all duration-200 hover:text-black 2xl:gap-0 dark:text-[#AFAFAF] dark:hover:text-white ${trulyActive ? 'active text-zinc-900 dark:text-white' : ''}`;
                       }}

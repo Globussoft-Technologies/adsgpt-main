@@ -33,6 +33,7 @@ import GoogleAdsAnalyticsPanel from './GoogleAdsAnalyticsPanel';
 import GoogleAdsCampaignsTable from './GoogleAdsCampaignsTable';
 import GoogleAdsAuditTab from './GoogleAdsAuditTab';
 import CreateCampaignWizard, { fetchSchemaOnce } from './CreateCampaignWizard';
+import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 
 const GOOGLE_BLUE = '#4285F4';
 
@@ -325,7 +326,7 @@ export default function GoogleAdsDashboard() {
             <SiGoogleads className="h-5 w-5" style={{ color: GOOGLE_BLUE }} />
           </div>
           <div>
-            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white">Google Ads Manager</h1>
+            <AdsManagerModeSwitcher activeMode="manager" platform="Google" />
             <p className="text-15 text-gray-500 dark:text-[#BEBEBE]">Manage · Analyse · Optimise</p>
           </div>
         </div>

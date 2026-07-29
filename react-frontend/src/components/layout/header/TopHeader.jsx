@@ -235,6 +235,7 @@ export default function TopHeader() {
     currentRoute === '/meta-ads' ||
     currentRoute === '/google-ads' ||
     currentRoute === '/tiktok-ads' ||
+    currentRoute === '/autopilot/meta' ||
     (currentRoute === '/adstudio' &&
       activeAdStudioTabId === 'adVideoNew' &&
       activePage !== 'home') ||

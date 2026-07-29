@@ -32,6 +32,7 @@ import CreateCampaignWizardV2 from './CreateCampaignWizardV2';
 import LeadsTab from './LeadsTab';
 import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
 import FacebookAccountSelector from './FacebookAccountSelector';
+import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
 import Cookies from 'js-cookie';
 import { clearSelectedFacebookId } from '@/utils/metaFacebookAccount';
@@ -342,12 +343,17 @@ export default function MetaAdsDashboard() {
 
       {/* ── header ─────────────────────────────────────────────────────────── */}
       <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 pr-14 2xl:px-6 2xl:py-4 2xl:pr-16 dark:border-white/[0.06]">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/20">
             <FaMeta className="h-5 w-5 text-[#0082FB]" />
           </div>
-          <div>
-            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white">Meta Ads Manager</h1>
+          <div className="flex flex-col gap-3">
+            <AdsManagerModeSwitcher
+              activeMode="manager"
+              platform="Meta"
+              autopilotAvailable
+              appearance="tabs"
+            />
             <p className="text-[15px] text-gray-500 dark:text-[#BEBEBE]">Manage · Analyse · Optimise</p>
           </div>
         </div>

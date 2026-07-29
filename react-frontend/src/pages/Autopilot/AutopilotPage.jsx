@@ -19,6 +19,7 @@ import AutopilotSettings from '@/components/Autopilot/AutopilotSettings';
 // below, in three places marked "ROTATION HIDDEN".
 // import AutopilotRotationQueue from '@/components/Autopilot/AutopilotRotationQueue';
 import AutopilotLLMAudit from '@/components/Autopilot/LLMAudit/AutopilotLLMAudit';
+import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { getAdAccounts, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import {
   getAutopilotConfig,
@@ -271,13 +272,18 @@ const AutopilotPage = () => {
           same scale. */}
       <div className="relative z-50 shrink-0">
         <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6 2xl:py-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10 2xl:h-11 2xl:w-11">
             <Compass className="h-5 w-5 text-[#15DCFF] 2xl:h-5.5 2xl:w-5.5" />
           </div>
-          <div>
-            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white 2xl:text-[22px]">Autopilot</h1>
-            <p className="text-13 text-gray-500 dark:text-white/70 2xl:text-sm">
+          <div className="flex flex-col gap-3">
+            <AdsManagerModeSwitcher
+              activeMode="autopilot"
+              platform="Meta"
+              autopilotAvailable
+              appearance="tabs"
+            />
+            <p className="text-13 leading-relaxed text-gray-500 dark:text-white/70 2xl:text-sm">
               Set budget. Set objective. Walk away.
             </p>
           </div>
