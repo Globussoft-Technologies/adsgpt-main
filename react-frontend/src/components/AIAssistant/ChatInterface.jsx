@@ -144,6 +144,22 @@ const ChatInterface = () => {
 
   const isEmpty = messages.length === 0 && !pending;
 
+  // Stable per-conversation key for the Composer's unsent-draft cache. Frozen
+  // to the sessionId (or 'new') at the moment the user explicitly starts a new
+  // chat or loads one from History — both bump `abortRequestId` — rather than
+  // tracking `sessionId` directly, because `sessionId` also updates mid-stream
+  // (server assigns it right after the first message) while the user may still
+  // be typing a follow-up; keying off that would wipe their in-progress text.
+  // Computed during render (not in an effect) so a New Chat / History switch
+  // never has the newly-mounted Composer read one render's worth of stale key.
+  const draftKeyRef = useRef(null);
+  const draftAbortRef = useRef(abortRequestId);
+  if (draftKeyRef.current === null || abortRequestId !== draftAbortRef.current) {
+    draftAbortRef.current = abortRequestId;
+    draftKeyRef.current = sessionId || 'new';
+  }
+  const draftKey = draftKeyRef.current;
+
   // Play the welcome intro (blur-in greeting) once per page entry — this
   // component mounts fresh each time the sidebar's AI button opens the module.
   // Returning to the empty state later in the same visit (New Chat) shows the
@@ -575,6 +591,7 @@ const ChatInterface = () => {
               variant="centered"
               quote={quote}
               onClearQuote={() => setQuote(null)}
+              draftKey={draftKey}
             />
           </div>
         </div>
@@ -614,6 +631,7 @@ const ChatInterface = () => {
                 placeholder="Ask anything..."
                 quote={quote}
                 onClearQuote={() => setQuote(null)}
+                draftKey={draftKey}
               />
             </div>
           </div>

@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import BorderGlow from './BorderGlow/BorderGlow';
 import ToolToggles from './ToolToggles';
 import ImageLightbox from './ImageLightbox';
+import { getDraft, setDraft } from './composerDraftStore';
 
 let _tmpId = 0;
 const nextTmpId = () => `att_${++_tmpId}`;
@@ -62,8 +63,18 @@ const Composer = ({
   placeholder = 'Ask Anything...',
   quote = null, // { text, role, messageId } the user is replying to
   onClearQuote,
+  draftKey = 'new', // stable per-conversation key for the unsent-draft cache
 }) => {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => getDraft(draftKey));
+  // Restore the matching draft when `draftKey` changes on an already-mounted
+  // instance (e.g. switching between two non-empty History conversations,
+  // which doesn't remount the docked Composer). Adjusting state during render
+  // (rather than in a useEffect) avoids a one-frame flash of the old text.
+  const [syncedDraftKey, setSyncedDraftKey] = useState(draftKey);
+  if (draftKey !== syncedDraftKey) {
+    setSyncedDraftKey(draftKey);
+    setText(getDraft(draftKey));
+  }
   // Each attachment: { tempId, file_type, filename, url, isImage, role,
   // preview?, pending }. Image role is sent to the backend so Reference Image
   // and Brand Logo mapping never has to guess from upload order.
@@ -134,6 +145,7 @@ const Composer = ({
     );
     onSend?.(text.trim(), payload);
     setText('');
+    setDraft(draftKey, '');
     setAttachments([]);
     setImageUrl('');
     setShowUrlInput(false);
@@ -499,7 +511,11 @@ const Composer = ({
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setText(value);
+            setDraft(draftKey, value);
+          }}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={placeholder}
