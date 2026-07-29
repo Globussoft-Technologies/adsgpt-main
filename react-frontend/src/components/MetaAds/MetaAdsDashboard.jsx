@@ -738,7 +738,7 @@ export default function MetaAdsDashboard() {
           campaignId/adSetId/adId read straight from the URL — the same params
           TableViewCampaigns drills into — so the chat always knows what's
           currently open, even after a refresh. */}
-      {IS_META_ADS_CHAT_ENABLED && isAdsChatAllowedForEmail(Cookies.get('user_email')) && (
+      
         <MetaAdsChatWidget
           adAccountId={selectedAccount?.id}
           adAccountName={selectedAccount?.name}
@@ -747,7 +747,7 @@ export default function MetaAdsDashboard() {
           adSetId={searchParams.get('adSetId')}
           adId={searchParams.get('adId')}
         />
-      )}
+ 
     </div>
   );
 }
