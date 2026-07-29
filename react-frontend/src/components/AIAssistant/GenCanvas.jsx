@@ -79,8 +79,10 @@ const GenCanvas = ({
             </div>
           </div>
 
-          {/* Body — the active genCard */}
-          <div className="subtle-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          {/* Body — the active genCard. No scroll here: ChoiceForm fills this
+              and manages its own internal scroll region so its credit total /
+              image count / Generate footer stay pinned in view. */}
+          <div className="flex min-h-0 flex-1 flex-col px-3 pb-4">
             {active?.choiceForm && (
               <ChoiceForm
                 key={active.id}

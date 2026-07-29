@@ -22,6 +22,7 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
 import ImageLightbox from './ImageLightbox';
+import BorderGlow from './BorderGlow/BorderGlow';
 
 // Reference / product / website images are often EXTERNAL URLs (scraped sites,
 // ad-library images). Hotlinking them straight into <img> fails a lot of the
@@ -1184,13 +1185,33 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     }
   };
 
+  // Expanded, the card fills GenCanvas's available height so the fields grid
+  // (below) can scroll internally while this header and the footer (credits +
+  // image count + Generate) stay pinned in view — no scrolling to find
+  // Generate. Collapsed, it shrinks back to just the header row.
   return (
-    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F0F]">
+    <BorderGlow
+      edgeSensitivity={30}
+      glowColor="40 80 80"
+      // Same glass treatment as the Composer prompt box: translucent dark fill
+      // + heavy backdrop blur so the chat's gradient background frosts through.
+      backgroundColor="rgba(20,20,26,0.35)"
+      className={`mt-3 w-full backdrop-blur-[40px] glow-edge-only ${collapsed ? '' : 'h-full min-h-0'}`}
+      borderRadius={16}
+      glowRadius={40}
+      glowIntensity={1}
+      coneSpread={25}
+      animated={false}
+      colors={['#c084fc', '#f472b6', '#38bdf8']}
+    >
+    <div
+      className={`flex w-full flex-col overflow-hidden rounded-2xl ${collapsed ? '' : 'h-full min-h-0'}`}
+    >
       {/* Header — double-click to collapse/expand the brief. */}
       <div
         onDoubleClick={() => setCollapsed((c) => !c)}
         title={collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
-        className="flex cursor-pointer items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3 select-none"
+        className="flex shrink-0 cursor-pointer items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3 select-none"
       >
         <div className="min-w-0">
           <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white/80 uppercase">
@@ -1228,8 +1249,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
       {!collapsed && (
       <>
-      {/* Fields — two-column grid; wide controls span both columns. */}
-      <div className="grid grid-cols-1 gap-x-3 gap-y-3.5 px-4 py-4 sm:grid-cols-2">
+      {/* Fields — two-column grid; wide controls span both columns. Scrolls
+          internally (min-h-0 + flex-1 on a flex-col parent) so the footer
+          below never needs a scroll to reach. */}
+      <div className="subtle-scroll grid min-h-0 flex-1 grid-cols-1 gap-x-3 gap-y-3.5 overflow-y-auto px-4 py-4 sm:grid-cols-2">
         {formHasBrandFields(form) && (
           <BrandPicker
             form={form}
@@ -1303,12 +1326,19 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </div>
           );
         })}
+      </div>
 
-        {/* Total-images notice — always shown (even for a single image) so the
-            user can confirm the output count before firing. Red when >1 image
-            so a multi-image spend isn't mistaken for the per-ratio count. */}
+      {/* Footer — submit OR submitted summary. Pinned outside the scrolling
+          fields grid (shrink-0 on a flex-col parent) so credits, image count,
+          and Generate are always visible without scrolling. */}
+      <div className="shrink-0 border-t border-white/[0.05] bg-black/30 px-4 py-3">
+        {/* Total-images notice — shown regardless of submitted state (unlike
+            the credit badge/Generate row below), so it stays visible even
+            after the brief collapses to its "Submitted with" summary. Red
+            when >1 image so a multi-image spend isn't mistaken for the
+            per-ratio count. */}
         <p
-          className={`sm:col-span-2 -mt-1 flex items-center gap-1.5 text-[11.5px] font-medium ${
+          className={`mb-2 flex items-center gap-1.5 text-[11.5px] font-medium ${
             creditInfo.totalImages > 1 ? 'text-red-400/90' : 'text-white/55'
           }`}
         >
@@ -1327,10 +1357,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             </span>
           )}
         </p>
-      </div>
-
-      {/* Footer — submit OR submitted summary */}
-      <div className="border-t border-white/[0.05] bg-black/30 px-4 py-3">
         {isSubmitted && !editing ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <Check className="h-3.5 w-3.5 text-emerald-400" />
@@ -1357,17 +1383,16 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 flex-col gap-1">
-              {/* Credit + image-count summary lives here (next to Generate) so the
-                  user can confirm exactly what they'll spend — and on how many
-                  images across how many ratios — right before firing. */}
+              {/* Credit total lives here, pinned next to Generate, so the
+                  user can confirm exactly what they'll spend right before
+                  firing. Image count is the persistent notice above. */}
               {creditInfo.totalCredits != null && (
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11.5px]">
-                  <span className="inline-flex items-center gap-1 font-semibold text-white/90">
-                    <Sparkles className="h-3.5 w-3.5 text-[#15DCFF]" />
-                    ~{creditInfo.totalCredits} credits
-                  </span>
-                  {/* Image count intentionally NOT repeated here — it's already
-                      shown in the "Generating N images" notice above the footer. */}
+                // Exact, live figure — matches Ad Studio's confident credit
+                // badge (no "~" hedge; it recomputes instantly from the same
+                // live per-model/quality registry Ad Studio reads).
+                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1 text-[12px] font-semibold text-white/90">
+                  <Sparkles className="h-3.5 w-3.5 text-[#15DCFF]" />
+                  {creditInfo.totalCredits} credits
                 </span>
               )}
               <span
@@ -1403,6 +1428,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       </>
       )}
     </div>
+    </BorderGlow>
   );
 };
 
