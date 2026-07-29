@@ -22,7 +22,6 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
 import ImageLightbox from './ImageLightbox';
-import BorderGlow from './BorderGlow/BorderGlow';
 
 // Reference / product / website images are often EXTERNAL URLs (scraped sites,
 // ad-library images). Hotlinking them straight into <img> fails a lot of the
@@ -1185,27 +1184,18 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     }
   };
 
-  // Expanded, the card fills GenCanvas's available height so the fields grid
+  // No card chrome of its own (no border/rounded corners/separate fill) —
+  // GenCanvas's own panel is already the glass surface; a second nested card
+  // on top of it just reads as two stacked boxes. This is content sections
+  // within that one panel, divided by thin border lines, not a card-in-card.
+  //
+  // Expanded, it fills GenCanvas's available height so the fields grid
   // (below) can scroll internally while this header and the footer (credits +
   // image count + Generate) stay pinned in view — no scrolling to find
   // Generate. Collapsed, it shrinks back to just the header row.
   return (
-    <BorderGlow
-      edgeSensitivity={30}
-      glowColor="40 80 80"
-      // Same glass treatment as the Composer prompt box: translucent dark fill
-      // + heavy backdrop blur so the chat's gradient background frosts through.
-      backgroundColor="rgba(20,20,26,0.35)"
-      className={`mt-3 w-full backdrop-blur-[40px] glow-edge-only ${collapsed ? '' : 'h-full min-h-0'}`}
-      borderRadius={16}
-      glowRadius={40}
-      glowIntensity={1}
-      coneSpread={25}
-      animated={false}
-      colors={['#c084fc', '#f472b6', '#38bdf8']}
-    >
     <div
-      className={`flex w-full flex-col overflow-hidden rounded-2xl ${collapsed ? '' : 'h-full min-h-0'}`}
+      className={`mt-3 flex w-full flex-col ${collapsed ? '' : 'h-full min-h-0'}`}
     >
       {/* Header — double-click to collapse/expand the brief. */}
       <div
@@ -1428,7 +1418,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       </>
       )}
     </div>
-    </BorderGlow>
   );
 };
 
