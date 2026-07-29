@@ -10,6 +10,7 @@ const {
   AppleLogin,
   DeleteAccount,
   AcceptMobileTerms,
+  ForgotPassword,
   getMobilePlans,
   verifyApplePayment,
   verifyGooglePayment,
@@ -26,6 +27,7 @@ router.post("/google-signup", GoogleSignup);
 router.post("/google-login", GoogleLogin);
 router.post("/apple-signup", AppleSignup);
 router.post("/apple-login", AppleLogin);
+router.post("/forgot-password", ForgotPassword);
 router.post("/delete-account", authenticateJWT, DeleteAccount);
 router.post("/accept-terms", authenticateJWT, AcceptMobileTerms);
 

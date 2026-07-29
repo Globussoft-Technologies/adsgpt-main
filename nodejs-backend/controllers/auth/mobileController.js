@@ -9,7 +9,6 @@ const UserProfile = require("../../Module/user/userProfileModel");
 const MobileStoreTransaction = require("../../Module/mobilePayments/mobileStoreTransactionModel");
 const MobileStoreWebhookEvent = require("../../Module/mobilePayments/mobileStoreWebhookEventModel");
 const { fetchUserDataByName, syncUserProfile } = require("./authController");
-const mobileProductsConfig = require("../../config/mobileProductsConfig");
 
 const apiKey = process.env.AMEMBER_API_KEY;
 const baseUrl = process.env.AMEMBER_BASE_API_URL;
@@ -122,7 +121,7 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
   if (firebaseUid) conditions.push({ firebase_uid: firebaseUid });
   if (email) conditions.push({ email: email.toLowerCase() });
 
-  const mongoProfile = conditions.length > 0 ? await UserProfile.findOne({ $or: conditions }) : null;
+  const mongoProfile = conditions.length > 0 ? await UserProfile.findOne({ $or: conditions, is_deleted: { $ne: true } }) : null;
 
   let amemberUser = null;
   if (email) {
@@ -148,10 +147,11 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
 let amemberProductsCache = null;
 let amemberProductsCacheExpiry = 0;
 
-async function matchAmemberProduct(storeProductId) {
+async function getAmemberProducts() {
   if (!amemberProductsCache || Date.now() > amemberProductsCacheExpiry) {
     try {
-      const res = await axios.get(`${baseUrl}/products?_key=${apiKey}`);
+      const apiHost = baseUrl || "https://adsgpt-dev.poweradspy.com/amember/api";
+      const res = await axios.get(`${apiHost}/products?_key=${apiKey}`);
       let prods = res.data;
       if (prods && typeof prods === "object" && !Array.isArray(prods)) prods = Object.values(prods);
       if (Array.isArray(prods)) {
@@ -162,14 +162,20 @@ async function matchAmemberProduct(storeProductId) {
       console.error("[mobileController] fetch products error:", e.message);
     }
   }
+  return amemberProductsCache || [];
+}
 
-  const prods = amemberProductsCache || [];
-  const matched = prods.find(
-    (p) =>
-      String(p.apple_product_id) === String(storeProductId) ||
-      String(p.google_product_id) === String(storeProductId) ||
-      String(p.product_id) === String(storeProductId)
-  );
+async function matchAmemberProduct(storeProductId) {
+  const prods = await getAmemberProducts();
+  const targetId = String(storeProductId || "").trim();
+
+  const matched = prods.find((p) => {
+    if (!p) return false;
+    const appleId = String(p.apple_product_id || "").trim();
+    const googleId = String(p.google_product_id || "").trim();
+    const productId = String(p.product_id || "").trim();
+    return appleId === targetId || googleId === targetId || productId === targetId;
+  });
 
   if (!matched) {
     const error = new Error("The selected subscription plan is currently unavailable. Please contact support.");
@@ -179,16 +185,22 @@ async function matchAmemberProduct(storeProductId) {
   }
 
   const amemberProductId = parseInt(matched.product_id, 10);
-
   const title = matched?.title || "AdsGPT Subscription";
   const billingPlanId = matched?.default_billing_plan_id || amemberProductId;
-  const isAnnual = storeProductId.includes("annual");
+  const targetIdLower = targetId.toLowerCase();
+  const titleLower = (matched.title || "").toLowerCase();
+  const isAnnual =
+    targetIdLower.includes("annual") ||
+    targetIdLower.includes("year") ||
+    titleLower.includes("annual") ||
+    titleLower.includes("year");
 
   return {
     amember_product_id: amemberProductId,
     amember_billing_plan_id: billingPlanId,
     title,
     period: isAnnual ? "1y" : "1m",
+    amemberProduct: matched,
   };
 }
 
@@ -276,11 +288,11 @@ async function deleteAmemberInvoice(platform, canonicalTransactionId) {
     const fetchRes = await axios.get(`${baseUrl}/invoices?_key=${apiKey}&_filter[public_id]=${publicId}`);
     const data = fetchRes.data;
     const invoices = Array.isArray(data) ? data : Object.values(data || {});
-    
+
     for (const inv of invoices) {
       if (inv && inv.invoice_id) {
-         await axios.delete(`${baseUrl}/invoices/${inv.invoice_id}?_key=${apiKey}`);
-         console.log(`[deleteAmemberInvoice] Deleted invoice ${inv.invoice_id} for ${publicId}`);
+        await axios.delete(`${baseUrl}/invoices/${inv.invoice_id}?_key=${apiKey}`);
+        console.log(`[deleteAmemberInvoice] Deleted invoice ${inv.invoice_id} for ${publicId}`);
       }
     }
   } catch (err) {
@@ -319,6 +331,41 @@ const MobileSignup = async (req, res) => {
 
     const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
     if (mongoProfile || amemberUser) {
+      const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+      const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || cleanLogin);
+      const active = userData?.ok ? isPlanActive(userData) : false;
+
+      if (!active) {
+        // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
+        const tokenPayload = {
+          status: true,
+          user_id: amemberUserId,
+          login: amemberUser?.login || mongoProfile?.login || cleanLogin,
+          user_email: cleanEmail,
+          hasActivePlan: false,
+          userSubscriptionType: {},
+          created_from: "GPT",
+        };
+        const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+        return res.status(200).json({
+          ok: true,
+          token: jwtToken,
+          isNewUser: false,
+          user: {
+            user_id: amemberUserId,
+            login: amemberUser?.login || mongoProfile?.login || cleanLogin,
+            user_name: mongoProfile?.name || `${firstName || ""} ${lastName || ""}`.trim(),
+            name_f: mongoProfile?.name_f || firstName || "",
+            name_l: mongoProfile?.name_l || lastName || "",
+            user_email: cleanEmail,
+            userSubscriptionType: {},
+            hasActivePlan: false,
+            created_from: "GPT",
+          },
+          nextAction: "SELECT_PLAN",
+        });
+      }
+
       return res.status(409).json({
         ok: false,
         code: "ACCOUNT_ALREADY_EXISTS",
@@ -329,19 +376,35 @@ const MobileSignup = async (req, res) => {
     const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName });
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
-    await UserProfile.create({
-      user_id: `GPT-${amemberUserId}`,
-      login: cleanLogin,
-      name: `${firstName || ""} ${lastName || ""}`.trim(),
-      name_f: firstName || "",
-      name_l: lastName || "",
-      email: cleanEmail,
-      created_from: "GPT",
-      amember_user_id: amemberUserId,
-      loginProviders: ["general"],
-      last_login_at: new Date(),
-      platform: platform || "",
-    });
+    const existingDeletedProfile = await UserProfile.findOne({ email: cleanEmail });
+    if (existingDeletedProfile) {
+      existingDeletedProfile.is_deleted = false;
+      existingDeletedProfile.deleted_at = null;
+      existingDeletedProfile.delete_reason = "";
+      existingDeletedProfile.user_id = `GPT-${amemberUserId}`;
+      existingDeletedProfile.amember_user_id = amemberUserId;
+      existingDeletedProfile.login = cleanLogin;
+      existingDeletedProfile.name = `${firstName || ""} ${lastName || ""}`.trim();
+      existingDeletedProfile.name_f = firstName || "";
+      existingDeletedProfile.name_l = lastName || "";
+      existingDeletedProfile.platform = platform || "";
+      existingDeletedProfile.last_login_at = new Date();
+      await existingDeletedProfile.save();
+    } else {
+      await UserProfile.create({
+        user_id: `GPT-${amemberUserId}`,
+        login: cleanLogin,
+        name: `${firstName || ""} ${lastName || ""}`.trim(),
+        name_f: firstName || "",
+        name_l: lastName || "",
+        email: cleanEmail,
+        created_from: "GPT",
+        amember_user_id: amemberUserId,
+        loginProviders: ["general"],
+        last_login_at: new Date(),
+        platform: platform || "",
+      });
+    }
 
     const tokenPayload = {
       status: true,
@@ -423,6 +486,45 @@ const GoogleSignup = async (req, res) => {
 
     const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
     if (mongoProfile || amemberUser) {
+      const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+      const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || email);
+      const active = userData?.ok ? isPlanActive(userData) : false;
+
+      if (!active) {
+        // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
+        const tokenPayload = {
+          status: true,
+          user_id: amemberUserId,
+          firebase_uid: firebaseUid,
+          auth_provider: "google.com",
+          login: userData?.login || mongoProfile?.login || email,
+          user_email: email,
+          hasActivePlan: false,
+          userSubscriptionType: {},
+          created_from: "GPT",
+        };
+        const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+        return res.status(200).json({
+          ok: true,
+          token: jwtToken,
+          isNewUser: false,
+          user: {
+            user_id: amemberUserId,
+            firebase_uid: firebaseUid,
+            auth_provider: "google.com",
+            login: userData?.login || mongoProfile?.login || email,
+            user_name: userData?.name || mongoProfile?.name || `${derivedFirstName} ${derivedLastName}`.trim(),
+            name_f: userData?.name_f || mongoProfile?.name_f || derivedFirstName,
+            name_l: userData?.name_l || mongoProfile?.name_l || derivedLastName,
+            user_email: email,
+            loginProviders: mongoProfile?.loginProviders || ["google"],
+            userSubscriptionType: {},
+            hasActivePlan: false,
+          },
+          nextAction: "SELECT_PLAN",
+        });
+      }
+
       return res.status(409).json({
         ok: false,
         code: "ACCOUNT_ALREADY_EXISTS",
@@ -441,20 +543,43 @@ const GoogleSignup = async (req, res) => {
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
-    await UserProfile.create({
-      user_id: `GPT-${amemberUserId}`,
-      login: generatedLogin,
-      name: `${derivedFirstName} ${derivedLastName}`.trim(),
-      name_f: derivedFirstName,
-      name_l: derivedLastName,
-      email,
-      created_from: "GPT",
-      amember_user_id: amemberUserId,
-      firebase_uid: firebaseUid,
-      loginProviders: ["google"],
-      last_login_at: new Date(),
-      platform: platform || "",
+    const existingDeletedProfile = await UserProfile.findOne({
+      $or: [{ email: email.toLowerCase() }, { firebase_uid: firebaseUid }],
     });
+
+    if (existingDeletedProfile) {
+      existingDeletedProfile.is_deleted = false;
+      existingDeletedProfile.deleted_at = null;
+      existingDeletedProfile.delete_reason = "";
+      existingDeletedProfile.user_id = `GPT-${amemberUserId}`;
+      existingDeletedProfile.amember_user_id = amemberUserId;
+      existingDeletedProfile.firebase_uid = firebaseUid;
+      existingDeletedProfile.login = generatedLogin;
+      existingDeletedProfile.name = `${derivedFirstName} ${derivedLastName}`.trim();
+      existingDeletedProfile.name_f = derivedFirstName;
+      existingDeletedProfile.name_l = derivedLastName;
+      existingDeletedProfile.platform = platform || "";
+      if (!existingDeletedProfile.loginProviders?.includes("google")) {
+        existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "google"];
+      }
+      existingDeletedProfile.last_login_at = new Date();
+      await existingDeletedProfile.save();
+    } else {
+      await UserProfile.create({
+        user_id: `GPT-${amemberUserId}`,
+        login: generatedLogin,
+        name: `${derivedFirstName} ${derivedLastName}`.trim(),
+        name_f: derivedFirstName,
+        name_l: derivedLastName,
+        email,
+        created_from: "GPT",
+        amember_user_id: amemberUserId,
+        firebase_uid: firebaseUid,
+        loginProviders: ["google"],
+        last_login_at: new Date(),
+        platform: platform || "",
+      });
+    }
 
     const tokenPayload = {
       status: true,
@@ -644,6 +769,45 @@ const AppleSignup = async (req, res) => {
 
     const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
     if (mongoProfile || amemberUser) {
+      const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+      const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || email);
+      const active = userData?.ok ? isPlanActive(userData) : false;
+
+      if (!active) {
+        // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
+        const tokenPayload = {
+          status: true,
+          user_id: amemberUserId,
+          firebase_uid: firebaseUid,
+          auth_provider: "apple.com",
+          login: userData?.login || mongoProfile?.login || email,
+          user_email: email,
+          hasActivePlan: false,
+          userSubscriptionType: {},
+          created_from: "GPT",
+        };
+        const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+        return res.status(200).json({
+          ok: true,
+          token: jwtToken,
+          isNewUser: false,
+          user: {
+            user_id: amemberUserId,
+            firebase_uid: firebaseUid,
+            auth_provider: "apple.com",
+            login: userData?.login || mongoProfile?.login || email,
+            user_name: userData?.name || mongoProfile?.name || `${derivedFirstName} ${derivedLastName}`.trim(),
+            name_f: userData?.name_f || mongoProfile?.name_f || derivedFirstName,
+            name_l: userData?.name_l || mongoProfile?.name_l || derivedLastName,
+            user_email: email,
+            loginProviders: mongoProfile?.loginProviders || ["apple"],
+            userSubscriptionType: {},
+            hasActivePlan: false,
+          },
+          nextAction: "SELECT_PLAN",
+        });
+      }
+
       return res.status(409).json({
         ok: false,
         code: "ACCOUNT_ALREADY_EXISTS",
@@ -662,20 +826,43 @@ const AppleSignup = async (req, res) => {
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
-    await UserProfile.create({
-      user_id: `GPT-${amemberUserId}`,
-      login: generatedLogin,
-      name: `${derivedFirstName} ${derivedLastName}`.trim(),
-      name_f: derivedFirstName,
-      name_l: derivedLastName,
-      email,
-      created_from: "GPT",
-      amember_user_id: amemberUserId,
-      firebase_uid: firebaseUid,
-      loginProviders: ["apple"],
-      last_login_at: new Date(),
-      platform: platform || "",
+    const existingDeletedProfile = await UserProfile.findOne({
+      $or: [{ email: email.toLowerCase() }, { firebase_uid: firebaseUid }],
     });
+
+    if (existingDeletedProfile) {
+      existingDeletedProfile.is_deleted = false;
+      existingDeletedProfile.deleted_at = null;
+      existingDeletedProfile.delete_reason = "";
+      existingDeletedProfile.user_id = `GPT-${amemberUserId}`;
+      existingDeletedProfile.amember_user_id = amemberUserId;
+      existingDeletedProfile.firebase_uid = firebaseUid;
+      existingDeletedProfile.login = generatedLogin;
+      existingDeletedProfile.name = `${derivedFirstName} ${derivedLastName}`.trim();
+      existingDeletedProfile.name_f = derivedFirstName;
+      existingDeletedProfile.name_l = derivedLastName;
+      existingDeletedProfile.platform = platform || "";
+      if (!existingDeletedProfile.loginProviders?.includes("apple")) {
+        existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "apple"];
+      }
+      existingDeletedProfile.last_login_at = new Date();
+      await existingDeletedProfile.save();
+    } else {
+      await UserProfile.create({
+        user_id: `GPT-${amemberUserId}`,
+        login: generatedLogin,
+        name: `${derivedFirstName} ${derivedLastName}`.trim(),
+        name_f: derivedFirstName,
+        name_l: derivedLastName,
+        email,
+        created_from: "GPT",
+        amember_user_id: amemberUserId,
+        firebase_uid: firebaseUid,
+        loginProviders: ["apple"],
+        last_login_at: new Date(),
+        platform: platform || "",
+      });
+    }
 
     const tokenPayload = {
       status: true,
@@ -826,68 +1013,6 @@ const AppleLogin = async (req, res) => {
   }
 };
 
-const DeleteAccount = async (req, res) => {
-  /*
-    #swagger.tags = ['Mobile Native Auth & Payments']
-    #swagger.summary = 'In-app account deletion'
-    #swagger.description = 'Uses the Bearer JWT to identify the user, looks up firebase_uid from MongoDB, hard-deletes from Firebase and aMember, and soft-deletes in MongoDB (App Store Guideline 5.1.1(v)).'
-    #swagger.security = [{ "BearerAuth": [] }]
-    #swagger.requestBody = {
-      required: false,
-      content: {
-        "application/json": {
-          schema: { $ref: '#/components/schemas/deleteAccountPayload' }
-        }
-      }
-    }
-    #swagger.responses[200] = {
-      description: 'Account successfully deleted'
-    }
-  */
-  try {
-    // JWT decoded by authenticateJWT middleware → req.user
-    const rawUserId = req.user?.user_id;
-    const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
-    const { reason } = req.body;
-
-    // Step 1: Look up MongoDB first to get firebase_uid
-    const userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
-    const firebaseUid = userProfile?.firebase_uid || null;
-
-    // Step 2: Hard delete from aMember
-    try {
-      await axios.delete(`${baseUrl}/users/${amemberUserId}?_key=${apiKey}`);
-    } catch (e) {
-      console.error("[DeleteAccount] error deleting aMember user:", e.message);
-    }
-
-    // Step 3: Hard delete from Firebase using firebase_uid from MongoDB
-    if (firebaseUid) {
-      try {
-        await getAuth().deleteUser(firebaseUid);
-      } catch (fbErr) {
-        console.error("[DeleteAccount] error deleting firebase user:", fbErr.message);
-      }
-    }
-
-    // Step 4: Soft delete in MongoDB (keep record for audit/history)
-    await UserProfile.findOneAndUpdate(
-      { amember_user_id: amemberUserId },
-      {
-        $set: {
-          is_deleted: true,
-          deleted_at: new Date(),
-          delete_reason: reason || "User requested deletion from mobile app settings",
-        },
-      }
-    );
-
-    return res.status(200).json({ ok: true, message: "Your account has been deleted." });
-  } catch (error) {
-    console.error("[DeleteAccount] error:", error);
-    return res.status(500).json({ ok: false, code: "INTERNAL_ERROR", error: "Account deletion failed." });
-  }
-};
 
 // ── Payment Verification Handlers ───────────────────────────────────────────
 
@@ -1340,43 +1465,43 @@ const handleAppleWebhook = async (req, res) => {
         const txInfo = await verifier.verifyAndDecodeTransaction(decoded.data.signedTransactionInfo);
 
         const originalTransactionId = String(txInfo.originalTransactionId);
-        
+
         if (notificationType === "DID_RENEW") {
-            const expiresDate = new Date(txInfo.expiresDate);
-            const purchaseDate = new Date(txInfo.purchaseDate);
+          const expiresDate = new Date(txInfo.expiresDate);
+          const purchaseDate = new Date(txInfo.purchaseDate);
 
-            await MobileStoreTransaction.updateMany(
-               { original_transaction_id: originalTransactionId },
-               { $set: { expires_at: expiresDate, event_type: "renewal", canonical_transaction_id: String(txInfo.transactionId) } }
-            );
+          await MobileStoreTransaction.updateMany(
+            { original_transaction_id: originalTransactionId },
+            { $set: { expires_at: expiresDate, event_type: "renewal", canonical_transaction_id: String(txInfo.transactionId) } }
+          );
 
-            const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
-            if (existingTx && existingTx.amember_user_id) {
-               const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
-               await postAmemberInvoice({
-                 amemberUserId: existingTx.amember_user_id,
-                 canonicalTransactionId: String(txInfo.transactionId),
-                 platform: "ios",
-                 storeProductId: existingTx.store_product_id,
-                 matchedProduct,
-                 amount: existingTx.amount || 19.99,
-                 currency: existingTx.currency || "USD",
-                 purchasedAt: purchaseDate,
-                 expiresAt: expiresDate,
-               });
-            }
+          const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
+          if (existingTx && existingTx.amember_user_id) {
+            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
+            await postAmemberInvoice({
+              amemberUserId: existingTx.amember_user_id,
+              canonicalTransactionId: String(txInfo.transactionId),
+              platform: "ios",
+              storeProductId: existingTx.store_product_id,
+              matchedProduct,
+              amount: existingTx.amount || 19.99,
+              currency: existingTx.currency || "USD",
+              purchasedAt: purchaseDate,
+              expiresAt: expiresDate,
+            });
+          }
         } else if (notificationType === "EXPIRED" || notificationType === "REFUND" || notificationType === "REVOKE") {
-            await MobileStoreTransaction.updateMany(
-               { original_transaction_id: originalTransactionId },
-               { $set: { expires_at: new Date() } }
-            );
+          await MobileStoreTransaction.updateMany(
+            { original_transaction_id: originalTransactionId },
+            { $set: { expires_at: new Date() } }
+          );
 
-            if (notificationType === "REFUND" || notificationType === "REVOKE") {
-                const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
-                if (existingTx && existingTx.canonical_transaction_id) {
-                    await deleteAmemberInvoice("ios", existingTx.canonical_transaction_id);
-                }
+          if (notificationType === "REFUND" || notificationType === "REVOKE") {
+            const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
+            if (existingTx && existingTx.canonical_transaction_id) {
+              await deleteAmemberInvoice("ios", existingTx.canonical_transaction_id);
             }
+          }
         }
       } catch (err) {
         console.error("[handleAppleWebhook] Failed to process transaction info:", err.message);
@@ -1421,7 +1546,7 @@ const handleGoogleWebhook = async (req, res) => {
     if (subNotification) {
       const purchaseToken = subNotification.purchaseToken;
       const notificationType = subNotification.notificationType;
-      
+
       if (notificationType === 2) { // Renewed
         try {
           const auth = new google.auth.GoogleAuth({
@@ -1435,7 +1560,7 @@ const handleGoogleWebhook = async (req, res) => {
             token: purchaseToken,
           });
           const subscriptionState = response.data;
-          
+
           let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // fallback
           if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
             const item = subscriptionState.lineItems[0];
@@ -1451,18 +1576,18 @@ const handleGoogleWebhook = async (req, res) => {
 
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
           if (existingTx && existingTx.amember_user_id) {
-             const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
-             await postAmemberInvoice({
-               amemberUserId: existingTx.amember_user_id,
-               canonicalTransactionId: purchaseToken,
-               platform: "android",
-               storeProductId: existingTx.store_product_id,
-               matchedProduct,
-               amount: existingTx.amount || 19.99,
-               currency: existingTx.currency || "USD",
-               purchasedAt: new Date(),
-               expiresAt: expiresDate,
-             });
+            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
+            await postAmemberInvoice({
+              amemberUserId: existingTx.amember_user_id,
+              canonicalTransactionId: purchaseToken,
+              platform: "android",
+              storeProductId: existingTx.store_product_id,
+              matchedProduct,
+              amount: existingTx.amount || 19.99,
+              currency: existingTx.currency || "USD",
+              purchasedAt: new Date(),
+              expiresAt: expiresDate,
+            });
           }
         } catch (err) {
           console.error("[handleGoogleWebhook] Failed to process renewal via Developer API:", err.message);
@@ -1471,17 +1596,15 @@ const handleGoogleWebhook = async (req, res) => {
             { $set: { event_type: "renewal", amember_sync_pending: true } }
           );
         }
-      } else if (notificationType === 3 || notificationType === 12) { // Canceled or Revoked
+      } else if (notificationType === 3 || notificationType === 12 || notificationType === 13) { // Canceled, Revoked, or Expired
         await MobileStoreTransaction.updateMany(
           { original_transaction_id: purchaseToken },
           { $set: { expires_at: new Date() } }
         );
 
-        if (notificationType === 3 || notificationType === 12) {
-            const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
-            if (existingTx && existingTx.canonical_transaction_id) {
-                await deleteAmemberInvoice("android", existingTx.canonical_transaction_id);
-            }
+        const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
+        if (existingTx && existingTx.canonical_transaction_id) {
+          await deleteAmemberInvoice("android", existingTx.canonical_transaction_id);
         }
       }
     }
@@ -1490,6 +1613,106 @@ const handleGoogleWebhook = async (req, res) => {
   } catch (error) {
     console.error("[handleGoogleWebhook] error:", error);
     return res.status(500).json({ ok: false, error: "Webhook failed." });
+  }
+};
+
+const DeleteAccount = async (req, res) => {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'In-app account deletion'
+    #swagger.description = 'Deletes account for Native Email/Password, Google, or Apple users. Hard-deletes from Firebase (if present) and aMember, and soft-deletes in MongoDB (App Store Guideline 5.1.1(v)).'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.requestBody = {
+      required: false,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              reason: { type: "string", description: "Reason for account deletion", example: "User requested deletion from mobile app settings" }
+            }
+          }
+        }
+      }
+    }
+    #swagger.responses[200] = { description: 'Account successfully deleted' }
+    #swagger.responses[401] = { description: 'Authenticated user required' }
+    #swagger.responses[404] = { description: 'User account not found' }
+  */
+  try {
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    const login = req.user?.login;
+    const userEmail = req.user?.user_email || req.user?.email;
+
+    if (!rawUserId && !login && !userEmail) {
+      return res.status(401).json({
+        ok: false,
+        code: "AUTH_USER_REQUIRED",
+        error: "An authenticated user is required.",
+      });
+    }
+
+    const cleanUserId = rawUserId ? String(rawUserId).replace(/^GPT-/, "") : null;
+
+    // 1. Find user in MongoDB
+    const userProfile = await UserProfile.findOne({
+      $or: [
+        ...(cleanUserId ? [{ amember_user_id: cleanUserId }, { user_id: `GPT-${cleanUserId}` }] : []),
+        ...(login ? [{ login }] : []),
+        ...(userEmail ? [{ email: userEmail }] : []),
+      ],
+    });
+
+    if (!userProfile || userProfile.is_deleted === true) {
+      return res.status(404).json({
+        ok: false,
+        code: "USER_NOT_FOUND",
+        error: "The authenticated user account was not found.",
+      });
+    }
+
+    const targetAmemberUserId = userProfile.amember_user_id || cleanUserId;
+    const reason = req.body?.reason || "User requested deletion from mobile app settings";
+
+    // 2. If Firebase user (Google or Apple), hard-delete from Firebase Admin
+    if (userProfile.firebase_uid) {
+      try {
+        const admin = require("firebase-admin");
+        if (admin.apps && admin.apps.length > 0) {
+          await admin.auth().deleteUser(userProfile.firebase_uid);
+        }
+      } catch (fbErr) {
+        console.error("[DeleteAccount] Firebase user deletion warning:", fbErr.message);
+      }
+    }
+
+    // 3. Hard-delete from aMember via REST API
+    if (targetAmemberUserId) {
+      try {
+        const url = `${baseUrl}/users/${targetAmemberUserId}?_key=${apiKey}`;
+        await axios.delete(url);
+      } catch (amErr) {
+        console.error("[DeleteAccount] aMember user deletion error:", amErr.message);
+      }
+    }
+
+    // 4. Soft-delete in MongoDB UserProfile
+    userProfile.is_deleted = true;
+    userProfile.deleted_at = new Date();
+    userProfile.deletion_reason = reason;
+    await userProfile.save();
+
+    return res.status(200).json({
+      ok: true,
+      message: "Account has been successfully deleted.",
+    });
+  } catch (error) {
+    console.error("[DeleteAccount] error:", error);
+    return res.status(500).json({
+      ok: false,
+      code: "INTERNAL_ERROR",
+      error: "Failed to delete account. Please try again.",
+    });
   }
 };
 
@@ -1597,7 +1820,7 @@ const getMobilePlans = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
     #swagger.summary = 'Get mobile subscription plans'
-    #swagger.description = 'Confirms the authenticated MongoDB and aMember identity, then returns product IDs for the native paywall. StoreKit / Google Play provides localized pricing.'
+    #swagger.description = 'Confirms the authenticated MongoDB and aMember identity, then returns direct aMember products matched by Apple / Google Store Product IDs for the native paywall.'
     #swagger.security = [{ "BearerAuth": [] }]
   */
   try {
@@ -1635,9 +1858,7 @@ const getMobilePlans = async (req, res) => {
     }
 
     const platform = (req.query.platform || "ios").toLowerCase();
-    const config = mobileProductsConfig[platform];
-
-    if (!config) {
+    if (platform !== "ios" && platform !== "android") {
       return res.status(400).json({
         ok: false,
         code: "INVALID_PLATFORM",
@@ -1645,10 +1866,47 @@ const getMobilePlans = async (req, res) => {
       });
     }
 
+    const prods = await getAmemberProducts();
+    const productField = platform === "ios" ? "apple_product_id" : "google_product_id";
+
+    // Direct aMember product export — filter products that have a store product ID set for target platform
+    const dynamicProds = prods.filter(
+      (p) => p && p[productField] && String(p[productField]).trim() !== ""
+    );
+
+    let plans = [];
+    if (dynamicProds.length > 0) {
+      plans = dynamicProds.map((p) => {
+        const storeProductId = String(p[productField]).trim();
+        const amemberProductId = parseInt(p.product_id, 10);
+        const storeProductIdLower = storeProductId.toLowerCase();
+        const titleLower = (p.title || "").toLowerCase();
+        const isAnnual =
+          storeProductIdLower.includes("annual") ||
+          storeProductIdLower.includes("year") ||
+          titleLower.includes("annual") ||
+          titleLower.includes("year");
+
+        return {
+          productId: storeProductId,
+          amemberProductId,
+          tier: p.title || "Subscription",
+          fallbackTitle: p.title || "Subscription Plan",
+          badge: isAnnual ? "Best Value" : null,
+          platform,
+          // Direct dynamic credit export raw from aMember REST API product record
+          credit: p.credit || p.credits || p.credits_quota || null,
+          amemberProduct: p,
+        };
+      });
+    }
+
+    const defaultProductId = plans[0]?.productId || null;
+
     return res.status(200).json({
       ok: true,
-      defaultProductId: config.defaultProductId,
-      plans: config.plans,
+      defaultProductId,
+      plans,
     });
   } catch (error) {
     console.error("[getMobilePlans] error:", error);
@@ -1659,6 +1917,86 @@ const getMobilePlans = async (req, res) => {
     });
   }
 };
+const ForgotPassword = async (req, res) => {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'Trigger aMember forgot password reset email'
+    #swagger.description = 'Checks if user exists, then dispatches password reset instructions via aMember to their registered email.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["identity"],
+            properties: {
+              identity: { type: "string", description: "Username or Email address", example: "user@example.com" }
+            }
+          }
+        }
+      }
+    }
+    #swagger.responses[200] = {
+      description: 'Password reset email sent successfully',
+      schema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", example: true },
+          message: { type: "string", example: "Password reset link has been sent to your email address." }
+        }
+      }
+    }
+    #swagger.responses[400] = { description: 'Missing identity input' }
+    #swagger.responses[404] = { description: 'User account not found' }
+    #swagger.responses[500] = { description: 'aMember error' }
+  */
+  try {
+    const identityInput = (req.body?.identity || req.body?.email || req.body?.username || "").trim();
+    if (!identityInput) {
+      return res.status(400).json({
+        ok: false,
+        code: "IDENTITY_REQUIRED",
+        error: "Please enter your registered email address or username.",
+      });
+    }
+
+    const cleanInput = identityInput.toLowerCase();
+
+    // 1. Check if user exists in MongoDB or aMember
+    const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanInput });
+
+    let existingUser = mongoProfile || amemberUser;
+    if (!existingUser) {
+      existingUser = await UserProfile.findOne({ login: cleanInput });
+    }
+
+    if (!existingUser) {
+      return res.status(404).json({
+        ok: false,
+        code: "USER_NOT_FOUND",
+        error: "No account was found with that email address or username. Please check your spelling or sign up for a new account.",
+      });
+    }
+
+    // 2. User exists — trigger aMember send-pass API
+    const targetLogin = existingUser.login || existingUser.email || cleanInput;
+    const url = `${baseUrl}/check-access/send-pass?_key=${apiKey}&login=${encodeURIComponent(targetLogin)}`;
+    await axios.get(url);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Password reset link has been sent to your email address.",
+    });
+  } catch (error) {
+    console.error("[ForgotPassword] error:", error.response?.data || error.message);
+    return res.status(500).json({
+      ok: false,
+      code: "AMEMBER_ERROR",
+      error: error.response?.data?.error || error.message || "Failed to send password reset email. Please try again.",
+    });
+  }
+};
+
 module.exports = {
   MobileSignup,
   GoogleSignup,
@@ -1667,7 +2005,11 @@ module.exports = {
   AppleLogin,
   DeleteAccount,
   AcceptMobileTerms,
+  ForgotPassword,
   getMobilePlans,
+  getAmemberProducts,
+  postAmemberInvoice,
+  deleteAmemberInvoice,
   verifyApplePayment,
   verifyGooglePayment,
   restoreApplePurchases,
