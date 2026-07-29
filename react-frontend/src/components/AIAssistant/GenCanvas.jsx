@@ -26,7 +26,11 @@ const GenCanvas = ({
   return (
     <aside
       aria-hidden={!isOpen}
-      className={`z-30 flex h-full shrink-0 flex-col border-l border-white/[0.08] bg-[#0A0A0A]/75 backdrop-blur-2xl transition-[width,transform] duration-300 ease-out ${
+      // Lighter tint (was /75) so the animated gradient behind the chat
+      // actually shows through — this panel is meant to be glass too, and at
+      // /75 it was dark enough to flatten the Creative Brief card's own glass
+      // fill into solid black regardless of what's behind it.
+      className={`z-30 flex h-full shrink-0 flex-col border-l border-white/[0.08] bg-[#0A0A0A]/30 backdrop-blur-2xl transition-[width,transform] duration-300 ease-out ${
         isOpen
           ? 'pointer-events-auto w-full translate-x-0 opacity-100 sm:w-[440px] lg:w-[520px]'
           : 'pointer-events-none w-0 translate-x-full opacity-0'
