@@ -2,19 +2,10 @@ const axios = require("axios");
 const User = require("../../Module/adPosting/facebookUsers");
 const { encrypt } = require("../../utils/crypto");
 const { redisClient } = require("../../db/redis");
-
-function safeFrontendUrl(candidate) {
-  const fallback = process.env.FRONTEND_URL;
-  try {
-    const allowed = new URL(fallback);
-    const target = new URL(candidate || fallback, allowed);
-    return target.origin === allowed.origin
-      ? target.toString()
-      : allowed.toString();
-  } catch {
-    return fallback;
-  }
-}
+const {
+  safeFacebookReturnUrl,
+  buildFacebookReturnUrl,
+} = require("../../utils/oauthReturnUrl");
 
 // Cache prefixes that are scoped per-user and embed Meta data which becomes
 // stale the moment a user re-auths Facebook (new ad accounts granted, token
@@ -72,7 +63,7 @@ class AuthController {
 
     const state = JSON.stringify({
       userId: userId || null,
-      feUrl: safeFrontendUrl(feUrl),
+      feUrl: safeFacebookReturnUrl(feUrl, process.env.FRONTEND_URL),
     });
 
     const appId = process.env.FACEBOOK_APP_ID;
@@ -123,20 +114,29 @@ class AuthController {
   async handleCallback(req, res) {
     const { code, state } = req.query;
 
-    if (!code) {
-      return res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
-    }
-
     let userId = null;
     let feUrl = process.env.FRONTEND_URL;
     try {
       if (state) {
         const decodedState = JSON.parse(state);
         userId = decodedState.userId;
-        feUrl = safeFrontendUrl(decodedState.feUrl);
+        feUrl = safeFacebookReturnUrl(
+          decodedState.feUrl,
+          process.env.FRONTEND_URL,
+        );
       }
     } catch (e) {
       console.error("Failed to parse state", e);
+    }
+
+    if (!code) {
+      return res.redirect(
+        buildFacebookReturnUrl(
+          feUrl,
+          { error: "auth_failed" },
+          process.env.FRONTEND_URL,
+        ),
+      );
     }
 
     try {
@@ -212,21 +212,25 @@ class AuthController {
       // account list and the user wouldn't see newly granted accounts.
       await bustPerUserCaches(user.userId);
 
-      // Redirect back to frontend with MongoDB User ID
-      // The frontend will then call /api/auth/me/:id to get details
-      const redirectUrl = new URL(
-        safeFrontendUrl(feUrl),
+      // Return to the initiating web page or mobile app callback.
+      const redirectUrl = buildFacebookReturnUrl(
+        feUrl,
+        { auth: "success", facebookId: id },
         process.env.FRONTEND_URL,
       );
-      redirectUrl.searchParams.set("auth", "success");
-      redirectUrl.searchParams.set("facebookId", id);
-      res.redirect(redirectUrl.toString());
+      res.redirect(redirectUrl);
     } catch (error) {
       console.error(
         "Auth callback error:",
         error.response?.data || error.message
       );
-      res.redirect(`${process.env.FRONTEND_URL}?error=token_exchange_failed`);
+      res.redirect(
+        buildFacebookReturnUrl(
+          feUrl,
+          { error: "token_exchange_failed" },
+          process.env.FRONTEND_URL,
+        ),
+      );
     }
   }
 }
