@@ -13,7 +13,14 @@ export const initGA4 = () => {
 
 export const trackGA4PageView = (path) => {
   if (!initialized) return;
-  ReactGA.send({ hitType: 'pageview', page: path });
+  const appUserId = Cookies.get('user_id') || null;
+  const appUserName = Cookies.get('user_name') || null;
+  ReactGA.send({
+    hitType: 'pageview',
+    page: path,
+    app_user_id: appUserId,
+    app_user_name: appUserName,
+  });
 };
 
 // Build the GA4 User-ID as "<id>-<name>" so the User Explorer list shows a
