@@ -8,6 +8,7 @@ const { generateToken } = require("../../services/authService");
 const UserProfile = require("../../Module/user/userProfileModel");
 const MobileStoreTransaction = require("../../Module/mobilePayments/mobileStoreTransactionModel");
 const MobileStoreWebhookEvent = require("../../Module/mobilePayments/mobileStoreWebhookEventModel");
+const mobileStorePlans = require("../../config/mobileStorePlans");
 const { fetchUserDataByName, syncUserProfile } = require("./authController");
 
 const apiKey = process.env.AMEMBER_API_KEY;
@@ -165,15 +166,37 @@ async function getAmemberProducts() {
   if (!amemberProductsCache || Date.now() > amemberProductsCacheExpiry) {
     try {
       const apiHost = baseUrl || "https://adsgpt-dev.poweradspy.com/amember/api";
-      const res = await axios.get(`${apiHost}/products?_key=${apiKey}`);
-      let prods = res.data;
-      if (prods && typeof prods === "object" && !Array.isArray(prods)) prods = Object.values(prods);
-      if (Array.isArray(prods)) {
-        amemberProductsCache = prods.filter(
-          (p) => p && typeof p === "object" && p.product_id
-        );
-        amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
-      }
+      const pageSize = 100;
+      const allProducts = [];
+      let page = 0;
+      let pageProducts = [];
+
+      do {
+        const res = await axios.get(`${apiHost}/products`, {
+          params: { _key: apiKey, _count: pageSize, _page: page },
+        });
+        let products = res.data;
+        if (
+          products &&
+          typeof products === "object" &&
+          !Array.isArray(products)
+        ) {
+          products = Object.values(products);
+        }
+        pageProducts = Array.isArray(products)
+          ? products.filter(
+              (product) =>
+                product &&
+                typeof product === "object" &&
+                product.product_id,
+            )
+          : [];
+        allProducts.push(...pageProducts);
+        page += 1;
+      } while (pageProducts.length === pageSize);
+
+      amemberProductsCache = allProducts;
+      amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
     } catch (e) {
       console.error("[mobileController] fetch products error:", e.message);
     }
@@ -181,68 +204,58 @@ async function getAmemberProducts() {
   return amemberProductsCache || [];
 }
 
-// Dynamic store product ID resolution directly from aMember product records
-function getStoreProductId(product, platform) {
-  if (!product) return "";
-  const isIos = platform === "ios";
-  const customId = isIos
-    ? product.apple_product_id || product.apple_id || product.ios_product_id || product.store_product_id
-    : product.google_product_id || product.google_id || product.android_product_id || product.store_product_id;
-
-  if (customId && String(customId).trim() !== "") {
-    return String(customId).trim();
+function getConfiguredProductCredit(product) {
+  const value = product?.credit;
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
   }
+  const credit = Number.parseInt(value, 10);
+  return Number.isNaN(credit) ? null : credit;
+}
 
-  // Canonical App Store / Google Play Store product ID format
-  const title = (product.title || "").toLowerCase().trim();
-  let slug = title.replace(/[^a-z0-9]+/g, ".").replace(/^\.|\.$/g, "");
-  if (slug === "free") slug = "starter";
-  if (!slug) slug = `plan.${product.product_id}`;
+function getStorePlanDescriptor(storePlan) {
+  const productId = String(storePlan?.productId || "").toLowerCase();
+  const segments = productId.split(".");
+  const tier = ["scale", "growth", "creator", "individual", "starter"].find(
+    (candidate) => segments.includes(candidate),
+  );
+  if (!tier) return null;
+  return { tier, isAnnual: segments.includes("annual") };
+}
 
-  const isAnnual = title.includes("annual") || title.includes("year");
+function resolveAmemberProduct(products, storePlan) {
+  const descriptor = getStorePlanDescriptor(storePlan);
+  if (!descriptor) return null;
 
-  if (isAnnual) {
-    if (slug.includes("annual")) {
-      return `io.adsgpt.app.subscription.${slug}`;
-    }
-    return `io.adsgpt.app.subscription.annual.${slug}`;
-  }
+  return products
+    .filter((product) => {
+      if (!product || product.is_disabled === "1" || product.is_archived === "1") {
+        return false;
+      }
+      const titleWords = String(product.title || "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+      const isAnnual = titleWords.includes("annual") || titleWords.includes("yearly");
+      return titleWords.includes(descriptor.tier) && isAnnual === descriptor.isAnnual;
+    })
+    .sort((left, right) =>
+      Number.parseInt(left.product_id, 10) - Number.parseInt(right.product_id, 10),
+    )[0] || null;
+}
 
-  if (slug.endsWith(".monthly") || slug.endsWith("monthly")) {
-    return `io.adsgpt.app.subscription.${slug}`;
-  }
-
-  return `io.adsgpt.app.subscription.${slug}.monthly`;
+function findConfiguredStorePlan(storeProductId) {
+  const targetId = String(storeProductId || "").trim();
+  return Object.values(mobileStorePlans)
+    .flat()
+    .find((plan) => plan.productId === targetId) || null;
 }
 
 async function matchAmemberProduct(storeProductId) {
   const prods = await getAmemberProducts();
   const targetId = String(storeProductId || "").trim();
-
-  const matched = prods.find((p) => {
-    if (!p) return false;
-    const appleId = getStoreProductId(p, "ios");
-    const googleId = getStoreProductId(p, "android");
-    const storeId = String(p.store_product_id || "").trim();
-    const productId = String(p.product_id || "").trim();
-
-    if (
-      appleId === targetId ||
-      googleId === targetId ||
-      storeId === targetId ||
-      productId === targetId
-    ) {
-      return true;
-    }
-
-    if (
-      targetId.endsWith(`_${productId}`) ||
-      targetId.endsWith(`.${productId}`)
-    ) {
-      return true;
-    }
-    return false;
-  });
+  const storePlan = findConfiguredStorePlan(targetId);
+  const matched = storePlan ? resolveAmemberProduct(prods, storePlan) : null;
 
   if (!matched) {
     const error = new Error("The selected subscription plan is currently unavailable. Please contact support.");
@@ -1888,11 +1901,11 @@ const AcceptMobileTerms = async (req, res) => {
   }
 };
 
-const getMobilePlans = async (req, res) => {
+async function getMobilePlans(req, res) {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
     #swagger.summary = 'Get mobile subscription plans'
-    #swagger.description = 'Confirms the authenticated MongoDB and aMember identity, then returns direct aMember products matched by Apple / Google Store Product IDs for the native paywall.'
+    #swagger.description = 'Returns direct aMember products matched by Apple / Google Store Product IDs for the native paywall.'
     #swagger.security = [{ "BearerAuth": [] }]
     #swagger.parameters['platform'] = {
       in: 'query',
@@ -1903,12 +1916,21 @@ const getMobilePlans = async (req, res) => {
     }
   */
   try {
-    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    const authorization = String(req.headers?.authorization || "");
+    if (!/^Bearer\s+\S+$/i.test(authorization)) {
+      return res.status(401).json({
+        ok: false,
+        code: "BEARER_TOKEN_REQUIRED",
+        error: "Authorization: Bearer token is required.",
+      });
+    }
+
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id || req.user?.id;
     if (!rawUserId) {
       return res.status(401).json({
         ok: false,
         code: "AUTH_USER_REQUIRED",
-        error: "An authenticated user is required.",
+        error: "A valid authentication token is required.",
       });
     }
 
@@ -1917,22 +1939,11 @@ const getMobilePlans = async (req, res) => {
       amember_user_id: amemberUserId,
     });
 
-    if (!userProfile || userProfile.is_deleted === true) {
+    if (userProfile && userProfile.is_deleted === true) {
       return res.status(404).json({
         ok: false,
         code: "USER_NOT_FOUND",
         error: "The authenticated user account was not found.",
-      });
-    }
-
-    const amemberUser = await fetchUserDataByName(
-      userProfile.login || req.user?.login,
-    );
-    if (!amemberUser?.ok || String(amemberUser.user_id) !== amemberUserId) {
-      return res.status(404).json({
-        ok: false,
-        code: "AMEMBER_USER_NOT_FOUND",
-        error: "The authenticated aMember account was not found.",
       });
     }
 
@@ -1946,60 +1957,42 @@ const getMobilePlans = async (req, res) => {
       });
     }
 
+    const targetPlatform = reqPlatform || "ios";
+    const configuredStorePlans = mobileStorePlans[targetPlatform];
+
+    // Fetch aMember IDs, titles, and credits dynamically. The store catalog
+    // contains only the native store Product IDs and subscription levels.
     const prods = await getAmemberProducts();
-    const productField = reqPlatform === "android" ? "google_product_id" : "apple_product_id";
+    // Join each static Store Product ID to the exact aMember tier and billing
+    // period encoded in that ID. IDs, titles, and credits remain live aMember data.
+    const plans = configuredStorePlans.flatMap((storePlan) => {
+      const product = resolveAmemberProduct(prods, storePlan);
+      if (!product) return [];
 
-    // Direct aMember product export — filter products that have a store product ID set for target platform
-    let dynamicProds = prods.filter(
-      (p) =>
-        p &&
-        ((p[productField] && String(p[productField]).trim() !== "") ||
-          (p.store_product_id && String(p.store_product_id).trim() !== "") ||
-          (p.apple_product_id && String(p.apple_product_id).trim() !== "") ||
-          (p.google_product_id && String(p.google_product_id).trim() !== ""))
-    );
+      const titleLower = (product.title || "").toLowerCase();
+      const isAnnual =
+        titleLower.includes("annual") ||
+        titleLower.includes("year") ||
+        storePlan.productId.toLowerCase().includes("annual");
 
-    // Fallback: If no products have store-specific product IDs explicitly set in aMember,
-    // export all active, non-archived products from aMember using product_id (or fallback store ID).
-    if (dynamicProds.length === 0 && prods.length > 0) {
-      dynamicProds = prods.filter(
-        (p) => p && p.is_disabled !== "1" && p.is_archived !== "1"
-      );
-    }
-
-    let plans = [];
-    if (dynamicProds.length > 0) {
-      plans = dynamicProds.map((p) => {
-        const amemberProductId = parseInt(p.product_id, 10);
-        const appleProductId = getStoreProductId(p, "ios");
-        const googleProductId = getStoreProductId(p, "android");
-
-        const storeProductId = reqPlatform === "android" ? googleProductId : appleProductId;
-        const storeProductIdLower = storeProductId.toLowerCase();
-        const titleLower = (p.title || "").toLowerCase();
-        const isAnnual =
-          storeProductIdLower.includes("annual") ||
-          storeProductIdLower.includes("year") ||
-          titleLower.includes("annual") ||
-          titleLower.includes("year");
-
-        const planObj = {
-          productId: storeProductId,
-          amemberProductId,
-          ...(reqPlatform === "ios"
-            ? { appleProductId }
-            : reqPlatform === "android"
-              ? { googleProductId }
-              : { appleProductId, googleProductId }),
-          tier: p.title || "Subscription",
-          fallbackTitle: p.title || "Subscription Plan",
-          badge: isAnnual ? "Best Value" : null,
-          ...(reqPlatform ? { platform: reqPlatform } : {}),
-          credit: p.credit || p.credits || p.credits_quota || null,
-        };
-        return planObj;
-      });
-    }
+      return [{
+        productId: storePlan.productId,
+        amemberProductId: parseInt(product.product_id, 10),
+        ...(reqPlatform === "ios"
+          ? { appleProductId: storePlan.productId }
+          : reqPlatform === "android"
+            ? { googleProductId: storePlan.productId }
+            : {
+                appleProductId: storePlan.productId,
+                googleProductId: "",
+              }),
+        tier: product.title || "Subscription",
+        fallbackTitle: product.title || "Subscription Plan",
+        badge: isAnnual ? "Best Value" : null,
+        ...(reqPlatform ? { platform: reqPlatform } : {}),
+        credit: getConfiguredProductCredit(product),
+      }];
+    });
 
     const defaultProductId = plans[0]?.productId || null;
 
