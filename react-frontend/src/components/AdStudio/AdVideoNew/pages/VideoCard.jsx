@@ -82,10 +82,13 @@ export default function VideoCard({
   const isSeedanceModel = ['seedance_v1', 'seedance_v2', 'seedance_fast'].includes(model);
 
   const isCloneModel = item?.inputs?.type === 'clone';
+  const isAiAds = item?.inputs?.type === 'ai_ads';
   const rawError = item?.results?.[0]?.error;
 
   const errorMessage =
-    (isCloneModel || isSeedanceModel) && rawError
+    isAiAds && item?.sceneError
+      ? item.sceneError
+      : (isCloneModel || isSeedanceModel) && rawError
       ? rawError
       : videoStatus === 529
         ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
@@ -129,7 +132,6 @@ export default function VideoCard({
   const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
 
   // ── AI Ads version switching (voice regenerate) ──────────────────────────
-  const isAiAds = item?.inputs?.type === 'ai_ads';
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];

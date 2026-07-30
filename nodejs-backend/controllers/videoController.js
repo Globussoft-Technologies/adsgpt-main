@@ -1766,6 +1766,7 @@ exports.generateScene = async (req, res) => {
         logger.error(`[AI Ads] generate-scene python call failed: ${pythonError}`);
         VideoGeneration.findByIdAndUpdate(sessionId, {
           status: "failed",
+          sceneError: pythonError,
         }).catch(() => { });
         if (global.io) {
           // Initial generation failure → whole session is dead → frontend shows full-page error
@@ -2332,7 +2333,11 @@ exports.updateSceneResult = async (req, res) => {
       (!imageStatus || imageStatus === "") &&
       (success === false || status === 400);
     if (isFullCrash) {
-      await VideoGeneration.findByIdAndUpdate(sessionId, { status: "failed" });
+      const sceneError = error || "Scene generation failed";
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        status: "failed",
+        sceneError,
+      });
       // Refund every active regen freeze for this session — no scenes
       // succeeded so all reserved credits are returned in full.
       await UnifiedCreditController.releaseByMeta({
@@ -2343,7 +2348,7 @@ exports.updateSceneResult = async (req, res) => {
           ...req.body,
           sessionId,
           event: "sessionFailed",
-          error: error || "Scene generation failed",
+          error: sceneError,
         });
       }
       return res.json({ success: true, message: "Session failure recorded" });
@@ -2391,6 +2396,7 @@ exports.updateSceneResult = async (req, res) => {
         totalSegments: totalSegments || scenes.length,
         totalDuration: totalDuration || record.totalDuration,
         status: "pending",
+        sceneError: null,
       };
       if (characterGender) {
         textUpdate["inputs.characterGender"] = characterGender;
