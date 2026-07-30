@@ -36,7 +36,7 @@ import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
 import Cookies from 'js-cookie';
-import { clearSelectedFacebookId } from '@/utils/metaFacebookAccount';
+import { clearSelectedFacebookId, setSelectedFacebookId } from '@/utils/metaFacebookAccount';
 
 // V2 wizard is gated on a build-time env var so V1 keeps running by
 // default. When V2 is ready for the migrated objectives we flip this
@@ -79,6 +79,11 @@ export default function MetaAdsDashboard() {
   const accountsRequestRef = useRef(0);
   const campaignsRequestRef = useRef(0);
   const analyticsRequestRef = useRef(0);
+  // Set when "Start from template" needs to land on a specific ad account
+  // AFTER switching Facebook connections (the template's account belongs to
+  // a different connection than the one currently active). Consumed by the
+  // ad-accounts-loading effect once the new connection's list arrives.
+  const pendingTemplateAccountRef = useRef(null);
   // Wizard launcher — one modal serves create (full), add-ad-set, and
   // add-ad flows. `mode` + `context` drive which steps render.
   const [wizard, setWizard] = useState({ open: false, mode: 'create-full', context: null });
@@ -193,6 +198,24 @@ export default function MetaAdsDashboard() {
         const accounts = res.adAccounts || [];
         setAdAccounts(accounts);
         if (accounts.length) {
+          // A cross-connection template apply is waiting to land on a
+          // specific account now that this (new) connection's list has
+          // loaded — takes priority over URL restoration / first-account
+          // fallback. Falls through to that normal logic if the account
+          // isn't actually visible under this connection (stale template,
+          // revoked access, etc.) rather than leaving the account blank.
+          const pending = pendingTemplateAccountRef.current;
+          if (pending && pending.facebookId === facebookId) {
+            pendingTemplateAccountRef.current = null;
+            const target = accounts.find((a) => a.id === pending.adAccountId);
+            if (target) {
+              selectAccount(target);
+              return;
+            }
+            globalToast.error(
+              "This template's ad account isn't visible under that Facebook connection.",
+            );
+          }
           // eslint-disable-next-line react-hooks/exhaustive-deps
           const urlAccountId = searchParams.get('adAccountId');
           const restored = urlAccountId && accounts.find((a) => a.id === urlAccountId);
@@ -651,12 +674,34 @@ export default function MetaAdsDashboard() {
           context={wizard.context}
           onClose={closeWizard}
           adAccountId={selectedAccount?.id}
+          activeFacebookId={activeFacebookId}
           account={selectedAccount}
           // Lets "Start from template" swap the active ad account on the
-          // dashboard when the template was saved against a different one.
-          onChangeAccount={(nextId) => {
+          // dashboard when the template was saved against a different one —
+          // and, when the template's `facebookId` differs from the connection
+          // currently active, switch Facebook connections first. We can't
+          // select an ad account that isn't in the OTHER connection's list, so
+          // stash the target and let the connection switch land it once that
+          // connection's accounts have loaded (see pendingTemplateAccountRef
+          // + the ad-accounts-loading effect above).
+          onChangeAccount={(nextId, templateFacebookId) => {
+            if (templateFacebookId && templateFacebookId !== activeFacebookId) {
+              pendingTemplateAccountRef.current = {
+                facebookId: templateFacebookId,
+                adAccountId: nextId,
+              };
+              setSelectedFacebookId(userData?.user_id, templateFacebookId);
+              setFacebookSelectorKey((k) => k + 1);
+              return;
+            }
             const next = adAccounts.find((a) => a.id === nextId);
-            if (next) selectAccount(next);
+            if (next) {
+              selectAccount(next);
+            } else {
+              globalToast.error(
+                "This template's ad account isn't visible under the current Facebook connection.",
+              );
+            }
           }}
           onCreated={() => {
             // Campaign-level changes (new campaign or edited campaign) reload

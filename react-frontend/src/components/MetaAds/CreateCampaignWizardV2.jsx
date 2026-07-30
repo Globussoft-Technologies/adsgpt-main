@@ -500,6 +500,10 @@ export default function CreateCampaignWizardV2({
   open,
   onClose,
   adAccountId,
+  // Facebook connection the dashboard currently has active — compared
+  // against a picked template's `facebookId` so applyTemplate knows whether
+  // it also needs to switch connections, not just the ad account.
+  activeFacebookId,
   account,
   onCreated,
   // Management flows: 'create-full' (default), 'create-adset', 'create-ad'.
@@ -507,10 +511,12 @@ export default function CreateCampaignWizardV2({
   // For add-to-existing modes: { campaignId, adSetId, objective,
   // conversionLocation, cbo, campaignBudgetType, pageId, parentLabel }.
   context = null,
-  // Optional callback for the "Start from template" picker to switch the
-  // dashboard's active ad account to the template's. Dashboard wires it to
-  // its own setSelectedAccount; if omitted, account-switch is silently
-  // skipped (template still applies, but stays on the current account).
+  // Optional callback for the "Start from template" picker: (adAccountId,
+  // facebookId?) => void. Dashboard wires it to switch the active ad account
+  // (and, when `facebookId` is given and differs from the currently active
+  // connection, to switch Facebook connections first). If omitted,
+  // account-switch is silently skipped (template still applies, but stays on
+  // the current account).
   onChangeAccount,
 }) {
   const [schema, setSchema] = useState(null);
@@ -717,14 +723,26 @@ export default function CreateCampaignWizardV2({
   // form, mark every patched field touched so validation surfaces, and ask
   // the dashboard to switch ad accounts if the template was saved against a
   // different one. Account-scoped IDs (page / IG / lead form / pixel) are
-  // cleared on an account switch so the user re-picks valid values for the
-  // new account; otherwise they're kept.
+  // cleared on an account/connection switch so the user re-picks valid
+  // values for the new account; otherwise they're kept.
+  //
+  // A template also remembers which Facebook CONNECTION its adAccountId
+  // belongs to (`template.facebookId`) — a user with multiple connected
+  // Facebook accounts (e.g. an agency managing several clients) could
+  // otherwise save a template under one connection, apply it while a
+  // different one is active, and have the account-switch silently fail
+  // because that ad account isn't visible under the wrong connection.
+  // Templates saved before this field existed have `facebookId: ''`, which
+  // safely falls back to today's same-connection-only behavior.
   const applyTemplate = useCallback(
     (template) => {
       const payload = template?.payload || {};
       const templateAccount = payload.adAccountId || null;
+      const templateFacebookId = template?.facebookId || '';
       const accountChanged =
         templateAccount && templateAccount !== adAccountId;
+      const facebookChanged =
+        templateFacebookId && templateFacebookId !== activeFacebookId;
       const patch = { ...payload };
       // adAccountId is dashboard-managed, not part of the form.
       delete patch.adAccountId;
@@ -732,7 +750,7 @@ export default function CreateCampaignWizardV2({
       // not useful and can't be reconstructed from a JSON snapshot.
       delete patch.imageFile;
       delete patch.videoFile;
-      if (accountChanged) {
+      if (accountChanged || facebookChanged) {
         patch.pageId = '';
         patch.instagramUserId = '';
         patch.leadFormId = '';
@@ -749,11 +767,11 @@ export default function CreateCampaignWizardV2({
         for (const k of Object.keys(patch)) next[k] = true;
         return next;
       });
-      if (accountChanged) {
-        onChangeAccount?.(templateAccount);
+      if (accountChanged || facebookChanged) {
+        onChangeAccount?.(templateAccount, templateFacebookId);
       }
     },
-    [adAccountId, onChangeAccount],
+    [adAccountId, activeFacebookId, onChangeAccount],
   );
 
   const goNext = () => {

@@ -7,9 +7,7 @@ const AdCreative = bizSdk.AdCreative;
 const Ad = bizSdk.Ad;
 const AdImage = bizSdk.AdImage;
 
-const FBUsers = require("../../Module/adPosting/facebookUsers");
 const PostedAd = require("../../Module/adPosting/postedAds");
-const { decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const CampaignModel = require("../../Module/adFactory/adFactory");
 const {
@@ -758,11 +756,7 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       if (!adAccountId || !accessToken) {
         return res
@@ -810,7 +804,7 @@ class AdController {
     } catch (error) {
       console.error("Get insights error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to fetch insights", details: error.message });
     }
   }
@@ -826,11 +820,7 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       if (!adAccountId || !accessToken) {
         return res
@@ -859,7 +849,7 @@ class AdController {
       });
     } catch (error) {
       console.error("Get delivery estimate error:", error);
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         error: "Failed to fetch delivery estimate",
         details: error.message,
       });
@@ -876,6 +866,12 @@ class AdController {
         return res.status(400).json({ error: "Account ID is required" });
       }
 
+      // Verify ownership before returning this connection's saved ad history —
+      // PostedAd.userId actually stores the FBUsers connection id, not the
+      // AdsGPT user_id, so without this check any authenticated user could
+      // read another user's saved ads by guessing their accountId.
+      await resolvePostAdConnection(req, accountId);
+
       const ads = await PostedAd.find({ userId: accountId }).sort({
         createdAt: -1,
       });
@@ -887,7 +883,7 @@ class AdController {
       });
     } catch (error) {
       console.error("Get posted ads error:", error);
-      res.status(500).json({ error: "Failed to fetch posted ads" });
+      res.status(error.statusCode || 500).json({ error: "Failed to fetch posted ads" });
     }
   }
 
@@ -908,11 +904,7 @@ class AdController {
         return res.status(404).json({ error: "Ad not found in history" });
       }
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser) {
-        return res.status(404).json({ error: "Facebook user not found" });
-      }
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -950,7 +942,7 @@ class AdController {
     } catch (error) {
       console.error("Get posted ad insights error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to fetch insights", details: error.message });
     }
   }
@@ -969,10 +961,7 @@ class AdController {
           .status(400)
           .json({ error: "Account ID and Ad Account ID are required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -984,7 +973,7 @@ class AdController {
     } catch (error) {
       console.error("Create campaign error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to create campaign", details: error.message });
     }
   }
@@ -1008,10 +997,7 @@ class AdController {
       if (!accountId || !adAccountId || !campaignId)
         return res.status(400).json({ error: "Missing required fields" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1040,7 +1026,7 @@ class AdController {
     } catch (error) {
       console.error("Create ad set error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to create ad set", details: error.message });
     }
   }
@@ -1056,10 +1042,7 @@ class AdController {
       if (!accountId || !adAccountId)
         return res.status(400).json({ error: "Missing required fields" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1071,7 +1054,7 @@ class AdController {
     } catch (error) {
       console.error("Upload media error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to upload media", details: error.message });
     }
   }
@@ -1096,10 +1079,7 @@ class AdController {
       if (!accountId || !adAccountId || !pageId || !imageHash)
         return res.status(400).json({ error: "Missing required fields" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1126,7 +1106,7 @@ class AdController {
     } catch (error) {
       console.error("Create creative error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to create creative", details: error.message });
     }
   }
@@ -1152,10 +1132,7 @@ class AdController {
       if (!accountId || !adAccountId || !adSetId || !creativeId)
         return res.status(400).json({ error: "Missing required fields" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1191,7 +1168,7 @@ class AdController {
     } catch (error) {
       console.error("Create ad error:", error);
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to create ad", details: error.message });
     }
   }
@@ -1206,10 +1183,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1306,7 +1280,7 @@ class AdController {
       res.json(result);
     } catch (error) {
       console.error("Get campaign full details error:", error);
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         error: "Failed to get campaign details",
         details: error.message,
       });
@@ -1320,10 +1294,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1337,7 +1308,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to update campaign", details: error.message });
     }
   }
@@ -1349,10 +1320,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1362,7 +1330,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to delete campaign", details: error.message });
     }
   }
@@ -1375,10 +1343,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1393,7 +1358,7 @@ class AdController {
       res.json(result);
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to get ad set", details: error.message });
     }
   }
@@ -1405,10 +1370,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1423,7 +1385,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to update ad set", details: error.message });
     }
   }
@@ -1435,10 +1397,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1448,7 +1407,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to delete ad set", details: error.message });
     }
   }
@@ -1461,10 +1420,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1478,7 +1434,7 @@ class AdController {
       res.json(result);
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to get ad", details: error.message });
     }
   }
@@ -1490,10 +1446,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1507,7 +1460,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to update ad", details: error.message });
     }
   }
@@ -1519,10 +1472,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1532,7 +1482,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to delete ad", details: error.message });
     }
   }
@@ -1546,10 +1496,7 @@ class AdController {
           .status(400)
           .json({ error: "Account ID and Ad Account ID are required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1570,7 +1517,7 @@ class AdController {
       res.json({ creatives: formattedCreatives });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to get creatives", details: error.message });
     }
   }
@@ -1582,10 +1529,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1598,7 +1542,7 @@ class AdController {
       res.json(result);
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to get creative", details: error.message });
     }
   }
@@ -1610,10 +1554,7 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
-      const fbUser = await FBUsers.findById(accountId);
-      if (!fbUser)
-        return res.status(404).json({ error: "Facebook user not found" });
-      const accessToken = decrypt(fbUser?.accessToken);
+      const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
@@ -1623,7 +1564,7 @@ class AdController {
       res.json({ success: true, result });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to delete creative", details: error.message });
     }
   }

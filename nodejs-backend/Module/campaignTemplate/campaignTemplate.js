@@ -21,6 +21,11 @@ const campaignTemplateSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 120 },
+    // Which of the user's (possibly several) Facebook connections this
+    // template's adAccountId belongs to. Without this, applying a template
+    // saved under one connection while a different one is active can't tell
+    // the wizard which connection to switch to — see gotchas.md.
+    facebookId: { type: String, default: "" },
     // Denormalized from payload for the picker UI.
     objective: { type: String, default: "" },
     conversionLocation: { type: String, default: "" },

@@ -7,6 +7,7 @@ const CampaignTemplate = require("../Module/campaignTemplate/campaignTemplate");
 const {
   createTemplateSchema,
 } = require("../Validations/campaignTemplate.validator");
+const { getFacebookIdFromRequest } = require("../utils/metaConnection");
 const logger = require("../utils/logger");
 
 // GET /meta-ads/v2/templates
@@ -18,7 +19,7 @@ async function listTemplates(req, res) {
   try {
     const userId = req.user.user_id;
     const rows = await CampaignTemplate.find({ userId })
-      .select("_id name objective conversionLocation createdAt updatedAt")
+      .select("_id name objective conversionLocation facebookId createdAt updatedAt")
       .sort({ createdAt: -1 })
       .lean();
     return res.status(200).json({
@@ -28,6 +29,7 @@ async function listTemplates(req, res) {
         name: r.name,
         objective: r.objective || "",
         conversionLocation: r.conversionLocation || "",
+        facebookId: r.facebookId || "",
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       })),
@@ -60,6 +62,7 @@ async function getTemplate(req, res) {
         name: row.name,
         objective: row.objective || "",
         conversionLocation: row.conversionLocation || "",
+        facebookId: row.facebookId || "",
         payload: row.payload || {},
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -97,6 +100,11 @@ async function createTemplate(req, res) {
       name: value.name,
       objective,
       conversionLocation,
+      // Which Facebook connection the saved adAccountId belongs to — lets
+      // applying the template later switch connections first if a different
+      // one is active. Empty for templates saved before this field existed;
+      // apply falls back to today's same-connection-only behavior for those.
+      facebookId: getFacebookIdFromRequest(req),
       payload: value.payload,
     });
     return res.status(201).json({
@@ -106,6 +114,7 @@ async function createTemplate(req, res) {
         name: doc.name,
         objective: doc.objective,
         conversionLocation: doc.conversionLocation,
+        facebookId: doc.facebookId,
         createdAt: doc.createdAt,
       },
     });
