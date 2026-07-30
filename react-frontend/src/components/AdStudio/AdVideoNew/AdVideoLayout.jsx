@@ -28,7 +28,7 @@ import {
   setRecreateInputs,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import genieMinimize, { captureModal } from '@/utils/ui/genieMinimize';
 import MyVideosPage from './pages/MyVideosPage';
 import MyImagesPage from './pages/MyImagesPage';
@@ -37,6 +37,7 @@ import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
 import MyClaudeImagesPage from './pages/MyClaudeImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 
 import DateRangeFilter from './DateRangeFilter';
 
@@ -108,7 +109,7 @@ const selectImageSource = [
   { value: 'claudeAI', label: 'Claude AI' },
 ];
 
-const AdVideoLayout = () => {
+const AdVideoLayout = ({ libraryOnly = false }) => {
   const [videoType, setVideoType] = useState('');
   const [imageType, setImageType] = useState('');
   // Image source lives in redux so the AI Assistant "View more" deep-link can
@@ -131,14 +132,51 @@ const AdVideoLayout = () => {
     aiAdsSceneLoading,
   } = useSelector((state) => state.adVideoNew);
   const dispatch = useDispatch();
+  const availableImageSources = useMemo(
+    () =>
+      selectImageSource.filter(({ value }) => {
+        if (value === 'adFactory') return canUseWorkspaceFeature('adFactory');
+        if (value === 'aiAssistant' || value === 'claudeAI') {
+          return canUseWorkspaceFeature('assistant');
+        }
+        return canUseWorkspaceFeature('adStudio.adCreative');
+      }),
+    []
+  );
+  const videosAllowed = canUseWorkspaceFeature('adStudio.adVideo');
+  const availableMySpaceTabs = [
+    { id: 'images', label: 'Images', Icon: Images },
+    videosAllowed && { id: 'videos', label: 'Videos', Icon: Video },
+  ].filter(Boolean);
   const setImageSource = (value) => dispatch(setMySpaceImageSource(value));
   const modalRef = useRef();
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const page = pageConfig[activePage];
+  const displayedActivePage = libraryOnly ? 'myVideos' : activePage;
+  const page = pageConfig[displayedActivePage];
   const PageComponent = page?.component;
   const pageVideo = page?.video;
+
+  useEffect(() => {
+    if (!libraryOnly) return;
+    if (activePage !== 'myVideos') dispatch(setActivePage('myVideos'));
+    if (!videosAllowed && mySpaceTab === 'videos') dispatch(setMySpaceTab('images'));
+    if (
+      availableImageSources.length &&
+      !availableImageSources.some(({ value }) => value === imageSource)
+    ) {
+      dispatch(setMySpaceImageSource(availableImageSources[0].value));
+    }
+  }, [
+    activePage,
+    availableImageSources,
+    dispatch,
+    imageSource,
+    libraryOnly,
+    mySpaceTab,
+    videosAllowed,
+  ]);
 
   useEffect(() => {
     if (activePage) {
@@ -218,16 +256,11 @@ const AdVideoLayout = () => {
       //   - initial gen in flight (no scripts yet)
       //   - some images still loading or failed (not all images ready)
       //   - any per-scene regen in flight
-      const aiAdsScenes =
-        aiAdsSceneData?.scenes || aiAdsSceneData?.data?.scenes || [];
+      const aiAdsScenes = aiAdsSceneData?.scenes || aiAdsSceneData?.data?.scenes || [];
       const isInitiallyLoading =
-        currentAIAdsStep === 'generation' &&
-        aiAdsSceneLoading &&
-        aiAdsScenes.length === 0;
+        currentAIAdsStep === 'generation' && aiAdsSceneLoading && aiAdsScenes.length === 0;
       const isRegenerating =
-        currentAIAdsStep === 'generation' &&
-        aiAdsSceneLoading &&
-        aiAdsScenes.length > 0;
+        currentAIAdsStep === 'generation' && aiAdsSceneLoading && aiAdsScenes.length > 0;
       const hasIncompleteImages =
         currentAIAdsStep === 'generation' &&
         aiAdsScenes.length > 0 &&
@@ -261,8 +294,7 @@ const AdVideoLayout = () => {
     // Prefer the real sidebar My Space button (bottom-left) so the genie
     // flies toward it. Falls back to the legacy hidden span only if the
     // sidebar isn't mounted (e.g. mobile drawer closed).
-    const targetEl =
-      document.getElementById('sidebar-my-space-button') || mySpaceIconRef.current;
+    const targetEl = document.getElementById('sidebar-my-space-button') || mySpaceIconRef.current;
 
     if (modal && targetEl) {
       const snapshot = await captureModal(modal);
@@ -325,27 +357,26 @@ const AdVideoLayout = () => {
     <div className="relative flex h-[95vh] w-full flex-col">
       {/* {activePage !== 'myVideos' && <SavedFolderIcon />} */}
 
-      {activePage === 'home' ? (
+      {displayedActivePage === 'home' ? (
         <AdVideoHomeNew />
-      ) : activePage === 'myVideos' ? (
+      ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
           <div className="flex w-full items-center justify-between gap-2 p-4 pr-14 text-gray-900 2xl:pr-16 dark:text-white">
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleBackNavigation}
-                className="flex items-center gap-2 text-xl 2xl:text-3xl"
-              >
-                <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
-                {page?.title}
-              </button>
+              {!libraryOnly && (
+                <button
+                  onClick={handleBackNavigation}
+                  className="flex items-center gap-2 text-xl 2xl:text-3xl"
+                >
+                  <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
+                  {page?.title}
+                </button>
+              )}
 
               {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs */}
               <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-gray-100 p-1 backdrop-blur-md dark:border-slate-600/40 dark:bg-[#0D0D0D]">
-                {[
-                  { id: 'images', label: 'Images', Icon: Images },
-                  { id: 'videos', label: 'Videos', Icon: Video },
-                ].map(({ id, label, Icon }) => {
+                {availableMySpaceTabs.map(({ id, label, Icon }) => {
                   const isActive = mySpaceTab === id;
                   return (
                     <button
@@ -353,7 +384,9 @@ const AdVideoLayout = () => {
                       type="button"
                       onClick={() => dispatch(setMySpaceTab(id))}
                       className={`2xl:text-13 relative flex items-center rounded-full px-[11px] py-[5px] text-[10px] font-medium whitespace-nowrap transition 2xl:px-4 2xl:py-[7px] ${
-                        isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
+                        isActive
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
                       }`}
                     >
                       <div className="flex gap-1 2xl:gap-2">
@@ -376,11 +409,11 @@ const AdVideoLayout = () => {
             <div className="flex items-center gap-2">
               {/* Images tab: choose between the existing AdCreative gallery and
                   the AdFactory images API. Shown only on the Images tab. */}
-              {mySpaceTab === 'images' && (
+              {mySpaceTab === 'images' && availableImageSources.length > 0 && (
                 <CreativeFilterDropdown
-                  options={selectImageSource}
+                  options={availableImageSources}
                   label="Source"
-                  value={selectImageSource.find((p) => p.value === imageSource)}
+                  value={availableImageSources.find((p) => p.value === imageSource)}
                   onChange={(value) => setImageSource(value)}
                 />
               )}
@@ -407,7 +440,19 @@ const AdVideoLayout = () => {
             </div>
           </div>
 
-          {mySpaceTab === 'images' ? (
+          {mySpaceTab === 'images' && !availableImageSources.length ? (
+            <div className="flex flex-1 items-center justify-center px-6 text-center">
+              <div>
+                <Library className="mx-auto h-8 w-8 text-zinc-500" />
+                <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  No media collection is available
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Your assigned features do not currently produce reusable media.
+                </p>
+              </div>
+            </div>
+          ) : mySpaceTab === 'images' ? (
             imageSource === 'adFactory' ? (
               <MyAdFactoryImagesPage startDate={startDate} endDate={endDate} />
             ) : imageSource === 'aiAssistant' ? (
@@ -433,7 +478,10 @@ const AdVideoLayout = () => {
               {page.title}
             </button>
             {/* Hidden genie target — zero-size, positioned top-right to match My Space in sidebar */}
-            <span ref={mySpaceIconRef} className="pointer-events-none fixed top-[700px] right-4 h-0 w-0" />
+            <span
+              ref={mySpaceIconRef}
+              className="pointer-events-none fixed top-[700px] right-4 h-0 w-0"
+            />
           </div>
 
           <div className="flex flex-1 items-center justify-center overflow-hidden px-4">
@@ -451,10 +499,10 @@ const AdVideoLayout = () => {
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
                   ? 'w-full max-w-[1480px]'
                   : activePage === 'ai-ads'
-                  ? 'w-fit max-w-none'
-                  : activePage === 'avatar' && currentAvatarStep === 'face-capture'
-                  ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
-                  : 'w-full max-w-2xl 2xl:max-w-4xl'
+                    ? 'w-fit max-w-none'
+                    : activePage === 'avatar' && currentAvatarStep === 'face-capture'
+                      ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
+                      : 'w-full max-w-2xl 2xl:max-w-4xl'
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'generation'
                   ? ''

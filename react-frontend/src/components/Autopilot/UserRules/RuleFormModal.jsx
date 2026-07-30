@@ -16,16 +16,8 @@ import {
   isNumericField,
   isStringField,
 } from './ruleFieldsCatalog';
-import {
-  createUserRule,
-  updateUserRule,
-  testUserRule,
-} from '@/apis/autopilot/autopilotApi';
-import {
-  getAdAccounts,
-  getCampaigns,
-  getFacebookAccounts,
-} from '@/apis/metaAds/metaAdsApi';
+import { createUserRule, updateUserRule, testUserRule } from '@/apis/autopilot/autopilotApi';
+import { getAdAccounts, getCampaigns, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 
 /**
@@ -197,7 +189,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
     // because the backend Joi schema requires an integer. Skipped entirely
     // when `lookbackPreset` is set — the preset overrides the number at
     // audit time, so the number's value is irrelevant.
-    if (form.lookbackPreset !== 'this_month') {
+    if (!form.lookbackPreset) {
       const lbRaw = form.lookbackDays;
       const lbNum = Number(lbRaw);
       if (
@@ -237,8 +229,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
     });
 
     if (!form.attachments || form.attachments.length === 0) {
-      fieldErrors.attachments =
-        'Attach the rule to at least one campaign.';
+      fieldErrors.attachments = 'Attach the rule to at least one campaign.';
     }
 
     const flatList = [];
@@ -246,9 +237,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
       if (k === 'conditions') {
         for (const idx of Object.keys(fieldErrors.conditions)) {
           for (const rk of Object.keys(fieldErrors.conditions[idx])) {
-            flatList.push(
-              `Condition #${Number(idx) + 1}: ${fieldErrors.conditions[idx][rk]}`,
-            );
+            flatList.push(`Condition #${Number(idx) + 1}: ${fieldErrors.conditions[idx][rk]}`);
           }
         }
       } else {
@@ -303,9 +292,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
           })),
         },
       };
-      const res = isEdit
-        ? await updateUserRule(rule._id, payload)
-        : await createUserRule(payload);
+      const res = isEdit ? await updateUserRule(rule._id, payload) : await createUserRule(payload);
       if (res.status && res.rule) {
         globalToast.success(isEdit ? 'Rule updated.' : 'Rule created.');
         onSaved && onSaved(res.rule);
@@ -318,7 +305,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         e?.response?.data?.details?.join?.('; ') ||
           e?.response?.data?.error ||
           e.message ||
-          'Save failed',
+          'Save failed'
       );
     } finally {
       setSaving(false);
@@ -464,15 +451,13 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
             {/* Lookback window — controls how many days of Meta insights
                   are rolled up before evaluating this rule. Rules sharing
                   the same window dedupe their Meta fetch on the cron side.
-                  "This month" is a calendar-resolved preset (`lookbackPreset:
-                  'this_month'`) that the backend re-resolves at every cron
-                  tick to today's day-of-month, so the window grows from 1
-                  → 31 across the month and resets on the 1st. */}
+                  "This month" grows from 1 → 31 days across the month.
+                  "MAX" uses Meta's lifetime (`maximum`) date preset. */}
             <div>
               <FieldLabel hint="Window of Meta insights the rule's metrics roll up over">
                 Evaluate over
               </FieldLabel>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
                 {[1, 3, 7, 14, 30].map((d) => {
                   const selected = !form.lookbackPreset && Number(form.lookbackDays) === d;
                   return (
@@ -490,6 +475,23 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                     </button>
                   );
                 })}
+                {(() => {
+                  const selected = form.lookbackPreset === 'maximum';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => set({ lookbackPreset: 'maximum' })}
+                      className={`text-13 rounded-full border py-2 font-medium transition-all ${
+                        selected
+                          ? 'border-[#15DCFF]/50 bg-[#15DCFF]/8 text-gray-900 dark:text-white'
+                          : 'border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-[#262626] dark:text-white/65 dark:hover:border-white/20 dark:hover:text-white'
+                      }`}
+                      title="Lifetime performance available from Meta."
+                    >
+                      MAX
+                    </button>
+                  );
+                })()}
                 {(() => {
                   const selected = form.lookbackPreset === 'this_month';
                   return (
@@ -516,7 +518,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                   max={90}
                   step={1}
                   value={form.lookbackDays}
-                  disabled={form.lookbackPreset === 'this_month'}
+                  disabled={!!form.lookbackPreset}
                   onChange={(e) =>
                     set({
                       lookbackDays: e.target.value,
@@ -545,10 +547,12 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                 <span className="text-[11px] text-gray-400 dark:text-white/45">
                   {form.lookbackPreset === 'this_month'
                     ? `disabled — "This month" resolves to today's day (currently ${new Date().getDate()}d)`
-                    : 'days (1–90, whole numbers)'}
+                    : form.lookbackPreset === 'maximum'
+                      ? 'disabled — MAX uses lifetime performance'
+                      : 'days (1–90, whole numbers)'}
                 </span>
               </div>
-              {showError('lookbackDays') && form.lookbackPreset !== 'this_month' && (
+              {showError('lookbackDays') && !form.lookbackPreset && (
                 <FieldError>{errorFor('lookbackDays')}</FieldError>
               )}
             </div>
@@ -694,19 +698,14 @@ function FieldLabel({ children, hint }) {
   return (
     <label className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-sm font-medium text-gray-600 dark:text-[#afafaf]">
       <span>{children}</span>
-      {hint && <span className="text-[11px] font-normal text-gray-400 dark:text-white/45">{hint}</span>}
+      {hint && (
+        <span className="text-[11px] font-normal text-gray-400 dark:text-white/45">{hint}</span>
+      )}
     </label>
   );
 }
 
-function TextInput({
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  maxLength,
-  invalid = false,
-}) {
+function TextInput({ value, onChange, placeholder, type = 'text', maxLength, invalid = false }) {
   return (
     <input
       type={type}
@@ -715,7 +714,7 @@ function TextInput({
       placeholder={placeholder}
       maxLength={maxLength}
       aria-invalid={invalid || undefined}
-      className={`w-full rounded-full border bg-gray-100 px-4 py-2.5 text-13 text-gray-900 placeholder:text-13 placeholder:text-gray-400 transition-colors focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
+      className={`text-13 placeholder:text-13 w-full rounded-full border bg-gray-100 px-4 py-2.5 text-gray-900 transition-colors placeholder:text-gray-400 focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
         invalid
           ? 'border-red-400/60 focus:border-red-400'
           : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
@@ -724,14 +723,7 @@ function TextInput({
   );
 }
 
-function TextArea({
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
-  maxLength,
-  invalid = false,
-}) {
+function TextArea({ value, onChange, placeholder, rows = 3, maxLength, invalid = false }) {
   return (
     <textarea
       value={value}
@@ -740,7 +732,7 @@ function TextArea({
       rows={rows}
       maxLength={maxLength}
       aria-invalid={invalid || undefined}
-      className={`w-full resize-none rounded-2xl border bg-gray-100 px-4 py-3 text-13 text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
+      className={`text-13 w-full resize-none rounded-2xl border bg-gray-100 px-4 py-3 text-gray-900 transition-colors placeholder:text-gray-400 focus:outline-none dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
         invalid
           ? 'border-red-400/60 focus:border-red-400'
           : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
@@ -773,7 +765,9 @@ function ChoiceCard({ selected, label, hint, onClick }) {
         type="button"
         onClick={onClick}
         className={`flex h-full w-full flex-col gap-1 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-          selected ? 'bg-white dark:bg-[#1d1d1d]' : 'bg-gray-50 hover:bg-white dark:bg-[#181818] dark:hover:bg-[#1d1d1d]'
+          selected
+            ? 'bg-white dark:bg-[#1d1d1d]'
+            : 'bg-gray-50 hover:bg-white dark:bg-[#181818] dark:hover:bg-[#1d1d1d]'
         }`}
       >
         <span
@@ -861,11 +855,8 @@ function SelectInput({
   }, [open]);
 
   // Normalize input to a flat list for label lookup + grouped rendering.
-  const isGrouped =
-    Array.isArray(options) && options.length > 0 && 'items' in options[0];
-  const flatItems = isGrouped
-    ? options.flatMap((g) => g.items)
-    : options || [];
+  const isGrouped = Array.isArray(options) && options.length > 0 && 'items' in options[0];
+  const flatItems = isGrouped ? options.flatMap((g) => g.items) : options || [];
   const selected = flatItems.find((o) => o.value === value);
 
   return (
@@ -876,7 +867,7 @@ function SelectInput({
         disabled={disabled}
         aria-invalid={invalid || undefined}
         onClick={() => setOpen((p) => !p)}
-        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-gray-100 px-4 py-2.5 text-left text-13 font-medium transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 dark:bg-[#909294]/15 dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 ${
+        className={`text-13 flex w-full items-center justify-between gap-2 rounded-full border bg-gray-100 px-4 py-2.5 text-left font-medium transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 dark:bg-[#909294]/15 dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 ${
           invalid
             ? 'border-red-400/60'
             : open
@@ -893,7 +884,9 @@ function SelectInput({
         </span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
-            open ? 'rotate-180 text-gray-700 dark:text-white/85' : 'text-gray-500 dark:text-white/55'
+            open
+              ? 'rotate-180 text-gray-700 dark:text-white/85'
+              : 'text-gray-500 dark:text-white/55'
           } ${disabled ? 'text-gray-300 dark:text-white/20' : ''}`}
         />
       </button>
@@ -919,7 +912,7 @@ function SelectInput({
                 {isGrouped
                   ? options.map((group) => (
                       <div key={group.groupLabel}>
-                        <div className="px-3 py-1.5 text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
+                        <div className="text-10 px-3 py-1.5 font-bold tracking-wider text-gray-400 uppercase dark:text-white/40">
                           {group.groupLabel}
                         </div>
                         {group.items.map((o) => (
@@ -950,7 +943,7 @@ function SelectInput({
             </motion.div>
           )}
         </AnimatePresence>,
-        document.body,
+        document.body
       )}
     </>
   );
@@ -968,18 +961,12 @@ function SelectMenuItem({ option, isSelected, onPick }) {
       }`}
     >
       <span className="flex min-w-0 flex-col">
-        <span className="truncate text-[12px] font-medium">
-          {option.label}
-        </span>
+        <span className="truncate text-[12px] font-medium">{option.label}</span>
         {option.hint && (
-          <span className="truncate text-10 text-gray-400 dark:text-white/45">
-            {option.hint}
-          </span>
+          <span className="text-10 truncate text-gray-400 dark:text-white/45">{option.hint}</span>
         )}
       </span>
-      {isSelected && (
-        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />
-      )}
+      {isSelected && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />}
     </button>
   );
 }
@@ -997,7 +984,7 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-[#181818]">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-white/45">
+        <span className="text-[11px] font-medium tracking-wider text-gray-400 uppercase dark:text-white/45">
           Condition #{index + 1}
         </span>
         {onRemove && (
@@ -1073,7 +1060,7 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
                   ? 'numeric value'
                   : 'value'
             }
-            className={`h-9 w-full rounded-full border bg-gray-100 px-4 text-13 text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:placeholder:text-gray-300 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 dark:disabled:placeholder:text-white/25 ${
+            className={`text-13 h-9 w-full rounded-full border bg-gray-100 px-4 text-gray-900 transition-colors placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:placeholder:text-gray-300 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:disabled:border-white/3 dark:disabled:bg-white/3 dark:disabled:text-white/30 dark:disabled:placeholder:text-white/25 ${
               numericValueInvalid
                 ? 'border-red-400/60 focus:border-red-400'
                 : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
@@ -1117,14 +1104,12 @@ function AttachmentPicker({ attachments, onChange }) {
       try {
         const response = await getFacebookAccounts(userId);
         if (!alive) return;
-        const list = (response?.accounts || []).filter(
-          (account) => account.isUsable,
-        );
+        const list = (response?.accounts || []).filter((account) => account.isUsable);
         setFacebookAccounts(list);
         setSelectedFacebookId((current) =>
           list.some((account) => account.facebookId === current)
             ? current
-            : list[0]?.facebookId || '',
+            : list[0]?.facebookId || ''
         );
       } catch {
         if (alive) setFacebookAccounts([]);
@@ -1194,14 +1179,11 @@ function AttachmentPicker({ attachments, onChange }) {
 
   const toggle = (acctKey, campaignId) => {
     const exists = attachments.some(
-      (a) => a.adAccountId === acctKey && a.campaignId === campaignId,
+      (a) => a.adAccountId === acctKey && a.campaignId === campaignId
     );
     if (exists) {
       onChange(
-        attachments.filter(
-          (a) =>
-            !(a.adAccountId === acctKey && a.campaignId === campaignId),
-        ),
+        attachments.filter((a) => !(a.adAccountId === acctKey && a.campaignId === campaignId))
       );
     } else {
       onChange([...attachments, { adAccountId: acctKey, campaignId }]);
@@ -1324,7 +1306,7 @@ function AttachmentPicker({ attachments, onChange }) {
               placeholder="Search campaigns…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-full border border-gray-300 bg-gray-100 pl-9 pr-3 text-13 text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
+              className="text-13 h-9 w-full rounded-full border border-gray-300 bg-gray-100 pr-3 pl-9 text-gray-900 transition-colors placeholder:text-gray-400 hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/5 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] dark:hover:border-white/15 dark:focus:border-white/20"
             />
           </div>
         </div>
@@ -1356,139 +1338,123 @@ function AttachmentPicker({ attachments, onChange }) {
                   if ((acct.name || '').toLowerCase().includes(q)) {
                     return true;
                   }
-                  const campaigns =
-                    campaignsByAccount[`act_${acct.id}`];
+                  const campaigns = campaignsByAccount[`act_${acct.id}`];
                   if (!campaigns) return false;
-                  return campaigns.some((c) =>
-                    (c.name || '').toLowerCase().includes(q),
-                  );
+                  return campaigns.some((c) => (c.name || '').toLowerCase().includes(q));
                 })
               : accounts;
-            if (
-              !accountsLoading &&
-              accounts.length > 0 &&
-              visibleAccounts.length === 0
-            ) {
+            if (!accountsLoading && accounts.length > 0 && visibleAccounts.length === 0) {
               return (
                 <p className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/55">
                   No accounts or campaigns match{' '}
-                  <span className="font-mono text-gray-600 dark:text-white/70">
-                    "{search}"
-                  </span>
-                  .
+                  <span className="font-mono text-gray-600 dark:text-white/70">"{search}"</span>.
                 </p>
               );
             }
             return visibleAccounts.map((acct) => {
-            const acctKey = `act_${acct.id}`;
-            const campaigns = campaignsByAccount[acctKey];
-            const isOpen = openAccount === acctKey;
-            const filtered = (campaigns || []).filter((c) =>
-              (c.name || '').toLowerCase().includes(search.toLowerCase()),
-            );
-            const attachedHere = attachments.filter(
-              (a) => a.adAccountId === acctKey,
-            ).length;
-            return (
-              <div
-                key={acct.id}
-                className="border-b border-gray-200 last:border-b-0 dark:border-white/10"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleAccount(acctKey)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
+              const acctKey = `act_${acct.id}`;
+              const campaigns = campaignsByAccount[acctKey];
+              const isOpen = openAccount === acctKey;
+              const filtered = (campaigns || []).filter((c) =>
+                (c.name || '').toLowerCase().includes(search.toLowerCase())
+              );
+              const attachedHere = attachments.filter((a) => a.adAccountId === acctKey).length;
+              return (
+                <div
+                  key={acct.id}
+                  className="border-b border-gray-200 last:border-b-0 dark:border-white/10"
                 >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-13 font-medium text-gray-900 dark:text-white">
-                      {acct.name}
-                    </span>
-                    <span className="text-[11px] font-mono text-gray-400 dark:text-white/45">
-                      {acctKey}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500 dark:text-white/55">
-                    {attachedHere > 0 && (
-                      <span className="rounded-full bg-linear-to-r from-[#02C8C4] to-[#5867EB] px-2 py-0.5 text-white">
-                        {attachedHere}
+                  <button
+                    type="button"
+                    onClick={() => toggleAccount(acctKey)}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-13 truncate font-medium text-gray-900 dark:text-white">
+                        {acct.name}
                       </span>
-                    )}
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${
-                        isOpen ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </div>
-                </button>
-                {isOpen && (
-                  <div className="border-t border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#181818]">
-                    {loadingAccount === acctKey || !campaigns ? (
-                      <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
-                        Loading campaigns…
-                      </p>
-                    ) : filtered.length === 0 ? (
-                      <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
-                        {search
-                          ? 'No campaigns match your search.'
-                          : 'No campaigns in this account.'}
-                      </p>
-                    ) : (
-                      filtered.map((c) => {
-                        const checked = attachments.some(
-                          (a) =>
-                            a.adAccountId === acctKey &&
-                            a.campaignId === String(c.id),
-                        );
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => toggle(acctKey, String(c.id))}
-                            className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors hover:bg-gray-200 dark:hover:bg-white/5 ${
-                              checked ? 'bg-gray-200 dark:bg-white/5' : ''
-                            }`}
-                          >
-                            <div className="flex min-w-0 items-center gap-2.5">
-                              <span
-                                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors ${
-                                  checked
-                                    ? 'bg-linear-to-r from-[#02C8C4] to-[#5867EB]'
-                                    : 'border border-gray-300 dark:border-white/20'
-                                }`}
-                              >
-                                {checked && (
-                                  <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                                )}
-                              </span>
-                              <div className="min-w-0">
-                                <div
-                                  className={`truncate text-13 ${
+                      <span className="font-mono text-[11px] text-gray-400 dark:text-white/45">
+                        {acctKey}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500 dark:text-white/55">
+                      {attachedHere > 0 && (
+                        <span className="rounded-full bg-linear-to-r from-[#02C8C4] to-[#5867EB] px-2 py-0.5 text-white">
+                          {attachedHere}
+                        </span>
+                      )}
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#181818]">
+                      {loadingAccount === acctKey || !campaigns ? (
+                        <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
+                          Loading campaigns…
+                        </p>
+                      ) : filtered.length === 0 ? (
+                        <p className="px-3 py-2.5 text-[12px] text-gray-500 dark:text-white/55">
+                          {search
+                            ? 'No campaigns match your search.'
+                            : 'No campaigns in this account.'}
+                        </p>
+                      ) : (
+                        filtered.map((c) => {
+                          const checked = attachments.some(
+                            (a) => a.adAccountId === acctKey && a.campaignId === String(c.id)
+                          );
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => toggle(acctKey, String(c.id))}
+                              className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors hover:bg-gray-200 dark:hover:bg-white/5 ${
+                                checked ? 'bg-gray-200 dark:bg-white/5' : ''
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <span
+                                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors ${
                                     checked
-                                      ? 'font-medium text-gray-900 dark:text-white'
-                                      : 'text-gray-700 dark:text-white/85'
+                                      ? 'bg-linear-to-r from-[#02C8C4] to-[#5867EB]'
+                                      : 'border border-gray-300 dark:border-white/20'
                                   }`}
                                 >
-                                  {c.name || `(unnamed)`}
-                                </div>
-                                <div className="truncate text-[11px] font-mono text-gray-400 dark:text-white/45">
-                                  {c.id}
+                                  {checked && (
+                                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                                  )}
+                                </span>
+                                <div className="min-w-0">
+                                  <div
+                                    className={`text-13 truncate ${
+                                      checked
+                                        ? 'font-medium text-gray-900 dark:text-white'
+                                        : 'text-gray-700 dark:text-white/85'
+                                    }`}
+                                  >
+                                    {c.name || `(unnamed)`}
+                                  </div>
+                                  <div className="truncate font-mono text-[11px] text-gray-400 dark:text-white/45">
+                                    {c.id}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            {c.status && (
-                              <span className="shrink-0 text-10 uppercase tracking-wider text-gray-400 dark:text-white/45">
-                                {c.status}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          });
+                              {c.status && (
+                                <span className="text-10 shrink-0 tracking-wider text-gray-400 uppercase dark:text-white/45">
+                                  {c.status}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            });
           })()}
         </div>
       </div>

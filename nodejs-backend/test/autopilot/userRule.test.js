@@ -266,6 +266,12 @@ group("createRuleSchema — lookbackDays", () => {
     assertValid(validRule({ lookbackDays: 30 }));
     assertValid(validRule({ lookbackDays: 90 }));
   });
+  test("accepts maximum as the lifetime lookback preset", () => {
+    assertValid(validRule({ lookbackPreset: "maximum" }));
+  });
+  test("rejects unknown lookback presets", () => {
+    assertInvalid(validRule({ lookbackPreset: "lifetime" }));
+  });
   test("rejects 0 / negative", () => {
     assertInvalid(validRule({ lookbackDays: 0 }));
     assertInvalid(validRule({ lookbackDays: -3 }));

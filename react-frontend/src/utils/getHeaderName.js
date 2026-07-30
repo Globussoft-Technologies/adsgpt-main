@@ -5,6 +5,8 @@
 // `/autopilot/meta`, `/adfactory/something/123` resolve to their parent
 // section's title instead of falling through to the default.
 const PREFIX_MAP = [
+  ['/workspace', 'Workspace'],
+  ['/my-space', 'My Space'],
   ['/autopilot', 'Autopilot'],
   ['/brandiq', 'Brand IQ'],
   ['/adstudio', 'Ad Studio'],

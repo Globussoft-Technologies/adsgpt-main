@@ -15,6 +15,7 @@ const AdsManagerPage = () => (
     // Google posting flows. When VITE_ENABLE_GOOGLE_POSTING !== 'true' the card
     // falls back to "Coming Soon" / inactive, just like Autopilot.
     googleComingSoon={import.meta.env.VITE_ENABLE_GOOGLE_POSTING !== 'true'}
+    workspaceMode="manager"
   />
 );
 

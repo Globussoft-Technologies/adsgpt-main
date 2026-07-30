@@ -38,6 +38,37 @@ const { evaluateRules } = require("./autopilot/ruleEvaluator");
 // Helpers (pure)
 // ---------------------------------------------------------------------------
 
+function resolveInsightTimeOptions({
+  lookbackDays = 14,
+  prevLookbackDays = 14,
+  lookbackPreset,
+  now = dayjs(),
+} = {}) {
+  if (lookbackPreset === "maximum") {
+    return {
+      isMaximumLookback: true,
+      current: { date_preset: "maximum" },
+      previous: null,
+    };
+  }
+
+  return {
+    isMaximumLookback: false,
+    current: {
+      time_range: {
+        since: now.subtract(lookbackDays - 1, "day").format("YYYY-MM-DD"),
+        until: now.format("YYYY-MM-DD"),
+      },
+    },
+    previous: {
+      since: now
+        .subtract(lookbackDays + prevLookbackDays - 1, "day")
+        .format("YYYY-MM-DD"),
+      until: now.subtract(lookbackDays, "day").format("YYYY-MM-DD"),
+    },
+  };
+}
+
 /**
  * Page through a facebook-nodejs-business-sdk Cursor and return one flat
  * array of every record across every page.
@@ -441,6 +472,7 @@ async function runAuditForAccount({
   const {
     lookbackDays = 14,
     prevLookbackDays = 14,
+    lookbackPreset,
     thresholdOverrides,
     enforceAgeGuard = false,
     enforceSpendFloor = false,
@@ -483,18 +515,15 @@ async function runAuditForAccount({
   // so CPI/ROAS/CTR will wobble a bit between hourly runs. We accept that
   // tradeoff to match Ads Manager's "Last N days" semantics — users were
   // confused when our 30-day window stopped a day short of theirs.
-  const currentRange = {
-    since: dayjs()
-      .subtract(lookbackDays - 1, "day")
-      .format("YYYY-MM-DD"),
-    until: dayjs().format("YYYY-MM-DD"),
-  };
-  const prevRange = {
-    since: dayjs()
-      .subtract(lookbackDays + prevLookbackDays - 1, "day")
-      .format("YYYY-MM-DD"),
-    until: dayjs().subtract(lookbackDays, "day").format("YYYY-MM-DD"),
-  };
+  const {
+    isMaximumLookback,
+    current: currentInsightsRange,
+    previous: prevRange,
+  } = resolveInsightTimeOptions({
+    lookbackDays,
+    prevLookbackDays,
+    lookbackPreset,
+  });
 
   // Page size for the entity + insights reads. Meta's response size is
   // bounded — larger `limit` values combined with the heavy insights field
@@ -572,7 +601,7 @@ async function runAuditForAccount({
     fetchAllPages(
       account.getInsights(getInsightsFields(), {
         level: "campaign",
-        time_range: currentRange,
+        ...currentInsightsRange,
         filtering: insightsFiltering("campaign"),
         limit: PAGE_LIMIT,
       }),
@@ -581,7 +610,7 @@ async function runAuditForAccount({
     fetchAllPages(
       account.getInsights(getInsightsFields(), {
         level: "adset",
-        time_range: currentRange,
+        ...currentInsightsRange,
         filtering: insightsFiltering("adset"),
         limit: PAGE_LIMIT,
       }),
@@ -590,40 +619,46 @@ async function runAuditForAccount({
     fetchAllPages(
       account.getInsights(getInsightsFields(), {
         level: "ad",
-        time_range: currentRange,
+        ...currentInsightsRange,
         filtering: insightsFiltering("ad"),
         limit: PAGE_LIMIT,
       }),
       { label: "ad-insights" },
     ),
 
-    fetchAllPages(
-      account.getInsights(getInsightsFields(), {
-        level: "campaign",
-        time_range: prevRange,
-        filtering: insightsFiltering("campaign"),
-        limit: PAGE_LIMIT,
-      }),
-      { label: "campaign-insights-prev" },
-    ),
-    fetchAllPages(
-      account.getInsights(getInsightsFields(), {
-        level: "adset",
-        time_range: prevRange,
-        filtering: insightsFiltering("adset"),
-        limit: PAGE_LIMIT,
-      }),
-      { label: "adset-insights-prev" },
-    ),
-    fetchAllPages(
-      account.getInsights(getInsightsFields(), {
-        level: "ad",
-        time_range: prevRange,
-        filtering: insightsFiltering("ad"),
-        limit: PAGE_LIMIT,
-      }),
-      { label: "ad-insights-prev" },
-    ),
+    isMaximumLookback
+      ? Promise.resolve([])
+      : fetchAllPages(
+          account.getInsights(getInsightsFields(), {
+            level: "campaign",
+            time_range: prevRange,
+            filtering: insightsFiltering("campaign"),
+            limit: PAGE_LIMIT,
+          }),
+          { label: "campaign-insights-prev" },
+        ),
+    isMaximumLookback
+      ? Promise.resolve([])
+      : fetchAllPages(
+          account.getInsights(getInsightsFields(), {
+            level: "adset",
+            time_range: prevRange,
+            filtering: insightsFiltering("adset"),
+            limit: PAGE_LIMIT,
+          }),
+          { label: "adset-insights-prev" },
+        ),
+    isMaximumLookback
+      ? Promise.resolve([])
+      : fetchAllPages(
+          account.getInsights(getInsightsFields(), {
+            level: "ad",
+            time_range: prevRange,
+            filtering: insightsFiltering("ad"),
+            limit: PAGE_LIMIT,
+          }),
+          { label: "ad-insights-prev" },
+        ),
   ]);
 
   const prevCampaignMap = new Map(
@@ -756,5 +791,6 @@ module.exports = {
     getActionValue,
     getRoas,
     buildNormalisers,
+    resolveInsightTimeOptions,
   },
 };

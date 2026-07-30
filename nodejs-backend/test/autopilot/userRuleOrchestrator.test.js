@@ -173,6 +173,7 @@ Module._load = function patched(request, parent, isMain) {
           accessToken,
           lookbackDays: options.lookbackDays,
           prevLookbackDays: options.prevLookbackDays,
+          lookbackPreset: options.lookbackPreset,
         });
         // Lookup precedence: (acct, lookback) → (acct) → throw.
         const lbKey = `${adAccountId}:${options.lookbackDays}`;
@@ -307,6 +308,16 @@ group("resolveEffectiveLookback", () => {
         may18,
       ),
       18,
+    );
+  });
+
+  test("lookbackPreset='maximum' resolves to the lifetime fetch token", () => {
+    assert.equal(
+      resolveEffectiveLookback({
+        lookbackDays: 7,
+        lookbackPreset: "maximum",
+      }),
+      "maximum",
     );
   });
 
@@ -1280,6 +1291,28 @@ const { runUserRuleCycle } = orchestrator;
         await runUserRuleCycle({ dryRun: false });
         assert.equal(stubs.auditCalls.length, 1);
         assert.equal(stubs.auditCalls[0].lookbackDays, 14);
+      },
+    );
+
+    await testAsync(
+      'maximum preset requests lifetime insights without a previous window',
+      async () => {
+        resetStubs();
+        stubs.rules = [
+          baseRule({
+            _id: 'r-maximum',
+            lookbackDays: 14,
+            lookbackPreset: 'maximum',
+          }),
+        ];
+        stubs.fbUsers = [{ userId: 'u1', accessToken: 'tok' }];
+        stubs.auditByAccount.set('act_42', auditFixture());
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(stubs.auditCalls.length, 1);
+        assert.equal(stubs.auditCalls[0].lookbackPreset, 'maximum');
+        assert.equal(stubs.auditCalls[0].lookbackDays, undefined);
+        assert.equal(stubs.auditCalls[0].prevLookbackDays, undefined);
       },
     );
   });

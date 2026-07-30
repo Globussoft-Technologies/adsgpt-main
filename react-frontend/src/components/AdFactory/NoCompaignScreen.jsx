@@ -197,25 +197,22 @@ const NoCompaignScreen = () => {
 
   return (
     <>
-      {campaignsList?.length > 0 && (
-        <div
-          id="new_campaign_button"
-          className="fixed top-3 right-14 z-50 mb-8 flex justify-end md:right-16 2xl:top-7 2xl:right-20"
-        >
-          <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
-            <button
-              onClick={() => setOpenStartForm(true)}
-              className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
-            >
-              <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-black/70 2xl:h-5 2xl:w-5 dark:group-hover:text-white/70" />
-              <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
-                New Campaign
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
       <div className="brands_new_container relative z-10 flex w-full flex-col sm:p-6">
+        {!loading && campaignsList?.length > 0 && (
+          <div id="new_campaign_button" className="mb-4 flex shrink-0 justify-end">
+            <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
+              <button
+                onClick={() => setOpenStartForm(true)}
+                className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
+              >
+                <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-black/70 2xl:h-5 2xl:w-5 dark:group-hover:text-white/70" />
+                <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
+                  New Campaign
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
         {/* Show loader when loading */}
         {loading ? (
           <div className="flex min-h-[55vh] w-full items-center justify-center">
@@ -225,7 +222,9 @@ const NoCompaignScreen = () => {
           /* Empty State */
           <div className="flex min-h-[70vh] w-full items-center justify-center">
             <div className="flex flex-col items-center justify-center space-y-5 p-6 text-center">
-              <h2 className="text-xl font-medium text-gray-700 dark:text-[#AFAFAF]">No Ad Campaigns yet</h2>
+              <h2 className="text-xl font-medium text-gray-700 dark:text-[#AFAFAF]">
+                No Ad Campaigns yet
+              </h2>
               <p className="max-w-sm text-base text-gray-500 dark:text-[#AFAFAF]">
                 You haven't launched any Ad campaigns yet. Start one to reach your audience.
               </p>
@@ -243,13 +242,13 @@ const NoCompaignScreen = () => {
             </div>
           </div>
         ) : (
-          <div className="h-full max-h-[calc(100svh-96px)] overflow-y-auto sm:max-h-[calc(100svh-140px)] 2xl:max-h-[calc(100svh-160px)]">
+          <div className="h-full max-h-[calc(100svh-152px)] overflow-y-auto sm:max-h-[calc(100svh-196px)] 2xl:max-h-[calc(100svh-216px)]">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {campaignsList?.map((campaign) => (
                 <div
                   key={campaign?.id}
                   onClick={() => handleCampaignClick(campaign)}
-                  className="ad_factory_card group relative flex w-full items-center cursor-pointer justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-[1px] shadow-sm backdrop-blur-[124px] transition-all duration-300 dark:border-none dark:bg-[#0D0D0D]/50 dark:shadow-none"
+                  className="ad_factory_card group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-[1px] shadow-sm backdrop-blur-[124px] transition-all duration-300 dark:border-none dark:bg-[#0D0D0D]/50 dark:shadow-none"
                 >
                   <div className="relative flex w-full flex-col gap-4 rounded-2xl p-5 py-6">
                     <div className="mb-1 flex items-start justify-between">
@@ -341,7 +340,10 @@ const NoCompaignScreen = () => {
 
           <div className="space-y-6">
             <div className="space-y-3">
-              <label htmlFor="campaign-name" className="text-sm font-medium text-gray-600 dark:text-[#CCCCCC]">
+              <label
+                htmlFor="campaign-name"
+                className="text-sm font-medium text-gray-600 dark:text-[#CCCCCC]"
+              >
                 Campaign Name
               </label>
               <div className="relative">

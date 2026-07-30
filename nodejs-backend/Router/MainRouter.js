@@ -54,6 +54,8 @@ const creditsApiRoutes = require("./creditsApiRoutes");
 const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnalyzerRoutes");
 const deviceTokenRoutes = require("./deviceTokenRoutes");
 const partnerMetaAdsRoutes = require("./partnerApi/metaAdsRoutes");
+const workspaceRoutes = require("./workspaceRoutes");
+const workspaceMemberAuthRoutes = require("./workspaceMemberAuthRoutes");
 const amemberSsoRoute = require("./auth/amemberSsoRoute");
 const mobileRoutes = require("./auth/mobileRoutes");
 
@@ -75,6 +77,7 @@ app.use("/trending", authenticateJWT, trendingRoute);
 app.use("/chat-settings", authenticateJWT, chatPageRoutes);
 app.use("/track", tracksRoutes);
 app.use("/check-access", checkAuth);
+app.use("/workspace-auth", workspaceMemberAuthRoutes);
 app.use("/auth/amember", amemberSsoRoute);
 app.use("/advertiser-search", advertiserSearch);
 app.use("/amember", amemberRoute);
@@ -99,6 +102,7 @@ app.use("/ad-posting", authenticateJWT, adPostingRoutes);
 app.use("/getCategory", getCategoryRoutes);
 app.use("/usage", Usage);
 app.use("/meta-ads", authenticateJWT, metaAdRoutes);
+app.use("/workspaces", authenticateJWT, workspaceRoutes);
 // Partner-facing surface: no AdsGPT JWT — auth is the partner's own Meta
 // System User token, validated inside partnerMetaAdsRoutes itself.
 app.use("/partner-api/v1/meta-ads", partnerMetaAdsRoutes);

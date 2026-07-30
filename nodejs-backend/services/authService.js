@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 const { features } = require('../utils/features');
 const { default: Redis } = require('ioredis');
+const {
+  validateSession: validateWorkspaceMemberSession,
+} = require('./workspace/workspaceMemberAuth');
+const { isWorkspaceError } = require('./workspace/workspaceConfig');
 const { parseCookies } = require('./oauth/sessionCheck');
 require('dotenv').config();
 const redisTokenConnect = new Redis({
@@ -24,6 +28,28 @@ const verifyTokenSocket = (token, callback) => {
     callback(null, decoded);
   });
 };
+// A delegated workspace session is revalidated against Mongo on every request,
+// so this runs on the hot path for member traffic. A deliberate workspace error
+// means access really was withdrawn and the caller is told which one it was —
+// the frontend keys its "return to workspace sign-in" handling off that 403.
+// Anything else is an internal fault: deny the request, but report it as a 500
+// with no detail, so a transient database blip cannot masquerade as revoked
+// access and sign every member out.
+const denyWorkspaceRequest = (res, error) => {
+  if (isWorkspaceError(error)) {
+    return res.status(403).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+    });
+  }
+  console.error('[workspace] session validation failed', error);
+  return res.status(500).json({
+    success: false,
+    code: 'WORKSPACE_SESSION_CHECK_FAILED',
+    message: 'Could not verify workspace access',
+  });
+};
 const requestToken = (req) => {
   const authHeader = String(req.headers?.authorization || '');
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -37,16 +63,24 @@ const authenticateJWT = (req, res, next) => {
   const token = requestToken(req);
   const options = { algorithms: ['HS512'] };
   if (token) {
-    jwt.verify(token, process.env.JWT_SECRET_KEY, options, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
       if (err) {
         return res.sendStatus(403);
       }
-      if(user?.created_from=="PAS") user.user_id = `PAS-${user.user_id}`
-      if(user?.created_from=="GPT") user.user_id = `GPT-${user.user_id}`
-      req.user = user;
-      next();
+      try {
+        if(user?.created_from=="PAS") user.user_id = `PAS-${user.user_id}`
+        if(user?.created_from=="GPT") user.user_id = `GPT-${user.user_id}`
+        const workspaceSession = await validateWorkspaceMemberSession(user);
+        if (workspaceSession?.refreshedToken) {
+          res.set("X-Workspace-Token", workspaceSession.refreshedToken);
+        }
+        req.user = user;
+        next();
+      } catch (error) {
+        return denyWorkspaceRequest(res, error);
+      }
     });
-  } 
+  }
   else {
     res.sendStatus(401);
   }
@@ -196,27 +230,41 @@ const authenticateJWTInteraction = (req, res, next) => {
     const options = { algorithms: ['HS512'] };
 
     if (token) {
-      return jwt.verify(token, process.env.JWT_SECRET_KEY, options, (err, user) => {
+      return jwt.verify(token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
         if (err) return res.sendStatus(403);
 
-        if (user?.created_from === "PAS") user.user_id = `PAS-${user.user_id}`;
-        if (user?.created_from === "GPT") user.user_id = `GPT-${user.user_id}`;
-
-        req.user = user;
-        return next(); 
+        try {
+          if (user?.created_from === "PAS") user.user_id = `PAS-${user.user_id}`;
+          if (user?.created_from === "GPT") user.user_id = `GPT-${user.user_id}`;
+          const workspaceSession = await validateWorkspaceMemberSession(user);
+          if (workspaceSession?.refreshedToken) {
+            res.set("X-Workspace-Token", workspaceSession.refreshedToken);
+          }
+          req.user = user;
+          return next();
+        } catch (error) {
+          return denyWorkspaceRequest(res, error);
+        }
       });
     }
 
     if (req?.session?.token) {
-      return jwt.verify(req.session.token, process.env.JWT_SECRET_KEY, options, (err, user) => {
+      return jwt.verify(req.session.token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
         if (err) return res.sendStatus(403);
-
-        req.user = user;
-        return next(); 
+        try {
+          const workspaceSession = await validateWorkspaceMemberSession(user);
+          if (workspaceSession?.refreshedToken) {
+            res.set("X-Workspace-Token", workspaceSession.refreshedToken);
+          }
+          req.user = user;
+          return next();
+        } catch (error) {
+          return denyWorkspaceRequest(res, error);
+        }
       });
     }
 
-    return res.sendStatus(401); 
+    return res.sendStatus(401);
 
   } catch (error) {
     

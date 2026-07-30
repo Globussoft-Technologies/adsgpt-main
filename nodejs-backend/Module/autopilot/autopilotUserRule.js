@@ -108,17 +108,12 @@ const autopilotUserRuleSchema = new mongoose.Schema(
       max: 90,
     },
 
-    // Optional preset that overrides the fixed `lookbackDays` window with a
-    // dynamic, calendar-aware one resolved at audit time. Currently only
-    // `'this_month'` is supported — it computes "days since the 1st of the
-    // current month" each cron tick (so the window grows from 1 → 31 across
-    // the month and resets on the 1st). Leave null/unset to use the fixed
-    // `lookbackDays` value. Kept as a separate field so existing numeric
-    // rules continue to validate and so future presets ('this_week',
-    // 'last_month', 'ytd', …) drop in without re-encoding the type.
+    // Optional preset overriding fixed `lookbackDays`. `'this_month'`
+    // computes days since the 1st; `'maximum'` fetches lifetime performance
+    // available from Meta. Null/unset keeps the numeric window.
     lookbackPreset: {
       type: String,
-      enum: ["this_month", null],
+      enum: ["this_month", "maximum", null],
       default: null,
     },
 

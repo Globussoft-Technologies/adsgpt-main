@@ -33,7 +33,11 @@ import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlic
 import { useLocation } from 'react-router-dom';
 import { getHeaderName } from '@/utils/getHeaderName';
 import HeaderTabs from './HeaderTabs';
-import { setActiveBrandIQTab, setSelectedCompetitorBrand, setSelectedCompetitorPlatform } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+import {
+  setActiveBrandIQTab,
+  setSelectedCompetitorBrand,
+  setSelectedCompetitorPlatform,
+} from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { Button } from '@/components/ui/button';
 import { resetAdCopySlice } from '@/store/reducers/adStudio/adCopySlice';
 import { resetPromptSlice, setField } from '@/store/reducers/adStudio/promptSlice';
@@ -72,6 +76,8 @@ import {
 } from '@/store/reducers/adInsights/Addie/AddieChatBotSlice';
 import { getFaqData } from '@/store/actions/adInsights/addieActions';
 import { resetAddiePromptSlice } from '@/store/reducers/adInsights/Addie/addiePromptSlice';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
+import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 const ENABLE_NEW_LAYOUT = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
@@ -110,6 +116,20 @@ const brandIQTabs = [
   // { id: 'Gallery', label: 'Gallery', icon: Images },
   // { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
+
+const adStudioTabFeatures = {
+  adCopy: 'adStudio.adCopy',
+  adCreative: 'adStudio.adCreative',
+  adCreativeNew: 'adStudio.adCreative',
+  adVideo: 'adStudio.adVideo',
+  adVideoNew: 'adStudio.adVideo',
+  adLibrary: 'adStudio.adLibrary',
+};
+
+const brandIqTabFeatures = {
+  myBrands: 'brandIq.myBrands',
+  competitors: 'brandIq.competitors',
+};
 
 const brandOptions = [
   { value: 'all-brands', label: 'All Brands' },
@@ -217,8 +237,17 @@ export default function TopHeader() {
   // adStudioTabs[3] = adCreativeNewTab;
   // }
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
-  const { myBrands, activeBrandIQTabId, selectedCompetitorBrand, selectedCompetitorPlatform } = useSelector((state) => state.brandIQTabs);
+  const { myBrands, activeBrandIQTabId, selectedCompetitorBrand, selectedCompetitorPlatform } =
+    useSelector((state) => state.brandIQTabs);
   const dispatch = useDispatch();
+  const visibleAdStudioTabs = useMemo(
+    () => adStudioTabs.filter((tab) => canUseWorkspaceFeature(adStudioTabFeatures[tab.id])),
+    []
+  );
+  const visibleBrandIqTabs = useMemo(
+    () => brandIQTabs.filter((tab) => canUseWorkspaceFeature(brandIqTabFeatures[tab.id])),
+    []
+  );
   const {
     conversations: creativeConversations,
     exploreCompetitor,
@@ -230,6 +259,26 @@ export default function TopHeader() {
   const adCreativeNewActivePage = useSelector(
     (state) => state.adStudioTabs.adCreativeNewActivePage
   );
+
+  useEffect(() => {
+    if (
+      currentRoute === '/adstudio' &&
+      visibleAdStudioTabs.length &&
+      !visibleAdStudioTabs.some(({ id }) => id === activeAdStudioTabId)
+    ) {
+      dispatch(setActiveAdStudioTab(visibleAdStudioTabs[0].id));
+    }
+  }, [activeAdStudioTabId, currentRoute, dispatch, visibleAdStudioTabs]);
+
+  useEffect(() => {
+    if (
+      currentRoute === '/brandiq' &&
+      visibleBrandIqTabs.length &&
+      !visibleBrandIqTabs.some(({ id }) => id === activeBrandIQTabId)
+    ) {
+      dispatch(setActiveBrandIQTab(visibleBrandIqTabs[0].id));
+    }
+  }, [activeBrandIQTabId, currentRoute, dispatch, visibleBrandIqTabs]);
 
   const hideHeader =
     currentRoute === '/meta-ads' ||
@@ -332,6 +381,20 @@ export default function TopHeader() {
     }
   }, [myBrands, selectedCompetitorBrand, dispatch]);
 
+  if (currentRoute !== '/adfactory-demo' && hideHeader) {
+    // Meta Ads Manager includes the switcher in its own control row so it
+    // participates in layout instead of floating over provider controls.
+    if (currentRoute === '/meta-ads') return null;
+
+    return (
+      <div className="pointer-events-none fixed top-4 right-5 z-[60]">
+        <div className="pointer-events-auto">
+          <WorkspaceSwitcher />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
@@ -356,7 +419,7 @@ export default function TopHeader() {
               <HeaderTabs
                 isShowHeadersTabs={isShowHeadersTabs}
                 setIsShowHeadersTabs={setIsShowHeadersTabs}
-                tabs={adStudioTabs}
+                tabs={visibleAdStudioTabs}
                 mobileTabsOpenRef={mobileTabsOpenRef}
                 activeTabId={activeAdStudioTabId}
                 onTabChange={(id) => dispatch(setActiveAdStudioTab(id))}
@@ -366,7 +429,7 @@ export default function TopHeader() {
               <HeaderTabs
                 isShowHeadersTabs={isShowHeadersTabs}
                 setIsShowHeadersTabs={setIsShowHeadersTabs}
-                tabs={brandIQTabs}
+                tabs={visibleBrandIqTabs}
                 mobileTabsOpenRef={mobileTabsOpenRef}
                 activeTabId={activeBrandIQTabId}
                 onTabChange={(id) => dispatch(setActiveBrandIQTab(id))}
@@ -378,6 +441,7 @@ export default function TopHeader() {
             id="tour_filter_adcreatives_prompt"
             className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
           >
+            <WorkspaceSwitcher />
             {/* AI Assistant — History + New Chat */}
             {currentRoute === '/assistant' && <AIAssistantHeaderActions />}
 
@@ -405,13 +469,13 @@ export default function TopHeader() {
                   <span>New Chat</span>
                 </Button>
               )}
-            {((currentRoute === '/adstudio' &&
+            {currentRoute === '/adstudio' &&
               ((activeAdStudioTabId === 'adCreative' &&
                 Array.isArray(creativeConversations) &&
                 creativeConversations.length === 0) ||
-                activeAdStudioTabId === 'adLibrary'))) && (
-              <>
-                {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
+                activeAdStudioTabId === 'adLibrary') && (
+                <>
+                  {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
               <Input
                 type="text"
                 placeholder={'Search your competitors'}
@@ -437,58 +501,34 @@ export default function TopHeader() {
               />
             </div> */}
 
-                {/* ! search field */}
-                <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
-                  <div className="flex flex-shrink-0 items-center">
-                    <Search
-                      className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
-                      onClick={() => {
-                        dispatch(setSkip(0));
-                        dispatch(fetchExploreAds());
-                      }}
+                  {/* ! search field */}
+                  <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                    <div className="flex flex-shrink-0 items-center">
+                      <Search
+                        className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
+                        onClick={() => {
+                          dispatch(setSkip(0));
+                          dispatch(fetchExploreAds());
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search.."
+                      className="w-full border-none bg-transparent text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+                      value={exploreCompetitor}
+                      onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
                     />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Search.."
-                    className="w-full border-none bg-transparent text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
-                    value={exploreCompetitor}
-                    onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
-                  />
-                  <div className="ml-2 flex space-x-1">
-                    {!isMobile ? (
-                      <>
-                        {['competitor', 'keyword'].map((type) => (
-                          <button
-                            key={type}
-                            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
-                              exploreSearchTerm === type
-                                ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
-                                : 'text-zinc-500 dark:text-[#777777]'
-                            }`}
-                            onClick={() => {
-                              dispatch(setExploreSearchTerm(type));
-                              dispatch(setSkip(0));
-                              dispatch(fetchExploreAds());
-                            }}
-                          >
-                            {type === 'competitor' ? 'Competitor' : 'Keyword'}
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
-                        </PopoverTrigger>
-                        <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                    <div className="ml-2 flex space-x-1">
+                      {!isMobile ? (
+                        <>
                           {['competitor', 'keyword'].map((type) => (
                             <button
                               key={type}
                               className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
                                 exploreSearchTerm === type
-                                  ? 'bg-[#2A2A2A] text-white'
-                                  : 'text-[#777777]'
+                                  ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
+                                  : 'text-zinc-500 dark:text-[#777777]'
                               }`}
                               onClick={() => {
                                 dispatch(setExploreSearchTerm(type));
@@ -499,21 +539,45 @@ export default function TopHeader() {
                               {type === 'competitor' ? 'Competitor' : 'Keyword'}
                             </button>
                           ))}
-                        </PopoverContent>
-                      </Popover>
-                    )}
+                        </>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                          </PopoverTrigger>
+                          <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                            {['competitor', 'keyword'].map((type) => (
+                              <button
+                                key={type}
+                                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
+                                  exploreSearchTerm === type
+                                    ? 'bg-[#2A2A2A] text-white'
+                                    : 'text-[#777777]'
+                                }`}
+                                onClick={() => {
+                                  dispatch(setExploreSearchTerm(type));
+                                  dispatch(setSkip(0));
+                                  dispatch(fetchExploreAds());
+                                }}
+                              >
+                                {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                              </button>
+                            ))}
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Platform select */}
-                <CreativeFilterDropdown
-                  options={selectPlateformsOptions}
-                  label="Platform"
-                  value={selectPlateformsOptions.find((p) => p.value === explorePlatform)}
-                  onChange={handlePlatformChange}
-                />
-              </>
-            )}
+                  {/* Platform select */}
+                  <CreativeFilterDropdown
+                    options={selectPlateformsOptions}
+                    label="Platform"
+                    value={selectPlateformsOptions.find((p) => p.value === explorePlatform)}
+                    onChange={handlePlatformChange}
+                  />
+                </>
+              )}
 
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideo' && (
               <>
@@ -560,10 +624,25 @@ export default function TopHeader() {
             {currentRoute === '/brandiq' && activeBrandIQTabId === 'competitors' && (
               <div className="flex items-center gap-2">
                 <BrandsDropdown
-                  options={Array.isArray(myBrands) ? myBrands.map(b => ({ value: b.id, label: b.name || 'Unnamed' })) : []}
-                  value={selectedCompetitorBrand ? { value: selectedCompetitorBrand.id, label: selectedCompetitorBrand.name || 'Unnamed' } : (Array.isArray(myBrands) && myBrands[0] ? { value: myBrands[0].id, label: myBrands[0].name } : null)}
+                  options={
+                    Array.isArray(myBrands)
+                      ? myBrands.map((b) => ({ value: b.id, label: b.name || 'Unnamed' }))
+                      : []
+                  }
+                  value={
+                    selectedCompetitorBrand
+                      ? {
+                          value: selectedCompetitorBrand.id,
+                          label: selectedCompetitorBrand.name || 'Unnamed',
+                        }
+                      : Array.isArray(myBrands) && myBrands[0]
+                        ? { value: myBrands[0].id, label: myBrands[0].name }
+                        : null
+                  }
                   onChange={(val) => {
-                    const brand = Array.isArray(myBrands) ? myBrands.find((b) => b.id === val) : null;
+                    const brand = Array.isArray(myBrands)
+                      ? myBrands.find((b) => b.id === val)
+                      : null;
                     if (brand) {
                       dispatch(setSelectedCompetitorBrand(brand));
                     }
@@ -591,14 +670,14 @@ export default function TopHeader() {
         </div>
       )}
 
-      {/* Floating fallback — only renders when the inline header is hidden so the
-          toggle stays reachable on sub-pages (Meta Ads, AdVideoNew sub-pages,
-          AdCreativeNew sub-pages, /adfactory-demo) without altering header logic. */}
+      {/* Floating fallback — keeps workspace switching reachable when the inline
+          header is hidden on provider and Ad Studio sub-pages. */}
       {(currentRoute === '/adfactory-demo' || hideHeader) && (
         <div
           className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
         >
           {/* HIDE-MARK — theme toggle hidden globally (floating fallback). */}
+          <WorkspaceSwitcher />
           {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
         </div>
       )}

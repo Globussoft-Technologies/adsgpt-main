@@ -39,6 +39,7 @@ module.exports = (req, res, next) => {
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Facebook-Id",
   );
+  res.header("Access-Control-Expose-Headers", "X-Workspace-Token");
   if (originAllowed) res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Max-Age", "86400");
 

@@ -52,4 +52,49 @@ const oauthTokenLimiter = rateLimit({
   },
 });
 
-module.exports = { apiLimiter, webhookLimiter, dcrLimiter, oauthTokenLimiter };
+// Workspace member magic links are fully unauthenticated — possession of a
+// one-time token, or just an email address, is the only credential. The shared
+// apiLimiter (1000 / 15 min) is far too loose for that, so the whole surface
+// gets its own per-IP cap.
+const workspaceAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.WORKSPACE_AUTH_RATE_LIMIT_PER_IP || 40),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: "WORKSPACE_RATE_LIMITED",
+    message: "Too many workspace requests. Try again in a few minutes.",
+  },
+});
+
+// Stacked on top of the per-IP cap for the one route that sends an email per
+// call. Keyed on the requested mailbox rather than the caller so an address
+// cannot be bombed from a rotating pool of IPs.
+const workspaceLoginEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.WORKSPACE_LOGIN_RATE_LIMIT_PER_EMAIL || 5),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Same normalization as normalizeEmail(), inlined to keep this middleware
+    // free of workspace imports. Requests without a usable address share one
+    // bucket: they send no email and write nothing, so collapsing them is safe.
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    return email ? `workspace-login:${email}` : "workspace-login:__missing__";
+  },
+  message: {
+    success: false,
+    code: "WORKSPACE_RATE_LIMITED",
+    message: "Too many sign-in links requested for this email. Try again later.",
+  },
+});
+
+module.exports = {
+  apiLimiter,
+  webhookLimiter,
+  dcrLimiter,
+  oauthTokenLimiter,
+  workspaceAuthLimiter,
+  workspaceLoginEmailLimiter,
+};

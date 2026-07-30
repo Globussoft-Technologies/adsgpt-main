@@ -9,6 +9,7 @@ import getCookies from '@/utils/getCookies';
 import metaIcon from '@/assets/layouts/appsidebar/meta-icon.svg';
 import googleAdsIcon from '@/assets/layouts/google-ads-icon.png';
 import tiktokIcon from '@/assets/layouts/appsidebar/tiktok-icon.jpg';
+import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 
 const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
@@ -33,14 +34,16 @@ const PlatformPicker = ({
   // googleComingSoon = false,
   googleComingSoon = false,
   tiktokComingSoon = import.meta.env.VITE_TIKTOK_COMING_SOON !== 'true',
+  workspaceMode = 'manager',
 }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedPlatform = searchParams.get('connect');
   const requestedReturnTo = searchParams.get('returnTo');
-  const safeReturnTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
-    ? requestedReturnTo
-    : null;
+  const safeReturnTo =
+    requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
+      ? requestedReturnTo
+      : null;
   const [metaConnected, setMetaConnected] = useState(false);
   const [checkingMeta, setCheckingMeta] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -49,46 +52,53 @@ const PlatformPicker = ({
   const [checkingTiktok, setCheckingTiktok] = useState(true);
   const [hoveredCard, setHoveredCard] = useState(null);
   const { userData } = useSelector((state) => state.socket);
+  const canUsePlatform = (platform) =>
+    canUseWorkspaceFeature(`adsManager.${platform}.${workspaceMode}`);
+  const metaAllowed = canUsePlatform('meta');
+  const googleAllowed = canUsePlatform('google');
+  const tiktokAllowed = canUsePlatform('tiktok');
 
   useEffect(() => {
     const userId = userData?.user_id;
     if (!userId) return;
 
     // Meta connection check
-    (async () => {
-      try {
-        // Connection state is about connected Facebook identities, not
-        // whether one identity has already been selected or has visible ad
-        // accounts. Calling getAdAccounts() here incorrectly asks the
-        // multi-account backend for a selected facebookId and makes two
-        // valid connections look disconnected on the platform picker.
-        const res = await getFacebookAccounts(userId);
-        setMetaConnected(
-          (res?.accounts || []).some((account) => account.isUsable),
-        );
-      } catch {
-        setMetaConnected(false);
-      } finally {
-        setCheckingMeta(false);
-      }
-    })();
+    if (metaAllowed)
+      (async () => {
+        try {
+          // Connection state is about connected Facebook identities, not
+          // whether one identity has already been selected or has visible ad
+          // accounts. Calling getAdAccounts() here incorrectly asks the
+          // multi-account backend for a selected facebookId and makes two
+          // valid connections look disconnected on the platform picker.
+          const res = await getFacebookAccounts(userId);
+          setMetaConnected((res?.accounts || []).some((account) => account.isUsable));
+        } catch {
+          setMetaConnected(false);
+        } finally {
+          setCheckingMeta(false);
+        }
+      })();
+    else setCheckingMeta(false);
 
     // Google connection check
-    (async () => {
-      try {
-        const res = await axios.get(`${BASE_URL}/adsgpt/google-ads/check-account`, {
-          headers: { Authorization: `Bearer ${getCookies()}` },
-        });
-        setGoogleConnected(!!(res.data?.isConnected && res.data?.hasAccount));
-      } catch {
-        setGoogleConnected(false);
-      } finally {
-        setCheckingGoogle(false);
-      }
-    })();
+    if (googleAllowed)
+      (async () => {
+        try {
+          const res = await axios.get(`${BASE_URL}/adsgpt/google-ads/check-account`, {
+            headers: { Authorization: `Bearer ${getCookies()}` },
+          });
+          setGoogleConnected(!!(res.data?.isConnected && res.data?.hasAccount));
+        } catch {
+          setGoogleConnected(false);
+        } finally {
+          setCheckingGoogle(false);
+        }
+      })();
+    else setCheckingGoogle(false);
 
     // TikTok connection check (skip if the card is in "Coming Soon" mode)
-    if (!tiktokComingSoon) {
+    if (tiktokAllowed && !tiktokComingSoon) {
       (async () => {
         try {
           const res = await checkTiktokAccount();
@@ -102,7 +112,7 @@ const PlatformPicker = ({
     } else {
       setCheckingTiktok(false);
     }
-  }, [userData?.user_id]);
+  }, [googleAllowed, metaAllowed, tiktokAllowed, tiktokComingSoon, userData?.user_id]);
 
   useEffect(() => {
     if (requestedPlatform !== 'meta' || checkingMeta || !metaConnected || !safeReturnTo) return;
@@ -191,7 +201,7 @@ const PlatformPicker = ({
         </div>
       ),
     },
-  ];
+  ].filter((platform) => canUsePlatform(platform.id));
 
   return (
     <div className="relative mt-25 flex h-full w-full flex-col overflow-auto">

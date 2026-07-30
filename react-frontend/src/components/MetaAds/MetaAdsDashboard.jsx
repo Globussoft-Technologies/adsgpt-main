@@ -32,6 +32,7 @@ import CreateCampaignWizardV2 from './CreateCampaignWizardV2';
 import LeadsTab from './LeadsTab';
 import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
 import FacebookAccountSelector from './FacebookAccountSelector';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
 import Cookies from 'js-cookie';
@@ -358,7 +359,8 @@ export default function MetaAdsDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <WorkspaceSwitcher />
           <FacebookAccountSelector
             key={facebookSelectorKey}
             userId={userData?.user_id}

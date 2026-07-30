@@ -7,7 +7,9 @@ import {
   History,
   //  Image,
   Library,
+  LogOut,
   ScanSearch,
+  Users,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
@@ -42,10 +44,14 @@ import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { resetAdFactorNewSlice } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+import { IS_AI_ASSISTANT_ENABLED, IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 import {
-  IS_AI_ASSISTANT_ENABLED,
-  IS_LANDING_ANALYZER_ENABLED,
-} from '@/utils/featureFlags';
+  canUseWorkspaceFeature,
+  canUseMySpace,
+  clearWorkspaceToken,
+  isWorkspaceMember,
+  sessionPayload,
+} from '@/utils/workspaceSession';
 
 const navigationItems = [
   {
@@ -133,10 +139,26 @@ const AppSidebar = () => {
   const location = useLocation();
   const currentRoute = location.pathname;
   const isDarkMode = useSelector((state) => state.theme.isDarkMode);
-  
 
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
+  const workspacePayload = sessionPayload();
+  const memberSession = isWorkspaceMember(workspacePayload);
+  const profileDisplayName = memberSession
+    ? workspacePayload.actorUserName || workspacePayload.actorUserEmail || 'Workspace member'
+    : userData?.user_name || 'User';
+  const profileImage = memberSession ? '' : userData?.profileImage;
+  const navigationFeature = {
+    adfactory: 'adFactory',
+    ai: 'assistant',
+    adstudio: 'adStudio',
+    brandiq: 'brandIq',
+    'landing-analyzer': 'analyzer',
+    'meta-ads': 'adsManager',
+  };
+  const visibleNavigationItems = navigationItems.filter((item) =>
+    canUseWorkspaceFeature(navigationFeature[item.id], workspacePayload)
+  );
   const [compactLogo, setCompactLogo] = useState(true);
   const navigate = useNavigate();
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
@@ -227,7 +249,7 @@ const AppSidebar = () => {
                       navigate(`${currentRoute}`);
                     }}
                     key="expanded-logo"
-                    src={ isDarkMode? AdsGPTLogo : AdsGPTLightModeLogo}
+                    src={isDarkMode ? AdsGPTLogo : AdsGPTLightModeLogo}
                     initial={{ opacity: 0, scale: 0.9, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: -5 }}
@@ -285,7 +307,7 @@ const AppSidebar = () => {
               exit="exit"
               className="navigation_menu_container mx-auto w-fit space-y-3.5 2xl:space-y-5"
             >
-              {navigationItems.map((item, index) => {
+              {visibleNavigationItems.map((item, index) => {
                 const isMySpace =
                   currentRoute === '/adstudio' &&
                   activeAdStudioTabId === 'adVideoNew' &&
@@ -367,7 +389,7 @@ const AppSidebar = () => {
               {/* My Space Item */}
               {/* <motion.div
                 key="myspace"
-                custom={navigationItems.length}
+                custom={visibleNavigationItems.length}
                 variants={FRAMER_NAVIGATION_ITEM_VARIANTS}
                 initial="hidden"
                 animate="visible"
@@ -545,64 +567,125 @@ const AppSidebar = () => {
               <div className="h-9 w-9 2xl:h-12.5 2xl:w-12.5" />
             )}
           </div>
-          <motion.div
-            key="myspace"
-            custom={navigationItems.length}
-            variants={FRAMER_NAVIGATION_ITEM_VARIANTS}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
-            <ShadcnTooltip
-              label="Your personal collection of AI-generated videos. Everything you create appears right here."
-              side="right"
+          {!memberSession && (
+            <motion.div
+              className="mb-2"
+              variants={FRAMER_NAVIGATION_ITEM_VARIANTS}
+              initial="hidden"
+              animate="visible"
             >
-              <button
-                id="sidebar-my-space-button"
-                onClick={() => {
-                  dispatch(setActiveAdStudioTab('adVideoNew'));
-                  dispatch(setActivePage('myVideos'));
-                  navigate('/adstudio');
-                  setOpen(false);
-                  setOpenHistory(false);
-                  if (isMobile) {
-                    setOpenMobile(false);
-                  }
-                }}
-                className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl transition-all duration-200 ${
-                  currentRoute === '/adstudio' &&
-                  activeAdStudioTabId === 'adVideoNew' &&
-                  activePage === 'myVideos'
-                    ? 'text-zinc-900 dark:text-white'
-                    : 'text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
-                } ${isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'}`}
-              >
-                <div
-                  className={`relative flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
-                    currentRoute === '/adstudio' &&
-                    activeAdStudioTabId === 'adVideoNew' &&
-                    activePage === 'myVideos'
-                      ? 'mb-2 bg-gradient-to-r from-[#15DCFF] to-[#6b72f8]'
-                      : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
+              <ShadcnTooltip label="Manage workspace members" side="right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate('/workspace/members');
+                    setOpen(false);
+                    setOpenHistory(false);
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white ${
+                    isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'
                   }`}
                 >
-                  <Library className="w-4 2xl:w-5" />
-                  {savedCount > 0 && (
-                    <div className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-[8px] font-bold text-black shadow-lg 2xl:h-5 2xl:w-5 2xl:text-[10px]">
-                      <div className="absolute inset-0 animate-spin rounded-full border border-white/30 border-t-white"></div>
-                      <span className="relative z-10">{savedCount}</span>
-                    </div>
-                  )}
-                </div>
-                <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
-                  My Space
-                </span>
-              </button>
-            </ShadcnTooltip>
-          </motion.div>
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
+                      currentRoute === '/workspace/members'
+                        ? 'bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-white'
+                        : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
+                    }`}
+                  >
+                    <Users className="w-4 2xl:w-5" />
+                  </div>
+                  <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
+                    Workspace
+                  </span>
+                </button>
+              </ShadcnTooltip>
+            </motion.div>
+          )}
+          {memberSession && (
+            <motion.div
+              className="mb-2"
+              variants={FRAMER_NAVIGATION_ITEM_VARIANTS}
+              initial="hidden"
+              animate="visible"
+            >
+              <ShadcnTooltip label="Sign out of workspace access" side="right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearWorkspaceToken();
+                    window.location.assign('/workspace-login');
+                  }}
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl text-zinc-700 hover:text-red-500 dark:text-[#AFAFAF] dark:hover:text-red-400 ${
+                    isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'
+                  }`}
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-red-500/10 2xl:h-10 2xl:w-10">
+                    <LogOut className="w-4 2xl:w-5" />
+                  </div>
+                  <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
+                    Sign out
+                  </span>
+                </button>
+              </ShadcnTooltip>
+            </motion.div>
+          )}
+          {canUseMySpace(workspacePayload) && (
+            <motion.div
+              key="myspace"
+              custom={visibleNavigationItems.length}
+              variants={FRAMER_NAVIGATION_ITEM_VARIANTS}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <ShadcnTooltip
+                label="Your personal collection of AI-generated videos. Everything you create appears right here."
+                side="right"
+              >
+                <button
+                  id="sidebar-my-space-button"
+                  onClick={() => {
+                    dispatch(setActivePage('myVideos'));
+                    navigate('/my-space');
+                    setOpen(false);
+                    setOpenHistory(false);
+                    if (isMobile) {
+                      setOpenMobile(false);
+                    }
+                  }}
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl transition-all duration-200 ${
+                    currentRoute === '/my-space'
+                      ? 'text-zinc-900 dark:text-white'
+                      : 'text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
+                  } ${isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'}`}
+                >
+                  <div
+                    className={`relative flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
+                      currentRoute === '/my-space'
+                        ? 'mb-2 bg-gradient-to-r from-[#15DCFF] to-[#6b72f8]'
+                        : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
+                    }`}
+                  >
+                    <Library className="w-4 2xl:w-5" />
+                    {savedCount > 0 && (
+                      <div className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-[8px] font-bold text-black shadow-lg 2xl:h-5 2xl:w-5 2xl:text-[10px]">
+                        <div className="absolute inset-0 animate-spin rounded-full border border-white/30 border-t-white"></div>
+                        <span className="relative z-10">{savedCount}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
+                    My Space
+                  </span>
+                </button>
+              </ShadcnTooltip>
+            </motion.div>
+          )}
           {/* SLOT 3 — BOTTOM SLOT (User Profile ALWAYS) */}
           <div
-            className={`${isSidebarOpen || openHistory ? 'mt-1 w-full py-1' : 'mt-4 h-9 w-9 2xl:mt-5 2xl:h-12.5 2xl:w-12.5'} `}
+            className={`${memberSession && !canUseWorkspaceFeature('profile', workspacePayload) ? 'hidden' : ''} ${isSidebarOpen || openHistory ? 'mt-1 w-full py-1' : 'mt-4 h-9 w-9 2xl:mt-5 2xl:h-12.5 2xl:w-12.5'} `}
           >
             <Link
               onClick={() => {
@@ -627,15 +710,18 @@ const AppSidebar = () => {
                   <button
                     className={`border_white_gradient_2px relative inline-flex h-9 w-9 items-center justify-center rounded-full p-1 hover:bg-gray-300 2xl:h-12.5 2xl:w-12.5 dark:hover:bg-gray-800/50`}
                   >
-                    {userData?.profileImage ? (
+                    {profileImage ? (
                       <img
-                        src={userData.profileImage}
+                        src={profileImage}
                         alt="User Avatar"
                         className="h-[30px] w-[30px] rounded-full object-cover"
                       />
                     ) : (
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F0F0F] text-[10px] font-bold text-white 2xl:text-sm">
                         {(() => {
+                          if (memberSession) {
+                            return profileDisplayName.slice(0, 2).toUpperCase();
+                          }
                           const firstName = userData?.name_f || '';
                           const lastName = userData?.name_l || '';
                           const userName = userData?.user_name || 'U';
@@ -658,7 +744,7 @@ const AppSidebar = () => {
                   </button>
                   {isSidebarOpen && !isMobile && (
                     <span className="ml-1 truncate text-[10px] whitespace-nowrap 2xl:text-sm">
-                      {userData?.user_name}
+                      {profileDisplayName}
                     </span>
                   )}
                 </>

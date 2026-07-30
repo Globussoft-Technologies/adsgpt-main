@@ -17,7 +17,11 @@
 const assert = require('node:assert/strict');
 const { _internals } = require('../../services/metaAuditService');
 
-const { buildNormalisers, getActionValue } = _internals;
+const {
+  buildNormalisers,
+  getActionValue,
+  resolveInsightTimeOptions,
+} = _internals;
 
 let pass = 0;
 let fail = 0;
@@ -113,6 +117,20 @@ function makeNormalisers({
 // ─── tests ──────────────────────────────────────────────────────────────────
 
 (async () => {
+  await group('resolveInsightTimeOptions — lifetime preset', () => {
+    test('maximum maps to Meta lifetime and has no previous window', () => {
+      const result = resolveInsightTimeOptions({
+        lookbackDays: 14,
+        prevLookbackDays: 14,
+        lookbackPreset: 'maximum',
+      });
+
+      assert.deepEqual(result.current, { date_preset: 'maximum' });
+      assert.equal(result.previous, null);
+      assert.equal(result.isMaximumLookback, true);
+    });
+  });
+
   await group('getActionValue — install action_type sums', () => {
     test('mobile_app_install returns its numeric value', () => {
       assert.equal(

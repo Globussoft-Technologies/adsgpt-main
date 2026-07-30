@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 
 const MODE_ROUTES = {
   manager: '/meta-ads',
@@ -20,10 +21,15 @@ export default function AdsManagerModeSwitcher({
   appearance = 'segmented',
 }) {
   const navigate = useNavigate();
+  const platformId = platform.toLowerCase();
+  const managerAvailable = canUseWorkspaceFeature(`adsManager.${platformId}.manager`);
+  const workspaceAutopilotAvailable = canUseWorkspaceFeature(`adsManager.${platformId}.autopilot`);
+  const canOpenAutopilot = autopilotAvailable && workspaceAutopilotAvailable;
 
   const selectMode = (mode) => {
     if (mode === activeMode) return;
-    if (mode === 'autopilot' && !autopilotAvailable) return;
+    if (mode === 'manager' && !managerAvailable) return;
+    if (mode === 'autopilot' && !canOpenAutopilot) return;
     navigate(MODE_ROUTES[mode]);
   };
 
@@ -33,9 +39,9 @@ export default function AdsManagerModeSwitcher({
 
   if (appearance === 'tabs') {
     const tabs = [
-      { id: 'manager', label: 'Ads Manager', available: true },
-      { id: 'autopilot', label: 'Autopilot', available: autopilotAvailable },
-    ];
+      { id: 'manager', label: 'Ads Manager', available: managerAvailable },
+      { id: 'autopilot', label: 'Autopilot', available: canOpenAutopilot },
+    ].filter((tab) => tab.available || activeMode === tab.id);
 
     return (
       <div
@@ -80,43 +86,47 @@ export default function AdsManagerModeSwitcher({
       aria-label={`${platform} ads workspace`}
       className="inline-flex items-center rounded-xl border border-gray-200 bg-gray-100/80 p-1 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={managerActive}
-        onClick={() => selectMode('manager')}
-        className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 2xl:px-3.5 2xl:text-sm ${
-          managerActive
-            ? 'bg-white text-gray-900 shadow-sm dark:bg-white/12 dark:text-white'
-            : 'text-gray-500 hover:text-gray-900 dark:text-white/55 dark:hover:text-white'
-        }`}
-      >
-        Ads Manager
-      </button>
+      {managerAvailable && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={managerActive}
+          onClick={() => selectMode('manager')}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 2xl:px-3.5 2xl:text-sm ${
+            managerActive
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-white/12 dark:text-white'
+              : 'text-gray-500 hover:text-gray-900 dark:text-white/55 dark:hover:text-white'
+          }`}
+        >
+          Ads Manager
+        </button>
+      )}
 
-      <button
-        type="button"
-        role="tab"
-        aria-selected={autopilotActive}
-        aria-disabled={!autopilotAvailable}
-        title={!autopilotAvailable ? comingSoonLabel : undefined}
-        onClick={() => selectMode('autopilot')}
-        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 2xl:px-3.5 2xl:text-sm ${
-          autopilotActive
-            ? 'bg-white text-gray-900 shadow-sm dark:bg-white/12 dark:text-white'
-            : autopilotAvailable
-              ? 'text-gray-500 hover:text-gray-900 dark:text-white/55 dark:hover:text-white'
-              : 'cursor-not-allowed text-gray-400 dark:text-white/30'
-        }`}
-      >
-        {!autopilotAvailable && <Lock className="h-3 w-3" aria-hidden="true" />}
-        <span>Autopilot</span>
-        {!autopilotAvailable && (
-          <span className="hidden rounded-full bg-gradient-to-r from-[#20CFF5] to-[#7567F8] px-2 py-0.5 text-[8px] leading-none font-bold tracking-[0.08em] text-white uppercase shadow-sm sm:inline 2xl:text-[9px]">
-            soon
-          </span>
-        )}
-      </button>
+      {(canOpenAutopilot || autopilotActive) && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={autopilotActive}
+          aria-disabled={!canOpenAutopilot}
+          title={!canOpenAutopilot ? comingSoonLabel : undefined}
+          onClick={() => selectMode('autopilot')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 2xl:px-3.5 2xl:text-sm ${
+            autopilotActive
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-white/12 dark:text-white'
+              : canOpenAutopilot
+                ? 'text-gray-500 hover:text-gray-900 dark:text-white/55 dark:hover:text-white'
+                : 'cursor-not-allowed text-gray-400 dark:text-white/30'
+          }`}
+        >
+          {!canOpenAutopilot && <Lock className="h-3 w-3" aria-hidden="true" />}
+          <span>Autopilot</span>
+          {!canOpenAutopilot && (
+            <span className="hidden rounded-full bg-gradient-to-r from-[#20CFF5] to-[#7567F8] px-2 py-0.5 text-[8px] leading-none font-bold tracking-[0.08em] text-white uppercase shadow-sm sm:inline 2xl:text-[9px]">
+              soon
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }

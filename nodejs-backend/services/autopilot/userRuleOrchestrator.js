@@ -100,10 +100,11 @@ async function releaseLock(runId) {
 // ─── pure helpers (exported for tests) ─────────────────────────────────────
 
 /**
- * Resolve a rule's effective lookback window in days. Two cases:
+ * Resolve a rule's effective lookback window:
  *   - `lookbackPreset: 'this_month'` → days since the 1st of the current
  *     month (1 on the 1st, 26 on the 26th, …). Recomputed every cron tick
  *     so the window walks the calendar correctly.
+ *   - `lookbackPreset: 'maximum'` → the Meta lifetime-fetch token.
  *   - otherwise → the rule's numeric `lookbackDays` (default 14 if absent).
  *
  * Pure-ish: depends on `new Date()` so a test must mock `now` to assert
@@ -111,6 +112,9 @@ async function releaseLock(runId) {
  * a FETCH-time concern, not a per-condition concern.
  */
 function resolveEffectiveLookback(rule, now = new Date()) {
+  if (rule && rule.lookbackPreset === "maximum") {
+    return "maximum";
+  }
   if (rule && rule.lookbackPreset === "this_month") {
     return Math.max(1, now.getDate()); // 1..31
   }
@@ -693,7 +697,10 @@ async function runUserRuleCycle({
           });
           const finalDryRun = gated.dryRun;
 
-          for (const [lookbackDays, rulesAtLookback] of byLookback.entries()) {
+          for (const [
+            effectiveLookback,
+            rulesAtLookback,
+          ] of byLookback.entries()) {
             // Scope the Meta fetch to ONLY the campaigns these rules are
             // attached to (for this account). Without this, runAuditForAccount
             // pulls the whole account's insights — which trips Meta's
@@ -724,8 +731,12 @@ async function runUserRuleCycle({
               options: {
                 enforceAgeGuard: false,
                 enforceSpendFloor: false,
-                lookbackDays,
-                prevLookbackDays: lookbackDays,
+                ...(effectiveLookback === "maximum"
+                  ? { lookbackPreset: "maximum" }
+                  : {
+                      lookbackDays: effectiveLookback,
+                      prevLookbackDays: effectiveLookback,
+                    }),
                 campaignIds,
               },
             });

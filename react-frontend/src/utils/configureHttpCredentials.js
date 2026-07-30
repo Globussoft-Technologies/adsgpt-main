@@ -1,4 +1,5 @@
 import getCookies from '@/utils/getCookies';
+import { applyRefreshedWorkspaceToken } from '@/utils/workspaceSession';
 
 let configured = false;
 
@@ -36,6 +37,11 @@ export function configureHttpCredentials(axios) {
   }
 
   const nativeFetch = window.fetch.bind(window);
+  const captureWorkspaceToken = (response) => {
+    const token = response?.headers?.get?.('x-workspace-token');
+    if (token) applyRefreshedWorkspaceToken(token);
+    return response;
+  };
   window.fetch = (input, init = {}) => {
     try {
       const rawUrl = typeof input === 'string' || input instanceof URL ? input : input?.url;
@@ -50,7 +56,11 @@ export function configureHttpCredentials(axios) {
           target.origin === backendOrigin && init.credentials === undefined
             ? 'include'
             : init.credentials;
-        return nativeFetch(input, { ...init, headers, ...(credentials ? { credentials } : {}) });
+        return nativeFetch(input, {
+          ...init,
+          headers,
+          ...(credentials ? { credentials } : {}),
+        }).then(captureWorkspaceToken);
       }
     } catch {
       // Preserve native fetch behavior for malformed/non-standard inputs.

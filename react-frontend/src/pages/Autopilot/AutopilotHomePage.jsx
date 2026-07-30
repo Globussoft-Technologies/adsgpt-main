@@ -13,6 +13,7 @@ const AutopilotHomePage = () => (
     title="Put your ads on Autopilot"
     subtitle="Pick the platform you want Autopilot to manage"
     googleComingSoon
+    workspaceMode="autopilot"
   />
 );
 

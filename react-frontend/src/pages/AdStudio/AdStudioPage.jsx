@@ -18,6 +18,7 @@ import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 import { addImage } from '@/store/reducers/adStudio/promptSlice';
 import { formatUrl } from '@/utils/formatUrl';
+import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 import { nanoid } from 'nanoid';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -30,6 +31,33 @@ const AdStudioPage = () => {
   );
   const userData = useSelector((state) => state.socket.userData);
   const { conversations } = useSelector((state) => state.adVideo);
+  const tabFeatures = useMemo(
+    () => ({
+      adCopy: 'adStudio.adCopy',
+      adCreative: 'adStudio.adCreative',
+      adCreativeNew: 'adStudio.adCreative',
+      adVideo: 'adStudio.adVideo',
+      adVideoNew: 'adStudio.adVideo',
+      adLibrary: 'adStudio.adLibrary',
+    }),
+    []
+  );
+  const allowedTabs = useMemo(
+    () =>
+      ['adCopy', 'adCreativeNew', 'adVideoNew', 'adLibrary'].filter((tabId) =>
+        canUseWorkspaceFeature(tabFeatures[tabId])
+      ),
+    [tabFeatures]
+  );
+  const effectiveTabId = canUseWorkspaceFeature(tabFeatures[activeAdStudioTabId])
+    ? activeAdStudioTabId
+    : allowedTabs[0];
+
+  useEffect(() => {
+    if (effectiveTabId && effectiveTabId !== activeAdStudioTabId) {
+      dispatch(setActiveAdStudioTab(effectiveTabId));
+    }
+  }, [activeAdStudioTabId, dispatch, effectiveTabId]);
 
   // Fetch brands on load
   useEffect(() => {
@@ -95,7 +123,9 @@ const AdStudioPage = () => {
       const activeIndex = urlParams.get('activeIndex') || 0;
 
       if (id && network && id !== storedPayloadId) {
-        dispatch(setActiveAdStudioTab('adCreative'));
+        if (canUseWorkspaceFeature('adStudio.adCreative')) {
+          dispatch(setActiveAdStudioTab('adCreativeNew'));
+        }
 
         // Api call and request logic here
         try {
@@ -115,14 +145,14 @@ const AdStudioPage = () => {
   return (
     <>
       <div className="flex">
-        {activeAdStudioTabId === 'adCopy' && (
+        {effectiveTabId === 'adCopy' && (
           <div className="adcopy_container max-h-[calc(100svh-240px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-260px)]">
             <AdCopyHome />
             <AdPromptComponent />
           </div>
         )}
 
-        {activeAdStudioTabId === 'adCreative' && (
+        {effectiveTabId === 'adCreative' && (
           <div className="adcopy_container w-full">
             <div className="max-h-[calc(100svh-73px)] w-full overflow-y-auto lg:max-h-[calc(100svh-73px)] 2xl:max-h-[calc(100svh-112px)]">
               <AdCreativesHome />
@@ -131,21 +161,21 @@ const AdStudioPage = () => {
           </div>
         )}
 
-        {activeAdStudioTabId === 'adVideo' && (
+        {effectiveTabId === 'adVideo' && (
           <div className="adcopy_container max-h-[calc(100svh-200px)] w-full">
             <AdVideoHome />
             {Array.isArray(conversations) && conversations?.length === 0 && <AdPromptComponent />}
           </div>
         )}
 
-        {activeAdStudioTabId === 'adVideoNew' && (
+        {effectiveTabId === 'adVideoNew' && (
           <div className="adcopy_container max-h-[calc(100svh-200px)] w-full">
             <AdVideoLayout />
             {/* {Array.isArray(conversations) && conversations?.length === 0 && <AdPromptComponent />} */}
           </div>
         )}
 
-        {activeAdStudioTabId === 'adCreativeNew' && (
+        {effectiveTabId === 'adCreativeNew' && (
           <div
             className={`adcopy_container w-full ${
               adCreativeNewActivePage === 'home' ? 'max-h-[calc(100svh-200px)]' : ''
@@ -155,7 +185,7 @@ const AdStudioPage = () => {
           </div>
         )}
 
-        {activeAdStudioTabId === 'adLibrary' && (
+        {effectiveTabId === 'adLibrary' && (
           <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-112px)]">
             <AdLibraryPage />
           </div>
