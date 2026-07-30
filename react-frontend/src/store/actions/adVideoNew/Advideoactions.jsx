@@ -14,6 +14,7 @@ import {
   setAiAdsAnalysisLoading,
   setAiAdsAnalysisError,
   setAiAdsSceneData,
+  setAiAdsSceneError,
   setAiAdsSceneLoading,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { uploadToS3 } from '@/utils/imageUpload';
@@ -742,13 +743,23 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
 
 export const getAiAdsSceneAction = (_id) => async (dispatch) => {
   try {
+    dispatch(setAiAdsSceneError(null));
     dispatch(setAiAdsSceneLoading(true));
     const response = await axios.get(
       `${BACKEND_HOST}/adsgpt/video/${_id}`,
       { headers: { Authorization: `Bearer ${getCookies()}` } }
     );
     const data = response.data?.data || response.data;
+    const failedBeforeScenes =
+      data?.status === 'failed' &&
+      (!Array.isArray(data?.scenes) || data.scenes.length === 0);
+    const persistedSceneError =
+      data?.sceneError ||
+      (failedBeforeScenes
+        ? 'Scene generation failed. Please try again.'
+        : null);
     dispatch(setAiAdsSceneData(data));
+    dispatch(setAiAdsSceneError(persistedSceneError));
     // This is a fetch, not a generation — turn off loading immediately
     dispatch(setAiAdsSceneLoading(false));
   } catch (error) {
