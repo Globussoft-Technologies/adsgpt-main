@@ -11,6 +11,7 @@ const {
   DeleteAccount,
   AcceptMobileTerms,
   ForgotPassword,
+  getMobileFreeTrial,
   getMobilePlans,
   verifyApplePayment,
   verifyGooglePayment,
@@ -32,6 +33,7 @@ router.post("/delete-account", authenticateJWT, DeleteAccount);
 router.post("/accept-terms", authenticateJWT, AcceptMobileTerms);
 
 // Plans Config Endpoint (JWT required — shown after signup)
+router.get("/free-trial", authenticateJWT, getMobileFreeTrial);
 router.get("/plans", authenticateJWT, getMobilePlans);
 
 // Payment Verification Endpoints

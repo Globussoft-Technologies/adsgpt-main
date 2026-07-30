@@ -1901,6 +1901,134 @@ const AcceptMobileTerms = async (req, res) => {
   }
 };
 
+async function getMobileFreeTrial(req, res) {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'Get Free Trial details and user eligibility'
+    #swagger.description = 'Requires a valid Bearer token, returns the direct aMember Free Trial product, and checks whether the authenticated user already used the trial.'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const products = await getAmemberProducts();
+    const freeTrialProduct = products
+      .filter((product) => {
+        if (!product || product.is_disabled === "1" || product.is_archived === "1") {
+          return false;
+        }
+        const titleWords = String(product.title || "")
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter(Boolean);
+        return titleWords.includes("free");
+      })
+      .sort((left, right) =>
+        Number.parseInt(left.product_id, 10) - Number.parseInt(right.product_id, 10),
+      )[0] || null;
+
+    if (!freeTrialProduct) {
+      return res.status(503).json({
+        ok: false,
+        code: "FREE_TRIAL_UNAVAILABLE",
+        error: "The Free Trial is currently unavailable.",
+      });
+    }
+
+    const freeTrial = {
+      amemberProductId: Number.parseInt(freeTrialProduct.product_id, 10),
+      title: freeTrialProduct.title,
+      credit: getConfiguredProductCredit(freeTrialProduct),
+    };
+
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id || req.user?.id;
+    if (!rawUserId) {
+      return res.status(401).json({
+        ok: false,
+        code: "AUTH_USER_REQUIRED",
+        error: "A valid authentication token is required.",
+      });
+    }
+
+    const amemberUserId = String(rawUserId).replace(/^(GPT|PAS)-/, "");
+    const userResponse = await axios.get(`${baseUrl}/users`, {
+      params: { _key: apiKey, "_filter[user_id]": amemberUserId },
+    });
+    const userRecords = Array.isArray(userResponse.data)
+      ? userResponse.data
+      : Object.values(userResponse.data || {});
+    const amemberUser = userRecords.find(
+      (user) => user && String(user.user_id) === amemberUserId,
+    );
+    if (!amemberUser) {
+      return res.status(404).json({
+        ok: false,
+        code: "USER_NOT_FOUND",
+        error: "The authenticated aMember account was not found.",
+      });
+    }
+
+    const invoices = [];
+    const invoicePageSize = 100;
+    let invoicePage = 0;
+    let pageInvoices = [];
+    do {
+      const invoiceResponse = await axios.get(`${baseUrl}/invoices`, {
+        params: {
+          _key: apiKey,
+          "_filter[user_id]": amemberUserId,
+          "_nested[]": "invoice-items",
+          _count: invoicePageSize,
+          _page: invoicePage,
+        },
+      });
+      const invoiceRecords = Array.isArray(invoiceResponse.data)
+        ? invoiceResponse.data
+        : Object.values(invoiceResponse.data || {});
+      pageInvoices = invoiceRecords.filter(
+        (invoice) => invoice && typeof invoice === "object" && invoice.invoice_id,
+      );
+      invoices.push(...pageInvoices);
+      invoicePage += 1;
+    } while (pageInvoices.length === invoicePageSize);
+    const trialIds = new Set(
+      [freeTrialProduct.product_id, freeTrialProduct.default_billing_plan_id]
+        .filter((value) => value !== undefined && value !== null && String(value) !== "")
+        .map(String),
+    );
+    const hasUsedFreeTrial = invoices.some((invoice) => {
+      const nestedItems = invoice?.nested?.["invoice-items"] || [];
+      const items = Array.isArray(nestedItems)
+        ? nestedItems
+        : Object.values(nestedItems || {});
+      return items.some((item) =>
+        [item?.item_id, item?.product_id, item?.billing_plan_id]
+          .filter((value) => value !== undefined && value !== null)
+          .map(String)
+          .some((value) => trialIds.has(value)),
+      );
+    });
+
+    return res.status(200).json({
+      ok: true,
+      freeTrial,
+      eligibility: {
+        checked: true,
+        eligible: !hasUsedFreeTrial,
+        hasUsedFreeTrial,
+        message: hasUsedFreeTrial
+          ? "You have already used the Free Trial."
+          : "You are eligible for the Free Trial.",
+      },
+    });
+  } catch (error) {
+    console.error("[getMobileFreeTrial] error:", error.response?.data || error.message);
+    return res.status(502).json({
+      ok: false,
+      code: "AMEMBER_ERROR",
+      error: "Failed to fetch or verify the Free Trial from aMember.",
+    });
+  }
+}
+
 async function getMobilePlans(req, res) {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
@@ -2103,6 +2231,7 @@ module.exports = {
   DeleteAccount,
   AcceptMobileTerms,
   ForgotPassword,
+  getMobileFreeTrial,
   getMobilePlans,
   getAmemberProducts,
   postAmemberInvoice,
