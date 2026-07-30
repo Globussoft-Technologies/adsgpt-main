@@ -771,6 +771,35 @@ exports.getAllVideos = async (req, res) => {
     const filter = {
       userId: req.user.user_id,
       status: { $ne: "copy" },
+      $nor: [
+        {
+          "inputs.type": "ai_ads",
+          status: { $in: ["pending", "failed"] },
+          $or: [
+            { "scenes.0": { $exists: false } },
+            {
+              $expr: {
+                $ne: [
+                  { $size: { $ifNull: ["$scenes", []] } },
+                  { $ifNull: ["$totalSegments", 0] },
+                ],
+              },
+            },
+            {
+              scenes: {
+                $elemMatch: {
+                  $or: [
+                    { frameImageUrl: { $exists: false } },
+                    { frameImageUrl: null },
+                    { frameImageUrl: "" },
+                    { imageFailed: true },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
     };
 
     if (type) filter["inputs.type"] = type;
@@ -2659,7 +2688,17 @@ exports.updateAiAdsVideoResult = async (req, res) => {
         : (error || "Video generation failed");
 
       await VideoGeneration.findByIdAndUpdate(sessionId, {
-        status: "failed",
+        $set: { status: "failed" },
+        $push: {
+          results: {
+            url: null,
+            waterMarkUrl: null,
+            model: model || null,
+            duration: String(durationInSeconds || ""),
+            videoStatus: Number(videoStatus) || 500,
+            error: failureMessage,
+          },
+        },
       });
       if (global.io) {
         global.io.to(record.userId).emit("aiAdsVideoFailed", {

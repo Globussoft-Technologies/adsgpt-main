@@ -22,6 +22,24 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const displayedVideos = useMemo(() => {
     return allVideos.filter((v) => {
+      const hasReadyAiAdsScenes =
+        Array.isArray(v.scenes) &&
+        v.scenes.length > 0 &&
+        Number(v.totalSegments) > 0 &&
+        v.scenes.length === Number(v.totalSegments) &&
+        v.scenes.every(
+          (scene) =>
+            Boolean(scene.frameImageUrl) &&
+            !scene.imageFailed,
+        );
+
+      if (
+        v.inputs?.type === 'ai_ads' &&
+        (v.status === 'pending' || v.status === 'failed') &&
+        !hasReadyAiAdsScenes
+      ) {
+        return false;
+      }
       if (v.status === 'pending' && v.inputs?.type === 'avatar') {
         return (
           v.generatedImage &&

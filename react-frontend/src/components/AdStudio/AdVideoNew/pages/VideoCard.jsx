@@ -88,7 +88,7 @@ export default function VideoCard({
   const errorMessage =
     isAiAds && item?.sceneError
       ? item.sceneError
-      : (isCloneModel || isSeedanceModel) && rawError
+      : (isAiAds || isCloneModel || isSeedanceModel) && rawError
       ? rawError
       : videoStatus === 529
         ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
