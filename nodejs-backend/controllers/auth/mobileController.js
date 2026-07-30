@@ -116,6 +116,20 @@ async function createAmemberUser({ login, email, password, firstName, lastName }
   throw new Error("Failed to parse created aMember user response.");
 }
 
+async function updateAmemberPassword(amemberUserId, newPassword) {
+  if (!amemberUserId || !newPassword) return;
+  try {
+    const url = `${baseUrl}/users/${amemberUserId}?_key=${apiKey}`;
+    const params = new URLSearchParams();
+    params.append("pass", newPassword);
+    await axios.put(url, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (e) {
+    console.error("[updateAmemberPassword] error updating password in aMember:", e.message);
+  }
+}
+
 async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
   const conditions = [];
   if (firebaseUid) conditions.push({ firebase_uid: firebaseUid });
@@ -155,7 +169,9 @@ async function getAmemberProducts() {
       let prods = res.data;
       if (prods && typeof prods === "object" && !Array.isArray(prods)) prods = Object.values(prods);
       if (Array.isArray(prods)) {
-        amemberProductsCache = prods;
+        amemberProductsCache = prods.filter(
+          (p) => p && typeof p === "object" && p.product_id
+        );
         amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
       }
     } catch (e) {
@@ -165,16 +181,67 @@ async function getAmemberProducts() {
   return amemberProductsCache || [];
 }
 
+// Dynamic store product ID resolution directly from aMember product records
+function getStoreProductId(product, platform) {
+  if (!product) return "";
+  const isIos = platform === "ios";
+  const customId = isIos
+    ? product.apple_product_id || product.apple_id || product.ios_product_id || product.store_product_id
+    : product.google_product_id || product.google_id || product.android_product_id || product.store_product_id;
+
+  if (customId && String(customId).trim() !== "") {
+    return String(customId).trim();
+  }
+
+  // Canonical App Store / Google Play Store product ID format
+  const title = (product.title || "").toLowerCase().trim();
+  let slug = title.replace(/[^a-z0-9]+/g, ".").replace(/^\.|\.$/g, "");
+  if (slug === "free") slug = "starter";
+  if (!slug) slug = `plan.${product.product_id}`;
+
+  const isAnnual = title.includes("annual") || title.includes("year");
+
+  if (isAnnual) {
+    if (slug.includes("annual")) {
+      return `io.adsgpt.app.subscription.${slug}`;
+    }
+    return `io.adsgpt.app.subscription.annual.${slug}`;
+  }
+
+  if (slug.endsWith(".monthly") || slug.endsWith("monthly")) {
+    return `io.adsgpt.app.subscription.${slug}`;
+  }
+
+  return `io.adsgpt.app.subscription.${slug}.monthly`;
+}
+
 async function matchAmemberProduct(storeProductId) {
   const prods = await getAmemberProducts();
   const targetId = String(storeProductId || "").trim();
 
   const matched = prods.find((p) => {
     if (!p) return false;
-    const appleId = String(p.apple_product_id || "").trim();
-    const googleId = String(p.google_product_id || "").trim();
+    const appleId = getStoreProductId(p, "ios");
+    const googleId = getStoreProductId(p, "android");
+    const storeId = String(p.store_product_id || "").trim();
     const productId = String(p.product_id || "").trim();
-    return appleId === targetId || googleId === targetId || productId === targetId;
+
+    if (
+      appleId === targetId ||
+      googleId === targetId ||
+      storeId === targetId ||
+      productId === targetId
+    ) {
+      return true;
+    }
+
+    if (
+      targetId.endsWith(`_${productId}`) ||
+      targetId.endsWith(`.${productId}`)
+    ) {
+      return true;
+    }
+    return false;
   });
 
   if (!matched) {
@@ -336,6 +403,11 @@ const MobileSignup = async (req, res) => {
       const active = userData?.ok ? isPlanActive(userData) : false;
 
       if (!active) {
+        // Sync the updated password to aMember so user can log in with the new password typed during re-signup
+        if (password && amemberUserId) {
+          await updateAmemberPassword(amemberUserId, password);
+        }
+
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
         const tokenPayload = {
           status: true,
@@ -1822,6 +1894,13 @@ const getMobilePlans = async (req, res) => {
     #swagger.summary = 'Get mobile subscription plans'
     #swagger.description = 'Confirms the authenticated MongoDB and aMember identity, then returns direct aMember products matched by Apple / Google Store Product IDs for the native paywall.'
     #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.parameters['platform'] = {
+      in: 'query',
+      description: 'Target mobile platform',
+      required: false,
+      type: 'string',
+      enum: ['ios', 'android']
+    }
   */
   try {
     const rawUserId = req.user?.user_id || req.user?.amember_user_id;
@@ -1857,28 +1936,45 @@ const getMobilePlans = async (req, res) => {
       });
     }
 
-    const platform = (req.query.platform || "ios").toLowerCase();
-    if (platform !== "ios" && platform !== "android") {
+    let reqPlatform = req.query.platform ? String(req.query.platform).toLowerCase() : null;
+    if (reqPlatform === "google") reqPlatform = "android";
+    if (reqPlatform && reqPlatform !== "ios" && reqPlatform !== "android") {
       return res.status(400).json({
         ok: false,
         code: "INVALID_PLATFORM",
-        error: `Unsupported platform: ${platform}. Use 'ios' or 'android'.`,
+        error: `Unsupported platform: ${req.query.platform}. Use 'ios' or 'android'.`,
       });
     }
 
     const prods = await getAmemberProducts();
-    const productField = platform === "ios" ? "apple_product_id" : "google_product_id";
+    const productField = reqPlatform === "android" ? "google_product_id" : "apple_product_id";
 
     // Direct aMember product export — filter products that have a store product ID set for target platform
-    const dynamicProds = prods.filter(
-      (p) => p && p[productField] && String(p[productField]).trim() !== ""
+    let dynamicProds = prods.filter(
+      (p) =>
+        p &&
+        ((p[productField] && String(p[productField]).trim() !== "") ||
+          (p.store_product_id && String(p.store_product_id).trim() !== "") ||
+          (p.apple_product_id && String(p.apple_product_id).trim() !== "") ||
+          (p.google_product_id && String(p.google_product_id).trim() !== ""))
     );
+
+    // Fallback: If no products have store-specific product IDs explicitly set in aMember,
+    // export all active, non-archived products from aMember using product_id (or fallback store ID).
+    if (dynamicProds.length === 0 && prods.length > 0) {
+      dynamicProds = prods.filter(
+        (p) => p && p.is_disabled !== "1" && p.is_archived !== "1"
+      );
+    }
 
     let plans = [];
     if (dynamicProds.length > 0) {
       plans = dynamicProds.map((p) => {
-        const storeProductId = String(p[productField]).trim();
         const amemberProductId = parseInt(p.product_id, 10);
+        const appleProductId = getStoreProductId(p, "ios");
+        const googleProductId = getStoreProductId(p, "android");
+
+        const storeProductId = reqPlatform === "android" ? googleProductId : appleProductId;
         const storeProductIdLower = storeProductId.toLowerCase();
         const titleLower = (p.title || "").toLowerCase();
         const isAnnual =
@@ -1887,17 +1983,21 @@ const getMobilePlans = async (req, res) => {
           titleLower.includes("annual") ||
           titleLower.includes("year");
 
-        return {
+        const planObj = {
           productId: storeProductId,
           amemberProductId,
+          ...(reqPlatform === "ios"
+            ? { appleProductId }
+            : reqPlatform === "android"
+              ? { googleProductId }
+              : { appleProductId, googleProductId }),
           tier: p.title || "Subscription",
           fallbackTitle: p.title || "Subscription Plan",
           badge: isAnnual ? "Best Value" : null,
-          platform,
-          // Direct dynamic credit export raw from aMember REST API product record
+          ...(reqPlatform ? { platform: reqPlatform } : {}),
           credit: p.credit || p.credits || p.credits_quota || null,
-          amemberProduct: p,
         };
+        return planObj;
       });
     }
 
@@ -1981,7 +2081,11 @@ const ForgotPassword = async (req, res) => {
     // 2. User exists — trigger aMember send-pass API
     const targetLogin = existingUser.login || existingUser.email || cleanInput;
     const url = `${baseUrl}/check-access/send-pass?_key=${apiKey}&login=${encodeURIComponent(targetLogin)}`;
-    await axios.get(url);
+    const amemberResponse = await axios.get(url);
+    console.log('[ForgotPassword] aMember send-pass response:', {
+      status: amemberResponse.status,
+      data: amemberResponse.data,
+    });
 
     return res.status(200).json({
       ok: true,
