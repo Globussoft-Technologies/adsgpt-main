@@ -1,18 +1,20 @@
 // ─── Mobile Auth Request Payloads ──────────────────────────────────────────────
 
 exports.mobileSignupPayload = {
-  email: "alex@example.com",
-  password: "StrongPassword123!",
+  $email: "alex@example.com",
+  $password: "StrongPassword123!",
   firstName: "Alex",
   lastName: "Smith",
+  $phoneNumber: "+15551234567",
   platform: "ios",
 };
 
 exports.googleSignupPayload = {
-  firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  $firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
   email: "alex@example.com",
   firstName: "Alex",
   lastName: "Smith",
+  $phoneNumber: "+15551234567",
   platform: "android",
 };
 
@@ -22,9 +24,10 @@ exports.googleLoginPayload = {
 };
 
 exports.appleSignupPayload = {
-  firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  $firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
   firstName: "Alex",
   lastName: "Smith",
+  $phoneNumber: "+15551234567",
   email: "user@privaterelay.appleid.com",
   platform: "ios",
 };
@@ -80,6 +83,7 @@ exports.mobileAuthResponse = {
     user_email: "alex@example.com",
     firstName: "Alex",
     lastName: "Smith",
+    phoneNumber: "+15551234567",
     loginProviders: ["general", "google"],
     userSubscriptionType: { "20": "2026-08-27" },
     hasActivePlan: true,

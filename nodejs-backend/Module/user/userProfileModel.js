@@ -8,6 +8,7 @@ const userProfileSchema = new mongoose.Schema(
     name: { type: String, default: "" },
     name_f: { type: String, default: "" },
     name_l: { type: String, default: "" },
+    phoneNumber: { type: String, default: "" },
     email: { type: String, default: "" },
     created_from: { type: String, default: "GPT" },
 

@@ -48,6 +48,7 @@ const SURFACE_CATALOG = {
   ad_creative: ADCREATIVE_IMAGE,
   ai_ads: {
     "veo-3.1-fast": { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
+    veo: { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
   },
   ugc: UGC_BROLL,
   broll: UGC_BROLL,
@@ -61,6 +62,7 @@ const SURFACE_CATALOG = {
     "veo-3.1-fast": { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
     veo: { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
     veo_4k: { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
+    "kling_3.0": { durations: [8, 12], aspectRatios: ["9:16", "16:9", "1:1"] },
   },
 };
 

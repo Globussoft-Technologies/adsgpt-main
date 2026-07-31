@@ -91,7 +91,13 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
-async function createAmemberUser({ login, email, password, firstName, lastName }) {
+function normalizePhoneNumber(value) {
+  const phoneNumber = String(value || "").trim();
+  const digitCount = phoneNumber.replace(/\D/g, "").length;
+  return digitCount >= 7 && digitCount <= 15 ? phoneNumber : null;
+}
+
+async function createAmemberUser({ login, email, password, firstName, lastName, phoneNumber }) {
   const url = `${baseUrl}/users`;
   const params = new URLSearchParams({
     _key: apiKey,
@@ -100,6 +106,7 @@ async function createAmemberUser({ login, email, password, firstName, lastName }
     pass: password,
     name_f: firstName || "",
     name_l: lastName || "",
+    phone: phoneNumber,
   });
 
 
@@ -129,6 +136,15 @@ async function updateAmemberPassword(amemberUserId, newPassword) {
   } catch (e) {
     console.error("[updateAmemberPassword] error updating password in aMember:", e.message);
   }
+}
+
+async function updateAmemberPhone(amemberUserId, phoneNumber) {
+  if (!amemberUserId || !phoneNumber) return;
+  const url = `${baseUrl}/users/${amemberUserId}?_key=${apiKey}`;
+  const params = new URLSearchParams({ phone: phoneNumber });
+  await axios.put(url, params.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
 }
 
 async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
@@ -401,9 +417,13 @@ const MobileSignup = async (req, res) => {
     }
   */
   try {
-    const { email, password, firstName, lastName, platform } = req.body;
+    const { email, password, firstName, lastName, phoneNumber, platform } = req.body;
     if (!email || !password) {
       return res.status(400).json({ ok: false, code: "INVALID_INPUT", error: "Email and password are required." });
+    }
+    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+    if (!cleanPhoneNumber) {
+      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
     }
 
     const cleanEmail = email.toLowerCase().trim();
@@ -419,6 +439,11 @@ const MobileSignup = async (req, res) => {
         // Sync the updated password to aMember so user can log in with the new password typed during re-signup
         if (password && amemberUserId) {
           await updateAmemberPassword(amemberUserId, password);
+        }
+        await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (mongoProfile) {
+          mongoProfile.phoneNumber = cleanPhoneNumber;
+          await mongoProfile.save();
         }
 
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
@@ -442,6 +467,7 @@ const MobileSignup = async (req, res) => {
             user_name: mongoProfile?.name || `${firstName || ""} ${lastName || ""}`.trim(),
             name_f: mongoProfile?.name_f || firstName || "",
             name_l: mongoProfile?.name_l || lastName || "",
+            phoneNumber: cleanPhoneNumber,
             user_email: cleanEmail,
             userSubscriptionType: {},
             hasActivePlan: false,
@@ -458,7 +484,7 @@ const MobileSignup = async (req, res) => {
       });
     }
 
-    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName });
+    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName, phoneNumber: cleanPhoneNumber });
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
     const existingDeletedProfile = await UserProfile.findOne({ email: cleanEmail });
@@ -472,6 +498,7 @@ const MobileSignup = async (req, res) => {
       existingDeletedProfile.name = `${firstName || ""} ${lastName || ""}`.trim();
       existingDeletedProfile.name_f = firstName || "";
       existingDeletedProfile.name_l = lastName || "";
+      existingDeletedProfile.phoneNumber = cleanPhoneNumber;
       existingDeletedProfile.platform = platform || "";
       existingDeletedProfile.last_login_at = new Date();
       await existingDeletedProfile.save();
@@ -482,6 +509,7 @@ const MobileSignup = async (req, res) => {
         name: `${firstName || ""} ${lastName || ""}`.trim(),
         name_f: firstName || "",
         name_l: lastName || "",
+        phoneNumber: cleanPhoneNumber,
         email: cleanEmail,
         created_from: "GPT",
         amember_user_id: amemberUserId,
@@ -499,6 +527,7 @@ const MobileSignup = async (req, res) => {
       user_email: cleanEmail,
       name_f: firstName || "",
       name_l: lastName || "",
+      phoneNumber: cleanPhoneNumber,
       userSubscriptionType: {},
       hasActivePlan: false,
       created_from: "GPT",
@@ -515,6 +544,7 @@ const MobileSignup = async (req, res) => {
         user_name: `${firstName || ""} ${lastName || ""}`.trim(),
         name_f: firstName || "",
         name_l: lastName || "",
+        phoneNumber: cleanPhoneNumber,
         user_email: cleanEmail,
         userSubscriptionType: {},
         hasActivePlan: false,
@@ -551,7 +581,11 @@ const GoogleSignup = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, firstName, lastName, platform, email: bodyEmail } = req.body;
+    const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail } = req.body;
+    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+    if (!cleanPhoneNumber) {
+      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+    }
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "google.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Google to sign in to this endpoint." });
@@ -576,6 +610,11 @@ const GoogleSignup = async (req, res) => {
       const active = userData?.ok ? isPlanActive(userData) : false;
 
       if (!active) {
+        await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (mongoProfile) {
+          mongoProfile.phoneNumber = cleanPhoneNumber;
+          await mongoProfile.save();
+        }
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
         const tokenPayload = {
           status: true,
@@ -601,6 +640,7 @@ const GoogleSignup = async (req, res) => {
             user_name: userData?.name || mongoProfile?.name || `${derivedFirstName} ${derivedLastName}`.trim(),
             name_f: userData?.name_f || mongoProfile?.name_f || derivedFirstName,
             name_l: userData?.name_l || mongoProfile?.name_l || derivedLastName,
+            phoneNumber: cleanPhoneNumber,
             user_email: email,
             loginProviders: mongoProfile?.loginProviders || ["google"],
             userSubscriptionType: {},
@@ -624,6 +664,7 @@ const GoogleSignup = async (req, res) => {
       password: generateRandomString(16),
       firstName: derivedFirstName,
       lastName: derivedLastName,
+      phoneNumber: cleanPhoneNumber,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -643,6 +684,7 @@ const GoogleSignup = async (req, res) => {
       existingDeletedProfile.name = `${derivedFirstName} ${derivedLastName}`.trim();
       existingDeletedProfile.name_f = derivedFirstName;
       existingDeletedProfile.name_l = derivedLastName;
+      existingDeletedProfile.phoneNumber = cleanPhoneNumber;
       existingDeletedProfile.platform = platform || "";
       if (!existingDeletedProfile.loginProviders?.includes("google")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "google"];
@@ -656,6 +698,7 @@ const GoogleSignup = async (req, res) => {
         name: `${derivedFirstName} ${derivedLastName}`.trim(),
         name_f: derivedFirstName,
         name_l: derivedLastName,
+        phoneNumber: cleanPhoneNumber,
         email,
         created_from: "GPT",
         amember_user_id: amemberUserId,
@@ -692,6 +735,7 @@ const GoogleSignup = async (req, res) => {
         user_name: `${derivedFirstName} ${derivedLastName}`.trim(),
         name_f: derivedFirstName,
         name_l: derivedLastName,
+        phoneNumber: cleanPhoneNumber,
         user_email: email,
         userSubscriptionType: {},
         hasActivePlan: false,
@@ -834,7 +878,11 @@ const AppleSignup = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, firstName, lastName, platform, email: bodyEmail } = req.body;
+    const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail } = req.body;
+    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+    if (!cleanPhoneNumber) {
+      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+    }
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "apple.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
@@ -859,6 +907,11 @@ const AppleSignup = async (req, res) => {
       const active = userData?.ok ? isPlanActive(userData) : false;
 
       if (!active) {
+        await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (mongoProfile) {
+          mongoProfile.phoneNumber = cleanPhoneNumber;
+          await mongoProfile.save();
+        }
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
         const tokenPayload = {
           status: true,
@@ -884,6 +937,7 @@ const AppleSignup = async (req, res) => {
             user_name: userData?.name || mongoProfile?.name || `${derivedFirstName} ${derivedLastName}`.trim(),
             name_f: userData?.name_f || mongoProfile?.name_f || derivedFirstName,
             name_l: userData?.name_l || mongoProfile?.name_l || derivedLastName,
+            phoneNumber: cleanPhoneNumber,
             user_email: email,
             loginProviders: mongoProfile?.loginProviders || ["apple"],
             userSubscriptionType: {},
@@ -907,6 +961,7 @@ const AppleSignup = async (req, res) => {
       password: generateRandomString(16),
       firstName: derivedFirstName,
       lastName: derivedLastName,
+      phoneNumber: cleanPhoneNumber,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -926,6 +981,7 @@ const AppleSignup = async (req, res) => {
       existingDeletedProfile.name = `${derivedFirstName} ${derivedLastName}`.trim();
       existingDeletedProfile.name_f = derivedFirstName;
       existingDeletedProfile.name_l = derivedLastName;
+      existingDeletedProfile.phoneNumber = cleanPhoneNumber;
       existingDeletedProfile.platform = platform || "";
       if (!existingDeletedProfile.loginProviders?.includes("apple")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "apple"];
@@ -939,6 +995,7 @@ const AppleSignup = async (req, res) => {
         name: `${derivedFirstName} ${derivedLastName}`.trim(),
         name_f: derivedFirstName,
         name_l: derivedLastName,
+        phoneNumber: cleanPhoneNumber,
         email,
         created_from: "GPT",
         amember_user_id: amemberUserId,
@@ -975,6 +1032,7 @@ const AppleSignup = async (req, res) => {
         user_name: `${derivedFirstName} ${derivedLastName}`.trim(),
         name_f: derivedFirstName,
         name_l: derivedLastName,
+        phoneNumber: cleanPhoneNumber,
         user_email: email,
         userSubscriptionType: {},
         hasActivePlan: false,
@@ -2097,12 +2155,6 @@ async function getMobilePlans(req, res) {
       const product = resolveAmemberProduct(prods, storePlan);
       if (!product) return [];
 
-      const titleLower = (product.title || "").toLowerCase();
-      const isAnnual =
-        titleLower.includes("annual") ||
-        titleLower.includes("year") ||
-        storePlan.productId.toLowerCase().includes("annual");
-
       return [{
         productId: storePlan.productId,
         amemberProductId: parseInt(product.product_id, 10),
@@ -2116,7 +2168,7 @@ async function getMobilePlans(req, res) {
               }),
         tier: product.title || "Subscription",
         fallbackTitle: product.title || "Subscription Plan",
-        badge: isAnnual ? "Best Value" : null,
+        badge: storePlan.badge || null,
         ...(reqPlatform ? { platform: reqPlatform } : {}),
         credit: getConfiguredProductCredit(product),
       }];

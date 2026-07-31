@@ -497,13 +497,13 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
         m.label.toLowerCase().includes('veo 3.1 fast')
       )?.value,
     },
-    //  {
-    //   value: 'veo',
-    //   label: 'Veo 3',
-    //   tier: 'premium',
-    //   Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-    //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-    // },
+    {
+      value: 'veo',
+      label: 'Veo 3.0 (Cinematic Quality)',
+      tier: 'premium',
+      Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
+    },
   ];
 
 

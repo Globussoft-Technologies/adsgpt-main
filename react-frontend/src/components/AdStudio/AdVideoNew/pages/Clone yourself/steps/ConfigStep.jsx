@@ -185,14 +185,14 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
       },
-      // {
-      //   value: 'kling_3.0',
-      //   label: 'Kling 3.0',
-      //   tier: 'premium',
-      //   Icon: <KlingIcon className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
-      //     ?.value,
-      // },
+      {
+        value: 'kling_3.0',
+        label: 'Kling 3.0',
+        tier: 'premium',
+        Icon: <KlingIcon className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
+        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
+          ?.value,
+      },
     ],
     [modelCredits]
   );
