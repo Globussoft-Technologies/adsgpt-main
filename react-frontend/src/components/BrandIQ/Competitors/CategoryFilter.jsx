@@ -10,7 +10,12 @@ const AI_CAT_SEARCH_URL = import.meta.env.VITE_AI_CAT_SEARCH_URL;
 // If the API's score is similarity (higher = better), flip the comparison below.
 const SCORE_THRESHOLD = 0.59;
 
-const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds = [], activeSubCategoryIds = [], onChange }) => {
+const CategoryFilter = ({
+  categories: staticCategories = [],
+  activeCategoryIds = [],
+  activeSubCategoryIds = [],
+  onChange,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categories, setCategories] = useState([]);
@@ -54,7 +59,8 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
         ? selectionUnits[0]
         : `${selectionUnits.length} selected`;
 
-  const rememberName = (id, name) => setNameById((prev) => (prev[id] ? prev : { ...prev, [id]: name }));
+  const rememberName = (id, name) =>
+    setNameById((prev) => (prev[id] ? prev : { ...prev, [id]: name }));
 
   // Build the onChange payload. A selected subcategory contributes BOTH its own
   // id AND its parent categoryId, so the backend gets category + subcategory
@@ -215,7 +221,7 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all ${
         checked
           ? 'border-[#02C8C4] bg-[#02C8C4]/20'
-          : 'border-white/20 bg-transparent'
+          : 'border-black/20 bg-transparent dark:border-white/20'
       }`}
     >
       {checked && <div className="h-2 w-2 rounded-full bg-[#02C8C4]" />}
@@ -229,7 +235,7 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
         checked || indeterminate
           ? 'border-[#02C8C4] bg-[#02C8C4]'
-          : 'border-white/20 bg-transparent'
+          : 'border-black/20 bg-transparent dark:border-white/20'
       }`}
     >
       {checked && <Check className="h-3 w-3 text-black" strokeWidth={3} />}
@@ -242,14 +248,16 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
       {/* Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-8 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/80 transition-all hover:bg-white/10"
+        className="flex h-8 items-center gap-2 rounded-full border border-black/10 bg-gray-50 px-4 py-2 text-xs text-gray-700 transition-all hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
       >
         <span className="max-w-[120px] truncate">{displayLabel}</span>
-        <ChevronDown className={`h-3 w-3 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`h-3 w-3 text-gray-400 transition-transform dark:text-white/40 ${isOpen ? 'rotate-180' : ''}`}
+        />
         {hasSelection && (
           <span
             onClick={handleClear}
-            className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"
+            className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:bg-white/10 dark:text-white/60 dark:hover:bg-white/20 dark:hover:text-white"
           >
             <X className="h-2.5 w-2.5" />
           </span>
@@ -264,25 +272,25 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 z-40 mt-2 w-80 overflow-hidden rounded-xl border border-white/10 bg-[#1a1a1a] shadow-2xl"
+            className="absolute top-full left-0 z-40 mt-2 w-80 overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]"
           >
             {/* Search */}
-            <div className="border-b border-white/10 p-3">
+            <div className="border-b border-black/10 dark:border-white/10 p-3">
               <div className="relative">
-                <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                 <input
                   type="text"
                   placeholder="Search categories..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pr-3 pl-8 text-xs text-white placeholder:text-white/30 outline-none focus:border-[#02C8C4]/50"
+                  className="w-full rounded-lg border border-black/10 bg-gray-50 py-2 pr-3 pl-8 text-xs text-gray-800 outline-none placeholder:text-gray-400 focus:border-[#02C8C4]/50 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white dark:placeholder:text-white/30"
                   autoFocus
                 />
               </div>
             </div>
 
             {/* Tree */}
-            <div className="max-h-[360px] overflow-y-auto p-2 cf-scroll">
+            <div className="cf-scroll max-h-[360px] overflow-y-auto p-2">
               {/* All categories option */}
               <button
                 onClick={() => {
@@ -290,9 +298,9 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
                   // open so the reset is visible alongside the other options.
                   clearAll();
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-all hover:bg-white/5 ${
-                  !hasSelection ? 'text-white' : 'text-white/70 hover:text-white'
-                }`}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-all ${
+                  !hasSelection ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-white/70 dark:hover:text-white'
+                } hover:bg-gray-100 dark:hover:bg-white/5`}
               >
                 <Radio checked={!hasSelection} />
                 <span>All categories</span>
@@ -300,7 +308,7 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
 
               {/* Loading state */}
               {searching && (
-                <div className="flex items-center justify-center gap-2 py-6 text-xs text-white/40">
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400 dark:text-white/40">
                   <Loader className="h-3.5 w-3.5 animate-spin text-[#5867EB]" />
                   <span>Searching...</span>
                 </div>
@@ -308,88 +316,93 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
 
               {/* Static tree placeholder — only shown if no static categories */}
               {!searching && !searchTerm && staticCategories.length === 0 && (
-                <div className="py-4 text-center text-xs text-white/30">
+                <div className="py-4 text-center text-xs text-gray-400 dark:text-white/30">
                   No categories available
                 </div>
               )}
 
               {/* No results */}
               {!searching && searchTerm && categories.length === 0 && (
-                <div className="py-4 text-center text-xs text-white/30">No categories found</div>
+                <div className="py-4 text-center text-xs text-gray-500">No categories found</div>
               )}
 
               {/* Results tree */}
-              {!searching && categories.map((cat) => {
-                const isExpanded = expandedCats.has(cat.id);
-                const hasSubs = cat.subcategories && cat.subcategories.length > 0;
-                const selectedSubCount = hasSubs
-                  ? cat.subcategories.filter((s) => selectedSubs.has(s.id)).length
-                  : 0;
-                // A category is "selected" when every subcategory is selected
-                // (or, for sub-less categories, when picked directly).
-                const isCatSelected = hasSubs
-                  ? selectedSubCount === cat.subcategories.length
-                  : selectedCats.has(cat.id);
-                const isCatIndeterminate =
-                  hasSubs && selectedSubCount > 0 && selectedSubCount < cat.subcategories.length;
+              {!searching &&
+                categories.map((cat) => {
+                  const isExpanded = expandedCats.has(cat.id);
+                  const hasSubs = cat.subcategories && cat.subcategories.length > 0;
+                  const selectedSubCount = hasSubs
+                    ? cat.subcategories.filter((s) => selectedSubs.has(s.id)).length
+                    : 0;
+                  // A category is "selected" when every subcategory is selected
+                  // (or, for sub-less categories, when picked directly).
+                  const isCatSelected = hasSubs
+                    ? selectedSubCount === cat.subcategories.length
+                    : selectedCats.has(cat.id);
+                  const isCatIndeterminate =
+                    hasSubs && selectedSubCount > 0 && selectedSubCount < cat.subcategories.length;
 
-                return (
-                  <div key={cat.id} className="mt-0.5">
-                    {/* Category row */}
-                    <div className="flex items-center">
-                      {hasSubs && (
+                  return (
+                    <div key={cat.id} className="mt-0.5">
+                      {/* Category row */}
+                      <div className="flex items-center">
+                        {hasSubs && (
+                          <button
+                            onClick={() => toggleExpand(cat.id)}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center text-gray-400 hover:text-gray-700 dark:text-white/40 dark:hover:text-white/70 transition-transform"
+                          >
+                            <ChevronDown
+                              className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : '-rotate-90'}`}
+                            />
+                          </button>
+                        )}
+                        {!hasSubs && <div className="h-6 w-6 shrink-0" />}
                         <button
-                          onClick={() => toggleExpand(cat.id)}
-                          className="flex h-6 w-6 shrink-0 items-center justify-center text-white/40 transition-transform hover:text-white/70"
+                          onClick={() => handleSelectCategory(cat)}
+                          className={`flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                            isCatSelected ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-700 hover:text-gray-950 dark:text-white/70 dark:hover:text-white'
+                          }`}
                         >
-                          <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : '-rotate-90'}`} />
+                          <Checkbox checked={isCatSelected} indeterminate={isCatIndeterminate} />
+                          <span className="truncate text-left font-medium">{cat.name}</span>
                         </button>
-                      )}
-                      {!hasSubs && <div className="h-6 w-6 shrink-0" />}
-                      <button
-                        onClick={() => handleSelectCategory(cat)}
-                        className={`flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-white/5 ${
-                          isCatSelected ? 'text-white' : 'text-white/70 hover:text-white'
-                        }`}
-                      >
-                        <Checkbox checked={isCatSelected} indeterminate={isCatIndeterminate} />
-                        <span className="truncate text-left font-medium">{cat.name}</span>
-                      </button>
-                    </div>
+                      </div>
 
-                    {/* Subcategories */}
-                    <AnimatePresence>
-                      {isExpanded && hasSubs && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="ml-6 border-l border-white/10 pl-2">
-                            {cat.subcategories.map((sub) => {
-                              const isSubSelected = selectedSubs.has(sub.id);
-                              return (
-                                <button
-                                  key={sub.id}
-                                  onClick={() => handleSelectSubcategory(cat, sub)}
-                                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-white/5 ${
-                                    isSubSelected ? 'text-white' : 'text-white/50 hover:text-white/80'
-                                  }`}
-                                >
-                                  <Checkbox checked={isSubSelected} />
-                                  <span className="truncate text-left">{sub.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
+                      {/* Subcategories */}
+                      <AnimatePresence>
+                        {isExpanded && hasSubs && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="ml-6 border-l border-black/10 dark:border-white/10 pl-2">
+                              {cat.subcategories.map((sub) => {
+                                const isSubSelected = selectedSubs.has(sub.id);
+                                return (
+                                  <button
+                                    key={sub.id}
+                                    onClick={() => handleSelectSubcategory(cat, sub)}
+                                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                                      isSubSelected
+                                        ? 'text-gray-900 dark:text-white font-medium'
+                                        : 'text-gray-500 hover:text-gray-800 dark:text-white/50 dark:hover:text-white/80'
+                                    }`}
+                                  >
+                                    <Checkbox checked={isSubSelected} />
+                                    <span className="truncate text-left">{sub.name}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
             </div>
           </motion.div>
         )}
@@ -400,13 +413,21 @@ const CategoryFilter = ({ categories: staticCategories = [], activeCategoryIds =
           width: 5px;
           height: 5px;
         }
+        /* Light mode scrollbars */
         .cf-scroll::-webkit-scrollbar-thumb {
-          background-color: rgba(255, 255, 255, 0.4);
+          background-color: rgba(0, 0, 0, 0.18);
           border-radius: 9999px;
         }
         .cf-scroll::-webkit-scrollbar-track {
-          background: rgba(40, 40, 40, 0.4);
+          background: rgba(0, 0, 0, 0.06);
           border-radius: 9999px;
+        }
+        /* Dark mode overrides (applies when html.dark is present) */
+        html.dark .cf-scroll::-webkit-scrollbar-thumb {
+          background-color: rgba(255, 255, 255, 0.4);
+        }
+        html.dark .cf-scroll::-webkit-scrollbar-track {
+          background: rgba(40, 40, 40, 0.4);
         }
       `}</style>
     </div>

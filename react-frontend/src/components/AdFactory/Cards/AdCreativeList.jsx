@@ -521,7 +521,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                                     isHistory ? 'history' : 'current'
                                   );
                                 }}
-                                className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3B3B3B] text-white transition-all duration-300 hover:scale-110 hover:bg-[#4A4A4A] active:scale-95 2xl:h-8 2xl:w-8"
+                                className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-[#3B3B3B] text-gray-900 dark:text-white transition-all duration-300 hover:scale-110 hover:bg-gray-200 dark:hover:bg-[#4A4A4A] active:scale-95 2xl:h-8 2xl:w-8"
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
@@ -535,7 +535,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                             <motion.button
                               onClick={(e) => handleEditWithCanva(e, item?.fullUrl)}
                               disabled={canvaLoadingKey === item?.fullUrl}
-                              className="group flex items-center gap-1 rounded-full bg-[#3B3B3B] px-2 py-1 text-10 font-medium text-white transition-all duration-300 hover:scale-105 hover:bg-[#4A4A4A] active:scale-95 disabled:opacity-50"
+                              className="group flex items-center gap-1 rounded-full bg-gray-100 dark:bg-[#3B3B3B] px-2 py-1 text-10 font-medium text-gray-900 dark:text-white transition-all duration-300 hover:scale-105 hover:bg-gray-200 dark:hover:bg-[#4A4A4A] active:scale-95 disabled:opacity-50"
                               initial={{ opacity: 0, scale: 0.9 }}
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.9 }}
@@ -563,9 +563,9 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                             <PopoverTrigger asChild>
                               <button
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3B3B3B]"
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 dark:bg-[#3B3B3B] text-gray-900 dark:text-white"
                               >
-                                <Info className="h-4 w-4 text-white" />
+                                <Info className="h-4 w-4" />
                               </button>
                             </PopoverTrigger>
 

@@ -213,7 +213,7 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
         <button
           type="button"
           onClick={onBack}
-          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+          className="flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to platforms
@@ -221,10 +221,10 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-white 2xl:text-xl">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white 2xl:text-xl">
           Account &amp; Page Selection
         </h2>
-        <p className="mt-0.5 text-xs text-gray-400 2xl:mt-1 2xl:text-sm">
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 2xl:mt-1 2xl:text-sm">
           Select your Facebook Ad Account and Page to proceed
         </p>
       </div>
@@ -325,7 +325,7 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
       {isLeadsCampaign && LEADS_POSTING_ENABLED && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:gap-10">
           <div className="flex flex-col gap-2">
-            <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+            <label className="text-sm text-gray-600 dark:text-[#AFAFAF] 2xl:text-[18px]">
               Choose Lead Form *
             </label>
             <InputCommonDropdown
@@ -369,8 +369,8 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
           }
           className={`flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold transition 2xl:px-10 2xl:py-3 2xl:text-base ${
             canNext
-              ? 'bg-white text-black hover:opacity-90'
-              : 'cursor-not-allowed bg-gray-400/30 text-gray-400'
+              ? 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
+              : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-400/30 dark:text-gray-400'
           }`}
         >
           Next

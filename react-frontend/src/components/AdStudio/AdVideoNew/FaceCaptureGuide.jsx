@@ -372,7 +372,7 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
               </p>
             </div>
           ) : (
-            <div className="face-capture__camera-area relative aspect-square w-full">
+            <div className="face-capture__camera-area relative aspect-square w-full border border-white/10! dark:border-[#2a2a2a]!">
               <Webcam
                 audio={false}
                 ref={webcamRef}
@@ -385,18 +385,20 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
               <canvas ref={canvasRef} className="face-capture__canvas" />
 
               {webcamError && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-3xl bg-black/80 backdrop-blur-md">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-3xl bg-white/90 backdrop-blur-md dark:bg-black/80">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-500">
                     <CameraOff size={32} />
                   </div>
-                  <span className="mb-2 text-lg font-semibold text-white">No camera found</span>
-                  <p className="max-w-[80%] text-center text-sm leading-relaxed text-neutral-400">
+                  <span className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                    No camera found
+                  </span>
+                  <p className="max-w-[80%] text-center text-sm leading-relaxed text-neutral-700 dark:text-neutral-400">
                     Please ensure your camera is connected and you have granted permission to use it
                     in your browser settings.
                   </p>
                   <button
                     onClick={() => window.location.reload()}
-                    className="mt-6 rounded-full bg-white px-6 py-2 text-sm font-semibold text-black transition-all hover:bg-neutral-200 active:scale-95"
+                    className="mt-6 rounded-full bg-gray-900 px-6 py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 dark:bg-white dark:text-black"
                   >
                     Retry Connection
                   </button>
@@ -418,18 +420,18 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
               {flash && <div className="face-capture__flash" />}
 
               {!allCaptured && (
-                <div className="absolute bottom-4 left-1/2 z-30 flex min-w-[200px] -translate-x-1/2 flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-black/60 p-2.5 backdrop-blur-md transition-all duration-300">
+                <div className="absolute bottom-4 left-1/2 z-30 flex min-w-[200px] -translate-x-1/2 flex-col items-center gap-1.5 rounded-xl border border-black/10 bg-white/70 p-2.5 backdrop-blur-md transition-all duration-300 dark:border-white/10 dark:bg-black/60">
                   {!faceDetected ? (
-                    <span className="text-10 font-bold tracking-widest text-red-400 uppercase">
+                    <span className="text-10 font-bold tracking-widest text-red-600 uppercase dark:text-red-400">
                       Face Not Detected
                     </span>
                   ) : inRange ? (
                     <>
-                      <span className="text-10 font-bold tracking-widest text-green-400 uppercase">
+                      <span className="text-10 font-bold tracking-widest text-green-600 uppercase dark:text-green-400">
                         {countdown != null ? 'Capturing...' : 'Hold Still...'}
                       </span>
                       {countdown == null && (
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/20">
                           <div
                             className="h-full bg-blue-500 transition-all duration-200"
                             style={{ width: `${stability * 100}%` }}
@@ -438,7 +440,7 @@ export default function FaceCaptureGuide({ onBack, onSubmit }) {
                       )}
                     </>
                   ) : (
-                    <span className="text-10 animate-pulse font-bold tracking-widest text-white uppercase">
+                    <span className="text-10 animate-pulse font-bold tracking-widest text-gray-900 uppercase dark:text-white">
                       {targetAngle.instruction}
                     </span>
                   )}

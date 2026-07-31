@@ -1,12 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const ImageCard = ({ image, isSelected, onSelect }) => {
   const [loading, setLoading] = useState(true);
+  const [isDark, setIsDark] = useState(
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    }
+  }, []);
 
   return (
     <div onClick={() => onSelect(image)} className="relative cursor-pointer rounded-xl">
       {/* Skeleton */}
-      {loading && <div className="absolute inset-0 animate-pulse rounded-xl bg-[#1a1a1a]" />}
+      {loading && (
+        <div
+          className={`absolute inset-0 animate-pulse rounded-xl ${
+            isDark ? 'bg-[#1a1a1a]' : 'bg-gray-200'
+          }`}
+        />
+      )}
       {/* {loading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#1a1a1a]">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />

@@ -465,7 +465,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                       <div className="space-y-5">
                         <h3 className="relative top-1.5 flex items-center gap-2 text-base text-gray-900 2xl:text-lg dark:text-white">
                           Service Quantities
-                          <span className="rounded-full border border-green-500/30 bg-green-600/20 px-3 py-1 text-sm font-semibold text-green-400">
+                          <span className="rounded-full border border-green-500/30 bg-emerald-300/20 text-emerald-500 dark:bg-emerald-300/10 px-3 py-1 text-sm font-semibold dark:text-emerald-300">
                             Credits Available: {availableCredits}
                           </span>
                         </h3>
@@ -718,7 +718,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
 
                       {/* Total Cost Summary */}
                       {(costs.text > 0 || costs.image > 0) && (
-                        <div className="rounded-lg border border-gray-500/30 bg-gray-500/10 p-4">
+                        <div className="rounded-lg border border-gray-500/30 bg-gray-100/50 dark:bg-gray-500/10 p-4">
                           <h4 className="mb-2 text-sm font-medium text-gray-900 2xl:text-base dark:text-gray-100">
                             Credit Summary
                           </h4>
@@ -735,7 +735,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                             )}
                             {costs.image > 0 && (
                               <div className="flex justify-between">
-                                <span className="text-sm text-emerald-300 2xl:text-base">
+                                <span className="text-sm text-emerald-500 dark:text-emerald-300 2xl:text-base">
                                   Images ({values.imageModelProvider}):
                                 </span>
                                 <span className="text-sm text-gray-900 2xl:text-base dark:text-white">

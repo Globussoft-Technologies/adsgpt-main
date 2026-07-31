@@ -146,7 +146,7 @@ export default function PostAdMySpaceModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-white/10 bg-[#1a1a1a] px-6 pt-16 text-white shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] outline-none focus:outline-none focus-visible:ring-0 focus-visible:outline-none md:w-full 2xl:!max-w-5xl 2xl:pt-20"
+        className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-black/10 bg-white px-6 pt-16 text-gray-900 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.3)] outline-none focus:outline-none focus-visible:ring-0 focus-visible:outline-none md:w-full dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white dark:shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] 2xl:!max-w-5xl 2xl:pt-20"
       >
         <div className="max-h-[calc(100svh-200px)] space-y-4 overflow-y-auto sm:px-6">
           <div className="pb-10">

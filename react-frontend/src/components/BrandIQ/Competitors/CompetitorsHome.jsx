@@ -2,7 +2,16 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSelector, useDispatch } from 'react-redux';
 import { useWindowSize } from '@react-hook/window-size';
 import Masonry from 'react-masonry-css';
-import { Loader, RefreshCcw, AlertCircle, Filter, ChevronDown, Calendar, X, ArrowLeft } from 'lucide-react';
+import {
+  Loader,
+  RefreshCcw,
+  AlertCircle,
+  Filter,
+  ChevronDown,
+  Calendar,
+  X,
+  ArrowLeft,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCompetitorAds, refreshCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
 import CompetitorAdCard from './CompetitorAdCard';
@@ -115,6 +124,7 @@ const CompetitorsHome = () => {
   const [width] = useWindowSize();
   const userData = useSelector((state) => state.socket.userData);
   const selectedBrand = useSelector((state) => state.brandIQTabs.selectedCompetitorBrand);
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
 
   const [ads, setAds] = useState([]);
   const [status, setStatus] = useState(null); // null | PENDING | READY | EMPTY | FAILED
@@ -213,74 +223,93 @@ const CompetitorsHome = () => {
 
   // Fetch ads function — kept as ref to avoid effect re-runs on recreation
   const fetchAdsRef = useRef();
-  const fetchAds = useCallback(async (isPolling = false, isAppend = false, overridePage = null) => {
-    if (!selectedBrand?.id || !userData?.user_id) return;
+  const fetchAds = useCallback(
+    async (isPolling = false, isAppend = false, overridePage = null) => {
+      if (!selectedBrand?.id || !userData?.user_id) return;
 
-    if (isAppend) {
-      setLoadingMore(true);
-    } else if (!isPolling) {
-      setLoading(true);
-    }
-
-    // Increment request ID for deduplication
-    const requestId = ++latestRequestRef.current;
-
-    try {
-      const selectedPill = platformPills.find((p) => p.key === activePlatform);
-      const platformFilter = activePlatform === 'all' ? '' : selectedPill?.platforms;
-
-      const targetPage = overridePage !== null ? overridePage : (isAppend ? page + 1 : page);
-
-      const params = {
-        userId: userData.user_id,
-        page: targetPage,
-        pageSize: PAGE_SIZE,
-        sort: activeSort,
-        ...(platformFilter && platformFilter.length > 0 && { platform: platformFilter.join(',') }),
-        ...(activeCategoryIds.length > 0 && { categoryId: activeCategoryIds.join(',') }),
-        ...(activeSubCategoryIds.length > 0 && { subCategoryId: activeSubCategoryIds.join(',') }),
-        ...(dateFrom && { dateFrom: new Date(dateFrom).toISOString(), dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : new Date().toISOString() }),
-      };
-
-      const data = await getCompetitorAds(selectedBrand.id, params);
-
-      // Ignore stale responses — a newer request was made
-      if (requestId !== latestRequestRef.current) return;
-
-      setStatus(data.status);
-      setAds((prev) => {
-        const newAds = isAppend ? [...prev, ...(data.ads || [])] : [...(data.ads || [])];
-        // Backend now drives pagination — prefer its explicit hasMore flag.
-        setHasMore(
-          typeof data.hasMore === 'boolean'
-            ? data.hasMore
-            : newAds.length < (data.totalCount || 0)
-        );
-        return newAds;
-      });
-      if (isAppend || overridePage !== null) {
-        setPage(targetPage);
-      }
-      setTotalCount(data.totalCount || 0);
-      setFiltersAvailable(data.filtersAvailable || { platforms: [], categories: [] });
-    } catch {
-      // console.error('fetchAds error');
-      // Ignore stale responses for errors too
-      if (requestId !== latestRequestRef.current) return;
-      if (!isPolling) {
-        setStatus('FAILED');
-        toast.error('Failed to fetch competitor ads');
-      }
-    } finally {
       if (isAppend) {
-        setLoadingMore(false);
-      } else if (!isPolling && requestId === latestRequestRef.current) {
-        // Only the latest request may clear the loading flag — prevents a
-        // stale/superseded response from uncovering the empty state mid-fetch.
-        setLoading(false);
+        setLoadingMore(true);
+      } else if (!isPolling) {
+        setLoading(true);
       }
-    }
-  }, [selectedBrand, userData, activePlatform, activeCategoryIds, activeSubCategoryIds, activeSort, dateFrom, dateTo, page]);
+
+      // Increment request ID for deduplication
+      const requestId = ++latestRequestRef.current;
+
+      try {
+        const selectedPill = platformPills.find((p) => p.key === activePlatform);
+        const platformFilter = activePlatform === 'all' ? '' : selectedPill?.platforms;
+
+        const targetPage = overridePage !== null ? overridePage : isAppend ? page + 1 : page;
+
+        const params = {
+          userId: userData.user_id,
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          sort: activeSort,
+          ...(platformFilter &&
+            platformFilter.length > 0 && { platform: platformFilter.join(',') }),
+          ...(activeCategoryIds.length > 0 && { categoryId: activeCategoryIds.join(',') }),
+          ...(activeSubCategoryIds.length > 0 && { subCategoryId: activeSubCategoryIds.join(',') }),
+          ...(dateFrom && {
+            dateFrom: new Date(dateFrom).toISOString(),
+            dateTo: dateTo
+              ? new Date(dateTo + 'T23:59:59').toISOString()
+              : new Date().toISOString(),
+          }),
+        };
+
+        const data = await getCompetitorAds(selectedBrand.id, params);
+
+        // Ignore stale responses — a newer request was made
+        if (requestId !== latestRequestRef.current) return;
+
+        setStatus(data.status);
+        setAds((prev) => {
+          const newAds = isAppend ? [...prev, ...(data.ads || [])] : [...(data.ads || [])];
+          // Backend now drives pagination — prefer its explicit hasMore flag.
+          setHasMore(
+            typeof data.hasMore === 'boolean'
+              ? data.hasMore
+              : newAds.length < (data.totalCount || 0)
+          );
+          return newAds;
+        });
+        if (isAppend || overridePage !== null) {
+          setPage(targetPage);
+        }
+        setTotalCount(data.totalCount || 0);
+        setFiltersAvailable(data.filtersAvailable || { platforms: [], categories: [] });
+      } catch {
+        // console.error('fetchAds error');
+        // Ignore stale responses for errors too
+        if (requestId !== latestRequestRef.current) return;
+        if (!isPolling) {
+          setStatus('FAILED');
+          toast.error('Failed to fetch competitor ads');
+        }
+      } finally {
+        if (isAppend) {
+          setLoadingMore(false);
+        } else if (!isPolling && requestId === latestRequestRef.current) {
+          // Only the latest request may clear the loading flag — prevents a
+          // stale/superseded response from uncovering the empty state mid-fetch.
+          setLoading(false);
+        }
+      }
+    },
+    [
+      selectedBrand,
+      userData,
+      activePlatform,
+      activeCategoryIds,
+      activeSubCategoryIds,
+      activeSort,
+      dateFrom,
+      dateTo,
+      page,
+    ]
+  );
 
   // Keep ref always pointing to latest fetchAds
   fetchAdsRef.current = fetchAds;
@@ -299,7 +328,15 @@ const CompetitorsHome = () => {
     setLoadingMore(false);
     setLoading(true);
     fetchAdsRef.current(false, false, 1);
-  }, [selectedBrand?.id, activePlatform, activeCategoryIds, activeSubCategoryIds, activeSort, dateFrom, dateTo]);
+  }, [
+    selectedBrand?.id,
+    activePlatform,
+    activeCategoryIds,
+    activeSubCategoryIds,
+    activeSort,
+    dateFrom,
+    dateTo,
+  ]);
 
   // Polling while PENDING
   useEffect(() => {
@@ -330,10 +367,18 @@ const CompetitorsHome = () => {
   }, [status, fetchAds]);
 
   // Keep infinite-scroll refs in sync with state (avoid stale closures)
-  useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
-  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
-  useEffect(() => { adsLengthRef.current = ads.length; }, [ads.length]);
+  useEffect(() => {
+    loadingMoreRef.current = loadingMore;
+  }, [loadingMore]);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+  useEffect(() => {
+    adsLengthRef.current = ads.length;
+  }, [ads.length]);
 
   // Infinite scroll — React-managed sentinel + viewport observer (avoids DOM reconciliation issues)
   const observerRef = useRef(null);
@@ -434,15 +479,18 @@ const CompetitorsHome = () => {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center">
         <div className="relative mb-6">
-          <div className="h-12 w-12 animate-spin rounded-full p-[2px]" style={{ background: 'conic-gradient(from 0deg, #02C8C4, #5867EB, transparent 75%)' }}>
-            <div className="h-full w-full rounded-full bg-[#0d0d0d]"></div>
+          <div
+            className="h-12 w-12 animate-spin rounded-full p-[2px]"
+            style={{ background: 'conic-gradient(from 0deg, #02C8C4, #5867EB, transparent 75%)' }}
+          >
+            <div className="h-full w-full rounded-full bg-background"></div>
           </div>
           <div className="absolute inset-0 h-12 w-12 animate-pulse rounded-full bg-gradient-to-r from-[#02C8C4]/10 to-[#5867EB]/10"></div>
         </div>
-        <h3 className="mb-2 text-lg font-medium text-white">Analyzing competitors...</h3>
-        <p className="max-w-md text-center text-sm text-white/50">
-          We're discovering your competitors and fetching their ads from across platforms.
-          This may take a minute.
+        <h3 className="mb-2 text-lg font-medium text-gray-900 dark:text-white">Analyzing competitors...</h3>
+        <p className="max-w-md text-center text-sm text-gray-500 dark:text-white/50">
+          We're discovering your competitors and fetching their ads from across platforms. This may
+          take a minute.
         </p>
         {/* <div className="mt-6 flex items-center gap-2 text-xs text-white/30">
           <Loader className="h-3 w-3 animate-spin text-[#02C8C4]" />
@@ -467,7 +515,9 @@ const CompetitorsHome = () => {
             across {filtersAvailable.platforms.length} platforms
           </span> */}
           {status === 'PENDING' && (
-            <span className={`flex items-center gap-1.5 rounded-full ${ADSGPT_BG_SOFT} px-3 py-1 text-xs ${ADSGPT_TEXT}`}>
+            <span
+              className={`flex items-center gap-1.5 rounded-full ${ADSGPT_BG_SOFT} px-3 py-1 text-xs ${ADSGPT_TEXT}`}
+            >
               <Loader className="h-3 w-3 animate-spin" />
               Updating...
             </span>
@@ -488,7 +538,9 @@ const CompetitorsHome = () => {
       <div className="mb-6 flex flex-wrap items-center gap-3">
         {/* Platform Pills */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">Platform</span>
+          <span className="text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
+            Platform
+          </span>
           <div className="flex flex-wrap items-center gap-1.5">
             {platformPills.map((pill) => {
               const isActive = activePlatform === pill.key;
@@ -499,7 +551,7 @@ const CompetitorsHome = () => {
                   className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
                     isActive
                       ? `${ADSGPT_GRADIENT} text-white`
-                      : 'border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                      : 'border border-black/10 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white'
                   }`}
                 >
                   {pill.label}
@@ -522,29 +574,36 @@ const CompetitorsHome = () => {
 
         {/* Date Range Picker */}
         <div className="relative flex items-center gap-2" ref={datePickerRef}>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">Date</span>
+          <span className="text-[10px] font-medium tracking-wide text-gray-500 dark:text-white/40 uppercase">
+            Date
+          </span>
           <button
             onClick={() => {
               setShowDatePicker((prev) => {
                 const next = !prev;
                 // On open, seed drafts from the applied range so a previously
                 // abandoned half-selection doesn't linger.
-                if (next) { setDraftFrom(dateFrom); setDraftTo(dateTo); }
+                if (next) {
+                  setDraftFrom(dateFrom);
+                  setDraftTo(dateTo);
+                }
                 return next;
               });
             }}
-            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition-all hover:bg-white/10"
+            className="flex items-center gap-2 rounded-full border border-black/10 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
           >
-            <Calendar className="h-3.5 w-3.5 text-white/50" />
-            <span>{dateLabel}</span>
-            <ChevronDown className={`h-3 w-3 text-white/40 transition-transform ${showDatePicker ? 'rotate-180' : ''}`} />
+            <Calendar className="h-3.5 w-3.5 text-gray-500 dark:text-white/50" />
+            <span className="text-gray-800 dark:text-white">{dateLabel}</span>
+            <ChevronDown
+              className={`h-3 w-3 text-gray-400 transition-transform dark:text-white/40 ${showDatePicker ? 'rotate-180' : ''}`}
+            />
           </button>
 
           {showDatePicker && (
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute top-full left-0 z-30 mt-2 w-80 rounded-xl border border-white/10 bg-[#1a1a1a] p-4 shadow-2xl"
+              className="absolute top-full left-0 z-30 mt-2 w-80 rounded-xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]"
             >
               {/* Presets */}
               <div className="mb-3 grid grid-cols-2 gap-2">
@@ -558,7 +617,7 @@ const CompetitorsHome = () => {
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                       datePreset === preset.key
                         ? `${ADSGPT_GRADIENT} text-white`
-                        : 'bg-white/5 text-white/70 hover:bg-white/10'
+                        : 'bg-gray-50 text-gray-800 hover:bg-gray-100 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10'
                     }`}
                   >
                     {preset.label}
@@ -567,12 +626,14 @@ const CompetitorsHome = () => {
               </div>
 
               {/* Divider */}
-              <div className="mb-3 border-t border-white/10"></div>
+              <div className="mb-3 border-t border-black/10 dark:border-white/10"></div>
 
               {/* Custom Date Inputs — Native picker with DD/MM/YYYY display */}
               <div className="mb-1 flex items-center gap-2">
                 <div className="flex-1">
-                  <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-white/40">From</label>
+                  <label className="mb-1 block text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
+                    From
+                  </label>
                   <div
                     className="relative cursor-pointer"
                     onClick={() => {
@@ -587,7 +648,7 @@ const CompetitorsHome = () => {
                       ref={fromDateRef}
                       type="date"
                       className="sr-only"
-                      style={{ colorScheme: 'dark', accentColor: '#02C8C4' }}
+                      style={{ colorScheme: isDarkMode ? 'dark' : 'light', accentColor: '#02C8C4' }}
                       max={draftTo || getTodayISO()}
                       value={draftFrom}
                       onChange={(e) => {
@@ -601,14 +662,16 @@ const CompetitorsHome = () => {
                         }
                       }}
                     />
-                    <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+                    <div className="w-full rounded-lg border border-black/10 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
                       {toDisplayDate(draftFrom) || 'DD/MM/YYYY'}
                     </div>
                   </div>
                 </div>
-                <span className="mt-5 text-white/30">-</span>
+                <span className="mt-5 text-gray-400 dark:text-white/30">-</span>
                 <div className="flex-1">
-                  <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-white/40">To</label>
+                  <label className="mb-1 block text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
+                    To
+                  </label>
                   <div
                     className="relative cursor-pointer"
                     onClick={() => {
@@ -623,7 +686,7 @@ const CompetitorsHome = () => {
                       ref={toDateRef}
                       type="date"
                       className="sr-only"
-                      style={{ colorScheme: 'dark', accentColor: '#02C8C4' }}
+                      style={{ colorScheme: isDarkMode ? 'dark' : 'light', accentColor: '#02C8C4' }}
                       min={draftFrom || undefined}
                       max={getTodayISO()}
                       value={draftTo}
@@ -638,7 +701,7 @@ const CompetitorsHome = () => {
                         }
                       }}
                     />
-                    <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+                    <div className="w-full rounded-lg border border-black/10 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
                       {toDisplayDate(draftTo) || 'DD/MM/YYYY'}
                     </div>
                   </div>
@@ -651,17 +714,17 @@ const CompetitorsHome = () => {
         {/* Sort */}
         <div className="ml-auto">
           <Select value={activeSort} onValueChange={(val) => setActiveSort(val)}>
-            <SelectTrigger className="h-8 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/80 transition-all hover:bg-white/10 focus:ring-0 focus:ring-offset-0 [&>svg]:text-white/40">
+            <SelectTrigger className="h-8 rounded-full border border-black/10 bg-gray-50 px-4 py-2 text-xs text-gray-700 transition-all hover:bg-gray-100 focus:ring-0 focus:ring-offset-0 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white [&>svg]:text-gray-400 dark:[&>svg]:text-white/40">
               <SelectValue placeholder="Sort">
                 Sort: {sortOptions.find((o) => o.value === activeSort)?.label || 'Newest'}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent className="rounded-xl border-white/10 bg-[#1a1a1a] text-white">
+            <SelectContent className="rounded-xl border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
               {sortOptions.map((opt) => (
                 <SelectItem
                   key={opt.value}
                   value={opt.value}
-                  className="text-xs text-white/70 outline-none hover:bg-white/10 hover:text-white data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-[#02C8C4] data-[state=checked]:to-[#5867EB] data-[state=checked]:text-white"
+                  className="text-xs text-gray-700 outline-none hover:bg-gray-100 hover:text-gray-900 data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-[#02C8C4] data-[state=checked]:to-[#5867EB] data-[state=checked]:text-white dark:text-white/70 dark:hover:bg-white/10"
                 >
                   {opt.label}
                 </SelectItem>
@@ -694,10 +757,7 @@ const CompetitorsHome = () => {
             >
               {ads.map((ad, index) => (
                 <div key={ad.adId || index} className="mb-4">
-                  <CompetitorAdCard
-                    ad={ad}
-                    onClick={() => handleAdClick(ad)}
-                  />
+                  <CompetitorAdCard ad={ad} onClick={() => handleAdClick(ad)} />
                 </div>
               ))}
             </Masonry>
@@ -715,8 +775,8 @@ const CompetitorsHome = () => {
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
                   <AlertCircle className="h-8 w-8 text-red-400" />
                 </div>
-                <h3 className="mb-2 text-lg font-medium text-white">Discovery failed</h3>
-                <p className="mb-6 max-w-md text-center text-sm text-white/50">
+                <h3 className="mb-2 text-lg font-medium text-gray-900 dark:text-white">Discovery failed</h3>
+                <p className="mb-6 max-w-md text-center text-sm text-gray-500 dark:text-white/50">
                   We couldn't fetch competitor ads for this brand. This might be a temporary issue.
                 </p>
                 <button
@@ -731,42 +791,42 @@ const CompetitorsHome = () => {
             )}
 
             {/* Empty state (inline, platform-aware — filter bar stays visible) */}
-            {!loading && status !== 'FAILED' && (status === 'EMPTY' || (status === 'READY' && ads.length === 0)) && (
-              <div className="flex h-[50vh] flex-col items-center justify-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
-                  <Filter className="h-8 w-8 text-white/30" />
+            {!loading &&
+              status !== 'FAILED' &&
+              (status === 'EMPTY' || (status === 'READY' && ads.length === 0)) && (
+                <div className="flex h-[50vh] flex-col items-center justify-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-black/5 dark:bg-white/5">
+                    <Filter className="h-8 w-8 text-gray-400 dark:text-white/30" />
+                  </div>
+                  <h3 className="mb-2 text-lg font-medium text-gray-900 dark:text-white">No competitor ads found</h3>
+                  <p className="mb-6 max-w-md text-center text-sm text-gray-500 dark:text-white/50">
+                    {activePlatform === 'all'
+                      ? "We couldn't find any ads matching your brand's competitors. Try adjusting your filters or refreshing."
+                      : `No ${platformPills.find((p) => p.key === activePlatform)?.label || ''} ads found for this brand's competitors. Try another platform or adjust your filters.`}
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => dispatch(setActiveBrandIQTab('myBrands'))}
+                      className="flex items-center gap-2 rounded-full border border-black/10 bg-gray-100/50 px-6 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-100 hover:text-gray-950 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to My Brands
+                    </button>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className={`flex items-center gap-2 rounded-full ${ADSGPT_GRADIENT} px-6 py-2.5 text-sm font-medium text-white transition-all ${ADSGPT_GRADIENT_HOVER} disabled:opacity-50`}
+                    >
+                      <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                  </div>
                 </div>
-                <h3 className="mb-2 text-lg font-medium text-white">No competitor ads found</h3>
-                <p className="mb-6 max-w-md text-center text-sm text-white/50">
-                  {activePlatform === 'all'
-                    ? "We couldn't find any ads matching your brand's competitors. Try adjusting your filters or refreshing."
-                    : `No ${platformPills.find((p) => p.key === activePlatform)?.label || ''} ads found for this brand's competitors. Try another platform or adjust your filters.`}
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => dispatch(setActiveBrandIQTab('myBrands'))}
-                    className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white/80 transition-all hover:bg-white/10 hover:text-white"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to My Brands
-                  </button>
-                  <button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className={`flex items-center gap-2 rounded-full ${ADSGPT_GRADIENT} px-6 py-2.5 text-sm font-medium text-white transition-all ${ADSGPT_GRADIENT_HOVER} disabled:opacity-50`}
-                  >
-                    <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
 
             {/* End of results message */}
             {!hasMore && ads.length > 0 && (
-              <div className="py-6 text-center text-sm text-white/30">
-                You've reached the end
-              </div>
+              <div className="py-6 text-center text-sm text-gray-400 dark:text-white/30">You've reached the end</div>
             )}
 
             {/* Infinite scroll sentinel */}

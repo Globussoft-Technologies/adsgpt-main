@@ -232,7 +232,7 @@ const AppSidebar = () => {
         // > */}
         layout
         transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className={`flex h-full w-full flex-col justify-between bg-[#fcfcfc] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-transparent' : 'dark:bg-[#0F0F0F]'}`}
+        className={`flex h-full w-full flex-col justify-between bg-[#f5f6f8] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-transparent' : 'dark:bg-[#0F0F0F]'}`}
       >
         {/* Logo */}
         <div className="logo_and_history flex w-full flex-col gap-0">
@@ -664,7 +664,7 @@ const AppSidebar = () => {
                   <div
                     className={`relative flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
                       currentRoute === '/my-space'
-                        ? 'mb-2 bg-gradient-to-r from-[#15DCFF] to-[#6b72f8]'
+                        ? 'mb-2 bg-gradient-to-r text-white from-[#15DCFF] to-[#6b72f8]'
                         : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
                     }`}
                   >

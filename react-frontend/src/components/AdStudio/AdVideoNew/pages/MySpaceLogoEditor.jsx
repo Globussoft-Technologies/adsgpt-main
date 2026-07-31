@@ -241,7 +241,7 @@ export default function MySpaceLogoEditor({ baseImageUrl, userId, onClose, onSav
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center"
       style={{ backgroundColor: '#0D0D0D50', backdropFilter: 'blur(100px)' }}
     >
       {loading && (
@@ -348,7 +348,7 @@ export default function MySpaceLogoEditor({ baseImageUrl, userId, onClose, onSav
           <button
             onClick={handleAttemptClose}
             disabled={isSaving}
-            className={`rounded-sm border border-transparent p-1.5 text-[#AFAFAF] transition-all hover:border-white/20 hover:bg-[#202020]/50 2xl:p-2 dark:hover:text-white ${isSaving ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`rounded-sm border border-transparent p-1.5 transition-all bg-black/20 dark:bg-transparent text-gray-100 dark:text-[#AFAFAF] hover:border-white/20 hover:bg-[#202020]/50 hover:text-white 2xl:p-2 ${isSaving ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             title="Close"
           >
             <X className="h-5 w-5 2xl:h-6 2xl:w-6" />
@@ -381,7 +381,7 @@ export default function MySpaceLogoEditor({ baseImageUrl, userId, onClose, onSav
           />
 
           <button
-            className={`rounded-sm border border-transparent p-2.5 text-[#AFAFAF] transition-all hover:border-white/20 hover:bg-[#202020]/50 dark:hover:text-white ${isSaving || !selectedLogoUrl ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`rounded-sm border border-transparent p-2.5 text-gray-100 transition-all bg-black/20  dark:bg-transparent hover:text-white dark:text-[#AFAFAF] hover:border-white/20 hover:bg-[#202020]/50 dark:hover:text-white ${isSaving || !selectedLogoUrl ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             title="Download"
             onClick={handleDownload}
             disabled={!selectedLogoUrl || isSaving}
@@ -392,7 +392,7 @@ export default function MySpaceLogoEditor({ baseImageUrl, userId, onClose, onSav
           <button
             className={`rounded-md border border-transparent px-3 py-2 text-sm transition-all ${
               !selectedLogoUrl || isSaving
-                ? 'cursor-not-allowed text-[#6f6f6f]'
+                ? 'cursor-not-allowed text-gray-200 dark:text-[#6f6f6f]'
                 : 'cursor-pointer text-white hover:border-white/20 hover:bg-[#202020]/50'
             }`}
             disabled={!selectedLogoUrl || isSaving}

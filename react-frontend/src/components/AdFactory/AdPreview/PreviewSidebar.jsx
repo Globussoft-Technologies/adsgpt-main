@@ -163,7 +163,7 @@ const PreviewSidebar = ({
         {/* Bottom section */}
         <button className="group flex flex-col items-center gap-2" onClick={onOpenSaved}>
           <div
-            className={`relative flex h-8 w-8 items-center justify-center rounded-sm bg-gray-50 dark:bg-[#2a2a2a] group-hover:bg-black/5 dark:group-hover:bg-white/20 2xl:h-10 2xl:w-10 ${activeView === 'saved' ? 'border border-black/10 dark:border-white/60 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'}`}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-sm bg-gray-100 dark:bg-[#2a2a2a] group-hover:bg-black/5 dark:group-hover:bg-white/20 2xl:h-10 2xl:w-10 ${activeView === 'saved' ? 'border border-black/10 dark:border-white/60 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/70'}`}
           >
             <Save className="h-5 w-5 2xl:h-6 2xl:w-6" />
             {savedCount > 0 && (

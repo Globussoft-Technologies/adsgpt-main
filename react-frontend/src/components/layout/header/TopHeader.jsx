@@ -84,7 +84,7 @@ const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 // HIDE-MARK — intentionally-hidden header UI (Templates / Refresh buttons and
 // the global theme toggle). Named flag avoids a literal `false &&`
 // (no-constant-binary-expression); flip to re-enable.
-const SHOW_HIDDEN_HEADER_UI = false;
+const SHOW_HIDDEN_HEADER_UI = true;
 
 import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -611,7 +611,7 @@ export default function TopHeader() {
                 {SHOW_HIDDEN_HEADER_UI && (
                   <button
                     variant="ghost"
-                    className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 p-[0.5px] px-4 py-1.5 text-[#AFAFAF] hover:text-white sm:flex 2xl:py-2 2xl:text-sm"
+                    className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-black/10 bg-white/70 p-[0.5px] px-4 py-1.5 text-gray-700 hover:text-gray-900 sm:flex 2xl:py-2 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
                   >
                     <span className="flex items-center gap-2 rounded-full">
                       Refresh

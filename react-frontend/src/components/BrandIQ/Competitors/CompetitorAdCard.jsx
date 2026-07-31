@@ -5,6 +5,7 @@ import { FaFacebookF, FaYoutube, FaLinkedinIn } from 'react-icons/fa';
 import { SiGoogle, SiGoogleads } from 'react-icons/si';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
+import { useSelector } from 'react-redux';
 
 const platformIcons = {
   facebook: <FaFacebookF className="h-4 w-4" />,
@@ -27,6 +28,7 @@ const platformLabels = {
 
 
 const CompetitorAdCard = ({ ad, onClick }) => {
+  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -54,16 +56,16 @@ const CompetitorAdCard = ({ ad, onClick }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border-none bg-[#1a1a1a] shadow-lg transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-xl"
+        className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-white dark:border-none dark:bg-[#1a1a1a] text-gray-900 dark:text-white shadow-lg transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-xl"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={onClick}
       >
       {/* ── Header bar (hover pe dikhata hai, AdCreative style) ── */}
-      <div className="absolute top-0 left-0 z-20 flex h-10 w-full items-center justify-between rounded-none px-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:bg-[#0F0F0F]/80">
-        <div className="flex items-center gap-2 text-sm font-medium text-white">
+      <div className="absolute top-0 left-0 z-20 flex h-10 w-full items-center justify-between rounded-none px-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-white/80 dark:bg-[#0F0F0F]/80">
+        <div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-white">
           {/* Avatar placeholder */}
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-white uppercase">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700 dark:bg-gray-600 dark:text-white uppercase">
             {advertiserName?.slice(0, 2)}
           </div>
           <span className="w-full max-w-[120px] truncate text-xs 2xl:max-w-[150px]">
@@ -73,7 +75,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
         <div className="right_header flex items-center gap-2">
           {/* Platform icon — AdLibrary style tooltip */}
           <ShadcnTooltip label={platformLabel}>
-            <button className="flex cursor-pointer items-center justify-center rounded-full text-center text-white/70 transition-all duration-200 hover:scale-110 hover:opacity-80">
+            <button className="flex cursor-pointer items-center justify-center rounded-full text-center text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white transition-all duration-200 hover:scale-110">
               {platformIcon}
             </button>
           </ShadcnTooltip>
@@ -182,7 +184,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
           aria-hidden
           className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           style={{
-            background: 'linear-gradient(to bottom, transparent 0%, #2A2A2A 100%)',
+            background: `linear-gradient(to bottom, transparent 0%, ${isDarkMode ? '#2A2A2A' : '#f3f4f6'} 100%)`,
           }}
         />
       </div>
@@ -190,8 +192,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       {/* Bottom hover-revealed action bar — exact AdLibrary pattern */}
       <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100">
         <div
-          className="flex h-14 w-full items-center px-3"
-          style={{ backgroundColor: '#2A2A2A' }}
+          className="flex h-14 w-full items-center px-3 bg-gray-100 dark:bg-[#2A2A2A]"
         >
           <button
             type="button"
@@ -199,7 +200,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
               e.stopPropagation();
               setIsRecreateModalOpen(true);
             }}
-            className="w-full rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-[#F2F2F2] active:bg-[#E5E5E5] 2xl:py-2.5 2xl:text-15"
+            className="w-full rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-gray-50 dark:bg-white dark:text-black dark:hover:bg-[#F2F2F2] active:bg-[#E5E5E5] 2xl:py-2.5 2xl:text-15"
           >
             Recreate
           </button>

@@ -19,7 +19,7 @@ const UserBubble = ({ message }) => {
 
   return (
     <div
-      className="border border-solid border-zinc-200 bg-zinc-100 px-4 py-4 text-xs text-zinc-900 backdrop-blur-[100px] 2xl:text-sm dark:border-[#2A2A2A] dark:bg-[#212121] dark:text-white"
+      className="border border-solid border-zinc-200 bg-white/80 px-4 py-4 text-xs text-zinc-900 backdrop-blur-[100px] 2xl:text-sm dark:border-[#2A2A2A] dark:bg-[#212121] dark:text-white"
       style={{ borderRadius: '30px 30px 1px 30px' }}
     >
       <span className="whitespace-pre-wrap">{visible || ''}</span>

@@ -82,7 +82,7 @@ const AdCreativeEditorActions = ({ onSelectLogo }) => {
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <button
-            className="group prompt_selection_button relative flex h-10 w-full items-center gap-2 rounded-lg bg-transparent px-3 text-left text-sm transition-colors hover:bg-[#202020]/50 hover:text-white"
+            className="group prompt_selection_button relative flex h-10 w-full items-center gap-2 rounded-lg bg-white/80 px-3 text-left text-sm text-gray-700 shadow-sm transition-colors hover:bg-gray-100 hover:text-gray-900 dark:bg-transparent dark:text-[#AFAFAF] dark:shadow-none dark:hover:bg-[#202020]/50 dark:hover:text-white"
             type="button"
           >
             {selectedId?.url ? (
@@ -98,30 +98,30 @@ const AdCreativeEditorActions = ({ onSelectLogo }) => {
                 />
               </div>
             ) : (
-              <ImagePlus className="h-5 w-5 text-[#AFAFAF] group-hover:text-white" />
+              <ImagePlus className="h-5 w-5 text-gray-500 group-hover:text-gray-900 dark:text-[#AFAFAF] dark:group-hover:text-white" />
             )}
             <span
               title={selectedId?.name || ''}
-              className="truncate font-medium text-[#AFAFAF] group-hover:text-white"
+              className="truncate font-medium text-gray-700 group-hover:text-gray-900 dark:text-[#AFAFAF] dark:group-hover:text-white"
             >
               {selectedId?.name || 'Choose a logo'}
             </span>
             {popoverOpen ? (
               <ChevronUp className="absolute right-2.5 h-5 w-5" />
             ) : (
-              <ChevronDown className="absolute right-2.5 h-5 w-5 text-[#AFAFAF] group-hover:text-white" />
+              <ChevronDown className="absolute right-2.5 h-5 w-5 text-gray-500 group-hover:text-gray-900 dark:text-[#AFAFAF] dark:group-hover:text-white" />
             )}
           </button>
         </PopoverTrigger>
 
-        <PopoverContent className="z-[9999] w-[180px] overflow-hidden rounded-md border border-white/20 bg-white/80 p-0 text-sm backdrop-blur-[80px] dark:bg-[#202020]/50">
+        <PopoverContent className="z-[9999] w-[180px] overflow-hidden rounded-md border border-black/10 bg-white/95 p-0 text-sm shadow-lg backdrop-blur-[80px] dark:border-white/20 dark:bg-[#202020]/50 dark:shadow-none">
           <div className="hidden-scrollbar max-h-[200px] overflow-auto">
             {logos.length > 0 ? (
               logos?.map((l) => (
                 <div
                   key={l?.id}
                   onClick={() => handleChange(l)}
-                  className="backdrop-blur-100 flex cursor-pointer items-center justify-center gap-2 px-3 py-1.5 text-[#AFAFAF] transition-colors hover:bg-[#3c3c3c]/80 hover:text-white"
+                  className="backdrop-blur-100 flex cursor-pointer items-center justify-center gap-2 px-3 py-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:bg-[#3c3c3c]/80 dark:hover:text-white"
                 >
                   <div
                     className="image_container flex h-[45px] w-[45px] items-center justify-center overflow-hidden rounded-sm"
@@ -137,7 +137,7 @@ const AdCreativeEditorActions = ({ onSelectLogo }) => {
                 </div>
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center px-4 py-4 text-center text-xs text-[#AFAFAF]">
+              <div className="flex flex-col items-center justify-center px-4 py-4 text-center text-xs text-gray-500 dark:text-[#AFAFAF]">
                 <p>No logos available</p>
               </div>
             )}

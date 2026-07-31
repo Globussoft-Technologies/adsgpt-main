@@ -19,10 +19,10 @@ const Warning = ({ open, onSave, onDelete, onClose }) => {
           Delete
         </button>
       </DialogTrigger>
-      <DialogContent className="flex w-full max-w-2xl flex-col overflow-x-hidden rounded-3xl !bg-[#0D0D0D]/30 !backdrop-blur-[50px] sm:p-8">
+      <DialogContent className="flex w-full border border-white/10 dark:border-white/20 max-w-2xl flex-col overflow-x-hidden rounded-3xl !bg-[#0D0D0D]/30 !backdrop-blur-[50px] text-white sm:p-8">
         <DialogHeader>
-          <DialogTitle className="text-center">Unsaved Changes</DialogTitle>
-          <DialogDescription className="mx-auto my-2 max-w-[80%] text-center">
+          <DialogTitle className="text-white text-center">Unsaved Changes</DialogTitle>
+          <DialogDescription className="mx-auto my-2 max-w-[80%] text-gray-200 dark:text-gray-100 text-center">
             Are you sure you want to discard this? Your file will be lost.
           </DialogDescription>
         </DialogHeader>
@@ -30,7 +30,7 @@ const Warning = ({ open, onSave, onDelete, onClose }) => {
           <Button variant="destructive" onClick={onDelete}>
             <Trash className="mr-0 h-4 w-4" /> Discard
           </Button>
-          <Button variant="outline" onClick={onSave}>
+          <Button variant="outline" onClick={onSave} className="text-gray-900 dark:text-white">
             <Save className="mr-0 h-4 w-4" /> Save Changes
           </Button>
         </div>

@@ -327,7 +327,7 @@ export default function ImageCard({
     <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
       <div className="relative" onMouseEnter={handleInfoEnter} onMouseLeave={handleInfoLeave}>
         <button
-          className={`rounded-full p-2 text-gray-100 dark:text-white backdrop-blur hover:bg-black/60 ${showInfo ? 'bg-black/60' : ''}`}
+          className={`rounded-full p-2 text-gray-100 bg-black/20 dark:text-white/90 backdrop-blur hover:bg-black/60 ${showInfo ? 'bg-black/60' : ''}`}
         >
           <Info size={18} />
         </button>
@@ -337,18 +337,18 @@ export default function ImageCard({
             <div className="absolute top-full right-0 h-2 w-full" />
             <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
               <p>
-                <span className="text-gray-400">Type:</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400">Type:</span>{' '}
                 {item?.creativeType || item?.inputs?.type || '-'}
               </p>
               <p>
-                <span className="text-gray-400">Model:</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400">Model:</span>{' '}
                 {(() => {
                   const raw = item?.inputs?.modelLabel || item?.inputs?.model || '-';
                   return MODEL_LABEL_OVERRIDES[raw] || raw;
                 })()}
               </p>
               <p>
-                <span className="text-gray-400">Quality:</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400">Quality:</span>{' '}
                 {(() => {
                   // Records created before the quality field existed won't
                   // carry it — fall back to the backend default of "medium".
@@ -359,37 +359,37 @@ export default function ImageCard({
               </p>
               {item?.inputs?.brandName && (
                 <p>
-                  <span className="text-gray-400">Brand:</span> {item.inputs.brandName}
+                  <span className="text-gray-500 dark:text-gray-400">Brand:</span> {item.inputs.brandName}
                 </p>
               )}
               {item?.inputs?.productName && (
                 <p>
-                  <span className="text-gray-400">Product:</span> {item.inputs.productName}
+                  <span className="text-gray-500 dark:text-gray-400">Product:</span> {item.inputs.productName}
                 </p>
               )}
               <p>
-                <span className="text-gray-400">Aspect:</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400">Aspect:</span>{' '}
                 {findAspectEntryForCard(item)?.aspectRatio || item?.inputs?.aspectRatio || '-'}
               </p>
               {item?.inputs?.numberOfImages && (
                 <p>
-                  <span className="text-gray-400">Variations:</span> {item.inputs.numberOfImages}
+                  <span className="text-gray-500 dark:text-gray-400">Variations:</span> {item.inputs.numberOfImages}
                 </p>
               )}
               {(item?.inputs?.userPrompt || item?.inputs?.prompt) && (
                 <p className="mt-1">
-                  <span className="text-gray-400">Prompt:</span>{' '}
+                  <span className="text-gray-500 dark:text-gray-400">Prompt:</span>{' '}
                   {item.inputs.userPrompt || item.inputs.prompt}
                 </p>
               )}
               {item?.inputs?.instructions && (
                 <p className="mt-1">
-                  <span className="text-gray-400">Instructions:</span> {item.inputs.instructions}
+                  <span className="text-gray-500 dark:text-gray-400">Instructions:</span> {item.inputs.instructions}
                 </p>
               )}
               {item?.updatedAt && (
                 <p className="mt-1">
-                  <span className="text-gray-400">Time:</span>{' '}
+                  <span className="text-gray-500 dark:text-gray-400">Time:</span>{' '}
                   {new Date(item.updatedAt).toLocaleString('en-IN', {
                     timeZone: 'Asia/Kolkata',
                     hour: '2-digit',
@@ -476,7 +476,7 @@ export default function ImageCard({
         </div>
       )}
 
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
+    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f]">
       {enableInfo && <InfoTooltip />}
 
       {/* Selection Checkbox */}
@@ -614,7 +614,7 @@ export default function ImageCard({
         // them pre-filled. Mirrors the success-state hover bar but with no
         // download / post-ad actions (no image to act on).
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
-          <p className="mt-2 text-xs text-gray-400">{errorMessage}</p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{errorMessage}</p>
 
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-linear-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
             {enableRecreate && (

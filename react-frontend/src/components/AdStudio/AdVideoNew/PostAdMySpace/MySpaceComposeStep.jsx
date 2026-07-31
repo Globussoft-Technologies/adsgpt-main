@@ -139,7 +139,7 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
         <button
           type="button"
           onClick={onBack}
-          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+          className="flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to selection
@@ -147,17 +147,17 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
       )}
 
       {selection && (
-        <div className="flex flex-wrap gap-2 text-[11px] text-white/55">
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+        <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-white/55">
+          <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Ad account · {selection.adAccountId}
           </span>
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+          <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Page · {selection.pageId}
           </span>
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+          <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Campaign · {selection.campaignId}
           </span>
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+          <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Ad set · {selection.adSetId}
           </span>
         </div>
@@ -175,8 +175,8 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
           </Field>
 
           <Field label="Media">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/2 px-3 py-3">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[#111]">
+            <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-black/5 px-3 py-3 dark:border-white/10 dark:bg-white/2">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-200 dark:bg-[#111]">
                 {mediaUrl ? (
                   isVideo ? (
                     <video src={mediaUrl} className="h-full w-full object-cover" muted />
@@ -186,23 +186,23 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
                 ) : null}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-white">
                   {isVideo ? (
-                    <VideoIcon className="h-3.5 w-3.5 text-white/55" />
+                    <VideoIcon className="h-3.5 w-3.5 text-gray-400 dark:text-white/55" />
                   ) : (
-                    <ImageIcon className="h-3.5 w-3.5 text-white/55" />
+                    <ImageIcon className="h-3.5 w-3.5 text-gray-400 dark:text-white/55" />
                   )}
                   <span className="truncate">{filename || 'Selected media'}</span>
                 </p>
-                <p className="mt-0.5 text-xs text-white/40">
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-white/40">
                   Prefilled from MySpace · {isVideo ? 'video' : 'image'}
                 </p>
               </div>
             </div>
           </Field>
 
-          <div className="rounded-2xl border border-white/8 bg-white/2 p-4 2xl:p-5">
-            <p className="mb-3 text-xs font-semibold tracking-wide text-white/55 uppercase">
+          <div className="rounded-2xl border border-black/8 bg-black/[0.02] p-4 dark:border-white/8 dark:bg-white/2 2xl:p-5">
+            <p className="mb-3 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-white/55">
               Ad Copy
             </p>
 
@@ -219,8 +219,8 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
                   disabled={generating || !form.prompt.trim()}
                   className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition 2xl:text-sm ${
                     generating || !form.prompt.trim()
-                      ? 'cursor-not-allowed bg-white/8 text-white/40'
-                      : 'bg-white text-black hover:opacity-90'
+                      ? 'cursor-not-allowed bg-black/5 text-gray-400 dark:bg-white/8 dark:text-white/40'
+                      : 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
                   }`}
                 >
                   {generating ? (
@@ -273,7 +273,7 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
                   value={form.callToAction}
                   onValueChange={(v) => setForm((f) => ({ ...f, callToAction: v }))}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-3 text-sm text-white">
+                  <SelectTrigger className="h-10 w-full rounded-xl border-black/10 bg-black/5 px-3 text-sm text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white">
                     {/* Pass children to SelectValue so the trigger label
                         is derived from `form.callToAction` directly.
                         Radix's default behavior reads the matching
@@ -286,7 +286,7 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
                       {form.callToAction ? labelize(form.callToAction) : undefined}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="z-[9999] border-white/10 bg-[#1A1A1A] text-white">
+                  <SelectContent className="z-[9999] border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-white">
                     {CTA_OPTIONS.map((opt) => (
                       <SelectItem key={opt} value={opt} className="text-sm">
                         {labelize(opt)}
@@ -309,23 +309,23 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
 
         {/* live preview */}
         <div>
-          <p className="mb-2 text-xs font-semibold tracking-wide text-white/55 uppercase">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-white/55">
             Preview
           </p>
-          <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#0D0D0D]">
-            <div className="flex items-center gap-2.5 border-b border-white/5 px-4 py-3 2xl:px-5 2xl:py-3.5">
-              <div className="h-8 w-8 rounded-full bg-white/10 2xl:h-9 2xl:w-9" />
+          <div className="overflow-hidden rounded-2xl border border-black/10 bg-gray-50 dark:border-white/8 dark:bg-[#0D0D0D]">
+            <div className="flex items-center gap-2.5 border-b border-black/5 px-4 py-3 dark:border-white/5 2xl:px-5 2xl:py-3.5">
+              <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-white/10 2xl:h-9 2xl:w-9" />
               <div>
-                <p className="text-sm font-semibold text-white 2xl:text-base">Sponsored</p>
-                <p className="text-xs text-white/35 2xl:text-sm">Facebook · Feed</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white 2xl:text-base">Sponsored</p>
+                <p className="text-xs text-gray-400 dark:text-white/35 2xl:text-sm">Facebook · Feed</p>
               </div>
             </div>
             {form.primaryText && (
-              <p className="px-4 pt-3 text-sm leading-relaxed text-white/85 2xl:px-5 2xl:text-base">
+              <p className="px-4 pt-3 text-sm leading-relaxed text-gray-800 dark:text-white/85 2xl:px-5 2xl:text-base">
                 {form.primaryText}
               </p>
             )}
-            <div className="mt-3 aspect-square w-full overflow-hidden bg-[#111]">
+            <div className="mt-3 aspect-square w-full overflow-hidden bg-gray-200 dark:bg-[#111]">
               {mediaUrl ? (
                 isVideo ? (
                   <video
@@ -346,24 +346,24 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-between gap-3 border-t border-white/5 px-4 py-3 2xl:px-5 2xl:py-4">
+            <div className="flex items-center justify-between gap-3 border-t border-black/5 px-4 py-3 dark:border-white/5 2xl:px-5 2xl:py-4">
               <div className="min-w-0">
-                <p className="truncate text-[11px] tracking-wider text-white/35 uppercase 2xl:text-xs">
+                <p className="truncate text-[11px] tracking-wider text-gray-400 uppercase dark:text-white/35 2xl:text-xs">
                   {previewHost}
                 </p>
                 {form.headline && (
-                  <p className="mt-0.5 truncate text-sm font-bold text-white 2xl:text-base">
+                  <p className="mt-0.5 truncate text-sm font-bold text-gray-900 dark:text-white 2xl:text-base">
                     {form.headline}
                   </p>
                 )}
                 {form.description && (
-                  <p className="mt-0.5 truncate text-xs text-white/55 2xl:text-sm">
+                  <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-white/55 2xl:text-sm">
                     {form.description}
                   </p>
                 )}
               </div>
               {form.callToAction !== 'NO_BUTTON' && (
-                <span className="ml-3 shrink-0 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white 2xl:px-4 2xl:py-2 2xl:text-sm">
+                <span className="ml-3 shrink-0 rounded-full border border-black/10 bg-black/5 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:border-white/12 dark:bg-white/8 dark:text-white 2xl:px-4 2xl:py-2 2xl:text-sm">
                   {labelize(form.callToAction)}
                 </span>
               )}
@@ -380,8 +380,8 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
           title={missingField || undefined}
           className={`flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold transition 2xl:px-10 2xl:py-3 2xl:text-base ${
             canPost
-              ? 'bg-white text-black hover:opacity-90'
-              : 'cursor-not-allowed bg-gray-400/30 text-gray-400'
+              ? 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
+              : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-400/30 dark:text-gray-400'
           }`}
         >
           {posting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -396,8 +396,8 @@ function Field({ label, hint, children }) {
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <label className="text-sm font-medium text-white/75 2xl:text-base">{label}</label>
-        {hint && <span className="text-[10px] text-white/40 2xl:text-xs">{hint}</span>}
+        <label className="text-sm font-medium text-gray-700 dark:text-white/75 2xl:text-base">{label}</label>
+        {hint && <span className="text-[10px] text-gray-400 dark:text-white/40 2xl:text-xs">{hint}</span>}
       </div>
       {children}
     </div>
@@ -412,7 +412,7 @@ function TextInput({ value, onChange, placeholder, maxLength }) {
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-white/25 focus:bg-white/8 2xl:h-11 2xl:text-base"
+      className="h-10 w-full rounded-xl border border-black/10 bg-black/5 px-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-black/20 focus:bg-black/8 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/25 dark:focus:bg-white/8 2xl:h-11 2xl:text-base"
     />
   );
 }
@@ -425,7 +425,7 @@ function TextArea({ value, onChange, placeholder, rows = 3, maxLength }) {
       placeholder={placeholder}
       rows={rows}
       maxLength={maxLength}
-      className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-white/25 focus:bg-white/8 2xl:text-base"
+      className="w-full resize-none rounded-xl border border-black/10 bg-black/5 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-black/20 focus:bg-black/8 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/25 dark:focus:bg-white/8 2xl:text-base"
     />
   );
 }
