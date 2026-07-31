@@ -1,8 +1,8 @@
 const { initializeApp, getApps, cert } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const axios = require("axios");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { SignedDataVerifier, Environment } = require("@apple/app-store-server-library");
 const { google } = require("googleapis");
 const { generateToken } = require("../../services/authService");
 const UserProfile = require("../../Module/user/userProfileModel");
@@ -15,6 +15,104 @@ const apiKey = process.env.AMEMBER_API_KEY;
 const baseUrl = process.env.AMEMBER_BASE_API_URL;
 const secretKey = process.env.JWT_SECRET_KEY;
 const tokenExpiryTime = process.env.TOKEN_EXPIRY_TIME || 1440;
+
+function verifyAndDecodeAppleJWS(jwsString) {
+  if (!jwsString) throw new Error("Empty Apple JWS token.");
+  const parts = jwsString.split(".");
+  if (parts.length !== 3) throw new Error("Invalid Apple JWS format.");
+
+  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+  if (header.alg !== "ES256") throw new Error("Unexpected Apple JWS algorithm.");
+  if (!Array.isArray(header.x5c) || header.x5c.length < 3) {
+    throw new Error("Apple JWS certificate chain is missing.");
+  }
+
+  const certificates = header.x5c.map(
+    (certificate) => new crypto.X509Certificate(Buffer.from(certificate, "base64")),
+  );
+  for (let index = 0; index < certificates.length - 1; index += 1) {
+    if (!certificates[index].verify(certificates[index + 1].publicKey)) {
+      throw new Error("Apple JWS certificate chain verification failed.");
+    }
+  }
+
+  return jwt.verify(
+    jwsString,
+    certificates[0].publicKey.export({ type: "spki", format: "pem" }),
+    { algorithms: ["ES256"] },
+  );
+}
+
+function validateApplePayload(payload) {
+  const bundleId = process.env.APPLE_BUNDLE_ID;
+  const envStr = process.env.APPLE_ENVIRONMENT;
+  if (!bundleId || !envStr) {
+    throw new Error("APPLE_BUNDLE_ID and APPLE_ENVIRONMENT are required.");
+  }
+  const expectedEnvironment =
+    envStr.toLowerCase() === "sandbox" ? "Sandbox" : "Production";
+  if (payload.bundleId !== bundleId || payload.environment !== expectedEnvironment) {
+    throw new Error("Apple JWS app identity does not match server configuration.");
+  }
+  return payload;
+}
+
+function generateAppleServerApiToken() {
+  const privateKey = process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const keyId = process.env.APPLE_KEY_ID;
+  const issuerId = process.env.APPLE_ISSUER_ID;
+  const bundleId = process.env.APPLE_BUNDLE_ID;
+  if (!privateKey || !keyId || !issuerId || !bundleId) {
+    throw new Error("Apple App Store Server API credentials are incomplete.");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign(
+    { iss: issuerId, iat: now - 30, exp: now + 20 * 60, aud: "appstoreconnect-v1", bid: bundleId },
+    privateKey,
+    { algorithm: "ES256", header: { alg: "ES256", kid: keyId, typ: "JWT" } },
+  );
+}
+
+async function crossCheckAppleTransaction(payload) {
+  const baseUrl =
+    payload.environment === "Sandbox"
+      ? "https://api.storekit-sandbox.itunes.apple.com/inApps/v1"
+      : "https://api.storekit.itunes.apple.com/inApps/v1";
+  const response = await axios.get(
+    `${baseUrl}/transactions/${payload.transactionId}`,
+    {
+      headers: { Authorization: `Bearer ${generateAppleServerApiToken()}` },
+      timeout: 15000,
+    },
+  );
+  const serverPayload = validateApplePayload(
+    verifyAndDecodeAppleJWS(response.data.signedTransactionInfo),
+  );
+  if (
+    String(serverPayload.transactionId) !== String(payload.transactionId) ||
+    String(serverPayload.originalTransactionId) !== String(payload.originalTransactionId) ||
+    serverPayload.productId !== payload.productId
+  ) {
+    throw new Error("Apple transaction does not match App Store Server API data.");
+  }
+  return serverPayload;
+}
+
+function validateAppleWebhookTransaction(notificationType, payload) {
+  const expiresAt = payload.expiresDate ? new Date(payload.expiresDate).getTime() : 0;
+  const revoked = Boolean(payload.revocationDate);
+
+  if (notificationType === "DID_RENEW") {
+    return !revoked && expiresAt > Date.now();
+  }
+  if (notificationType === "EXPIRED") {
+    return expiresAt > 0 && expiresAt <= Date.now();
+  }
+  if (notificationType === "REFUND" || notificationType === "REVOKE") {
+    return revoked;
+  }
+  return true;
+}
 
 // Initialize Firebase Admin if credentials present
 if (getApps().length === 0) {
@@ -300,6 +398,43 @@ async function matchAmemberProduct(storeProductId) {
   };
 }
 
+async function matchAmemberFreeTrialProduct() {
+  const prods = await getAmemberProducts();
+  const trialPlanId = process.env.TRIAL_PLAN_ID || "8";
+
+  let matched = prods.find(
+    (product) =>
+      product &&
+      product.is_disabled !== "1" &&
+      product.is_archived !== "1" &&
+      String(product.product_id) === String(trialPlanId),
+  );
+
+  if (!matched) {
+    matched = prods.find((product) => {
+      if (!product || product.is_disabled === "1" || product.is_archived === "1") return false;
+      const titleWords = String(product.title || "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+      return titleWords.includes("free");
+    });
+  }
+
+  if (!matched && prods.length > 0) {
+    matched = prods[0];
+  }
+
+  const amemberProductId = matched ? parseInt(matched.product_id, 10) : parseInt(trialPlanId, 10);
+  const title = matched?.title || "Free Trial";
+  const billingPlanId = matched?.default_billing_plan_id || amemberProductId;
+
+  return {
+    amember_product_id: amemberProductId,
+    amember_billing_plan_id: billingPlanId,
+    title,
+    period: "7d",
+    amemberProduct: matched,
+  };
+}
+
 function formatDateForAmember(date) {
   const d = new Date(date);
   const year = d.getUTCFullYear();
@@ -322,8 +457,8 @@ async function postAmemberInvoice({
   const publicId = `${platform}_${canonicalTransactionId}`;
   const paysysId = platform === "ios" ? "app-store" : "google-play";
   const beginDateStr = formatDateForAmember(purchasedAt);
-  const expireDateStr = formatDateForAmember(expiresAt);
-  const formattedAmount = (amount || 19.99).toFixed(2);
+  const numericAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : (parseFloat(amount) || 0);
+  const formattedAmount = numericAmount.toFixed(2);
 
   const payload = new URLSearchParams();
   payload.append("_key", apiKey);
@@ -375,7 +510,73 @@ async function postAmemberInvoice({
   const res = await axios.post(`${baseUrl}/invoices`, payload.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
+
+  // Explicitly grant product access in aMember /access table
+  try {
+    const accessPayload = new URLSearchParams({
+      _key: apiKey,
+      user_id: String(amemberUserId),
+      product_id: String(matchedProduct.amember_product_id),
+      begin_date: beginDateStr,
+      expire_date: expireDateStr,
+    });
+    await axios.post(`${baseUrl}/access`, accessPayload.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (accessErr) {
+    console.error("[postAmemberInvoice] aMember access post warning:", accessErr.message);
+  }
+
+  // Update user status to Active (1) in aMember
+  try {
+    const userParams = new URLSearchParams({
+      _key: apiKey,
+      status: "1",
+    });
+    await axios.put(`${baseUrl}/users/${amemberUserId}`, userParams.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (userErr) {
+    console.error("[postAmemberInvoice] aMember user status update warning:", userErr.message);
+  }
+
   return res.data;
+}
+
+async function activateAmemberUserStatus({
+  amemberUserId,
+  matchedProduct,
+  purchasedAt,
+  expiresAt,
+}) {
+  try {
+    const beginDateStr = formatDateForAmember(purchasedAt);
+    const expireDateStr = formatDateForAmember(expiresAt);
+    const accessPayload = new URLSearchParams({
+      _key: apiKey,
+      user_id: String(amemberUserId),
+      product_id: String(matchedProduct.amember_product_id),
+      begin_date: beginDateStr,
+      expire_date: expireDateStr,
+    });
+    await axios.post(`${baseUrl}/access`, accessPayload.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (accessErr) {
+    console.warn("[activateAmemberUserStatus] Access post info:", accessErr.message);
+  }
+
+  try {
+    const userParams = new URLSearchParams({
+      _key: apiKey,
+      status: "1",
+    });
+    await axios.put(`${baseUrl}/users/${amemberUserId}`, userParams.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (userErr) {
+    console.warn("[activateAmemberUserStatus] User status update info:", userErr.message);
+  }
 }
 
 async function deleteAmemberInvoice(platform, canonicalTransactionId) {
@@ -1189,17 +1390,17 @@ const verifyApplePayment = async (req, res) => {
 
     let decoded;
     try {
-      const issuerId = process.env.APPLE_ISSUER_ID || "PLACEHOLDER";
-      const keyId = process.env.APPLE_KEY_ID || "PLACEHOLDER";
-      const bundleId = process.env.APPLE_BUNDLE_ID || "io.adsgpt.app";
-      const envStr = process.env.APPLE_ENVIRONMENT || "Production";
-      const environment = envStr.toLowerCase() === "sandbox" ? Environment.SANDBOX : Environment.PRODUCTION;
-      const rootCerts = [];
-      const verifier = new SignedDataVerifier(rootCerts, false, environment, bundleId, undefined);
-      decoded = await verifier.verifyAndDecodeTransaction(signedTransaction);
+      decoded = validateApplePayload(verifyAndDecodeAppleJWS(signedTransaction));
     } catch (e) {
       console.error("[verifyApplePayment] JWS verification failed:", e.message);
       return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Invalid App Store signature." });
+    }
+
+    try {
+      decoded = await crossCheckAppleTransaction(decoded);
+    } catch (e) {
+      console.error("[verifyApplePayment] App Store Server API check failed:", e.message);
+      return res.status(502).json({ ok: false, code: "APPLE_SERVER_ERROR", error: "Apple could not confirm this transaction." });
     }
 
     const productId = decoded.productId;
@@ -1208,11 +1409,33 @@ const verifyApplePayment = async (req, res) => {
     const purchaseDate = decoded.purchaseDate ? new Date(decoded.purchaseDate) : new Date();
     const expiresDate = decoded.expiresDate ? new Date(decoded.expiresDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const isTrial = decoded.offerType === 2; // Apple offerType 2 = Free Trial
-    let amount = isTrial ? 0.00 : (decoded.price ? (decoded.price / 1000.0) : 19.99);
+    const isTrial =
+      decoded.offerDiscountType === "FREE_TRIAL" ||
+      (decoded.offerType === 1 && decoded.offerDiscountType === "FREE_TRIAL") ||
+      decoded.offerType === 2 ||
+      decoded.price === 0;
+
+    let amount = 0.00;
+    if (isTrial) {
+      amount = 0.00;
+    } else if (typeof decoded.price === "number") {
+      amount = decoded.price / 1000.0;
+    } else {
+      amount = 0.00;
+    }
 
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: transactionId });
-    const matchedProduct = await matchAmemberProduct(productId);
+    if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
+      return res.status(409).json({
+        ok: false,
+        code: "TRANSACTION_ALREADY_USED",
+        error: "This transaction ID has already been claimed by another user account."
+      });
+    }
+
+    const matchedProduct = isTrial
+      ? await matchAmemberFreeTrialProduct()
+      : await matchAmemberProduct(productId);
 
     if (!existingTx) {
       try {
@@ -1228,11 +1451,12 @@ const verifyApplePayment = async (req, res) => {
           expiresAt: expiresDate,
         });
       } catch (invoiceErr) {
-        console.error("[verifyApplePayment] aMember invoice failed:", invoiceErr.message);
+        const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
+        console.error("[verifyApplePayment] aMember invoice failed:", detail);
         return res.status(422).json({
           ok: false,
           code: "AMEMBER_SYNC_FAILED",
-          error: "Your payment was verified by Apple, but our billing system failed to update your account. Please try restoring your purchases in a few minutes or contact support."
+          error: `aMember invoice sync failed: ${detail}`
         });
       }
 
@@ -1243,7 +1467,7 @@ const verifyApplePayment = async (req, res) => {
         canonical_transaction_id: transactionId,
         original_transaction_id: originalTransactionId,
         store_product_id: productId,
-        event_type: "initial_purchase",
+        event_type: isTrial ? "free_trial" : "initial_purchase",
         amount,
         currency: decoded.currency || "USD",
         amember_invoice_id: `ios_${transactionId}`,
@@ -1253,6 +1477,13 @@ const verifyApplePayment = async (req, res) => {
         meta: { env: process.env.APPLE_ENVIRONMENT || "Production" },
       });
     }
+
+    await activateAmemberUserStatus({
+      amemberUserId,
+      matchedProduct,
+      purchasedAt: purchaseDate,
+      expiresAt: expiresDate,
+    });
 
     let userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
     const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
@@ -1351,12 +1582,8 @@ const verifyGooglePayment = async (req, res) => {
       return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Invalid Google Play purchase token." });
     }
 
-    const canonicalTxId = purchaseToken;
-    let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
-    const matchedProduct = await matchAmemberProduct(productId);
-
     let isTrial = false;
-    let amount = 19.99;
+    let amount = 0.00;
     let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const now = new Date();
 
@@ -1368,12 +1595,25 @@ const verifyGooglePayment = async (req, res) => {
       if (item.offerDetails && item.offerDetails.offerTags && item.offerDetails.offerTags.includes("trial")) {
         isTrial = true;
       }
-      // Attempt to parse dynamic pricing if available in a full implementation, fallback for now if missing
     }
 
     if (isTrial) {
       amount = 0.00;
     }
+
+    const canonicalTxId = purchaseToken;
+    let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
+    if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
+      return res.status(409).json({
+        ok: false,
+        code: "TRANSACTION_ALREADY_USED",
+        error: "This transaction ID has already been claimed by another user account."
+      });
+    }
+
+    const matchedProduct = isTrial
+      ? await matchAmemberFreeTrialProduct()
+      : await matchAmemberProduct(productId);
 
     if (!existingTx) {
       try {
@@ -1389,11 +1629,12 @@ const verifyGooglePayment = async (req, res) => {
           expiresAt: expiresDate,
         });
       } catch (invoiceErr) {
-        console.error("[verifyGooglePayment] aMember invoice failed:", invoiceErr.message);
+        const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
+        console.error("[verifyGooglePayment] aMember invoice failed:", detail);
         return res.status(422).json({
           ok: false,
           code: "AMEMBER_SYNC_FAILED",
-          error: "Your payment was verified by Google, but our billing system failed to update your account. Please try restoring your purchases in a few minutes or contact support."
+          error: `aMember invoice sync failed: ${detail}`
         });
       }
 
@@ -1404,7 +1645,7 @@ const verifyGooglePayment = async (req, res) => {
         canonical_transaction_id: canonicalTxId,
         original_transaction_id: canonicalTxId,
         store_product_id: productId,
-        event_type: "initial_purchase",
+        event_type: isTrial ? "free_trial" : "initial_purchase",
         amount,
         currency: "USD",
         amember_invoice_id: `android_${canonicalTxId}`,
@@ -1414,6 +1655,13 @@ const verifyGooglePayment = async (req, res) => {
         meta: { packageName },
       });
     }
+
+    await activateAmemberUserStatus({
+      amemberUserId,
+      matchedProduct,
+      purchasedAt: now,
+      expiresAt: expiresDate,
+    });
 
     let userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
     const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
@@ -1575,11 +1823,7 @@ const handleAppleWebhook = async (req, res) => {
 
     let decoded;
     try {
-      const bundleId = process.env.APPLE_BUNDLE_ID || "io.adsgpt.app";
-      const envStr = process.env.APPLE_ENVIRONMENT || "Production";
-      const environment = envStr.toLowerCase() === "sandbox" ? Environment.SANDBOX : Environment.PRODUCTION;
-      const verifier = new SignedDataVerifier([], false, environment, bundleId, undefined);
-      decoded = await verifier.verifyAndDecodeNotification(signedPayload);
+      decoded = verifyAndDecodeAppleJWS(signedPayload);
     } catch (err) {
       console.error("[handleAppleWebhook] JWS verification failed:", err.message);
       return res.status(401).json({ ok: false, error: "Forged webhook payload." });
@@ -1591,22 +1835,40 @@ const handleAppleWebhook = async (req, res) => {
     const existing = await MobileStoreWebhookEvent.findOne({ event_id: eventId });
     if (existing) return res.status(200).json({ ok: true, message: "Duplicate event ignored." });
 
-    await MobileStoreWebhookEvent.create({
-      platform: "ios",
-      event_id: eventId,
-      event_type: notificationType,
-      state: "processed",
-      raw_payload: decoded,
-    });
+    if (notificationType === "TEST") {
+      return res.status(200).json({ ok: true, message: "Test notification received." });
+    }
 
-    if (decoded.data && decoded.data.signedTransactionInfo) {
+    let txInfo = null;
+    if (decoded.data?.signedTransactionInfo) {
       try {
-        const bundleId = process.env.APPLE_BUNDLE_ID || "io.adsgpt.app";
-        const envStr = process.env.APPLE_ENVIRONMENT || "Production";
-        const environment = envStr.toLowerCase() === "sandbox" ? Environment.SANDBOX : Environment.PRODUCTION;
-        const verifier = new SignedDataVerifier([], false, environment, bundleId, undefined);
-        const txInfo = await verifier.verifyAndDecodeTransaction(decoded.data.signedTransactionInfo);
+        const signedTransaction = validateApplePayload(
+          verifyAndDecodeAppleJWS(decoded.data.signedTransactionInfo),
+        );
+        txInfo = await crossCheckAppleTransaction(signedTransaction);
+      } catch (err) {
+        console.error("[handleAppleWebhook] Apple transaction check failed:", err.message);
+        return res.status(err.response ? 502 : 401).json({
+          ok: false,
+          error: err.response
+            ? "Apple could not confirm the webhook transaction."
+            : "Invalid Apple webhook transaction.",
+        });
+      }
+    }
 
+    const stateChangingTypes = ["DID_RENEW", "EXPIRED", "REFUND", "REVOKE"];
+    if (stateChangingTypes.includes(notificationType)) {
+      if (!txInfo || !validateAppleWebhookTransaction(notificationType, txInfo)) {
+        return res.status(409).json({
+          ok: false,
+          error: "Webhook state does not match Apple Server API data.",
+        });
+      }
+    }
+
+    if (txInfo) {
+      try {
         const originalTransactionId = String(txInfo.originalTransactionId);
 
         if (notificationType === "DID_RENEW") {
@@ -1621,13 +1883,17 @@ const handleAppleWebhook = async (req, res) => {
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
           if (existingTx && existingTx.amember_user_id) {
             const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
+            const renewalAmount =
+              typeof txInfo?.price === "number"
+                ? txInfo.price / 1000.0
+                : existingTx.amount;
             await postAmemberInvoice({
               amemberUserId: existingTx.amember_user_id,
               canonicalTransactionId: String(txInfo.transactionId),
               platform: "ios",
               storeProductId: existingTx.store_product_id,
               matchedProduct,
-              amount: existingTx.amount || 19.99,
+              amount: renewalAmount,
               currency: existingTx.currency || "USD",
               purchasedAt: purchaseDate,
               expiresAt: expiresDate,
@@ -1648,8 +1914,17 @@ const handleAppleWebhook = async (req, res) => {
         }
       } catch (err) {
         console.error("[handleAppleWebhook] Failed to process transaction info:", err.message);
+        return res.status(500).json({ ok: false, error: "Webhook processing failed." });
       }
     }
+
+    await MobileStoreWebhookEvent.create({
+      platform: "ios",
+      event_id: eventId,
+      event_type: notificationType,
+      state: "processed",
+      raw_payload: decoded,
+    });
 
     return res.status(200).json({ ok: true });
   } catch (error) {
@@ -1720,13 +1995,14 @@ const handleGoogleWebhook = async (req, res) => {
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
           if (existingTx && existingTx.amember_user_id) {
             const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
+            const renewalAmount = existingTx.amount;
             await postAmemberInvoice({
               amemberUserId: existingTx.amember_user_id,
               canonicalTransactionId: purchaseToken,
               platform: "android",
               storeProductId: existingTx.store_product_id,
               matchedProduct,
-              amount: existingTx.amount || 19.99,
+              amount: renewalAmount,
               currency: existingTx.currency || "USD",
               purchasedAt: new Date(),
               expiresAt: expiresDate,

@@ -203,7 +203,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
     }
     if (videoModel === 'kling_3.0') {
-      return [{ value: '8s', label: '8s' }, { value: '12s', label: '12s' }];
+      return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
     }
     const opts = [
       { value: '8s', label: '8s' },
