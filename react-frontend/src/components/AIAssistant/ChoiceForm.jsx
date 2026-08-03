@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Sparkles,
@@ -160,9 +161,133 @@ const SelectField = ({ field, value, onChange, disabled }) => {
   );
 };
 
-// Friendly model picker: instead of a cramped native <select>, each model is a
-// selectable row showing its per-image credit cost inline (a badge) AND on hover
-// (a tooltip) — so users can compare what each model costs before choosing.
+// ─── Dropdown shell ─────────────────────────────────────────────────────────
+// Shared trigger + menu for the model and aspect-ratio pickers, matching the
+// Ad Studio → Ad Creatives pattern (a pill you click to open a list) rather
+// than laying every option out as a button.
+//
+// The menu is portalled to <body> and positioned `fixed` from the trigger's
+// rect: the brief's fields grid scrolls internally and the card is a
+// backdrop-blurred glass panel, either of which would clip an absolutely
+// positioned menu. Same approach as Ad Studio's AspectRatioTiles quantity menu.
+const DROPDOWN_MIN_W = 200;
+
+const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children }) => {
+  // menu: { left, top?, bottom?, width, below } — null when fully closed.
+  const [menu, setMenu] = useState(null);
+  const [visible, setVisible] = useState(false); // drives the open/close animation
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const closeTimer = useRef(null);
+
+  const close = () => {
+    setVisible(false);
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setMenu(null), 160); // matches exit duration
+  };
+
+  const open = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    clearTimeout(closeTimer.current);
+    const r = el.getBoundingClientRect();
+    const width = Math.max(r.width, DROPDOWN_MIN_W);
+    // Prefer opening downward; flip up when the viewport can't take the menu.
+    const below = r.bottom + estHeight + 8 <= window.innerHeight;
+    setMenu({
+      width,
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+      top: below ? r.bottom + 6 : undefined,
+      bottom: below ? undefined : window.innerHeight - r.top + 6,
+      below,
+    });
+    // Double rAF so the closed state paints first — otherwise the enter
+    // transition is skipped and the menu just pops in.
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  };
+
+  // Close on outside click, Escape, and scroll/resize (a fixed position would
+  // otherwise go stale as the fields grid scrolls under it).
+  useEffect(() => {
+    if (!menu) return undefined;
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      close();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    const onScrollResize = () => close();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScrollResize, true);
+    window.addEventListener('resize', onScrollResize);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScrollResize, true);
+      window.removeEventListener('resize', onScrollResize);
+    };
+  }, [menu]);
+
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
+
+  const isOpen = !!menu;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => (isOpen ? close() : open())}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel}
+        className={`flex h-9 w-full items-center justify-between gap-2 rounded-lg border bg-[#111] px-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+          isOpen ? 'border-white/40' : 'border-white/10 hover:border-white/25'
+        }`}
+      >
+        {trigger}
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-white/40 transition-transform ${
+            isOpen ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {menu &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            style={{
+              position: 'fixed',
+              left: menu.left,
+              top: menu.top,
+              bottom: menu.bottom,
+              width: menu.width,
+              maxHeight: estHeight,
+            }}
+            className={`subtle-scroll pointer-events-auto z-[80] overflow-y-auto rounded-xl border border-white/10 bg-[#191919] py-1 shadow-2xl ring-1 ring-black/40 transition-all duration-150 ease-out will-change-transform ${
+              menu.below ? 'origin-top' : 'origin-bottom'
+            } ${
+              visible
+                ? 'translate-y-0 scale-100 opacity-100'
+                : `${menu.below ? '-translate-y-1' : 'translate-y-1'} scale-95 opacity-0`
+            }`}
+          >
+            {children({ close })}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+};
+
+// Friendly model picker: a dropdown whose rows each show the model's per-image
+// credit cost inline (a badge), so users can compare what each model costs
+// before choosing. The cost also rides on the closed trigger.
 // `creditCosts` is the form's { model: creditsPerImage, auto: … } map.
 const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => {
   const opts = normaliseOptions(field.options);
@@ -171,53 +296,71 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
     if (Object.prototype.hasOwnProperty.call(creditCosts, v)) return creditCosts[v];
     return creditCosts.auto ?? null;
   };
+  const selected = opts.find((o) => o.value === value);
+  const selectedCost = selected ? costFor(selected.value) : null;
+
   return (
-    <div className="flex flex-col gap-1.5">
-      {opts.map((o) => {
-        const isOn = value === o.value;
-        const cost = costFor(o.value);
-        const row = (
-          <button
-            type="button"
-            onClick={() => onChange(o.value)}
-            disabled={disabled}
-            className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-all ${
-              isOn
-                ? 'border-white/40 bg-white/[0.10] shadow-[0_0_0_1px_#ffffff30]'
-                : 'border-white/10 bg-transparent hover:border-white/25'
-            } disabled:cursor-not-allowed disabled:opacity-60`}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span
-                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                  isOn ? 'border-white' : 'border-white/30'
-                }`}
-              >
-                {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-              </span>
-              <span className="truncate text-[13px] text-white/90">{o.label}</span>
+    <DropdownShell
+      disabled={disabled}
+      ariaLabel={`Model: ${selected?.label || 'none selected'}`}
+      trigger={
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate text-[13px] text-white/90">
+            {selected?.label || 'Select a model'}
+          </span>
+          {selectedCost != null && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
+              <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
+              {selectedCost} cr/img
             </span>
-            {cost != null && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
-                <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
-                {cost} cr/img
+          )}
+        </span>
+      }
+    >
+      {({ close }) =>
+        opts.map((o) => {
+          const isOn = value === o.value;
+          const cost = costFor(o.value);
+          return (
+            <button
+              key={String(o.value)}
+              type="button"
+              role="option"
+              aria-selected={isOn}
+              title={
+                cost != null
+                  ? `${o.label}: ${cost} credit${cost === 1 ? '' : 's'} per image`
+                  : o.label
+              }
+              onClick={() => {
+                onChange(o.value);
+                close();
+              }}
+              className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
+                isOn ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                    isOn ? 'border-white' : 'border-white/30'
+                  }`}
+                >
+                  {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                </span>
+                <span className="truncate text-[13px] text-white/90">{o.label}</span>
               </span>
-            )}
-          </button>
-        );
-        return cost != null ? (
-          <Tip
-            key={String(o.value)}
-            side="left"
-            content={`${o.label}: ${cost} credit${cost === 1 ? '' : 's'} per image`}
-          >
-            {row}
-          </Tip>
-        ) : (
-          <div key={String(o.value)}>{row}</div>
-        );
-      })}
-    </div>
+              {cost != null && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
+                  <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
+                  {cost} cr/img
+                </span>
+              )}
+            </button>
+          );
+        })
+      }
+    </DropdownShell>
   );
 };
 
@@ -295,7 +438,9 @@ const StepperField = ({ field, value, onChange, disabled }) => {
   );
 };
 
-// Multi-select pills (e.g. several aspect ratios at once). Value is an array.
+// Multi-select dropdown (e.g. several aspect ratios at once). Value is an array.
+// The menu stays open while toggling — picking several ratios is the normal
+// case, so closing on each click would mean reopening it every time.
 const CheckboxField = ({ field, value, onChange, disabled }) => {
   const opts = normaliseOptions(field.options);
   const arr = Array.isArray(value) ? value : value == null ? [] : [value];
@@ -303,27 +448,57 @@ const CheckboxField = ({ field, value, onChange, disabled }) => {
     if (arr.includes(v)) onChange(arr.filter((x) => x !== v));
     else onChange([...arr, v]);
   };
+  // Name the choices while they still fit, then fall back to a count — the
+  // trigger is narrow and "1:1, 4:5" reads better than "2 selected".
+  const chosen = opts.filter((o) => arr.includes(o.value)).map((o) => o.label);
+  const summary =
+    chosen.length === 0
+      ? 'None selected'
+      : chosen.length <= 2
+        ? chosen.join(', ')
+        : `${chosen.length} selected`;
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {opts.map((o) => {
-        const isOn = arr.includes(o.value);
-        return (
-          <button
-            key={String(o.value)}
-            type="button"
-            onClick={() => toggle(o.value)}
-            disabled={disabled}
-            className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
-              isOn
-                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
-                : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
-            } disabled:cursor-not-allowed disabled:opacity-60`}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
+    <DropdownShell
+      disabled={disabled}
+      ariaLabel={`${field.label || field.key}: ${summary}`}
+      trigger={
+        <span
+          className={`min-w-0 flex-1 truncate text-[13px] ${
+            chosen.length ? 'text-white/90' : 'text-white/45'
+          }`}
+        >
+          {summary}
+        </span>
+      }
+    >
+      {() =>
+        opts.map((o) => {
+          const isOn = arr.includes(o.value);
+          return (
+            <button
+              key={String(o.value)}
+              type="button"
+              role="option"
+              aria-selected={isOn}
+              onClick={() => toggle(o.value)}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors ${
+                isOn ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'
+              }`}
+            >
+              <span
+                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                  isOn ? 'border-white bg-white' : 'border-white/30'
+                }`}
+              >
+                {isOn && <Check className="h-2.5 w-2.5 text-black" strokeWidth={3} />}
+              </span>
+              <span className="truncate text-[13px] text-white/90">{o.label}</span>
+            </button>
+          );
+        })
+      }
+    </DropdownShell>
   );
 };
 
@@ -618,11 +793,11 @@ const FIELD_RENDERERS = {
 const isModelField = (field) =>
   field.type === 'select' && (field.key === 'model' || field.key === 'provider');
 
-// Fields that always span both grid columns (their controls are wide). The model
-// picker is a list of rows, so it reads better full-width too.
+// Fields that always span both grid columns (their controls are wide). The
+// model picker used to be a full-height list of rows and needed the full width;
+// now that it's a dropdown it sits fine in one column beside Quality.
 const FULL_WIDTH_TYPES = new Set(['textarea', 'image_upload', 'image_picker']);
-const isFullWidth = (field) =>
-  !!field.fullWidth || FULL_WIDTH_TYPES.has(field.type) || isModelField(field);
+const isFullWidth = (field) => !!field.fullWidth || FULL_WIDTH_TYPES.has(field.type);
 
 // ─── Brand picker ────────────────────────────────────────────────────────────
 // The brief's brand fields (description / logo / colors) were pre-filled by the
