@@ -299,11 +299,11 @@ async function getAmemberProducts() {
         }
         pageProducts = Array.isArray(products)
           ? products.filter(
-              (product) =>
-                product &&
-                typeof product === "object" &&
-                product.product_id,
-            )
+            (product) =>
+              product &&
+              typeof product === "object" &&
+              product.product_id,
+          )
           : [];
         allProducts.push(...pageProducts);
         page += 1;
@@ -457,6 +457,7 @@ async function postAmemberInvoice({
   const publicId = `${platform}_${canonicalTransactionId}`;
   const paysysId = platform === "ios" ? "app-store" : "google-play";
   const beginDateStr = formatDateForAmember(purchasedAt);
+  const expireDateStr = formatDateForAmember(expiresAt);
   const numericAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : (parseFloat(amount) || 0);
   const formattedAmount = numericAmount.toFixed(2);
 
@@ -1425,11 +1426,13 @@ const verifyApplePayment = async (req, res) => {
     }
 
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: transactionId });
-    if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
+
+    // If this transaction ID was already processed (by any user), reject it
+    if (existingTx) {
       return res.status(409).json({
         ok: false,
         code: "TRANSACTION_ALREADY_USED",
-        error: "This transaction ID has already been claimed by another user account."
+        error: "This transaction ID has already been processed."
       });
     }
 
@@ -1437,46 +1440,44 @@ const verifyApplePayment = async (req, res) => {
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId);
 
-    if (!existingTx) {
-      try {
-        await postAmemberInvoice({
-          amemberUserId,
-          canonicalTransactionId: transactionId,
-          platform: "ios",
-          storeProductId: productId,
-          matchedProduct,
-          amount,
-          currency: decoded.currency || "USD",
-          purchasedAt: purchaseDate,
-          expiresAt: expiresDate,
-        });
-      } catch (invoiceErr) {
-        const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
-        console.error("[verifyApplePayment] aMember invoice failed:", detail);
-        return res.status(422).json({
-          ok: false,
-          code: "AMEMBER_SYNC_FAILED",
-          error: `aMember invoice sync failed: ${detail}`
-        });
-      }
-
-      existingTx = await MobileStoreTransaction.create({
-        user_id: `GPT-${amemberUserId}`,
-        amember_user_id: amemberUserId,
+    try {
+      await postAmemberInvoice({
+        amemberUserId,
+        canonicalTransactionId: transactionId,
         platform: "ios",
-        canonical_transaction_id: transactionId,
-        original_transaction_id: originalTransactionId,
-        store_product_id: productId,
-        event_type: isTrial ? "free_trial" : "initial_purchase",
+        storeProductId: productId,
+        matchedProduct,
         amount,
         currency: decoded.currency || "USD",
-        amember_invoice_id: `ios_${transactionId}`,
-        purchased_at: purchaseDate,
-        expires_at: expiresDate,
-        raw_payload: decoded,
-        meta: { env: process.env.APPLE_ENVIRONMENT || "Production" },
+        purchasedAt: purchaseDate,
+        expiresAt: expiresDate,
+      });
+    } catch (invoiceErr) {
+      const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
+      console.error("[verifyApplePayment] aMember invoice failed:", detail);
+      return res.status(422).json({
+        ok: false,
+        code: "AMEMBER_SYNC_FAILED",
+        error: `aMember invoice sync failed: ${detail}`
       });
     }
+
+    existingTx = await MobileStoreTransaction.create({
+      user_id: `GPT-${amemberUserId}`,
+      amember_user_id: amemberUserId,
+      platform: "ios",
+      canonical_transaction_id: transactionId,
+      original_transaction_id: originalTransactionId,
+      store_product_id: productId,
+      event_type: isTrial ? "free_trial" : "initial_purchase",
+      amount,
+      currency: decoded.currency || "USD",
+      amember_invoice_id: `ios_${transactionId}`,
+      purchased_at: purchaseDate,
+      expires_at: expiresDate,
+      raw_payload: decoded,
+      meta: { env: process.env.APPLE_ENVIRONMENT || "Production" },
+    });
 
     await activateAmemberUserStatus({
       amemberUserId,
@@ -1603,11 +1604,12 @@ const verifyGooglePayment = async (req, res) => {
 
     const canonicalTxId = purchaseToken;
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
-    if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
+    // If this transaction ID was already processed (by any user), reject it
+    if (existingTx) {
       return res.status(409).json({
         ok: false,
         code: "TRANSACTION_ALREADY_USED",
-        error: "This transaction ID has already been claimed by another user account."
+        error: "This transaction ID has already been processed."
       });
     }
 
@@ -1615,46 +1617,44 @@ const verifyGooglePayment = async (req, res) => {
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId);
 
-    if (!existingTx) {
-      try {
-        await postAmemberInvoice({
-          amemberUserId,
-          canonicalTransactionId: canonicalTxId,
-          platform: "android",
-          storeProductId: productId,
-          matchedProduct,
-          amount,
-          currency: "USD",
-          purchasedAt: now,
-          expiresAt: expiresDate,
-        });
-      } catch (invoiceErr) {
-        const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
-        console.error("[verifyGooglePayment] aMember invoice failed:", detail);
-        return res.status(422).json({
-          ok: false,
-          code: "AMEMBER_SYNC_FAILED",
-          error: `aMember invoice sync failed: ${detail}`
-        });
-      }
-
-      existingTx = await MobileStoreTransaction.create({
-        user_id: `GPT-${amemberUserId}`,
-        amember_user_id: amemberUserId,
+    try {
+      await postAmemberInvoice({
+        amemberUserId,
+        canonicalTransactionId: canonicalTxId,
         platform: "android",
-        canonical_transaction_id: canonicalTxId,
-        original_transaction_id: canonicalTxId,
-        store_product_id: productId,
-        event_type: isTrial ? "free_trial" : "initial_purchase",
+        storeProductId: productId,
+        matchedProduct,
         amount,
         currency: "USD",
-        amember_invoice_id: `android_${canonicalTxId}`,
-        purchased_at: now,
-        expires_at: expiresDate,
-        raw_payload: subscriptionState,
-        meta: { packageName },
+        purchasedAt: now,
+        expiresAt: expiresDate,
+      });
+    } catch (invoiceErr) {
+      const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
+      console.error("[verifyGooglePayment] aMember invoice failed:", detail);
+      return res.status(422).json({
+        ok: false,
+        code: "AMEMBER_SYNC_FAILED",
+        error: `aMember invoice sync failed: ${detail}`
       });
     }
+
+    existingTx = await MobileStoreTransaction.create({
+      user_id: `GPT-${amemberUserId}`,
+      amember_user_id: amemberUserId,
+      platform: "android",
+      canonical_transaction_id: canonicalTxId,
+      original_transaction_id: canonicalTxId,
+      store_product_id: productId,
+      event_type: isTrial ? "free_trial" : "initial_purchase",
+      amount,
+      currency: "USD",
+      amember_invoice_id: `android_${canonicalTxId}`,
+      purchased_at: now,
+      expires_at: expiresDate,
+      raw_payload: subscriptionState,
+      meta: { packageName },
+    });
 
     await activateAmemberUserStatus({
       amemberUserId,
@@ -2439,9 +2439,9 @@ async function getMobilePlans(req, res) {
           : reqPlatform === "android"
             ? { googleProductId: storePlan.productId }
             : {
-                appleProductId: storePlan.productId,
-                googleProductId: "",
-              }),
+              appleProductId: storePlan.productId,
+              googleProductId: "",
+            }),
         tier: product.title || "Subscription",
         fallbackTitle: product.title || "Subscription Plan",
         badge: storePlan.badge || null,
