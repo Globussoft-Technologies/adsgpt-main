@@ -29,10 +29,21 @@ export default function WorkspaceInvitationAcceptPage() {
   const [invitation, setInvitation] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [touched, setTouched] = useState({ firstName: false, lastName: false });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(null);
   const [error, setError] = useState('');
+
+  const nameErrors = {
+    firstName: !firstName.trim()
+      ? 'First name is required'
+      : firstName.trim().length > 80
+        ? 'Keep it under 80 characters'
+        : '',
+    lastName: lastName.trim().length > 80 ? 'Keep it under 80 characters' : '',
+  };
+  const hasNameErrors = Boolean(nameErrors.firstName || nameErrors.lastName);
 
   useEffect(() => {
     if (loaded.current) return;
@@ -53,6 +64,10 @@ export default function WorkspaceInvitationAcceptPage() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (!invitation?.existingMember && hasNameErrors) {
+      setTouched({ firstName: true, lastName: true });
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -246,20 +261,44 @@ export default function WorkspaceInvitationAcceptPage() {
                           <input
                             required
                             autoFocus
+                            maxLength={80}
                             value={firstName}
                             onChange={(event) => setFirstName(event.target.value)}
+                            onBlur={() => setTouched((prev) => ({ ...prev, firstName: true }))}
                             placeholder="First name"
-                            className="mt-2 h-10 w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] hover:border-white/15 focus:border-[#15DCFF]/40"
+                            aria-invalid={touched.firstName && Boolean(nameErrors.firstName)}
+                            className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
+                              touched.firstName && nameErrors.firstName
+                                ? 'border-red-500/50 focus:border-red-500/60'
+                                : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
+                            }`}
                           />
+                          {touched.firstName && nameErrors.firstName && (
+                            <span className="mt-1.5 block text-[11px] font-normal text-red-400">
+                              {nameErrors.firstName}
+                            </span>
+                          )}
                         </label>
                         <label className="text-xs font-medium text-[#BEBEBE]">
                           Last name
                           <input
+                            maxLength={80}
                             value={lastName}
                             onChange={(event) => setLastName(event.target.value)}
+                            onBlur={() => setTouched((prev) => ({ ...prev, lastName: true }))}
                             placeholder="Last name"
-                            className="mt-2 h-10 w-full rounded-full border border-white/5 bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] hover:border-white/15 focus:border-[#15DCFF]/40"
+                            aria-invalid={touched.lastName && Boolean(nameErrors.lastName)}
+                            className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
+                              touched.lastName && nameErrors.lastName
+                                ? 'border-red-500/50 focus:border-red-500/60'
+                                : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
+                            }`}
                           />
+                          {touched.lastName && nameErrors.lastName && (
+                            <span className="mt-1.5 block text-[11px] font-normal text-red-400">
+                              {nameErrors.lastName}
+                            </span>
+                          )}
                         </label>
                       </div>
                     </>

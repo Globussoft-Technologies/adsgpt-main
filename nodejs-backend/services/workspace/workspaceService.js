@@ -112,21 +112,27 @@ function createWorkspaceService(overrides = {}) {
       });
     } catch (error) {
       if (error?.code !== 11000) throw error;
-      workspace = await deps.Workspace.findOne({
-        ownerUserId: ownerId,
-        status: "active",
-      }).lean();
-      // `ownerUserId` is uniquely indexed but not compound with `status`, so
-      // a concurrent create (or a replica-lagged read right after it) can
-      // leave this lookup empty even though the duplicate-key error proves a
-      // workspace exists. Callers assume a non-null workspace — surface a
-      // retryable conflict instead of letting them crash on `workspace._id`.
+      // `ownerUserId` alone is what's uniquely indexed, so that's the only
+      // filter guaranteed to find the document that just caused the
+      // duplicate-key error — querying with `status: "active"` on top of it
+      // left owners with a non-active row (there is no feature that sets
+      // one today, but stray rows can exist) permanently stuck: every retry
+      // re-hit the same E11000 and the fallback lookup kept coming back
+      // empty, surfacing WORKSPACE_CREATE_CONFLICT forever instead of once.
+      workspace = await deps.Workspace.findOne({ ownerUserId: ownerId }).lean();
       if (!workspace) {
         throw workspaceError(
           "WORKSPACE_CREATE_CONFLICT",
           "Workspace could not be created — please retry",
           409,
         );
+      }
+      if (workspace.status !== "active") {
+        workspace = await deps.Workspace.findOneAndUpdate(
+          { _id: workspace._id },
+          { $set: { status: "active" } },
+          { new: true },
+        ).lean();
       }
     }
     return {

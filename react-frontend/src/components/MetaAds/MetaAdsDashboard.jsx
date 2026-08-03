@@ -532,27 +532,37 @@ export default function MetaAdsDashboard() {
           >
             <div className="w-72 p-1">
               <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-                {adAccounts.map((acc) => (
-                  <button
-                    key={acc.id}
-                    onClick={() => {
-                      selectAccount(acc);
-                      setAccountOpen(false);
-                      setActiveTab('analytics');
-                    }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}
-                  >
-                    <div>
-                      <p
-                        className={`text-xs font-medium ${selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'}`}
-                      >
-                        {acc.name}
-                      </p>
-                      <p className="text-10 text-gray-900 dark:text-white">Spent: {acc.amountSpent}</p>
-                    </div>
-                    <StatusBadge status={acc.status === 1 ? 'ACTIVE' : 'PAUSED'} />
-                  </button>
-                ))}
+                {loadingAccounts ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-500 dark:text-[#BEBEBE]" />
+                  </div>
+                ) : adAccounts.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-xs text-gray-500 dark:text-[#BEBEBE]">
+                    No ad accounts found
+                  </p>
+                ) : (
+                  adAccounts.map((acc) => (
+                    <button
+                      key={acc.id}
+                      onClick={() => {
+                        selectAccount(acc);
+                        setAccountOpen(false);
+                        setActiveTab('analytics');
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}
+                    >
+                      <div>
+                        <p
+                          className={`text-xs font-medium ${selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'}`}
+                        >
+                          {acc.name}
+                        </p>
+                        <p className="text-10 text-gray-900 dark:text-white">Spent: {acc.amountSpent}</p>
+                      </div>
+                      <StatusBadge status={acc.status === 1 ? 'ACTIVE' : 'PAUSED'} />
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </Dropdown>
