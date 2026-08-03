@@ -76,17 +76,114 @@ export const getAuditData = async (adAccountId) => {
   return data;
 };
 
+// `refresh: true` skips the server's 5-min Redis cache — wired to the
+// Analytics tab's Refresh button so it actually refetches from Meta instead
+// of re-serving the same cached payload (mirrors getAdAccounts's refresh
+// flag).
+// Pass EITHER `datePreset` OR both `since`+`until` (custom range, YYYY-MM-DD).
 export const getAnalyticsData = async ({
   adAccountId,
-  datePreset = 'last_30d',
+  datePreset,
+  since,
+  until,
   facebookId,
+  refresh = false,
 } = {}) => {
+  const params = { adAccountId };
+  if (since && until) {
+    params.since = since;
+    params.until = until;
+  } else {
+    params.datePreset = datePreset || 'last_30d';
+  }
+  if (refresh) params.refresh = 'true';
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-analytics-data`, {
-    params: { adAccountId, datePreset },
+    params,
     headers: getAuthHeaders(facebookId),
   });
   return data;
 };
+
+// Metric values for the rows of one entity table, keyed by entity id:
+//   { metrics: { "<campaignId>": { spend: 123, ctr: 0.9 } } }
+// Deliberately separate from the entity-list endpoints: those are cached for
+// 2h because entity lists are stable, while metrics are volatile (5 min).
+// Merging them would drag the list cache down 24x.
+export const getTableMetrics = async ({
+  adAccountId,
+  level,
+  campaignId,
+  adsetId,
+  datePreset,
+  since,
+  until,
+  facebookId,
+  refresh = false,
+} = {}) => {
+  const params = { adAccountId, level };
+  if (campaignId) params.campaignId = campaignId;
+  if (adsetId) params.adsetId = adsetId;
+  if (since && until) {
+    params.since = since;
+    params.until = until;
+  } else if (datePreset) {
+    params.datePreset = datePreset;
+  }
+  if (refresh) params.refresh = 'true';
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/table-metrics`, {
+    params,
+    headers: getAuthHeaders(facebookId),
+  });
+  return data;
+};
+
+// ─── Selectable Analytics dashboard metrics ─────────────────────────────────
+// Static catalog of every selectable metric (config/metricsCatalog.js on the
+// backend) + the current user's saved selection. Global per user — not
+// scoped to a specific ad account or Facebook connection.
+
+// Full metric catalog — fetch once per session, it's a static code-committed
+// list on the backend (no per-user data, safe to hold in component state).
+export const getAnalyticsMetricsCatalog = async () => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/analytics/metrics-catalog`,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// All per-user Meta Ads UI preferences in one namespaced document:
+//   { preference: { userId, analytics: { visibleMetricKeys },
+//                   tables: { campaign: [], adset: [], ad: [] } } }
+// Analytics falls back to catalog defaults; table columns default to empty
+// (opt-in), so tables render exactly as they did before metric columns.
+export const getMetaAdsPreference = async () => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/preferences`,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Merge-PATCH: only the namespaces present in `patch` are touched, so the
+// Analytics picker and the three table pickers can save independently
+// without clobbering each other. Each namespace's key list is replaced
+// wholesale (the picker always sends the complete checked list).
+//   updateMetaAdsPreference({ analytics: { visibleMetricKeys: [...] } })
+//   updateMetaAdsPreference({ tables: { campaign: [...] } })
+export const updateMetaAdsPreference = async (patch) => {
+  const { data } = await axios.patch(
+    `${BASE_URL}/adsgpt/meta-ads/preferences`,
+    patch,
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
+// Convenience wrapper kept so MetricsPicker's default save path stays a
+// one-liner for the Analytics surface.
+export const updateAnalyticsMetricsPreference = async (visibleMetricKeys) =>
+  updateMetaAdsPreference({ analytics: { visibleMetricKeys } });
 
 export const getUserAdPostingInfo = async (userId, { facebookId } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/ad-posting/users/${userId}`, {

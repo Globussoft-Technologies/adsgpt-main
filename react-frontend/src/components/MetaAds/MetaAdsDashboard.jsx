@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 // eslint-disable-next-line no-unused-vars -- motion is used as <motion.div> below; the project's lint rule doesn't track JSX dotted access.
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -14,6 +14,7 @@ import {
   LogOut,
   Info,
   Inbox,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   getAdAccounts,
@@ -21,10 +22,20 @@ import {
   getAnalyticsData,
   getUserAdPostingInfo,
   metaDisconnect,
+  getAnalyticsMetricsCatalog,
+  getMetaAdsPreference,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
-import { DATE_PRESETS, STATUS_MAP } from './metaAdsUtils';
+import { DateRange } from 'react-date-range';
+import { format } from 'date-fns';
+// Calendar base styles. The light/dark theming on top of these lives in
+// App.css under `.date-range-picker-dark` / `.rdr*`, shared with Autopilot's
+// date pill and AdStudio's DateRangeFilter.
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
+import { DATE_PRESETS, STATUS_MAP, formatDateRangeLabel } from './metaAdsUtils';
 import { AnalyticsPanel, AuditTab } from './MetaAdsPanels';
+import MetricsPicker from './MetricsPicker';
 import { TableViewCampaigns } from './MetaAdsTableView';
 import { StatusBadge, Dropdown } from './MetaAdsAtoms';
 import CreateCampaignWizard from './CreateCampaignWizard';
@@ -54,7 +65,54 @@ export default function MetaAdsDashboard() {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
-  const [datePreset, setDatePreset] = useState('last_14d');
+  // Date window for every metric on the page. Seeded from the URL so a
+  // refresh or a shared link restores the same window — which matters more
+  // now that table metric columns depend on it too: losing it silently
+  // changes every number on screen back to the default.
+  const [dateRange, setDateRange] = useState(() => {
+    const raw = searchParams.get('date');
+    if (raw === 'custom') {
+      const since = searchParams.get('since');
+      const until = searchParams.get('until');
+      if (since && until) return { preset: 'custom', since, until };
+      return { preset: 'last_14d', since: null, until: null };
+    }
+    const known = DATE_PRESETS.some((p) => p.value === raw && p.value !== 'custom');
+    return { preset: known ? raw : 'last_14d', since: null, until: null };
+  });
+
+  // The single shape every metrics call takes, so no call site has to know
+  // about the 'custom' sentinel.
+  const dateParams = useMemo(
+    () =>
+      dateRange.preset === 'custom'
+        ? { since: dateRange.since, until: dateRange.until }
+        : { datePreset: dateRange.preset },
+    [dateRange],
+  );
+
+  // Mirror the window into the URL (replace, not push — changing the date
+  // shouldn't stack up back-button entries).
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (dateRange.preset === 'custom' && dateRange.since && dateRange.until) {
+          next.set('date', 'custom');
+          next.set('since', dateRange.since);
+          next.set('until', dateRange.until);
+        } else {
+          next.set('date', dateRange.preset);
+          next.delete('since');
+          next.delete('until');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+    // setSearchParams identity is stable; only the window should retrigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange]);
   // A refresh with a drilled-down campaign/ad set/ad still in the URL should
   // land back on the Campaigns tab (where TableViewCampaigns restores the
   // drill-down itself) instead of bouncing to Analytics.
@@ -70,6 +128,51 @@ export default function MetaAdsDashboard() {
   const [dateOpen, setDateOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+
+  // Selectable Analytics metrics — catalog is static (fetched once), the
+  // preference is the user's saved selection (global, not per ad account).
+  // See MetricsPicker.jsx for the picker UI and config/metricsCatalog.js for
+  // the backend catalog this mirrors.
+  const [metricsCatalog, setMetricsCatalog] = useState([]);
+  const [visibleMetricKeys, setVisibleMetricKeys] = useState([]);
+  // Metric COLUMNS per entity table, keyed by level. Empty until the user
+  // opts in, so the tables render exactly as they did before this feature
+  // and make no metrics request at all.
+  const [tableMetricKeys, setTableMetricKeys] = useState({
+    campaign: [],
+    adset: [],
+    ad: [],
+  });
+  const [metricsPickerOpen, setMetricsPickerOpen] = useState(false);
+  // Set when the picker actually persists a change, so closing it can
+  // refetch analytics ONCE. `stats` only contains the keys that were
+  // selected at fetch time, so without a refetch a newly-picked metric
+  // renders as an empty "—" card against the previous payload. Batched on
+  // close rather than fired per debounced save — toggling ten metrics
+  // should cost one Meta round-trip, not ten.
+  const metricsSelectionDirtyRef = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([getAnalyticsMetricsCatalog(), getMetaAdsPreference()])
+      .then(([catalogRes, prefRes]) => {
+        if (!alive) return;
+        setMetricsCatalog(catalogRes?.catalog || []);
+        const pref = prefRes?.preference;
+        setVisibleMetricKeys(pref?.analytics?.visibleMetricKeys || []);
+        setTableMetricKeys({
+          campaign: pref?.tables?.campaign || [],
+          adset: pref?.tables?.adset || [],
+          ad: pref?.tables?.ad || [],
+        });
+      })
+      .catch(() => {
+        /* AnalyticsPanel falls back to rendering whatever keys `stats`
+           already has if the catalog/preference fetch fails. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
   const activeFacebookId =
     selectedFacebookAccount?.userId === userData?.user_id
@@ -280,8 +383,11 @@ export default function MetaAdsDashboard() {
     };
   }, [selectedAccount, activeFacebookId]);
 
-  // load analytics
-  const loadAnalytics = useCallback(async () => {
+  // load analytics. `refresh` (from the Refresh button) skips the server's
+  // 5-min cache — without it the button just re-served the same cached
+  // payload, so a user seeing stale/incomplete data had no way to recover
+  // except waiting out the TTL.
+  const loadAnalytics = useCallback(async ({ refresh = false } = {}) => {
     const facebookId = activeFacebookId;
     if (!selectedAccount || !facebookId) return;
     const requestId = ++analyticsRequestRef.current;
@@ -290,8 +396,9 @@ export default function MetaAdsDashboard() {
     try {
       const res = await getAnalyticsData({
         adAccountId: selectedAccount.id,
-        datePreset,
+        ...dateParams,
         facebookId,
+        refresh,
       });
       if (requestId === analyticsRequestRef.current) {
         setAnalyticsData(res);
@@ -303,7 +410,7 @@ export default function MetaAdsDashboard() {
         setLoadingInsights(false);
       }
     }
-  }, [selectedAccount, datePreset, activeFacebookId]);
+  }, [selectedAccount, dateParams, activeFacebookId]);
 
   useEffect(() => {
     if (activeTab !== 'analytics') return undefined;
@@ -450,8 +557,10 @@ export default function MetaAdsDashboard() {
             </div>
           </Dropdown>
 
-          {/* date preset — analytics tab only */}
-          {activeTab === 'analytics' && (
+          {/* Date window. Shown on Analytics AND Campaigns — the tables'
+              metric columns are scoped by it too, so hiding it there would
+              leave those numbers unexplained. */}
+          {(activeTab === 'analytics' || activeTab === 'campaigns') && (
             <Dropdown
               open={dateOpen}
               onClose={() => setDateOpen(false)}
@@ -461,26 +570,39 @@ export default function MetaAdsDashboard() {
                   className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
                 >
                   <Calendar className="h-3 w-3 text-gray-900 dark:text-white" />
-                  <span className="font-medium">
-                    {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
-                  </span>
+                  <span className="font-medium">{formatDateRangeLabel(dateRange)}</span>
                   <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
                 </button>
               }
             >
-              <div className="w-44 p-1">
-                {DATE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.value}
-                    onClick={() => {
-                      setDatePreset(preset.value);
-                      setDateOpen(false);
-                    }}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${datePreset === preset.value ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5' : 'text-gray-900 dark:text-white'}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+              {/* Presets on the left, calendar on the right — the layout
+                  Ads Manager itself uses, and it avoids a mode-switch
+                  between "pick a preset" and "pick a range". */}
+              <div className="flex items-stretch">
+                <div className="w-44 shrink-0 border-r border-gray-200 p-1 dark:border-white/10">
+                  <div className="max-h-[360px] overflow-y-auto pr-0.5">
+                    {DATE_PRESETS.filter((p) => p.value !== 'custom').map((preset) => (
+                      <button
+                        key={preset.value}
+                        onClick={() => {
+                          setDateRange({ preset: preset.value, since: null, until: null });
+                          setDateOpen(false);
+                        }}
+                        className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${dateRange.preset === preset.value ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5' : 'text-gray-900 dark:text-white'}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <CustomRangeFields
+                  since={dateRange.since}
+                  until={dateRange.until}
+                  onApply={(since, until) => {
+                    setDateRange({ preset: 'custom', since, until });
+                    setDateOpen(false);
+                  }}
+                />
               </div>
             </Dropdown>
           )}
@@ -603,6 +725,13 @@ export default function MetaAdsDashboard() {
                 // (V1 wizard doesn't understand these modes.)
                 onLaunchWizard={FEATURE_WIZARD_V2 ? openWizard : null}
                 manageNonce={manageNonce}
+                metricsCatalog={metricsCatalog}
+                tableMetricKeys={tableMetricKeys}
+                onTableMetricsSaved={(level, keys) =>
+                  setTableMetricKeys((prev) => ({ ...prev, [level]: keys }))
+                }
+                dateParams={dateParams}
+                dateLabel={formatDateRangeLabel(dateRange)}
               />
             </motion.div>
           )}
@@ -621,16 +750,30 @@ export default function MetaAdsDashboard() {
                 <div>
                   <p className="text-base 2xl:text-xl font-bold text-gray-900 dark:text-white">Account Analytics</p>
                 </div>
-                <button
-                  onClick={loadAnalytics}
-                  disabled={loadingInsights}
-                  className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
-                >
-                  <RefreshCw className={`h-3 w-3 ${loadingInsights ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMetricsPickerOpen(true)}
+                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
+                  >
+                    <SlidersHorizontal className="h-3 w-3" />
+                    Customize metrics
+                  </button>
+                  <button
+                    onClick={() => loadAnalytics({ refresh: true })}
+                    disabled={loadingInsights}
+                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingInsights ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
               </div>
-              <AnalyticsPanel analyticsData={analyticsData} loading={loadingInsights} />
+              <AnalyticsPanel
+                analyticsData={analyticsData}
+                loading={loadingInsights}
+                metricsCatalog={metricsCatalog}
+                visibleMetricKeys={visibleMetricKeys}
+              />
             </motion.div>
           )}
 
@@ -778,6 +921,30 @@ export default function MetaAdsDashboard() {
       </AnimatePresence>
       </div>
 
+      {/* ── customize-metrics modal ─────────────────────────────────────────── */}
+      <MetricsPicker
+        open={metricsPickerOpen}
+        onClose={() => {
+          setMetricsPickerOpen(false);
+          // Refetch so `stats` includes the newly-selected metrics —
+          // otherwise their cards render "—" against the pre-change payload.
+          // `refresh: true` is required: the server response is cached and,
+          // although the cache key is fingerprinted by selection, a
+          // previously-cached entry for this exact new selection would still
+          // be served stale-but-shaped-right.
+          if (metricsSelectionDirtyRef.current) {
+            metricsSelectionDirtyRef.current = false;
+            loadAnalytics({ refresh: true });
+          }
+        }}
+        catalog={metricsCatalog}
+        visibleKeys={visibleMetricKeys}
+        onSaved={(keys) => {
+          setVisibleMetricKeys(keys);
+          metricsSelectionDirtyRef.current = true;
+        }}
+      />
+
       {/* ── docked Ads Chat sidebar (pushes the content when open) ─────────── */}
       {/* Still in active development — double-gated: VITE_FEATURE_META_ADS_CHAT
           is the build-wide switch, and on top of that only emails listed in
@@ -794,7 +961,85 @@ export default function MetaAdsDashboard() {
           adSetId={searchParams.get('adSetId')}
           adId={searchParams.get('adId')}
         />
- 
+
+    </div>
+  );
+}
+
+// ─── custom date range fields ────────────────────────────────────────────────
+// Two native date inputs rather than a calendar widget: no popover nesting
+// inside the already-portaled Dropdown, no extra CSS import, and the
+// commit-when-both-valid behaviour is the important part anyway.
+//
+// The draft state matters — picking a From date must NOT fire a request while
+// To is still empty (or still the previous value), otherwise every custom
+// selection costs a wasted Meta call for a range the user never asked for.
+// Same guard as BrandIQ/Competitors.
+// Uses `react-date-range`'s DateRange — the same calendar Autopilot's date
+// pill and AdStudio's DateRangeFilter already use, including the shared
+// `date-range-picker-dark` wrapper whose light/dark theming lives in
+// App.css. Rendered INLINE inside the existing preset dropdown rather than
+// in a nested Popover: the dropdown is already an absolutely-positioned
+// animated panel, and nesting a portaled popover inside it is exactly the
+// stacking/containing-block trap that broke the columns modal.
+function CustomRangeFields({ since, until, onApply }) {
+  const today = new Date();
+  const parse = (iso) => {
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  // Draft range — react-date-range fires onChange on EVERY click (start, then
+  // end), so committing directly would fetch a half-selected range. The user
+  // confirms with Apply. Seeded from the applied custom range when there is
+  // one, otherwise a sensible last-14-days starting point.
+  const seed = () => ({
+    startDate: parse(since) || new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13),
+    endDate: parse(until) || today,
+    key: 'selection',
+  });
+  const [draft, setDraft] = useState(seed);
+
+  // Re-seed when the applied range changes underneath us (restored from the
+  // URL, or the user picked a preset and came back).
+  useEffect(() => {
+    setDraft(seed());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [since, until]);
+
+  const iso = (d) => format(d, 'yyyy-MM-dd');
+  const valid = draft.startDate && draft.endDate && draft.startDate <= draft.endDate;
+
+  return (
+    <div className="flex flex-col p-2">
+      <div className="date-range-picker-dark">
+        <DateRange
+          editableDateInputs
+          onChange={(item) => setDraft(item.selection)}
+          moveRangeOnFirstSelection={false}
+          ranges={[draft]}
+          months={1}
+          direction="horizontal"
+          rangeColors={['#15DCFF']}
+          color="#15DCFF"
+          className="bg-transparent text-gray-900 dark:text-white"
+          maxDate={today}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <span className="text-10 text-gray-500 dark:text-white/45">
+          {valid ? `${iso(draft.startDate)} → ${iso(draft.endDate)}` : 'Pick a start and end date'}
+        </span>
+        <button
+          type="button"
+          disabled={!valid}
+          onClick={() => valid && onApply(iso(draft.startDate), iso(draft.endDate))}
+          className="shrink-0 rounded-lg bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-2.5 py-1 text-10 font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Apply
+        </button>
+      </div>
     </div>
   );
 }

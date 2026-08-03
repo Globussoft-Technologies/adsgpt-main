@@ -1,5 +1,24 @@
 // ─── shared constants & helpers for MetaAds components ───────────────────────
 
+import {
+  DollarSign,
+  Eye,
+  MousePointerClick,
+  Users,
+  TrendingUp,
+  Activity,
+  Zap,
+  Radio,
+  Play,
+  Clock,
+  ThumbsUp,
+  MessageCircle,
+  Share2,
+  ShoppingCart,
+  UserPlus,
+  Smartphone,
+} from 'lucide-react';
+
 export const DATE_PRESETS = [
               { value: "today", label: "Today" },
               { value: "yesterday", label: "Yesterday" },
@@ -17,7 +36,29 @@ export const DATE_PRESETS = [
               { value: "last_year", label: "Last Year" },
               { value: "lifetime", label: "Lifetime" },
               { value: "maximum", label: "Maximum" },
+              // Sentinel — when selected, the dashboard sends since/until
+              // instead of datePreset. Same pattern as BrandIQ/Competitors.
+              { value: "custom", label: "Custom Range" },
             ]
+
+// Trigger-button label for the date control. A custom range reads as
+// "1 Jul – 15 Jul" rather than the useless literal "Custom Range".
+export const formatDateRangeLabel = (dateRange) => {
+  if (dateRange?.preset !== 'custom') {
+    return DATE_PRESETS.find((d) => d.value === dateRange?.preset)?.label || 'Select dates';
+  }
+  if (!dateRange.since || !dateRange.until) return 'Custom Range';
+  const short = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+    });
+  };
+  return dateRange.since === dateRange.until
+    ? short(dateRange.since)
+    : `${short(dateRange.since)} – ${short(dateRange.until)}`;
+};
 
 
 export const CHART_COLORS = ['#15DCFF', '#6b72f8', '#f472b6', '#34d399', '#fbbf24', '#f87171'];
@@ -62,6 +103,67 @@ export const getActionVal = (actions, type) =>
   parseInt(actions?.find((a) => a.action_type === type)?.value || 0, 10);
 export const getCPAVal = (list, type) =>
   parseFloat(list?.find((a) => a.action_type === type)?.value || 0);
+
+// ─── selectable-metrics catalog helpers ──────────────────────────────────────
+// The backend's config/metricsCatalog.js entries reference icons by string
+// name (JSON can't carry a component reference) — resolve to the actual
+// lucide-react component here. Shared by AnalyticsPanel (renders the KPI
+// cards) and MetricsPicker (renders the picker rows) so the name→component
+// map lives in exactly one place.
+export const METRIC_ICONS = {
+  DollarSign,
+  Eye,
+  MousePointerClick,
+  Users,
+  TrendingUp,
+  Activity,
+  Zap,
+  Radio,
+  Play,
+  Clock,
+  ThumbsUp,
+  MessageCircle,
+  Share2,
+  ShoppingCart,
+  UserPlus,
+  Smartphone,
+};
+
+// Friendly group labels for the picker's collapsible sections — keys match
+// the backend catalog's `group` field (config/metricsCatalog.js).
+export const METRIC_GROUP_LABELS = {
+  performance: 'Performance',
+  video: 'Video',
+  engagement: 'Engagement',
+  messaging: 'Messaging',
+  leads: 'Leads',
+  commerce: 'Commerce',
+  app: 'App',
+  offline: 'Offline Conversions',
+  roas: 'Return on Ad Spend',
+};
+
+// Format a raw numeric metric value per the catalog entry's `format` field.
+// Mirrors the ad-hoc per-field formatting AnalyticsPanel used to do inline
+// (fmtINR for currency, .toLocaleString() for integers) — centralized here
+// now that the set of formattable metrics isn't a fixed hardcoded list.
+export const formatMetricValue = (format, val) => {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  switch (format) {
+    case 'currency':
+      return fmtINR(n);
+    case 'integer':
+      return Math.round(n).toLocaleString();
+    case 'percent':
+      return `${fmt(n)}%`;
+    case 'ratio':
+      return `${fmt(n)}x`;
+    case 'decimal2':
+    default:
+      return fmt(n);
+  }
+};
 
 // ─── enum label maps ─────────────────────────────────────────────────────────
 // Meta returns SCREAMING_SNAKE values for objectives, billing, optimization,

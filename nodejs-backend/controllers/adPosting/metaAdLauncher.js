@@ -1,5 +1,6 @@
 const bizSdk = require("facebook-nodejs-business-sdk");
 const axios = require("axios");
+const crypto = require("crypto");
 const dayjs = require("dayjs");
 const AdAccount = bizSdk.AdAccount;
 const Campaign = bizSdk.Campaign;
@@ -19,6 +20,13 @@ const {
   getInsightsFields,
   getCampaignFields,
 } = require("../../utils/metaHelpers");
+const {
+  getMetricsCatalog,
+  extractMetricValue,
+} = require("../../config/metricsCatalog");
+const { getVisibleMetricKeys } = require("../../Module/metaAds/metaAdsPreference");
+const { metricsFingerprint, dateRangeToken } = require("../../utils/metaCacheKeys");
+const { resolveDateRange } = require("../../utils/metaDateRange");
 const {
   updateAdStatusSchema,
   createCampaignSchema,
@@ -92,6 +100,11 @@ const ALL_CACHE_PREFIXES = [
   // CDN-signed URLs valid for hours; clear on disconnect so stale signed
   // URLs from a different connection don't leak across reconnects.
   "metaAdPreview",
+  // Metric columns for the campaign/adset/ad tables
+  // (metaTableMetricsController.js). Deliberately NOT in
+  // STATUS_CACHE_PREFIXES: pausing an entity doesn't retroactively change
+  // its historical metrics, and the 5-min TTL covers the drift.
+  "metaTableMetrics",
 ];
 
 async function invalidateMetaCacheByPrefixes(userId, prefixes) {
@@ -603,19 +616,45 @@ class MetaAdLauncher {
        #swagger.parameters['datePreset'] = { description: 'Date preset for insights', type: 'string', default: 'last_30d' }
     */
     try {
-      const { adAccountId, datePreset = "last_30d" } = req.query;
+      const { adAccountId } = req.query;
       if (!adAccountId)
         return res.status(400).json({ error: "Account ID is required" });
 
       const userId = req.user.user_id;
+      const refresh = String(req.query.refresh || "").toLowerCase() === "true";
+
+      // Accepts EITHER ?datePreset= OR ?since=&until= (custom range).
+      let range;
+      try {
+        range = resolveDateRange(req.query);
+      } catch (err) {
+        if (err.statusCode === 400) {
+          return res.status(400).json({ status: false, error: err.message });
+        }
+        throw err;
+      }
+
+      // Which catalog metrics this user has selected. Resolved BEFORE the
+      // cache read because the response's `stats` shape depends on it — see
+      // the fingerprint note on the cache key below.
+      const selectedKeys = await getVisibleMetricKeys(userId, "analytics");
 
       // ---------- REDIS CACHE KEY ----------
-      const cacheKey = `metaAnalytics:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${datePreset}`;
+      // Two load-bearing fragments, both learned the hard way:
+      //   - the metrics fingerprint, because `stats` only contains the keys
+      //     the user selected, so a response built under a different
+      //     selection isn't interchangeable;
+      //   - range.token rather than a raw query param, because a custom-range
+      //     request has no `datePreset` and that fragment would collapse to
+      //     the string "undefined", making EVERY custom range share one entry.
+      // See utils/metaCacheKeys.js.
+      const cacheKey = `metaAnalytics:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${dateRangeToken(range)}:${metricsFingerprint(selectedKeys)}`;
 
-      const cached = await redisClient.get(cacheKey);
-
-      if (cached) {
-        return res.status(200).json(JSON.parse(cached));
+      if (!refresh) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.status(200).json(JSON.parse(cached));
+        }
       }
       // -------------------------------------
 
@@ -629,98 +668,67 @@ class MetaAdLauncher {
 
       const account = new AdAccount(`act_${adAccountId}`);
 
-      // Calculate previous period preset mapping
-      const prevPresets = {
-        today: "yesterday",
-        yesterday: "last_7d", // not perfect but okay for proxy
-        last_7d: "last_7d", // will use time_range for proper prev
-        last_30d: "last_30d",
-        this_month: "last_month",
-        last_month: "last_month",
-      };
-
-      // For more accurate comparison, we should use time_range
-      // But date_preset is easier for now as a first pass.
-      // Let's implement a helper for time ranges if we want precision.
-
       const fields = getInsightsFields();
+      // use_unified_attribution_setting: Meta's own docs say to set this to
+      // true "to get the same behavior as in Ads Manager" — without it,
+      // action-type-derived fields (actions, action_values,
+      // cost_per_action_type, conversions, purchase_roas, etc.) can attribute
+      // under a different window than the ad set's configured attribution
+      // setting, silently under-reporting (often to 0) metrics Ads Manager's
+      // UI shows a real number for. Confirmed missing account-wide; add to
+      // every getInsights() call, not just the ones this bug was first
+      // reported on (App Installs / CPI).
+      // `range.previous` is a concrete preceding equal-length time_range, or
+      // null for lifetime/maximum (nothing precedes "all time"). Skipping the
+      // call entirely in that case saves a request AND yields change: null,
+      // which renders as no chip — better than the old code's nonsense
+      // comparison against an arbitrary last_30d window.
       const [current, previous, daily] = await Promise.all([
-        account.getInsights(fields, { date_preset: datePreset }),
         account.getInsights(fields, {
-          date_preset: prevPresets[datePreset] || "last_30d",
-        }), // Simple proxy
+          ...range.current,
+          use_unified_attribution_setting: true,
+        }),
+        range.previous
+          ? account.getInsights(fields, {
+              ...range.previous,
+              use_unified_attribution_setting: true,
+            })
+          : Promise.resolve([]),
         account.getInsights(["spend", "clicks", "date_start"], {
-          date_preset: datePreset,
+          ...range.current,
           time_increment: 1,
+          use_unified_attribution_setting: true,
         }),
       ]);
 
       const curr = current[0]?._data || {};
       const prev = previous[0]?._data || {};
 
+      // null (not 0) when there's no comparable previous period, so the UI
+      // shows no chip rather than a misleading "0%".
       const calculateChange = (c, p) => {
+        if (!range.previous) return null;
         if (!p || p === 0) return 0;
         return (((c - p) / p) * 100).toFixed(1);
       };
 
-      const stats = {
-        spend: {
-          val: parseFloat(curr.spend || 0),
-          change: calculateChange(
-            parseFloat(curr.spend || 0),
-            parseFloat(prev.spend || 0),
-          ),
-        },
-        impressions: {
-          val: parseInt(curr.impressions || 0),
-          change: calculateChange(
-            parseInt(curr.impressions || 0),
-            parseInt(prev.impressions || 0),
-          ),
-        },
-        clicks: {
-          val: parseInt(curr.clicks || 0),
-          change: calculateChange(
-            parseInt(curr.clicks || 0),
-            parseInt(prev.clicks || 0),
-          ),
-        },
-        ctr: {
-          val: parseFloat(curr.ctr || 0),
-          change: calculateChange(
-            parseFloat(curr.ctr || 0),
-            parseFloat(prev.ctr || 0),
-          ),
-        },
-        cpc: {
-          val: parseFloat(curr.cpc || 0),
-          change: calculateChange(
-            parseFloat(curr.cpc || 0),
-            parseFloat(prev.cpc || 0),
-          ),
-        },
-        cpm: {
-          val: parseFloat(curr.cpm || 0),
-          change: calculateChange(
-            parseFloat(curr.cpm || 0),
-            parseFloat(prev.cpm || 0),
-          ),
-        },
-        reach: {
-          val: parseInt(curr.reach || 0),
-          change: calculateChange(
-            parseInt(curr.reach || 0),
-            parseInt(prev.reach || 0),
-          ),
-        },
-        frequency: {
-          val: parseFloat(curr.frequency || 0),
-          change: calculateChange(
-            parseFloat(curr.frequency || 0),
-            parseFloat(prev.frequency || 0),
-          ),
-        },
-      };
+      // Build `stats` from whichever catalog metrics this user has selected
+      // (config/metricsCatalog.js) — defaults to today's 8 hardcoded metrics
+      // when no preference is saved. `selectedKeys` was resolved above (it
+      // feeds the cache-key fingerprint). getInsightsFields() always fetches
+      // the full field set regardless of selection (same Meta API call
+      // either way), so switching selected metrics never needs a new Meta
+      // request — this just changes which of the already-fetched fields get
+      // surfaced into the response.
+      const selectedEntries = getMetricsCatalog().filter((m) =>
+        selectedKeys.includes(m.key),
+      );
+      const stats = {};
+      for (const entry of selectedEntries) {
+        const currVal = extractMetricValue(entry, curr);
+        const prevVal = extractMetricValue(entry, prev);
+        stats[entry.key] = { val: currVal, change: calculateChange(currVal, prevVal) };
+      }
 
       const chartData = daily.map((d) => ({
         name: dayjs(d.date_start).format("DD MMM"),
@@ -809,12 +817,17 @@ class MetaAdLauncher {
             const account = new AdAccount(`act_${id}`);
 
             const [summary, daily, campaigns] = await Promise.all([
+              // use_unified_attribution_setting: true — see getAnalyticsData
+              // for why (matches Ads Manager's attribution, otherwise
+              // `actions` can under-report vs what the UI shows).
               account.getInsights(["spend", "actions"], {
                 date_preset: datePreset,
+                use_unified_attribution_setting: true,
               }),
               account.getInsights(["spend", "actions", "date_start"], {
                 date_preset: datePreset,
                 time_increment: 1,
+                use_unified_attribution_setting: true,
               }),
               // Paginated — agencies with >100 campaigns previously got an
               // undercount on the dashboard tile.
@@ -1482,10 +1495,20 @@ class MetaAdLauncher {
       const params = {
         level: level || "account",
         date_preset: datePreset || "last_30d",
+        // Matches Ads Manager's attribution behavior — see getAnalyticsData
+        // for the full rationale.
+        use_unified_attribution_setting: true,
+        // Meta's edges default to 25 rows. At level=adset/ad that silently
+        // truncated any account with more than 25 active entities — the same
+        // trap documented for the detailed-targeting browse tree. Paginate.
+        limit: 200,
         ...(filters.length > 0 && { filtering: filters }),
       };
 
-      const insights = await account.getInsights(fields, params);
+      const insights = await fetchAllPaged(
+        account.getInsights(fields, params),
+        `insights (${params.level})`,
+      );
 
       const formattedInsights = insights.map((insight) => insight?._data);
 
@@ -3701,7 +3724,6 @@ class MetaAdLauncher {
       // Stable cache key — hash the canonical JSON of the Meta-shaped spec
       // (post-transform) so identical configs hit the same cached estimate
       // regardless of key order on the input.
-      const crypto = require("crypto");
       const targetingHash = crypto
         .createHash("sha1")
         .update(JSON.stringify(metaTargeting) + "|" + (optimizationGoal || ""))
@@ -4621,6 +4643,10 @@ module.exports.rawErrorDump = rawErrorDump;
 // controller). Exporting keeps that file decoupled from this one's
 // internals.
 module.exports.initApiForUser = initApiForUser;
+// fetchAllPaged is required by metaTableMetricsController.js. Every Meta
+// edge read MUST go through it — the raw SDK call stops at 25 rows, which
+// silently truncates metrics for any account with more than 25 ad sets/ads.
+module.exports.fetchAllPaged = fetchAllPaged;
 // getPagePhone is required by metaAdLauncherV2.js for click-to-call
 // (Calls) ads — phone number comes from the Page, not the wizard form.
 module.exports.getPagePhone = getPagePhone;

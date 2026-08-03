@@ -5,21 +5,16 @@ import {
   ChevronDown,
   ChevronRight,
   TrendingUp,
-  Eye,
-  MousePointerClick,
   DollarSign,
-  Users,
   RefreshCw,
   ExternalLink,
   Play,
   Image as ImageIcon,
   Activity,
   Target,
-  Zap,
   ArrowUpRight,
   ArrowDownRight,
   Layers,
-  Radio,
   ShieldAlert,
   AlertTriangle,
   Lightbulb,
@@ -45,7 +40,12 @@ import {
   updateAdStatus,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
-import { CHART_COLORS, fmt, fmtINR, getActionVal } from './metaAdsUtils';
+import {
+  CHART_COLORS,
+  getActionVal,
+  METRIC_ICONS,
+  formatMetricValue,
+} from './metaAdsUtils';
 import { StatusBadge, Spinner, EmptyState, ChartTooltip } from './MetaAdsAtoms';
 
 // ─── ad card ──────────────────────────────────────────────────────────────────
@@ -512,7 +512,11 @@ const ChangeChip = ({ change }) => {
 
 // ─── analytics panel ─────────────────────────────────────────────────────────
 
-export const AnalyticsPanel = ({ analyticsData, loading }) => {
+// `metricsCatalog`/`visibleMetricKeys` come from MetaAdsDashboard.jsx's
+// one-time fetch of GET /meta-ads/analytics/metrics-catalog + the user's
+// saved preference (see MetricsPicker.jsx for the picker itself). Default to
+// empty arrays so this still renders sensibly before that fetch resolves.
+export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], visibleMetricKeys = [] }) => {
   const [chartMetric, setChartMetric] = useState('spend');
 
   if (loading) return <Spinner />;
@@ -536,20 +540,30 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
     );
   }
 
-  const kpiRows = [
-    [
-      { icon: DollarSign,        label: 'Spend',       value: fmtINR(stats.spend?.val),                              change: stats.spend?.change       },
-      { icon: Eye,               label: 'Impressions', value: parseInt(stats.impressions?.val ?? 0).toLocaleString(), change: stats.impressions?.change  },
-      { icon: MousePointerClick, label: 'Clicks',      value: parseInt(stats.clicks?.val ?? 0).toLocaleString(),      change: stats.clicks?.change       },
-      { icon: Users,             label: 'Reach',       value: parseInt(stats.reach?.val ?? 0).toLocaleString(),        change: stats.reach?.change        },
-    ],
-    [
-      { icon: TrendingUp, label: 'CTR',       value: `${fmt(stats.ctr?.val)}%`, change: stats.ctr?.change       },
-      { icon: Activity,   label: 'CPC',       value: fmtINR(stats.cpc?.val),    change: stats.cpc?.change       },
-      { icon: Zap,        label: 'CPM',       value: fmtINR(stats.cpm?.val),    change: stats.cpm?.change       },
-      { icon: Radio,      label: 'Frequency', value: fmt(stats.frequency?.val), change: stats.frequency?.change },
-    ],
-  ];
+  // Catalog-driven KPI cards — replaces the old hardcoded 8-metric array.
+  // `visibleMetricKeys` (the user's saved selection, defaulting to today's
+  // original 8 metrics) picks which catalog entries render; `stats` (keyed
+  // by the same catalog `key`s — see getAnalyticsData) supplies the values.
+  // Falls back to whatever keys `stats` actually has if the catalog hasn't
+  // loaded yet, so cards still render (unlabeled-icon-less) rather than
+  // going blank while the catalog fetch is in flight.
+  const visibleEntries = metricsCatalog.length
+    ? metricsCatalog.filter((m) => visibleMetricKeys.includes(m.key))
+    : Object.keys(stats).map((key) => ({ key, label: key, format: 'decimal2', icon: null }));
+  const kpiCards = visibleEntries.map((entry) => ({
+    key: entry.key,
+    icon: METRIC_ICONS[entry.icon] || TrendingUp,
+    label: entry.label,
+    value: formatMetricValue(entry.format, stats[entry.key]?.val),
+    change: stats[entry.key]?.change,
+  }));
+  // The card design is sized for the default 8 metrics (2 rows). Now that a
+  // user can select dozens, keeping that size turns the KPI block into a
+  // wall that pushes the charts below the fold. Past 8, switch to a denser
+  // card + more columns so ~20 metrics occupy roughly the space 8 used to.
+  // At or below 8 the markup is byte-identical to before, so the default
+  // dashboard is unchanged.
+  const compact = kpiCards.length > 8;
 
   const ACTION_LABELS = {
     video_view: 'Video Views',
@@ -574,31 +588,58 @@ export const AnalyticsPanel = ({ analyticsData, loading }) => {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* KPI rows */}
-      {kpiRows.map((row, ri) => (
-        <div key={ri} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {row.map(({ icon, label, value, change }) => (
-            <div
-              key={label}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-all duration-300 hover:border-gray-300 hover:bg-gray-50 2xl:p-5 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3"
-            >
-              {/* top row: icon left, label right */}
-              <div className="flex items-start justify-between">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5">
-                  {React.createElement(icon, { className: 'h-4 w-4 text-gray-400 dark:text-white/50' })}
-                </div>
-                <p className="text-xs font-semibold tracking-[0.12em] uppercase text-gray-400 dark:text-white/35">{label}</p>
+      {/* KPI cards — one wrapping grid (not pre-chunked rows) so the column
+          count can flex with the metric count. gap-y-5 in the roomy variant
+          preserves the row spacing the old two-grid layout produced. */}
+      <div
+        className={`grid grid-cols-2 ${
+          compact
+            ? 'gap-3 lg:grid-cols-4 xl:grid-cols-6'
+            : 'gap-x-3 gap-y-5 lg:grid-cols-4'
+        }`}
+      >
+        {kpiCards.map(({ key, icon, label, value, change }) => (
+          <div
+            key={key}
+            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white backdrop-blur-xl transition-all duration-300 hover:border-gray-300 hover:bg-gray-50 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3 ${
+              compact ? 'p-3' : 'p-4 2xl:p-5'
+            }`}
+          >
+            {/* top row: icon left, label right */}
+            <div className="flex items-start justify-between gap-1.5">
+              <div
+                className={`flex shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5 ${
+                  compact ? 'h-7 w-7' : 'h-9 w-9'
+                }`}
+              >
+                {React.createElement(icon, {
+                  className: `text-gray-400 dark:text-white/50 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`,
+                })}
               </div>
-
-              {/* bottom row: value left, change chip right */}
-              <div className="mt-4 flex items-end justify-between">
-                <p className="text-xl font-bold leading-none text-gray-900 2xl:text-2xl dark:text-white">{value}</p>
-                <ChangeChip change={change} />
-              </div>
+              <p
+                title={label}
+                className={`font-semibold tracking-[0.12em] uppercase text-gray-400 dark:text-white/35 ${
+                  compact ? 'line-clamp-2 text-right text-10 leading-tight' : 'text-xs'
+                }`}
+              >
+                {label}
+              </p>
             </div>
-          ))}
-        </div>
-      ))}
+
+            {/* bottom row: value left, change chip right */}
+            <div className={`flex items-end justify-between gap-1.5 ${compact ? 'mt-2.5' : 'mt-4'}`}>
+              <p
+                className={`truncate font-bold leading-none text-gray-900 dark:text-white ${
+                  compact ? 'text-base 2xl:text-lg' : 'text-xl 2xl:text-2xl'
+                }`}
+              >
+                {value}
+              </p>
+              <ChangeChip change={change} />
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* charts row: bar chart left, pie + actions right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">

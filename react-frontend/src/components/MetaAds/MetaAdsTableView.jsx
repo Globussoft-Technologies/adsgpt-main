@@ -40,6 +40,14 @@ import {
   labelBidType,
   labelCTA,
 } from './metaAdsUtils';
+import MetricsPicker from './MetricsPicker';
+import {
+  useTableMetricColumns,
+  MetricHeaderCells,
+  MetricBodyCells,
+  CustomizeColumnsButton,
+  MetricsWindowLabel,
+} from './MetricColumns';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -142,7 +150,15 @@ function ToggleSwitch({ status, onToggle, toggling }) {
 
 // ─── sort hook ────────────────────────────────────────────────────────────────
 
-function useSortedRows(rows, defaultKey) {
+/**
+ * @param getValue optional (row, sortKey) => value resolver. Without it only
+ *   flat top-level keys sort — which is why the Ads table's
+ *   `creative.call_to_action_type` column has silently never sorted, and why
+ *   metric columns (whose values live outside the row object entirely) need
+ *   one. Tables pass a resolver handling both `__m.<metricKey>` and dotted
+ *   paths.
+ */
+function useSortedRows(rows, defaultKey, getValue) {
   const [sortKey, setSortKey] = useState(defaultKey);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -152,8 +168,8 @@ function useSortedRows(rows, defaultKey) {
   };
 
   const sorted = [...rows].sort((a, b) => {
-    const av = a[sortKey] ?? '';
-    const bv = b[sortKey] ?? '';
+    const av = (getValue ? getValue(a, sortKey) : a[sortKey]) ?? '';
+    const bv = (getValue ? getValue(b, sortKey) : b[sortKey]) ?? '';
     const an = parseFloat(av);
     const bn = parseFloat(bv);
     const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
@@ -165,14 +181,16 @@ function useSortedRows(rows, defaultKey) {
 
 // ─── sort header ──────────────────────────────────────────────────────────────
 
-function SortTh({ label, colKey, sortKey, sortDir, onSort, className = '' }) {
+function SortTh({ label, colKey, sortKey, sortDir, onSort, className = '', align = 'left' }) {
   const active = sortKey === colKey;
   return (
     <th
       onClick={() => onSort(colKey)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-white/70 dark:hover:text-white ${className}`}
+      // Full literal class strings — Tailwind's scanner can't see
+      // dynamically built ones like `text-${align}`.
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 ${align === 'right' ? 'text-right' : 'text-left'} text-xs font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-white/70 dark:hover:text-white ${className}`}
     >
-      <span className="flex items-center gap-2">
+      <span className={`flex items-center gap-2 ${align === 'right' ? 'justify-end' : ''}`}>
         {label}
         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all
           ${active ? 'bg-gray-200 text-gray-900 dark:bg-white/15 dark:text-white' : 'bg-gray-100 text-gray-400 dark:bg-white/6 dark:text-white/25'}`}>
@@ -274,12 +292,20 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, onLaunchWizard, query, onQueryChange }) {
+function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const [statuses, setStatuses]   = useState({});
   const [toggling, setToggling]   = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const metrics = useTableMetricColumns({
+    level: 'campaign',
+    adAccountId,
+    dateParams,
+    metricsCatalog,
+    metricKeys,
+    onMetricKeysSaved,
+  });
   // Search by campaign name — client-side over the already-fetched list
   // (same list `useSortedRows` sorts), not a separate API call. Matches
   // the search-input pattern already used in DetailedTargetingPicker.jsx
@@ -292,7 +318,11 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     if (!q) return campaigns;
     return campaigns.filter((c) => (c.name || '').toLowerCase().includes(q));
   }, [campaigns, query]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredCampaigns, 'name');
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
+    filteredCampaigns,
+    'name',
+    metrics.resolveSortValue,
+  );
 
   // Edit — read FRESH campaign settings (the list is cached + budgets are
   // formatted strings, useless for editing) then open the wizard prefilled.
@@ -386,6 +416,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
             )}
           </div>
           <RefreshButton onClick={onRefresh} busy={loading} title="Refresh campaigns" />
+          <CustomizeColumnsButton onClick={metrics.openPicker} count={metrics.entries.length} />
+          {metrics.entries.length > 0 && (
+            <MetricsWindowLabel dateParams={dateParams} label={dateLabel} />
+          )}
           {onNewCampaign && (
             <button
               type="button"
@@ -401,7 +435,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
       </div>
 
       <div className="scrollbar-thin flex-1 overflow-auto">
-        <table className="w-full min-w-[700px] border-collapse">
+        <table
+          className="w-full min-w-[700px] border-collapse"
+          style={{ minWidth: 700 + 120 * metrics.entries.length }}
+        >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <SortTh label="Campaign"         colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[36%] pl-5" />
@@ -410,15 +447,16 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               <SortTh label="Daily Budget"     colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th className="w-16 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={7 + metrics.entries.length} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={7} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
+              <tr><td colSpan={7 + metrics.entries.length} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const status  = getStatus(c);
@@ -480,6 +518,11 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                       {c.start_time ? new Date(c.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
+                  <MetricBodyCells
+                    entries={metrics.entries}
+                    values={metrics.metricsById[c.id]}
+                    loading={metrics.loading}
+                  />
                   {/* actions */}
                   <td className="pr-5 pl-2 py-4">
                     <div className="flex items-center justify-end gap-1.5">
@@ -564,13 +607,34 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           </motion.div>
         )}
       </AnimatePresence>
+
+      <MetricsPicker
+        open={metrics.pickerOpen}
+        onClose={metrics.closePicker}
+        catalog={metricsCatalog}
+        visibleKeys={metricKeys}
+        onSaved={metrics.onSaved}
+        persist={metrics.persist}
+        title="Customize columns"
+        subtitle="shown for the selected date range"
+        minSelected={0}
+      />
     </div>
   );
 }
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange }) {
+function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+  const metrics = useTableMetricColumns({
+    level: 'adset',
+    adAccountId,
+    campaignId: campaign?.id,
+    dateParams,
+    metricsCatalog,
+    metricKeys,
+    onMetricKeysSaved,
+  });
   const [adSets,  setAdSets]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -586,7 +650,11 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
     if (!q) return adSets;
     return adSets.filter((s) => (s.name || '').toLowerCase().includes(q));
   }, [adSets, query]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredAdSets, 'name');
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
+    filteredAdSets,
+    'name',
+    metrics.resolveSortValue,
+  );
   // CBO campaigns own the budget — adsets show 0/empty daily_budget. We
   // surface this explicitly instead of rendering a confusing "₹0.00".
   const cboParent = hasBudget(campaign?.daily_budget) || hasBudget(campaign?.lifetime_budget);
@@ -780,11 +848,18 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
             )}
           </div>
           <RefreshButton onClick={handleRefresh} busy={refreshing} title="Refresh ad sets" />
+          <CustomizeColumnsButton onClick={metrics.openPicker} count={metrics.entries.length} />
+          {metrics.entries.length > 0 && (
+            <MetricsWindowLabel dateParams={dateParams} label={dateLabel} />
+          )}
           {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
         </div>
       </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
-        <table className="w-full min-w-[680px] border-collapse">
+        <table
+          className="w-full min-w-[680px] border-collapse"
+          style={{ minWidth: 680 + 120 * metrics.entries.length }}
+        >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
               <SortTh label="Ad Set"            colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-5" />
@@ -793,15 +868,16 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Optimization Goal" colKey="optimization_goal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
+              <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
             )}
             {sorted.map((s, idx) => {
               const status = getStatus(s);
@@ -851,6 +927,11 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                       {s.start_time ? new Date(s.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
+                  <MetricBodyCells
+                    entries={metrics.entries}
+                    values={metrics.metricsById[s.id]}
+                    loading={metrics.loading}
+                  />
                   {canAdd && (
                     <td className="pr-5 pl-2 py-4">
                       <div className="flex items-center justify-end">
@@ -875,6 +956,18 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
           </tbody>
         </table>
       </div>
+
+      <MetricsPicker
+        open={metrics.pickerOpen}
+        onClose={metrics.closePicker}
+        catalog={metricsCatalog}
+        visibleKeys={metricKeys}
+        onSaved={metrics.onSaved}
+        persist={metrics.persist}
+        title="Customize columns"
+        subtitle="shown for the selected date range"
+        minSelected={0}
+      />
     </div>
   );
 }
@@ -1167,7 +1260,16 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange }) {
+function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange, adAccountId, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+  const metrics = useTableMetricColumns({
+    level: 'ad',
+    adAccountId,
+    adsetId: adSet?.id,
+    dateParams,
+    metricsCatalog,
+    metricKeys,
+    onMetricKeysSaved,
+  });
   const [ads,       setAds]       = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1184,7 +1286,11 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
     if (!q) return ads;
     return ads.filter((a) => (a.name || '').toLowerCase().includes(q));
   }, [ads, query]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(filteredAds, 'name');
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
+    filteredAds,
+    'name',
+    metrics.resolveSortValue,
+  );
   // Add Ad / Edit only when V2 wizard is on AND the campaign objective is
   // V2-supported (see AdSetTable's canAdd for the rationale).
   const canAdd = V2_SUPPORTED_OBJECTIVES.has(campaign?.objective) && !!onLaunchWizard;
@@ -1356,11 +1462,18 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
               )}
             </div>
             <RefreshButton onClick={handleRefresh} busy={refreshing} title="Refresh ads" />
+            <CustomizeColumnsButton onClick={metrics.openPicker} count={metrics.entries.length} />
+            {metrics.entries.length > 0 && (
+              <MetricsWindowLabel dateParams={dateParams} label={dateLabel} />
+            )}
             {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
           </div>
         </div>
         <div className="scrollbar-thin flex-1 overflow-auto">
-          <table className="w-full min-w-140 border-collapse">
+          <table
+            className="w-full min-w-140 border-collapse"
+            style={{ minWidth: 560 + 120 * metrics.entries.length }}
+          >
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
                 <th className="w-18 py-3 pl-5 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
@@ -1369,15 +1482,16 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                 <SortTh label="Bid Type" colKey="bid_type"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="CTA"      colKey="creative.call_to_action_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><Spinner /></td></tr>
+                <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
               )}
               {!loading && sorted.length === 0 && (
-                <tr><td colSpan={canAdd ? 7 : 6} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
+                <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
               )}
               {sorted.map((a, idx) => {
                 const status     = getStatus(a);
@@ -1428,6 +1542,11 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelCTA(a.creative?.call_to_action_type) ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
+                    <MetricBodyCells
+                      entries={metrics.entries}
+                      values={metrics.metricsById[a.id]}
+                      loading={metrics.loading}
+                    />
                     {canAdd && (
                       <td className="pr-5 pl-2 py-3">
                         <div className="flex items-center justify-end">
@@ -1466,6 +1585,18 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
           />
         )}
       </AnimatePresence>
+
+      <MetricsPicker
+        open={metrics.pickerOpen}
+        onClose={metrics.closePicker}
+        catalog={metricsCatalog}
+        visibleKeys={metricKeys}
+        onSaved={metrics.onSaved}
+        persist={metrics.persist}
+        title="Customize columns"
+        subtitle="shown for the selected date range"
+        minSelected={0}
+      />
     </div>
   );
 }
@@ -1477,7 +1608,25 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
 // instead of bouncing back to the Campaigns list — and so the Meta Ads chat
 // widget (mounted alongside this dashboard) can scope its answers to
 // whatever's currently open. See docs/META_ADS_CHATBOT.md.
-export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, onRefresh, onNewCampaign, onLaunchWizard, manageNonce }) {
+export function TableViewCampaigns({
+  campaigns,
+  loadingCampaigns,
+  adAccountId,
+  onRefresh,
+  onNewCampaign,
+  onLaunchWizard,
+  manageNonce,
+  // Selectable metric columns. The catalog is the dashboard's single
+  // one-time fetch (no second request from here); `tableMetricKeys` is the
+  // saved per-level selection; `dateParams`/`dateLabel` scope the NUMBERS
+  // only — never which rows exist, which is what lets the entity-list
+  // endpoints keep their 2h cache while metrics refresh every 5 min.
+  metricsCatalog = [],
+  tableMetricKeys = { campaign: [], adset: [], ad: [] },
+  onTableMetricsSaved,
+  dateParams,
+  dateLabel,
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const campaignIdParam = searchParams.get('campaignId');
   const adSetIdParam = searchParams.get('adSetId');
@@ -1559,7 +1708,7 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (
@@ -1573,6 +1722,11 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
                 restoreAdSetId={adSetIdParam}
                 query={adSetQuery}
                 onQueryChange={setAdSetQuery}
+                metricsCatalog={metricsCatalog}
+                metricKeys={tableMetricKeys.adset}
+                onMetricKeysSaved={onTableMetricsSaved}
+                dateParams={dateParams}
+                dateLabel={dateLabel}
               />
             </motion.div>
           )}
@@ -1587,6 +1741,12 @@ export function TableViewCampaigns({ campaigns, loadingCampaigns, adAccountId, o
                 onSelectAdChange={setAdId}
                 query={adQuery}
                 onQueryChange={setAdQuery}
+                adAccountId={adAccountId}
+                metricsCatalog={metricsCatalog}
+                metricKeys={tableMetricKeys.ad}
+                onMetricKeysSaved={onTableMetricsSaved}
+                dateParams={dateParams}
+                dateLabel={dateLabel}
               />
             </motion.div>
           )}
