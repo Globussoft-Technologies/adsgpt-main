@@ -240,6 +240,7 @@ const ChatInterface = () => {
       metaAccountSelection,
       metaActionResponse,
       metaMediaResponse,
+      recreateSource,
       quote: turnQuote,
     }) => {
       const controller = streamChat({
@@ -259,6 +260,7 @@ const ChatInterface = () => {
         metaAccountSelection: metaAccountSelection || null,
         metaActionResponse: metaActionResponse || null,
         metaMediaResponse: metaMediaResponse || null,
+        recreateSource: recreateSource || null,
         quote: turnQuote || null,
         onEvent: (event, data) => {
           switch (event) {
@@ -414,6 +416,7 @@ const ChatInterface = () => {
         attachments,
         quote: activeQuote,
         metaAccountSelection: options.metaAccountSelection || null,
+        recreateSource: options.recreateSource || null,
       });
     },
     [dispatch, pending, hasPendingMetaControl, quote, runStreamingTurn],
@@ -466,6 +469,14 @@ const ChatInterface = () => {
         `Use only these source-ad details in Creative Studio: ` +
         `brand name "${sourceBrand}", brand description "${sourceDescription}", ` +
         `CTA "${sourceCta}". Do not substitute a saved or unrelated brand.`;
+      // The prompt above is a hint the model often dropped, leaving brand_name
+      // empty — which the backend then filled from the user's saved brand. Send
+      // the same details as data so the brief is seeded deterministically.
+      const recreateSource = {
+        brand: sourceBrand || null,
+        description: sourceDescription || null,
+        cta: sourceCta || null,
+      };
       // Derive a sane image extension; ad-CDN URLs often omit one, so default jpg.
       const clean = (img || '').split('?')[0];
       const m = clean.match(/\.(png|jpe?g|webp|gif|bmp)$/i);
@@ -477,7 +488,7 @@ const ChatInterface = () => {
             role: 'reference_image',
           }]
         : [];
-      handleSend(text, attachments);
+      handleSend(text, attachments, { recreateSource });
     },
     [pending, hasPendingMetaControl, handleSend],
   );

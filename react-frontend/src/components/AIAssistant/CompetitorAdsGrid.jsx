@@ -201,24 +201,31 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
         </div>
       )}
 
-      {/* ── Footer: CTA badge + Recreate + "View ad" link ────────────────── */}
+      {/* ── Footer: CTA badge + Recreate + "View ad" link ──────────────────
+          Wraps rather than overflows: in the narrow masonry columns a card can
+          hold CTA + Recreate + View ad at once, which doesn't fit on one line.
+          The CTA truncates (it's the flexible part) and the action pills stay
+          whole on a line of their own. */}
       {(ad.call_to_action || adUrl || canRecreate) && (
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
           {ad.call_to_action ? (
-            <span className="inline-flex h-7 items-center rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium tracking-wide text-white/70 capitalize">
-              {ad.call_to_action}
+            <span
+              title={ad.call_to_action}
+              className="inline-flex h-7 min-w-0 max-w-full shrink items-center rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium tracking-wide text-white/70 capitalize"
+            >
+              <span className="truncate">{ad.call_to_action}</span>
             </span>
           ) : (
             <span />
           )}
           {/* Action pills share one height/shape/size so they align on the row. */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {canRecreate && (
               <button
                 type="button"
                 onClick={() => onRecreate(ad)}
                 title="Recreate a similar ad with the AI Assistant"
-                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-3 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-3 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
               >
                 <Sparkles className="h-3 w-3 text-[#15DCFF]" />
                 Recreate
@@ -230,7 +237,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
                 target="_blank"
                 rel="noreferrer"
                 title="View the original ad"
-                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/10 px-3 text-[11.5px] font-medium text-white/60 transition-colors duration-150 hover:border-white/25 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 px-3 text-[11.5px] font-medium text-white/60 transition-colors duration-150 hover:border-white/25 hover:text-white"
               >
                 View ad
                 <ExternalLink className="h-3 w-3" />

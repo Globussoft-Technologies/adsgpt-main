@@ -50,6 +50,7 @@ export const streamChat = ({
   metaAccountSelection,
   metaActionResponse,
   metaMediaResponse,
+  recreateSource,
   quote,
   onEvent,
 }) => {
@@ -84,6 +85,10 @@ export const streamChat = ({
           // arguments are never accepted from the browser.
           meta_action_response: metaActionResponse || null,
           meta_media_response: metaMediaResponse || null,
+          // Set by an ad card's "Recreate" button. Sent as data so the brief is
+          // seeded with the SOURCE ad's brand — describing it in the prompt
+          // alone let the user's saved brand get substituted in.
+          recreate_source: recreateSource || null,
           // A message/selection the user is replying to → { text, role, messageId }.
           // Maps to the backend QuoteItem (message_id). null when not replying.
           quote: quote

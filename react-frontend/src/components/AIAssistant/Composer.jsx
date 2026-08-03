@@ -99,13 +99,18 @@ const Composer = ({
     variant === 'docked' ? MAX_TEXTAREA_PX_DOCKED : MAX_TEXTAREA_PX_CENTERED;
 
   // Auto-grow the textarea between min and max. Past max, the textarea's own
-  // overflow-y-auto kicks in and shows a scrollbar.
-  useEffect(() => {
+  // overflow-y-auto kicks in and shows a scrollbar. Measuring from `auto` means
+  // this shrinks as well as grows, so it doubles as the reset after a send.
+  // NOTE: this only reflows the box the user typed in — it never changes the
+  // composer's configured min/max size.
+  const resizeTextarea = () => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minTextareaPx), maxTextareaPx)}px`;
-  }, [text, minTextareaPx, maxTextareaPx]);
+  };
+
+  useEffect(resizeTextarea, [text, minTextareaPx, maxTextareaPx]);
 
   // Focus the input when the user picks something to reply to.
   useEffect(() => {
@@ -149,6 +154,12 @@ const Composer = ({
     setAttachments([]);
     setImageUrl('');
     setShowUrlInput(false);
+    // Collapse the box back to its resting height straight away. The auto-grow
+    // effect only reruns when `text` actually changes, so an attachments-only
+    // send (text already '') would otherwise leave it standing tall. Clearing
+    // the value first makes the measurement reflect the now-empty box.
+    if (textareaRef.current) textareaRef.current.value = '';
+    resizeTextarea();
   };
 
   const handleKeyDown = (e) => {
