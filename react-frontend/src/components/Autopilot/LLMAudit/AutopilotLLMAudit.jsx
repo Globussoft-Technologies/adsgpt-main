@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Sparkles, Loader2, ChevronDown, Radio, Coins, Clock } from 'lucide-react';
+import { Sparkles, Loader2, Coins, Clock } from 'lucide-react';
 import {
   runLLMAudit,
   getAIFindings,
@@ -8,8 +8,6 @@ import {
   undoAuditFix,
 } from '@/apis/autopilot/llmAuditApi';
 import { globalToast } from '@/utils/globalToast';
-import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
-import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 import ApplyFixModal from './ApplyFixModal';
 import AuditsList from './AuditsList';
 import AuditFindings from './AuditFindings';
@@ -68,49 +66,14 @@ function FetchingSpinner() {
 // ─── main router ─────────────────────────────────────────────────────────────
 
 export default function AutopilotLLMAudit({
-  userId,
-  facebookAccounts = [],
+  // Both controlled from the page header now — AutopilotPage owns the
+  // Facebook + ad-account pickers so they sit next to each other in one
+  // place instead of a second picker row duplicating the header's.
+  facebookId,
+  adAccountId,
   adAccountsByFacebook = {},
-  // The page-level Facebook account (Overview / Action log's shared
-  // selector). AI Audit still needs its own picker — an audit run targets
-  // one specific ad account, not a rollup — so this is only the DEFAULT on
-  // mount; picking a different account here overrides it for as long as
-  // this tab stays mounted, same as before this prop existed.
-  defaultFacebookId = '',
 }) {
-  // The AI Audit tab is the only place that needs a per-account scope, so
-  // its picker lives here (was previously page-level — confusingly implied
-  // a global filter that didn't exist for the other tabs).
-  const [facebookId, setFacebookId] = useState('');
-  const [adAccountId, setAdAccountId] = useState('');
-  const [accountOpen, setAccountOpen] = useState(false);
   const adAccounts = facebookId ? adAccountsByFacebook[facebookId] || [] : [];
-
-  useEffect(() => {
-    setFacebookId((current) => {
-      if (current && facebookAccounts.some((account) => account.facebookId === current)) {
-        return current;
-      }
-      const defaultIsKnown =
-        defaultFacebookId &&
-        facebookAccounts.some((account) => account.facebookId === defaultFacebookId);
-      return defaultIsKnown ? defaultFacebookId : facebookAccounts[0]?.facebookId || '';
-    });
-    // `defaultFacebookId` intentionally excluded — it should only seed the
-    // picker on mount / when the account list changes, not yank the
-    // selection out from under a manual local pick every time the header
-    // selector changes on another tab.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facebookAccounts]);
-
-  // Default the selection to the first account on mount / when the list
-  // hydrates. Preserve a still-valid prior pick if the list refreshes.
-  useEffect(() => {
-    setAdAccountId((prev) =>
-      prev && adAccounts.find((a) => a.id === prev) ? prev : adAccounts[0]?.id || '',
-    );
-  }, [facebookId, adAccountsByFacebook]);
-
   const selectedAccount = adAccounts.find((a) => a.id === adAccountId) || null;
   const currency = selectedAccount?.currency || 'INR';
 
@@ -257,112 +220,45 @@ export default function AutopilotLLMAudit({
 
   // ─── render ────────────────────────────────────────────────────────────────
 
-  // Picker — rendered above whatever view is active. Click-to-open dropdown
-  // matching the rest of the autopilot/Meta-Ads visual language.
-  const picker = (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]">
-      <div className="flex items-center gap-2">
-        <span className="text-10 font-medium uppercase tracking-wider text-gray-400 dark:text-white/40">
-          Account
+  // Currency/timezone context for whatever account the header pickers have
+  // selected. The pickers themselves live in AutopilotPage's header now —
+  // this is just informational, so it renders nothing when no account is
+  // selected instead of duplicating a picker here.
+  const accountInfo = selectedAccount && (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
+        <Coins className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
+        <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
+          Currency
         </span>
-        <Dropdown
-          open={accountOpen}
-          onClose={() => setAccountOpen(false)}
-          anchor="left"
-          trigger={
-            <button
-              type="button"
-              onClick={() => setAccountOpen((p) => !p)}
-              disabled={adAccounts.length === 0}
-              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-900 transition-all hover:border-gray-300 disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.06] dark:text-white dark:hover:border-white/10"
-            >
-              <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-              <span className="max-w-45 truncate font-medium">
-                {selectedAccount?.name ?? 'Pick an account'}
-              </span>
-              <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
-            </button>
-          }
-        >
-          <div className="w-72 p-1">
-            <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-              {adAccounts.map((acc) => (
-                <button
-                  key={acc.id}
-                  onClick={() => {
-                    setAdAccountId(acc.id);
-                    setAccountOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
-                    adAccountId === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''
-                  }`}
-                >
-                  <div>
-                    <p
-                      className={`text-xs font-medium ${
-                        adAccountId === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
-                      }`}
-                    >
-                      {acc.name}
-                    </p>
-                    <p className="text-10 text-gray-500 dark:text-white/50">act_{acc.id}</p>
-                  </div>
-                  <StatusBadge status={acc.status === 1 ? 'ACTIVE' : 'PAUSED'} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </Dropdown>
-        <FacebookAccountSelector
-          userId={userId}
-          onChange={(account) => {
-            const nextFacebookId = account?.facebookId || '';
-            if (nextFacebookId === facebookId) return;
-            setFacebookId(nextFacebookId);
-            setAdAccountId('');
-            setAccountOpen(false);
-          }}
-        />
-      </div>
-      {selectedAccount && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
-            <Coins className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-            <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
-              Currency
-            </span>
-            <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
-              {selectedAccount.currency}
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
-            <Clock className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-            <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
-              Timezone
-            </span>
-            <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
-              {selectedAccount.timezone || '—'}
-            </span>
-          </span>
-        </div>
-      )}
+        <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
+          {selectedAccount.currency}
+        </span>
+      </span>
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
+        <Clock className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
+        <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
+          Timezone
+        </span>
+        <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
+          {selectedAccount.timezone || '—'}
+        </span>
+      </span>
     </div>
   );
 
-  // No account selected (yet) — picker visible, nothing else to render.
+  // No account selected (yet) — nothing to render but the empty state; the
+  // pickers themselves are in the page header above.
   if (!adAccountId) {
     return (
-      <>
-        {picker}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10">
-            <Sparkles className="h-6 w-6 text-[#15DCFF]" />
-          </div>
-          <p className="text-sm text-gray-600 dark:text-white/60">
-            Pick an account above to start an AI audit.
-          </p>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10">
+          <Sparkles className="h-6 w-6 text-[#15DCFF]" />
         </div>
-      </>
+        <p className="text-sm text-gray-600 dark:text-white/60">
+          Pick an account above to start an AI audit.
+        </p>
+      </div>
     );
   }
 
@@ -371,7 +267,7 @@ export default function AutopilotLLMAudit({
 
   return (
     <>
-      {picker}
+      {accountInfo}
 
       {view === 'list' && (
         <AuditsList

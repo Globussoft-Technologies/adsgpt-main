@@ -8,6 +8,8 @@ import {
   ClipboardList,
   Sparkles,
   Settings,
+  Radio,
+  ChevronDown,
   // Repeat,  // ROTATION HIDDEN — re-add when uncommenting the rotation tab
 } from 'lucide-react';
 import AutopilotOverview from '@/components/Autopilot/AutopilotOverview';
@@ -21,6 +23,7 @@ import AutopilotSettings from '@/components/Autopilot/AutopilotSettings';
 import AutopilotLLMAudit from '@/components/Autopilot/LLMAudit/AutopilotLLMAudit';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
+import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
 import { getAdAccounts, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import {
   getAutopilotConfig,
@@ -80,10 +83,10 @@ const AutopilotPage = () => {
   // account instead of the unfiltered list.
   const [logAccountFilter, setLogAccountFilter] = useState('');
 
-  // Page-level Facebook account scope — Overview + Action log both read
-  // from it (AI Audit keeps its own picker; it targets one specific ad
-  // account for a single audit run, a different concept from "which
-  // accounts' data should populate these tabs"). `FacebookAccountSelector`
+  // Page-level Facebook account — shared by every tab now. Overview /
+  // Action log use it to scope a SET of accounts (`scopedAdAccounts`
+  // below); AI Audit narrows further to one specific ad account, since an
+  // audit run always targets a single account. `FacebookAccountSelector`
   // resolves its own default (persisted pick, else the first connected
   // identity) and reports it here on mount, so there's no separate
   // "nothing selected yet" state to handle.
@@ -96,6 +99,27 @@ const AutopilotPage = () => {
     () => scopedAdAccounts.map((account) => account.id),
     [scopedAdAccounts],
   );
+
+  // AI Audit's single-account pick, scoped within `activeFacebookId`'s
+  // account list. Lives in the header (next to the Facebook selector)
+  // rather than inside AutopilotLLMAudit so the two controls sit together
+  // visually instead of duplicating a Facebook picker in the tab body.
+  const [aiAuditAdAccountId, setAiAuditAdAccountId] = useState('');
+  const [aiAuditAccountOpen, setAiAuditAccountOpen] = useState(false);
+  const aiAuditAdAccounts = activeFacebookId
+    ? adAccountsByFacebook[activeFacebookId] || []
+    : [];
+
+  // Default to the first account whenever the Facebook identity (or its
+  // account list) changes; keep a still-valid prior pick otherwise.
+  useEffect(() => {
+    setAiAuditAdAccountId((prev) =>
+      prev && aiAuditAdAccounts.some((account) => account.id === prev)
+        ? prev
+        : aiAuditAdAccounts[0]?.id || '',
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFacebookId, adAccountsByFacebook]);
 
   // Hydrate the global live-actions flag AND the user's per-account
   // autopilot settings (enabled + dryRunGlobal). Both feed the resolved
@@ -308,8 +332,67 @@ const AutopilotPage = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* AI Audit's ad-account picker — only rendered on that tab,
+              directly left of the Facebook selector (same order as Ads
+              Manager: account, then Facebook identity). An audit run
+              targets exactly one ad account, so this narrows further than
+              the Facebook-level scope Overview / Action log use below. */}
+          {activeTab === 'ai-audit' && (
+            <Dropdown
+              open={aiAuditAccountOpen}
+              onClose={() => setAiAuditAccountOpen(false)}
+              anchor="left"
+              trigger={
+                <button
+                  type="button"
+                  onClick={() => setAiAuditAccountOpen((p) => !p)}
+                  disabled={aiAuditAdAccounts.length === 0}
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+                >
+                  <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <span className="max-w-45 truncate font-medium">
+                    {aiAuditAdAccounts.find((account) => account.id === aiAuditAdAccountId)
+                      ?.name ?? 'Pick an account'}
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
+                </button>
+              }
+            >
+              <div className="w-72 p-1">
+                <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+                  {aiAuditAdAccounts.map((account) => (
+                    <button
+                      key={account.id}
+                      onClick={() => {
+                        setAiAuditAdAccountId(account.id);
+                        setAiAuditAccountOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                        aiAuditAdAccountId === account.id ? 'bg-gray-100 dark:bg-white/5' : ''
+                      }`}
+                    >
+                      <div>
+                        <p
+                          className={`text-xs font-medium ${
+                            aiAuditAdAccountId === account.id
+                              ? 'text-[#15DCFF]'
+                              : 'text-gray-900 dark:text-white'
+                          }`}
+                        >
+                          {account.name}
+                        </p>
+                        <p className="text-10 text-gray-500 dark:text-white/50">act_{account.id}</p>
+                      </div>
+                      <StatusBadge status={account.status === 1 ? 'ACTIVE' : 'PAUSED'} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Dropdown>
+          )}
           {/* Scopes Overview + Action log to one Facebook connection's ad
-              accounts. Same component/behavior as Ads Manager's picker —
+              accounts; on AI Audit it's what the ad-account picker above is
+              scoped to. Same component/behavior as Ads Manager's picker —
               persists the pick across the app via localStorage. */}
           <FacebookAccountSelector
             userId={userId}
@@ -418,10 +501,9 @@ const AutopilotPage = () => {
             >
               <div className="flex w-full flex-col gap-4 px-4 py-5 sm:px-5 sm:py-6 lg:px-6 2xl:py-8">
                 <AutopilotLLMAudit
-                  userId={userId}
-                  facebookAccounts={facebookAccounts}
+                  facebookId={activeFacebookId}
+                  adAccountId={aiAuditAdAccountId}
                   adAccountsByFacebook={adAccountsByFacebook}
-                  defaultFacebookId={activeFacebookId}
                 />
               </div>
             </motion.div>
