@@ -90,6 +90,11 @@ export default function MetricsPicker({
   // valid state). Table pickers pass 0 — zero metric columns is exactly how
   // the tables looked before this feature, so clearing them all is fine.
   minSelected = 1,
+  // What "Reset" restores. Analytics leaves this unset and falls back to the
+  // catalog's `defaultVisible` flags (the same set getDefaultVisibleKeys()
+  // computes server-side). Table pickers pass [] explicitly — their real
+  // default, per the locked decision, is no columns at all.
+  defaultKeys,
 }) {
   const [selectedKeys, setSelectedKeys] = useState(visibleKeys || []);
   const [query, setQuery] = useState('');
@@ -196,6 +201,11 @@ export default function MetricsPicker({
     setSaveMessage(null);
   };
 
+  const resolvedDefaultKeys = useMemo(
+    () => defaultKeys ?? catalog.filter((m) => m.defaultVisible).map((m) => m.key),
+    [defaultKeys, catalog],
+  );
+
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const aliasExpansion = SEARCH_ALIASES[q];
@@ -216,6 +226,31 @@ export default function MetricsPicker({
       items: byGroup.get(g),
     }));
   }, [catalog, query]);
+
+  // Flattened keys currently matching the search — "Select all" adds exactly
+  // these, so searching "video" then hitting it only adds video metrics
+  // instead of the entire 233-entry catalog.
+  const filteredKeys = useMemo(
+    () => grouped.flatMap((g) => g.items.map((m) => m.key)),
+    [grouped],
+  );
+  const allFilteredSelected =
+    filteredKeys.length > 0 && filteredKeys.every((k) => selectedKeys.includes(k));
+  const isAtDefault =
+    selectedKeys.length === resolvedDefaultKeys.length &&
+    resolvedDefaultKeys.every((k) => selectedKeys.includes(k));
+
+  const selectAll = () => {
+    setSelectedKeys((prev) => Array.from(new Set([...prev, ...filteredKeys])));
+    setDirty(true);
+    setSaveMessage(null);
+  };
+
+  const resetToDefault = () => {
+    setSelectedKeys(resolvedDefaultKeys);
+    setDirty(true);
+    setSaveMessage(null);
+  };
 
   const toggleGroup = (group) => {
     setOpenGroups((prev) => {
@@ -282,6 +317,25 @@ export default function MetricsPicker({
               placeholder="Search metrics…"
               className="w-full bg-transparent text-13 text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-white/40"
             />
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={selectAll}
+              disabled={allFilteredSelected}
+              className="text-11 font-medium text-[#5867EB] hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:disabled:text-white/30"
+            >
+              Select all{query ? ` (${filteredKeys.length})` : ''}
+            </button>
+            <span className="text-gray-300 dark:text-white/15">·</span>
+            <button
+              type="button"
+              onClick={resetToDefault}
+              disabled={isAtDefault}
+              className="text-11 font-medium text-[#5867EB] hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:disabled:text-white/30"
+            >
+              Reset to default
+            </button>
           </div>
         </div>
 
