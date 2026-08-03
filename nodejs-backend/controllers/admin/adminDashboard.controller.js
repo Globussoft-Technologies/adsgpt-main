@@ -3,6 +3,11 @@ const UserProfile = require("../../Module/user/userProfileModel");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { buildEffectiveCostStages } = require("../../config/modelAggregation");
 const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
+const axios = require("axios");
+const { MODEL_REGISTRY, allKeysFor } = require("../../config/modelRegistry");
+
+let amemberProductsCache = null;
+let amemberProductsCacheExpiry = 0;
 
 // Date strings of the form "YYYY-MM-DD" represent a whole calendar day. Treat
 // `from` as start-of-day UTC and `to` as end-of-day UTC, otherwise a request
@@ -25,6 +30,177 @@ function buildDateMatch(from, to) {
   if (from) range.$gte = parseRangeStart(from);
   if (to) range.$lte = parseRangeEnd(to);
   return { createdAt: range };
+}
+
+function parseFiniteNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function addNumberRange(match, field, min, max) {
+  const range = {};
+  const minValue = parseFiniteNumber(min);
+  const maxValue = parseFiniteNumber(max);
+  if (minValue !== null) range.$gte = minValue;
+  if (maxValue !== null) range.$lte = maxValue;
+  if (Object.keys(range).length) match[field] = range;
+}
+
+function addDateRange(match, field, from, to) {
+  if (!from && !to) return;
+  const range = {};
+  if (from) range.$gte = parseRangeStart(from);
+  if (to) range.$lte = parseRangeEnd(to);
+  match[field] = range;
+}
+
+function toOption(value) {
+  return { value, label: value };
+}
+
+function normalizeOptionKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function addPlanOption(map, value, meta = {}) {
+  const label = String(value || "").trim().replace(/\s+/g, " ");
+  if (!label) return;
+  const key = normalizeOptionKey(label);
+  if (!map.has(key)) {
+    map.set(key, {
+      value: meta.value || `label:${key}`,
+      label,
+      planIds: [],
+      sources: [],
+      ...meta,
+    });
+  }
+  const option = map.get(key);
+  if (meta.planId && !option.planIds.includes(String(meta.planId))) {
+    option.planIds.push(String(meta.planId));
+  }
+  if (meta.source && !option.sources.includes(meta.source)) {
+    option.sources.push(meta.source);
+  }
+}
+
+function uniqueStringOptions(values) {
+  const byLabel = new Map();
+  (values || []).forEach((value) => {
+    const label = String(value || "").trim().replace(/\s+/g, " ");
+    if (!label) return;
+    const key = normalizeOptionKey(label);
+    if (!byLabel.has(key)) byLabel.set(key, label);
+  });
+  return Array.from(byLabel.values()).sort((a, b) => a.localeCompare(b)).map(toOption);
+}
+
+function buildModelOptionsFromRegistry() {
+  return MODEL_REGISTRY
+    .filter((entry) => entry.enabled !== false)
+    .map((entry) => ({
+      value: entry.canonicalKey,
+      label: entry.label || entry.canonicalKey,
+      type: entry.type,
+      aliases: allKeysFor(entry),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function modelValuesForFilter(model) {
+  const selected = String(model || "").trim();
+  if (!selected) return [];
+  const entry = MODEL_REGISTRY.find(
+    (candidate) =>
+      candidate.canonicalKey === selected ||
+      normalizeOptionKey(candidate.label) === normalizeOptionKey(selected) ||
+      allKeysFor(candidate).some((key) => normalizeOptionKey(key) === normalizeOptionKey(selected)),
+  );
+  return entry ? allKeysFor(entry) : [selected];
+}
+
+function normalizeAmemberProducts(data) {
+  if (!data) return [];
+  const products = Array.isArray(data) ? data : Object.values(data);
+  return products.filter((product) => product && typeof product === "object" && product.product_id);
+}
+
+async function fetchAmemberProducts() {
+  if (amemberProductsCache && Date.now() < amemberProductsCacheExpiry) {
+    return amemberProductsCache;
+  }
+  const apiHost = (process.env.AMEMBER_BASE_API_URL || "https://adsgpt-dev.poweradspy.com/amember/api").replace(/\/+$/, "");
+  const apiKey = process.env.AMEMBER_API_KEY;
+  const pageSize = 100;
+  const allProducts = [];
+  let page = 0;
+  let pageProducts = [];
+
+  do {
+    const res = await axios.get(`${apiHost}/products`, {
+      params: { ...(apiKey ? { _key: apiKey } : {}), _count: pageSize, _page: page },
+      timeout: 10000,
+    });
+    pageProducts = normalizeAmemberProducts(res.data);
+    allProducts.push(...pageProducts);
+    page += 1;
+  } while (pageProducts.length === pageSize);
+
+  amemberProductsCache = allProducts;
+  amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
+  return allProducts;
+}
+
+function buildPlanOptionsFromProducts(products) {
+  const byLabel = new Map();
+  products.forEach((product) => {
+    const productId = String(product.product_id);
+    addPlanOption(byLabel, product.title || product.name || product.product_id, {
+      value: `label:${normalizeOptionKey(product.title || product.name || product.product_id)}`,
+      planId: productId,
+      billingPlanId: product.default_billing_plan_id ? String(product.default_billing_plan_id) : "",
+      source: "amember",
+      credits: product.credit,
+    });
+  });
+  return byLabel;
+}
+
+function addObservedPlanOptions(map, observedPlans) {
+  observedPlans.forEach((plan) => {
+    addPlanOption(map, plan.value, { source: "profile" });
+  });
+}
+
+function buildSelectedPlanLabels(products, selectedPlan) {
+  const selected = String(selectedPlan || "").trim();
+  if (!selected) return new Set();
+  if (selected.startsWith("label:")) {
+    const selectedLabelKey = selected.slice("label:".length);
+    return new Set([selectedLabelKey]);
+  }
+  const selectedProduct = products.find(
+    (product) =>
+      String(product.product_id) === selected ||
+      normalizeOptionKey(product.title || product.name) === normalizeOptionKey(selected),
+  );
+  return new Set([
+    normalizeOptionKey(selected),
+    selectedProduct ? normalizeOptionKey(selectedProduct.title || selectedProduct.name || selectedProduct.product_id) : "",
+  ].filter(Boolean));
+}
+
+function buildSelectedPlanIds(products, selectedPlan) {
+  const selected = String(selectedPlan || "").trim();
+  if (!selected) return new Set();
+  if (!selected.startsWith("label:")) return new Set([selected]);
+  const selectedLabelKey = selected.slice("label:".length);
+  return new Set(
+    products
+      .filter((product) => normalizeOptionKey(product.title || product.name || product.product_id) === selectedLabelKey)
+      .map((product) => String(product.product_id)),
+  );
 }
 
 // GET /admin/overview?from&to
@@ -109,13 +285,84 @@ exports.overview = async (req, res) => {
   }
 };
 
-// GET /admin/users?from&to&search&sort&page&limit
+// GET /admin/users/filter-options?from&to
+exports.usersFilterOptions = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const match = buildDateMatch(from, to);
+
+    const [observedPlans, amemberProductsResult] = await Promise.allSettled([
+      UserProfile.aggregate([
+        {
+          $match: {
+            $or: [
+              { subscription_plan_name: { $type: "string", $ne: "" } },
+              { subscription_plan_id: { $type: "string", $ne: "" } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $cond: [
+                { $ne: ["$subscription_plan_name", ""] },
+                "$subscription_plan_name",
+                "$subscription_plan_id",
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            value: "$_id",
+            label: "$_id",
+          },
+        },
+        { $sort: { label: 1 } },
+      ]),
+      fetchAmemberProducts(),
+    ]);
+    const amemberProducts = amemberProductsResult.status === "fulfilled" ? amemberProductsResult.value : [];
+    const planMap = buildPlanOptionsFromProducts(amemberProducts);
+    if (amemberProductsResult.status === "rejected") {
+      console.warn("[admin users filter-options] aMember products unavailable:", amemberProductsResult.reason?.message || amemberProductsResult.reason);
+    }
+    if (planMap.size === 0 && observedPlans.status === "fulfilled") {
+      addObservedPlanOptions(planMap, observedPlans.value);
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        models: buildModelOptionsFromRegistry(),
+        plans: Array.from(planMap.values()).sort((a, b) => a.label.localeCompare(b.label)),
+      },
+    });
+  } catch (error) {
+    console.error("Admin users filter options error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+};
+
+// GET /admin/users?from&to&search&sort&page&limit&type&model&plan&generationsMin&generationsMax&creditsMin&creditsMax&costMin&costMax&lastActivityFrom&lastActivityTo
 exports.usersList = async (req, res) => {
   try {
     const {
       from,
       to,
       search = "",
+      type = "",
+      model = "",
+      plan = "",
+      generationsMin,
+      generationsMax,
+      creditsMin,
+      creditsMax,
+      costMin,
+      costMax,
+      lastActivityFrom,
+      lastActivityTo,
       sort = "cost", // cost | generations | credits | recent
       page = 1,
       limit = 20,
@@ -126,6 +373,14 @@ exports.usersList = async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     const match = buildDateMatch(from, to);
+    if (["image", "video"].includes(type)) match.type = type;
+    if (model.trim()) match.model = { $in: modelValuesForFilter(model) };
+
+    const aggregateRangeMatch = {};
+    addNumberRange(aggregateRangeMatch, "generations", generationsMin, generationsMax);
+    addNumberRange(aggregateRangeMatch, "credits", creditsMin, creditsMax);
+    addNumberRange(aggregateRangeMatch, "cost", costMin, costMax);
+    addDateRange(aggregateRangeMatch, "lastActivity", lastActivityFrom, lastActivityTo);
 
     const sortField = {
       cost: "cost",
@@ -160,6 +415,7 @@ exports.usersList = async (req, res) => {
           lastActivity: 1,
         },
       },
+      ...(Object.keys(aggregateRangeMatch).length ? [{ $match: aggregateRangeMatch }] : []),
     ]);
 
     const userIds = aggregated.map((u) => u.userId);
@@ -206,6 +462,28 @@ exports.usersList = async (req, res) => {
           r.email.toLowerCase().includes(q) ||
           r.name.toLowerCase().includes(q) ||
           r.login.toLowerCase().includes(q),
+      );
+    }
+
+    if (plan.trim()) {
+      const q = plan.trim();
+      const amemberProducts = await fetchAmemberProducts().catch((error) => {
+        console.warn("[admin users list] aMember products unavailable for plan matching:", error.message);
+        return [];
+      });
+      const selectedLabels = buildSelectedPlanLabels(amemberProducts, q);
+      const selectedPlanIds = buildSelectedPlanIds(amemberProducts, q);
+      merged = merged.filter(
+        (r) => {
+          const rowPlan = String(r.plan || "").trim();
+          const rowPlanId = String(r.planId || "").trim();
+          return (
+            rowPlan === q ||
+            rowPlanId === q ||
+            selectedPlanIds.has(rowPlanId) ||
+            selectedLabels.has(normalizeOptionKey(rowPlan))
+          );
+        },
       );
     }
 

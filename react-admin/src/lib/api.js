@@ -33,6 +33,7 @@ export const adminApi = {
   login: (username, password) => api.post("/login", { username, password }),
   me: () => api.get("/me"),
   overview: (params) => api.get("/overview", { params }),
+  usersFilterOptions: (params) => api.get("/users/filter-options", { params }),
   users: (params) => api.get("/users", { params }),
   userDetail: (userId, params) => api.get(`/users/${encodeURIComponent(userId)}`, { params }),
   partnerApiKeys: () => api.get("/partner-api-keys"),

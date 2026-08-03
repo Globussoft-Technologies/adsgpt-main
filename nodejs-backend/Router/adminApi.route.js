@@ -10,6 +10,7 @@ router.post("/login", adminAuth.login);
 router.get("/me", requireAdmin, adminAuth.me);
 
 router.get("/overview", requireAdmin, adminDashboard.overview);
+router.get("/users/filter-options", requireAdmin, adminDashboard.usersFilterOptions);
 router.get("/users", requireAdmin, adminDashboard.usersList);
 router.get("/users/:userId", requireAdmin, adminDashboard.userDetail);
 // Look up a failed Meta launch by its reference code (see wizard error

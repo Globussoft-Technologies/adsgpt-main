@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
   Activity,
   ArrowLeft,
@@ -88,6 +88,8 @@ function planTone(plan) {
 
 export default function UserDetailPage() {
   const { userId } = useParams();
+  const location = useLocation();
+  const usersBackTo = location.state?.usersBackTo || "/users";
   const [range, setRange] = useState(() => getStoredDateRange());
   const [type, setType] = useState("all");
   const [model, setModel] = useState("");
@@ -182,7 +184,7 @@ export default function UserDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/users" className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline">
+        <Link to={usersBackTo} className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to users
         </Link>
       </div>
