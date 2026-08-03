@@ -46,7 +46,16 @@ const normalizeAccountId = (id) =>
  * batch matching server-side filters (account / action / outcome / time),
  * then layers client-side severity + free-text filters and pagination.
  */
-const AutopilotActionLog = ({ selectedAdAccountId, adAccounts } = {}) => {
+// `scopedAdAccountIds` (bare ids, no `act_` prefix) — the ad accounts under
+// the page-level Facebook account selector's current pick. `undefined`/empty
+// means "All accounts" at the page level, so the dropdown's own "All
+// accounts" option should fall through to no filter, same as today. When
+// set, "All accounts" in THIS dropdown means "every account under that
+// Facebook connection" rather than truly every account the user has ever
+// touched — `adAccounts` (built from the same scope by the parent) already
+// keeps the dropdown's own option list correct; this just closes the gap
+// for the unfiltered/default case.
+const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountIds } = {}) => {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -105,7 +114,15 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts } = {}) => {
     setError(null);
     try {
       const params = {
-        adAccountId: filters.adAccountId || undefined,
+        // A specific dropdown pick always wins. Otherwise fall back to the
+        // page-level Facebook scope (if any) so "All accounts" here means
+        // "every account under that connection," not the user's entire
+        // history across every Facebook account they've ever linked.
+        adAccountId:
+          filters.adAccountId ||
+          (scopedAdAccountIds?.length
+            ? scopedAdAccountIds.map((id) => `act_${id}`)
+            : undefined),
         action: filters.action || undefined,
         outcome: filters.outcome || undefined,
         page: 1,
@@ -136,6 +153,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts } = {}) => {
     filters.outcome,
     filters.from,
     filters.to,
+    scopedAdAccountIds,
   ]);
 
   useEffect(() => {

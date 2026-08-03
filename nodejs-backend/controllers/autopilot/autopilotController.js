@@ -31,6 +31,7 @@ const {
   getAccessTokenForAccount,
   accounts: configuredAccounts,
   isLiveActionsAllowed,
+  parseAdAccountIdFilter,
 } = require("../../config/autopilotConfig");
 const { runAuditForAccount } = require("../../services/metaAuditService");
 const {
@@ -192,12 +193,20 @@ class AutopilotController {
       const runAtQuery = { $gte: since };
       if (hasTo) runAtQuery.$lte = toRaw;
 
+      // Optional — scopes the summary to one Facebook connection's ad
+      // accounts. The Autopilot account selector resolves the account list
+      // for the picked identity client-side (it already loads it to build
+      // the picker) and sends the ids here rather than the backend
+      // re-resolving them from Meta on every summary request.
+      const adAccountIdFilter = parseAdAccountIdFilter(req.query.adAccountId);
+
       // Pull rows the user can see: their own + the scheduler's SYSTEM rows.
       // Lean for speed; no projection limit so summary has full row context.
       const rows = await AutopilotActionLog.find(
         {
           userId: { $in: [userId, "SYSTEM"] },
           runAt: runAtQuery,
+          ...(adAccountIdFilter ? { adAccountId: adAccountIdFilter } : {}),
         },
         {
           // Modest projection — we don't need the full metricsSnapshot for
@@ -949,7 +958,11 @@ class AutopilotController {
       );
 
       const q = { userId };
-      if (adAccountId) q.adAccountId = adAccountId;
+      // Accepts either one id or a comma-separated list — the latter is how
+      // the Autopilot account selector scopes the log to every ad account
+      // under one Facebook connection.
+      const adAccountIdFilter = parseAdAccountIdFilter(adAccountId);
+      if (adAccountIdFilter) q.adAccountId = adAccountIdFilter;
       if (runId) q.runId = runId;
       if (entityId) q.entityId = entityId;
       if (action) q.action = action;

@@ -3,8 +3,7 @@ const {
 } = require("../services/workspace/workspaceService");
 const {
   accept,
-  consumeLogin,
-  requestLogin,
+  login,
 } = require("../services/workspace/workspaceMemberAuth");
 const {
   workspaceErrorResponse,
@@ -35,6 +34,7 @@ async function acceptInvitation(req, res) {
       token: req.params.token,
       firstName: req.body?.firstName,
       lastName: req.body?.lastName,
+      password: req.body?.password,
     });
     return res.json({ success: true, ...session });
   } catch (error) {
@@ -42,26 +42,16 @@ async function acceptInvitation(req, res) {
   }
 }
 
-async function requestLink(req, res) {
+async function loginMember(req, res) {
   try {
-    return res.json({
-      success: true,
-      ...(await requestLogin(req.body?.email)),
+    const session = await login({
+      email: req.body?.email,
+      password: req.body?.password,
     });
+    return res.json({ success: true, ...session });
   } catch (error) {
     return sendError(res, error);
   }
 }
 
-async function consumeLink(req, res) {
-  try {
-    return res.json({
-      success: true,
-      ...(await consumeLogin(req.body?.token)),
-    });
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-module.exports = { acceptInvitation, consumeLink, info, requestLink };
+module.exports = { acceptInvitation, info, loginMember };

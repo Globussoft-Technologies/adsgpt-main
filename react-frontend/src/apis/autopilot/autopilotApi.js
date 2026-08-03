@@ -107,7 +107,9 @@ export const getActionLog = async ({
     `${BASE_URL}/adsgpt/meta-ads/autopilot/log`,
     {
       params: {
-        adAccountId,
+        // Accepts a single id or an array — the Autopilot account selector
+        // passes every ad account under one Facebook connection this way.
+        adAccountId: Array.isArray(adAccountId) ? adAccountId.join(',') : adAccountId,
         runId,
         entityId,
         action,
@@ -133,11 +135,15 @@ export const getAutopilotSummary = async ({
   windowDays,
   from,
   to,
+  // Scopes the summary to one Facebook connection's ad accounts — see
+  // `getActionLog`'s `adAccountId` for the same array-or-string contract.
+  adAccountIds,
 } = {}) => {
   const params = {};
   if (from) params.from = from;
   if (to) params.to = to;
   if (!from && !to) params.windowDays = windowDays ?? 7;
+  if (adAccountIds?.length) params.adAccountId = adAccountIds.join(',');
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/autopilot/summary`,
     { params, headers: headers() },
@@ -247,10 +253,12 @@ export const getAuditRules = async () => {
 // User-defined rules (Autopilot v4). Form-based rules attached to specific
 // campaigns; the cron evaluates only attached (rule × entity) pairs.
 // -----------------------------------------------------------------------------
-export const listUserRules = async () => {
+export const listUserRules = async ({ adAccountIds } = {}) => {
+  const params = {};
+  if (adAccountIds?.length) params.adAccountId = adAccountIds.join(',');
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/autopilot/rules`,
-    { headers: headers() },
+    { params, headers: headers() },
   );
   return data;
 };

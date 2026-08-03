@@ -72,6 +72,17 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
       accountState.created += 1;
       return accountState.account;
     },
+    findOneAndUpdate: (filter, update) => {
+      if (
+        !accountState.account ||
+        String(accountState.account._id) !== String(filter._id) ||
+        accountState.account.passwordHash !== filter.passwordHash
+      ) {
+        return query(null);
+      }
+      Object.assign(accountState.account, update.$set);
+      return query({ ...accountState.account });
+    },
     deleteOne: async () => {
       accountState.account = null;
     },
@@ -161,10 +172,12 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
     accountState,
     memberships,
   });
+  const memberPassword = "member-password-1";
   const acceptedA = await first.service.acceptInvitation({
     rawToken: `${workspaceA._id}-token`,
     firstName: "Member",
     lastName: "B",
+    password: memberPassword,
   });
   assert.equal(first.invitation.status, "accepted");
   assert.equal(accountState.created, 1);
@@ -199,11 +212,17 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
   assert.equal(acceptedC.account._id, acceptedA.account._id);
   assert.equal(memberships.length, 2);
 
-  let loginToken;
   const secret = "workspace-login-test-secret-that-is-long";
   const memberAuth = createWorkspaceMemberAuth({
     WorkspaceMemberAccount: {
-      findOne: () => query(accountState.account),
+      findOne: ({ email, status }) =>
+        query(
+          accountState.account &&
+          accountState.account.email === email &&
+          accountState.account.status === status
+            ? accountState.account
+            : null,
+        ),
       updateOne: async () => ({ modifiedCount: 1 }),
     },
     WorkspaceMembership: {
@@ -212,31 +231,6 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
     },
     Workspace: {
       find: () => query([workspaceA, workspaceC]),
-    },
-    WorkspaceMemberLoginToken: {
-      create: async (value) => {
-        loginToken = {
-          _id: "login-token-id",
-          usedAt: null,
-          ...value,
-        };
-        return loginToken;
-      },
-      findOne: ({ tokenHash: hash, usedAt }) =>
-        query(
-          loginToken &&
-          loginToken.tokenHash === hash &&
-          loginToken.usedAt === usedAt
-            ? { ...loginToken }
-            : null,
-        ),
-      findOneAndUpdate: async (filter, update) => {
-        if (!loginToken || loginToken.usedAt || loginToken._id !== filter._id) {
-          return null;
-        }
-        Object.assign(loginToken, update.$set);
-        return { ...loginToken };
-      },
     },
     requireSponsor: async (ownerUserId) => ({
       profile: {
@@ -248,20 +242,41 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
         created_from: "GPT",
       },
     }),
-    sendLoginLink: async () => ({ sent: false }),
-    randomToken: () => "member-login-token",
-    exposeLinks: true,
     jwtSecret: secret,
     now: () => new Date("2026-07-29T10:00:00Z"),
   });
 
-  const requested = await memberAuth.requestLogin("member@example.com");
-  assert.equal(requested.token, "member-login-token");
-  const session = await memberAuth.consumeLogin("member-login-token");
+  const session = await memberAuth.login({
+    email: "member@example.com",
+    password: memberPassword,
+  });
   assert.equal(session.workspaceName, "Owner A Workspace");
+
   await assert.rejects(
-    memberAuth.consumeLogin("member-login-token"),
-    (error) => error.code === "WORKSPACE_LOGIN_LINK_INVALID",
+    memberAuth.login({ email: "member@example.com", password: "wrong-password" }),
+    (error) => error.code === "WORKSPACE_INVALID_CREDENTIALS",
+  );
+  await assert.rejects(
+    memberAuth.login({ email: "nobody@example.com", password: "whatever1" }),
+    (error) => error.code === "WORKSPACE_INVALID_CREDENTIALS",
+  );
+
+  const noPasswordAuth = createWorkspaceMemberAuth({
+    WorkspaceMemberAccount: {
+      findOne: () =>
+        query({
+          _id: "legacy-account",
+          email: "legacy@example.com",
+          status: "active",
+          passwordHash: null,
+        }),
+    },
+    jwtSecret: secret,
+  });
+  await assert.rejects(
+    noPasswordAuth.login({ email: "legacy@example.com", password: "whatever1" }),
+    (error) => error.code === "WORKSPACE_INVALID_CREDENTIALS",
+    "an account that never set a password must reject like any other invalid credential",
   );
 
   const staleNow = new Date("2026-07-29T10:00:00Z");
@@ -372,6 +387,7 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
     raceService.acceptInvitation({
       rawToken: "race-token",
       firstName: "Member",
+      password: "race-password-1",
     }),
     (error) => error.code === "WORKSPACE_ACCEPTANCE_CONFLICT",
   );
@@ -383,6 +399,53 @@ function invitationHarness({ workspace, email, accountState, memberships }) {
     racedMembership,
     "an older attempt must not delete membership written by a newer attempt",
   );
+
+  const legacyAccountState = {
+    account: {
+      _id: "64a33ccd1d76229f9df0784f",
+      status: "active",
+      email: "legacy@example.com",
+      firstName: "Legacy",
+      lastName: "Member",
+      passwordHash: null,
+    },
+    created: 0,
+  };
+  const legacyMemberships = [];
+  const workspaceD = {
+    _id: "64a33ccd1d76229f9df07850",
+    ownerUserId: "GPT-437",
+    name: "Owner D Workspace",
+    status: "active",
+  };
+  const legacy = invitationHarness({
+    workspace: workspaceD,
+    email: "legacy@example.com",
+    accountState: legacyAccountState,
+    memberships: legacyMemberships,
+  });
+  await assert.rejects(
+    legacy.service.acceptInvitation({
+      rawToken: `${workspaceD._id}-token`,
+      password: "short1",
+    }),
+    (error) => error.code === "WORKSPACE_PASSWORD_INVALID",
+    "a re-invited legacy account must still enforce the password policy",
+  );
+  assert.equal(
+    legacyAccountState.account.passwordHash,
+    null,
+    "a rejected password must not be partially applied",
+  );
+  const legacyAccepted = await legacy.service.acceptInvitation({
+    rawToken: `${workspaceD._id}-token`,
+    password: "legacy-password-1",
+  });
+  assert.ok(
+    legacyAccepted.account.passwordHash,
+    "a re-invited legacy account with no password yet must get one bootstrapped, without needing its name again",
+  );
+  assert.equal(legacyAccepted.account._id, legacyAccountState.account._id);
 
   console.log("workspaceAcceptance tests passed");
 })().catch((error) => {

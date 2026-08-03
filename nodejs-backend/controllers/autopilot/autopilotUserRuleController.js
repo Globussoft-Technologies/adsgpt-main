@@ -5,6 +5,7 @@ const {
 } = require("../../Validations/autopilotUserRule.validator");
 const {
   normalizeAdAccountId,
+  parseAdAccountIdFilter,
 } = require("../../config/autopilotConfig");
 const {
   listTemplates,
@@ -75,11 +76,19 @@ class AutopilotUserRuleController {
 
   /**
    * GET /rules — list this user's rules, sorted newest first.
+   *
+   * Optional `adAccountId` (single id or comma-separated list) scopes the
+   * list to rules that touch at least one of those ad accounts — a rule's
+   * `attachments[]` can span several accounts, so this is an "any attachment
+   * matches" filter, not an exact-owner one.
    */
   async list(req, res) {
     try {
       const userId = req.user.user_id;
-      const rules = await AutopilotUserRule.find({ userId })
+      const adAccountIdFilter = parseAdAccountIdFilter(req.query?.adAccountId);
+      const query = { userId };
+      if (adAccountIdFilter) query["attachments.adAccountId"] = adAccountIdFilter;
+      const rules = await AutopilotUserRule.find(query)
         .sort({ updatedAt: -1 })
         .lean();
       return res.status(200).json({ status: true, rules });

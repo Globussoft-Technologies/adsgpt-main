@@ -12,6 +12,7 @@ const workspaceMemberAccountSchema = new mongoose.Schema(
     },
     firstName: { type: String, default: "", trim: true, maxlength: 80 },
     lastName: { type: String, default: "", trim: true, maxlength: 80 },
+    passwordHash: { type: String, default: null },
     status: {
       type: String,
       enum: ["active", "disabled"],

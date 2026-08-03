@@ -4,6 +4,7 @@ const {
   isWorkspaceError,
   normalizeFeatures,
   requireFeatures,
+  validatePassword,
   workspaceError,
   workspaceErrorResponse,
 } = require("../../services/workspace/workspaceConfig");
@@ -433,6 +434,27 @@ function query(value) {
     isWorkspaceError({ code: "WORKSPACE_X" }),
     false,
     "a workspace code without a status is not a deliberate response",
+  );
+  assert.equal(
+    isWorkspaceError(workspaceError("WORKSPACE_PASSWORD_INVALID", "nope", 400)),
+    true,
+  );
+  assert.equal(
+    isWorkspaceError(workspaceError("WORKSPACE_INVALID_CREDENTIALS", "nope", 401)),
+    true,
+  );
+
+  assert.throws(
+    () => validatePassword("short1"),
+    (error) => error.code === "WORKSPACE_PASSWORD_INVALID",
+    "a 6-character password must be rejected",
+  );
+  assert.equal(validatePassword("exactly8"), "exactly8");
+  assert.equal(validatePassword("a".repeat(128)), "a".repeat(128));
+  assert.throws(
+    () => validatePassword("a".repeat(129)),
+    (error) => error.code === "WORKSPACE_PASSWORD_INVALID",
+    "an oversized password must be rejected",
   );
 
   const deliberate = workspaceErrorResponse(

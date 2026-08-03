@@ -68,25 +68,29 @@ const workspaceAuthLimiter = rateLimit({
   },
 });
 
-// Stacked on top of the per-IP cap for the one route that sends an email per
-// call. Keyed on the requested mailbox rather than the caller so an address
-// cannot be bombed from a rotating pool of IPs.
-const workspaceLoginEmailLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: Number(process.env.WORKSPACE_LOGIN_RATE_LIMIT_PER_EMAIL || 5),
+// Stacked on top of the per-IP cap for password-login attempts. Keyed on the
+// submitted mailbox rather than the caller so one account can't be
+// credential-stuffed from a rotating pool of IPs; skipSuccessfulRequests
+// means a legitimate login doesn't burn the same budget wrong guesses do.
+const workspaceMemberLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.WORKSPACE_MEMBER_LOGIN_RATE_LIMIT_PER_EMAIL || 8),
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
   keyGenerator: (req) => {
     // Same normalization as normalizeEmail(), inlined to keep this middleware
     // free of workspace imports. Requests without a usable address share one
-    // bucket: they send no email and write nothing, so collapsing them is safe.
+    // bucket: they can never succeed, so collapsing them is safe.
     const email = String(req.body?.email || "").trim().toLowerCase();
-    return email ? `workspace-login:${email}` : "workspace-login:__missing__";
+    return email
+      ? `workspace-member-login:${email}`
+      : "workspace-member-login:__missing__";
   },
   message: {
     success: false,
     code: "WORKSPACE_RATE_LIMITED",
-    message: "Too many sign-in links requested for this email. Try again later.",
+    message: "Too many sign-in attempts for this email. Try again later.",
   },
 });
 
@@ -96,5 +100,5 @@ module.exports = {
   dcrLimiter,
   oauthTokenLimiter,
   workspaceAuthLimiter,
-  workspaceLoginEmailLimiter,
+  workspaceMemberLoginLimiter,
 };

@@ -47,23 +47,9 @@ async function sendInvitation({ to, token, workspaceName }) {
   return send({
     to,
     subject: `Join ${workspaceName} on AdsGPT`,
-    text: `You have been invited to ${workspaceName}. Accept your invitation: ${link}\n\nWorkspace access is passwordless. For future visits, request a secure one-time sign-in link at ${loginUrl}`,
-    html: `<p>You have been invited to <strong>${safeWorkspaceName}</strong>.</p><p><a href="${safeLink}">Accept invitation</a></p><p>Workspace access is passwordless. For future visits, request a secure one-time sign-in link at <a href="${safeLoginUrl}">${safeLoginUrl}</a>.</p>`,
+    text: `You have been invited to ${workspaceName}. Accept your invitation: ${link}\n\nYou'll set a password when you accept, and can sign in with your email and password afterward at ${loginUrl}`,
+    html: `<p>You have been invited to <strong>${safeWorkspaceName}</strong>.</p><p><a href="${safeLink}">Accept invitation</a></p><p>You'll set a password when you accept, and can sign in with your email and password afterward at <a href="${safeLoginUrl}">${safeLoginUrl}</a>.</p>`,
   });
 }
 
-async function sendLoginLink({ to, token }) {
-  const baseUrl =
-    process.env.WORKSPACE_MEMBER_LOGIN_URL_BASE ||
-    `${String(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/workspace-login`;
-  const link = `${baseUrl}?token=${encodeURIComponent(token)}`;
-  const safeLink = escapeHtml(link);
-  return send({
-    to,
-    subject: "Sign in to your AdsGPT workspaces",
-    text: `Use this one-time link to sign in: ${link}`,
-    html: `<p><a href="${safeLink}">Sign in to your AdsGPT workspaces</a></p><p>This link expires shortly and can be used once.</p>`,
-  });
-}
-
-module.exports = { sendInvitation, sendLoginLink };
+module.exports = { sendInvitation };

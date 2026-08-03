@@ -62,6 +62,9 @@ const {
   MAX_ATTACHMENTS,
   MAX_CONDITION_ROWS,
 } = require("../../Validations/autopilotUserRule.validator");
+// Real (unstubbed) module — required before `Module._load` is patched below,
+// so this captures the actual implementation the controller uses in prod.
+const { parseAdAccountIdFilter } = require("../../config/autopilotConfig");
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const validRule = (overrides = {}) => ({
@@ -469,6 +472,31 @@ group("updateRuleSchema", () => {
   });
 });
 
+// `parseAdAccountIdFilter` backs the account-scoped filtering the Autopilot
+// account selector (Overview / Action log / rules list) relies on — a plain
+// string for one id, `{ $in }` for several, `undefined` for "no filter" so
+// callers can splat it into a Mongo query without an extra `if`.
+group("parseAdAccountIdFilter", () => {
+  test("empty/undefined input → undefined (no filter)", () => {
+    assert.equal(parseAdAccountIdFilter(""), undefined);
+    assert.equal(parseAdAccountIdFilter(undefined), undefined);
+  });
+  test("single id → plain normalized string", () => {
+    assert.equal(parseAdAccountIdFilter("123"), "act_123");
+    assert.equal(parseAdAccountIdFilter("act_123"), "act_123");
+  });
+  test("comma-separated ids → normalized $in list", () => {
+    assert.deepEqual(parseAdAccountIdFilter("123,act_456"), {
+      $in: ["act_123", "act_456"],
+    });
+  });
+  test("blank entries between commas are dropped", () => {
+    assert.deepEqual(parseAdAccountIdFilter("123,,456"), {
+      $in: ["act_123", "act_456"],
+    });
+  });
+});
+
 // ─── controller — Mongo CRUD + ownership ────────────────────────────────────
 //
 // Stub the AutopilotUserRule Mongoose model with an in-memory implementation
@@ -528,13 +556,23 @@ Module._load = function patched(request, parent, isMain) {
     };
   }
   if (request.endsWith("config/autopilotConfig")) {
+    const normalizeAdAccountId = (id) =>
+      !id
+        ? id
+        : String(id).startsWith("act_")
+          ? String(id)
+          : `act_${id}`;
     return {
-      normalizeAdAccountId: (id) =>
-        !id
-          ? id
-          : String(id).startsWith("act_")
-            ? String(id)
-            : `act_${id}`,
+      normalizeAdAccountId,
+      parseAdAccountIdFilter: (raw) => {
+        if (!raw) return undefined;
+        const ids = String(raw)
+          .split(",")
+          .map((s) => normalizeAdAccountId(s.trim()))
+          .filter(Boolean);
+        if (ids.length === 0) return undefined;
+        return ids.length === 1 ? ids[0] : { $in: ids };
+      },
     };
   }
   if (request.endsWith("utils/logger")) {
@@ -543,10 +581,30 @@ Module._load = function patched(request, parent, isMain) {
   return originalLoad.apply(this, arguments);
 };
 
+// Resolves a (possibly dotted) query key against a doc, mirroring Mongo's
+// own array semantics — `attachments.adAccountId` reads every attachment's
+// `adAccountId` into a flat array so `$in`/equality checks below can match
+// against any element (like a real `find({'attachments.adAccountId': ...})`).
+function fieldValue(doc, key) {
+  if (!key.includes(".")) return doc[key];
+  const [base, subKey] = [key.slice(0, key.indexOf(".")), key.slice(key.indexOf(".") + 1)];
+  const baseVal = doc[base];
+  return Array.isArray(baseVal) ? baseVal.map((item) => item?.[subKey]) : baseVal?.[subKey];
+}
+
+function matchesValue(actual, expected) {
+  if (expected && typeof expected === "object" && "$in" in expected) {
+    const candidates = Array.isArray(actual) ? actual : [actual];
+    return candidates.some((v) => expected.$in.includes(v));
+  }
+  if (Array.isArray(actual)) return actual.includes(expected);
+  return actual === expected;
+}
+
 function matchesQuery(q) {
   return (doc) => {
     for (const [k, v] of Object.entries(q || {})) {
-      if (doc[k] !== v) return false;
+      if (!matchesValue(fieldValue(doc, k), v)) return false;
     }
     return true;
   };
@@ -555,11 +613,12 @@ function matchesQuery(q) {
 // Re-require the controller now that loaders are patched.
 const userRuleController = require("../../controllers/autopilot/autopilotUserRuleController");
 
-function fakeReq({ user_id, body, params }) {
+function fakeReq({ user_id, body, params, query }) {
   return {
     user: { user_id },
     body: body || {},
     params: params || {},
+    query: query || {},
   };
 }
 function fakeRes() {
@@ -594,6 +653,41 @@ function fakeRes() {
         ["1", "3"],
       );
     });
+
+    await testAsync(
+      "adAccountId query param scopes to rules whose attachments touch it",
+      async () => {
+        stubs.docs = [
+          {
+            _id: "1",
+            userId: "u1",
+            name: "A",
+            attachments: [{ adAccountId: "act_100" }],
+          },
+          {
+            _id: "2",
+            userId: "u1",
+            name: "B",
+            // Spans two accounts — should surface for either one.
+            attachments: [{ adAccountId: "act_200" }, { adAccountId: "act_300" }],
+          },
+          {
+            _id: "3",
+            userId: "u1",
+            name: "C",
+            attachments: [{ adAccountId: "act_999" }],
+          },
+        ];
+        const req = fakeReq({ user_id: "u1", query: { adAccountId: "100,300" } });
+        const res = fakeRes();
+        await userRuleController.list(req, res);
+        assert.equal(res.statusCode, 200);
+        assert.deepEqual(
+          res.payload.rules.map((r) => r._id).sort(),
+          ["1", "2"],
+        );
+      },
+    );
   });
 
   await group("controller — create", async () => {

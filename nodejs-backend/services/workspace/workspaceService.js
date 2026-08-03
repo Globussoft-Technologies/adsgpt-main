@@ -9,10 +9,12 @@ const WorkspaceMembership = require("../../Module/workspace/workspaceMembership"
 const UserProfile = require("../../Module/user/userProfileModel");
 const { requireSponsor } = require("./workspaceSponsor");
 const { sendInvitation } = require("./workspaceEmail");
+const { hashClientSecret } = require("../oauth/clientSecretService");
 const {
   normalizeEmail,
   normalizeFeatures,
   requireFeatures,
+  validatePassword,
   workspaceError,
 } = require("./workspaceConfig");
 
@@ -315,6 +317,7 @@ function createWorkspaceService(overrides = {}) {
       workspaceId: String(workspace._id),
       workspaceName: workspace.name,
       existingMember: Boolean(existingAccount),
+      hasPassword: Boolean(existingAccount?.passwordHash),
       ...(existingAccount
         ? {
             memberName: memberName(existingAccount),
@@ -405,7 +408,7 @@ function createWorkspaceService(overrides = {}) {
     );
   }
 
-  async function findOrCreateAccount({ email, firstName, lastName }) {
+  async function findOrCreateAccount({ email, firstName, lastName, password }) {
     let account = await deps.WorkspaceMemberAccount.findOne({ email }).lean();
     if (account) {
       if (account.status !== "active") {
@@ -414,6 +417,24 @@ function createWorkspaceService(overrides = {}) {
           "This workspace member account is disabled",
           403,
         );
+      }
+      if (!account.passwordHash) {
+        // Legacy account (created before password login existed) or a retry
+        // of a previously-interrupted accept: bootstrap a password now. This
+        // write is a one-time, idempotent side effect — it must never
+        // re-hash or error once a password exists, and it is deliberately
+        // outside acceptInvitation's compensateAcceptance rollback boundary
+        // (that function only ever touches WorkspaceMembership). A stranded
+        // legacy member's only path back in is being re-invited, which lands
+        // here again with hasPassword still false — this is what lets them
+        // finish setup without any email-link infrastructure.
+        const validPassword = validatePassword(password);
+        const updated = await deps.WorkspaceMemberAccount.findOneAndUpdate(
+          { _id: account._id, passwordHash: null },
+          { $set: { passwordHash: hashClientSecret(validPassword) } },
+          { new: true },
+        ).lean();
+        account = updated || account;
       }
       return { account, created: false };
     }
@@ -425,11 +446,13 @@ function createWorkspaceService(overrides = {}) {
         400,
       );
     }
+    const validPassword = validatePassword(password);
     try {
       account = await deps.WorkspaceMemberAccount.create({
         email,
         firstName: normalizedFirstName,
         lastName: String(lastName || "").trim(),
+        passwordHash: hashClientSecret(validPassword),
       });
       return {
         account: account?.toObject ? account.toObject() : account,
@@ -496,6 +519,7 @@ function createWorkspaceService(overrides = {}) {
     rawToken,
     firstName,
     lastName,
+    password,
   }) {
     const normalizedFirstName = String(firstName || "").trim();
     const normalizedLastName = String(lastName || "").trim();
@@ -553,6 +577,7 @@ function createWorkspaceService(overrides = {}) {
         email: invitation.inviteeEmail,
         firstName: normalizedFirstName,
         lastName: normalizedLastName,
+        password,
       });
     } catch (error) {
       await releaseAcceptanceClaim(invitation._id, attemptId);

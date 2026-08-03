@@ -92,6 +92,23 @@ function getAccountConfig(adAccountId) {
 }
 
 /**
+ * Turn a query-string `adAccountId` value (single id, or comma-separated
+ * ids — the Autopilot account selector sends every ad account under a
+ * picked Facebook identity this way) into a Mongo filter value: a plain
+ * string for one id, `{ $in: [...] }` for several, or `undefined` when the
+ * param is absent — merge that straight into a `.find()` query object.
+ */
+function parseAdAccountIdFilter(raw) {
+  if (!raw) return undefined;
+  const ids = String(raw)
+    .split(",")
+    .map((s) => normalizeAdAccountId(s.trim()))
+    .filter(Boolean);
+  if (ids.length === 0) return undefined;
+  return ids.length === 1 ? ids[0] : { $in: ids };
+}
+
+/**
  * Compute effective thresholds for a rule, given its declared defaults,
  * optional per-account overrides, and optional caller-supplied overrides.
  *
@@ -236,4 +253,5 @@ module.exports = {
   effectiveDryRun,
   getAccessTokenForAccount,
   normalizeAdAccountId,
+  parseAdAccountIdFilter,
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +20,7 @@ import AutopilotSettings from '@/components/Autopilot/AutopilotSettings';
 // import AutopilotRotationQueue from '@/components/Autopilot/AutopilotRotationQueue';
 import AutopilotLLMAudit from '@/components/Autopilot/LLMAudit/AutopilotLLMAudit';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
+import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 import { getAdAccounts, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import {
   getAutopilotConfig,
@@ -78,6 +79,23 @@ const AutopilotPage = () => {
   // "View" for "Tivra Jagatap" lands on the log already scoped to that
   // account instead of the unfiltered list.
   const [logAccountFilter, setLogAccountFilter] = useState('');
+
+  // Page-level Facebook account scope — Overview + Action log both read
+  // from it (AI Audit keeps its own picker; it targets one specific ad
+  // account for a single audit run, a different concept from "which
+  // accounts' data should populate these tabs"). `FacebookAccountSelector`
+  // resolves its own default (persisted pick, else the first connected
+  // identity) and reports it here on mount, so there's no separate
+  // "nothing selected yet" state to handle.
+  const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
+  const activeFacebookId = selectedFacebookAccount?.facebookId || '';
+  const scopedAdAccounts = activeFacebookId
+    ? adAccountsByFacebook[activeFacebookId] || []
+    : adAccounts;
+  const scopedAdAccountIds = useMemo(
+    () => scopedAdAccounts.map((account) => account.id),
+    [scopedAdAccounts],
+  );
 
   // Hydrate the global live-actions flag AND the user's per-account
   // autopilot settings (enabled + dryRunGlobal). Both feed the resolved
@@ -290,6 +308,13 @@ const AutopilotPage = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Scopes Overview + Action log to one Facebook connection's ad
+              accounts. Same component/behavior as Ads Manager's picker —
+              persists the pick across the app via localStorage. */}
+          <FacebookAccountSelector
+            userId={userId}
+            onChange={setSelectedFacebookAccount}
+          />
           {/* Resolved mode badge — reflects the USER's effective state,
               not the server env flag in isolation. "Live" only when
               autopilot is enabled AND dryRunGlobal is off AND the
@@ -370,7 +395,8 @@ const AutopilotPage = () => {
               className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto"
             >
               <AutopilotOverview
-                adAccounts={adAccounts}
+                adAccounts={scopedAdAccounts}
+                adAccountIds={scopedAdAccountIds}
                 liveActionsAllowed={liveActionsAllowed}
                 autopilotStatus={autopilotStatus}
                 onOpenActionLog={(adAccountId) => {
@@ -395,6 +421,7 @@ const AutopilotPage = () => {
                   userId={userId}
                   facebookAccounts={facebookAccounts}
                   adAccountsByFacebook={adAccountsByFacebook}
+                  defaultFacebookId={activeFacebookId}
                 />
               </div>
             </motion.div>
@@ -411,7 +438,8 @@ const AutopilotPage = () => {
             >
               <AutopilotActionLog
                 selectedAdAccountId={logAccountFilter}
-                adAccounts={adAccounts}
+                adAccounts={scopedAdAccounts}
+                scopedAdAccountIds={scopedAdAccountIds}
               />
             </motion.div>
           )}

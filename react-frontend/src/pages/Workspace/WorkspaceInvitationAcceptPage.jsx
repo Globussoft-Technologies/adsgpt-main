@@ -6,6 +6,8 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   LockKeyhole,
@@ -29,12 +31,20 @@ export default function WorkspaceInvitationAcceptPage() {
   const [invitation, setInvitation] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [touched, setTouched] = useState({ firstName: false, lastName: false });
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [touched, setTouched] = useState({
+    firstName: false,
+    lastName: false,
+    password: false,
+  });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(null);
   const [error, setError] = useState('');
 
+  const nameFieldsRequired = !invitation?.existingMember;
+  const passwordRequired = !invitation?.hasPassword;
   const nameErrors = {
     firstName: !firstName.trim()
       ? 'First name is required'
@@ -44,6 +54,9 @@ export default function WorkspaceInvitationAcceptPage() {
     lastName: lastName.trim().length > 80 ? 'Keep it under 80 characters' : '',
   };
   const hasNameErrors = Boolean(nameErrors.firstName || nameErrors.lastName);
+  // 8 mirrors the backend's WORKSPACE_PASSWORD_MIN_LENGTH in
+  // nodejs-backend/services/workspace/workspaceConfig.js.
+  const passwordError = password.length < 8 ? 'Use at least 8 characters' : '';
 
   useEffect(() => {
     if (loaded.current) return;
@@ -64,14 +77,14 @@ export default function WorkspaceInvitationAcceptPage() {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!invitation?.existingMember && hasNameErrors) {
-      setTouched({ firstName: true, lastName: true });
+    if ((nameFieldsRequired && hasNameErrors) || (passwordRequired && passwordError)) {
+      setTouched({ firstName: true, lastName: true, password: true });
       return;
     }
     setSubmitting(true);
     setError('');
     try {
-      const result = await acceptInvitation(token, { firstName, lastName });
+      const result = await acceptInvitation(token, { firstName, lastName, password });
       setWorkspaceToken(result.token);
       setAccepted({
         path: firstAllowedPath(result.features),
@@ -141,11 +154,11 @@ export default function WorkspaceInvitationAcceptPage() {
                   <KeyRound className="h-4.5 w-4.5 text-[#15DCFF]" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">No password is required</p>
+                  <p className="text-sm font-semibold">Your sign-in is ready</p>
                   <p className="mt-1 text-xs leading-5 text-[#BEBEBE]">
                     Next time, open the workspace member sign-in page and enter{' '}
-                    <span className="font-medium text-white">{invitation?.email}</span>. We&apos;ll
-                    email you a secure one-time sign-in link.
+                    <span className="font-medium text-white">{invitation?.email}</span> with the
+                    password you just set.
                   </p>
                 </div>
               </div>
@@ -229,7 +242,7 @@ export default function WorkspaceInvitationAcceptPage() {
                 </div>
 
                 <form onSubmit={submit} className="mt-7">
-                  {invitation?.existingMember ? (
+                  {invitation?.existingMember && !passwordRequired ? (
                     <>
                       <p className="text-sm font-semibold">Workspace profile found</p>
                       <p className="mt-1 text-xs text-[#BEBEBE]">
@@ -251,56 +264,122 @@ export default function WorkspaceInvitationAcceptPage() {
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-semibold">Complete your workspace profile</p>
-                      <p className="mt-1 text-xs text-[#BEBEBE]">
-                        This profile is only used to identify you inside shared workspaces.
-                      </p>
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <label className="text-xs font-medium text-[#BEBEBE]">
-                          First name
+                      {invitation?.existingMember ? (
+                        <>
+                          <p className="text-sm font-semibold">
+                            Set a password to finish securing your access
+                          </p>
+                          <p className="mt-1 text-xs text-[#BEBEBE]">
+                            We found your existing profile for this workspace. Set a password
+                            to sign in from now on.
+                          </p>
+                          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15">
+                              <UsersRound className="h-4.5 w-4.5 text-[#15DCFF]" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">
+                                {invitation.memberName || 'Workspace member'}
+                              </p>
+                              <p className="mt-0.5 truncate text-xs text-[#BEBEBE]">
+                                {invitation.email}
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold">Complete your workspace profile</p>
+                          <p className="mt-1 text-xs text-[#BEBEBE]">
+                            This profile is used to identify you and sign you in to shared
+                            workspaces.
+                          </p>
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <label className="text-xs font-medium text-[#BEBEBE]">
+                              First name
+                              <input
+                                required
+                                autoFocus
+                                maxLength={80}
+                                value={firstName}
+                                onChange={(event) => setFirstName(event.target.value)}
+                                onBlur={() => setTouched((prev) => ({ ...prev, firstName: true }))}
+                                placeholder="First name"
+                                aria-invalid={touched.firstName && Boolean(nameErrors.firstName)}
+                                className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
+                                  touched.firstName && nameErrors.firstName
+                                    ? 'border-red-500/50 focus:border-red-500/60'
+                                    : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
+                                }`}
+                              />
+                              {touched.firstName && nameErrors.firstName && (
+                                <span className="mt-1.5 block text-[11px] font-normal text-red-400">
+                                  {nameErrors.firstName}
+                                </span>
+                              )}
+                            </label>
+                            <label className="text-xs font-medium text-[#BEBEBE]">
+                              Last name
+                              <input
+                                maxLength={80}
+                                value={lastName}
+                                onChange={(event) => setLastName(event.target.value)}
+                                onBlur={() => setTouched((prev) => ({ ...prev, lastName: true }))}
+                                placeholder="Last name"
+                                aria-invalid={touched.lastName && Boolean(nameErrors.lastName)}
+                                className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
+                                  touched.lastName && nameErrors.lastName
+                                    ? 'border-red-500/50 focus:border-red-500/60'
+                                    : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
+                                }`}
+                              />
+                              {touched.lastName && nameErrors.lastName && (
+                                <span className="mt-1.5 block text-[11px] font-normal text-red-400">
+                                  {nameErrors.lastName}
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        </>
+                      )}
+
+                      <label className="mt-4 block text-xs font-medium text-[#BEBEBE]">
+                        Password
+                        <div className="relative mt-2">
                           <input
                             required
-                            autoFocus
-                            maxLength={80}
-                            value={firstName}
-                            onChange={(event) => setFirstName(event.target.value)}
-                            onBlur={() => setTouched((prev) => ({ ...prev, firstName: true }))}
-                            placeholder="First name"
-                            aria-invalid={touched.firstName && Boolean(nameErrors.firstName)}
-                            className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
-                              touched.firstName && nameErrors.firstName
+                            minLength={8}
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
+                            placeholder="Create a password"
+                            aria-invalid={touched.password && Boolean(passwordError)}
+                            className={`h-10 w-full rounded-full border bg-[#909294]/15 px-4 pr-11 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
+                              touched.password && passwordError
                                 ? 'border-red-500/50 focus:border-red-500/60'
                                 : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
                             }`}
                           />
-                          {touched.firstName && nameErrors.firstName && (
-                            <span className="mt-1.5 block text-[11px] font-normal text-red-400">
-                              {nameErrors.firstName}
-                            </span>
-                          )}
-                        </label>
-                        <label className="text-xs font-medium text-[#BEBEBE]">
-                          Last name
-                          <input
-                            maxLength={80}
-                            value={lastName}
-                            onChange={(event) => setLastName(event.target.value)}
-                            onBlur={() => setTouched((prev) => ({ ...prev, lastName: true }))}
-                            placeholder="Last name"
-                            aria-invalid={touched.lastName && Boolean(nameErrors.lastName)}
-                            className={`mt-2 h-10 w-full rounded-full border bg-[#909294]/15 px-4 text-xs text-white transition-colors outline-none placeholder:text-[#AFAFAF] ${
-                              touched.lastName && nameErrors.lastName
-                                ? 'border-red-500/50 focus:border-red-500/60'
-                                : 'border-white/5 hover:border-white/15 focus:border-[#15DCFF]/40'
-                            }`}
-                          />
-                          {touched.lastName && nameErrors.lastName && (
-                            <span className="mt-1.5 block text-[11px] font-normal text-red-400">
-                              {nameErrors.lastName}
-                            </span>
-                          )}
-                        </label>
-                      </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            className="absolute top-1/2 right-4 -translate-y-1/2 text-[#AEB5BD] hover:text-white"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        {touched.password && passwordError && (
+                          <span className="mt-1.5 block text-[11px] font-normal text-red-400">
+                            {passwordError}
+                          </span>
+                        )}
+                      </label>
                     </>
                   )}
                   {error && (
@@ -317,7 +396,9 @@ export default function WorkspaceInvitationAcceptPage() {
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
                       <>
-                        {invitation?.existingMember ? 'Join workspace' : 'Accept invitation'}
+                        {invitation?.existingMember && !passwordRequired
+                          ? 'Join workspace'
+                          : 'Accept invitation'}
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
@@ -327,8 +408,8 @@ export default function WorkspaceInvitationAcceptPage() {
                 <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-3">
                   <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#15DCFF]" />
                   <p className="text-xs leading-5 text-[#BEBEBE]">
-                    Workspace access is passwordless. For future visits, we&apos;ll send a secure
-                    one-time link to this email address.
+                    You&apos;ll sign in with this email address and your password for future
+                    visits.
                   </p>
                 </div>
               </div>

@@ -71,6 +71,12 @@ export default function AutopilotLLMAudit({
   userId,
   facebookAccounts = [],
   adAccountsByFacebook = {},
+  // The page-level Facebook account (Overview / Action log's shared
+  // selector). AI Audit still needs its own picker — an audit run targets
+  // one specific ad account, not a rollup — so this is only the DEFAULT on
+  // mount; picking a different account here overrides it for as long as
+  // this tab stays mounted, same as before this prop existed.
+  defaultFacebookId = '',
 }) {
   // The AI Audit tab is the only place that needs a per-account scope, so
   // its picker lives here (was previously page-level — confusingly implied
@@ -81,11 +87,20 @@ export default function AutopilotLLMAudit({
   const adAccounts = facebookId ? adAccountsByFacebook[facebookId] || [] : [];
 
   useEffect(() => {
-    setFacebookId((current) =>
-      current && facebookAccounts.some((account) => account.facebookId === current)
-        ? current
-        : facebookAccounts[0]?.facebookId || '',
-    );
+    setFacebookId((current) => {
+      if (current && facebookAccounts.some((account) => account.facebookId === current)) {
+        return current;
+      }
+      const defaultIsKnown =
+        defaultFacebookId &&
+        facebookAccounts.some((account) => account.facebookId === defaultFacebookId);
+      return defaultIsKnown ? defaultFacebookId : facebookAccounts[0]?.facebookId || '';
+    });
+    // `defaultFacebookId` intentionally excluded — it should only seed the
+    // picker on mount / when the account list changes, not yank the
+    // selection out from under a manual local pick every time the header
+    // selector changes on another tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facebookAccounts]);
 
   // Default the selection to the first account on mount / when the list

@@ -1,29 +1,34 @@
-const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const Workspace = require("../../Module/workspace/workspace");
 const WorkspaceMemberAccount = require(
   "../../Module/workspace/workspaceMemberAccount",
 );
-const WorkspaceMemberLoginToken = require(
-  "../../Module/workspace/workspaceMemberLoginToken",
-);
 const WorkspaceMembership = require("../../Module/workspace/workspaceMembership");
 const UserProfile = require("../../Module/user/userProfileModel");
 const { requireSponsor } = require("./workspaceSponsor");
-const { sendLoginLink } = require("./workspaceEmail");
+const { hashClientSecret, verifyClientSecret } = require(
+  "../oauth/clientSecretService",
+);
 const {
   acceptInvitation,
   accountIdFromActor,
   actorId,
   memberName,
-  tokenHash,
 } = require("./workspaceService");
 const {
   normalizeEmail,
   normalizeFeatures,
   workspaceError,
 } = require("./workspaceConfig");
+
+// A fixed dummy hash so an unknown-email or no-password-yet lookup still
+// pays the same scrypt cost a real verification would — otherwise response
+// timing would leak which case occurred, defeating the point of collapsing
+// them into one generic error below.
+const DUMMY_PASSWORD_HASH = hashClientSecret(
+  "workspace-member-login-dummy-hash-do-not-use",
+);
 
 function ownerClaims(owner) {
   const rawId =
@@ -62,21 +67,14 @@ function createWorkspaceMemberAuth(overrides = {}) {
   const deps = {
     Workspace,
     WorkspaceMemberAccount,
-    WorkspaceMemberLoginToken,
     WorkspaceMembership,
     UserProfile,
     acceptInvitation,
     requireSponsor,
-    sendLoginLink,
+    verifyClientSecret,
     jwtSecret: process.env.JWT_SECRET_KEY,
     tokenMinutes: Number(process.env.WORKSPACE_MEMBER_TOKEN_MINUTES) || 60,
-    loginTtlMs: Number(process.env.WORKSPACE_MEMBER_LOGIN_TOKEN_TTL_MS) ||
-      15 * 60 * 1000,
-    exposeLinks:
-      process.env.NODE_ENV !== "production" &&
-      process.env.WORKSPACE_EXPOSE_LOGIN_LINK === "true",
     now: () => new Date(),
-    randomToken: () => crypto.randomBytes(32).toString("base64url"),
     ...overrides,
   };
 
@@ -190,12 +188,13 @@ function createWorkspaceMemberAuth(overrides = {}) {
     throw workspaceError("WORKSPACE_NOT_FOUND", "Workspace not found", 404);
   }
 
-  async function accept({ token, firstName, lastName }) {
+  async function accept({ token, firstName, lastName, password }) {
     requireConfiguration();
     const accepted = await deps.acceptInvitation({
       rawToken: token,
       firstName,
       lastName,
+      password,
     });
     return sessionFor({
       account: accepted.account,
@@ -203,84 +202,35 @@ function createWorkspaceMemberAuth(overrides = {}) {
     });
   }
 
-  async function requestLogin(email) {
+  async function login({ email, password }) {
+    requireConfiguration();
+    const genericError = () =>
+      workspaceError(
+        "WORKSPACE_INVALID_CREDENTIALS",
+        "Incorrect email or password",
+        401,
+      );
     const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return { sent: true };
+    if (!normalizedEmail || !password) throw genericError();
+
     const account = await deps.WorkspaceMemberAccount.findOne({
       email: normalizedEmail,
       status: "active",
     }).lean();
-    if (!account) return { sent: true };
 
-    const membership = await deps.WorkspaceMembership.findOne({
-      memberAccountId: account._id,
-      status: "active",
-    }).lean();
-    if (!membership) return { sent: true };
-
-    const rawToken = deps.randomToken();
-    await deps.WorkspaceMemberLoginToken.create({
-      memberAccountId: account._id,
-      tokenHash: tokenHash(rawToken),
-      expiresAt: new Date(deps.now().getTime() + deps.loginTtlMs),
-    });
-    const delivery = await deps.sendLoginLink({
-      to: account.email,
-      token: rawToken,
-    });
-    const result = { sent: true };
-    if (deps.exposeLinks && !delivery.sent) result.token = rawToken;
-    return result;
-  }
-
-  async function consumeLogin(token) {
-    requireConfiguration();
-    const now = deps.now();
-    const hash = tokenHash(token);
-    const loginToken = await deps.WorkspaceMemberLoginToken.findOne({
-      tokenHash: hash,
-      usedAt: null,
-      expiresAt: { $gt: now },
-    }).lean();
-    if (!loginToken) {
-      throw workspaceError(
-        "WORKSPACE_LOGIN_LINK_INVALID",
-        "This sign-in link is invalid or expired",
-        410,
-      );
-    }
-    const account = await deps.WorkspaceMemberAccount.findOne({
-      _id: loginToken.memberAccountId,
-      status: "active",
-    }).lean();
-    if (!account) {
-      throw workspaceError(
-        "WORKSPACE_MEMBER_DISABLED",
-        "This workspace member account is unavailable",
-        403,
-      );
+    // Always verify against something, even when the account/password
+    // doesn't exist, so failure timing can't be used to probe which emails
+    // are registered — see DUMMY_PASSWORD_HASH above.
+    const storedHash = account?.passwordHash || DUMMY_PASSWORD_HASH;
+    const passwordMatches = deps.verifyClientSecret(String(password), storedHash);
+    if (!account || !account.passwordHash || !passwordMatches) {
+      throw genericError();
     }
 
     const session = await sessionFor({ account });
-    const consumed = await deps.WorkspaceMemberLoginToken.findOneAndUpdate(
-      {
-        _id: loginToken._id,
-        usedAt: null,
-        expiresAt: { $gt: now },
-      },
-      { $set: { usedAt: now } },
-      { new: true },
-    );
-    if (!consumed) {
-      throw workspaceError(
-        "WORKSPACE_LOGIN_LINK_USED",
-        "This sign-in link has already been used",
-        410,
-      );
-    }
     await deps.WorkspaceMemberAccount.updateOne(
       { _id: account._id },
-      { $set: { lastLoginAt: now } },
+      { $set: { lastLoginAt: deps.now() } },
     );
     return session;
   }
@@ -388,9 +338,8 @@ function createWorkspaceMemberAuth(overrides = {}) {
 
   return {
     accept,
-    consumeLogin,
     listMemberWorkspaces,
-    requestLogin,
+    login,
     switchWorkspace,
     validateSession,
   };

@@ -2,7 +2,7 @@ const express = require("express");
 const controller = require("../controllers/workspaceMemberAuth.controller");
 const {
   workspaceAuthLimiter,
-  workspaceLoginEmailLimiter,
+  workspaceMemberLoginLimiter,
 } = require("../middlewares/rateLimitMiddleware");
 
 const router = express.Router();
@@ -14,9 +14,8 @@ router.use(workspaceAuthLimiter);
 
 router.get("/invitations/:token", controller.info);
 router.post("/invitations/:token/accept", controller.acceptInvitation);
-// Sends a SendGrid email per call, so this one is additionally capped per
-// mailbox on top of the per-IP limiter above.
-router.post("/login/request", workspaceLoginEmailLimiter, controller.requestLink);
-router.post("/login/consume", controller.consumeLink);
+// Password submissions are additionally capped per mailbox on top of the
+// per-IP limiter above, since this is now a credential-stuffing surface.
+router.post("/login", workspaceMemberLoginLimiter, controller.loginMember);
 
 module.exports = router;

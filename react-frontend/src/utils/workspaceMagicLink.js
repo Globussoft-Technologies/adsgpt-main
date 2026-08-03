@@ -1,6 +1,5 @@
 const STORAGE_KEYS = Object.freeze({
   invitation: 'workspace:invitation-token',
-  login: 'workspace:login-token',
 });
 
 const captured = {};
@@ -32,13 +31,6 @@ export function scrubWorkspaceMagicLink() {
       remember('invitation', invitationMatch[1]);
     }
     url.pathname = '/workspace-invite';
-    replaceUrl(url);
-    return;
-  }
-
-  if (url.pathname === '/workspace-login' && url.searchParams.has('token')) {
-    remember('login', url.searchParams.get('token'));
-    url.searchParams.delete('token');
     replaceUrl(url);
   }
 }

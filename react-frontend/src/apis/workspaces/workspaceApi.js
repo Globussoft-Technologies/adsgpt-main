@@ -63,12 +63,7 @@ export async function acceptInvitation(token, profile) {
   return data;
 }
 
-export async function requestMemberLogin(email) {
-  const { data } = await axios.post(`${AUTH_URL}/login/request`, { email });
-  return data;
-}
-
-export async function consumeMemberLogin(token) {
-  const { data } = await axios.post(`${AUTH_URL}/login/consume`, { token });
+export async function loginMember(email, password) {
+  const { data } = await axios.post(`${AUTH_URL}/login`, { email, password });
   return data;
 }

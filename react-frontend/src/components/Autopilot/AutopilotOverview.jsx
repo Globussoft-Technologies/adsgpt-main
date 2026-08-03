@@ -53,6 +53,11 @@ import {
  */
 const AutopilotOverview = ({
   adAccounts,
+  // Ad-account ids under the page-level Facebook account selector's current
+  // pick. `undefined`/empty = "All accounts" (today's cross-account rollup,
+  // unchanged). When set, every fetch below scopes to just these accounts —
+  // `adAccounts` already reflects the same scope for the picker/table UI.
+  adAccountIds,
   liveActionsAllowed = false,
   // Resolved 'off' | 'dry-run' | 'live' status from the parent page.
   // Falls back to deriving from `liveActionsAllowed` for legacy callers
@@ -95,14 +100,20 @@ const AutopilotOverview = ({
       const priorFromIso = new Date(fromMs - 1 - rangeMs).toISOString();
 
       const [sum, sumPrior, log, rules] = await Promise.all([
-        getAutopilotSummary({ from: fromIso, to: toIso }),
-        getAutopilotSummary({ from: priorFromIso, to: priorToIso }).catch(
-          () => null,
-        ),
-        getActionLog({ from: fromIso, to: toIso, page: 1, limit: 1000 }).catch(
-          () => ({ rows: [] }),
-        ),
-        listUserRules().catch(() => null),
+        getAutopilotSummary({ from: fromIso, to: toIso, adAccountIds }),
+        getAutopilotSummary({
+          from: priorFromIso,
+          to: priorToIso,
+          adAccountIds,
+        }).catch(() => null),
+        getActionLog({
+          from: fromIso,
+          to: toIso,
+          page: 1,
+          limit: 1000,
+          adAccountId: adAccountIds,
+        }).catch(() => ({ rows: [] })),
+        listUserRules({ adAccountIds }).catch(() => null),
       ]);
       setSummary(sum);
       setPriorTotal(
@@ -116,7 +127,7 @@ const AutopilotOverview = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [adAccountIds]);
 
   useEffect(() => {
     load(from, to);

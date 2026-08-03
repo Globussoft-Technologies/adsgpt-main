@@ -80,6 +80,26 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+const WORKSPACE_PASSWORD_MIN_LENGTH = 8;
+const WORKSPACE_PASSWORD_MAX_LENGTH = 128;
+
+// Max length is an engineering bound against oversized scrypt input, not a
+// policy choice — the product requirement is only the 8-character minimum.
+function validatePassword(value) {
+  const password = String(value ?? "");
+  if (
+    password.length < WORKSPACE_PASSWORD_MIN_LENGTH ||
+    password.length > WORKSPACE_PASSWORD_MAX_LENGTH
+  ) {
+    throw workspaceError(
+      "WORKSPACE_PASSWORD_INVALID",
+      `Password must be at least ${WORKSPACE_PASSWORD_MIN_LENGTH} characters`,
+      400,
+    );
+  }
+  return password;
+}
+
 function normalizeFeatures(value) {
   if (!Array.isArray(value)) return [];
   const requested = new Set();
@@ -157,5 +177,7 @@ module.exports = {
   normalizeEmail,
   normalizeFeatures,
   requireFeatures,
+  validatePassword,
+  WORKSPACE_PASSWORD_MIN_LENGTH,
   workspaceError,
 };
