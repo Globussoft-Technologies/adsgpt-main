@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Mail, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import UserProfilePage from '@/pages/Profile/UserProfilePage';
 import {
+  featureIdsOf,
   isWorkspaceMember,
   normalizeWorkspaceFeatures,
   sessionPayload,
@@ -14,9 +15,9 @@ export default function WorkspaceProfilePage() {
   if (!isWorkspaceMember(payload)) return <UserProfilePage />;
 
   const normalizedFeatures = normalizeWorkspaceFeatures(payload.workspace_features);
-  const featureLabels = WORKSPACE_FEATURES.filter(({ id }) => normalizedFeatures.includes(id)).map(
-    ({ label }) => label
-  );
+  const featureLabels = WORKSPACE_FEATURES.filter((feature) =>
+    featureIdsOf(feature).every((id) => normalizedFeatures.includes(id))
+  ).map(({ label }) => label);
 
   return (
     <div className="relative mx-auto w-full max-w-3xl px-5 pt-8 pb-16 text-gray-900 dark:text-white">

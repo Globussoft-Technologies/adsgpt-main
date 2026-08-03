@@ -28,28 +28,37 @@ import {
   ASSIGNABLE_WORKSPACE_FEATURES,
   WORKSPACE_FEATURE_GROUPS,
   WORKSPACE_FEATURES,
+  featureIdsOf,
   normalizeWorkspaceFeatures,
 } from '@/utils/workspaceSession';
 
 const requestErrorMessage = (requestError, fallback) =>
   requestError.response?.data?.message || requestError.message || fallback;
 
+const allLeafFeatureIds = WORKSPACE_FEATURES.flatMap(featureIdsOf);
+
 function featurePicker(selected, setSelected) {
-  const toggleFeature = (featureId) => {
+  const isFeatureActive = (feature) => featureIdsOf(feature).every((id) => selected.includes(id));
+
+  const toggleFeature = (feature) => {
+    const ids = featureIdsOf(feature);
+    const active = ids.every((id) => selected.includes(id));
     setSelected((current) =>
-      current.includes(featureId)
-        ? current.filter((id) => id !== featureId)
-        : [...current, featureId]
+      active
+        ? current.filter((id) => !ids.includes(id))
+        : [...current, ...ids.filter((id) => !current.includes(id))]
     );
   };
 
   const toggleGroup = (group) => {
-    const availableIds = group.features.filter(({ available }) => available).map(({ id }) => id);
+    const availableIds = group.features
+      .filter(({ available }) => available)
+      .flatMap(featureIdsOf);
     const allSelected = availableIds.every((id) => selected.includes(id));
     setSelected((current) => {
       const next = new Set(current);
       availableIds.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
-      return WORKSPACE_FEATURES.map(({ id }) => id).filter((id) => next.has(id));
+      return allLeafFeatureIds.filter((id) => next.has(id));
     });
   };
 
@@ -57,7 +66,7 @@ function featurePicker(selected, setSelected) {
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {WORKSPACE_FEATURE_GROUPS.map((group) => {
         const availableFeatures = group.features.filter(({ available }) => available);
-        const selectedCount = availableFeatures.filter(({ id }) => selected.includes(id)).length;
+        const selectedCount = availableFeatures.filter(isFeatureActive).length;
         const allSelected =
           availableFeatures.length > 0 && selectedCount === availableFeatures.length;
         const partiallySelected = selectedCount > 0 && !allSelected;
@@ -115,13 +124,13 @@ function featurePicker(selected, setSelected) {
                         const feature = group.features.find(
                           (item) => item.platform === platform && item.mode === mode
                         );
-                        const active = selected.includes(feature.id);
+                        const active = isFeatureActive(feature);
                         return (
                           <button
                             key={feature.id}
                             type="button"
                             disabled={!feature.available}
-                            onClick={() => toggleFeature(feature.id)}
+                            onClick={() => toggleFeature(feature)}
                             aria-pressed={feature.available ? active : undefined}
                             aria-label={`${platform} ${mode} permission${
                               feature.available ? '' : ' unavailable'
@@ -154,13 +163,13 @@ function featurePicker(selected, setSelected) {
               ) : (
                 <div className="grid grid-cols-2 gap-1.5 p-2">
                   {group.features.map((feature) => {
-                    const active = selected.includes(feature.id);
+                    const active = isFeatureActive(feature);
                     return (
                       <button
-                        key={feature.id}
+                        key={featureIdsOf(feature).join('+')}
                         type="button"
                         disabled={!feature.available}
-                        onClick={() => toggleFeature(feature.id)}
+                        onClick={() => toggleFeature(feature)}
                         aria-pressed={feature.available ? active : undefined}
                         className={`flex min-h-8 items-center gap-2 rounded-full border px-2.5 py-1.5 text-left text-[11px] font-medium transition-all ${
                           active
@@ -403,7 +412,7 @@ export default function WorkspaceMembersPage() {
             const memberName = member.name || member.email || 'Member';
             const normalizedMemberFeatures = normalizeWorkspaceFeatures(member.features);
             const featureLabels = WORKSPACE_FEATURES.filter((feature) =>
-              normalizedMemberFeatures.includes(feature.id)
+              featureIdsOf(feature).every((id) => normalizedMemberFeatures.includes(id))
             ).map((feature) => feature.label);
 
             return (
@@ -600,8 +609,8 @@ export default function WorkspaceMembersPage() {
                       </div>
                       <p className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-zinc-500 dark:bg-white/[0.06]">
                         {
-                          ASSIGNABLE_WORKSPACE_FEATURES.filter(({ id }) =>
-                            selectedFeatures.includes(id)
+                          ASSIGNABLE_WORKSPACE_FEATURES.filter((feature) =>
+                            featureIdsOf(feature).every((id) => selectedFeatures.includes(id))
                           ).length
                         }{' '}
                         selected

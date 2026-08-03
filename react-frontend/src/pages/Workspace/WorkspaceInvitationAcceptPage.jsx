@@ -17,6 +17,7 @@ import {
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
 import { acceptInvitation, getInvitation } from '@/apis/workspaces/workspaceApi';
 import {
+  featureIdsOf,
   firstAllowedPath,
   normalizeWorkspaceFeatures,
   setWorkspaceToken,
@@ -228,10 +229,12 @@ export default function WorkspaceInvitationAcceptPage() {
                   </p>
                   <div className="mt-2.5 flex flex-wrap gap-2">
                     {WORKSPACE_FEATURES.filter((feature) =>
-                      normalizeWorkspaceFeatures(invitation?.features).includes(feature.id)
+                      featureIdsOf(feature).every((id) =>
+                        normalizeWorkspaceFeatures(invitation?.features).includes(id)
+                      )
                     ).map((feature) => (
                       <span
-                        key={feature.id}
+                        key={featureIdsOf(feature).join('+')}
                         className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-[#BEBEBE]"
                       >
                         <Check className="h-3 w-3 text-[#15DCFF]" />

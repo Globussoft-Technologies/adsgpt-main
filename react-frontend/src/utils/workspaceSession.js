@@ -30,9 +30,13 @@ export const WORKSPACE_FEATURE_GROUPS = Object.freeze([
     description: 'Choose individual studio tools',
     features: [
       { id: 'adStudio.adCopy', label: 'Ad Copy', path: '/adstudio', available: true },
-      { id: 'adStudio.adCreative', label: 'Ad Creative', path: '/adstudio', available: true },
+      {
+        id: ['adStudio.adCreative', 'adStudio.adLibrary'],
+        label: 'Ad Creative & Library',
+        path: '/adstudio',
+        available: true,
+      },
       { id: 'adStudio.adVideo', label: 'Ad Video', path: '/adstudio', available: true },
-      { id: 'adStudio.adLibrary', label: 'Ad Library', path: '/adstudio', available: true },
     ],
   },
   {
@@ -116,6 +120,19 @@ export const ASSIGNABLE_WORKSPACE_FEATURES = Object.freeze(
   WORKSPACE_FEATURES.filter((feature) => feature.available)
 );
 
+// Most feature entries store a single leaf id, but a picker entry can bundle
+// several leaf ids under one toggle (e.g. Ad Creative & Library) so an owner
+// grants/revokes them together. Every place that reads or writes `feature.id`
+// must go through this instead of assuming it's always a plain string.
+export function featureIdsOf(feature) {
+  return Array.isArray(feature.id) ? feature.id : [feature.id];
+}
+
+const WORKSPACE_LEAF_FEATURE_IDS = Object.freeze(WORKSPACE_FEATURES.flatMap(featureIdsOf));
+const ASSIGNABLE_LEAF_FEATURE_IDS = Object.freeze(
+  ASSIGNABLE_WORKSPACE_FEATURES.flatMap(featureIdsOf)
+);
+
 const LEGACY_FEATURE_EXPANSIONS = Object.freeze({
   adStudio: ['adStudio.adCopy', 'adStudio.adCreative', 'adStudio.adVideo', 'adStudio.adLibrary'],
   brandIq: ['brandIq.myBrands', 'brandIq.competitors'],
@@ -127,10 +144,10 @@ const LEGACY_FEATURE_EXPANSIONS = Object.freeze({
 export function normalizeWorkspaceFeatures(features) {
   const selected = new Set();
   (Array.isArray(features) ? features : []).forEach((featureId) => {
-    if (WORKSPACE_FEATURES.some(({ id }) => id === featureId)) selected.add(featureId);
+    if (WORKSPACE_LEAF_FEATURE_IDS.includes(featureId)) selected.add(featureId);
     (LEGACY_FEATURE_EXPANSIONS[featureId] || []).forEach((leaf) => selected.add(leaf));
   });
-  return WORKSPACE_FEATURES.map(({ id }) => id).filter((id) => selected.has(id));
+  return WORKSPACE_LEAF_FEATURE_IDS.filter((id) => selected.has(id));
 }
 
 export function sessionPayload() {
@@ -150,7 +167,7 @@ export function isWorkspaceMember(payload = sessionPayload()) {
 }
 
 export function allowedWorkspaceFeatures(payload = sessionPayload()) {
-  if (!isWorkspaceMember(payload)) return ASSIGNABLE_WORKSPACE_FEATURES.map(({ id }) => id);
+  if (!isWorkspaceMember(payload)) return ASSIGNABLE_LEAF_FEATURE_IDS;
   return normalizeWorkspaceFeatures(payload.workspace_features);
 }
 
@@ -210,8 +227,9 @@ export function isWorkspacePathAllowed(pathname, features) {
 export function firstAllowedPath(features = allowedWorkspaceFeatures()) {
   const selected = new Set(normalizeWorkspaceFeatures(features));
   return (
-    WORKSPACE_FEATURES.find(({ id, available }) => available && selected.has(id))?.path ||
-    '/workspace-login'
+    WORKSPACE_FEATURES.find(
+      (feature) => feature.available && featureIdsOf(feature).some((id) => selected.has(id))
+    )?.path || '/workspace-login'
   );
 }
 
