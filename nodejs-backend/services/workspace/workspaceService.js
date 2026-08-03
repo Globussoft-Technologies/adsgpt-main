@@ -188,7 +188,7 @@ function createWorkspaceService(overrides = {}) {
     if (await findAdsGptUserByEmail(inviteeEmail)) {
       throw workspaceError(
         "WORKSPACE_PAID_INVITEE_DISABLED",
-        "Inviting existing AdsGPT accounts is not available in this release",
+        "Inviting existing AdsGPT accounts is not available",
         409,
       );
     }
