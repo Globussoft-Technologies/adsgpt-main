@@ -51,9 +51,11 @@ const MAX_ATTACHMENTS = 6;
 // Tweak these to change composer size:
 //   MIN_*  → starting / minimum height
 //   MAX_*  → cap before the textarea starts scrolling internally
+// CENTERED is the big empty-state box; DOCKED is the compact bar the composer
+// becomes once the conversation starts (i.e. from the first send onwards).
 const MIN_TEXTAREA_PX_CENTERED = 130;
 const MAX_TEXTAREA_PX_CENTERED = 200;
-const MIN_TEXTAREA_PX_DOCKED = 56;
+const MIN_TEXTAREA_PX_DOCKED = 44;
 const MAX_TEXTAREA_PX_DOCKED = 140;
 
 const Composer = ({
@@ -530,7 +532,11 @@ const Composer = ({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={placeholder}
-          rows={3}
+          // The intrinsic row count is a FLOOR on scrollHeight, so a hardcoded
+          // 3 kept the docked bar ~3 lines tall no matter how small MIN_DOCKED
+          // was. Docked starts at one line and grows from there; the centered
+          // empty state is sized by its own larger minHeight regardless.
+          rows={variant === 'docked' ? 1 : 3}
           // Stay typeable while a response streams — the user can compose their
           // next message; only sending is locked (see canSend / the send button).
           disabled={false}

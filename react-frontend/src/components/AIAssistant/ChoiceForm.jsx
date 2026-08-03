@@ -14,8 +14,16 @@ import {
   RefreshCw,
   RotateCcw,
   Globe,
+  Proportions,
+  LayoutGrid,
+  Upload,
+  Link2,
+  Images,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+// The brief's ratio control IS the Ad Studio → Ad Creatives one — imported
+// rather than reimplemented so the two surfaces can't drift apart.
+import AspectRatioTiles from '@/components/AdStudio/AdCreativeNew/AspectRatioPicker';
 
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
@@ -55,6 +63,38 @@ const normaliseOptions = (options) => {
 
 // Field types whose value is an array.
 const ARRAY_TYPES = new Set(['checkbox', 'color_chips', 'image_upload']);
+
+// ─── Aspect ratios ⇄ per-ratio counts ───────────────────────────────────────
+// The card now drives the Ad Studio tiles, whose value is a per-ratio counts
+// map. The submitted contract still carries `aspect_ratios[]` + `num_images`
+// (plus the exact `aspect_ratio_counts`), so briefs saved before this control
+// existed still open correctly and the backend keeps a usable fallback.
+const ratiosFromCounts = (counts) =>
+  Object.keys(counts || {}).filter((key) => (counts[key] || 0) > 0);
+
+// Legacy `num_images` means "this many for EVERY selected ratio", so the max is
+// the only lossless single number; the explicit counts are what the backend
+// actually generates from.
+const numImagesFromCounts = (counts) => {
+  const values = ratiosFromCounts(counts).map((key) => counts[key]);
+  return values.length ? Math.max(...values) : 1;
+};
+
+// Rebuild the counts map from whatever a brief already holds — the tiles are
+// the only editor now, so an older brief's ratios[] + num_images has to be
+// projected onto it (each selected ratio gets num_images).
+const countsFromValues = (values) => {
+  const existing = values?.aspect_ratio_counts;
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) return existing;
+  const raw = values?.aspect_ratios;
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const per = Math.max(1, Number(values?.num_images) || 1);
+  const out = {};
+  list.forEach((ratio) => {
+    out[String(ratio)] = per;
+  });
+  return out;
+};
 
 // ─── image_upload item helpers ──────────────────────────────────────────────
 // image_upload values are [{ url, filename, selected }]. Only `selected` items
@@ -162,17 +202,29 @@ const SelectField = ({ field, value, onChange, disabled }) => {
 };
 
 // ─── Dropdown shell ─────────────────────────────────────────────────────────
-// Shared trigger + menu for the model and aspect-ratio pickers, matching the
-// Ad Studio → Ad Creatives pattern (a pill you click to open a list) rather
-// than laying every option out as a button.
+// Shared trigger + menu for the model and aspect-ratio pickers. These mirror
+// Ad Studio → Ad Creatives: a rounded pill you click to open a floating panel,
+// with the same fills, radii and shadow.
 //
-// The menu is portalled to <body> and positioned `fixed` from the trigger's
-// rect: the brief's fields grid scrolls internally and the card is a
-// backdrop-blurred glass panel, either of which would clip an absolutely
-// positioned menu. Same approach as Ad Studio's AspectRatioTiles quantity menu.
+// One necessary deviation from Ad Studio: the menu is portalled to <body> and
+// positioned `fixed` from the trigger's rect. Ad Studio's pills sit in a static
+// bar and can use `absolute bottom-full`, but the brief's fields grid scrolls
+// internally and the card is a backdrop-blurred glass panel — either would clip
+// an absolutely positioned menu. This is exactly why Ad Studio's own
+// AspectRatioTiles quantity menu is portalled too.
 const DROPDOWN_MIN_W = 200;
 
-const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children }) => {
+const DropdownShell = ({
+  trigger,
+  disabled,
+  ariaLabel,
+  estHeight = 260,
+  menuWidth,
+  panel = false, // true → a padded panel (tiles) rather than a list of rows
+  triggerClassName, // override the pill styling (e.g. the image "Add" tile)
+  hideChevron = false,
+  children,
+}) => {
   // menu: { left, top?, bottom?, width, below } — null when fully closed.
   const [menu, setMenu] = useState(null);
   const [visible, setVisible] = useState(false); // drives the open/close animation
@@ -191,7 +243,7 @@ const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children
     if (!el) return;
     clearTimeout(closeTimer.current);
     const r = el.getBoundingClientRect();
-    const width = Math.max(r.width, DROPDOWN_MIN_W);
+    const width = menuWidth || Math.max(r.width, DROPDOWN_MIN_W);
     // Prefer opening downward; flip up when the viewport can't take the menu.
     const below = r.bottom + estHeight + 8 <= window.innerHeight;
     setMenu({
@@ -212,21 +264,31 @@ const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children
     if (!menu) return undefined;
     const onDown = (e) => {
       if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      // AspectRatioTiles portals its per-ratio quantity menu to <body>, so it is
+      // not a DOM descendant of ours — without this, choosing a quantity would
+      // count as an outside click and shut the whole panel.
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       close();
     };
     const onKey = (e) => {
       if (e.key === 'Escape') close();
     };
-    const onScrollResize = () => close();
+    const onResize = () => close();
+    // Closing on scroll keeps the fixed position from going stale — but the
+    // tiles grid scrolls INSIDE the menu, and that must not close it.
+    const onScroll = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      close();
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', onScrollResize, true);
-    window.addEventListener('resize', onScrollResize);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', onScrollResize, true);
-      window.removeEventListener('resize', onScrollResize);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   }, [menu]);
 
@@ -244,16 +306,22 @@ const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}
-        className={`flex h-9 w-full items-center justify-between gap-2 rounded-lg border bg-[#111] px-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-          isOpen ? 'border-white/40' : 'border-white/10 hover:border-white/25'
-        }`}
+        className={
+          triggerClassName ||
+          `flex h-9 w-full items-center justify-between gap-2 rounded-full bg-[#2b2a2a]/80 px-3.5 text-left ring-1 transition-colors hover:bg-[#33333a] disabled:cursor-not-allowed disabled:opacity-60 ${
+            isOpen ? 'ring-white/25' : 'ring-white/5'
+          }`
+        }
       >
         {trigger}
-        <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-white/40 transition-transform ${
-            isOpen ? 'rotate-180' : ''
-          }`}
-        />
+        {!hideChevron && (
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-white/40 transition-transform ${
+              isOpen ? 'rotate-180' : ''
+            }`}
+            strokeWidth={2}
+          />
+        )}
       </button>
 
       {menu &&
@@ -269,9 +337,12 @@ const DropdownShell = ({ trigger, disabled, ariaLabel, estHeight = 260, children
               width: menu.width,
               maxHeight: estHeight,
             }}
-            className={`subtle-scroll pointer-events-auto z-[80] overflow-y-auto rounded-xl border border-white/10 bg-[#191919] py-1 shadow-2xl ring-1 ring-black/40 transition-all duration-150 ease-out will-change-transform ${
-              menu.below ? 'origin-top' : 'origin-bottom'
-            } ${
+            className={`subtle-scroll dark pointer-events-auto z-[80] overflow-y-auto bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10 transition-all duration-150 ease-out will-change-transform ${
+              // `dark` above: the Ad Studio panel we host is theme-aware, but the
+              // assistant card is always dark — without this it renders its light
+              // variant whenever the app is in light mode.
+              panel ? 'rounded-[20px] p-4' : 'rounded-[18px] py-1'
+            } ${menu.below ? 'origin-top' : 'origin-bottom'} ${
               visible
                 ? 'translate-y-0 scale-100 opacity-100'
                 : `${menu.below ? '-translate-y-1' : 'translate-y-1'} scale-95 opacity-0`
@@ -336,8 +407,10 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
                 onChange(o.value);
                 close();
               }}
-              className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
-                isOn ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'
+              className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-[13px] transition-colors ${
+                isOn
+                  ? 'bg-[#373839] text-white'
+                  : 'text-white/80 hover:bg-white/5 hover:text-white'
               }`}
             >
               <span className="flex min-w-0 items-center gap-2">
@@ -348,7 +421,7 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
                 >
                   {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                 </span>
-                <span className="truncate text-[13px] text-white/90">{o.label}</span>
+                <span className="truncate">{o.label}</span>
               </span>
               {cost != null && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
@@ -438,9 +511,51 @@ const StepperField = ({ field, value, onChange, disabled }) => {
   );
 };
 
-// Multi-select dropdown (e.g. several aspect ratios at once). Value is an array.
-// The menu stays open while toggling — picking several ratios is the normal
-// case, so closing on each click would mean reopening it every time.
+// Aspect ratios — the Ad Studio → Ad Creatives control, reused wholesale.
+// `AspectRatioTiles` owns the visual ratio frames and the per-ratio quantity
+// menu; the trigger below is the same "N Images" pill Ad Studio shows.
+//
+// Value is the per-ratio counts map ({ '1:1': 2, '9:16': 1 }). ChoiceForm keeps
+// `aspect_ratios` / `num_images` in sync off it so the submitted contract is
+// unchanged for briefs that predate this control.
+const AspectRatioCountsField = ({ field, value, onChange, disabled, creditsPerImage }) => {
+  const ratios = normaliseOptions(field.options).map((o) => String(o.value));
+  const counts = value && typeof value === 'object' ? value : {};
+  const total = ratios.reduce((sum, key) => sum + (counts[key] || 0), 0);
+
+  return (
+    <DropdownShell
+      disabled={disabled}
+      menuWidth={300}
+      panel
+      estHeight={380}
+      ariaLabel={`Aspect ratios — ${total} image${total === 1 ? '' : 's'}`}
+      trigger={
+        <span className="flex min-w-0 flex-1 items-center gap-2 text-white/85">
+          <Proportions className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.8} />
+          <span className="h-3 w-px shrink-0 bg-white/20" />
+          <LayoutGrid className="h-3 w-3 shrink-0 text-white/50" strokeWidth={1.8} />
+          <span className="truncate text-[13px]">
+            {total} Image{total === 1 ? '' : 's'}
+          </span>
+        </span>
+      }
+    >
+      {() => (
+        <AspectRatioTiles
+          counts={counts}
+          onChange={onChange}
+          ratios={ratios}
+          creditsPerImage={creditsPerImage ?? 0}
+        />
+      )}
+    </DropdownShell>
+  );
+};
+
+// Multi-select pills — the generic `checkbox` renderer. `aspect_ratios` no
+// longer uses it (see AspectRatioCountsField); kept for any other multi-select
+// field the agent emits.
 const CheckboxField = ({ field, value, onChange, disabled }) => {
   const opts = normaliseOptions(field.options);
   const arr = Array.isArray(value) ? value : value == null ? [] : [value];
@@ -448,57 +563,27 @@ const CheckboxField = ({ field, value, onChange, disabled }) => {
     if (arr.includes(v)) onChange(arr.filter((x) => x !== v));
     else onChange([...arr, v]);
   };
-  // Name the choices while they still fit, then fall back to a count — the
-  // trigger is narrow and "1:1, 4:5" reads better than "2 selected".
-  const chosen = opts.filter((o) => arr.includes(o.value)).map((o) => o.label);
-  const summary =
-    chosen.length === 0
-      ? 'None selected'
-      : chosen.length <= 2
-        ? chosen.join(', ')
-        : `${chosen.length} selected`;
-
   return (
-    <DropdownShell
-      disabled={disabled}
-      ariaLabel={`${field.label || field.key}: ${summary}`}
-      trigger={
-        <span
-          className={`min-w-0 flex-1 truncate text-[13px] ${
-            chosen.length ? 'text-white/90' : 'text-white/45'
-          }`}
-        >
-          {summary}
-        </span>
-      }
-    >
-      {() =>
-        opts.map((o) => {
-          const isOn = arr.includes(o.value);
-          return (
-            <button
-              key={String(o.value)}
-              type="button"
-              role="option"
-              aria-selected={isOn}
-              onClick={() => toggle(o.value)}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors ${
-                isOn ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'
-              }`}
-            >
-              <span
-                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-                  isOn ? 'border-white bg-white' : 'border-white/30'
-                }`}
-              >
-                {isOn && <Check className="h-2.5 w-2.5 text-black" strokeWidth={3} />}
-              </span>
-              <span className="truncate text-[13px] text-white/90">{o.label}</span>
-            </button>
-          );
-        })
-      }
-    </DropdownShell>
+    <div className="flex flex-wrap gap-1.5">
+      {opts.map((o) => {
+        const isOn = arr.includes(o.value);
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            onClick={() => toggle(o.value)}
+            disabled={disabled}
+            className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
+              isOn
+                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
+                : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 };
 
@@ -588,7 +673,25 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 // stores [{url, filename, selected}] — the user clicks to pick which images
 // actually feed generation (selected = bordered); the first is selected by
 // default. Broken/unreachable images are dropped so only good ones show or ship.
-const ImageUploadField = ({ field, value, onChange, disabled }) => {
+// Images already saved on the user's brands, so a reference image or logo can be
+// picked instead of re-uploaded. Field spellings vary by endpoint — same
+// tolerance as the agent's brand normaliser (Agent/src/utils/brand.py).
+const brandLogosOf = (b) =>
+  [
+    ...(Array.isArray(b?.logoUrls) ? b.logoUrls : []),
+    b?.brandLogo,
+    b?.logoUrl,
+    b?.logo,
+    b?.iconUrl,
+  ].filter(Boolean);
+const brandProductImagesOf = (b) =>
+  [
+    ...(Array.isArray(b?.imageUrl) ? b.imageUrl : b?.imageUrl ? [b.imageUrl] : []),
+    ...(Array.isArray(b?.imageUrls) ? b.imageUrls : []),
+    ...(Array.isArray(b?.brandImages) ? b.brandImages : []),
+  ].filter(Boolean);
+
+const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
   // Drop empty/whitespace-URL items at render: an <img src=""> does NOT reliably
   // fire onError in Chromium, so a blank entry would show a permanent broken box
   // that the onError→removeAt path can never clear (BUG 8).
@@ -597,9 +700,53 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
   const [uploading, setUploading] = useState(false);
   // Full-screen preview (double-click / double-tap a thumbnail).
   const [preview, setPreview] = useState(null);
+  // The "Add" tile offers three sources; these drive the two that need their
+  // own inline UI (the third just opens the OS file picker).
+  const [urlOpen, setUrlOpen] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+  const [brandOpen, setBrandOpen] = useState(false);
+  const fileInputRef = useRef(null);
   const userId = useSelector((s) => s.socket?.userData?.user_id);
+  const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
   const maxFiles = field.maxFiles || 5;
   const selectedCount = arr.filter(isImgSelected).length;
+  const isLogoField = field.key === 'brand_logo';
+
+  // Offer the images of the brand the brief is actually about; fall back to
+  // every saved brand's images when nothing is chosen yet, so the option is
+  // never an empty panel.
+  const brandImages = useMemo(() => {
+    const wanted = (brandName || '').trim().toLowerCase();
+    const matched = wanted
+      ? brands.filter((b) => (b?.name || '').trim().toLowerCase() === wanted)
+      : [];
+    const pool = matched.length ? matched : brands;
+    const urls = pool.flatMap((b) => (isLogoField ? brandLogosOf(b) : brandProductImagesOf(b)));
+    return [...new Set(urls.map(String).filter((u) => u.trim()))];
+  }, [brands, brandName, isLogoField]);
+
+  const addImages = (urls) => {
+    const existing = new Set(arr.map((it) => it.url));
+    const fresh = urls
+      .filter((u) => u && !existing.has(u))
+      .map((u) => ({ url: u, filename: u.split('/').pop() || 'image', selected: true }));
+    if (!fresh.length) return;
+    onChange([...arr, ...fresh].slice(0, maxFiles));
+  };
+
+  const addByUrl = () => {
+    const raw = urlDraft.trim();
+    try {
+      const parsed = new URL(raw);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    } catch {
+      toast.error('Enter a valid public http(s) image URL.');
+      return;
+    }
+    addImages([raw]);
+    setUrlDraft('');
+    setUrlOpen(false);
+  };
   // Upload straight to S3 via the shared helper (returns a stored PATH) — same
   // fast path the rest of the app uses; the domain is prefixed for display.
   const onPick = async (e) => {
@@ -686,13 +833,162 @@ const ImageUploadField = ({ field, value, onChange, disabled }) => {
           );
         })}
         {!disabled && arr.length < maxFiles && (
-          <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40 hover:text-white/70">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            <span className="text-[9px]">{uploading ? 'Uploading' : 'Add'}</span>
-            <input type="file" accept="image/*" multiple={maxFiles > 1} onChange={onPick} className="hidden" />
-          </label>
+          <DropdownShell
+            menuWidth={232}
+            estHeight={160}
+            ariaLabel="Add an image"
+            hideChevron
+            triggerClassName="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40 hover:text-white/70"
+            trigger={
+              <>
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span className="text-[9px]">{uploading ? 'Uploading' : 'Add'}</span>
+              </>
+            }
+          >
+            {({ close }) => (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  <Upload className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  Upload from your computer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    setBrandOpen(false);
+                    setUrlOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  <Link2 className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  Paste an image URL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    setUrlOpen(false);
+                    setBrandOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  <Images className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  <span className="flex-1">Choose brand image</span>
+                  <span className="text-[11px] text-white/40">{brandImages.length}</span>
+                </button>
+              </>
+            )}
+          </DropdownShell>
         )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple={maxFiles > 1}
+          onChange={onPick}
+          className="hidden"
+        />
       </div>
+
+      {urlOpen && !disabled && (
+        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 p-1.5">
+          <Link2 className="ml-1 h-3.5 w-3.5 shrink-0 text-white/45" />
+          <input
+            type="url"
+            value={urlDraft}
+            autoFocus
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addByUrl();
+              } else if (e.key === 'Escape') {
+                setUrlOpen(false);
+              }
+            }}
+            placeholder="https://example.com/image.png"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
+          />
+          <button
+            type="button"
+            onClick={addByUrl}
+            disabled={!urlDraft.trim()}
+            className="inline-flex h-6 items-center rounded-full bg-white px-2.5 text-[11px] font-semibold text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => setUrlOpen(false)}
+            aria-label="Close image URL input"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {brandOpen && !disabled && (
+        <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-white/70">
+              {isLogoField ? 'Saved brand logos' : 'Saved brand images'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setBrandOpen(false)}
+              aria-label="Close brand images"
+              className="flex h-5 w-5 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          {brandImages.length === 0 ? (
+            <p className="px-0.5 py-1 text-[11px] text-white/40">
+              No saved {isLogoField ? 'logos' : 'images'} on your brands yet.
+            </p>
+          ) : (
+            <div className="flex max-h-[132px] flex-wrap gap-2 overflow-y-auto">
+              {brandImages.map((url) => {
+                const already = arr.some((it) => it.url === url);
+                return (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => addImages([url])}
+                    disabled={already}
+                    title={already ? 'Already added' : 'Add this image'}
+                    className={`h-14 w-14 overflow-hidden rounded-lg border-2 transition-all ${
+                      already
+                        ? 'cursor-not-allowed border-white/40 opacity-40'
+                        : 'border-transparent hover:border-white/50'
+                    }`}
+                  >
+                    <img
+                      src={toDisplaySrc(url)}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       {arr.length > 0 && (
         <span
           className={`text-[11px] font-medium ${selectedCount ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
@@ -810,6 +1106,38 @@ const BRAND_FIELD_KEYS = new Set([
   'brand_logo',
   'brand_colors',
 ]);
+// Every field a brand switch re-derives — brand-owned data plus the fields that
+// describe the brand's product. Switching brands used to swap only the four
+// BRAND_FIELD_KEYS, leaving the OLD brand's product images and its name inside
+// the prompt, so the brief still generated the previous brand's creative.
+const BRAND_DERIVED_KEYS = [
+  'brand_name',
+  'brand_description',
+  'brand_logo',
+  'brand_colors',
+  'product',
+  'reference_images',
+  'prompt',
+];
+
+// Swap a brand name inside free text (the prompt) when the user switches brands.
+// Deterministic and reversible — we only rename what the previous brand put
+// there rather than trying to rewrite the user's brief.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const renameBrandInText = (text, from, to) => {
+  const before = String(text || '');
+  const oldName = (from || '').trim();
+  const newName = (to || '').trim();
+  if (!before || !oldName || !newName || oldName.toLowerCase() === newName.toLowerCase()) {
+    return before;
+  }
+  // \b doesn't work around names with punctuation ("H&M"), so guard on
+  // non-word neighbours instead.
+  return before.replace(
+    new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi'),
+    (_m, lead) => `${lead}${newName}`,
+  );
+};
 const formHasBrandFields = (form) =>
   (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
 
@@ -857,7 +1185,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   const rememberCurrentBrand = () => {
     if (!currentName) return;
     const snap = {};
-    ['brand_name', 'brand_description', 'brand_logo', 'brand_colors'].forEach((k) => {
+    BRAND_DERIVED_KEYS.forEach((k) => {
       if (fieldKeys.has(k)) snap[k] = values[k];
     });
     setPrevBrand(snap);
@@ -869,6 +1197,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     if (currentName.toLowerCase() !== (b.name || '').trim().toLowerCase()) {
       rememberCurrentBrand();
     }
+    const nextName = (b.name || '').trim();
     const patch = {};
     if (fieldKeys.has('brand_name')) patch.brand_name = b.name || '';
     if (fieldKeys.has('brand_description')) patch.brand_description = b.description || '';
@@ -879,6 +1208,29 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     if (fieldKeys.has('brand_colors')) {
       const colors = b.colors || b.brandColors || b.palette;
       if (Array.isArray(colors) && colors.length) patch.brand_colors = colors;
+    }
+    // The rest of the brief has to follow the brand too, or the card still
+    // describes (and generates) the previous one.
+    if (fieldKeys.has('product')) {
+      // Only when Product was just the old brand's name — a real product
+      // ("running shoes") is the user's own wording and must survive.
+      const product = (values.product || '').trim();
+      if (!product || product.toLowerCase() === currentName.toLowerCase()) {
+        patch.product = nextName;
+      }
+    }
+    if (fieldKeys.has('reference_images')) {
+      // Replace, don't merge: the outgoing brand's product photos are exactly
+      // what shouldn't feed the new brand's creative.
+      const images = brandProductImagesOf(b);
+      patch.reference_images = images.map((url, i) => ({
+        url,
+        filename: url.split('/').pop() || 'image',
+        selected: i === 0,
+      }));
+    }
+    if (fieldKeys.has('prompt')) {
+      patch.prompt = renameBrandInText(values.prompt, currentName, nextName);
     }
     onPick(patch);
     setOpen(false);
@@ -1163,6 +1515,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const setField = (key, val) =>
     setValues((prev) => {
       const next = { ...prev, [key]: val };
+      // The tiles edit the counts map; keep the legacy pair derived from it so
+      // validation, the summary and the submitted payload all stay consistent.
+      if (key === 'aspect_ratio_counts') {
+        next.aspect_ratios = ratiosFromCounts(val);
+        next.num_images = numImagesFromCounts(val);
+      }
       if (key === 'model') {
         const costs = form.credit_costs_by_quality?.[val];
         const currentQuality = prev.quality === 'standard' ? 'medium' : prev.quality;
@@ -1172,17 +1530,19 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         }
         const allowedRatios = modelConfigByValue.get(val)?.aspect_ratios;
         if (Array.isArray(allowedRatios) && allowedRatios.length) {
-          const selectedRatios = Array.isArray(prev.aspect_ratios)
-            ? prev.aspect_ratios
-            : prev.aspect_ratios
-              ? [prev.aspect_ratios]
-              : [];
-          const supportedRatios = selectedRatios.filter((ratio) =>
-            allowedRatios.includes(ratio),
-          );
-          next.aspect_ratios = supportedRatios.length
-            ? supportedRatios
-            : [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]];
+          // Models support different ratio sets — carry the per-ratio counts
+          // the new model still supports, and fall back to one square image.
+          const prevCounts = countsFromValues(prev);
+          const kept = {};
+          allowedRatios.forEach((ratio) => {
+            if (prevCounts[ratio] > 0) kept[ratio] = prevCounts[ratio];
+          });
+          const counts = Object.keys(kept).length
+            ? kept
+            : { [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]]: 1 };
+          next.aspect_ratio_counts = counts;
+          next.aspect_ratios = ratiosFromCounts(counts);
+          next.num_images = numImagesFromCounts(counts);
         }
       }
       return next;
@@ -1212,22 +1572,22 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
       const allowedRatios = modelConfigByValue.get(model)?.aspect_ratios;
       if (Array.isArray(allowedRatios) && allowedRatios.length) {
-        const selectedRatios = Array.isArray(prev.aspect_ratios)
-          ? prev.aspect_ratios
-          : prev.aspect_ratios
-            ? [prev.aspect_ratios]
-            : [];
-        const supportedRatios = selectedRatios.filter((ratio) =>
-          allowedRatios.includes(ratio),
-        );
-        const reconciledRatios = supportedRatios.length
-          ? supportedRatios
-          : [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]];
-        if (
-          reconciledRatios.length !== selectedRatios.length ||
-          reconciledRatios.some((ratio, index) => ratio !== selectedRatios[index])
-        ) {
-          next.aspect_ratios = reconciledRatios;
+        const prevCounts = countsFromValues(prev);
+        const kept = {};
+        allowedRatios.forEach((ratio) => {
+          if (prevCounts[ratio] > 0) kept[ratio] = prevCounts[ratio];
+        });
+        const counts = Object.keys(kept).length
+          ? kept
+          : { [allowedRatios.includes('1:1') ? '1:1' : allowedRatios[0]]: 1 };
+        const sameAsBefore =
+          prev.aspect_ratio_counts &&
+          Object.keys(counts).length === Object.keys(prevCounts).length &&
+          Object.keys(counts).every((ratio) => counts[ratio] === prevCounts[ratio]);
+        if (!sameAsBefore) {
+          next.aspect_ratio_counts = counts;
+          next.aspect_ratios = ratiosFromCounts(counts);
+          next.num_images = numImagesFromCounts(counts);
           changed = true;
         }
       }
@@ -1293,13 +1653,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const creditInfo = useMemo(() => {
     const costs = creditCostsForQuality;
     const isPack = values.creative_type === 'ad_pack';
-    const ratiosRaw = values.aspect_ratios;
-    const ratios = Math.max(
-      1,
-      Array.isArray(ratiosRaw) ? ratiosRaw.length : ratiosRaw ? 1 : 1,
-    );
+    // Per-ratio counts are authoritative — the tiles can ask for 2×1:1 and
+    // 1×9:16, which a single "per ratio" number can't express.
+    const counts = countsFromValues(values);
+    const selected = ratiosFromCounts(counts);
+    const ratios = Math.max(1, selected.length);
+    const countTotal = selected.reduce((sum, key) => sum + counts[key], 0);
     const perRatio = isPack ? 3 : Math.max(1, Number(values.num_images) || 1);
-    const totalImages = perRatio * ratios;
+    const totalImages = isPack ? perRatio * ratios : Math.max(1, countTotal);
     let perImage = null;
     if (costs) {
       const model = values.model || 'auto';
@@ -1427,7 +1788,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           />
         )}
         {(form.fields || []).map((field) => {
+          // The ratio tiles carry a per-ratio quantity, so the separate "how
+          // many per ratio" stepper has nothing left to say — same as Ad Studio,
+          // which has no such control. Its value is still derived and submitted.
+          if (field.key === 'num_images') return null;
           const model = isModelField(field);
+          const isRatios = field.key === 'aspect_ratios';
           const qualityCosts =
             field.key === 'quality'
               ? form.credit_costs_by_quality?.[values.model || 'auto']
@@ -1456,7 +1822,11 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               ),
             };
           }
-          const Renderer = model ? ModelSelectField : FIELD_RENDERERS[field.type] || TextField;
+          const Renderer = model
+            ? ModelSelectField
+            : isRatios
+              ? AspectRatioCountsField
+              : FIELD_RENDERERS[field.type] || TextField;
           const full = isFullWidth(field);
           return (
             <div
@@ -1483,10 +1853,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               </div>
               <Renderer
                 field={renderedField}
-                value={values[field.key]}
-                onChange={(v) => setField(field.key, v)}
+                value={isRatios ? countsFromValues(values) : values[field.key]}
+                onChange={(v) => setField(isRatios ? 'aspect_ratio_counts' : field.key, v)}
                 disabled={isLocked}
                 creditCosts={model ? creditCostsForQuality : undefined}
+                creditsPerImage={isRatios ? creditInfo.perImage : undefined}
+                // Lets the image fields offer THIS brand's saved images first.
+                brandName={field.type === 'image_upload' ? values.brand_name : undefined}
               />
             </div>
           );
@@ -1517,8 +1890,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           ) : (
             <span>
               Generating {creditInfo.totalImages} image
-              {creditInfo.totalImages > 1 ? 's' : ''} in total — {creditInfo.perRatio} per
-              ratio × {creditInfo.ratios} ratio{creditInfo.ratios > 1 ? 's' : ''}.
+              {creditInfo.totalImages > 1 ? 's' : ''} in total across {creditInfo.ratios}{' '}
+              ratio{creditInfo.ratios > 1 ? 's' : ''}.
             </span>
           )}
         </p>
