@@ -116,6 +116,18 @@ function createWorkspaceService(overrides = {}) {
         ownerUserId: ownerId,
         status: "active",
       }).lean();
+      // `ownerUserId` is uniquely indexed but not compound with `status`, so
+      // a concurrent create (or a replica-lagged read right after it) can
+      // leave this lookup empty even though the duplicate-key error proves a
+      // workspace exists. Callers assume a non-null workspace — surface a
+      // retryable conflict instead of letting them crash on `workspace._id`.
+      if (!workspace) {
+        throw workspaceError(
+          "WORKSPACE_CREATE_CONFLICT",
+          "Workspace could not be created — please retry",
+          409,
+        );
+      }
     }
     return {
       workspace: workspace?.toObject ? workspace.toObject() : workspace,

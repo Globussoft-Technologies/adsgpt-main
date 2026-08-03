@@ -180,9 +180,11 @@ class AuthController {
 
       if (user) {
         if (userId && user.userId !== userId) {
-          throw new Error(
+          const conflictError = new Error(
             "This Facebook account is already connected to another AdsGPT user",
           );
+          conflictError.oauthErrorCode = "facebook_account_taken";
+          throw conflictError;
         }
         user.accessToken = encryptedToken;
         user.name = name;
@@ -227,7 +229,7 @@ class AuthController {
       res.redirect(
         buildFacebookReturnUrl(
           feUrl,
-          { error: "token_exchange_failed" },
+          { error: error.oauthErrorCode || "token_exchange_failed" },
           process.env.FRONTEND_URL,
         ),
       );

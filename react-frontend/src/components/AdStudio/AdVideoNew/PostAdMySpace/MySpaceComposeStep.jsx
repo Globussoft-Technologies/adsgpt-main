@@ -6,7 +6,6 @@ import {
   Sparkles,
   Video as VideoIcon,
 } from 'lucide-react';
-import { useSelector } from 'react-redux';
 import {
   Select,
   SelectTrigger,
@@ -63,7 +62,6 @@ const buildInitialForm = () => ({
 
 export default function MySpaceComposeStep({ payload, selection, onBack, onPosted }) {
   const { url: mediaUrl, isVideo } = payload || {};
-  const fbUser = useSelector((state) => state.adFactoryNew?.fbUser);
   const [form, setForm] = useState(buildInitialForm);
   const [posting, setPosting] = useState(false);
   const { generate, loading: generating } = useGenerateAdCopy();
@@ -85,8 +83,9 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
     );
 
   // Gate Post on every required field: media, primary text, headline, CTA,
-  // destination URL, a valid selection, and a known fbUser. Description
-  // and the optional prompt stay free-form.
+  // destination URL, and a valid selection (which now carries the picked
+  // Facebook account via accountId/facebookId — see MySpaceSelectStep).
+  // Description and the optional prompt stay free-form.
   const missingField =
     !mediaUrl
       ? 'Media is required'
@@ -101,8 +100,14 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
               : '';
   const canPost =
     !missingField &&
-    Boolean(selection?.adAccountId && selection?.pageId && selection?.campaignId && selection?.adSetId) &&
-    Boolean(fbUser?._id) &&
+    Boolean(
+      selection?.accountId &&
+        selection?.facebookId &&
+        selection?.adAccountId &&
+        selection?.pageId &&
+        selection?.campaignId &&
+        selection?.adSetId,
+    ) &&
     !posting;
 
   const onPost = async () => {
@@ -110,7 +115,6 @@ export default function MySpaceComposeStep({ payload, selection, onBack, onPoste
     setPosting(true);
     try {
       const body = buildPostAdPayload({
-        fbUser,
         selection,
         media: { url: mediaUrl, isVideo },
         form,

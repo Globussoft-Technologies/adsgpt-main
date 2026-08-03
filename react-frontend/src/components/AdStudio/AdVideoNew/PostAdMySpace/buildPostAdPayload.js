@@ -6,8 +6,12 @@
 // aren't tied to an AdFactory campaign — backend treats both as
 // optional). `imageUrl` and `videoUrl` are mutually exclusive per the
 // API spec — switched on the media's `isVideo` flag.
+//
+// `selection.accountId`/`selection.facebookId` come from the
+// FacebookAccountSelector picked in MySpaceSelectStep — a user can have
+// multiple Facebook accounts connected, so the account is no longer
+// assumed from the single global `fbUser`.
 export default function buildPostAdPayload({
-  fbUser,
   selection,
   media,
   form,
@@ -27,7 +31,8 @@ export default function buildPostAdPayload({
   }
 
   return {
-    accountId: fbUser?._id,
+    accountId: selection.accountId,
+    facebookId: selection.facebookId,
     adAccountId: selection.adAccountId,
     pageId: selection.pageId,
     campaignDetails: { campaignId: selection.campaignId },

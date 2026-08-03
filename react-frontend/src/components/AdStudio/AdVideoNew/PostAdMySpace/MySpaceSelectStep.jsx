@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getLeadForms, getMetaPages } from '@/apis/metaAds/metaAdsApi';
@@ -8,6 +8,7 @@ import {
   fetchCampaign,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
+import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 import FbCustomDropdown from './FbCustomDropdown';
 
 // Gates posting to Leads campaigns. Mirrors the env check in
@@ -24,9 +25,19 @@ const LEADS_POSTING_ENABLED =
 // the dropdown grid.
 export default function MySpaceSelectStep({ onBack, onNext }) {
   const dispatch = useDispatch();
-  const { fbUser, adAccDropdown = [], campaignsDropdown = [], adSetDropdown = [] } = useSelector(
+  const { userData } = useSelector((state) => state.socket);
+  const { adAccDropdown = [], campaignsDropdown = [], adSetDropdown = [] } = useSelector(
     (state) => state.adFactoryNew || {},
   );
+
+  // Multiple Facebook accounts may be connected for this AdsGPT user —
+  // FacebookAccountSelector lets them pick which one to post through,
+  // same as AdFactory/PostAd/FbAccountReady.jsx.
+  const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
+  const [facebookAccountsLoading, setFacebookAccountsLoading] = useState(true);
+  const facebookAccountsRequestRef = useRef(null);
+  const facebookId = selectedFacebookAccount?.facebookId || '';
+  const facebookConnectionId = selectedFacebookAccount?._id || '';
 
   const [selectedAccount, setSelectedAccount] = useState('');
   const [selectedPage, setSelectedPage] = useState('');
@@ -44,14 +55,42 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
   const [leadForms, setLeadForms] = useState([]);
   const [leadFormsLoading, setLeadFormsLoading] = useState(false);
 
-  // Ad accounts come from Redux. PostAdDialogContent already kicks the
-  // fetch when its modal mounts, but the MySpace modal is independent so
-  // we fire it ourselves if the list is empty.
-  useEffect(() => {
-    if (fbUser?._id && adAccDropdown.length === 0) {
-      dispatch(fetchAdAccounts(fbUser._id));
-    }
-  }, [fbUser?._id, adAccDropdown.length, dispatch]);
+  const handleFacebookAccountChange = useCallback(
+    (account) => {
+      if (account?.facebookId && account.facebookId === facebookId) return;
+      setSelectedFacebookAccount(account);
+      setSelectedAccount('');
+      setSelectedPage('');
+      setSelectedCampaign('');
+      setSelectedAdSet('');
+      setSelectedLeadForm('');
+      setPages([]);
+      setLeadForms([]);
+      facebookAccountsRequestRef.current?.abort();
+      if (!account?._id || !account?.facebookId) {
+        setFacebookAccountsLoading(false);
+        return;
+      }
+      setFacebookAccountsLoading(true);
+      const request = dispatch(
+        fetchAdAccounts({ accountId: account._id, facebookId: account.facebookId }),
+      );
+      facebookAccountsRequestRef.current = request;
+      request.finally(() => {
+        if (facebookAccountsRequestRef.current === request) {
+          setFacebookAccountsLoading(false);
+        }
+      });
+    },
+    [dispatch, facebookId],
+  );
+
+  useEffect(
+    () => () => {
+      facebookAccountsRequestRef.current?.abort();
+    },
+    [],
+  );
 
   const formatSpent = (amountMinor, currency) => {
     const major = Number(amountMinor || 0) / 100;
@@ -118,14 +157,14 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
     }
     setPagesLoading(true);
     try {
-      const r = await getMetaPages(adAccountId);
+      const r = await getMetaPages(adAccountId, { facebookId });
       setPages(r?.pages || []);
     } catch {
       setPages([]);
     } finally {
       setPagesLoading(false);
     }
-  }, []);
+  }, [facebookId]);
 
   const fetchLeadFormsForPage = useCallback(async (pageId) => {
     if (!pageId) {
@@ -134,14 +173,14 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
     }
     setLeadFormsLoading(true);
     try {
-      const r = await getLeadForms(pageId);
+      const r = await getLeadForms(pageId, { facebookId });
       setLeadForms(r?.forms || []);
     } catch {
       setLeadForms([]);
     } finally {
       setLeadFormsLoading(false);
     }
-  }, []);
+  }, [facebookId]);
 
   const onAccountChange = (adAccountId) => {
     setSelectedAccount(adAccountId);
@@ -152,10 +191,10 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
     setSelectedLeadForm('');
     setLeadForms([]);
     fetchPagesForAccount(adAccountId);
-    if (fbUser?._id && adAccountId) {
+    if (facebookConnectionId && facebookId && adAccountId) {
       setCampaignsLoading(true);
       dispatch(
-        fetchCampaign({ adAccountId, accountId: fbUser._id }),
+        fetchCampaign({ adAccountId, accountId: facebookConnectionId, facebookId }),
       ).finally(() => setCampaignsLoading(false));
     }
   };
@@ -176,12 +215,13 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
     setSelectedCampaign(campaignId);
     setSelectedAdSet('');
     setSelectedLeadForm('');
-    if (campaignId && selectedAccount && fbUser?._id) {
+    if (campaignId && selectedAccount && facebookConnectionId && facebookId) {
       setAdsetsLoading(true);
       dispatch(
         fetchAdsets({
           adAccountId: selectedAccount,
-          accountId: fbUser._id,
+          accountId: facebookConnectionId,
+          facebookId,
           campaignId,
         }),
       ).finally(() => setAdsetsLoading(false));
@@ -200,6 +240,8 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
   const isLeadsBlocked = isLeadsCampaign && !LEADS_POSTING_ENABLED;
 
   const canNext =
+    Boolean(facebookConnectionId) &&
+    Boolean(facebookId) &&
     Boolean(selectedAccount) &&
     Boolean(selectedPage) &&
     Boolean(selectedCampaign) &&
@@ -229,6 +271,17 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
         </p>
       </div>
 
+      <div className="flex max-w-md flex-col gap-2">
+        <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+          Select Your Facebook Account *
+        </label>
+        <FacebookAccountSelector
+          userId={userData?.user_id}
+          onChange={handleFacebookAccountChange}
+          className="w-full"
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:gap-10">
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
@@ -238,8 +291,15 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
             value={selectedAccount}
             onChange={onAccountChange}
             options={accountOptions}
-            label={accountOptions.length === 0 ? 'Loading ad accounts…' : 'Choose Ad Account'}
+            label={
+              !facebookId
+                ? 'Pick a Facebook account first'
+                : accountOptions.length === 0
+                  ? 'Loading ad accounts…'
+                  : 'Choose Ad Account'
+            }
             type="account"
+            disabled={!facebookId || facebookAccountsLoading}
           />
         </div>
 
@@ -360,6 +420,8 @@ export default function MySpaceSelectStep({ onBack, onNext }) {
           disabled={!canNext}
           onClick={() =>
             onNext({
+              accountId: facebookConnectionId,
+              facebookId,
               adAccountId: selectedAccount,
               pageId: selectedPage,
               campaignId: selectedCampaign,

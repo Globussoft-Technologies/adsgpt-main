@@ -39,8 +39,11 @@ import 'swiper/css/pagination';
 import 'swiper/css/scrollbar';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import useFacebookOAuthErrorToast from '@/hooks/useFacebookOAuthErrorToast';
 
 function App() {
+  useFacebookOAuthErrorToast();
+
   return (
     <>
       <RouterProvider router={router} />
