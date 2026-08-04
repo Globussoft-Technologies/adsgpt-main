@@ -15,9 +15,6 @@ import DownloadMenu from './DownloadMenu';
 import QuotableText from './QuotableText';
 import ImageLightbox from './ImageLightbox';
 import MetaConnectCard from './MetaConnectCard';
-// The project-wide "Generating" loader — same component My Space and Ad Studio
-// use, so a generation in progress looks identical everywhere.
-import CreativeGeneratingLoader from '@/components/AdStudio/AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import CardBlock from '@/components/MetaAds/Chatbot/cards/CardBlock';
 import ConfirmActionCard from '@/components/MetaAds/Chatbot/ConfirmActionCard';
 import MediaPickerCard from '@/components/MetaAds/Chatbot/MediaPickerCard';
@@ -346,19 +343,6 @@ const Messages = ({
         const isLast = m === messages[messages.length - 1];
         const showLiveSteps = isLast && pending;
         const isStreaming = isLast && pending;
-        // The turn is running and has produced nothing renderable yet. This is
-        // what a reopened mid-generation chat looks like, and also the gap
-        // between hitting Generate and the first token arriving.
-        const isAwaitingFirstOutput =
-          isStreaming &&
-          !(m.text || '').trim() &&
-          !(m.images?.length) &&
-          !(m.competitorAds?.length) &&
-          !(m.metaCards?.length) &&
-          !m.adCreative &&
-          !m.choiceForm &&
-          !m.conceptCards &&
-          !m.storyboard;
         return (
           <motion.div
             key={m.id}
@@ -377,17 +361,6 @@ const Messages = ({
                   activeLabel={pendingActiveLabel}
                   completedLabel={null}
                 />
-              )}
-              {/* Nothing has come back yet — show the project's generating
-                  loader (the one My Space / Ad Studio use) rather than leaving
-                  the turn looking like a finished exchange. It gives way as
-                  soon as the first token, image or card arrives. `dark` is
-                  forced because the loader is theme-aware and this surface is
-                  always dark. */}
-              {isAwaitingFirstOutput && (
-                <div className="dark mb-2 flex h-40 w-full items-center justify-center overflow-hidden rounded-2xl border border-white/[0.06]">
-                  <CreativeGeneratingLoader />
-                </div>
               )}
               {!showLiveSteps && m.steps?.length > 0 && (
                 <StepsIndicator
