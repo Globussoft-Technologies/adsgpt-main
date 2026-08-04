@@ -75,6 +75,14 @@ function sanitizeNumericInput(value, allowDecimal = false) {
   return rest.length ? `${first}.${rest.join("")}` : first;
 }
 
+function isInvalidRange(min, max) {
+  if (!min || !max) return false;
+  const minNumber = Number(min);
+  const maxNumber = Number(max);
+  if (!Number.isFinite(minNumber) || !Number.isFinite(maxNumber)) return false;
+  return minNumber > maxNumber;
+}
+
 function readUsersStateFromSearch(searchString) {
   const rawSearch = searchString.replace(/^\?/, "");
   const hasUrlState = rawSearch.length > 0;
@@ -145,7 +153,7 @@ function FilterInput({ value, onChange, placeholder, type = "text", min, numeric
   );
 }
 
-function RangeFilter({ label, minValue, maxValue, onMinChange, onMaxChange, type = "number", min = "0", decimal = false }) {
+function RangeFilter({ label, minValue, maxValue, onMinChange, onMaxChange, type = "number", min = "0", decimal = false, error = "" }) {
   const numeric = type === "number";
 
   return (
@@ -170,6 +178,9 @@ function RangeFilter({ label, minValue, maxValue, onMinChange, onMaxChange, type
           placeholder="Max"
         />
       </div>
+      {error ? (
+        <div className="text-[11px] font-medium normal-case tracking-normal text-rose-500">{error}</div>
+      ) : null}
     </FilterField>
   );
 }
@@ -283,6 +294,13 @@ export default function UsersPage() {
     setPage(1);
   };
 
+  const resetFilters = () => {
+    setSearch("");
+    setSort("cost");
+    setFilters(EMPTY_FILTERS);
+    setPage(1);
+  };
+
   useEffect(() => {
     const nextParams = buildUsersSearchParams({ range, search, sort, page, filters }).toString();
     const currentParams = location.search.replace(/^\?/, "");
@@ -316,6 +334,31 @@ export default function UsersPage() {
     () => [ALL_PLAN_OPTION, ...filterOptions.plans],
     [filterOptions.plans],
   );
+
+  const rangeErrors = useMemo(
+    () => ({
+      generations: isInvalidRange(filters.generationsMin, filters.generationsMax)
+        ? "Min cannot be greater than max"
+        : "",
+      credits: isInvalidRange(filters.creditsMin, filters.creditsMax)
+        ? "Min cannot be greater than max"
+        : "",
+      cost: isInvalidRange(filters.costMin, filters.costMax)
+        ? "Min cannot be greater than max"
+        : "",
+    }),
+    [
+      filters.generationsMin,
+      filters.generationsMax,
+      filters.creditsMin,
+      filters.creditsMax,
+      filters.costMin,
+      filters.costMax,
+    ],
+  );
+
+  const hasRangeErrors = Object.values(rangeErrors).some(Boolean);
+  const canResetFilters = hasActiveFilters || Boolean(search) || sort !== "cost";
 
   const activeFilterChips = useMemo(() => {
     const chips = [];
@@ -424,6 +467,14 @@ export default function UsersPage() {
 
   useEffect(() => {
     let cancel = false;
+    if (hasRangeErrors) {
+      setLoading(false);
+      setError("Fix invalid range filters before loading users.");
+      return () => {
+        cancel = true;
+      };
+    }
+
     setLoading(true);
     setError("");
     adminApi
@@ -469,6 +520,7 @@ export default function UsersPage() {
     filters.creditsMax,
     filters.costMin,
     filters.costMax,
+    hasRangeErrors,
   ]);
 
   const rows = data?.data || [];
@@ -540,6 +592,15 @@ export default function UsersPage() {
               leadingIcon={ArrowDownWideNarrow}
               className="h-10 min-w-44 rounded-md border-slate-200 shadow-xs"
             />
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!canResetFilters}
+              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <X className="h-4 w-4" />
+              Reset
+            </button>
           </div>
         </div>
 
@@ -566,6 +627,7 @@ export default function UsersPage() {
             maxValue={filters.generationsMax}
             onMinChange={(value) => updateFilter("generationsMin", value)}
             onMaxChange={(value) => updateFilter("generationsMax", value)}
+            error={rangeErrors.generations}
           />
           <RangeFilter
             label="Credits"
@@ -573,6 +635,7 @@ export default function UsersPage() {
             maxValue={filters.creditsMax}
             onMinChange={(value) => updateFilter("creditsMin", value)}
             onMaxChange={(value) => updateFilter("creditsMax", value)}
+            error={rangeErrors.credits}
           />
           <RangeFilter
             label="Cost"
@@ -581,6 +644,7 @@ export default function UsersPage() {
             maxValue={filters.costMax}
             onMinChange={(value) => updateFilter("costMin", value)}
             onMaxChange={(value) => updateFilter("costMax", value)}
+            error={rangeErrors.cost}
           />
           {/* <FilterSummary
             chips={activeFilterChips}

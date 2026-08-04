@@ -608,17 +608,20 @@ export default function TopHeader() {
                 {Array.isArray(myBrands) && myBrands?.length > 0 && (
                   <AddNewBrand fromComponent="topheader" />
                 )}
-                {SHOW_HIDDEN_HEADER_UI && (
-                  <button
-                    variant="ghost"
-                    className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-black/10 bg-white/70 p-[0.5px] px-4 py-1.5 text-gray-700 hover:text-gray-900 sm:flex 2xl:py-2 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
-                  >
-                    <span className="flex items-center gap-2 rounded-full">
-                      Refresh
-                      <RefreshCcw className="!h-3.5 !w-3.5 2xl:h-5 2xl:w-5" />
-                    </span>
-                  </button>
-                )}
+                {/* HIDE-MARK: BrandIQ Refresh button hidden because it has no action wired. */}
+                {/*
+                  {SHOW_HIDDEN_HEADER_UI && (
+                    <button
+                      variant="ghost"
+                      className="backdrop-blur-100 text-10 relative hidden items-center justify-center gap-2 rounded-full border border-black/10 bg-white/70 p-[0.5px] px-4 py-1.5 text-gray-700 hover:text-gray-900 sm:flex 2xl:py-2 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
+                    >
+                      <span className="flex items-center gap-2 rounded-full">
+                        Refresh
+                        <RefreshCcw className="!h-3.5 !w-3.5 2xl:h-5 2xl:w-5" />
+                      </span>
+                    </button>
+                  )}
+                */}
               </>
             )}
             {currentRoute === '/brandiq' && activeBrandIQTabId === 'competitors' && (
