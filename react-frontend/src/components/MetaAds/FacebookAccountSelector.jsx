@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FaFacebook } from 'react-icons/fa6';
-import { Check, ChevronDown, Loader2, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { FaFacebook, FaFacebookF } from 'react-icons/fa6';
+import { AlertTriangle, Check, ChevronDown, Loader2, Plus, Settings2 } from 'lucide-react';
 import { getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import { Dropdown } from './MetaAdsAtoms';
 import {
@@ -14,15 +15,32 @@ export default function FacebookAccountSelector({
   userId,
   onChange,
   className = '',
+  preferredFacebookId = '',
+  disabled = false,
+  variant = 'default',
+  dropdownAnchor = 'right',
+  showManageAccounts = false,
+  onLoadingChange,
 }) {
   const [accounts, setAccounts] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const onChangeRef = useRef(onChange);
+  const onLoadingChangeRef = useRef(onLoadingChange);
+  const preferredFacebookIdRef = useRef(preferredFacebookId);
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+  useEffect(() => {
+    onLoadingChangeRef.current = onLoadingChange;
+  }, [onLoadingChange]);
+  useEffect(() => {
+    preferredFacebookIdRef.current = preferredFacebookId;
+  }, [preferredFacebookId]);
+  useEffect(() => {
+    onLoadingChangeRef.current?.(loading);
+  }, [loading]);
 
   const select = useCallback(
     (facebookId, nextAccounts = []) => {
@@ -37,7 +55,12 @@ export default function FacebookAccountSelector({
   );
 
   const load = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setAccounts([]);
+      setSelectedId('');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const response = await getFacebookAccounts(userId);
@@ -47,7 +70,11 @@ export default function FacebookAccountSelector({
       const params = new URLSearchParams(window.location.search);
       const oauthFacebookId = params.get('facebookId');
       const stored = getSelectedFacebookId(userId);
+      const preferredFacebookIdValue = preferredFacebookIdRef.current;
       const preferred =
+        (preferredFacebookIdValue &&
+          list.some((account) => account.facebookId === String(preferredFacebookIdValue)) &&
+          String(preferredFacebookIdValue)) ||
         (oauthFacebookId &&
           list.some((account) => account.facebookId === oauthFacebookId) &&
           oauthFacebookId) ||
@@ -79,11 +106,99 @@ export default function FacebookAccountSelector({
     load();
   }, [load]);
 
+  // A saved job can hydrate its preferred account after the list request has
+  // already completed. Select it from the loaded list without fetching the
+  // same accounts again. This also prevents our own onChange from causing a
+  // second loading cycle when the first account is selected automatically.
+  useEffect(() => {
+    if (loading || !preferredFacebookId) return;
+    const preferred = String(preferredFacebookId);
+    if (preferred === selectedId) return;
+    if (accounts.some((account) => account.facebookId === preferred)) {
+      select(preferred, accounts);
+    }
+  }, [accounts, loading, preferredFacebookId, select, selectedId]);
+
   const connect = () => {
     if (!userId) return;
     const feUrl = window.location.href;
     window.location.href = `${BASE_URL}/api/auth/facebook?userId=${encodeURIComponent(userId)}&feUrl=${encodeURIComponent(feUrl)}`;
   };
+
+  if (variant === 'card') {
+    if (loading) {
+      return (
+        <div className={`flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-3 text-xs text-gray-500 dark:border-white/10 dark:bg-[#13171A] dark:text-white/60 ${className}`}>
+          <Loader2 className="h-4 w-4 animate-spin text-[#1877F2]" />
+          <span>Loading Facebook accounts…</span>
+        </div>
+      );
+    }
+
+    if (accounts.length === 0) {
+      return (
+        <div className={`flex items-center gap-2 self-start rounded-full border border-amber-500/30 bg-amber-500/10 py-1 pr-1 pl-3 ${className}`}>
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-300" />
+          <span className="text-xs text-white">Meta not connected — required to activate</span>
+          <button
+            type="button"
+            onClick={connect}
+            disabled={!userId}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#1877F2] px-2.5 py-0.5 text-xs font-medium text-white transition hover:bg-[#1665d8] disabled:opacity-50"
+          >
+            <FaFacebookF className="size-3" />
+            Connect
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-2.5 dark:border-white/10 dark:bg-[#13171A] ${className}`}>
+        <div className="max-h-60 overflow-y-auto space-y-1.5 pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+          {accounts.map((account) => {
+            const active = account.facebookId === selectedId;
+            return (
+              <div
+                key={account.facebookId}
+                onClick={() => !disabled && select(account.facebookId, accounts)}
+                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-all cursor-pointer ${
+                  active
+                    ? 'bg-gray-100 dark:bg-[#1C2228] border border-transparent dark:border-white/5'
+                    : 'hover:bg-gray-50 dark:hover:bg-white/5 opacity-80'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`truncate text-xs font-semibold ${
+                      active ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {account.name}
+                  </p>
+                  <p className="truncate text-[11px] text-gray-500 dark:text-white/55 mt-0.5">
+                    {account.email || `Facebook ID: ${account.facebookId}`}
+                  </p>
+                </div>
+                {active && <Check className="h-4 w-4 shrink-0 text-[#15DCFF]" />}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2 border-t border-gray-200 pt-2 dark:border-white/10">
+          <button
+            type="button"
+            onClick={connect}
+            disabled={disabled}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-gray-100 dark:text-[#65A4FF] dark:hover:bg-white/5 disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Facebook account
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!loading && accounts.length === 0) {
     return (
@@ -104,13 +219,14 @@ export default function FacebookAccountSelector({
       <Dropdown
         open={open}
         onClose={() => setOpen(false)}
+        anchor={dropdownAnchor}
         trigger={
           <button
             type="button"
             aria-label="Facebook account"
             aria-expanded={open}
-            onClick={() => !loading && accounts.length > 0 && setOpen((value) => !value)}
-            disabled={loading || accounts.length === 0}
+            onClick={() => !disabled && !loading && accounts.length > 0 && setOpen((value) => !value)}
+            disabled={disabled || loading || accounts.length === 0}
             className="flex h-9 min-w-48 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:cursor-default disabled:opacity-70 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
           >
             {loading ? (
@@ -175,6 +291,16 @@ export default function FacebookAccountSelector({
               <Plus className="h-3.5 w-3.5" />
               Add Facebook account
             </button>
+            {showManageAccounts && (
+              <Link
+                to="/profile"
+                onClick={() => setOpen(false)}
+                className="mt-1 flex w-full items-center gap-2 rounded-xl bg-red-500/10 px-3 py-2.5 text-left text-xs font-medium text-red-400 transition-colors hover:bg-red-500/15"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                Manage accounts
+              </Link>
+            )}
           </div>
         </div>
       </Dropdown>

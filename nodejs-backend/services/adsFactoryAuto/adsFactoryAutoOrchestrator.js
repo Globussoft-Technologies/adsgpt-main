@@ -30,6 +30,8 @@ const { uploadImageFromUrl }                     = require("../../controllers/ad
 
 function adFactoryCtrl() { return require("../../controllers/adFactory"); }
 
+const { resolveFacebookConnectionForRecord } = require('../../utils/metaConnection');
+
 // Build a rich error string from a V2/Google controller's JSON error response.
 //
 // The controllers return { error, details, meta:{ code, subcode, fbtraceId } }.
@@ -92,8 +94,56 @@ const IS_DEV_MODE =
 
 // Releases the in-memory in-flight marker. Every exit path from run() —
 // early return or final completion — must call this.
-function releaseRunLock(jobId) {
+const RUN_LOCK_LEASE_MS = Math.max(
+  2 * 60 * 1000,
+  Number(process.env.ADSFACTORY_RUN_LOCK_LEASE_MS) || 10 * 60 * 1000,
+);
+
+async function acquireRunLock(jobId, token) {
+  const now = new Date();
+  return AdsFactoryJob.findOneAndUpdate(
+    {
+      _id: jobId,
+      status: "active",
+      $or: [
+        { "runLock.expiresAt": { $lte: now } },
+        { "runLock.expiresAt": null },
+        { "runLock.expiresAt": { $exists: false } },
+      ],
+    },
+    {
+      $set: {
+        "runLock.token": token,
+        "runLock.expiresAt": new Date(now.getTime() + RUN_LOCK_LEASE_MS),
+      },
+    },
+    { new: true },
+  );
+}
+
+function startRunLockHeartbeat(jobId, token) {
+  const interval = setInterval(() => {
+    AdsFactoryJob.updateOne(
+      { _id: jobId, "runLock.token": token },
+      { $set: { "runLock.expiresAt": new Date(Date.now() + RUN_LOCK_LEASE_MS) } },
+    ).catch((error) => {
+      logger.error(`[adsFactoryAuto] failed to renew run lock for ${jobId}: ${error.message}`);
+    });
+  }, Math.min(60_000, Math.floor(RUN_LOCK_LEASE_MS / 3)));
+  interval.unref?.();
+  return interval;
+}
+
+async function releaseRunLock(jobId, token, heartbeat) {
+  if (heartbeat) clearInterval(heartbeat);
   _runningJobs.delete(jobId);
+  if (!token) return;
+  await AdsFactoryJob.updateOne(
+    { _id: jobId, "runLock.token": token },
+    { $set: { "runLock.token": null, "runLock.expiresAt": null } },
+  ).catch((error) => {
+    logger.error(`[adsFactoryAuto] failed to release run lock for ${jobId}: ${error.message}`);
+  });
 }
 
 // ─── Platform Posters Registry ────────────────────────────────────────────────
@@ -104,6 +154,54 @@ function releaseRunLock(jobId) {
 // To add a new platform:
 //   1. Add its target schema to the model + validation
 //   2. Add one entry here — nothing else changes
+
+async function resolveJobFacebookConnection(job) {
+  const target = job.targets?.meta || {};
+  const rawUserId = job.userId?.includes('-')
+    ? job.userId.split('-').slice(1).join('-')
+    : job.userId;
+  const candidateUserIds = [...new Set([job.userId, rawUserId].filter(Boolean))];
+
+  if (target.facebookId || target.connectionId) {
+    let lastError;
+    for (const userId of candidateUserIds) {
+      try {
+        return await resolveFacebookConnectionForRecord({
+          userId,
+          facebookId: target.facebookId,
+          connectionId: target.connectionId,
+        });
+      } catch (error) {
+        lastError = error;
+        if (!['FACEBOOK_ACCOUNT_NOT_CONNECTED', 'FACEBOOK_NOT_CONNECTED'].includes(error.code)) {
+          throw error;
+        }
+      }
+    }
+    throw lastError || new Error('Selected Facebook account is not connected');
+  }
+
+  // Jobs created before connection binding retain their previous fallback.
+  const connection = await FBUsers.findOne({ userId: { $in: candidateUserIds } })
+    .sort({ updatedAt: -1 });
+  if (!connection) throw new Error(`No Facebook account linked for user ${job.userId}`);
+  const accessToken = decrypt(connection.accessToken);
+  if (!accessToken) throw new Error('Facebook access token is missing');
+  return { connection, facebookId: connection.facebookId, accessToken };
+}
+
+// facebook-nodejs-business-sdk keeps a process-global default API instance.
+// Serialize Meta posts so two jobs using different Facebook connections cannot
+// replace that instance while the other job is still creating its campaign,
+// ad set, creatives, or ads. Google jobs and creative generation stay parallel.
+let metaPostTail = Promise.resolve();
+async function acquireMetaPostLock() {
+  const previous = metaPostTail;
+  let release;
+  metaPostTail = new Promise((resolve) => { release = resolve; });
+  await previous;
+  return release;
+}
 
 const PLATFORM_POSTERS = {
   meta: {
@@ -127,6 +225,22 @@ const PLATFORM_POSTERS = {
     //      creatives generated, instead of wasting a generation cycle only to
     //      fail at post time every tick.
     isConnected: async (job) => {
+      if (job.targets?.meta?.facebookId || job.targets?.meta?.connectionId) {
+        try {
+          await resolveJobFacebookConnection(job);
+          return true;
+        } catch (e) {
+          const permanentConnectionError = [
+            'FACEBOOK_ACCOUNT_NOT_CONNECTED',
+            'FACEBOOK_ACCOUNT_MISMATCH',
+            'FACEBOOK_TOKEN_EXPIRED',
+            'FACEBOOK_TOKEN_INVALID',
+            'FACEBOOK_TOKEN_MISSING',
+          ].includes(e.code);
+          logger.warn(`[adsFactoryAuto][2b] selected Meta connection check failed for job ${job._id}: ${e.message}`);
+          return permanentConnectionError ? false : true;
+        }
+      }
       const rawFbUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
       const fbQuery = { $or: [{ userId: job.userId }, { userId: rawFbUserId }] };
       let fbUser;
@@ -207,6 +321,8 @@ const PLATFORM_POSTERS = {
     },
 
     post: async (target, job, creatives, campaign) => {
+      const releaseMetaPost = await acquireMetaPostLock();
+      try {
       const { template } = target;
 
       if (!template || !template.payload) {
@@ -219,11 +335,9 @@ const PLATFORM_POSTERS = {
       }
 
       // job.userId may be prefixed e.g. "GPT-438" — FBUsers stores the raw numeric part
-      const rawFbUserId = job.userId?.includes("-") ? job.userId.split("-").slice(1).join("-") : job.userId;
-      const fbUser = await FBUsers.findOne({ $or: [{ userId: job.userId }, { userId: rawFbUserId }] });
-      if (!fbUser) throw new Error(`No Facebook account linked for user ${job.userId}`);
-      const accessToken = decrypt(fbUser.accessToken);
-      if (!accessToken) throw new Error("Facebook access token is missing");
+      const resolvedConnection = await resolveJobFacebookConnection(job);
+      const fbUser = resolvedConnection.connection;
+      const accessToken = resolvedConnection.accessToken;
 
       // We still need bizSdk for uploading images since the V2 controller doesn't handle pure image upload natively for us
       const api = bizSdk.FacebookAdsApi.init(accessToken);
@@ -252,7 +366,11 @@ const PLATFORM_POSTERS = {
       // metaAdLauncher controller is untouched.
       const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2");
       const executeController = async (controllerFn, body) => {
-        const req = { body, user: { user_id: fbUser.userId } };
+        const req = {
+          body,
+          headers: { 'x-facebook-id': resolvedConnection.facebookId },
+          user: { user_id: fbUser.userId },
+        };
         let statusCode = 200;
         let responseData = null;
         const res = {
@@ -579,6 +697,9 @@ const PLATFORM_POSTERS = {
 
       logger.info(`[adsFactoryAuto:meta] created ${createdAdIds.length} ad(s).`);
       return { adId: createdAdIds.join(","), creativeAdMap, campaignId: usedCampaignId, adSetId: usedAdSetId };
+      } finally {
+        releaseMetaPost();
+      }
     },
   },
 
@@ -1224,20 +1345,28 @@ async function run(jobId) {
   let rawTexts      = [];
   let job;
   let campaign = null;
+  const runLockToken = uuidv4();
+  let runLockHeartbeat = null;
 
   if (_runningJobs.has(jobId)) {
     logger.warn(`[adsFactoryAuto] job ${jobId} is already running — skipping duplicate dispatch`);
     return;
   }
 
+  const lockedJob = await acquireRunLock(jobId, runLockToken);
+  if (!lockedJob) {
+    logger.warn(`[adsFactoryAuto] job ${jobId} is already leased by another worker or is no longer active â€” skipping duplicate dispatch`);
+    return;
+  }
+
   _runningJobs.add(jobId);
+  runLockHeartbeat = startRunLockHeartbeat(jobId, runLockToken);
 
   logger.info(`[adsFactoryAuto] ▶ run START  jobId=${jobId}  runId=${runId}`);
 
   try {
     // ── Step 1: Load job ──────────────────────────────────────────────────────
-    job = await AdsFactoryJob.findById(jobId);
-    if (!job) throw new Error(`AdsFactoryJob ${jobId} not found`);
+    job = lockedJob;
     logger.info(`[adsFactoryAuto][1] job loaded  status=${job.status}  userId=${job.userId}  campaignId=${job.campaignId}  frequency=${job.schedule?.frequency}`);
 
     if (job.status !== "active") {
@@ -1252,7 +1381,7 @@ async function run(jobId) {
       } catch (e) {
         logger.warn(`[adsFactoryAuto][1] could not cancel ${job.status} job's stale queue entry: ${e.message}`);
       }
-      await releaseRunLock(jobId);
+      await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
       return;
     }
 
@@ -1265,7 +1394,7 @@ async function run(jobId) {
         logger.warn(
           `[adsFactoryAuto][1] does_not_repeat job ${jobId} fired early — scheduled at ${nextRunAt.toISOString()} but now is ${new Date().toISOString()} — skipping stale BullMQ tick`
         );
-        await releaseRunLock(jobId);
+        await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
         return;
       }
     }
@@ -1286,7 +1415,7 @@ async function run(jobId) {
           `[adsFactoryAuto][1] job ${jobId} skipping — only ${Math.round(elapsed / 86400000)}d elapsed ` +
           `of required ${sched.customFrequency.repeatEvery * 7}d (lastRunAt=${sched.lastRunAt})`
         );
-        await releaseRunLock(jobId);
+        await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
         return;
       }
     }
@@ -1310,14 +1439,17 @@ async function run(jobId) {
     }
     if (effectiveEndBoundary && new Date() > effectiveEndBoundary) {
       logger.info(`[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} (inclusive boundary ${effectiveEndBoundary.toISOString()}), marking completed`);
-      await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "completed" } });
+      await AdsFactoryJob.updateOne(
+        { _id: job._id },
+        { $set: { status: "completed" }, $unset: { lifecycleKey: 1 } },
+      );
       try {
         const { cancelJob } = require("./adsFactoryAutoQueue");
         await cancelJob(job._id.toString());
       } catch (e) {
         logger.warn(`[adsFactoryAuto][1] could not cancel completed job from queue: ${e.message}`);
       }
-      await releaseRunLock(jobId);
+      await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
       return;
     }
 
@@ -1329,7 +1461,7 @@ async function run(jobId) {
       await cancelJob(job._id.toString()).catch(() => {});
       await AdsFactoryJob.updateOne({ _id: job._id }, { $set: { status: "paused" } })
         .catch((e) => logger.warn(`[adsFactoryAuto][2] could not save paused status: ${e.message}`));
-      await releaseRunLock(jobId);
+      await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
       return;
     }
 
@@ -1349,7 +1481,7 @@ async function run(jobId) {
       logger.warn(
         `[adsFactoryAuto][2] campaign ${campaign.metadata?.campaignId} still in-progress — skipping tick to avoid overlap`
       );
-      await releaseRunLock(jobId);
+      await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
       return;
     }
 
@@ -1365,6 +1497,23 @@ async function run(jobId) {
     // disconnected account auto-pauses the job with a clear reason instead of
     // silently repeating the same failed attempt every single tick forever.
     const targetsForConnCheck = job.targets || {};
+    const configuredTargetPlatforms = Object.entries(PLATFORM_POSTERS)
+      .filter(([platformName, poster]) => poster.isConfigured(targetsForConnCheck[platformName]))
+      .map(([platformName]) => platformName);
+    if (configuredTargetPlatforms.length === 0) {
+      const reason = "No complete platform template is configured for this automation";
+      logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing â€” ${reason}`);
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      await job.save({ validateBeforeSave: false });
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (error) {
+        logger.warn(`[adsFactoryAuto][2b] could not cancel targetless job: ${error.message}`);
+      }
+      throw new Error(reason);
+    }
     const disconnectedPlatforms = [];
     for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
       if (!poster.isConfigured(targetsForConnCheck[platformName])) continue;
@@ -1590,8 +1739,13 @@ async function run(jobId) {
     // ── Step 7b: Build creatives ──────────────────────────────────────────────
     const metaPayload   = job.targets?.meta?.template?.payload   || {};
     const googlePayload = job.targets?.google?.template?.payload || {};
-    // Use the active platform's payload (google wins if google template is set)
-    const activePlatformPayload = job.targets?.google?.template ? googlePayload : metaPayload;
+    // The shared creative URL is consumed by Meta; Google reads finalUrl from
+    // its own template inside the Google poster. Prefer Meta here whenever it
+    // is configured so a dual-platform run cannot send Meta traffic to the
+    // Google landing page.
+    const activePlatformPayload = PLATFORM_POSTERS.meta.isConfigured(job.targets?.meta)
+      ? metaPayload
+      : googlePayload;
     const ctaList       = activePlatformPayload.callToAction
       ? (Array.isArray(activePlatformPayload.callToAction) ? activePlatformPayload.callToAction : [activePlatformPayload.callToAction])
       : [];
@@ -1637,15 +1791,20 @@ async function run(jobId) {
       .map(([platformName, poster]) => {
         logger.info(`[adsFactoryAuto][8] posting to ${platformName}  creatives=${newCreatives.length}`);
         return poster.post(targets[platformName], job, newCreatives, completedCampaign)
-          .then((result) => ({
-            platformName,
-            adId: result.adId,
-            creativeAdMap: result.creativeAdMap || {},
-            campaignId: result.campaignId || null,
-            adGroupId: result.adGroupId || null,
-            adSetId: result.adSetId || null,
-            ok: true,
-          }))
+          .then((result) => {
+            if (!result?.adId) {
+              throw new Error(`${platformName} did not return a created ad ID`);
+            }
+            return {
+              platformName,
+              adId: result.adId,
+              creativeAdMap: result.creativeAdMap || {},
+              campaignId: result.campaignId || null,
+              adGroupId: result.adGroupId || null,
+              adSetId: result.adSetId || null,
+              ok: true,
+            };
+          })
           .catch((platformErr) => {
             let errMsg = platformErr.message;
             if (platformName === "meta") {
@@ -1694,9 +1853,14 @@ async function run(jobId) {
     }
 
     const anyPosted = Object.keys(postedAdIds).length > 0;
-    runStatus = platformErrors.length > 0
-      ? (anyPosted ? "partial" : "failed")
-      : "success";
+    runStatus = postTasks.length === 0
+      ? "failed"
+      : platformErrors.length > 0
+        ? (anyPosted ? "partial" : "failed")
+        : (anyPosted ? "success" : "failed");
+    if (postTasks.length === 0 || (!anyPosted && platformErrors.length === 0)) {
+      runError = "No configured platform accepted this run for posting";
+    }
     if (platformErrors.length) runError = platformErrors.map((e) => `${e.platformName}: ${e.message}`).join(" | ");
 
     logger.info(
@@ -1765,6 +1929,7 @@ async function run(jobId) {
         job.schedule.nextRunAt = null;
         if (runStatus === "success" || runStatus === "partial") {
           job.status = "completed";
+          job.lifecycleKey = undefined;
           logger.info(`[adsFactoryAuto][9] job ${jobId} is does_not_repeat — marking completed, cleared nextRunAt`);
         } else {
           logger.info(`[adsFactoryAuto][9] job ${jobId} is does_not_repeat and failed — staying active for manual retry, removing from queue`);
@@ -2090,7 +2255,7 @@ async function run(jobId) {
     }
   }
 
-  await releaseRunLock(jobId);
+  await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
   logger.info(`[adsFactoryAuto] ■ run END  jobId=${jobId}  runId=${runId}  finalStatus=${runStatus}  durationMs=${Date.now() - startedAt.getTime()}`);
 }
 

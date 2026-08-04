@@ -14,6 +14,8 @@ import {
   selectAutomationEntry,
   selectAutomationSaving,
   selectAutomationSummary,
+  selectMetaAdsTemplateById,
+  selectGoogleAdsTemplateById,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
 import { AUTOMATION_STATUS } from '@/store/reducers/adFactoryAutomation/constants';
 import {
@@ -36,6 +38,7 @@ import GoogleStatusPill from './GoogleStatusPill';
 import { Info } from 'lucide-react';
 import { FaFacebookF } from 'react-icons/fa6';
 import { FcGoogle } from 'react-icons/fc';
+import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 
 // ----------------------------------------------------------------------------
 // AutomationForm — INLINE form rendered inside ServicesForm when the user
@@ -117,6 +120,8 @@ const defaultFormValues = () => {
     // objective = mirrored from the resolved template.
     template: {
       id: null,
+      facebookId: '',
+      facebookConnectionId: '',
       dailyBudgetOverride: null,
       campaignName: null,
       objective: null,
@@ -209,12 +214,11 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   const [searchParams] = useSearchParams();
   const campaignId = searchParams.get('campaignId');
 
-  const { fbUser, googleUser, distribution } = useSelector((state) => state.adFactoryNew);
+  const { googleUser, distribution } = useSelector((state) => state.adFactoryNew);
   const { userData, credits } = useSelector((state) => state.socket);
   const saving = useSelector(selectAutomationSaving);
   const entry = useSelector((state) => selectAutomationEntry(state, campaignId));
 
-  const isMetaConnected = !!fbUser?.facebookId;
   const isGoogleConnected =
     !!(googleUser?.email || googleUser?.googleId || googleUser?.sub);
 
@@ -258,10 +262,6 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // Per-platform `isXxxConnected` flags still gate that platform's own
   // TemplatePicker. So the user can browse the templates of providers they
   // actually have access to, while the schedule/CTA stays editable.
-  const anyPlatformConnected =
-    (hasMetaSelected && isMetaConnected) ||
-    (hasGoogleSelected && isGoogleConnected);
-
   // Synchronous hydration on first render — if the slice already has the
   // saved entry (typically true because AdFactoryWorkflow's mount effect
   // already dispatched fetchAutomation), the form initialises with the real
@@ -276,6 +276,14 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
     return initial;
   });
+  const [metaAccountsLoading, setMetaAccountsLoading] = useState(true);
+  const isMetaConnected = !!(
+    values?.template?.facebookId && values?.template?.facebookConnectionId
+  );
+  const anyPlatformConnected =
+    (hasMetaSelected && isMetaConnected) ||
+    (hasGoogleSelected && isGoogleConnected);
+
 
   // Re-fetch in case anything changed since the slice was first hydrated.
   useEffect(() => {
@@ -296,10 +304,13 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // Re-poll Meta connection state when the form mounts (the user may have
   // OAuth'd in another tab).
   useEffect(() => {
-    if (userData?.user_id) {
-      dispatch(checkFbUser(userData.user_id));
+    if (userData?.user_id && values?.template?.facebookId) {
+      dispatch(checkFbUser({
+        userId: userData.user_id,
+        facebookId: values.template.facebookId,
+      }));
     }
-  }, [dispatch, userData?.user_id]);
+  }, [dispatch, userData?.user_id, values?.template?.facebookId]);
 
   // Mirror for Google. Only kicks when Google is one of the platforms — no
   // sense pinging the Google /users endpoint for a Meta-only campaign.
@@ -360,6 +371,14 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   // round (user can edit later to add it).
   const metaTemplatePicked = !!values?.template?.id;
   const googleTemplatePicked = !!values?.googleTemplate?.id;
+  const metaTemplateState = useSelector((state) =>
+    selectMetaAdsTemplateById(state, values?.template?.id),
+  );
+  const googleTemplateState = useSelector((state) =>
+    selectGoogleAdsTemplateById(state, values?.googleTemplate?.id),
+  );
+  const metaTemplateResolved = !!metaTemplateState?.template && !metaTemplateState?.error;
+  const googleTemplateResolved = !!googleTemplateState?.template && !googleTemplateState?.error;
   // `enabled` is the toggle inside each TemplatePicker. Defaults to true on
   // open; user flips it off to skip that platform without un-picking the
   // template. A platform that's off is excluded from "ready" so the
@@ -367,9 +386,17 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   const metaEnabled = values?.template?.enabled !== false;
   const googleEnabled = values?.googleTemplate?.enabled !== false;
   const metaReady =
-    hasMetaSelected && isMetaConnected && metaEnabled && metaTemplatePicked;
+    hasMetaSelected &&
+    isMetaConnected &&
+    metaEnabled &&
+    metaTemplatePicked &&
+    metaTemplateResolved;
   const googleReady =
-    hasGoogleSelected && isGoogleConnected && googleEnabled && googleTemplatePicked;
+    hasGoogleSelected &&
+    isGoogleConnected &&
+    googleEnabled &&
+    googleTemplatePicked &&
+    googleTemplateResolved;
   const anyPlatformReady = metaReady || googleReady;
 
   // Template-resolved objective patches into the form value from inside
@@ -402,7 +429,13 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     // template picked. The payload builders only emit targets.<platform>
     // for the platforms whose template is set, so an unfilled side is
     // automatically skipped this activation.
-    if (!anyPlatformReady) errs.push('Pick a template for Meta or Google');
+    if (!anyPlatformReady) {
+      errs.push(
+        metaTemplateState?.loading || googleTemplateState?.loading
+          ? 'Wait for the selected template to finish loading'
+          : 'Pick a valid template for Meta or Google',
+      );
+    }
     // Per-platform CTA validation. A platform that is not ready is skipped by
     // the payload builder, so we don't block activation on its CTA fields.
     if (metaReady) errs.push(...validatePlatformCta(values.template?.callToAction, 'Meta'));
@@ -591,7 +624,46 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
           selected → both pills stack. */}
       {(hasMetaSelected || hasGoogleSelected) && (
         <div className="flex flex-wrap gap-2">
-          {hasMetaSelected && <MetaStatusPill />}
+          {hasMetaSelected && (
+            <>
+              {!isMetaConnected && !metaAccountsLoading && <MetaStatusPill />}
+              <div className="[&>button]:hidden">
+                <FacebookAccountSelector
+                  userId={userData?.user_id}
+                  preferredFacebookId={values?.template?.facebookId}
+                  disabled={metaLocked}
+                  dropdownAnchor="left"
+                  showManageAccounts
+                  onLoadingChange={setMetaAccountsLoading}
+                  onChange={(account) => {
+                    const facebookId = account?.facebookId || '';
+                    const accountChanged =
+                      !!values.template?.facebookId &&
+                      values.template.facebookId !== facebookId;
+                    updateValues({
+                      template: {
+                        ...values.template,
+                        ...(accountChanged
+                          ? {
+                              id: null,
+                              objective: null,
+                              dailyBudgetOverride: null,
+                              campaignName: null,
+                              callToAction: {
+                                button: null,
+                                url: values.template?.callToAction?.url || '',
+                              },
+                            }
+                          : {}),
+                        facebookId,
+                        facebookConnectionId: account?._id || '',
+                      },
+                    });
+                  }}
+                />
+              </div>
+            </>
+          )}
           {hasGoogleSelected && <GoogleStatusPill />}
         </div>
       )}

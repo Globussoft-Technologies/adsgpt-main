@@ -1,7 +1,15 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import getCookies from '@/utils/getCookies';
-import { getGoogleCtaOptions } from '@/apis/googleAds/googleAdsApi';
+import {
+  getGoogleCampaignTemplate,
+  getGoogleCtaOptions,
+  listGoogleCampaignTemplates,
+} from '@/apis/googleAds/googleAdsApi';
+import {
+  getCampaignTemplate,
+  listCampaignTemplates,
+} from '@/apis/metaAds/metaAdsApi';
 import {
   AUTOMATION_STATUS,
   mapApiStatusToLocal,
@@ -15,12 +23,10 @@ const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
 
 // Meta Ads V2 templates — saved snapshots of the wizard form used as the
 // `targets.meta.template` payload on autopilot job creation.
-const META_TEMPLATES_BASE = `${BACKEND_HOST}/adsgpt/meta-ads/v2/templates`;
 
 // Google Ads templates — saved snapshots of the Google wizard form used as
 // the `targets.google.template` payload on autopilot job creation. Same
 // list/detail/cache pattern as Meta, just a different base.
-const GOOGLE_TEMPLATES_BASE = `${BACKEND_HOST}/adsgpt/google-ads/templates`;
 
 // ----------------------------------------------------------------------------
 // Form ↔ API payload mapping
@@ -82,6 +88,18 @@ function buildMetaTemplateForJob(formTemplate, fullTemplate) {
     // Store the template id inside the payload so edit mode can re-select the
     // saved template from the dropdown. The backend echoes payload as-is.
     payload: { ...basePayload, templateId: fullTemplate.id, ...overlay },
+  };
+}
+
+function buildMetaTargetForJob(formTemplate, fullTemplate) {
+  const template = buildMetaTemplateForJob(formTemplate, fullTemplate);
+  if (!template || !formTemplate?.facebookId || !formTemplate?.facebookConnectionId) {
+    return null;
+  }
+  return {
+    facebookId: String(formTemplate.facebookId),
+    connectionId: String(formTemplate.facebookConnectionId),
+    template,
   };
 }
 
@@ -203,9 +221,9 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate, fullGoogleTempl
   // Toggling off keeps the template id in form state for instant restore on
   // re-toggle, but we still need to gate the send so a turned-off platform
   // never reaches the backend.
-  const metaTemplate =
+  const metaTarget =
     template?.enabled !== false
-      ? buildMetaTemplateForJob(template, fullTemplate)
+      ? buildMetaTargetForJob(template, fullTemplate)
       : null;
   // Google automation is env-gated. When disabled, never emit targets.google —
   // even if a stale googleTemplate leaked into config (e.g. hydrated from an
@@ -215,7 +233,7 @@ function buildJobPayload(adsgptCampaignId, config, fullTemplate, fullGoogleTempl
       ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
       : null;
   const targets = {};
-  if (metaTemplate) targets.meta = { template: metaTemplate };
+  if (metaTarget) targets.meta = metaTarget;
   if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
   if (Object.keys(targets).length > 0) payload.targets = targets;
 
@@ -273,9 +291,9 @@ function buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate) {
   // each time. A platform toggled OFF is dropped from the payload, so the
   // backend learns it should stop posting there (the PATCH effectively
   // unsets that targets.<platform> key).
-  const metaTemplate =
+  const metaTarget =
     template?.enabled !== false
-      ? buildMetaTemplateForJob(template, fullTemplate)
+      ? buildMetaTargetForJob(template, fullTemplate)
       : null;
   // Google automation is env-gated. When disabled, never emit targets.google —
   // even if a stale googleTemplate leaked into config (e.g. hydrated from an
@@ -285,7 +303,7 @@ function buildJobUpdatePayload(config, fullTemplate, fullGoogleTemplate) {
       ? buildGoogleTemplateForJob(googleTemplate, fullGoogleTemplate)
       : null;
   const targets = {};
-  if (metaTemplate) targets.meta = { template: metaTemplate };
+  if (metaTarget) targets.meta = metaTarget;
   if (googleTemplateBlock) targets.google = { template: googleTemplateBlock };
   if (Object.keys(targets).length > 0) payload.targets = targets;
 
@@ -437,10 +455,12 @@ function mapJobToEntry(job, previous) {
             : 0,
         timezone: schedule.timezone || previous?.config?.frequency?.timezone || 'UTC',
         custom: {
-          interval: Number(schedule.repeatEvery) || 1,
-          unit: schedule.repeatUnit === 'day' ? 'day' : 'week',
-          daysOfWeek: Array.isArray(schedule.repeatOnDays)
-            ? schedule.repeatOnDays.map(dayNameToDayOfWeekNumber).filter((n) => n !== null)
+          interval: Number(schedule.customFrequency?.repeatEvery) || 1,
+          unit: schedule.customFrequency?.repeatUnit === 'day' ? 'day' : 'week',
+          daysOfWeek: Array.isArray(schedule.customFrequency?.repeatOnDays)
+            ? schedule.customFrequency.repeatOnDays
+                .map(dayNameToDayOfWeekNumber)
+                .filter((n) => n !== null)
             : [],
         },
       },
@@ -459,6 +479,12 @@ function mapJobToEntry(job, previous) {
       template: {
         id: templateId,
         objective: apiObjective,
+        facebookId:
+          meta.facebookId || previous?.config?.template?.facebookId || '',
+        facebookConnectionId:
+          meta.connectionId ||
+          previous?.config?.template?.facebookConnectionId ||
+          '',
         dailyBudgetOverride,
         campaignName,
         // A platform is considered "enabled" on Edit only when the saved job
@@ -1358,16 +1384,24 @@ export const fetchAutomationSummary = createAsyncThunk(
 // ----------------------------------------------------------------------------
 export const fetchMetaAdsTemplates = createAsyncThunk(
   'adFactoryAutomation/fetchMetaAdsTemplates',
-  async (_, { rejectWithValue }) => {
+  async (facebookId, { rejectWithValue }) => {
+    const scope = String(facebookId || '');
+    // Automation templates must always be tied to the selected connection.
+    // Clearing/changing the account clears the list without briefly fetching
+    // every account's templates.
+    if (!scope) return { templates: [], scope, legacyTemplateCount: 0 };
     try {
-      const res = await axios.get(META_TEMPLATES_BASE, {
-        headers: {
-          Authorization: `Bearer ${getCookies()}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const templates = Array.isArray(res?.data?.templates) ? res.data.templates : [];
-      return { templates };
+      const data = await listCampaignTemplates();
+      const allTemplates = Array.isArray(data?.templates) ? data.templates : [];
+      // Account scoping belongs to Automation only; the shared templates API
+      // continues returning every template for Meta Ads Manager.
+      const templates = allTemplates.filter(
+        (template) => String(template.facebookId || '') === scope,
+      );
+      const legacyTemplateCount = allTemplates.filter(
+        (template) => !String(template.facebookId || '').trim(),
+      ).length;
+      return { templates, scope, legacyTemplateCount };
     } catch (err) {
       return rejectWithValue({
         message:
@@ -1398,13 +1432,8 @@ export const fetchMetaAdsTemplateById = createAsyncThunk(
       return { templateId, template: cached.template, cached: true };
     }
     try {
-      const res = await axios.get(`${META_TEMPLATES_BASE}/${templateId}`, {
-        headers: {
-          Authorization: `Bearer ${getCookies()}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const template = res?.data?.template || null;
+      const data = await getCampaignTemplate(templateId);
+      const template = data?.template || null;
       if (!template) {
         return rejectWithValue({ message: 'Template not found' });
       }
@@ -1432,13 +1461,9 @@ export const fetchGoogleAdsTemplates = createAsyncThunk(
   'adFactoryAutomation/fetchGoogleAdsTemplates',
   async (_, { rejectWithValue }) => {
     try {
-      const res = await axios.get(GOOGLE_TEMPLATES_BASE, {
-        headers: {
-          Authorization: `Bearer ${getCookies()}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const templates = Array.isArray(res?.data?.templates) ? res.data.templates : [];
+      // This helper requests both regular-ad and PMax asset-group templates.
+      const data = await listGoogleCampaignTemplates();
+      const templates = Array.isArray(data?.templates) ? data.templates : [];
       return { templates };
     } catch (err) {
       return rejectWithValue({
@@ -1469,13 +1494,8 @@ export const fetchGoogleAdsTemplateById = createAsyncThunk(
       return { templateId, template: cached.template, cached: true };
     }
     try {
-      const res = await axios.get(`${GOOGLE_TEMPLATES_BASE}/${templateId}`, {
-        headers: {
-          Authorization: `Bearer ${getCookies()}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const template = res?.data?.template || null;
+      const data = await getGoogleCampaignTemplate(templateId);
+      const template = data?.template || null;
       if (!template) {
         return rejectWithValue({ message: 'Template not found' });
       }

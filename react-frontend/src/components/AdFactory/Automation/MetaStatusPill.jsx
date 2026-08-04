@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { FaFacebookF } from 'react-icons/fa6';
 import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router-dom';
@@ -22,9 +22,7 @@ export default function MetaStatusPill() {
   const [searchParams] = useSearchParams();
   const campaignId = searchParams.get('campaignId');
 
-  const { fbUser } = useSelector((state) => state.adFactoryNew);
   const { userData } = useSelector((state) => state.socket);
-  const isConnected = !!fbUser?.facebookId;
 
   const handleConnect = () => {
     if (!userData?.user_id) {
@@ -40,20 +38,6 @@ export default function MetaStatusPill() {
     const feUrl = window.location.href;
     window.location.href = buildFbAuthUrl({ userId: userData.user_id, feUrl });
   };
-
-  if (isConnected) {
-    return (
-      <div className="flex items-center gap-2 self-start rounded-full border border-emerald-500/30 bg-emerald-500/10 py-1 pr-3 pl-1">
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#1877F2]">
-          <FaFacebookF className="size-3 text-white" />
-        </div>
-        <span className="text-xs font-medium text-white">
-          Meta {fbUser?.name ? <>· <span className="text-[#E3E3E3]">{fbUser.name}</span></> : 'connected'}
-        </span>
-        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-400" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex items-center gap-2 self-start rounded-full border border-amber-500/30 bg-amber-500/10 py-1 pr-1 pl-3">

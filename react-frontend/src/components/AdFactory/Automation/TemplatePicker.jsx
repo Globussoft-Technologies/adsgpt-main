@@ -144,6 +144,7 @@ export default function TemplatePicker({
   const pickedBucket = useSelector((state) => cfg.selectById(state, picked.id));
   const pickedTemplate = pickedBucket?.template;
   const pickedLoading = pickedBucket?.loading;
+  const templateListScope = platform === 'meta' ? picked.facebookId : undefined;
 
   // Live CTA options for the picked template's objective. Each platform hits
   // its own endpoint (Meta vs Google), so the options are platform-specific.
@@ -154,16 +155,16 @@ export default function TemplatePicker({
   const ctaUnsupported = ctaCache?.status === 'unsupported';
 
   useEffect(() => {
-    dispatch(cfg.fetchListThunk());
-  }, [dispatch, cfg.fetchListThunk]);
+    dispatch(cfg.fetchListThunk(templateListScope));
+  }, [dispatch, cfg.fetchListThunk, templateListScope]);
 
   // Re-fetch on tab focus so a template the user just created in the wizard
   // (which opens in a new tab) shows up without forcing a manual refresh.
   useEffect(() => {
-    const onFocus = () => dispatch(cfg.fetchListThunk());
+    const onFocus = () => dispatch(cfg.fetchListThunk(templateListScope));
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [dispatch, cfg.fetchListThunk]);
+  }, [dispatch, cfg.fetchListThunk, templateListScope]);
 
   // When the user picks an id, fetch the full template if we don't have it
   // cached. Mirror the resolved objective onto `value` so the CTA section
@@ -248,13 +249,32 @@ export default function TemplatePicker({
     // — the toggle is independent of which template is picked. Preserve the
     // URL because the landing page usually doesn't change; the button will be
     // cleared once the new template's objective resolves.
+    const selectedTemplate = (templates || []).find((template) => template.id === id);
+    const selectedFacebookId =
+      platform === 'meta' ? selectedTemplate?.facebookId || picked.facebookId || '' : undefined;
+    const facebookAccountChanged =
+      platform === 'meta' &&
+      selectedFacebookId &&
+      selectedFacebookId !== picked.facebookId;
+
     onChange?.({
+      // Keep the selected platform connection when changing its template.
+      ...picked,
       id: id || null,
       dailyBudgetOverride: null,
       campaignName: null,
       objective: null,
       callToAction: { button: null, url: picked.callToAction?.url || '' },
       enabled,
+      ...(platform === 'meta'
+        ? {
+            facebookId: selectedFacebookId,
+            // The account selector resolves the new Mongo connection id.
+            facebookConnectionId: facebookAccountChanged
+              ? ''
+              : picked.facebookConnectionId || '',
+          }
+        : {}),
     });
   };
 
@@ -500,7 +520,7 @@ export default function TemplatePicker({
       )}
 
       {/* No saved templates + toggle ON → deep-link to the wizard. */}
-      {showEmptyState && <EmptyState cfg={cfg} />}
+      {showEmptyState && <EmptyState cfg={cfg} message={listError} />}
     </section>
   );
 }
@@ -554,13 +574,13 @@ function PlatformGlyph({ platform }) {
 // Deep-links to the wizard in a new tab so the user doesn't lose the
 // half-filled schedule they're configuring here.
 // ----------------------------------------------------------------------------
-function EmptyState({ cfg }) {
+function EmptyState({ cfg, message }) {
   return (
     <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/22 bg-amber-500/6 p-3">
       <Inbox className="mt-0.5 size-4 shrink-0 text-amber-400" />
       <div className="flex flex-col gap-2 text-xs">
         <p className="leading-relaxed text-amber-200/90">
-          {cfg.emptyTitle} {cfg.emptyHint}
+          {message || `${cfg.emptyTitle} ${cfg.emptyHint}`}
         </p>
         <a
           href={cfg.deepLinkHref}

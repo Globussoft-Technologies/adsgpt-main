@@ -1,5 +1,6 @@
 const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const Campaign      = require("../../Module/adFactory/adFactory");
+const FBUsers       = require('../../Module/adPosting/facebookUsers');
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
 const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
 const {
@@ -12,6 +13,25 @@ const logger = require("../../utils/logger");
 const { _runningJobs } = require("../../services/adsFactoryAuto/adsFactoryAutoOrchestrator");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { getCreditDeduction, imageEntries } = require("../../config/modelRegistry");
+
+async function ownsFacebookConnection(userId, target) {
+  if (!target?.facebookId || !target?.connectionId) return false;
+  const rawUserId = userId?.includes('-')
+    ? userId.split('-').slice(1).join('-')
+    : userId;
+  return !!(await FBUsers.exists({
+    _id: target.connectionId,
+    facebookId: target.facebookId,
+    userId: { $in: [...new Set([userId, rawUserId].filter(Boolean))] },
+  }));
+}
+
+function isJobRunLocked(job) {
+  if (!job?._id) return false;
+  if (_runningJobs.has(job._id.toString())) return true;
+  const expiresAt = job.runLock?.expiresAt ? new Date(job.runLock.expiresAt) : null;
+  return !!(expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date());
+}
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -32,6 +52,8 @@ class AdsFactoryAutoController {
         }
       }
     */
+    let createdJob = null;
+    let campaignLinked = false;
     try {
       const { error, value } = createJobSchema.validate(req.body, { abortEarly: false });
       if (error) {
@@ -51,12 +73,34 @@ class AdsFactoryAutoController {
         });
       }
 
+      const existingLiveJob = await AdsFactoryJob.findOne({
+        userId,
+        campaignId: value.campaignId,
+        status: { $nin: ["completed", "archived"] },
+      }).select("_id status").lean();
+      if (existingLiveJob) {
+        return res.status(409).json({
+          success: false,
+          error: `This campaign already has a ${existingLiveJob.status} automation job. Update or archive it instead of creating a duplicate.`,
+          jobId: existingLiveJob._id,
+        });
+      }
+
+      if (value.targets?.meta && !(await ownsFacebookConnection(userId, value.targets.meta))) {
+        return res.status(403).json({
+          success: false,
+          error: 'The selected Facebook account is not connected to this AdsGPT user',
+        });
+      }
+
       // Resolve and store cron for preset frequencies
       const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
 
+      const lifecycleKey = `${userId}:${value.campaignId}`;
       const job = await AdsFactoryJob.create({
         userId,
         campaignId:     value.campaignId,
+        lifecycleKey,
         schedule: {
           ...value.schedule,
           cronExpression: resolvedCron,
@@ -67,6 +111,15 @@ class AdsFactoryAutoController {
         alerts:         value.alerts  ?? {},
         status:         "active",
       });
+      createdJob = job;
+
+      await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
+
+      const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
+      if (nextTime) {
+        job.schedule.nextRunAt = nextTime;
+        await job.save();
+      }
 
       // Link the campaign back to its automation job. The campaign schema has
       // carried a `metadata.jobId` field since automation was introduced
@@ -77,19 +130,28 @@ class AdsFactoryAutoController {
         { _id: value.campaignId },
         { $set: { "metadata.jobId": job._id.toString() } }
       );
-
-      await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
-
-      const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
-      if (nextTime) {
-        job.schedule.nextRunAt = nextTime;
-        await job.save();
-      }
+      campaignLinked = true;
 
       return res.status(201).json({ success: true, data: job });
     } catch (err) {
       logger.error(`[adsFactoryAuto:createJob] ${err.message}`);
-      return res.status(500).json({ success: false, error: err.message });
+      if (createdJob?._id) {
+        await cancelJob(createdJob._id.toString()).catch(() => {});
+        await AdsFactoryJob.deleteOne({ _id: createdJob._id }).catch(() => {});
+        if (campaignLinked) {
+          await Campaign.updateOne(
+            { _id: createdJob.campaignId, "metadata.jobId": createdJob._id.toString() },
+            { $unset: { "metadata.jobId": 1 } },
+          ).catch(() => {});
+        }
+      }
+      const duplicate = err?.code === 11000;
+      return res.status(duplicate ? 409 : 500).json({
+        success: false,
+        error: duplicate
+          ? "This campaign already has an automation job. Update or archive it instead of creating a duplicate."
+          : err.message,
+      });
     }
   }
 
@@ -190,6 +252,7 @@ class AdsFactoryAutoController {
         }
       }
     */
+    let scheduleRollback = null;
     try {
       const { error, value } = updateJobSchema.validate(req.body, { abortEarly: false });
       if (error) {
@@ -210,7 +273,7 @@ class AdsFactoryAutoController {
         });
       }
 
-      const isRunning = _runningJobs.has(job._id.toString());
+      const isRunning = isJobRunLocked(job);
       if (isRunning) {
         return res.status(409).json({
           success: false,
@@ -228,6 +291,22 @@ class AdsFactoryAutoController {
       const newlyAddedPlatforms = new Set();
 
       if (value.targets !== undefined) {
+        const incomingMetaHasConnection = !!(
+          value.targets.meta?.facebookId || value.targets.meta?.connectionId
+        );
+        const isAddingMeta = !!(
+          value.targets.meta && !job.targets.meta?.template
+        );
+        if (
+          value.targets.meta &&
+          (incomingMetaHasConnection || isAddingMeta) &&
+          !(await ownsFacebookConnection(userId, value.targets.meta))
+        ) {
+          return res.status(403).json({
+            success: false,
+            error: 'The selected Facebook account is not connected to this AdsGPT user',
+          });
+        }
         // The frontend may send back the full job object it already has (so
         // it doesn't need to hand-pick fields), but only budget/CTA/link are
         // actually editable on an EXISTING platform template — the
@@ -244,6 +323,19 @@ class AdsFactoryAutoController {
           if (!savedTemplate) {
             newlyAddedPlatforms.add(platform);
             continue; // new platform — full template accepted, nothing to diff
+          }
+
+          if (
+            platform === 'meta' &&
+            job.targets.meta?.facebookId &&
+            (targetData.facebookId !== undefined || targetData.connectionId !== undefined)
+          ) {
+            if (
+              String(targetData.facebookId || '') !== String(job.targets.meta.facebookId) ||
+              String(targetData.connectionId || '') !== String(job.targets.meta.connectionId)
+            ) {
+              rejections.push('targets.meta Facebook connection cannot be changed');
+            }
           }
 
           // The campaign name is normally locked — renaming wouldn't rename the
@@ -297,7 +389,6 @@ class AdsFactoryAutoController {
       }
 
       // Validation passed (or no targets were sent) — now safe to mutate.
-      if (value.campaignId    !== undefined) job.campaignId    = value.campaignId;
       if (value.pairsPerCycle !== undefined) job.pairsPerCycle = value.pairsPerCycle;
       if (value.model         !== undefined) job.model         = value.model;
 
@@ -315,8 +406,21 @@ class AdsFactoryAutoController {
           if (newlyAddedPlatforms.has(platform)) {
             // Brand-new platform on this job — save its full template as-is.
             if (!job.targets[platform]) job.targets[platform] = {};
+            if (platform === 'meta') {
+              job.targets[platform].facebookId = targetData.facebookId;
+              job.targets[platform].connectionId = targetData.connectionId;
+            }
             job.targets[platform].template = targetData.template;
             continue;
+          }
+          if (
+            platform === 'meta' &&
+            !job.targets.meta?.facebookId &&
+            targetData.facebookId &&
+            targetData.connectionId
+          ) {
+            job.targets.meta.facebookId = targetData.facebookId;
+            job.targets.meta.connectionId = targetData.connectionId;
           }
           const editableSet = new Set(EDITABLE_FIELDS[platform] || []);
           // Campaign name is editable only while no campaign has been created
@@ -374,20 +478,49 @@ class AdsFactoryAutoController {
       }
 
       if (value.schedule) {
+        const previousSchedule = job.schedule?.toObject
+          ? job.schedule.toObject()
+          : { ...(job.schedule || {}) };
         const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
-        Object.assign(job.schedule, { ...value.schedule, cronExpression: resolvedCron });
-        await cancelJob(job._id.toString());
+        const nextSchedule = {
+          ...previousSchedule,
+          ...value.schedule,
+          cronExpression: resolvedCron,
+        };
         if (job.status === "active") {
-          await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
+          try {
+            await scheduleJob(job._id, resolveScheduleForQueue(nextSchedule));
+          } catch (scheduleError) {
+            await scheduleJob(job._id, resolveScheduleForQueue(previousSchedule)).catch((rollbackError) => {
+              logger.error(`[adsFactoryAuto:updateJob] failed to restore previous schedule: ${rollbackError.message}`);
+            });
+            throw scheduleError;
+          }
+          scheduleRollback = { jobId: job._id.toString(), previousSchedule };
+        } else {
+          await cancelJob(job._id.toString());
         }
+        Object.assign(job.schedule, nextSchedule);
       }
 
-      const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
+      const nextTime = job.status === "active"
+        ? await getNextRunTime(job._id.toString(), job.schedule)
+        : null;
       if (nextTime) job.schedule.nextRunAt = nextTime;
+      else job.schedule.nextRunAt = null;
       await job.save();
+      scheduleRollback = null;
 
       return res.json({ success: true, data: job });
     } catch (err) {
+      if (scheduleRollback) {
+        await scheduleJob(
+          scheduleRollback.jobId,
+          resolveScheduleForQueue(scheduleRollback.previousSchedule),
+        ).catch((rollbackError) => {
+          logger.error(`[adsFactoryAuto:updateJob] DB save failed and previous schedule could not be restored: ${rollbackError.message}`);
+        });
+      }
       logger.error(`[adsFactoryAuto:updateJob] ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -406,7 +539,7 @@ class AdsFactoryAutoController {
       const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
 
-      if (_runningJobs.has(job._id.toString())) {
+      if (isJobRunLocked(job)) {
         return res.status(409).json({
           success: false,
           error: "This job is currently running. Deleting it now could cause incomplete postings — please wait for the current run to finish before deleting.",
@@ -419,7 +552,10 @@ class AdsFactoryAutoController {
       // even after the job that created them is "deleted" by the user.
       await AdsFactoryJob.updateOne(
         { _id: req.params.id, userId },
-        { $set: { status: "archived", "schedule.nextRunAt": null } }
+        {
+          $set: { status: "archived", "schedule.nextRunAt": null },
+          $unset: { lifecycleKey: 1 },
+        }
       );
       await cancelJob(req.params.id);
       if (job.campaignId) {
@@ -462,7 +598,7 @@ class AdsFactoryAutoController {
         return res.json({ success: true, message: "Already paused", data: job });
       }
 
-      if (_runningJobs.has(job._id.toString())) {
+      if (isJobRunLocked(job)) {
         return res.status(409).json({
           success: false,
           error: "This job is currently running. Please wait for the current run to finish, then pause it.",
@@ -552,7 +688,7 @@ class AdsFactoryAutoController {
       if (job.status === "completed") {
         return res.status(400).json({ success: false, error: "Cannot run a completed job." });
       }
-      if (_runningJobs.has(job._id.toString())) {
+      if (isJobRunLocked(job)) {
         return res.status(409).json({
           success: false,
           error: "This job is already running right now. Please wait for the current run to finish before triggering another one.",

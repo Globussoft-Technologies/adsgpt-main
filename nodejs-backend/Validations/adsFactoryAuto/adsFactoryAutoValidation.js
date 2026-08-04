@@ -29,13 +29,15 @@ const scheduleSchema = Joi.object({
 // ─── Platform target schemas ──────────────────────────────────────────────────
 
 const metaTargetSchema = Joi.object({
+  facebookId: Joi.string().trim().required(),
+  connectionId: Joi.string().length(24).hex().required(),
   template: Joi.object({
     name: Joi.string().trim().required(),
     objective: Joi.string().allow("", null).optional(),
     conversionLocation: Joi.string().allow("", null).optional(),
     pageId: Joi.string().allow("", null).optional(),
     payload: Joi.object().required(),
-  }).optional(),
+  }).required(),
 });
 
 const googleTargetSchema = Joi.object({
@@ -45,13 +47,13 @@ const googleTargetSchema = Joi.object({
     conversionLocation: Joi.string().allow("", null).optional(),
     customerId: Joi.string().allow("", null).optional(),
     payload: Joi.object().required(),
-  }).optional(),
+  }).required(),
 });
 
 const targetsSchema = Joi.object({
   meta:   metaTargetSchema.optional(),
   google: googleTargetSchema.optional(),
-});
+}).min(1).required();
 
 // ─── Update-only target schemas ───────────────────────────────────────────────
 // Editing a job must NOT be able to rename the campaign or swap the template
@@ -70,6 +72,8 @@ const EDITABLE_GOOGLE_PAYLOAD_FIELDS = ["dailyBudget", "dailyBudgetMicros", "lif
 
 const updateTargetsSchema = Joi.object({
   meta: Joi.object({
+    facebookId: Joi.string().trim().optional(),
+    connectionId: Joi.string().length(24).hex().optional(),
     template: Joi.object({
       name:               Joi.string().trim().optional(),
       objective:          Joi.string().allow("", null).optional(),
@@ -135,7 +139,7 @@ const createJobSchema = Joi.object({
 
   model: Joi.string().allow("", null).optional(),
 
-  targets: targetsSchema.optional(),
+  targets: targetsSchema.required(),
 
   alerts: alertsSchema.optional(),
 });
@@ -143,7 +147,6 @@ const createJobSchema = Joi.object({
 // ─── updateJobSchema ──────────────────────────────────────────────────────────
 
 const updateJobSchema = Joi.object({
-  campaignId:     Joi.string().pattern(/^[a-f\d]{24}$/i).messages({ "string.pattern.base": "campaignId must be a valid MongoDB ObjectId" }),
   schedule:       scheduleSchema,
   pairsPerCycle:  Joi.number().integer().min(1).max(200),
   model:          Joi.string().allow("", null),

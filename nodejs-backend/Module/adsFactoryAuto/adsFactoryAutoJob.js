@@ -97,6 +97,11 @@ const ScheduleSchema = new mongoose.Schema(
 // Facebook / Instagram placement IDs — must exist in the user's Meta Business Manager
 const MetaTargetSchema = new mongoose.Schema(
   {
+    // The exact Facebook OAuth connection selected when this automation was
+    // configured. Scheduled workers have no request-header context, so the
+    // identity must be persisted with the job.
+    facebookId:   { type: String, default: '', trim: true },
+    connectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'FacebookUsers', default: null },
     template: {
       name:               { type: String, required: true, trim: true },
       objective:          { type: String, default: "" },
@@ -152,6 +157,11 @@ const AdsFactoryJobSchema = new mongoose.Schema(
     userId:     { type: String, required: true, index: true }, // job owner
     campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign", required: true, index: true },
 
+    // Present while a campaign owns a live automation lifecycle. A sparse
+    // unique index makes concurrent create requests collapse to one job even
+    // across multiple API instances. Terminal jobs unset this key.
+    lifecycleKey: { type: String, default: undefined },
+
     // When and how often to run — maps 1:1 to the UI Schedule modal
     schedule: { type: ScheduleSchema, required: true },
 
@@ -179,12 +189,22 @@ const AdsFactoryJobSchema = new mongoose.Schema(
       default: "active",
     },
 
+    // Cross-process execution lease. The in-memory Set remains a fast local
+    // guard, while this Mongo lease prevents two backend instances from
+    // generating/posting the same automation at the same time.
+    runLock: {
+      token:     { type: String, default: null },
+      expiresAt: { type: Date, default: null },
+    },
+
     runHistory: { type: [RunHistorySchema], default: [] }, // append-only run log
     totalRuns:  { type: Number, default: 0 }, // incremented after every run attempt
     failedRuns: { type: Number, default: 0 }, // incremented when a run ends in "failed"
   },
   { timestamps: true }
 );
+
+AdsFactoryJobSchema.index({ lifecycleKey: 1 }, { unique: true, sparse: true });
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 

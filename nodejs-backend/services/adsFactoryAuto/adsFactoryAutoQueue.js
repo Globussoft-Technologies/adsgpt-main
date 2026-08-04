@@ -11,6 +11,73 @@ function resolvePresetCron(frequency, hour = 0) {
   }
 }
 
+function toDateOnly(value) {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`Invalid schedule date: ${value}`);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function zonedDateTimeToUtc(dateValue, hour = 0, timezone = "UTC") {
+  const [year, month, day] = toDateOnly(dateValue).split("-").map(Number);
+  const targetHour = Math.max(0, Math.min(23, Number(hour) || 0));
+  const wallClockUtc = Date.UTC(year, month - 1, day, targetHour, 0, 0, 0);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone || "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const partsFor = (timestamp) => Object.fromEntries(
+    formatter.formatToParts(new Date(timestamp))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+
+  let candidate = wallClockUtc;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = partsFor(candidate);
+    const representedUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    const nextCandidate = wallClockUtc - (representedUtc - candidate);
+    if (nextCandidate === candidate) break;
+    candidate = nextCandidate;
+  }
+
+  const resolved = partsFor(candidate);
+  if (
+    resolved.year !== year ||
+    resolved.month !== month ||
+    resolved.day !== day ||
+    resolved.hour !== targetHour ||
+    resolved.minute !== 0
+  ) {
+    throw new Error(
+      `The selected local time ${toDateOnly(dateValue)} ${String(targetHour).padStart(2, "0")}:00 does not exist in ${timezone}`,
+    );
+  }
+  return new Date(candidate);
+}
+
+function weekdayForDate(dateValue) {
+  const names = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  return names[new Date(`${toDateOnly(dateValue)}T00:00:00.000Z`).getUTCDay()];
+}
+
 /**
  * Resolve the INCLUSIVE end boundary for a schedule.
  *
@@ -30,22 +97,7 @@ function resolvePresetCron(frequency, hour = 0) {
  * @returns {Date}      the inclusive end boundary instant
  */
 function resolveInclusiveEndDate(endDate, hour = 0, tz = "UTC") {
-  const h = Number(hour) || 0;
-  const base = new Date(endDate);
-  try {
-    const cronParser = require("cron-parser");
-    // Anchor one ms before midnight of the end date so .next() returns THAT
-    // day's hour:00 fire (not the following day's) as the boundary instant.
-    const anchor = new Date(base.getTime() - 1);
-    return cronParser
-      .parseExpression(`0 ${h} * * *`, { currentDate: anchor, tz })
-      .next()
-      .toDate();
-  } catch (_) {
-    // Fallback: shift the raw endDate forward by the run hour in wall-clock ms.
-    // Not timezone-correct, but strictly better than a midnight cutoff.
-    return new Date(base.getTime() + h * 60 * 60 * 1000);
-  }
+  return zonedDateTimeToUtc(endDate, hour, tz);
 }
 
 // BullMQ needs its own dedicated ioredis connection — cannot share pub/sub connections
@@ -88,6 +140,12 @@ const IS_DEV_MODE =
 // Shared by controller and reloadActiveJobs so both resolve the same way.
 function resolveScheduleForQueue(schedule) {
   const { frequency, startDate, timezone } = schedule;
+  const tz = timezone || "UTC";
+  const hour = Number(schedule.hour) || 0;
+  const startBoundary = startDate ? zonedDateTimeToUtc(startDate, hour, tz) : null;
+  const endBoundary = schedule.endDate
+    ? resolveInclusiveEndDate(schedule.endDate, hour, tz)
+    : null;
 
   const fastCronMinutes = Number(process.env.ADSFACTORY_TEST_FAST_CRON_MINUTES || 0);
   if (IS_DEV_MODE && fastCronMinutes > 0 && frequency !== "does_not_repeat") {
@@ -96,24 +154,7 @@ function resolveScheduleForQueue(schedule) {
   }
 
   if (frequency === "does_not_repeat") {
-    let runAt;
-    if (startDate) {
-      try {
-        const cronParser = require("cron-parser");
-        const hour = Number(schedule.hour) || 0;
-        const tz   = timezone || "UTC";
-        runAt = cronParser.parseExpression(`0 ${hour} * * *`, {
-          currentDate: new Date(startDate),
-          tz,
-        }).next().toDate();
-      } catch (e) {
-        logger.warn(`[resolveScheduleForQueue] cron-parser failed (${e.message}), falling back to startDate`);
-        runAt = new Date(startDate);
-      }
-    } else {
-      runAt = new Date();
-    }
-    return { type: "once", runAt, timezone };
+    return { type: "once", runAt: startBoundary || new Date(), timezone: tz };
   }
 
   if (frequency === "custom") {
@@ -122,14 +163,31 @@ function resolveScheduleForQueue(schedule) {
       type:         "custom",
       repeatEvery:  cf.repeatEvery  || 1,
       repeatUnit:   cf.repeatUnit   || "week",
-      repeatOnDays: cf.repeatOnDays || [],
-      timezone,
-      hour:         schedule.hour || 0,
+      repeatOnDays: cf.repeatOnDays?.length
+        ? cf.repeatOnDays
+        : (startDate ? [weekdayForDate(startDate)] : []),
+      timezone:     tz,
+      hour,
+      startDate:    startBoundary,
+      endDate:      endBoundary,
     };
   }
 
   // Preset (daily / every_weekday / every_weekend) → dynamic cron based on hour
-  return { type: "cron", cronExpression: resolvePresetCron(frequency, schedule.hour), timezone };
+  return {
+    type: "cron",
+    cronExpression: resolvePresetCron(frequency, schedule.hour),
+    timezone: tz,
+    startDate: startBoundary,
+    endDate: endBoundary,
+  };
+}
+
+function repeatWindow(schedule) {
+  return {
+    ...(schedule.startDate ? { startDate: new Date(schedule.startDate) } : {}),
+    ...(schedule.endDate ? { endDate: new Date(schedule.endDate) } : {}),
+  };
 }
 
 /**
@@ -145,6 +203,7 @@ function buildRepeatOpts(schedule) {
       repeat: {
         pattern: schedule.cronExpression,
         tz:      schedule.timezone || "UTC",
+        ...repeatWindow(schedule),
       },
     };
   }
@@ -166,18 +225,18 @@ function buildRepeatOpts(schedule) {
 
     if (unit === "day") {
       // Every N days at specific hour
-      return { repeat: { pattern: `0 ${hour} */${every} * *`, tz } };
+      return { repeat: { pattern: `0 ${hour} */${every} * *`, tz, ...repeatWindow(schedule) } };
     }
 
     // Every N weeks on selected days — build a cron day-of-week list
-    // If no days selected fall back to Monday
+    // Empty selections are resolved to the start-date weekday upstream.
     const DOW_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
     const dowNums = days.length > 0
       ? days.map((d) => DOW_MAP[d]).filter((n) => n !== undefined).join(",")
       : "1";
     // BullMQ does not natively support "every N weeks" cron, so we fire on the
     // correct days every week and let the orchestrator skip based on lastRunAt if needed.
-    return { repeat: { pattern: `0 ${hour} * * ${dowNums}`, tz } };
+    return { repeat: { pattern: `0 ${hour} * * ${dowNums}`, tz, ...repeatWindow(schedule) } };
   }
 
   // "once" — one-shot with delay, no repeat
@@ -266,16 +325,14 @@ async function getNextRunTime(jobId, schedule = null) {
     if (schedule.frequency === "does_not_repeat") {
       if (!schedule.startDate) return null;
       try {
-        const parser = require("cron-parser");
-        const hour   = Number(schedule.hour) || 0;
-        const result = parser.parseExpression(`0 ${hour} * * *`, {
-          currentDate: new Date(schedule.startDate),
-          tz: schedule.timezone || "UTC",
-        }).next().toDate();
-        return result;
+        return zonedDateTimeToUtc(
+          schedule.startDate,
+          schedule.hour,
+          schedule.timezone || "UTC",
+        );
       } catch (e) {
-        logger.warn(`[getNextRunTime] cron-parser failed (${e.message}), falling back to startDate`);
-        return new Date(schedule.startDate);
+        logger.warn(`[getNextRunTime] timezone conversion failed: ${e.message}`);
+        return null;
       }
     }
     if (schedule.cronExpression) {
@@ -297,15 +354,16 @@ async function getNextRunTime(jobId, schedule = null) {
  */
 async function runJobNow(jobId) {
   const queue = getQueue();
-  // Use a unique jobId per manual trigger so BullMQ de-dupes concurrent calls.
+  // A stable BullMQ jobId de-dupes simultaneous manual clicks/API retries.
   // attempts = 1 → no retries on manual runs either (would duplicate the ad).
   await queue.add(
     `${jobName(jobId)}:manual:${Date.now()}`,
     { jobId: jobId.toString() },
     {
+      jobId:            `ads-factory-manual-${jobId}`,
       attempts:         1,
       removeOnComplete: true,
-      removeOnFail:     { count: 10 },
+      removeOnFail:     true,
     }
   );
 }
@@ -328,7 +386,7 @@ function startWorker() {
       // Every due job (different users/campaigns) runs immediately, no cap —
       // BullMQ requires a finite concurrency number (no "unlimited" sentinel),
       // so this is set as high as BullMQ allows to never be the bottleneck.
-      concurrency: Number.MAX_SAFE_INTEGER,
+      concurrency: Math.max(1, Number(process.env.ADSFACTORY_WORKER_CONCURRENCY) || 5),
     }
   );
 
@@ -466,7 +524,10 @@ async function reloadActiveJobs() {
     const staleIds = staleOneShots.map((j) => j._id);
     await AdsFactoryJob.updateMany(
       { _id: { $in: staleIds } },
-      { $set: { status: "completed", "schedule.nextRunAt": null } }
+      {
+        $set: { status: "completed", "schedule.nextRunAt": null },
+        $unset: { lifecycleKey: 1 },
+      }
     );
     for (const job of staleOneShots) {
       await cancelJob(job._id.toString()).catch(() => {});
@@ -587,4 +648,17 @@ async function reloadActiveJobs() {
   logger.info(`[adsFactoryAuto] reloaded ${count} active autopilot jobs into BullMQ  (skipped ${orphanJobs.length} orphan + ${skippedPast} already-ran does_not_repeat)`);
 }
 
-module.exports = { scheduleJob, cancelJob, runJobNow, startWorker, reloadActiveJobs, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime };
+module.exports = {
+  scheduleJob,
+  cancelJob,
+  runJobNow,
+  startWorker,
+  reloadActiveJobs,
+  resolveScheduleForQueue,
+  resolvePresetCron,
+  resolveInclusiveEndDate,
+  getNextRunTime,
+  zonedDateTimeToUtc,
+  weekdayForDate,
+  buildRepeatOpts,
+};

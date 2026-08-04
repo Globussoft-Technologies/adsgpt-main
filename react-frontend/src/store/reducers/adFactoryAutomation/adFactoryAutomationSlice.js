@@ -124,6 +124,8 @@ const initialState = {
   metaTemplatesList: [],
   metaTemplatesLoading: false,
   metaTemplatesError: null,
+  metaTemplatesRequestId: null,
+  metaTemplatesScope: '',
   // Full per-template cache keyed by id, populated when the user picks a row.
   //   { [id]: { template, loading, error } }
   metaTemplatesById: {},
@@ -441,16 +443,29 @@ const adFactoryAutomationSlice = createSlice({
       })
 
       // -- Meta Ads templates --
-      .addCase(fetchMetaAdsTemplates.pending, (state) => {
+      .addCase(fetchMetaAdsTemplates.pending, (state, action) => {
         state.metaTemplatesLoading = true;
         state.metaTemplatesError = null;
+        state.metaTemplatesRequestId = action.meta.requestId;
+        state.metaTemplatesScope = String(action.meta.arg || '');
       })
       .addCase(fetchMetaAdsTemplates.fulfilled, (state, action) => {
+        if (
+          state.metaTemplatesRequestId !== action.meta.requestId ||
+          state.metaTemplatesScope !== String(action.payload?.scope || '')
+        ) return;
         state.metaTemplatesLoading = false;
         state.metaTemplatesList = action.payload?.templates || [];
+        state.metaTemplatesRequestId = null;
+        const legacyCount = Number(action.payload?.legacyTemplateCount) || 0;
+        state.metaTemplatesError = legacyCount > 0 && state.metaTemplatesList.length === 0
+          ? `${legacyCount} older Meta template${legacyCount === 1 ? '' : 's'} cannot be matched to a connected account. Re-save the template from Meta Ads Manager to bind it to this account.`
+          : null;
       })
       .addCase(fetchMetaAdsTemplates.rejected, (state, action) => {
+        if (state.metaTemplatesRequestId !== action.meta.requestId) return;
         state.metaTemplatesLoading = false;
+        state.metaTemplatesRequestId = null;
         state.metaTemplatesError = action.payload?.message || 'Failed to load templates';
       })
 

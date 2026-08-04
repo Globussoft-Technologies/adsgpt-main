@@ -1361,6 +1361,206 @@ const AppleLogin = async (req, res) => {
 
 // ── Payment Verification Handlers ───────────────────────────────────────────
 
+const APPLE_PROCESSING_LEASE_MS = 2 * 60 * 1000;
+
+function appleOwnershipConflict(status, code, error) {
+  return { ok: false, status, code, error };
+}
+
+async function resolveAppleSubscriptionOwnership({
+  originalTransactionId,
+  appAccountToken,
+  subscriptionGroupIdentifier,
+  amemberUserId,
+}) {
+  const legacyRows = await MobileStoreTransaction.find({
+    platform: "ios",
+    original_transaction_id: originalTransactionId,
+  })
+    .select("amember_user_id event_type lineage_owner trial_consumed app_account_token subscription_group_identifier raw_payload.appAccountToken")
+    .sort({ createdAt: 1 });
+  const legacyOwners = [...new Set(
+    legacyRows.map((row) => String(row.amember_user_id || "")).filter(Boolean),
+  )];
+
+  // Existing conflicting rows cannot be assigned automatically. Choosing one
+  // would transfer a paid subscription without authorization.
+  if (legacyOwners.length > 1) {
+    return appleOwnershipConflict(
+      409,
+      "account_transfer_required",
+      "This Apple subscription is linked to multiple AdsGPT accounts and requires support review.",
+    );
+  }
+
+  let ownership = legacyRows.find((row) => row.lineage_owner) || null;
+  if (!ownership && legacyRows.length > 0) {
+    const candidate = legacyRows[0];
+    const legacyAppAccountToken = legacyRows
+      .map((row) => row.app_account_token || row.raw_payload?.appAccountToken || "")
+      .find(Boolean) || "";
+    try {
+      ownership = await MobileStoreTransaction.findOneAndUpdate(
+        { _id: candidate._id, lineage_owner: { $ne: true } },
+        {
+          $set: {
+            lineage_owner: true,
+            trial_consumed: legacyRows.some((row) => row.event_type === "free_trial"),
+            app_account_token: legacyAppAccountToken || appAccountToken,
+            subscription_group_identifier:
+              candidate.subscription_group_identifier || subscriptionGroupIdentifier,
+          },
+        },
+        { new: true },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+    }
+    // A concurrent request may have promoted the same legacy row first,
+    // causing findOneAndUpdate to return null rather than throw.
+    if (!ownership) {
+      ownership = await MobileStoreTransaction.findOne({
+        platform: "ios",
+        original_transaction_id: originalTransactionId,
+        lineage_owner: true,
+      });
+    }
+  }
+
+  if (ownership && String(ownership.amember_user_id) !== String(amemberUserId)) {
+    return appleOwnershipConflict(
+      409,
+      "subscription_already_linked",
+      "This Apple subscription is already linked to another AdsGPT account.",
+    );
+  }
+
+  if (appAccountToken) {
+    const tokenOwnedElsewhere = await MobileStoreTransaction.exists({
+      platform: "ios",
+      amember_user_id: { $ne: String(amemberUserId) },
+      $or: [
+        { app_account_token: appAccountToken },
+        { "raw_payload.appAccountToken": appAccountToken },
+      ],
+    });
+    if (tokenOwnedElsewhere) {
+      return appleOwnershipConflict(
+        409,
+        "account_transfer_required",
+        "This Apple app account token is already associated with another AdsGPT account.",
+      );
+    }
+    if (ownership?.app_account_token && ownership.app_account_token !== appAccountToken) {
+      return appleOwnershipConflict(
+        409,
+        "account_transfer_required",
+        "The Apple app account token does not match this subscription owner.",
+      );
+    }
+    if (ownership && !ownership.app_account_token) ownership.app_account_token = appAccountToken;
+  }
+
+  if (ownership && !ownership.subscription_group_identifier && subscriptionGroupIdentifier) {
+    ownership.subscription_group_identifier = subscriptionGroupIdentifier;
+  }
+  if (ownership?.isModified()) await ownership.save();
+
+  return { ok: true, ownership };
+}
+
+async function acquireAppleTransactionProcessing(ownershipId, transactionId) {
+  const now = new Date();
+  return MobileStoreTransaction.findOneAndUpdate(
+    {
+      _id: ownershipId,
+      lineage_owner: true,
+      $or: [
+        { processing_transaction_id: "" },
+        { processing_transaction_id: null },
+        { processing_transaction_id: { $exists: false } },
+        { processing_expires_at: { $lte: now } },
+      ],
+    },
+    {
+      $set: {
+        processing_transaction_id: transactionId,
+        processing_expires_at: new Date(now.getTime() + APPLE_PROCESSING_LEASE_MS),
+      },
+    },
+    { new: true },
+  );
+}
+
+async function releaseAppleTransactionProcessing(ownershipId, transactionId) {
+  await MobileStoreTransaction.updateOne(
+    { _id: ownershipId, lineage_owner: true, processing_transaction_id: transactionId },
+    { $set: { processing_transaction_id: "", processing_expires_at: null } },
+  );
+}
+
+async function sendApplePaymentSuccess({
+  req,
+  res,
+  amemberUserId,
+  productId,
+  matchedProduct,
+  originalTransactionId,
+  transactionId,
+  expiresDate,
+  idempotent = false,
+}) {
+  let userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
+  const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
+  if (userData?.ok) {
+    await syncUserProfile(userData);
+    userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
+  }
+
+  const subscriptionType = {
+    [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate),
+  };
+  const tokenPayload = {
+    status: true,
+    user_id: amemberUserId,
+    login: userProfile?.login || req.user?.login,
+    user_email: userProfile?.email || req.user?.user_email,
+    hasActivePlan: true,
+    userSubscriptionType: subscriptionType,
+    created_from: "GPT",
+  };
+
+  return res.status(200).json({
+    ok: true,
+    ...(idempotent ? { message: "Apple transaction already verified for this account." } : {}),
+    ...(req.appleRestore ? { restoredCount: 1 } : {}),
+    token: generateToken(tokenPayload, secretKey, tokenExpiryTime),
+    subscription: {
+      platform: "ios",
+      store_product_id: productId,
+      status: "active",
+      original_transaction_id: originalTransactionId,
+      latest_transaction_id: transactionId,
+      expires_at: expiresDate,
+    },
+    credits: {
+      adCopy: userProfile?.total_available_credits || 5000,
+      adCreative: userProfile?.remaining_topup_credits || 1500,
+    },
+    user: {
+      user_id: amemberUserId,
+      login: userProfile?.login || req.user?.login,
+      user_name: userProfile?.name || req.user?.user_name || "",
+      name_f: userProfile?.name_f || req.user?.name_f || "",
+      name_l: userProfile?.name_l || req.user?.name_l || "",
+      user_email: userProfile?.email || req.user?.user_email,
+      loginProviders: userProfile?.loginProviders || req.user?.loginProviders || [],
+      hasActivePlan: true,
+      userSubscriptionType: subscriptionType,
+    },
+  });
+}
+
 const verifyApplePayment = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
@@ -1410,11 +1610,10 @@ const verifyApplePayment = async (req, res) => {
     const purchaseDate = decoded.purchaseDate ? new Date(decoded.purchaseDate) : new Date();
     const expiresDate = decoded.expiresDate ? new Date(decoded.expiresDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+    const offerDiscountType = String(decoded.offerDiscountType || "").toUpperCase();
     const isTrial =
-      decoded.offerDiscountType === "FREE_TRIAL" ||
-      (decoded.offerType === 1 && decoded.offerDiscountType === "FREE_TRIAL") ||
-      decoded.offerType === 2 ||
-      decoded.price === 0;
+      Number(decoded.offerType) === 1 &&
+      (offerDiscountType === "FREE_TRIAL" || Number(decoded.price) === 0);
 
     let amount = 0.00;
     if (isTrial) {
@@ -1425,20 +1624,207 @@ const verifyApplePayment = async (req, res) => {
       amount = 0.00;
     }
 
-    let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: transactionId });
+    const appAccountToken = String(decoded.appAccountToken || "").trim();
+    const subscriptionGroupIdentifier = String(decoded.subscriptionGroupIdentifier || "").trim();
 
-    // If this transaction ID was already processed (by any user), reject it
-    if (existingTx) {
+    const ownershipResult = await resolveAppleSubscriptionOwnership({
+      originalTransactionId,
+      transactionId,
+      appAccountToken,
+      subscriptionGroupIdentifier,
+      amemberUserId,
+    });
+    if (!ownershipResult.ok) {
+      const conflictCode =
+        req.appleRestore && ownershipResult.code === "subscription_already_linked"
+          ? "restore_conflict"
+          : ownershipResult.code;
+      return res.status(ownershipResult.status).json({
+        ok: false,
+        code: conflictCode,
+        error: ownershipResult.error,
+      });
+    }
+    let ownership = ownershipResult.ownership;
+
+    let existingTx = await MobileStoreTransaction.findOne({
+      canonical_transaction_id: transactionId,
+    });
+    if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
       return res.status(409).json({
         ok: false,
-        code: "TRANSACTION_ALREADY_USED",
-        error: "This transaction ID has already been processed."
+        code: req.appleRestore ? "restore_conflict" : "subscription_already_linked",
+        error: "This Apple subscription is already linked to another AdsGPT account.",
+      });
+    }
+
+    // A verified record with the same transaction and owner is an idempotent
+    // retry. Do not create another aMember invoice.
+    if (existingTx && !existingTx.meta?.amember_sync_pending) {
+      const existingMatchedProduct = existingTx.event_type === "free_trial"
+        ? await matchAmemberFreeTrialProduct()
+        : await matchAmemberProduct(existingTx.store_product_id || productId);
+      return sendApplePaymentSuccess({
+        req,
+        res,
+        amemberUserId,
+        productId: existingTx.store_product_id || productId,
+        matchedProduct: existingMatchedProduct,
+        originalTransactionId,
+        transactionId,
+        expiresDate: existingTx.expires_at || expiresDate,
+        idempotent: true,
+      });
+    }
+
+    if (isTrial && ownership?.trial_consumed && !existingTx) {
+      return res.status(409).json({
+        ok: false,
+        code: "trial_already_used",
+        error: "The free trial for this Apple subscription has already been used.",
       });
     }
 
     const matchedProduct = isTrial
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId);
+    const hadExistingLineage = Boolean(ownership);
+    let lineageTx = existingTx || null;
+    let processingAlreadyClaimed = false;
+
+    const transactionValues = {
+      user_id: `GPT-${amemberUserId}`,
+      amember_user_id: amemberUserId,
+      platform: "ios",
+      canonical_transaction_id: transactionId,
+      original_transaction_id: originalTransactionId,
+      app_account_token: appAccountToken,
+      subscription_group_identifier: subscriptionGroupIdentifier,
+      trial_consumed: Boolean(ownership?.trial_consumed),
+      store_product_id: productId,
+      event_type: existingTx?.event_type || (isTrial ? "free_trial" : (hadExistingLineage ? "renewal" : "initial_purchase")),
+      amount,
+      currency: decoded.currency || "USD",
+      amember_invoice_id: `ios_${transactionId}`,
+      purchased_at: purchaseDate,
+      expires_at: expiresDate,
+      raw_payload: decoded,
+      meta: {
+        ...(lineageTx?.meta || {}),
+        env: process.env.APPLE_ENVIRONMENT || "Production",
+        amember_sync_pending: true,
+        verification_state: "processing",
+      },
+    };
+
+    // For a brand-new lineage, creating the transaction row with
+    // lineage_owner=true is the atomic ownership claim. The partial unique
+    // index permits only one owner for this Apple originalTransactionId.
+    if (!ownership) {
+      try {
+        lineageTx = await MobileStoreTransaction.create({
+          ...transactionValues,
+          lineage_owner: true,
+          processing_transaction_id: transactionId,
+          processing_expires_at: new Date(Date.now() + APPLE_PROCESSING_LEASE_MS),
+        });
+        ownership = lineageTx;
+        processingAlreadyClaimed = true;
+      } catch (claimError) {
+        if (claimError?.code !== 11000) throw claimError;
+        const retryOwnership = await resolveAppleSubscriptionOwnership({
+          originalTransactionId,
+          appAccountToken,
+          subscriptionGroupIdentifier,
+          amemberUserId,
+        });
+        if (!retryOwnership.ok) {
+          return res.status(retryOwnership.status).json({
+            ok: false,
+            code:
+              req.appleRestore && retryOwnership.code === "subscription_already_linked"
+                ? "restore_conflict"
+                : retryOwnership.code,
+            error: retryOwnership.error,
+          });
+        }
+        ownership = retryOwnership.ownership;
+        lineageTx = ownership;
+      }
+    }
+
+    if (isTrial && ownership?.trial_consumed && !existingTx) {
+      return res.status(409).json({
+        ok: false,
+        code: "trial_already_used",
+        error: "The free trial for this Apple subscription has already been used.",
+      });
+    }
+
+    if (!processingAlreadyClaimed) {
+      const processingOwnership = await acquireAppleTransactionProcessing(
+        ownership._id,
+        transactionId,
+      );
+      if (!processingOwnership) {
+        return res.status(409).json({
+          ok: false,
+          code: "purchase_processing",
+          error: "This Apple transaction is already being processed. Please retry shortly.",
+        });
+      }
+      ownership = processingOwnership;
+    }
+
+    if (!lineageTx) {
+      lineageTx = new MobileStoreTransaction(transactionValues);
+    }
+
+    // Re-check after acquiring the lineage lease. Another request may have
+    // completed between the initial read and this atomic claim.
+    const completedTx = await MobileStoreTransaction.findOne({
+      canonical_transaction_id: transactionId,
+    });
+    if (
+      completedTx &&
+      String(completedTx.amember_user_id) !== String(amemberUserId)
+    ) {
+      await releaseAppleTransactionProcessing(ownership._id, transactionId);
+      return res.status(409).json({
+        ok: false,
+        code: req.appleRestore ? "restore_conflict" : "subscription_already_linked",
+        error: "This Apple subscription is already linked to another AdsGPT account.",
+      });
+    }
+    if (
+      completedTx &&
+      completedTx._id.toString() !== lineageTx._id.toString() &&
+      !completedTx.meta?.amember_sync_pending
+    ) {
+      await releaseAppleTransactionProcessing(ownership._id, transactionId);
+      const existingMatchedProduct = completedTx.event_type === "free_trial"
+        ? await matchAmemberFreeTrialProduct()
+        : await matchAmemberProduct(completedTx.store_product_id || productId);
+      return sendApplePaymentSuccess({
+        req,
+        res,
+        amemberUserId,
+        productId: completedTx.store_product_id || productId,
+        matchedProduct: existingMatchedProduct,
+        originalTransactionId,
+        transactionId,
+        expiresDate: completedTx.expires_at || expiresDate,
+        idempotent: true,
+      });
+    }
+
+    Object.assign(lineageTx, transactionValues);
+    try {
+      await lineageTx.save();
+    } catch (persistenceError) {
+      await releaseAppleTransactionProcessing(ownership._id, transactionId);
+      throw persistenceError;
+    }
 
     try {
       await postAmemberInvoice({
@@ -1453,31 +1839,15 @@ const verifyApplePayment = async (req, res) => {
         expiresAt: expiresDate,
       });
     } catch (invoiceErr) {
+      await releaseAppleTransactionProcessing(ownership._id, transactionId);
       const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
       console.error("[verifyApplePayment] aMember invoice failed:", detail);
       return res.status(422).json({
         ok: false,
         code: "AMEMBER_SYNC_FAILED",
-        error: `aMember invoice sync failed: ${detail}`
+        error: `aMember invoice sync failed: ${detail}`,
       });
     }
-
-    existingTx = await MobileStoreTransaction.create({
-      user_id: `GPT-${amemberUserId}`,
-      amember_user_id: amemberUserId,
-      platform: "ios",
-      canonical_transaction_id: transactionId,
-      original_transaction_id: originalTransactionId,
-      store_product_id: productId,
-      event_type: isTrial ? "free_trial" : "initial_purchase",
-      amount,
-      currency: decoded.currency || "USD",
-      amember_invoice_id: `ios_${transactionId}`,
-      purchased_at: purchaseDate,
-      expires_at: expiresDate,
-      raw_payload: decoded,
-      meta: { env: process.env.APPLE_ENVIRONMENT || "Production" },
-    });
 
     await activateAmemberUserStatus({
       amemberUserId,
@@ -1486,51 +1856,34 @@ const verifyApplePayment = async (req, res) => {
       expiresAt: expiresDate,
     });
 
-    let userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
-    const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
-    if (userData?.ok) {
-      await syncUserProfile(userData);
-      userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
-    }
-
-    const tokenPayload = {
-      status: true,
-      user_id: amemberUserId,
-      login: userProfile?.login || req.user?.login,
-      user_email: userProfile?.email || req.user?.user_email,
-      hasActivePlan: true,
-      userSubscriptionType: { [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate) },
-      created_from: "GPT",
+    lineageTx.trial_consumed = Boolean(lineageTx.trial_consumed || isTrial);
+    lineageTx.meta = {
+      ...(lineageTx.meta || {}),
+      env: process.env.APPLE_ENVIRONMENT || "Production",
+      amember_sync_pending: false,
+      verification_state: "verified",
     };
 
-    const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+    ownership.trial_consumed = Boolean(ownership.trial_consumed || isTrial);
+    ownership.processing_transaction_id = "";
+    ownership.processing_expires_at = null;
+    if (ownership._id.toString() === lineageTx._id.toString()) {
+      ownership.meta = lineageTx.meta;
+      await ownership.save();
+    } else {
+      await lineageTx.save();
+      await ownership.save();
+    }
 
-    return res.status(200).json({
-      ok: true,
-      token: jwtToken,
-      subscription: {
-        platform: "ios",
-        store_product_id: productId,
-        status: "active",
-        original_transaction_id: originalTransactionId,
-        latest_transaction_id: transactionId,
-        expires_at: expiresDate,
-      },
-      credits: {
-        adCopy: userProfile?.total_available_credits || 5000,
-        adCreative: userProfile?.remaining_topup_credits || 1500,
-      },
-      user: {
-        user_id: amemberUserId,
-        login: userProfile?.login || req.user?.login,
-        user_name: userProfile?.name || req.user?.user_name || "",
-        name_f: userProfile?.name_f || req.user?.name_f || "",
-        name_l: userProfile?.name_l || req.user?.name_l || "",
-        user_email: userProfile?.email || req.user?.user_email,
-        loginProviders: userProfile?.loginProviders || req.user?.loginProviders || [],
-        hasActivePlan: true,
-        userSubscriptionType: { [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate) },
-      },
+    return sendApplePaymentSuccess({
+      req,
+      res,
+      amemberUserId,
+      productId,
+      matchedProduct,
+      originalTransactionId,
+      transactionId,
+      expiresDate,
     });
   } catch (error) {
     console.error("[verifyApplePayment] error:", error);
@@ -1724,30 +2077,19 @@ const restoreApplePurchases = async (req, res) => {
       description: 'Purchases restored'
     }
   */
-  try {
-    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
-    const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
-
-    // Check if the user has any active subscriptions in the DB
-    const activeTx = await MobileStoreTransaction.findOne({
-      amember_user_id: amemberUserId,
-      platform: "ios",
-      expires_at: { $gt: new Date() }
-    }).sort({ expires_at: -1 });
-
-    if (activeTx) {
-      return res.status(200).json({
-        ok: true,
-        restoredCount: 1,
-        entitlements: [activeTx],
-        user: { user_id: amemberUserId, hasActivePlan: true }
-      });
-    }
-
-    return res.status(200).json({ ok: true, restoredCount: 0, entitlements: [], user: { user_id: amemberUserId, hasActivePlan: false } });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+  const { signedTransaction } = req.body || {};
+  if (!signedTransaction) {
+    return res.status(400).json({
+      ok: false,
+      code: "STORE_PROOF_INVALID",
+      error: "signedTransaction is required to restore an Apple purchase.",
+    });
   }
+
+  // Restore must prove the Apple lineage currently presented by StoreKit. A
+  // current-user-only DB lookup cannot detect a restore on a different account.
+  req.appleRestore = true;
+  return verifyApplePayment(req, res);
 };
 
 const restoreGooglePurchases = async (req, res) => {
@@ -1869,47 +2211,160 @@ const handleAppleWebhook = async (req, res) => {
 
     if (txInfo) {
       try {
-        const originalTransactionId = String(txInfo.originalTransactionId);
+        const originalTransactionId = String(txInfo.originalTransactionId || txInfo.transactionId);
+        const lineageRows = await MobileStoreTransaction.find({
+          platform: "ios",
+          original_transaction_id: originalTransactionId,
+        }).sort({ createdAt: 1 });
+        const lineageOwners = [...new Set(
+          lineageRows.map((row) => String(row.amember_user_id || "")).filter(Boolean),
+        )];
 
-        if (notificationType === "DID_RENEW") {
-          const expiresDate = new Date(txInfo.expiresDate);
-          const purchaseDate = new Date(txInfo.purchaseDate);
+        if (lineageOwners.length > 1) {
+          return res.status(409).json({
+            ok: false,
+            code: "account_transfer_required",
+            error: "This Apple subscription has conflicting AdsGPT owners and requires support review.",
+          });
+        }
 
-          await MobileStoreTransaction.updateMany(
-            { original_transaction_id: originalTransactionId },
-            { $set: { expires_at: expiresDate, event_type: "renewal", canonical_transaction_id: String(txInfo.transactionId) } }
-          );
-
-          const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
-          if (existingTx && existingTx.amember_user_id) {
-            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
-            const renewalAmount =
-              typeof txInfo?.price === "number"
-                ? txInfo.price / 1000.0
-                : existingTx.amount;
-            await postAmemberInvoice({
-              amemberUserId: existingTx.amember_user_id,
-              canonicalTransactionId: String(txInfo.transactionId),
-              platform: "ios",
-              storeProductId: existingTx.store_product_id,
-              matchedProduct,
-              amount: renewalAmount,
-              currency: existingTx.currency || "USD",
-              purchasedAt: purchaseDate,
-              expiresAt: expiresDate,
+        let existingTx = lineageRows.find((row) => row.lineage_owner) || null;
+        if (!existingTx && lineageOwners.length === 1) {
+          const ownershipResult = await resolveAppleSubscriptionOwnership({
+            originalTransactionId,
+            appAccountToken: String(txInfo.appAccountToken || "").trim(),
+            subscriptionGroupIdentifier: String(txInfo.subscriptionGroupIdentifier || "").trim(),
+            amemberUserId: lineageOwners[0],
+          });
+          if (!ownershipResult.ok) {
+            return res.status(ownershipResult.status).json({
+              ok: false,
+              code: ownershipResult.code,
+              error: ownershipResult.error,
             });
           }
-        } else if (notificationType === "EXPIRED" || notificationType === "REFUND" || notificationType === "REVOKE") {
+          existingTx = ownershipResult.ownership;
+        }
+
+        // A webhook has no logged-in AdsGPT user. It may update a verified
+        // lineage owner, but it must never guess ownership for a new lineage.
+        if (existingTx && notificationType === "DID_RENEW") {
+          const expiresDate = new Date(txInfo.expiresDate);
+          const purchaseDate = new Date(txInfo.purchaseDate);
+          const transactionId = String(txInfo.transactionId);
+          let renewalTx = await MobileStoreTransaction.findOne({
+            canonical_transaction_id: transactionId,
+          });
+          if (
+            renewalTx &&
+            String(renewalTx.original_transaction_id) !== originalTransactionId
+          ) {
+            return res.status(409).json({
+              ok: false,
+              code: "subscription_already_linked",
+              error: "This Apple transaction is already linked to another subscription.",
+            });
+          }
+
+          const storeProductId = txInfo.productId || existingTx.store_product_id;
+          const renewalAmount =
+            typeof txInfo.price === "number"
+              ? txInfo.price / 1000.0
+              : existingTx.amount;
+          const currency = txInfo.currency || existingTx.currency || "USD";
+
+          // Transaction.updates or an earlier webhook may already have created
+          // this immutable transaction record and its aMember invoice.
+          if (!renewalTx || renewalTx.meta?.amember_sync_pending) {
+            const processingOwnership = await acquireAppleTransactionProcessing(
+              existingTx._id,
+              transactionId,
+            );
+            if (!processingOwnership) {
+              return res.status(409).json({
+                ok: false,
+                code: "purchase_processing",
+                error: "This Apple transaction is already being processed.",
+              });
+            }
+            existingTx = processingOwnership;
+
+            try {
+              if (!renewalTx) {
+                renewalTx = await MobileStoreTransaction.create({
+                  user_id: existingTx.user_id,
+                  amember_user_id: existingTx.amember_user_id,
+                  platform: "ios",
+                  canonical_transaction_id: transactionId,
+                  original_transaction_id: originalTransactionId,
+                  app_account_token:
+                    String(txInfo.appAccountToken || "").trim() ||
+                    existingTx.app_account_token ||
+                    "",
+                  subscription_group_identifier:
+                    String(txInfo.subscriptionGroupIdentifier || "").trim() ||
+                    existingTx.subscription_group_identifier ||
+                    "",
+                  store_product_id: storeProductId,
+                  event_type: "renewal",
+                  amount: renewalAmount,
+                  currency,
+                  amember_invoice_id: "ios_" + transactionId,
+                  purchased_at: purchaseDate,
+                  expires_at: expiresDate,
+                  raw_payload: txInfo,
+                  meta: {
+                    env: process.env.APPLE_ENVIRONMENT || "Production",
+                    amember_sync_pending: true,
+                    verification_state: "processing",
+                    source: "apple_webhook",
+                  },
+                });
+              }
+
+              const matchedProduct = await matchAmemberProduct(storeProductId);
+              await postAmemberInvoice({
+                amemberUserId: existingTx.amember_user_id,
+                canonicalTransactionId: transactionId,
+                platform: "ios",
+                storeProductId,
+                matchedProduct,
+                amount: renewalAmount,
+                currency,
+                purchasedAt: purchaseDate,
+                expiresAt: expiresDate,
+              });
+              renewalTx.meta = {
+                ...(renewalTx.meta || {}),
+                amember_sync_pending: false,
+                verification_state: "verified",
+              };
+              await renewalTx.save();
+            } finally {
+              await releaseAppleTransactionProcessing(existingTx._id, transactionId);
+            }
+          }
+          if (!existingTx.expires_at || existingTx.expires_at < expiresDate) {
+            existingTx.expires_at = expiresDate;
+            await existingTx.save();
+          }
+        } else if (
+          existingTx &&
+          (notificationType === "EXPIRED" ||
+            notificationType === "REFUND" ||
+            notificationType === "REVOKE")
+        ) {
           await MobileStoreTransaction.updateMany(
-            { original_transaction_id: originalTransactionId },
-            { $set: { expires_at: new Date() } }
+            {
+              platform: "ios",
+              original_transaction_id: originalTransactionId,
+              amember_user_id: existingTx.amember_user_id,
+            },
+            { $set: { expires_at: new Date() } },
           );
 
           if (notificationType === "REFUND" || notificationType === "REVOKE") {
-            const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: originalTransactionId });
-            if (existingTx && existingTx.canonical_transaction_id) {
-              await deleteAmemberInvoice("ios", existingTx.canonical_transaction_id);
-            }
+            await deleteAmemberInvoice("ios", String(txInfo.transactionId));
           }
         }
       } catch (err) {
@@ -1917,7 +2372,6 @@ const handleAppleWebhook = async (req, res) => {
         return res.status(500).json({ ok: false, error: "Webhook processing failed." });
       }
     }
-
     await MobileStoreWebhookEvent.create({
       platform: "ios",
       event_id: eventId,
