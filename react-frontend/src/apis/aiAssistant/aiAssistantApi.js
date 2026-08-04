@@ -259,6 +259,17 @@ export const getHistory = async (sessionId) => {
   return data;
 };
 
+// Is a turn still running for this conversation? Turns keep going server-side
+// after the browser leaves, so the transcript alone can't tell us — without
+// this, reopening a chat mid-generation looks like a finished exchange.
+export const getConversationStatus = async (sessionId) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/me/conversations/${encodeURIComponent(sessionId)}/status`,
+    { headers: headers() },
+  );
+  return data;
+};
+
 export const deleteConversation = async (sessionId) => {
   const { data } = await axios.delete(
     `${BASE_URL}/me/conversations/${encodeURIComponent(sessionId)}`,

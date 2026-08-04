@@ -15,6 +15,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   deleteConversation as deleteConversationApi,
+  getConversationStatus,
   getHistory,
   listConversations,
 } from '@/apis/aiAssistant/aiAssistantApi';
@@ -86,8 +87,19 @@ const AIAssistantHeaderActions = () => {
     if (!conv?.id || loadingId) return;
     setLoadingId(conv.id);
     try {
-      const history = await getHistory(conv.id);
-      dispatch(loadConversation({ sessionId: conv.id, messages: history || [] }));
+      // Fetch the run state alongside the transcript — a turn started here may
+      // still be generating in the background, and the messages alone can't say.
+      const [history, status] = await Promise.all([
+        getHistory(conv.id),
+        getConversationStatus(conv.id).catch(() => ({ generating: false })),
+      ]);
+      dispatch(
+        loadConversation({
+          sessionId: conv.id,
+          messages: history || [],
+          generating: !!status?.generating,
+        }),
+      );
       setOpen(false);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to load conversation');

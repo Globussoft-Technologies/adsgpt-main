@@ -3,11 +3,16 @@ import { useDispatch, useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
+import emitter from '@/utils/eventEmitter';
 import Composer from './Composer';
 import Messages from './Messages';
 import GenCanvas from './GenCanvas';
 import BlurText from './BlurText';
-import { getHistory, streamChat } from '@/apis/aiAssistant/aiAssistantApi';
+import {
+  getConversationStatus,
+  getHistory,
+  streamChat,
+} from '@/apis/aiAssistant/aiAssistantApi';
 import {
   appendAssistantText,
   appendMetaConnectionStatus,
@@ -208,11 +213,15 @@ const ChatInterface = () => {
       window.history.replaceState(null, '', '/assistant');
       (async () => {
         try {
-          const history = await getHistory(notifiedConversation);
+          const [history, status] = await Promise.all([
+            getHistory(notifiedConversation),
+            getConversationStatus(notifiedConversation).catch(() => ({ generating: false })),
+          ]);
           dispatch(
             loadConversation({
               sessionId: notifiedConversation,
               messages: history || [],
+              generating: !!status?.generating,
             }),
           );
         } catch {
@@ -251,6 +260,33 @@ const ChatInterface = () => {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A detached turn (one whose browser left mid-generation) finished. If it
+  // belongs to the conversation on screen, pull the result in so the
+  // "Generating..." indicator resolves into the actual images/reply without the
+  // user having to reload or re-open the chat.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  useEffect(() => {
+    const onCompleted = async (data) => {
+      const conversationId = data?.conversationId;
+      if (!conversationId || conversationId !== sessionIdRef.current) return;
+      try {
+        const history = await getHistory(conversationId);
+        dispatch(
+          loadConversation({
+            sessionId: conversationId,
+            messages: history || [],
+            generating: false,
+          }),
+        );
+      } catch {
+        /* the notification already told them; a failed refresh is not fatal */
+      }
+    };
+    emitter.on('assistant:turnCompleted', onCompleted);
+    return () => emitter.off('assistant:turnCompleted', onCompleted);
+  }, [dispatch]);
 
   // Real network turn — extracted so form/concept follow-ups and the
   // normal send path can call it without duplicating the SSE event switch.

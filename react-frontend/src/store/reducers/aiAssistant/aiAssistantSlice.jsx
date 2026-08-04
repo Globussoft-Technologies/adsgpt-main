@@ -356,7 +356,7 @@ const aiAssistantSlice = createSlice({
       }
     },
     loadConversation: (state, action) => {
-      const { sessionId, messages } = action.payload || {};
+      const { sessionId, messages, generating } = action.payload || {};
       state.sessionId = sessionId || null;
       state.messages = (messages || []).map((m) => ({
         id: m.id,
@@ -390,8 +390,37 @@ const aiAssistantSlice = createSlice({
         metaPendingAction: m.metaPendingAction || null,
         metaMediaPicker: m.metaMediaPicker || null,
       }));
-      state.pending = false;
-      state.pendingActiveLabel = null;
+      // A turn keeps running server-side after its browser leaves, so a
+      // conversation can be reopened mid-generation. Resume the pending state
+      // instead of rendering a transcript that looks finished — the last user
+      // message would otherwise sit there with no sign anything is happening.
+      //
+      // The steps indicator hangs off a trailing ASSISTANT message (see
+      // Messages.jsx `isLast && pending`), and history ends on the user's turn
+      // while generating — so append the same empty placeholder the live path
+      // pushes in `startAssistantStream`, or nothing would render.
+      if (generating) {
+        state.messages.push({
+          id: nanoid(),
+          role: 'assistant',
+          text: '',
+          steps: [],
+          images: [],
+          competitorAds: [],
+          storyboard: null,
+          adCreative: null,
+          choiceForm: null,
+          choiceFormResult: null,
+          conceptCards: null,
+          conceptResult: null,
+          metaCards: [],
+          metaPendingAction: null,
+          metaMediaPicker: null,
+          complete: false,
+        });
+      }
+      state.pending = !!generating;
+      state.pendingActiveLabel = generating ? 'Generating...' : null;
       state.pendingDoneLabels = [];
       state.completedLabel = null;
       state.error = null;
