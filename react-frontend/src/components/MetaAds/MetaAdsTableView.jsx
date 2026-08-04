@@ -619,6 +619,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
         subtitle="shown for the selected date range"
         minSelected={0}
         defaultKeys={[]}
+        maxSelected={20}
       />
     </div>
   );
@@ -969,6 +970,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
         subtitle="shown for the selected date range"
         minSelected={0}
         defaultKeys={[]}
+        maxSelected={20}
       />
     </div>
   );
@@ -1599,6 +1601,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
         subtitle="shown for the selected date range"
         minSelected={0}
         defaultKeys={[]}
+        maxSelected={20}
       />
     </div>
   );

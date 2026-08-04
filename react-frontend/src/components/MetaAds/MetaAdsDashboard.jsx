@@ -953,6 +953,7 @@ export default function MetaAdsDashboard() {
           setVisibleMetricKeys(keys);
           metricsSelectionDirtyRef.current = true;
         }}
+        maxSelected={80}
       />
 
       {/* ── docked Ads Chat sidebar (pushes the content when open) ─────────── */}
@@ -961,8 +962,11 @@ export default function MetaAdsDashboard() {
           VITE_META_ADS_CHAT_ALLOWED_EMAILS actually see the launcher icon.
           campaignId/adSetId/adId read straight from the URL — the same params
           TableViewCampaigns drills into — so the chat always knows what's
-          currently open, even after a refresh. */}
-      
+          currently open, even after a refresh.
+          Hidden while the create/edit wizard is open — its floating launcher
+          button (fixed bottom-right, z-60) sits on top of the wizard's own
+          footer controls otherwise. */}
+      {!wizard.open && (
         <MetaAdsChatWidget
           adAccountId={selectedAccount?.id}
           adAccountName={selectedAccount?.name}
@@ -971,6 +975,7 @@ export default function MetaAdsDashboard() {
           adSetId={searchParams.get('adSetId')}
           adId={searchParams.get('adId')}
         />
+      )}
 
     </div>
   );

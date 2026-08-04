@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Loader2, Search, X } from 'lucide-react';
+import { Check, CheckCheck, ChevronDown, Loader2, RotateCcw, Search, X } from 'lucide-react';
 import { updateAnalyticsMetricsPreference } from '@/apis/metaAds/metaAdsApi';
 import { METRIC_ICONS, METRIC_GROUP_LABELS } from './metaAdsUtils';
 
@@ -95,6 +95,11 @@ export default function MetricsPicker({
   // computes server-side). Table pickers pass [] explicitly — their real
   // default, per the locked decision, is no columns at all.
   defaultKeys,
+  // Upper bound on selections. Must mirror the backend Joi cap for this
+  // surface (Validations/metaAdsPreference.validator.js — analytics.max(80),
+  // TABLE_METRIC_CAP=20) or "Select all" can build a payload the server
+  // rejects wholesale, undoing every change in the batch.
+  maxSelected = Infinity,
 }) {
   const [selectedKeys, setSelectedKeys] = useState(visibleKeys || []);
   const [query, setQuery] = useState('');
@@ -194,6 +199,7 @@ export default function MetricsPicker({
       // Require at least 1 selected — block unchecking the last one rather
       // than letting the user save an empty dashboard.
       if (has && prev.length <= minSelected) return prev;
+      if (!has && prev.length >= maxSelected) return prev;
       const next = has ? prev.filter((k) => k !== key) : [...prev, key];
       return next;
     });
@@ -236,18 +242,24 @@ export default function MetricsPicker({
   );
   const allFilteredSelected =
     filteredKeys.length > 0 && filteredKeys.every((k) => selectedKeys.includes(k));
+  const atCap = selectedKeys.length >= maxSelected;
   const isAtDefault =
     selectedKeys.length === resolvedDefaultKeys.length &&
     resolvedDefaultKeys.every((k) => selectedKeys.includes(k));
 
   const selectAll = () => {
-    setSelectedKeys((prev) => Array.from(new Set([...prev, ...filteredKeys])));
+    setSelectedKeys((prev) => {
+      const merged = Array.from(new Set([...prev, ...filteredKeys]));
+      // Cap rather than reject — filling up to the limit is more useful than
+      // a no-op, and matches what the server would accept anyway.
+      return merged.slice(0, maxSelected);
+    });
     setDirty(true);
     setSaveMessage(null);
   };
 
   const resetToDefault = () => {
-    setSelectedKeys(resolvedDefaultKeys);
+    setSelectedKeys(resolvedDefaultKeys.slice(0, maxSelected));
     setDirty(true);
     setSaveMessage(null);
   };
@@ -289,7 +301,8 @@ export default function MetricsPicker({
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-[#BEBEBE]">
-              {selectedKeys.length} selected
+              {selectedKeys.length}
+              {Number.isFinite(maxSelected) ? ` / ${maxSelected}` : ''} selected
               {subtitle ? ` · ${subtitle}` : ''}
             </p>
           </div>
@@ -318,22 +331,23 @@ export default function MetricsPicker({
               className="w-full bg-transparent text-13 text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-white/40"
             />
           </div>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-1.5">
             <button
               type="button"
               onClick={selectAll}
-              disabled={allFilteredSelected}
-              className="text-11 font-medium text-[#5867EB] hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:disabled:text-white/30"
+              disabled={allFilteredSelected || atCap}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-11 font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
             >
+              <CheckCheck className="h-3 w-3" />
               Select all{query ? ` (${filteredKeys.length})` : ''}
             </button>
-            <span className="text-gray-300 dark:text-white/15">·</span>
             <button
               type="button"
               onClick={resetToDefault}
               disabled={isAtDefault}
-              className="text-11 font-medium text-[#5867EB] hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:disabled:text-white/30"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-11 font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
             >
+              <RotateCcw className="h-3 w-3" />
               Reset to default
             </button>
           </div>
@@ -368,14 +382,21 @@ export default function MetricsPicker({
                     {items.map((entry) => {
                       const Icon = METRIC_ICONS[entry.icon];
                       const checked = selectedKeys.includes(entry.key);
-                      const isLastChecked = checked && selectedKeys.length === 1;
+                      const isLastChecked = checked && selectedKeys.length <= minSelected;
+                      const isBlockedByCap = !checked && atCap;
                       return (
                         <button
                           type="button"
                           key={entry.key}
                           onClick={() => toggle(entry.key)}
-                          disabled={isLastChecked}
-                          title={isLastChecked ? 'At least one metric must stay selected' : undefined}
+                          disabled={isLastChecked || isBlockedByCap}
+                          title={
+                            isLastChecked
+                              ? 'At least one metric must stay selected'
+                              : isBlockedByCap
+                                ? `Maximum ${maxSelected} metrics selected`
+                                : undefined
+                          }
                           className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-white/5 ${checked ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}`}
                         >
                           <span
