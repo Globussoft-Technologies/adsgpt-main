@@ -32,6 +32,7 @@ exports.assistantTurnComplete = async (req, res) => {
       image_count: imageCount = 0,
       preview_image: previewImage = "",
       text = "",
+      detached = false,
     } = req.body || {};
 
     if (!userId || !conversationId) {
@@ -55,6 +56,9 @@ exports.assistantTurnComplete = async (req, res) => {
         imageCount: images,
         previewImage,
         text,
+        // The browser had already left when this finished. The web client uses
+        // it to decide whether to raise an OS notification or just refresh.
+        detached: !!detached,
       },
       push: {
         title,

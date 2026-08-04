@@ -213,8 +213,18 @@ export const initSocket = (url) => (dispatch, getState) => {
     // and its result is persisted — this is the only thing that tells the user.
     socket.on('assistantTurnCompleted', (data) => {
       if (!data?.conversationId) return;
-      showAssistantTurnNotification(data.conversationId, Number(data.imageCount) || 0);
+      // Always let the open chat refresh itself.
       emitter.emit('assistant:turnCompleted', data);
+      // Only interrupt with an OS notification when the user isn't already
+      // watching this happen: the tab is hidden/blurred, they're on another
+      // page, or the turn finished after they navigated away entirely.
+      const onThisConversation =
+        window.location.pathname.startsWith('/assistant') &&
+        document.visibilityState === 'visible' &&
+        document.hasFocus();
+      if (data.detached || !onThisConversation) {
+        showAssistantTurnNotification(data.conversationId, Number(data.imageCount) || 0);
+      }
     });
 
     socket.on(`chatResponse`, (data) => {
