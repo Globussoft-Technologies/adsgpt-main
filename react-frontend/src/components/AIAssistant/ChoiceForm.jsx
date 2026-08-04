@@ -27,6 +27,7 @@ import AspectRatioTiles from '@/components/AdStudio/AdCreativeNew/AspectRatioPic
 
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
+import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
@@ -1149,6 +1150,22 @@ const mentions = (text, name) =>
   !!name &&
   new RegExp(`(^|[^\\w])${escapeRe(name)}(?=[^\\w]|$)`, 'i').test(String(text || ''));
 
+// Keep the prompt in step with the creative type. The brief's prompt is prose
+// the agent wrote for ONE creative type, so switching type left it describing
+// the old one — the card looked unchanged and the brief read wrong.
+//
+// We don't try to rewrite the user's sentences (that's a model's job and risks
+// making them worse); we maintain a single trailing marker, replacing it each
+// time rather than letting them stack. Same technique as the brand fallback
+// below, and it survives "restore previous" because it's plain text.
+const CREATIVE_TYPE_MARKER = /\s*Creative type:\s*[^.]*\.\s*$/i;
+const applyCreativeTypeToPrompt = (text, typeLabel) => {
+  const base = String(text || '').replace(CREATIVE_TYPE_MARKER, '').trimEnd();
+  const label = (typeLabel || '').replace(/_/g, ' ').trim();
+  if (!base || !label) return base;
+  return `${base.replace(/[.\s]+$/, '')}. Creative type: ${label}.`;
+};
+
 const applyBrandToPrompt = (text, oldNames, to) => {
   const before = String(text || '');
   const newName = (to || '').trim();
@@ -1563,10 +1580,52 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const [editing, setEditing] = useState(false);
   // Double-clicking the header collapses the brief to just its title bar.
   const [collapsed, setCollapsed] = useState(false);
-  const modelConfigs = useMemo(
-    () => (Array.isArray(form.ad_creative_models) ? form.ad_creative_models : []),
-    [form.ad_creative_models],
-  );
+  // Model / quality / aspect-ratio catalogue.
+  //
+  // Prefer the surface the BROWSER fetches (`useAdCreativeConfig` →
+  // /usage/model-credit-value), which is the exact source Ad Studio and the
+  // Profile credit table read. The agent also inlines this on the form, but
+  // that path goes through the secret-gated /credits/models endpoint and
+  // returns NOTHING on any failure — when that happened the card silently fell
+  // back to the MCP's hardcoded options, so credits stopped varying by quality
+  // and every model showed the same aspect ratios. That mismatch with Profile
+  // is the bug; reading the same endpoint as Profile is the fix. The inlined
+  // copy stays as the fallback for when the browser fetch is the one that fails.
+  const { models: surfaceModels } = useAdCreativeConfig();
+  const modelConfigs = useMemo(() => {
+    if (surfaceModels?.length) {
+      return surfaceModels.map((m) => ({
+        value: m.apiId,
+        label: m.label,
+        aspect_ratios: Array.isArray(m.aspectRatios) ? m.aspectRatios : [],
+        qualities: Array.isArray(m.qualities) ? m.qualities : [],
+        credits_by_quality: m.creditsByQuality || {},
+      }));
+    }
+    return Array.isArray(form.ad_creative_models) ? form.ad_creative_models : [];
+  }, [surfaceModels, form.ad_creative_models]);
+
+  // {model: {quality: credits}}, plus the "auto" key the card falls back to.
+  // Mirrors the agent's _attach_credit_costs: "auto" is the MAX per-quality
+  // credit, matching what graph.credit_for actually freezes.
+  const creditCostsByQuality = useMemo(() => {
+    if (!surfaceModels?.length) return form.credit_costs_by_quality;
+    const out = {};
+    surfaceModels.forEach((m) => {
+      if (m.apiId && m.creditsByQuality) out[m.apiId] = m.creditsByQuality;
+    });
+    const qualities = new Set();
+    Object.values(out).forEach((tiers) => Object.keys(tiers).forEach((q) => qualities.add(q)));
+    const auto = {};
+    qualities.forEach((q) => {
+      const costs = Object.values(out)
+        .map((tiers) => tiers[q])
+        .filter((c) => typeof c === 'number');
+      if (costs.length) auto[q] = Math.max(...costs);
+    });
+    if (Object.keys(auto).length) out.auto = auto;
+    return out;
+  }, [surfaceModels, form.credit_costs_by_quality]);
   const modelConfigByValue = useMemo(
     () => new Map(modelConfigs.map((config) => [config.value, config])),
     [modelConfigs],
@@ -1587,8 +1646,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         next.aspect_ratios = ratiosFromCounts(val);
         next.num_images = numImagesFromCounts(val);
       }
+      // Switching creative type has to be reflected in the brief itself, not
+      // just in which tool ends up being called.
+      if (key === 'creative_type' && prev.prompt) {
+        next.prompt = applyCreativeTypeToPrompt(prev.prompt, val);
+      }
       if (key === 'model') {
-        const costs = form.credit_costs_by_quality?.[val];
+        const costs = creditCostsByQuality?.[val];
         const currentQuality = prev.quality === 'standard' ? 'medium' : prev.quality;
         if (costs && costs[currentQuality] == null) {
           next.quality =
@@ -1628,7 +1692,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         changed = true;
       }
 
-      const qualityCosts = form.credit_costs_by_quality?.[model];
+      const qualityCosts = creditCostsByQuality?.[model];
       const quality = prev.quality === 'standard' ? 'medium' : prev.quality;
       if (qualityCosts && qualityCosts[quality] == null) {
         next.quality =
@@ -1659,10 +1723,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       }
       return changed ? next : prev;
     });
-  }, [form.credit_costs_by_quality, modelConfigByValue, modelConfigs.length]);
+  }, [creditCostsByQuality, modelConfigByValue, modelConfigs.length]);
 
   const creditCostsForQuality = useMemo(() => {
-    const tiered = form.credit_costs_by_quality;
+    const tiered = creditCostsByQuality;
     if (!tiered) return form.credit_costs || null;
     const quality = values.quality === 'standard' ? 'medium' : values.quality || 'high';
     const modelKeys = new Set([
@@ -1674,7 +1738,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       resolved[model] = tiered[model]?.[quality] ?? null;
     });
     return resolved;
-  }, [form.credit_costs, form.credit_costs_by_quality, values.quality]);
+  }, [form.credit_costs, creditCostsByQuality, values.quality]);
 
   // What the "Submitted with" summary should show for a field. Prefer the
   // submitted `result.values`, but fall back to the card's live `values` when
@@ -1862,7 +1926,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           const isRatios = field.key === 'aspect_ratios';
           const qualityCosts =
             field.key === 'quality'
-              ? form.credit_costs_by_quality?.[values.model || 'auto']
+              ? creditCostsByQuality?.[values.model || 'auto']
               : null;
           const selectedModelConfig = modelConfigByValue.get(values.model || 'auto');
           let renderedField = field;
