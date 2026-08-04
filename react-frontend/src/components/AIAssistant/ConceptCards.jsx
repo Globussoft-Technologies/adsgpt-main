@@ -11,7 +11,11 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
   if (concepts.length === 0) return null;
 
   const chosenId = result?.conceptId || null;
-  const locked = disabled || !!chosenId;
+  // Picking a concept used to disable the whole set, so exploring a second
+  // direction meant regenerating the ideas — and paying for them again. Every
+  // concept stays clickable; choosing another opens a fresh brief for it. Only
+  // an in-flight turn (`disabled`) blocks selection.
+  const locked = disabled;
 
   return (
     <div className="mt-3 w-full">
@@ -23,7 +27,6 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {concepts.map((c) => {
           const isChosen = chosenId === c.id;
-          const dimmed = chosenId && !isChosen;
           return (
             <button
               key={c.id}
@@ -34,7 +37,7 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
                 isChosen
                   ? 'border-[#5E66F5] bg-[#5E66F5]/10'
                   : 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
-              } ${dimmed ? 'opacity-45' : ''} ${locked ? 'cursor-default' : 'cursor-pointer'}`}
+              } ${locked ? 'cursor-default opacity-60' : 'cursor-pointer'}`}
             >
               {c.angle_label ? (
                 <span className="mb-1.5 inline-flex w-fit items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium tracking-wide text-white/55 uppercase">
@@ -89,7 +92,8 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
 
       {chosenId ? (
         <p className="mt-2 text-[11px] text-white/40">
-          Opening your creative brief on the right — tweak it and hit Generate.
+          Opening your creative brief on the right — tweak it and hit Generate. Pick
+          another concept any time to open a brief for that one instead.
         </p>
       ) : null}
     </div>

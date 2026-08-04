@@ -1329,6 +1329,25 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       if (fieldKeys.has('brand_description')) {
         patch.brand_description = res?.aiInsights?.aiSummary || res?.meta?.description || '';
       }
+      // The scrape returns the site's imagery too, and we were throwing it away
+      // — a brand added from a website ended up with empty Product Images and
+      // Logo even though the response carried them. Same filtering BrandIQ's
+      // onboarding applies: drop broken URLs and SVGs (icons, not product shots).
+      const scraped = (Array.isArray(res?.images) ? res.images : []).filter(
+        (u) => typeof u === 'string' && u && !u.includes('undefined') && !u.endsWith('.svg'),
+      );
+      if (fieldKeys.has('reference_images') && scraped.length) {
+        patch.reference_images = scraped.slice(0, 5).map((url, i) => ({
+          url,
+          filename: url.split('/').pop() || 'image',
+          selected: i === 0,
+        }));
+      }
+      // Not every scrape identifies a logo; only set the field when it did.
+      const scrapedLogo = res?.logo || res?.logoUrl || res?.meta?.logo || res?.favicon || '';
+      if (fieldKeys.has('brand_logo') && scrapedLogo) {
+        patch.brand_logo = [{ url: scrapedLogo, filename: 'logo', selected: true }];
+      }
       onPick(patch);
       setSiteDraft('');
       setOpen(false);

@@ -10,6 +10,7 @@ import {
 } from 'react-icons/fa';
 import { SiGoogleads } from 'react-icons/si';
 import Masonry, { ResponsiveMasonry } from 'react-responsive-masonry';
+import ImageLightbox from './ImageLightbox';
 
 const NETWORK_META = {
   facebook: { Icon: FaFacebook, color: 'text-[#1877F2]', label: 'Facebook' },
@@ -91,7 +92,7 @@ const BrandAvatar = ({ brand, logoUrl }) => {
   );
 };
 
-const AdCard = ({ ad, onLoadFail, onRecreate }) => {
+const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
   const imageCandidates = useMemo(() => imageCandidatesFor(ad), [ad]);
   const [imgIdx, setImgIdx] = useState(0);
   const [imgExhausted, setImgExhausted] = useState(imageCandidates.length === 0);
@@ -164,11 +165,15 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
         </div>
       ) : (
         !imgExhausted && (
-          <a
-            href={adUrl || imageCandidates[imgIdx]}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 block bg-black"
+          // Clicking the creative opens a preview in place. It used to be an
+          // <a> to the original ad, which threw the user out of the app
+          // mid-research — "View ad" in the footer (and the header link) is
+          // still there for when they DO want the original.
+          <button
+            type="button"
+            onClick={() => onPreview?.(imageCandidates[imgIdx])}
+            title="Click to preview"
+            className="mt-3 block w-full cursor-zoom-in bg-black"
           >
             <img
               src={imageCandidates[imgIdx]}
@@ -177,7 +182,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
               onError={handleImgError}
               className="block w-full select-none"
             />
-          </a>
+          </button>
         )
       )}
 
@@ -252,6 +257,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate }) => {
 
 const CompetitorAdsGrid = ({ ads = [], onRecreate }) => {
   const [hidden, setHidden] = useState(() => new Set());
+  const [preview, setPreview] = useState(null);
 
   if (!ads || ads.length === 0) return null;
 
@@ -275,10 +281,17 @@ const CompetitorAdsGrid = ({ ads = [], onRecreate }) => {
       >
         <Masonry>
           {visible.map((ad, i) => (
-            <AdCard key={`${keyFor(ad)}-${i}`} ad={ad} onLoadFail={handleFail} onRecreate={onRecreate} />
+            <AdCard
+              key={`${keyFor(ad)}-${i}`}
+              ad={ad}
+              onLoadFail={handleFail}
+              onRecreate={onRecreate}
+              onPreview={setPreview}
+            />
           ))}
         </Masonry>
       </ResponsiveMasonry>
+      <ImageLightbox src={preview} onClose={() => setPreview(null)} />
     </div>
   );
 };
