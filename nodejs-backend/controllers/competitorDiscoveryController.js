@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const brandNameLists = require('../Module/brandNames/brandNamesSchema');
 const { buildCompetitorDiscoveryPrompt, KEYWORD_VERSION } = require('../AI/Prompts/competitorDiscoveryPrompt');
-const axios = require('axios');
+const { searchAdsByKeywords } = require('../services/adsSearch/competitorSearch');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -220,41 +220,26 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
 
   if (allSearchTerms.length === 0) return { ads: [], total: 0, hasMore: false };
 
-  const url = `${process.env.NODE_ADS_BACKEND_URL}/adsgpt/ads/search`;
-
   try {
-    const response = await axios.post(
-      url,
+    const result = await searchAdsByKeywords(
+      allSearchTerms,
+      competitorNames,
+      platform,
+      page,
+      pageSize,
+      'date',
+      sortOrder,
       {
-        keywords: allSearchTerms,
-        competitors: competitorNames,  // Send separately for ES boosting
-        platform,                      // 'all' or a specific platform
-        page,                          // ← real pagination, forwarded to ES
-        limit: pageSize,               // ← per-platform page size
-        sortBy: 'date',
-        sortOrder,
-        // Multi-select category filters applied inside ES (terms query). Only
-        // sent when something is selected — when empty we omit the keys entirely
-        // so the default "all categories" view behaves exactly as before.
         ...(categoryIds.length > 0 && { categoryIds }),
         ...(subCategoryIds.length > 0 && { subCategoryIds }),
-        // Back-compat: keep the scalar keys when exactly one is selected so the
-        // existing single-category ES path keeps working unchanged.
         ...(categoryIds.length === 1 && { categoryId: categoryIds[0] }),
         ...(subCategoryIds.length === 1 && { subCategoryId: subCategoryIds[0] }),
         dateFrom,
         dateTo,
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authHeader && { Authorization: authHeader }),
-        },
-        timeout: 30000,
-      }
     );
 
-    const data = response.data?.data || [];
+    const data = result?.ads || [];
 
     // Map PAS response shape to our schema
     const ads = data.map(ad => ({
@@ -279,17 +264,11 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
 
     return {
       ads,
-      total: response.data?.total || 0,
-      hasMore: !!response.data?.hasMore,
+      total: result?.total || 0,
+      hasMore: !!result?.hasMore,
     };
   } catch (err) {
     console.error(`[fetchAdsFromPas] ERROR: ${err.message}`);
-    if (err.response) {
-      console.error(`[fetchAdsFromPas] Response status: ${err.response.status}`);
-      console.error(`[fetchAdsFromPas] Response data: ${JSON.stringify(err.response.data)}`);
-    } else if (err.request) {
-      console.error(`[fetchAdsFromPas] No response received. Request failed. URL: ${url}`);
-    }
     return { ads: [], total: 0, hasMore: false }; // Return empty on failure so brand doesn't get stuck
   }
 }
