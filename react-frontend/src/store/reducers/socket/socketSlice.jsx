@@ -22,6 +22,7 @@ import {
   showNotificationForMyVideo,
   showNotificationForMyImage,
   showFailureNotification,
+  showAssistantTurnNotification,
 } from '@/utils/showNotification';
 import {
   adAdsData,
@@ -205,6 +206,15 @@ export const initSocket = (url) => (dispatch, getState) => {
         lpaBuffer.set(data.sessionId, buf);
       }
       emitter.emit('lpa:socket', data);
+    });
+
+    // An AI Assistant turn that finished after its browser had already left
+    // (New Chat / closed tab mid-generation). The turn kept running server-side
+    // and its result is persisted — this is the only thing that tells the user.
+    socket.on('assistantTurnCompleted', (data) => {
+      if (!data?.conversationId) return;
+      showAssistantTurnNotification(data.conversationId, Number(data.imageCount) || 0);
+      emitter.emit('assistant:turnCompleted', data);
     });
 
     socket.on(`chatResponse`, (data) => {

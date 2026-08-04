@@ -51,6 +51,7 @@ const adsFactoryAutoPilotRoutes = require("./adsFactoryAuto/adsFactoryAutoPilotR
 const voiceSelectorRoutes = require("./voiceSelectorRoutes");
 const promptTemplateRoutes = require("./promptTemplate/promptTemplateRoutes");
 const creditsApiRoutes = require("./creditsApiRoutes");
+const assistantNotifyRoutes = require("./assistantNotifyRoutes");
 const landingPageAnalyzerRoutes = require("./landingPageAnalyzer/landingPageAnalyzerRoutes");
 const deviceTokenRoutes = require("./deviceTokenRoutes");
 const partnerMetaAdsRoutes = require("./partnerApi/metaAdsRoutes");
@@ -119,6 +120,7 @@ app.use("/voice-selector", authenticateJWT, voiceSelectorRoutes);
 app.use("/ads-factory/autopilot", adsFactoryAutoPilotRoutes);
 app.use("/prompt-templates", promptTemplateRoutes);
 app.use("/credits", creditsApiRoutes);
+app.use("/notify", assistantNotifyRoutes);
 app.use("/landing-page-analyzer", landingPageAnalyzerRoutes);
 app.use("/device-tokens", authenticateJWT, deviceTokenRoutes);
 

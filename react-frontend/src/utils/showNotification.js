@@ -438,6 +438,70 @@ function createCompetitorAdsNotification(brand, dispatch, requestId) {
   }
 }
 
+// AI Assistant — a turn that finished after the user navigated away (New Chat /
+// closed tab mid-generation). The work completed and is persisted server-side,
+// so clicking through reopens that exact conversation.
+let lastAssistantTurnRequestId = null;
+
+export const showAssistantTurnNotification = (conversationId, imageCount = 0) => {
+  if (typeof window.Notification === 'undefined' || !conversationId) return;
+
+  const requestId = `assistant-turn-${conversationId}-${Date.now()}`;
+  lastAssistantTurnRequestId = requestId;
+
+  Notification.requestPermission()
+    .then((permission) => {
+      if (permission === 'granted') {
+        setTimeout(() => {
+          createAssistantTurnNotification(conversationId, imageCount, requestId);
+        }, 100);
+      }
+    })
+    .catch((err) => {
+      console.error('Error requesting notification permission:', err);
+    });
+};
+
+function createAssistantTurnNotification(conversationId, imageCount, requestId) {
+  if (lastAssistantTurnRequestId !== requestId) return;
+
+  try {
+    const uniqueTag = `assistant-turn-${conversationId}-${Date.now()}`;
+    const notification = new Notification(
+      imageCount > 0 ? 'Your creative is ready!' : 'Your assistant reply is ready!',
+      {
+        body:
+          imageCount > 0
+            ? `${imageCount} image${imageCount > 1 ? 's' : ''} finished while you were away. Click to view.`
+            : 'Your request finished while you were away. Click to view it.',
+        icon: NotifyLogo,
+        vibrate: [100, 50, 100],
+        requireInteraction: false,
+        tag: uniqueTag,
+        silent: false,
+      },
+    );
+
+    notification.onclick = (event) => {
+      event.preventDefault();
+      // The assistant reads ?conversation= on mount and resumes that chat.
+      router.navigate(`/assistant?conversation=${encodeURIComponent(conversationId)}`);
+      window.focus();
+      notification.close();
+    };
+
+    notification.onerror = (err) => {
+      console.error('Assistant turn notification error:', err);
+    };
+
+    setTimeout(() => {
+      if (lastAssistantTurnRequestId === requestId) lastAssistantTurnRequestId = null;
+    }, 5000);
+  } catch (error) {
+    console.error('Assistant turn notification creation failed:', error);
+  }
+}
+
 export const showFailureNotification = (type, reason = 'generation failed') => {
   if (typeof window.Notification === 'undefined') return;
 

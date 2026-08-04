@@ -199,6 +199,29 @@ const ChatInterface = () => {
     const params = new URLSearchParams(window.location.search);
     const returnedFromMeta = params.get('meta_connected') === '1';
     let resumeSessionId = null;
+
+    // Arriving from the "your generation finished" notification — open that
+    // exact conversation instead of the usual fresh chat, so the result the
+    // user was told about is the first thing they see.
+    const notifiedConversation = params.get('conversation');
+    if (notifiedConversation && !returnedFromMeta) {
+      window.history.replaceState(null, '', '/assistant');
+      (async () => {
+        try {
+          const history = await getHistory(notifiedConversation);
+          dispatch(
+            loadConversation({
+              sessionId: notifiedConversation,
+              messages: history || [],
+            }),
+          );
+        } catch {
+          dispatch(startNewSession());
+        }
+      })();
+      return;
+    }
+
     if (returnedFromMeta) {
       try {
         resumeSessionId = JSON.parse(

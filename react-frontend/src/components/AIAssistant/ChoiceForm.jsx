@@ -1120,23 +1120,64 @@ const BRAND_DERIVED_KEYS = [
   'prompt',
 ];
 
-// Swap a brand name inside free text (the prompt) when the user switches brands.
-// Deterministic and reversible — we only rename what the previous brand put
-// there rather than trying to rewrite the user's brief.
+// Retarget the prompt at a newly picked brand. Deterministic (no model call) so
+// the result is predictable and undoable via "restore previous".
+//
+// An exact `brand_name` swap alone wasn't enough in practice: the prompt often
+// names the brand differently to the saved record ("Acme" vs "Acme Inc"), and
+// when the agent left `brand_name` empty there was nothing to match at all — so
+// switching brands left the prompt untouched and it still generated for the old
+// brand. We therefore try every plausible spelling of the outgoing brand, and
+// if none of them appear we state the brand explicitly instead of silently
+// doing nothing.
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const renameBrandInText = (text, from, to) => {
-  const before = String(text || '');
-  const oldName = (from || '').trim();
-  const newName = (to || '').trim();
-  if (!before || !oldName || !newName || oldName.toLowerCase() === newName.toLowerCase()) {
-    return before;
+
+// "Acme Inc." → ["Acme Inc.", "Acme"]. Longest first so the fuller name wins.
+const brandNameVariants = (name) => {
+  const full = (name || '').trim();
+  if (!full) return [];
+  const variants = [full];
+  const firstWord = full.split(/[\s,]+/)[0]?.replace(/[.,]$/, '');
+  // A 1-2 character first word ("A", "H&") is too generic to swap on.
+  if (firstWord && firstWord.length > 2 && firstWord.toLowerCase() !== full.toLowerCase()) {
+    variants.push(firstWord);
   }
-  // \b doesn't work around names with punctuation ("H&M"), so guard on
-  // non-word neighbours instead.
-  return before.replace(
-    new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi'),
-    (_m, lead) => `${lead}${newName}`,
-  );
+  return variants;
+};
+
+const mentions = (text, name) =>
+  !!name &&
+  new RegExp(`(^|[^\\w])${escapeRe(name)}(?=[^\\w]|$)`, 'i').test(String(text || ''));
+
+const applyBrandToPrompt = (text, oldNames, to) => {
+  const before = String(text || '');
+  const newName = (to || '').trim();
+  if (!before.trim() || !newName) return before;
+  if (mentions(before, newName)) return before; // already on-brand
+
+  let out = before;
+  let renamed = false;
+  const candidates = [...new Set(oldNames.flatMap(brandNameVariants))]
+    .filter((n) => n && n.toLowerCase() !== newName.toLowerCase())
+    .sort((a, b) => b.length - a.length);
+
+  candidates.forEach((oldName) => {
+    // \b doesn't work around names with punctuation ("H&M"), so guard on
+    // non-word neighbours instead.
+    const re = new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi');
+    if (re.test(out)) {
+      renamed = true;
+      out = out.replace(
+        new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi'),
+        (_m, lead) => `${lead}${newName}`,
+      );
+    }
+  });
+
+  if (renamed) return out;
+  // Nothing to rename — the prompt never named the outgoing brand (or there
+  // wasn't one). State the new brand so the brief is unambiguously about it.
+  return `${out.trim().replace(/[.\s]+$/, '')}. Brand: ${newName}.`;
 };
 const formHasBrandFields = (form) =>
   (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
@@ -1230,7 +1271,13 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       }));
     }
     if (fieldKeys.has('prompt')) {
-      patch.prompt = renameBrandInText(values.prompt, currentName, nextName);
+      // Feed every name the outgoing brand might appear under: the card's
+      // brand_name, and the saved record it matched (they can differ).
+      patch.prompt = applyBrandToPrompt(
+        values.prompt,
+        [currentName, matched?.name || ''],
+        nextName,
+      );
     }
     onPick(patch);
     setOpen(false);
