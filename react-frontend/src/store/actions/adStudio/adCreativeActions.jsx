@@ -24,7 +24,6 @@ import { resetAdVideoNewSlice } from '@/store/reducers/adStudio/adVideoNewSlice'
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
-const ADS_HOST = import.meta.env.VITE_ADS_URL;
 const INTERNAL_EMAIL = import.meta.env.VITE_INTERNAL_EMAIL_DOMAINS?.split(',') || [];
 const INTERNAL_EMAIL_EXCLUDE = import.meta.env.VITE_INTERNAL_EMAIL_EXCLUDE?.split(',') || [];
 const LOW_QUALITY_EMAILS = import.meta.env.VITE_LOW_QUALITY_EMAILS?.split(',') || [];
@@ -353,7 +352,7 @@ export const fetchExploreAds = createAsyncThunk(
       if (adCreative?.explorePlatform && !esNetworks[adCreative?.explorePlatform]) return [];
 
       const res = await axios.post(
-        `${ADS_HOST}/ads/explore-ads`,
+        `${BACKEND_HOST}/adsgpt/ads/explore-ads`,
         {
           from: adCreative?.exploreSkip,
           size: 10,

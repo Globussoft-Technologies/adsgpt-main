@@ -2,9 +2,7 @@ import { createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import getCookies from '@/utils/getCookies';
 
-const ADS_HOST = (
-  import.meta.env.VITE_ADS_URL || 'https://adsgpt-dev-ads-api.poweradspy.com'
-).trim();
+const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 
 /**
  * Fetches competitor ads — no-arg thunk, reads everything from Redux state.
@@ -25,7 +23,7 @@ export const fetchCompetitorAds = createAsyncThunk(
       const token = getCookies();
 
       const res = await axios.post(
-        `${ADS_HOST}/ads/explore-ads`,
+        `${BACKEND_HOST}/adsgpt/ads/explore-ads`,
         {
           from: competitorSearch?.skip ?? 0,
           size: 10,

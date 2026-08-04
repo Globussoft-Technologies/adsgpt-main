@@ -1,7 +1,6 @@
 import {
   getFaqData,
   freshUserData,
-  fetchAdsOnScroll,
 } from '@/store/actions/adInsights/addieActions';
 import { fetchAdHistory } from '@/store/actions/adStudio/adHistoryActions';
 import { createSlice } from '@reduxjs/toolkit';
@@ -347,36 +346,6 @@ const addieSlice = createSlice({
       .addCase(fetchAdHistory.rejected, (state, action) => {
         state.historyError = action.payload;
         // state.scrollLoading = false;
-      });
-
-    builder
-      .addCase(fetchAdsOnScroll.pending, (state) => {
-        state.scrollLoading = true;
-        state.error = null;
-      })
-      .addCase(fetchAdsOnScroll.fulfilled, (state, action) => {
-        const responseData = action?.payload || {};
-        const newAdsData = responseData?.adsData?.adsData || [];
-        const currentSkip = action?.meta?.arg?.skip || 0;
-
-        if (currentSkip === 0) {
-          // Initial load - replace existing data
-          state.adData = newAdsData;
-        } else {
-          // Append new data for infinite scroll
-          state.adData = [...state.adData, ...newAdsData];
-        }
-
-        // Update scroll state
-        state.hasMore = newAdsData?.length >= 20; // Assuming 20 is your limit
-        state.totalCount = state.adData?.length;
-        state.scrollSkip = currentSkip;
-        state.scrollLoading = false;
-      })
-      .addCase(fetchAdsOnScroll.rejected, (state, action) => {
-        state.scrollLoading = false;
-        state.error = action.payload;
-        state.hasMore = false; // Stop trying to load more on error
       });
   },
 });

@@ -19,6 +19,7 @@
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-sdk/client-s3": "^3.744.0",
+    "@elastic/elasticsearch": "^7.17.0",
     "@google/genai": "^2.10.0",
     "@google/generative-ai": "^0.24.0",
     "@modelcontextprotocol/sdk": "^1.29.0",

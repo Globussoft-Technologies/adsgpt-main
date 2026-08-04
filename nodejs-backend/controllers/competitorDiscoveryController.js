@@ -220,7 +220,7 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
 
   if (allSearchTerms.length === 0) return { ads: [], total: 0, hasMore: false };
 
-  const url = `${process.env.NODE_ADS_BACKEND_URL}/ads/search`;
+  const url = `${process.env.NODE_ADS_BACKEND_URL}/adsgpt/ads/search`;
 
   try {
     const response = await axios.post(

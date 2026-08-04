@@ -13,7 +13,6 @@ export function configureHttpCredentials(axios) {
 
   const configuredServices = [
     import.meta.env.VITE_SOCKET_URL,
-    import.meta.env.VITE_ADS_URL,
     ...(import.meta.env.VITE_AUTH_API_URLS || '').split(','),
   ];
   const trustedOrigins = new Set();

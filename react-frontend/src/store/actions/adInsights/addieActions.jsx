@@ -15,7 +15,6 @@ import { useLocation } from 'react-router-dom';
 import { setAddieField } from '@/store/reducers/adInsights/Addie/addiePromptSlice';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const FRESH_USER_HOST = import.meta.env.VITE_APP_FRESHUSER_API;
-const ONSCROLL = import.meta.env.VITE_ADS_URL;
 
 // 1. Thunk to fetch suggestions
 export const freshUserData = createAsyncThunk(
@@ -203,48 +202,3 @@ const triggerTimeoutGuard = (dispatch, botId, sessionId) => {
   dispatch(registerTimeout({ botId, timeoutId }));
 };
 
-export const fetchAdsOnScroll = createAsyncThunk(
-  'ads/fetchAdsOnScroll',
-  async ({ currentContext, skip, limit }, { rejectWithValue, getState }) => {
-    // Add getState to destructured arguments
-    try {
-      const token = getCookies();
-      // Access the current Redux state if needed
-      const { addie, socket, addieHistory } = getState();
-
-      const payload = {
-        ...currentContext,
-        isFreshUser: addie?.isFreshUser,
-        uid: socket?.userData?.user_id,
-        token: socket?.userData?.token,
-        chatId: '',
-        sessionId: addieHistory?.em1,
-        skip: skip,
-        limit: limit,
-        featureObject: {
-          'Popularity Index': socket?.userData?.featureObject?.['Popularity Index'],
-          Networks: socket?.userData?.featureObject?.Networks,
-        },
-      };
-
-      const res = await fetch(`${ONSCROLL}/ads/vector-search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload), // Add payload to request body
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! Status: ${res.status}`);
-      }
-
-      const data = await res.json(); // Parse response
-      return data || []; // Return parsed data
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      return rejectWithValue(err.message);
-    }
-  }
-);
