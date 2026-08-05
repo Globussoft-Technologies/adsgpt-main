@@ -1240,37 +1240,50 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     }
     onPick(patch);
     setOpen(false);
+    rewriteBriefFor({
+      prompt: patch.prompt,
+      brandName: nextName,
+      brandDescription: b.description || '',
+      product: patch.product ?? values.product,
+    });
+  };
 
-    // Renaming the brand isn't enough on its own — everything AROUND the name
-    // still described the previous brand. Rewrite the brief for the new one.
-    // The rename above has already landed, so this is a refinement: if it's
-    // slow or fails, the card is still on the right brand.
-    if (fieldKeys.has('prompt') && patch.prompt) {
-      rewriteAbort.current?.abort();
-      const controller = new AbortController();
-      rewriteAbort.current = controller;
-      setRewriting(true);
-      suggestBriefPrompt({
-        prompt: patch.prompt,
-        brandName: nextName,
-        brandDescription: b.description || '',
-        product: patch.product ?? values.product,
-        creativeType: values.creative_type,
-        signal: controller.signal,
+  // Renaming the brand isn't enough on its own — everything AROUND the name
+  // still describes the previous brand. Rewrite the brief for the new one.
+  //
+  // Shared by BOTH ways of changing brand: picking a saved one and adding one
+  // from its website. It used to hang off the saved-brand path only, so the
+  // website flow — which is what the bug report records — changed the name and
+  // left the rest of the brief describing whatever came before.
+  //
+  // The deterministic rename has already landed by the time this runs, so it's
+  // a refinement: slow or failing, the card is still on the right brand.
+  const rewriteBriefFor = ({ prompt, brandName, brandDescription, product }) => {
+    if (!fieldKeys.has('prompt') || !prompt || !brandName) return;
+    rewriteAbort.current?.abort();
+    const controller = new AbortController();
+    rewriteAbort.current = controller;
+    setRewriting(true);
+    suggestBriefPrompt({
+      prompt,
+      brandName,
+      brandDescription,
+      product,
+      creativeType: values.creative_type,
+      signal: controller.signal,
+    })
+      .then((rewritten) => {
+        if (rewritten && !controller.signal.aborted) onPick({ prompt: rewritten });
       })
-        .then((rewritten) => {
-          if (rewritten && !controller.signal.aborted) onPick({ prompt: rewritten });
-        })
-        .catch(() => {
-          /* keep the renamed prompt — never block the user on a rewrite */
-        })
-        .finally(() => {
-          if (rewriteAbort.current === controller) {
-            rewriteAbort.current = null;
-            setRewriting(false);
-          }
-        });
-    }
+      .catch(() => {
+        /* keep the renamed prompt — never block the user on a rewrite */
+      })
+      .finally(() => {
+        if (rewriteAbort.current === controller) {
+          rewriteAbort.current = null;
+          setRewriting(false);
+        }
+      });
   };
 
   // Clear a wrong selection — blanks every brand field the form has so the
@@ -1310,7 +1323,11 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     const site = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     setAnalyzing(true);
     try {
-      const res = await analazeDomain(site);
+      // We render our own failure messages below, so opt out of the shared
+      // helper's handling — its 403 branch navigates the whole page to login,
+      // which is catastrophic when the 403 came from the SITE being scraped
+      // rather than from our own auth.
+      const res = await analazeDomain(site, { handleErrors: false });
       const patch = {};
       if (fieldKeys.has('brand_name')) {
         patch.brand_name =
@@ -1338,15 +1355,39 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       if (fieldKeys.has('brand_logo') && scrapedLogo) {
         patch.brand_logo = [{ url: scrapedLogo, filename: 'logo', selected: true }];
       }
+      // The brief has to follow a website-added brand exactly as it follows a
+      // saved one — this path used to change the name and leave the rest of the
+      // brief describing the previous brand.
+      if (fieldKeys.has('prompt')) {
+        patch.prompt = applyBrandToPrompt(
+          values.prompt,
+          [currentName, matched?.name || ''],
+          patch.brand_name || '',
+          values.creative_type,
+        );
+      }
       onPick(patch);
       setSiteDraft('');
       setOpen(false);
       // Analyzing can save the brand server-side — refresh so it's listed next time.
       if (userId) dispatch(fetchBrands(userId));
+      rewriteBriefFor({
+        prompt: patch.prompt,
+        brandName: patch.brand_name || '',
+        brandDescription: patch.brand_description || '',
+        product: patch.product ?? values.product,
+      });
     } catch (err) {
-      // 409 = brand already saved — refresh the list so the user can pick it.
+      // 409 = the brand is already saved. This used to refresh the list and say
+      // NOTHING (the shared helper's toast is a different toast system and its
+      // text is the raw backend string), so the user pressed Add and watched
+      // nothing happen.
       if (err?.response?.status === 409) {
         refresh();
+        toast(`That brand is already saved — pick it from the list above.`, {
+          icon: 'ℹ️',
+          duration: 5000,
+        });
       } else {
         // Say WHICH site failed, WHY, and what to do next. One generic line for
         // every failure left users with no idea whether to retry, fix the URL,

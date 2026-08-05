@@ -77,6 +77,9 @@ export const brandFetchMessage = (err, site) => {
   if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
     return `${host} took too long to respond. It may be slow or blocking automated visits — try again, or enter the brand details manually.`;
   }
+  if (status === 409) {
+    return `${host} is already saved as one of your brands — pick it from the list above.`;
+  }
   if (status === 404) {
     return `We couldn't find ${host}. Check the address for a typo and try again.`;
   }

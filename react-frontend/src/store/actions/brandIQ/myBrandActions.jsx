@@ -213,7 +213,17 @@ export const fetchAudienceSuggestions = createAsyncThunk(
   }
 );
 
-export const analazeDomain = async (domain_url) => {
+/**
+ * Analyze a brand's website.
+ *
+ * `handleErrors: false` lets the CALLER own how failures are presented. The
+ * default path toasts the raw backend message and, on a 403, navigates the
+ * whole page to login — which is wrong when the 403 came from the site we were
+ * asked to scrape rather than from our own auth: the user is thrown out of the
+ * app mid-task with nothing explaining why. Callers that render their own
+ * messages (the assistant's creative brief) opt out and get a plain throw.
+ */
+export const analazeDomain = async (domain_url, { handleErrors = true } = {}) => {
   try {
     if (!domain_url) return;
     let response = await axios.get(`${BACKEND_HOST}/adsgpt/adVideo/analyze-url?url=${domain_url}`, {
@@ -226,6 +236,11 @@ export const analazeDomain = async (domain_url) => {
   } catch (error) {
     const status = error?.response?.status;
     const backendMessage = error?.response?.data?.message;
+
+    if (!handleErrors) {
+      console.error('Error in analyzing domain:', error);
+      throw error;
+    }
 
     //  BUSINESS CONFLICTS
     if (status === 409) {
