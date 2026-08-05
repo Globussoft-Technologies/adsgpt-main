@@ -21,7 +21,11 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
     <div className="mt-3 w-full">
       <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-white/60">
         <Lightbulb className="h-3.5 w-3.5" />
-        <span>{cards?.title || 'Pick a concept to develop'}</span>
+        <span>
+          {locked
+            ? 'Generating — concepts are available again when this finishes'
+            : cards?.title || 'Pick a concept to develop'}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
@@ -37,7 +41,7 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
                 isChosen
                   ? 'border-[#5E66F5] bg-[#5E66F5]/10'
                   : 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
-              } ${locked ? 'cursor-default opacity-60' : 'cursor-pointer'}`}
+              } ${locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
             >
               {c.angle_label ? (
                 <span className="mb-1.5 inline-flex w-fit items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium tracking-wide text-white/55 uppercase">

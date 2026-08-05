@@ -490,7 +490,11 @@ const Messages = ({
                   messageId={m.id}
                   result={m.conceptResult}
                   onSelect={onConceptSelect}
-                  disabled={pending && isLast}
+                  // Any generation in flight, not just one on THIS message:
+                  // handleConceptSelect refuses to start a second turn while
+                  // pending, so concepts on earlier messages looked clickable
+                  // and then swallowed the click.
+                  disabled={pending}
                 />
               )}
 

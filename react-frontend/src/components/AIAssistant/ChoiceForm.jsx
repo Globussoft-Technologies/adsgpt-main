@@ -1256,7 +1256,6 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
         brandDescription: b.description || '',
         product: patch.product ?? values.product,
         creativeType: values.creative_type,
-        userId,
         signal: controller.signal,
       })
         .then((rewritten) => {
@@ -1729,6 +1728,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         (Array.isArray(v) && v.length === 0);
       if (isEmpty) return `${f.label || f.key} is required`;
     }
+    // Nothing chosen in the ratio tiles means there is nothing to generate.
+    // Without this the card offered a live Generate button for a request that
+    // could only ever produce zero images.
+    const hasRatioField = (form.fields || []).some((f) => f.key === 'aspect_ratios');
+    if (hasRatioField && ratiosFromCounts(countsFromValues(values)).length === 0) {
+      return 'Pick at least one aspect ratio';
+    }
     return null;
   }, [form, values]);
 
@@ -1747,14 +1753,21 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     const ratios = Math.max(1, selected.length);
     const countTotal = selected.reduce((sum, key) => sum + counts[key], 0);
     const perRatio = isPack ? 3 : Math.max(1, Number(values.num_images) || 1);
-    const totalImages = isPack ? perRatio * ratios : Math.max(1, countTotal);
+    // No ratio picked = no images = nothing to charge for. This used to floor at
+    // 1 image, so a card with "0 Images" selected still quoted a full credit
+    // price for a generation that couldn't happen.
+    const totalImages = isPack ? perRatio * ratios : countTotal;
     let perImage = null;
     if (costs) {
       const model = values.model || 'auto';
       perImage = costs[model] != null ? costs[model] : costs.auto ?? null;
     }
     const totalCredits =
-      perImage != null ? perImage * totalImages : form.estimated_credits ?? null;
+      totalImages === 0
+        ? 0
+        : perImage != null
+          ? perImage * totalImages
+          : form.estimated_credits ?? null;
     return { isPack, ratios, perRatio, totalImages, perImage, totalCredits };
   }, [values, creditCostsForQuality, form.estimated_credits]);
 
@@ -1969,7 +1982,9 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           }`}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
-          {creditInfo.isPack ? (
+          {creditInfo.totalImages === 0 ? (
+            <span>Pick at least one aspect ratio to generate.</span>
+          ) : creditInfo.isPack ? (
             <span>
               Ad pack: generating {creditInfo.totalImages} image
               {creditInfo.totalImages > 1 ? 's' : ''} in total (3 variants ×{' '}
@@ -2012,7 +2027,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               {/* Credit total lives here, pinned next to Generate, so the
                   user can confirm exactly what they'll spend right before
                   firing. Image count is the persistent notice above. */}
-              {creditInfo.totalCredits != null && (
+              {/* Hidden entirely at zero images — quoting "0 credits" next to a
+                  Generate button is just as confusing as quoting a real price
+                  for a generation that can't happen. */}
+              {creditInfo.totalCredits != null && creditInfo.totalImages > 0 && (
                 // Exact, live figure — matches Ad Studio's confident credit
                 // badge (no "~" hedge; it recomputes instantly from the same
                 // live per-model/quality registry Ad Studio reads).
