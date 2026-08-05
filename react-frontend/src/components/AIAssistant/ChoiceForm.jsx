@@ -28,9 +28,11 @@ import AspectRatioTiles from '@/components/AdStudio/AdCreativeNew/AspectRatioPic
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
+import { suggestBriefPrompt } from '@/utils/suggestBriefPrompt';
 import {
   applyBrandToPrompt,
   applyCreativeTypeToPrompt,
+  brandFetchMessage,
   buildCreditCostsByQuality,
   buildModelConfigs,
 } from './briefCatalog';
@@ -1147,6 +1149,12 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   // from it (for brands that aren't in the saved list).
   const [siteDraft, setSiteDraft] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  // A brand switch rewrites the brief for the new brand (see `pick`). Only the
+  // latest switch matters, so an in-flight rewrite is aborted when another
+  // starts — otherwise a slow first response could land after a later one.
+  const [rewriting, setRewriting] = useState(false);
+  const rewriteAbort = useRef(null);
+  useEffect(() => () => rewriteAbort.current?.abort(), []);
   const wrapRef = useRef(null);
 
   // Load the user's brands once if we don't have them yet — the assistant can
@@ -1204,12 +1212,11 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     // The rest of the brief has to follow the brand too, or the card still
     // describes (and generates) the previous one.
     if (fieldKeys.has('product')) {
-      // Only when Product was just the old brand's name — a real product
-      // ("running shoes") is the user's own wording and must survive.
-      const product = (values.product || '').trim();
-      if (!product || product.toLowerCase() === currentName.toLowerCase()) {
-        patch.product = nextName;
-      }
+      // Product Details describe the BRAND's product, so they follow the brand
+      // outright. (This used to only fire when Product was literally the old
+      // brand's name, which is why picking a new brand left the previous
+      // product sitting there.) "Restore previous" puts it back.
+      patch.product = nextName;
     }
     if (fieldKeys.has('reference_images')) {
       // Replace, don't merge: the outgoing brand's product photos are exactly
@@ -1233,6 +1240,38 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
     }
     onPick(patch);
     setOpen(false);
+
+    // Renaming the brand isn't enough on its own — everything AROUND the name
+    // still described the previous brand. Rewrite the brief for the new one.
+    // The rename above has already landed, so this is a refinement: if it's
+    // slow or fails, the card is still on the right brand.
+    if (fieldKeys.has('prompt') && patch.prompt) {
+      rewriteAbort.current?.abort();
+      const controller = new AbortController();
+      rewriteAbort.current = controller;
+      setRewriting(true);
+      suggestBriefPrompt({
+        prompt: patch.prompt,
+        brandName: nextName,
+        brandDescription: b.description || '',
+        product: patch.product ?? values.product,
+        creativeType: values.creative_type,
+        userId,
+        signal: controller.signal,
+      })
+        .then((rewritten) => {
+          if (rewritten && !controller.signal.aborted) onPick({ prompt: rewritten });
+        })
+        .catch(() => {
+          /* keep the renamed prompt — never block the user on a rewrite */
+        })
+        .finally(() => {
+          if (rewriteAbort.current === controller) {
+            rewriteAbort.current = null;
+            setRewriting(false);
+          }
+        });
+    }
   };
 
   // Clear a wrong selection — blanks every brand field the form has so the
@@ -1310,7 +1349,10 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       if (err?.response?.status === 409) {
         refresh();
       } else {
-        toast.error('Could not analyze that website — check the URL and try again.');
+        // Say WHICH site failed, WHY, and what to do next. One generic line for
+        // every failure left users with no idea whether to retry, fix the URL,
+        // or give up and fill the brand in by hand.
+        toast.error(brandFetchMessage(err, site), { duration: 6000 });
       }
     } finally {
       setAnalyzing(false);
@@ -1356,6 +1398,12 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
           </Tip>
         </div>
       </label>
+      {rewriting && (
+        <span className="flex items-center gap-1.5 text-[11px] text-white/50">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Rewriting the brief for this brand…
+        </span>
+      )}
       <button
         type="button"
         disabled={disabled}
@@ -1911,12 +1959,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       <div className="shrink-0 border-t border-white/[0.05] bg-black/30 px-4 py-3">
         {/* Total-images notice — shown regardless of submitted state (unlike
             the credit badge/Generate row below), so it stays visible even
-            after the brief collapses to its "Submitted with" summary. Red
-            when >1 image so a multi-image spend isn't mistaken for the
-            per-ratio count. */}
+            after the brief collapses to its "Submitted with" summary.
+            Highlighted when >1 image so a multi-image spend isn't mistaken for
+            the per-ratio count — in the design system's blue, not red: this is
+            information, not an error, and red read as "something is wrong". */}
         <p
           className={`mb-2 flex items-center gap-1.5 text-[11.5px] font-medium ${
-            creditInfo.totalImages > 1 ? 'text-red-400/90' : 'text-white/55'
+            creditInfo.totalImages > 1 ? 'text-[#15DCFF]' : 'text-white/55'
           }`}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />

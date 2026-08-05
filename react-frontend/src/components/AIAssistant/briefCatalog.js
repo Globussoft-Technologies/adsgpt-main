@@ -58,6 +58,43 @@ export const buildCreditCostsByQuality = (modelConfigs, surfaceModels, inlinedFa
   return out;
 };
 
+// ─── Brand-URL analysis failures ────────────────────────────────────────────
+// One generic "couldn't analyze that website" for every failure told the user
+// nothing: they couldn't tell a typo from a site that blocks scrapers from our
+// service being down, so they had no idea whether retrying was worth it. Name
+// the host, say what happened, and give the next step — including the way out
+// (fill the brand in by hand), which is always available.
+export const brandFetchMessage = (err, site) => {
+  const status = err?.response?.status;
+  let host = site || 'that site';
+  try {
+    host = new URL(site).hostname.replace(/^www\./, '');
+  } catch {
+    /* keep the raw string */
+  }
+  const backend = err?.response?.data?.message;
+
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
+    return `${host} took too long to respond. It may be slow or blocking automated visits — try again, or enter the brand details manually.`;
+  }
+  if (status === 404) {
+    return `We couldn't find ${host}. Check the address for a typo and try again.`;
+  }
+  if (status === 401 || status === 403) {
+    return `${host} blocked our request, which some sites do automatically. Enter the brand details manually to continue.`;
+  }
+  if (status === 422 || status === 400) {
+    return backend || `${host} doesn't look like a valid website address. Include the full domain, e.g. example.com.`;
+  }
+  if (status >= 500) {
+    return `We couldn't reach ${host} just now — this one is on us. Try again in a moment, or enter the brand details manually.`;
+  }
+  if (err?.message === 'Network Error') {
+    return `Couldn't reach ${host} — check your connection and try again.`;
+  }
+  return backend || `We couldn't read ${host}. Check the address, or enter the brand details manually to carry on.`;
+};
+
 // ─── Keeping the brief in step with its selections ──────────────────────────
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

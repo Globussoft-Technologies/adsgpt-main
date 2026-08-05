@@ -163,24 +163,16 @@ const MessageActions = ({
         </ActionButton>
       )}
 
+      {/* Like / Dislike are intentionally NOT rendered.
+          They looked interactive but did nothing on the messages users actually
+          wanted to rate: `handleRate` bails out when `messageId` is absent,
+          which is the case for a generated-image turn until its id comes back —
+          so the click was swallowed with no feedback at all. Rather than ship a
+          control that lies about being available, it's hidden until the
+          feature is finished. `handleRate` and the feedback API are left intact
+          below; restoring is putting these two buttons back. */}
       {role === 'assistant' && (
         <>
-          <ActionButton
-            onClick={() => handleRate(1)}
-            label={liked ? 'Liked' : 'Like'}
-            active={liked}
-            disabled={pendingRating}
-          >
-            <ThumbsUp className="h-3.5 w-3.5" />
-          </ActionButton>
-          <ActionButton
-            onClick={() => handleRate(-1)}
-            label={disliked ? 'Disliked' : 'Dislike'}
-            active={disliked}
-            disabled={pendingRating}
-          >
-            <ThumbsDown className="h-3.5 w-3.5" />
-          </ActionButton>
           <ActionButton
             onClick={handleReadAloud}
             label={speaking ? 'Stop' : 'Read aloud'}
