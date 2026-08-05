@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -13,6 +13,7 @@ import {
   ThumbsUp,
   MessageCircle,
   Share2,
+  ChevronDown,
 } from 'lucide-react';
 import {
   closePublishedAds,
@@ -78,6 +79,8 @@ export default function PublishedAdsModal() {
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [timeFilter, setTimeFilter] = useState('all');
+  const [platformFilter, setPlatformFilter] = useState(['all']);
+  const [accountFilter, setAccountFilter] = useState(['all']);
   // Date objects so we don't have to round-trip through dd-MM-yyyy strings
   // every time the filter recomputes.
   const [customRange, setCustomRange] = useState({ startDate: null, endDate: null });
@@ -108,15 +111,13 @@ export default function PublishedAdsModal() {
   const error = activity?.error || null;
   const runs = useMemo(() => (Array.isArray(activity?.runs) ? activity.runs : []), [activity?.runs]);
 
-  // Flatten runs[].creatives[] into per-ad cards. We tag each with its run's
-  // error so failed cards can surface a reason; success cards leave it null.
-  // Runs that completed with zero creatives + non-success status still produce
-  // a single placeholder card so the user sees the run happened. `pending`
-  // runs come from selectActivityWithPending — virtual placeholders the
-  // selector synthesises while a cycle is overdue but the socket hasn't
-  // fired yet. They get a special "generating" card variant.
+  // Flatten runs[].creatives[] into per-ad cards. Tag each with platform & account name.
   const allAds = useMemo(() => {
     const flat = [];
+    const targets = activity?.targets || entry?.targets || {};
+    const metaTargetName = targets.meta?.accountName || targets.meta?.name || targets.meta?.config?.template?.payload?.pageName;
+    const defaultMetaAccountName = metaTargetName || (targets.meta?.facebookId ? `Meta (${targets.meta.facebookId})` : 'Meta Account');
+
     runs.forEach((run) => {
       const list = Array.isArray(run?.creatives) ? run.creatives : [];
       if (list.length === 0) {
@@ -136,6 +137,8 @@ export default function PublishedAdsModal() {
             postedAt: run?.startedAt || null,
             status: 'pending',
             runError: null,
+            platform: 'meta',
+            accountName: defaultMetaAccountName,
           });
         } else if (status && status !== 'success') {
           flat.push({
@@ -152,6 +155,8 @@ export default function PublishedAdsModal() {
             postedAt: run?.completedAt || run?.startedAt || null,
             status: 'failed',
             runError: run?.error || `Run ${status}`,
+            platform: 'meta',
+            accountName: defaultMetaAccountName,
           });
         }
         return;
@@ -160,6 +165,23 @@ export default function PublishedAdsModal() {
         const ad = c?.ad || {};
         const posting = c?.posting || {};
         const posted = posting.posted === true;
+        const platform = (c?.platform || ad?.platform || posting?.platform || 'meta').toLowerCase();
+
+        let accountName = c?.accountName || posting?.accountName || posting?.pageName;
+        if (!accountName || accountName === 'Meta Account') {
+          if (platform === 'meta') {
+            const pageName = targets.meta?.config?.template?.payload?.pageName || targets.meta?.template?.payload?.pageName;
+            const pageId = targets.meta?.config?.template?.pageId || targets.meta?.template?.pageId || targets.meta?.template?.payload?.pageId;
+            const fbId = targets.meta?.config?.facebookId || targets.meta?.facebookId;
+            accountName = pageName ? pageName : (pageId ? `Meta Page (${pageId})` : (fbId ? `Meta (${fbId})` : defaultMetaAccountName));
+          } else if (platform === 'google') {
+            const customerId = targets.google?.config?.customerId || targets.google?.customerId;
+            accountName = customerId ? `Google (${customerId})` : 'Google Account';
+          } else {
+            accountName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account`;
+          }
+        }
+
         flat.push({
           id: c?.creativeId || `${run?.runId || 'run'}-${idx}`,
           imageUrl: ad.imageUrl || '',
@@ -174,16 +196,99 @@ export default function PublishedAdsModal() {
           postedAt: posting.postedAt || run?.completedAt || run?.startedAt || null,
           status: posted ? 'success' : 'failed',
           runError: posted ? null : run?.error || null,
+          platform,
+          accountName,
         });
       });
     });
     return flat;
-  }, [runs]);
+  }, [runs, activity?.targets, entry?.targets]);
+
+  const availablePlatforms = useMemo(() => {
+    const set = new Set();
+    allAds.forEach((ad) => {
+      if (ad.platform) set.add(ad.platform.toLowerCase());
+    });
+    const targets = activity?.targets || entry?.targets || {};
+    Object.keys(targets).forEach((p) => {
+      if (targets[p]?.template || targets[p]?.config) set.add(p.toLowerCase());
+    });
+    if (set.size === 0) set.add('meta');
+    return [
+      { id: 'all', label: 'All' },
+      ...Array.from(set).map((p) => ({
+        id: p,
+        label: p === 'meta' ? 'Meta' : p === 'google' ? 'Google' : p.charAt(0).toUpperCase() + p.slice(1),
+      })),
+    ];
+  }, [allAds, activity?.targets, entry?.targets]);
+
+  const availableAccounts = useMemo(() => {
+    const set = new Set();
+    const isAllPlatforms = platformFilter.includes('all');
+    const relevantAds = isAllPlatforms
+      ? allAds
+      : allAds.filter((ad) => platformFilter.includes(ad.platform?.toLowerCase()));
+
+    relevantAds.forEach((ad) => {
+      if (ad.accountName && ad.accountName !== 'Meta Account' && ad.accountName !== 'Google Account') {
+        set.add(ad.accountName);
+      }
+    });
+
+    const targets = activity?.targets || entry?.targets || {};
+    if (set.size === 0) {
+      if ((isAllPlatforms || platformFilter.includes('meta')) && targets.meta) {
+        const pageName = targets.meta?.config?.template?.payload?.pageName || targets.meta?.template?.payload?.pageName;
+        const pageId = targets.meta?.config?.template?.pageId || targets.meta?.template?.pageId || targets.meta?.template?.payload?.pageId;
+        const fbId = targets.meta?.config?.facebookId || targets.meta?.facebookId;
+        const label = pageName || (pageId ? `Meta Page (${pageId})` : (fbId ? `Meta (${fbId})` : null));
+        if (label) set.add(label);
+      }
+      if ((isAllPlatforms || platformFilter.includes('google')) && targets.google) {
+        const customerId = targets.google?.config?.customerId || targets.google?.customerId;
+        const label = customerId ? `Google (${customerId})` : null;
+        if (label) set.add(label);
+      }
+    }
+
+    if (set.size === 0) {
+      relevantAds.forEach((ad) => {
+        if (ad.accountName) set.add(ad.accountName);
+      });
+    }
+
+    return [
+      { id: 'all', label: 'All Accounts' },
+      ...Array.from(set).map((acc) => ({
+        id: acc,
+        label: acc,
+      })),
+    ];
+  }, [allAds, platformFilter, activity?.targets, entry?.targets]);
+
+  // Reset accountFilter if active accounts no longer exist in availableAccounts after a platform change
+  useEffect(() => {
+    if (!accountFilter.includes('all') && accountFilter.length > 0) {
+      const valid = accountFilter.filter((accId) => availableAccounts.some((a) => a.id === accId));
+      if (valid.length === 0) {
+        setAccountFilter(['all']);
+      } else if (valid.length !== accountFilter.length) {
+        setAccountFilter(valid);
+      }
+    }
+  }, [platformFilter, availableAccounts]);
 
   const filtered = useMemo(() => {
     let list = allAds;
     if (statusFilter !== 'all') {
       list = list.filter((ad) => ad.status === statusFilter);
+    }
+    if (platformFilter.length > 0 && !platformFilter.includes('all')) {
+      list = list.filter((ad) => platformFilter.includes(ad.platform?.toLowerCase()));
+    }
+    if (accountFilter.length > 0 && !accountFilter.includes('all')) {
+      list = list.filter((ad) => accountFilter.includes(ad.accountName));
     }
     if (timeFilter === '7d') {
       const cutoff = Date.now() - 7 * 86400000;
@@ -193,7 +298,6 @@ export default function PublishedAdsModal() {
       });
     } else if (timeFilter === 'custom') {
       const fromTime = customRange.startDate ? customRange.startDate.getTime() : -Infinity;
-      // `endDate` is inclusive — push it forward by a day so same-day `to` still matches.
       const toTime = customRange.endDate
         ? customRange.endDate.getTime() + 86400000
         : Infinity;
@@ -203,7 +307,7 @@ export default function PublishedAdsModal() {
       });
     }
     return list;
-  }, [allAds, statusFilter, timeFilter, customRange]);
+  }, [allAds, statusFilter, platformFilter, accountFilter, timeFilter, customRange]);
 
   const buckets = useMemo(() => bucketByDate(filtered), [filtered]);
   const densityCfg = DENSITY_OPTIONS.find((d) => d.id === density) || DENSITY_OPTIONS[2];
@@ -287,6 +391,24 @@ export default function PublishedAdsModal() {
               onDateChange={handleCustomDateChange}
               onClear={handleCustomDateClear}
             />
+          )}
+          <span className="hidden h-5 w-px bg-white/10 sm:block" />
+          <CustomDropdown
+            label="Platform"
+            options={availablePlatforms}
+            value={platformFilter}
+            onChange={setPlatformFilter}
+          />
+          {availableAccounts.length > 1 && (
+            <>
+              <span className="hidden h-5 w-px bg-white/10 sm:block" />
+              <CustomDropdown
+                label="Account"
+                options={availableAccounts}
+                value={accountFilter}
+                onChange={setAccountFilter}
+              />
+            </>
           )}
           <div className="ml-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-white/3 p-0.5">
             {DENSITY_OPTIONS.map((d) => (
@@ -375,6 +497,111 @@ function FilterRow({ label, options, value, onChange }) {
   );
 }
 
+function CustomDropdown({ label, options, value, onChange, multi = true }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedArr = Array.isArray(value) ? value : [value];
+  const isAll = selectedArr.includes('all');
+
+  const getDisplayLabel = () => {
+    if (isAll) return 'All';
+    if (selectedArr.length === 0) return 'None';
+    if (selectedArr.length === 1) {
+      const match = options.find((o) => o.id === selectedArr[0]);
+      return match?.label || selectedArr[0];
+    }
+    return `${selectedArr.length} Selected`;
+  };
+
+  const handleToggle = (optionId) => {
+    if (!multi) {
+      onChange(optionId);
+      setOpen(false);
+      return;
+    }
+
+    const nonAllOptionIds = options.filter((o) => o.id !== 'all').map((o) => o.id);
+
+    if (optionId === 'all') {
+      if (isAll) {
+        onChange([]);
+      } else {
+        onChange(['all']);
+      }
+      return;
+    }
+
+    const currentSelected = isAll ? [...nonAllOptionIds] : [...selectedArr];
+    let next;
+    if (currentSelected.includes(optionId)) {
+      next = currentSelected.filter((id) => id !== optionId);
+    } else {
+      next = [...currentSelected, optionId];
+    }
+
+    if (nonAllOptionIds.length > 0 && next.length === nonAllOptionIds.length) {
+      onChange(['all']);
+    } else {
+      onChange(next);
+    }
+  };
+
+  const isOptionSelected = (optionId) => {
+    if (!multi) return value === optionId;
+    if (optionId === 'all') return isAll;
+    if (isAll) return true;
+    return selectedArr.includes(optionId);
+  };
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10 hover:border-white/20"
+      >
+        <span className="text-10 tracking-wider text-[#AFAFAF] uppercase">{label}:</span>
+        <span className="text-xs font-semibold text-[#15DCFF]">{getDisplayLabel()}</span>
+        <ChevronDown className={`size-3.5 text-[#AFAFAF] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-50 mt-1.5 min-w-48 max-h-60 overflow-y-auto origin-top-left rounded-xl border border-white/10 bg-[#16161B] p-1 shadow-2xl backdrop-blur-xl">
+          {options.map((option) => {
+            const active = isOptionSelected(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handleToggle(option.id)}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-xs transition ${
+                  active
+                    ? 'bg-[#15DCFF]/10 font-semibold text-[#15DCFF]'
+                    : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span className="truncate">{option.label}</span>
+                {active && <Check className="size-3.5 shrink-0 text-[#15DCFF]" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // PublishedAdCard — Meta-style ad card matching MobilePreview.jsx but compact
 // for grid use. Renders posted/failed states from the activity payload, plus
 // a `pending` skeleton variant for cycles that are mid-run (socket hasn't
@@ -420,33 +647,41 @@ function PublishedAdCard({ ad, brandInfo }) {
         isFailed ? 'border-red-400/50' : 'border-white/10'
       }`}
     >
-      {/* Status pill */}
-      <div className="pointer-events-none absolute top-2 right-2 z-10">
-        {posted ? (
-          <span className="flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-10 font-semibold text-white shadow">
-            <Check className="size-3" /> Posted
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-10 font-semibold text-white shadow">
-            <AlertTriangle className="size-3" /> Failed
-          </span>
-        )}
-      </div>
-
-      {/* Header */}
-      <div className="flex items-start gap-2 px-3 pt-3 pr-20">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
-          {initial}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[12px] leading-tight font-semibold text-gray-900">
-            {brandInfo?.brandName || 'Brand'}
+      {/* Header with inline Account badge & Status pill */}
+      <div className="flex items-start justify-between gap-2 px-3 pt-3">
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
+            {initial}
           </div>
-          {postedAt && (
-            <div className="truncate text-10 text-gray-500">{formatPostedAt(postedAt)}</div>
-          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="truncate text-[12px] leading-tight font-semibold text-gray-900">
+                {brandInfo?.brandName || 'Brand'}
+              </span>
+              {ad.accountName && (
+                <span className="truncate rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 border border-gray-200">
+                  {ad.platform === 'meta' ? 'Meta' : ad.platform === 'google' ? 'Google' : ad.platform} · {ad.accountName}
+                </span>
+              )}
+            </div>
+            {postedAt && (
+              <div className="truncate text-10 text-gray-500 mt-0.5">{formatPostedAt(postedAt)}</div>
+            )}
+          </div>
         </div>
-        <EllipsisVertical className="h-4 w-4 shrink-0 text-gray-500" />
+
+        <div className="flex items-center gap-1 shrink-0">
+          {posted ? (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-10 font-semibold text-white shadow">
+              <Check className="size-3" /> Posted
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-10 font-semibold text-white shadow">
+              <AlertTriangle className="size-3" /> Failed
+            </span>
+          )}
+          <EllipsisVertical className="h-4 w-4 shrink-0 text-gray-400" />
+        </div>
       </div>
 
       {/* Body text */}

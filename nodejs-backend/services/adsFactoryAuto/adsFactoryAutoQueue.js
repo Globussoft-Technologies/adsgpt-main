@@ -184,8 +184,18 @@ function resolveScheduleForQueue(schedule) {
 }
 
 function repeatWindow(schedule) {
+  let start = null;
+  if (schedule.startDate) {
+    const rawStart = new Date(schedule.startDate);
+    const now = new Date();
+    if (rawStart.toDateString() === now.toDateString()) {
+      start = new Date(now.getTime() - 60 * 1000);
+    } else if (rawStart > now) {
+      start = rawStart;
+    }
+  }
   return {
-    ...(schedule.startDate ? { startDate: new Date(schedule.startDate) } : {}),
+    ...(start ? { startDate: start } : {}),
     ...(schedule.endDate ? { endDate: new Date(schedule.endDate) } : {}),
   };
 }

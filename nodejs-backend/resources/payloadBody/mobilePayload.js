@@ -51,6 +51,12 @@ exports.verifyApplePaymentPayload = {
   signedTransaction: "eyJhbGciOiJFUzI1NiIsIng1YyI6...",
 };
 
+exports.restoreApplePurchasesPayload = {
+  signedTransactionJwsList: [
+    "eyJhbGciOiJFUzI1NiIsIng1YyI6...",
+  ],
+};
+
 exports.verifyGooglePaymentPayload = {
   productId: "io.adsgpt.app.subscription.starter.monthly",
   purchaseToken: "GPA.3311-2244-5566-77889",
@@ -108,6 +114,29 @@ exports.mobilePaymentVerifyResponse = {
     user_id: "123",
     hasActivePlan: true,
     userSubscriptionType: { "20": "2026-08-27" },
+  },
+};
+
+exports.mobileSubscriptionDetailsResponse = {
+  ok: true,
+  hasActivePlan: true,
+  subscription: {
+    hasActivePlan: true,
+    platform: "ios",
+    source: "ios",
+    store_product_id: "io.adsgpt.app.subscription.starter.monthly",
+    status: "active",
+    latest_transaction_id: "2000000123456789",
+    original_transaction_id: "2000000123456789",
+    purchased_at: "2026-08-04T12:00:00.000Z",
+    expires_at: "2026-09-04T12:00:00.000Z",
+    can_manage_in_app: true,
+    manage_url: "https://apps.apple.com/account/subscriptions",
+  },
+  user: {
+    user_id: "123",
+    login: "alex_smith",
+    email: "alex@example.com",
   },
 };
 

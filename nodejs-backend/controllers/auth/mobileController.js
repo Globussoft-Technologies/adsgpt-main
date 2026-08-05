@@ -1028,10 +1028,13 @@ const GoogleLogin = async (req, res) => {
 
     const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
 
+    const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+
     return res.status(200).json({
       ok: true,
       token: jwtToken,
       isNewUser: false,
+      subscription,
       user: {
         user_id: amemberUserId,
         firebase_uid: firebaseUid,
@@ -1184,7 +1187,7 @@ const AppleSignup = async (req, res) => {
       existingDeletedProfile.name_f = derivedFirstName;
       existingDeletedProfile.name_l = derivedLastName;
       existingDeletedProfile.phoneNumber = cleanPhoneNumber;
-      existingDeletedProfile.platform = platform || "";
+      existingDeletedProfile.platform = platform || "ios";
       if (!existingDeletedProfile.loginProviders?.includes("apple")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "apple"];
       }
@@ -1204,7 +1207,7 @@ const AppleSignup = async (req, res) => {
         firebase_uid: firebaseUid,
         loginProviders: ["apple"],
         last_login_at: new Date(),
-        platform: platform || "",
+        platform: platform || "ios",
       });
     }
 
@@ -1297,7 +1300,7 @@ const AppleLogin = async (req, res) => {
       if (!mongoProfile.firebase_uid) mongoProfile.firebase_uid = firebaseUid;
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = ["general"];
       if (!mongoProfile.loginProviders.includes("apple")) mongoProfile.loginProviders.push("apple");
-      if (platform) mongoProfile.platform = platform;
+      mongoProfile.platform = platform || mongoProfile.platform || "ios";
       mongoProfile.last_login_at = new Date();
       await mongoProfile.save();
     }
@@ -1325,10 +1328,13 @@ const AppleLogin = async (req, res) => {
 
     const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
 
+    const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+
     return res.status(200).json({
       ok: true,
       token: jwtToken,
       isNewUser: false,
+      subscription,
       user: {
         user_id: amemberUserId,
         firebase_uid: firebaseUid,
@@ -2071,25 +2077,76 @@ const restoreApplePurchases = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
     #swagger.summary = 'StoreKit 2 restore purchases'
-    #swagger.description = 'Reconciles active StoreKit 2 entitlements for the currently authenticated user.'
+    #swagger.description = 'Reconciles one or more active StoreKit 2 entitlement JWS values for the authenticated user.'
     #swagger.security = [{ "BearerAuth": [] }]
-    #swagger.responses[200] = {
-      description: 'Purchases restored'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/restoreApplePurchasesPayload' }
+        }
+      }
     }
   */
-  const { signedTransaction } = req.body || {};
-  if (!signedTransaction) {
+  const { signedTransaction, signedTransactionJwsList } = req.body || {};
+  const transactions = Array.isArray(signedTransactionJwsList)
+    ? signedTransactionJwsList.filter(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    )
+    : signedTransaction
+      ? [signedTransaction]
+      : [];
+
+  if (transactions.length === 0) {
     return res.status(400).json({
       ok: false,
       code: "STORE_PROOF_INVALID",
-      error: "signedTransaction is required to restore an Apple purchase.",
+      error: "signedTransactionJwsList must contain at least one Apple transaction.",
     });
   }
 
-  // Restore must prove the Apple lineage currently presented by StoreKit. A
-  // current-user-only DB lookup cannot detect a restore on a different account.
   req.appleRestore = true;
-  return verifyApplePayment(req, res);
+  let lastSuccess = null;
+  const restoredTransactions = [];
+
+  for (const jws of transactions) {
+    let statusCode = 200;
+    let responseBody = null;
+    const captureResponse = {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(body) {
+        responseBody = body;
+        return body;
+      },
+    };
+    req.body = { signedTransaction: jws, source: "ios" };
+    await verifyApplePayment(req, captureResponse);
+
+    if (!responseBody?.ok) {
+      const code = responseBody?.code === "subscription_already_linked"
+        ? "restore_conflict"
+        : responseBody?.code || "verification_failed";
+      return res.status(statusCode).json({
+        ...responseBody,
+        ok: false,
+        code,
+        msg: responseBody?.msg || responseBody?.error || "Restore failed.",
+      });
+    }
+    lastSuccess = responseBody;
+    restoredTransactions.push(responseBody.subscription);
+  }
+
+  return res.status(200).json({
+    ...lastSuccess,
+    ok: true,
+    msg: "Apple purchases restored.",
+    restoredCount: restoredTransactions.length,
+    subscriptions: restoredTransactions,
+  });
 };
 
 const restoreGooglePurchases = async (req, res) => {
@@ -2127,11 +2184,86 @@ const restoreGooglePurchases = async (req, res) => {
   }
 };
 
+async function getUserSubscriptionDetails(amemberUserId, userData, active) {
+  try {
+    const latestTx = await MobileStoreTransaction.findOne({
+      amember_user_id: String(amemberUserId),
+    }).sort({ createdAt: -1 });
+
+    if (latestTx) {
+      const isTxActive = active && new Date(latestTx.expires_at) > new Date();
+      const platform = latestTx.platform || "ios";
+      const manageUrl = platform === "ios"
+        ? "https://apps.apple.com/account/subscriptions"
+        : `https://play.google.com/store/account/subscriptions?sku=${latestTx.store_product_id || ""}&package=com.adsgpt.app`;
+
+      return {
+        hasActivePlan: Boolean(active),
+        platform,
+        source: platform,
+        store_product_id: latestTx.store_product_id || "",
+        status: isTxActive ? (latestTx.event_type === "free_trial" ? "free_trial" : "active") : (active ? "active" : "expired"),
+        latest_transaction_id: latestTx.canonical_transaction_id || "",
+        original_transaction_id: latestTx.original_transaction_id || latestTx.canonical_transaction_id || "",
+        purchased_at: latestTx.purchased_at || null,
+        expires_at: latestTx.expires_at || null,
+        can_manage_in_app: true,
+        manage_url: manageUrl,
+      };
+    }
+
+    if (active) {
+      return {
+        hasActivePlan: true,
+        platform: "web",
+        source: "web",
+        store_product_id: "",
+        status: "active",
+        latest_transaction_id: "",
+        original_transaction_id: "",
+        purchased_at: null,
+        expires_at: null,
+        can_manage_in_app: false,
+        manage_url: "https://adsgpt.app/account",
+      };
+    }
+
+    return {
+      hasActivePlan: false,
+      platform: null,
+      source: null,
+      store_product_id: null,
+      status: "none",
+      latest_transaction_id: null,
+      original_transaction_id: null,
+      purchased_at: null,
+      expires_at: null,
+      can_manage_in_app: false,
+      manage_url: null,
+    };
+  } catch (err) {
+    console.error("[getUserSubscriptionDetails] Error:", err.message);
+    return {
+      hasActivePlan: Boolean(active),
+      platform: null,
+      source: null,
+      store_product_id: null,
+      status: active ? "active" : "none",
+      latest_transaction_id: null,
+      original_transaction_id: null,
+      purchased_at: null,
+      expires_at: null,
+      can_manage_in_app: false,
+      manage_url: null,
+    };
+  }
+}
+
 const getSubscriptionStatus = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
     #swagger.summary = 'Get Subscription Status'
-    #swagger.description = 'Returns the active subscription state for the logged-in user.'
+    #swagger.description = 'Returns the active subscription state, latest transaction ID, platform source, and management flags for the logged-in user.'
     #swagger.security = [{ "BearerAuth": [] }]
   */
   try {
@@ -2142,9 +2274,17 @@ const getSubscriptionStatus = async (req, res) => {
     const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
     const active = userData?.ok ? isPlanActive(userData) : false;
 
+    const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+
     return res.status(200).json({
       ok: true,
       hasActivePlan: active,
+      subscription,
+      user: {
+        user_id: amemberUserId,
+        hasActivePlan: active,
+        userSubscriptionType: userData?.subscriptions || {},
+      },
       userSubscriptionType: userData?.subscriptions || {},
       credits: {
         adCopy: userProfile?.total_available_credits || 0,
@@ -2153,6 +2293,46 @@ const getSubscriptionStatus = async (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ ok: false, error: "Failed to fetch status" });
+  }
+};
+
+const getMobileSubscriptionDetails = async (req, res) => {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'Get Mobile Subscription Details for Manage Subscription UI'
+    #swagger.description = 'Requires JWT token in Authorization header. Verifies user and returns latest transaction ID, platform source (ios/android/web), store product ID, expiry date, and manage URL for native App Store / Google Play manage subscription.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.responses[200] = {
+      description: 'Successfully fetched mobile subscription details',
+      schema: { $ref: '#/components/schemas/mobileSubscriptionDetailsResponse' }
+    }
+  */
+  try {
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    if (!rawUserId) {
+      return res.status(401).json({ ok: false, code: "UNAUTHORIZED", error: "Authentication required." });
+    }
+    const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
+
+    const userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
+    const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
+    const active = userData?.ok ? isPlanActive(userData) : false;
+
+    const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+
+    return res.status(200).json({
+      ok: true,
+      hasActivePlan: active,
+      subscription,
+      user: {
+        user_id: amemberUserId,
+        login: userProfile?.login || req.user?.login || "",
+        email: userProfile?.email || req.user?.user_email || "",
+      },
+    });
+  } catch (error) {
+    console.error("[getMobileSubscriptionDetails] error:", error);
+    return res.status(500).json({ ok: false, error: "Failed to retrieve mobile subscription details." });
   }
 };
 
@@ -3023,6 +3203,7 @@ module.exports = {
   restoreApplePurchases,
   restoreGooglePurchases,
   getSubscriptionStatus,
+  getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
 };

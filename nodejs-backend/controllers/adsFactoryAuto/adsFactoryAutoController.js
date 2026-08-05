@@ -218,7 +218,7 @@ class AdsFactoryAutoController {
         .lean();
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
 
-      if (job.schedule && !job.schedule.nextRunAt) {
+      if (job.schedule && job.status === "active") {
         try {
           const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
           const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
@@ -1137,13 +1137,12 @@ class AdsFactoryAutoController {
 
       let dynamicNextRun = null;
       if (job.status !== "completed" && job.status !== "paused") {
-        dynamicNextRun = job.schedule?.nextRunAt || null;
+        try {
+          const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+          dynamicNextRun = await getNextRunTime(job._id.toString(), job.schedule);
+        } catch (e) {}
         if (!dynamicNextRun) {
-          try {
-            const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
-            const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
-            if (nextTime) dynamicNextRun = nextTime;
-          } catch (e) {}
+          dynamicNextRun = job.schedule?.nextRunAt || null;
         }
       }
 
@@ -1223,10 +1222,38 @@ class AdsFactoryAutoController {
         idType = "campaignId";
       }
 
+      // Load connected FBUsers to resolve Meta account names
+      const fbConnectionIds = jobs.map((j) => j.targets?.meta?.connectionId).filter(Boolean);
+      const fbFacebookIds = jobs.map((j) => j.targets?.meta?.facebookId).filter(Boolean);
+
+      const fbUsers = (fbConnectionIds.length > 0 || fbFacebookIds.length > 0)
+        ? await FBUsers.find({
+            $or: [
+              { _id: { $in: fbConnectionIds } },
+              { facebookId: { $in: fbFacebookIds } }
+            ]
+          }).select("facebookId name email").lean()
+        : [];
+
+      const fbUserMap = new Map();
+      fbUsers.forEach((u) => {
+        const displayName = u.name || u.email || (u.facebookId ? `Meta (${u.facebookId})` : "Meta Account");
+        if (u._id) fbUserMap.set(u._id.toString(), displayName);
+        if (u.facebookId) fbUserMap.set(u.facebookId.toString(), displayName);
+      });
+
       // ── Shared helper — builds full activity detail for one job ─────────────
       const buildJobDetail = async (job, skipNum, limitNum) => {
         const campaign = await Campaign.findById(job.campaignId)
           .select("metadata brandInfo results creatives services status").lean();
+
+        const metaAccountName = fbUserMap.get(job.targets?.meta?.connectionId?.toString())
+          || fbUserMap.get(job.targets?.meta?.facebookId?.toString())
+          || (job.targets?.meta?.facebookId ? `Meta (${job.targets.meta.facebookId})` : "Meta Account");
+
+        const googleAccountName = job.targets?.google?.customerId
+          ? `Google (${job.targets.google.customerId})`
+          : "Google Account";
 
         const allRuns   = [...(job.runHistory || [])].reverse();
         const pageRuns  = allRuns.slice(skipNum, skipNum + limitNum);
@@ -1258,14 +1285,6 @@ class AdsFactoryAutoController {
             };
           });
 
-          // Split one raw text-generation result into its per-platform copies.
-          // Generation produces distinct copy per platform (data.meta.* vs
-          // data.google.*); we surface both explicitly rather than collapsing
-          // to a single winner. When the raw data isn't platform-shaped (plain
-          // string, or a generic object with no meta/google keys), fall back to
-          // one flat entry so older/unusual generation results still show
-          // something. Single source of truth for both generatedTexts[] and
-          // creatives[].ad.platformText below.
           const splitPlatformText = (txt) => {
             const data = txt?.data;
             const isObj = typeof data === "object" && data !== null;
@@ -1317,47 +1336,39 @@ class AdsFactoryAutoController {
             postingSummary: { posted, platforms: Object.keys(adsPosted), adIds: adsPosted },
             generatedImages,
             generatedTexts,
-            // One creative is posted to every targeted platform, but each
-            // platform gets its OWN generated copy (Meta uses platformText.meta,
-            // Google uses platformText.google) and its own ad id. Expand each
-            // creative into one entry PER PLATFORM so the activity view shows a
-            // separate Meta card and Google card — same split as generatedTexts[].
             creatives: runCreatives.flatMap((c, i) => {
               const { meta: metaText, google: googleText, fallback } = splitPlatformText(rawTexts[i] || {});
               const perPlatformText = { meta: metaText, google: googleText };
 
-              // Which platforms this creative went to: prefer the real
-              // per-creative ad ids; fall back to the run-level posted platforms.
               const creativePosted = c.postedAdIds instanceof Map
                 ? Object.fromEntries(c.postedAdIds)
                 : (c.postedAdIds || {});
               const platformsForCreative = Object.keys(creativePosted).length
                 ? Object.keys(creativePosted)
                 : Object.keys(adsPosted);
-              // Nothing posted (e.g. failed run) — still emit the platforms this
-              // job targets so the card shows what was attempted.
               const platforms = platformsForCreative.length
                 ? platformsForCreative
                 : Object.keys(job.targets || {}).filter((p) => job.targets[p]?.template);
 
               return platforms.map((platform) => {
-                // That platform's own copy only — fall back to the
-                // non-platform-shaped `fallback` (raw text wasn't split by
-                // platform at all) but never to another platform's copy.
                 const txt = perPlatformText[platform] || fallback || null;
                 const headline = txt?.headline || "";
                 const body     = txt?.body     || "";
                 const platformAdId = creativePosted[platform] || (adsPosted[platform] || null);
 
+                const accountName = platform === "meta"
+                  ? metaAccountName
+                  : platform === "google"
+                    ? googleAccountName
+                    : `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account`;
+
                 return {
-                  // Response-card identity must be unique per platform. The
-                  // underlying stored creative id stays unchanged and is
-                  // exposed separately for tracing/posting reconciliation.
                   creativeId: `${c.creativeId}:${platform}`,
                   sourceCreativeId: c.creativeId,
                   imageIndex: i,
                   textIndex:  i,
-                  platform,                       // "meta" | "google"
+                  platform,
+                  accountName,
                   runStatus:  run.status,
                   runError:   run.error,
                   ad: {
@@ -1367,8 +1378,8 @@ class AdsFactoryAutoController {
                           : `${(process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "")}${c.imageUrl.startsWith("/") ? "" : "/"}${c.imageUrl}`)
                       : c.imageUrl,
                     imageStatus:  c.imageUrl ? "generated" : "missing",
-                    headline,                     // this platform's headline
-                    body,                         // this platform's body
+                    headline,
+                    body,
                     description:  c.description,
                     textStatus:   (headline || body) ? "generated" : "missing",
                     callToAction: c.callToAction,
@@ -1377,7 +1388,7 @@ class AdsFactoryAutoController {
                   },
                   posting: {
                     posted:   !!platformAdId,
-                    adId:     platformAdId,       // this platform's ad id
+                    adId:     platformAdId,
                     postedAt: platformAdId ? (run.completedAt || null) : null,
                   },
                 };

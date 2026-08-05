@@ -50,11 +50,13 @@ const {
   deleteAccountPayload,
   acceptMobileTermsPayload,
   verifyApplePaymentPayload,
+  restoreApplePurchasesPayload,
   verifyGooglePaymentPayload,
   appleWebhookPayload,
   googleWebhookPayload,
   mobileAuthResponse,
   mobilePaymentVerifyResponse,
+  mobileSubscriptionDetailsResponse,
   mobileWebhookResponse,
 } = require("./resources/payloadBody/mobilePayload");
 
@@ -169,11 +171,13 @@ const doc = {
       deleteAccountPayload,
       acceptMobileTermsPayload,
       verifyApplePaymentPayload,
+      restoreApplePurchasesPayload,
       verifyGooglePaymentPayload,
       appleWebhookPayload,
       googleWebhookPayload,
       mobileAuthResponse,
       mobilePaymentVerifyResponse,
+      mobileSubscriptionDetailsResponse,
       mobileWebhookResponse,
 
       // Dashboard

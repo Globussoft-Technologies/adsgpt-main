@@ -494,6 +494,7 @@ export default function AdFactoryWorkflowDarkReal() {
   // quantities > 0 server-side, which previously lit up + unlocked the manual
   // group on an automation-only campaign even though no manual ad was ever made.
   const isManualActive =
+    completedNodes.includes('services') ||
     hasManualResults ||
     !!selectedServices?.image ||
     !!selectedServices?.text;
@@ -616,43 +617,43 @@ export default function AdFactoryWorkflowDarkReal() {
   ];
   const initialEdges = IS_AUTOMATION_ENABLED
     ? [
-        ...trunkEdges,
-        {
-          id: 'e-services-to-manual',
-          source: 'services',
-          target: MANUAL_GROUP_ID,
-          animated: true,
-          type: 'smoothstep',
-          style: { stroke: trunkStroke, strokeWidth: 3 },
-        },
-        {
-          id: 'e-services-to-auto',
-          source: 'services',
-          target: AUTO_GROUP_ID,
-          animated: true,
-          type: 'smoothstep',
-          style: { stroke: trunkStroke, strokeWidth: 3 },
-        },
-      ]
+      ...trunkEdges,
+      {
+        id: 'e-services-to-manual',
+        source: 'services',
+        target: MANUAL_GROUP_ID,
+        animated: true,
+        type: 'smoothstep',
+        style: { stroke: trunkStroke, strokeWidth: 3 },
+      },
+      {
+        id: 'e-services-to-auto',
+        source: 'services',
+        target: AUTO_GROUP_ID,
+        animated: true,
+        type: 'smoothstep',
+        style: { stroke: trunkStroke, strokeWidth: 3 },
+      },
+    ]
     : [
-        ...trunkEdges,
-        {
-          id: 'e-services-to-image',
-          source: 'services',
-          target: 'image-generation',
-          animated: true,
-          type: 'smoothstep',
-          style: { stroke: trunkStroke, strokeWidth: 3 },
-        },
-        {
-          id: 'e-services-to-text',
-          source: 'services',
-          target: 'text-generation',
-          animated: true,
-          type: 'smoothstep',
-          style: { stroke: trunkStroke, strokeWidth: 3 },
-        },
-      ];
+      ...trunkEdges,
+      {
+        id: 'e-services-to-image',
+        source: 'services',
+        target: 'image-generation',
+        animated: true,
+        type: 'smoothstep',
+        style: { stroke: trunkStroke, strokeWidth: 3 },
+      },
+      {
+        id: 'e-services-to-text',
+        source: 'services',
+        target: 'text-generation',
+        animated: true,
+        type: 'smoothstep',
+        style: { stroke: trunkStroke, strokeWidth: 3 },
+      },
+    ];
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -818,11 +819,11 @@ export default function AdFactoryWorkflowDarkReal() {
       // concrete from/to width + height values to animate.
       style: manualExpanded
         ? {
-            width: MANUAL_GROUP_EXPANDED_SIZE.width,
-            height: MANUAL_GROUP_EXPANDED_SIZE.height,
-            transition:
-              'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
-          }
+          width: MANUAL_GROUP_EXPANDED_SIZE.width,
+          height: MANUAL_GROUP_EXPANDED_SIZE.height,
+          transition:
+            'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
+        }
         : { transition: 'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)' },
       data: {
         id: MANUAL_GROUP_ID,
@@ -845,11 +846,11 @@ export default function AdFactoryWorkflowDarkReal() {
       position: AUTO_GROUP_POSITION,
       style: autoExpanded
         ? {
-            width: AUTO_GROUP_EXPANDED_SIZE.width,
-            height: AUTO_GROUP_EXPANDED_SIZE.height,
-            transition:
-              'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
-          }
+          width: AUTO_GROUP_EXPANDED_SIZE.width,
+          height: AUTO_GROUP_EXPANDED_SIZE.height,
+          transition:
+            'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)',
+        }
         : { transition: 'width 0.35s cubic-bezier(.22,1,.36,1), height 0.35s cubic-bezier(.22,1,.36,1)' },
       data: {
         id: AUTO_GROUP_ID,
@@ -1007,44 +1008,44 @@ export default function AdFactoryWorkflowDarkReal() {
     const showInnerManual = IS_AUTOMATION_ENABLED ? manualExpanded : true;
     const innerManualEdges = showInnerManual
       ? [
-          {
-            id: 'e-img-prep',
-            source: 'image-generation',
-            target: 'preview',
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: trunkStroke, strokeWidth: 3 },
-          },
-          {
-            id: 'e-text-prep',
-            source: 'text-generation',
-            target: 'preview',
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: trunkStroke, strokeWidth: 3 },
-          },
-          {
-            id: 'e-prep-post',
-            source: 'preview',
-            target: 'post-ad',
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: trunkStroke, strokeWidth: 3 },
-          },
-        ]
+        {
+          id: 'e-img-prep',
+          source: 'image-generation',
+          target: 'preview',
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: trunkStroke, strokeWidth: 3 },
+        },
+        {
+          id: 'e-text-prep',
+          source: 'text-generation',
+          target: 'preview',
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: trunkStroke, strokeWidth: 3 },
+        },
+        {
+          id: 'e-prep-post',
+          source: 'preview',
+          target: 'post-ad',
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: trunkStroke, strokeWidth: 3 },
+        },
+      ]
       : [];
 
     const innerAutoEdges = IS_AUTOMATION_ENABLED && autoExpanded
       ? [
-          {
-            id: 'e-active-result',
-            source: AUTOMATION_ACTIVE_NODE_ID,
-            target: AUTOMATION_RESULT_NODE_ID,
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: '#15DCFF', strokeWidth: 3, opacity: 0.9 },
-          },
-        ]
+        {
+          id: 'e-active-result',
+          source: AUTOMATION_ACTIVE_NODE_ID,
+          target: AUTOMATION_RESULT_NODE_ID,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#15DCFF', strokeWidth: 3, opacity: 0.9 },
+        },
+      ]
       : [];
 
     // Wrapper-edge active styling — bright cyan + animated, used when a
@@ -1221,8 +1222,8 @@ export default function AdFactoryWorkflowDarkReal() {
               ? {}
               : IS_AUTOMATION_ENABLED
                 ? {
-                    padding: { top: '40px', right: '100px', bottom: '100px', left: '100px' },
-                  }
+                  padding: { top: '40px', right: '100px', bottom: '100px', left: '100px' },
+                }
                 : undefined
           }
           defaultViewport={IS_AUTOMATION_ENABLED ? undefined : computeFlatViewport()}

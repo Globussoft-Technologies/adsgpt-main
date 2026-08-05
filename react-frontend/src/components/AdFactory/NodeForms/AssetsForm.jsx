@@ -558,10 +558,16 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
       if (asset.file && (asset.source === 'upload' || asset.source === 'clipboard')) {
         try {
           const uploadedUrl = await uploadToS3(asset.file, userData?.user_id, true);
+          if (!uploadedUrl) {
+            throw new Error(`Upload failed to return a valid URL for ${asset.name}`);
+          }
+          const finalUrl = uploadedUrl.startsWith('http')
+            ? uploadedUrl
+            : `${S3_BASE_URL}${uploadedUrl.startsWith('/') ? '' : '/'}${uploadedUrl}`;
           return {
             ...asset,
             file: null,
-            url: `${S3_BASE_URL}${uploadedUrl}`,
+            url: finalUrl,
             isUploading: false,
             isExisting: true,
           };
@@ -575,10 +581,16 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
         try {
           const file = await urlToFile(asset.originalUrl, asset.name);
           const uploadedUrl = await uploadToS3(file, userData?.user_id, true);
+          if (!uploadedUrl) {
+            throw new Error(`Failed to upload image from URL ${asset.originalUrl}`);
+          }
+          const finalUrl = uploadedUrl.startsWith('http')
+            ? uploadedUrl
+            : `${S3_BASE_URL}${uploadedUrl.startsWith('/') ? '' : '/'}${uploadedUrl}`;
           return {
             ...asset,
             file: null,
-            url: `${S3_BASE_URL}${uploadedUrl}`,
+            url: finalUrl,
             isUploading: false,
             isExisting: true,
             originalUrl: undefined,
@@ -688,11 +700,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                 {/* URL Input Section */}
                 {/* Upload Area */}
                 <div
-                  className={`backdrop-blur-100 flex max-w-full items-center gap-6 overflow-x-auto rounded-[20px] border border-black/10 bg-gray-50 dark:border-gray-100/10 dark:bg-[#383838]/50 p-1.5 transition ${
-                    !isSubmitting && assetsArray?.length < 5
-                      ? 'cursor-pointer hover:border-black/20 hover:bg-gray-100 dark:hover:border-[#4D4D4D]/60 dark:hover:bg-[#2F2F2F]'
-                      : 'cursor-pointer opacity-50'
-                  }`}
+                  className={`backdrop-blur-100 flex max-w-full items-center gap-6 overflow-x-auto rounded-[20px] border border-black/10 bg-gray-50 dark:border-gray-100/10 dark:bg-[#383838]/50 p-1.5 transition ${!isSubmitting && assetsArray?.length < 5
+                    ? 'cursor-pointer hover:border-black/20 hover:bg-gray-100 dark:hover:border-[#4D4D4D]/60 dark:hover:bg-[#2F2F2F]'
+                    : 'cursor-pointer opacity-50'
+                    }`}
                 >
                   <div className="uploading flex gap-2">
                     {/* Display selected assets */}
@@ -712,9 +723,8 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                             <img
                               src={asset.tempUrl || asset.url || ''}
                               alt={`Upload ${asset.name || 'asset'}`}
-                              className={`h-26 min-w-[7rem] rounded-lg object-cover 2xl:h-28 2xl:min-w-[7.99rem] ${
-                                pasteLoaderIndex === index ? 'opacity-50' : ''
-                              }`}
+                              className={`h-26 min-w-[7rem] rounded-lg object-cover 2xl:h-28 2xl:min-w-[7.99rem] ${pasteLoaderIndex === index ? 'opacity-50' : ''
+                                }`}
                               onClick={() => {
                                 const images = assetsArray.map((a) => a.tempUrl || a.url);
                                 setLightboxImages(images);
@@ -812,11 +822,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                             if (urlError) setUrlError('');
                           }}
                           placeholder="Enter any URL (image URL or webpage)"
-                          className={`flex-1 rounded-lg border bg-gray-100 text-gray-900 dark:bg-[#2F2F2F] dark:text-white px-4 py-2.5 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none 2xl:text-base ${
-                            urlError
-                              ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/40'
-                              : 'border-black/10 dark:border-gray-100/10 focus:border-[#5867EB] focus:ring-[#5867EB]'
-                          }`}
+                          className={`flex-1 rounded-lg border bg-gray-100 text-gray-900 dark:bg-[#2F2F2F] dark:text-white px-4 py-2.5 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none 2xl:text-base ${urlError
+                            ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/40'
+                            : 'border-black/10 dark:border-gray-100/10 focus:border-[#5867EB] focus:ring-[#5867EB]'
+                            }`}
                           disabled={isLoadingUrl || isExtractingImages || isSubmitting}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -1153,11 +1162,10 @@ export default function AssetsForm({ onComplete, handleGenerateCreatives }) {
                                       setIsAddingUrl(true);
                                     }
                                   }}
-                                  className={`absolute top-2 right-2 z-10 flex items-center justify-center rounded-full p-1.5 shadow-lg transition-all duration-200 ${
-                                    isSelected
-                                      ? 'bg-green-500 hover:bg-green-600'
-                                      : 'bg-[#5867EB] opacity-0 group-hover:opacity-100 hover:bg-[#6a77f0]'
-                                  }`}
+                                  className={`absolute top-2 right-2 z-10 flex items-center justify-center rounded-full p-1.5 shadow-lg transition-all duration-200 ${isSelected
+                                    ? 'bg-green-500 hover:bg-green-600'
+                                    : 'bg-[#5867EB] opacity-0 group-hover:opacity-100 hover:bg-[#6a77f0]'
+                                    }`}
                                   disabled={isSelected}
                                   title={isSelected ? 'Already selected' : 'Add to assets'}
                                 >

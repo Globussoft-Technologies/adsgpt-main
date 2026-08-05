@@ -18,6 +18,7 @@ const {
   restoreApplePurchases,
   restoreGooglePurchases,
   getSubscriptionStatus,
+  getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
 } = require("../../controllers/auth/mobileController");
@@ -42,6 +43,7 @@ router.post("/payments/google/verify", authenticateJWT, verifyGooglePayment);
 router.post("/payments/apple/restore", authenticateJWT, restoreApplePurchases);
 router.post("/payments/google/restore", authenticateJWT, restoreGooglePurchases);
 router.get("/payments/status", authenticateJWT, getSubscriptionStatus);
+router.get("/payments/subscription-details", authenticateJWT, getMobileSubscriptionDetails);
 
 // Webhook Endpoints
 router.post("/webhooks/apple/notifications", handleAppleWebhook);
