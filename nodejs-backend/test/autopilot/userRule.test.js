@@ -263,11 +263,12 @@ group("createRuleSchema — lookbackDays", () => {
     assert.equal(error, undefined);
     assert.equal(value.lookbackDays, 14);
   });
-  test("accepts integer in [1, 90]", () => {
+  test("accepts integer in [1, 200]", () => {
     assertValid(validRule({ lookbackDays: 1 }));
     assertValid(validRule({ lookbackDays: 7 }));
     assertValid(validRule({ lookbackDays: 30 }));
     assertValid(validRule({ lookbackDays: 90 }));
+    assertValid(validRule({ lookbackDays: 200 }));
   });
   test("accepts maximum as the lifetime lookback preset", () => {
     assertValid(validRule({ lookbackPreset: "maximum" }));
@@ -279,8 +280,8 @@ group("createRuleSchema — lookbackDays", () => {
     assertInvalid(validRule({ lookbackDays: 0 }));
     assertInvalid(validRule({ lookbackDays: -3 }));
   });
-  test("rejects > 90", () => {
-    assertInvalid(validRule({ lookbackDays: 91 }));
+  test("rejects > 200", () => {
+    assertInvalid(validRule({ lookbackDays: 201 }));
     assertInvalid(validRule({ lookbackDays: 365 }));
   });
   test("rejects non-integer", () => {

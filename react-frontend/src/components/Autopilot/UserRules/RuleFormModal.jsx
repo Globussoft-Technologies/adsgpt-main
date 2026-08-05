@@ -185,7 +185,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
     if (!form.evaluateOn) fieldErrors.evaluateOn = 'Pick an evaluation level.';
     if (!form.action?.type) fieldErrors.action = 'Pick an action.';
 
-    // Lookback window: integer in [1, 90]. Decimal is rejected client-side
+    // Lookback window: integer in [1, 200]. Decimal is rejected client-side
     // because the backend Joi schema requires an integer. Skipped entirely
     // when `lookbackPreset` is set — the preset overrides the number at
     // audit time, so the number's value is irrelevant.
@@ -199,9 +199,9 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         !Number.isFinite(lbNum) ||
         !Number.isInteger(lbNum) ||
         lbNum < 1 ||
-        lbNum > 90
+        lbNum > 200
       ) {
-        fieldErrors.lookbackDays = 'Enter a whole number between 1 and 90.';
+        fieldErrors.lookbackDays = 'Enter a whole number between 1 and 200.';
       }
     }
 
@@ -515,7 +515,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                 <input
                   type="number"
                   min={1}
-                  max={90}
+                  max={200}
                   step={1}
                   value={form.lookbackDays}
                   disabled={!!form.lookbackPreset}
@@ -536,7 +536,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                       set({ lookbackDays: 14 });
                       return;
                     }
-                    set({ lookbackDays: Math.min(90, Math.max(1, n)) });
+                    set({ lookbackDays: Math.min(200, Math.max(1, n)) });
                   }}
                   className={`text-13 h-8 w-24 rounded-full border bg-gray-100 px-3 text-gray-900 transition-colors placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#909294]/15 dark:text-white dark:placeholder:text-[#AFAFAF] ${
                     showError('lookbackDays')
@@ -549,7 +549,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                     ? `disabled — "This month" resolves to today's day (currently ${new Date().getDate()}d)`
                     : form.lookbackPreset === 'maximum'
                       ? 'disabled — MAX uses lifetime performance'
-                      : 'days (1–90, whole numbers)'}
+                      : 'days (1–200, whole numbers)'}
                 </span>
               </div>
               {showError('lookbackDays') && !form.lookbackPreset && (

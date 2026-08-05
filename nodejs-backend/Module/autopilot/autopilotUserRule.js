@@ -1,4 +1,9 @@
 const mongoose = require("mongoose");
+const {
+  MIN_LOOKBACK_DAYS,
+  MAX_LOOKBACK_DAYS,
+  DEFAULT_LOOKBACK_DAYS,
+} = require("../../Validations/autopilotUserRule.validator");
 
 /**
  * autopilotUserRule — user-defined Autopilot rule (v4 architecture).
@@ -101,11 +106,12 @@ const autopilotUserRuleSchema = new mongoose.Schema(
     // rule. Defaults to 14 to match v3 behaviour. Rules with the same
     // lookbackDays under the same ad account share a single Meta fetch
     // per cron tick (see services/autopilot/userRuleOrchestrator.js).
+    // Bounds come from the validator so the two can't drift apart.
     lookbackDays: {
       type: Number,
-      default: 14,
-      min: 1,
-      max: 90,
+      default: DEFAULT_LOOKBACK_DAYS,
+      min: MIN_LOOKBACK_DAYS,
+      max: MAX_LOOKBACK_DAYS,
     },
 
     // Optional preset overriding fixed `lookbackDays`. `'this_month'`

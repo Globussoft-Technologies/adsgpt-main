@@ -75,10 +75,12 @@ const MAX_CONDITION_ROWS = 8;
 const MAX_NAME = 80;
 const MAX_DESCRIPTION = 500;
 // Lookback window the rule's metrics are rolled up over. 1 day is the
-// minimum sensible window (Meta's daily aggregation); 90 days is the
-// upper bound to keep insights API cost predictable.
+// minimum sensible window (Meta's daily aggregation); 200 days is the
+// upper bound to keep insights API cost predictable. Meta itself allows
+// ~37 months, so this is our cap, not theirs — the `maximum` preset is
+// the escape hatch for lifetime performance.
 const MIN_LOOKBACK_DAYS = 1;
-const MAX_LOOKBACK_DAYS = 90;
+const MAX_LOOKBACK_DAYS = 200;
 const DEFAULT_LOOKBACK_DAYS = 14;
 
 // ─── condition row ─────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ const requestErrorMessage = (requestError, fallback) =>
   requestError.response?.data?.message || requestError.message || fallback;
 
 const allLeafFeatureIds = WORKSPACE_FEATURES.flatMap(featureIdsOf);
+const allAssignableFeatureIds = ASSIGNABLE_WORKSPACE_FEATURES.flatMap(featureIdsOf);
 
 function featurePicker(selected, setSelected) {
   const isFeatureActive = (feature) => featureIdsOf(feature).every((id) => selected.includes(id));
@@ -607,14 +608,31 @@ export default function WorkspaceMembersPage() {
                           Nothing is selected automatically.
                         </p>
                       </div>
-                      <p className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-zinc-500 dark:bg-white/[0.06]">
-                        {
-                          ASSIGNABLE_WORKSPACE_FEATURES.filter((feature) =>
-                            featureIdsOf(feature).every((id) => selectedFeatures.includes(id))
-                          ).length
-                        }{' '}
-                        selected
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedFeatures(
+                              allAssignableFeatureIds.every((id) => selectedFeatures.includes(id))
+                                ? []
+                                : allAssignableFeatureIds
+                            )
+                          }
+                          className="text-[10px] font-semibold text-[#15DCFF] hover:underline"
+                        >
+                          {allAssignableFeatureIds.every((id) => selectedFeatures.includes(id))
+                            ? 'Clear all'
+                            : 'Select all'}
+                        </button>
+                        <p className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-zinc-500 dark:bg-white/[0.06]">
+                          {
+                            ASSIGNABLE_WORKSPACE_FEATURES.filter((feature) =>
+                              featureIdsOf(feature).every((id) => selectedFeatures.includes(id))
+                            ).length
+                          }{' '}
+                          selected
+                        </p>
+                      </div>
                     </div>
                     {featurePicker(selectedFeatures, setSelectedFeatures)}
                   </div>
