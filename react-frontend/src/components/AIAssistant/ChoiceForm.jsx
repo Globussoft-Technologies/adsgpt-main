@@ -28,6 +28,12 @@ import AspectRatioTiles from '@/components/AdStudio/AdCreativeNew/AspectRatioPic
 import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
+import {
+  applyBrandToPrompt,
+  applyCreativeTypeToPrompt,
+  buildCreditCostsByQuality,
+  buildModelConfigs,
+} from './briefCatalog';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
 import Tip from './Tip';
@@ -1121,81 +1127,9 @@ const BRAND_DERIVED_KEYS = [
   'prompt',
 ];
 
-// Retarget the prompt at a newly picked brand. Deterministic (no model call) so
-// the result is predictable and undoable via "restore previous".
-//
-// An exact `brand_name` swap alone wasn't enough in practice: the prompt often
-// names the brand differently to the saved record ("Acme" vs "Acme Inc"), and
-// when the agent left `brand_name` empty there was nothing to match at all — so
-// switching brands left the prompt untouched and it still generated for the old
-// brand. We therefore try every plausible spelling of the outgoing brand, and
-// if none of them appear we state the brand explicitly instead of silently
-// doing nothing.
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// "Acme Inc." → ["Acme Inc.", "Acme"]. Longest first so the fuller name wins.
-const brandNameVariants = (name) => {
-  const full = (name || '').trim();
-  if (!full) return [];
-  const variants = [full];
-  const firstWord = full.split(/[\s,]+/)[0]?.replace(/[.,]$/, '');
-  // A 1-2 character first word ("A", "H&") is too generic to swap on.
-  if (firstWord && firstWord.length > 2 && firstWord.toLowerCase() !== full.toLowerCase()) {
-    variants.push(firstWord);
-  }
-  return variants;
-};
-
-const mentions = (text, name) =>
-  !!name &&
-  new RegExp(`(^|[^\\w])${escapeRe(name)}(?=[^\\w]|$)`, 'i').test(String(text || ''));
-
-// Keep the prompt in step with the creative type. The brief's prompt is prose
-// the agent wrote for ONE creative type, so switching type left it describing
-// the old one — the card looked unchanged and the brief read wrong.
-//
-// We don't try to rewrite the user's sentences (that's a model's job and risks
-// making them worse); we maintain a single trailing marker, replacing it each
-// time rather than letting them stack. Same technique as the brand fallback
-// below, and it survives "restore previous" because it's plain text.
-const CREATIVE_TYPE_MARKER = /\s*Creative type:\s*[^.]*\.\s*$/i;
-const applyCreativeTypeToPrompt = (text, typeLabel) => {
-  const base = String(text || '').replace(CREATIVE_TYPE_MARKER, '').trimEnd();
-  const label = (typeLabel || '').replace(/_/g, ' ').trim();
-  if (!base || !label) return base;
-  return `${base.replace(/[.\s]+$/, '')}. Creative type: ${label}.`;
-};
-
-const applyBrandToPrompt = (text, oldNames, to) => {
-  const before = String(text || '');
-  const newName = (to || '').trim();
-  if (!before.trim() || !newName) return before;
-  if (mentions(before, newName)) return before; // already on-brand
-
-  let out = before;
-  let renamed = false;
-  const candidates = [...new Set(oldNames.flatMap(brandNameVariants))]
-    .filter((n) => n && n.toLowerCase() !== newName.toLowerCase())
-    .sort((a, b) => b.length - a.length);
-
-  candidates.forEach((oldName) => {
-    // \b doesn't work around names with punctuation ("H&M"), so guard on
-    // non-word neighbours instead.
-    const re = new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi');
-    if (re.test(out)) {
-      renamed = true;
-      out = out.replace(
-        new RegExp(`(^|[^\\w])${escapeRe(oldName)}(?=[^\\w]|$)`, 'gi'),
-        (_m, lead) => `${lead}${newName}`,
-      );
-    }
-  });
-
-  if (renamed) return out;
-  // Nothing to rename — the prompt never named the outgoing brand (or there
-  // wasn't one). State the new brand so the brief is unambiguously about it.
-  return `${out.trim().replace(/[.\s]+$/, '')}. Brand: ${newName}.`;
-};
+// Prompt retargeting (brand + creative type) lives in ./briefCatalog — pure,
+// and exercised on its own. Deterministic by design: no model call, so the
+// result is predictable and "restore previous" undoes it.
 const formHasBrandFields = (form) =>
   (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
 
@@ -1294,6 +1228,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
         values.prompt,
         [currentName, matched?.name || ''],
         nextName,
+        values.creative_type,
       );
     }
     onPick(patch);
@@ -1592,40 +1527,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   // is the bug; reading the same endpoint as Profile is the fix. The inlined
   // copy stays as the fallback for when the browser fetch is the one that fails.
   const { models: surfaceModels } = useAdCreativeConfig();
-  const modelConfigs = useMemo(() => {
-    if (surfaceModels?.length) {
-      return surfaceModels.map((m) => ({
-        value: m.apiId,
-        label: m.label,
-        aspect_ratios: Array.isArray(m.aspectRatios) ? m.aspectRatios : [],
-        qualities: Array.isArray(m.qualities) ? m.qualities : [],
-        credits_by_quality: m.creditsByQuality || {},
-      }));
-    }
-    return Array.isArray(form.ad_creative_models) ? form.ad_creative_models : [];
-  }, [surfaceModels, form.ad_creative_models]);
-
-  // {model: {quality: credits}}, plus the "auto" key the card falls back to.
-  // Mirrors the agent's _attach_credit_costs: "auto" is the MAX per-quality
-  // credit, matching what graph.credit_for actually freezes.
-  const creditCostsByQuality = useMemo(() => {
-    if (!surfaceModels?.length) return form.credit_costs_by_quality;
-    const out = {};
-    surfaceModels.forEach((m) => {
-      if (m.apiId && m.creditsByQuality) out[m.apiId] = m.creditsByQuality;
-    });
-    const qualities = new Set();
-    Object.values(out).forEach((tiers) => Object.keys(tiers).forEach((q) => qualities.add(q)));
-    const auto = {};
-    qualities.forEach((q) => {
-      const costs = Object.values(out)
-        .map((tiers) => tiers[q])
-        .filter((c) => typeof c === 'number');
-      if (costs.length) auto[q] = Math.max(...costs);
-    });
-    if (Object.keys(auto).length) out.auto = auto;
-    return out;
-  }, [surfaceModels, form.credit_costs_by_quality]);
+  const modelConfigs = useMemo(
+    () => buildModelConfigs(surfaceModels, form.ad_creative_models),
+    [surfaceModels, form.ad_creative_models],
+  );
+  const creditCostsByQuality = useMemo(
+    () => buildCreditCostsByQuality(modelConfigs, surfaceModels, form.credit_costs_by_quality),
+    [modelConfigs, surfaceModels, form.credit_costs_by_quality],
+  );
   const modelConfigByValue = useMemo(
     () => new Map(modelConfigs.map((config) => [config.value, config])),
     [modelConfigs],
@@ -1649,7 +1558,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       // Switching creative type has to be reflected in the brief itself, not
       // just in which tool ends up being called.
       if (key === 'creative_type' && prev.prompt) {
-        next.prompt = applyCreativeTypeToPrompt(prev.prompt, val);
+        next.prompt = applyCreativeTypeToPrompt(prev.prompt, val, prev.brand_name);
       }
       if (key === 'model') {
         const costs = creditCostsByQuality?.[val];
