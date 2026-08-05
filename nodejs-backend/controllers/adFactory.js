@@ -13,7 +13,6 @@ const { features } = require("../utils/features");
 const AD_FACTORY_API = process.env.AD_FACTORY_PYTHON_API;
 const { s3Client } = require("../storage/s3");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
-const { deleteImageFromS3 } = require("../utils/cron");
 const archiver = require("archiver");
 const brandNameLists = require("../Module/brandNames/brandNamesSchema");
 const UnifiedCreditController = require("./UnifiedCreditController");
@@ -681,52 +680,6 @@ exports.deleteCampaign = async (req, res) => {
         message: "No campaign found for the given userId and campaignId",
       });
     }
-    if (campaign?.results?.image && Array.isArray(campaign?.results?.image)) {
-      for (const img of campaign?.results?.image) {
-        try {
-          const key = img?.data;
-          if (key) {
-            let parts = key?.split("/");
-            parts.shift();
-            let newKey = parts.join("/");
-            await deleteImageFromS3(newKey);
-          }
-        } catch (err) {
-          console.error(
-            "Failed to delete image from Campaign S3:",
-            img?.data,
-            err,
-          );
-        }
-      }
-    }
-
-    const histories = await CampaignHistory.find({ campaignId });
-
-    for (const history of histories) {
-      const prev = history?.previousData;
-
-      if (prev?.results?.image && Array.isArray(prev.results.image)) {
-        for (const img of prev.results.image) {
-          try {
-            const key = img?.data;
-            if (key) {
-              let parts = key?.split("/");
-              parts.shift();
-              let newKey = parts.join("/");
-              await deleteImageFromS3(newKey);
-            }
-          } catch (err) {
-            console.error(
-              "Failed to delete image from History S3:",
-              img?.data,
-              err,
-            );
-          }
-        }
-      }
-    }
-
     // If the campaign was deleted mid-generation, release any frozen credits.
     // The freeze key uses metadata.campaignId (user-facing id), matching the
     // value frozen in updateCampaign(services).
