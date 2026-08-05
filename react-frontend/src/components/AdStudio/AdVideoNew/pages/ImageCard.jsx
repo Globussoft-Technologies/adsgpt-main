@@ -15,6 +15,7 @@ import MySpaceLogoEditor, { proxied as proxiedImageUrl } from './MySpaceLogoEdit
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
 import { saveEditedImageAction } from '@/store/actions/image/imageActions';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { setImageRecreateInputs } from '@/store/reducers/image/imageSlice';
 import {
   setActiveAdStudioTab,
@@ -114,6 +115,7 @@ export default function ImageCard({
   onLogoSaved,
 }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const userId = useSelector((state) => state.socket?.userData?.user_id);
   const containerRef = useRef(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -310,6 +312,7 @@ export default function ImageCard({
     dispatch(setImageRecreateInputs(tailored));
     dispatch(setActiveAdStudioTab('adCreativeNew'));
     dispatch(setAdCreativeNewActivePage(targetRoute));
+    navigate(`/adstudio?creative=${targetRoute}`);
   };
 
   const handleInfoEnter = () => {

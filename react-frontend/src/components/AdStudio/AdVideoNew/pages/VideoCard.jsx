@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Megaphone,
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import CreativeGeneratingLoader from '../../AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
 import CustomVideoPlayer from '../../AdVideo/AdVideoChats/CustomVideoPlayer';
 import {
@@ -37,6 +37,7 @@ import {
   setAiAdsPreviewVersion,
   setAiAdsVersion,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 import RegenerateVoiceModal from './RegenerateVoiceModal';
 import VideoVersionControls from './VideoVersionControls';
 import { IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED } from '@/utils/featureFlags';
@@ -127,6 +128,7 @@ export default function VideoCard({
   }, [activeVideoSrc]);
 
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { userData } = useSelector((state) => state.socket);
   const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
@@ -427,6 +429,44 @@ export default function VideoCard({
     }, 150);
   };
 
+  const formatInfoValue = (value) => {
+    if (value === true) return 'On';
+    if (value === false) return 'Off';
+    if (value === null || value === undefined || value === '') return '-';
+    return String(value)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const InfoRow = ({ label, value, className = '' }) => (
+    <p className={className}>
+      <span className="text-gray-400">{label}:</span> {formatInfoValue(value)}
+    </p>
+  );
+
+  const aiAdsInfo = (() => {
+    const inputs = item?.inputs || {};
+    const voice = inputs.voice || {};
+    const filters = inputs.voiceFilters || {};
+    const versionAiAds = shownResult?.aiAds || {};
+    return {
+      voiceModel: versionAiAds.voiceProvider || voice.provider || inputs.voiceProvider,
+      language:
+        versionAiAds.language ||
+        voice.languageLabel ||
+        filters.languageLabel ||
+        voice.language ||
+        filters.language ||
+        inputs.language,
+      gender: voice.gender || filters.gender,
+      accent: voice.accent || filters.accent,
+      age: voice.age || filters.age,
+      voice: versionAiAds.voiceName || voice.voiceName || inputs.voiceName || voice.voiceId || inputs.voiceId,
+      captionsEnabled: inputs.captionsEnabled ?? inputs.captions ?? inputs.captionEnabled,
+      name: inputs.name || inputs.brandName || inputs.productName,
+    };
+  })();
+
   const InfoTooltip = () => (
     <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
       {item?.status === 'completed' && hasPlan8 && (
@@ -460,40 +500,38 @@ export default function VideoCard({
         {showInfo && (
           <>
             <div className="absolute top-full right-0 h-2 w-full" />
-            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
-              <p>
-                <span className="text-gray-400">Type:</span> {item?.inputs?.type || '-'}
-              </p>
-              <p>
-                <span className="text-gray-400">Model:</span> {item?.inputs?.model || '-'}
-              </p>
-              <p>
-                <span className="text-gray-400">Product:</span> {item?.inputs?.productName || '-'}
-              </p>
-              <p>
-                <span className="text-gray-400">Duration:</span> {item?.inputs?.duration || '-'}
-              </p>
-              <p>
-                <span className="text-gray-400">Aspect:</span> {item?.inputs?.aspectRatio || '-'}
-              </p>
+            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-36 w-64 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
+              <InfoRow label="Type" value={item?.inputs?.type} />
+              <InfoRow label="Model" value={item?.inputs?.model} />
+              <InfoRow
+                label={isAiAds ? 'Name' : 'Product'}
+                value={isAiAds ? aiAdsInfo.name : item?.inputs?.productName}
+              />
+              <InfoRow label="Duration" value={item?.inputs?.duration} />
+              <InfoRow label="Aspect" value={item?.inputs?.aspectRatio} />
+
+              {isAiAds && (
+                <>
+                  <InfoRow label="Voice Model" value={aiAdsInfo.voiceModel} className="mt-1" />
+                  <InfoRow label="Language" value={aiAdsInfo.language} />
+                  <InfoRow label="Gender" value={aiAdsInfo.gender} />
+                  <InfoRow label="Accent" value={aiAdsInfo.accent} />
+                  <InfoRow label="Age" value={aiAdsInfo.age} />
+                  <InfoRow label="Voice" value={aiAdsInfo.voice} />
+                  <InfoRow label="Caption status" value={aiAdsInfo.captionsEnabled} />
+                </>
+              )}
 
               {item?.inputs?.promotion && (
-                <p>
-                  <span className="text-gray-400">Promotion:</span> {item?.inputs?.promotion}
-                </p>
+                <InfoRow label="Promotion" value={item?.inputs?.promotion} />
               )}
 
               {item?.inputs?.notes && (
-                <p>
-                  <span className="text-gray-400">Notes:</span> {item?.inputs?.notes}
-                </p>
+                <InfoRow label="Notes" value={item?.inputs?.notes} />
               )}
 
               {item?.inputs?.productDescription && (
-                <p className="mt-1">
-                  <span className="text-gray-400">Description:</span>{' '}
-                  {item?.inputs?.productDescription}
-                </p>
+                <InfoRow label="Description" value={item?.inputs?.productDescription} className="mt-1" />
               )}
 
               {item?.updatedAt && (
@@ -517,6 +555,40 @@ export default function VideoCard({
       </div>
     </div>
   );
+
+  const handleRecreate = (e) => {
+    e.stopPropagation();
+
+    const type = item?.inputs?.type || 'broll';
+    let targetPage = 'b-roll';
+    if (type === 'ugc') targetPage = 'ugc';
+    else if (type === 'avatar') targetPage = 'avatar';
+    else if (type === 'clone') targetPage = 'clone';
+    else if (type === 'ai_ads') targetPage = 'ai-ads';
+
+    dispatch(setActiveAdStudioTab('adVideoNew'));
+
+    if (type === 'ai_ads') {
+      if (item.scenes?.length > 0) {
+        dispatch(setAiAdsSceneData({ _id: item._id, scenes: item.scenes }));
+      }
+      dispatch(setAIAdsStep('details'));
+      dispatch(setActivePage(targetPage));
+      dispatch(setAiAdsPrefillInputs(item.inputs));
+      navigate(`/adstudio?page=${targetPage}`);
+      return;
+    }
+
+    dispatch(setRecreateInputs(item.inputs));
+    dispatch(setActivePage(targetPage));
+    if (type === 'avatar') {
+      dispatch(setAvatarStep('config'));
+    }
+    navigate(`/adstudio?page=${targetPage}`);
+    if (type === 'ugc' || type === 'broll') {
+      setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
+    }
+  };
 
   // Hide the card entirely while a clone/avatar job is still generating its
   // script/image (status pending, nothing generated yet, nothing failed).
@@ -692,11 +764,6 @@ export default function VideoCard({
               onClick={(e) => {
                 e.stopPropagation();
 
-                // Set ?id= in URL so refresh re-fetches via GET /video/{id}
-                const url = new URL(window.location.href);
-                url.searchParams.set('id', item._id);
-                window.history.replaceState(null, '', url.toString());
-
                 if (item.scenes?.length > 0) {
                   dispatch(setAiAdsSceneData({
                     _id: item._id,
@@ -711,6 +778,8 @@ export default function VideoCard({
                 }
                 dispatch(setAIAdsStep('generation'));
                 dispatch(setActivePage('ai-ads'));
+                dispatch(setActiveAdStudioTab('adVideoNew'));
+                navigate(`/adstudio?page=ai-ads&id=${item._id}`);
               }}
               className="group/resume flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-xs font-bold text-black transition-all hover:bg-blue-600 hover:text-white"
             >
@@ -927,37 +996,7 @@ export default function VideoCard({
 
                 <button
                   className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const type = item?.inputs?.type || 'broll';
-                    let targetPage = 'b-roll';
-                    if (type === 'ugc') targetPage = 'ugc';
-                    else if (type === 'avatar') targetPage = 'avatar';
-                    else if (type === 'clone') targetPage = 'clone';
-                    else if (type === 'ai_ads') targetPage = 'ai-ads';
-
-                    if (type === 'ai_ads') {
-                      const url = new URL(window.location.href);
-                      url.searchParams.delete('id');
-                      window.history.replaceState(null, '', url.toString());
-                      if (item.scenes?.length > 0) {
-                        dispatch(setAiAdsSceneData({ _id: item._id, scenes: item.scenes }));
-                      }
-                      dispatch(setAIAdsStep('details'));
-                      dispatch(setActivePage(targetPage));
-                      dispatch(setAiAdsPrefillInputs(item.inputs));
-                      return;
-                    }
-
-                    dispatch(setRecreateInputs(item.inputs));
-                    dispatch(setActivePage(targetPage));
-                    if (type === 'avatar') {
-                      dispatch(setAvatarStep('config'));
-                    }
-                    if (type === 'ugc' || type === 'broll') {
-                      setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
-                    }
-                  }}
+                  onClick={handleRecreate}
                   title="Recreate Video"
                 >
                   <Edit size={18} />
@@ -1007,37 +1046,7 @@ export default function VideoCard({
           )}
           <button
             className="absolute right-3 bottom-3 rounded-full p-2 text-gray-500 backdrop-blur transition-colors hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
-            onClick={(e) => {
-              e.stopPropagation();
-              const type = item?.inputs?.type || 'broll';
-              let targetPage = 'b-roll';
-              if (type === 'ugc') targetPage = 'ugc';
-              else if (type === 'avatar') targetPage = 'avatar';
-              else if (type === 'clone') targetPage = 'clone';
-              else if (type === 'ai_ads') targetPage = 'ai-ads';
-
-              if (type === 'ai_ads') {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('id');
-                window.history.replaceState(null, '', url.toString());
-                if (item.scenes?.length > 0) {
-                  dispatch(setAiAdsSceneData({ _id: item._id, scenes: item.scenes }));
-                }
-                dispatch(setAIAdsStep('details'));
-                dispatch(setActivePage(targetPage));
-                dispatch(setAiAdsPrefillInputs(item.inputs));
-                return;
-              }
-
-              dispatch(setRecreateInputs(item.inputs));
-              dispatch(setActivePage(targetPage));
-              if (type === 'avatar') {
-                dispatch(setAvatarStep('config'));
-              }
-              if (type === 'ugc' || type === 'broll') {
-                setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
-              }
-            }}
+            onClick={handleRecreate}
             title="Recreate Video"
           >
             <Edit size={18} />

@@ -469,11 +469,15 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
       dispatch(setRecreateInputs(null));
     };
 
+    if (recreateInputs?.type === 'ugc') {
+      handleRecreate(recreateInputs);
+    }
+
     emitter.on('recreate-video', handleRecreate);
     return () => {
       emitter.off('recreate-video', handleRecreate);
     };
-  }, [dispatch, videoChatModels]);
+  }, [dispatch, recreateInputs, videoChatModels]);
 
   if (step === 1) {
     return (

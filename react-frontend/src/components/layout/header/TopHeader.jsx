@@ -285,6 +285,7 @@ export default function TopHeader() {
     currentRoute === '/google-ads' ||
     currentRoute === '/tiktok-ads' ||
     currentRoute === '/autopilot/meta' ||
+    currentRoute === '/my-space' ||
     (currentRoute === '/adstudio' &&
       activeAdStudioTabId === 'adVideoNew' &&
       activePage !== 'home') ||
@@ -668,7 +669,7 @@ export default function TopHeader() {
             )}
 
             {/* HIDE-MARK — theme toggle hidden globally (inline header). */}
-            {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
+            {/* {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />} */}
           </div>
         </div>
       )}

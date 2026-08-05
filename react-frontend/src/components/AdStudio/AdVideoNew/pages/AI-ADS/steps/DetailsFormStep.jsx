@@ -17,7 +17,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import { RiGeminiFill } from 'react-icons/ri';
 import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
-import { setAiAdsSceneLoading, setAiAdsPrefillInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setAiAdsSceneLoading } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
@@ -313,7 +313,6 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       setUploadedLogo(null);
     }
     setErrors({});
-    dispatch(setAiAdsPrefillInputs(null));
   }, [prefillInputs, dispatch]);
 
   const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
@@ -513,10 +512,27 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       {/* Close button */}
       <button
         onClick={onClose}
+        disabled={submitting}
         className="pointer-events-auto absolute top-5 right-4 z-50 cursor-pointer text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white"
       >
         <X className="h-5 w-5" />
       </button>
+
+      {submitting && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-white/70 backdrop-blur-sm dark:bg-black/55">
+          <div className="flex min-w-72 flex-col items-center gap-4 rounded-2xl border border-black/10 bg-white px-8 py-6 text-center shadow-2xl dark:border-white/10 dark:bg-[#202020]">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                Preparing script generation
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
+                Uploading assets and starting AI video generation...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="relative mb-2 w-full min-w-0 rounded-2xl px-4 pt-1 pb-4 sm:px-6 sm:pt-2 sm:pb-6 xl:px-8 xl:pt-2 xl:pb-4">
         {/* Title */}
@@ -962,7 +978,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                           const fieldMap = { ctaType: 'cta', userPrompt: 'optimizedPrompt' };
                           const apiErrors = {};
                           result.fields.forEach(({ field, reason }) => {
-                            // Strip array index suffix: "images[0]" → "images", trim whitespace
+                            // Strip array index suffix: "images[0]" -> "images", trim whitespace
                             const baseField = field.trim().replace(/\[\d+\]/g, '');
                             const key = fieldMap[baseField] || baseField;
                             apiErrors[key] = reason;

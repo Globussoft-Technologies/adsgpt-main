@@ -54,7 +54,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const { brand_name, brandInfo } = useSelector((state) => state.adFactoryNew);
   const sessionId = useSelector((state) => state.adHistory?.avs3);
-  const { isLoading, error } = useSelector((state) => state.adVideoNew);
+  const { isLoading, error, recreateInputs } = useSelector((state) => state.adVideoNew);
   const { userData } = useSelector((state) => state.socket);
   const dispatch = useDispatch();
   const productName = brand_name || brandInfo?.brandName || '';
@@ -294,11 +294,15 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
       dispatch(setRecreateInputs(null));
     };
 
+    if (recreateInputs && recreateInputs.type !== 'ugc') {
+      handleRecreate(recreateInputs);
+    }
+
     emitter.on('recreate-video', handleRecreate);
     return () => {
       emitter.off('recreate-video', handleRecreate);
     };
-  }, [dispatch, videoTimer, videoChatModels]);
+  }, [dispatch, recreateInputs, videoTimer, videoChatModels]);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];

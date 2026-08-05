@@ -11,8 +11,8 @@ export default function MySpacePage() {
   }, [dispatch]);
 
   return (
-    <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto">
-      <AdVideoLayout libraryOnly />
+    <div className="adcopy_container w-full">
+      <AdVideoLayout />
     </div>
   );
 }

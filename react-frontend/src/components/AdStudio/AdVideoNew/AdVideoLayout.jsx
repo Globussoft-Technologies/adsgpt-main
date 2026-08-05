@@ -185,6 +185,16 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   }, [activePage]);
 
   useEffect(() => {
+    if (libraryOnly) return;
+    const pageHint = searchParams.get('page');
+    if (!pageHint || !pageConfig[pageHint]) return;
+    if (pageHint === 'ai-ads' && searchParams.get('id')) {
+      dispatch(setAIAdsStep('generation'));
+    }
+    if (activePage !== pageHint) dispatch(setActivePage(pageHint));
+  }, [activePage, dispatch, libraryOnly, searchParams]);
+
+  useEffect(() => {
     if (savedCount > 0 && activePage !== 'myVideos' && !pollingRef.current) {
       pollingRef.current = setInterval(() => {
         dispatch(fetchProcessingCount());

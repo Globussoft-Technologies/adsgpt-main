@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import AdCreativeNewHome from './AdCreativeNewHome';
 import { LifestyleAdsFlow } from './lifestyle/LifestyleAdsFlow';
 import { AiCreativesCustom } from './ai-creatives/AiCreativesCustom';
@@ -30,6 +31,7 @@ const AdCreativeNewLayout = () => {
   // currently holds". Otherwise we want a fresh entry to land on home.
   const hasRecreateInputs = useSelector((s) => Boolean(s.image.recreateInputs));
   const dispatch = useDispatch();
+  const [searchParams] = useSearchParams();
   const setRoute = (next) => dispatch(setAdCreativeNewActivePage(next));
 
   // Modal node + invisible top-right anchor that the genie animation lands on.
@@ -50,6 +52,11 @@ const AdCreativeNewLayout = () => {
   // hasRecreateInputs check, so the recreate route is preserved on both
   // and a normal entry resets cleanly on both.
   useEffect(() => {
+    const routeHint = searchParams.get('creative');
+    if (hasRecreateInputs && routeHint) {
+      dispatch(setAdCreativeNewActivePage(routeHint));
+      return;
+    }
     if (!hasRecreateInputs) {
       dispatch(setAdCreativeNewActivePage('home'));
     }

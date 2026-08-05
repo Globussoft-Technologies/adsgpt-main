@@ -96,6 +96,7 @@ const AIAdsPage = ({ handleGenerate }) => {
     if (sessionId) sessionStorage.removeItem(`aiads_canGoBack_${sessionId}`);
     setSearchParams({}, { replace: true });
     dispatch(setAiAdsSceneData(null));
+    dispatch(setAiAdsPrefillInputs(null));
     dispatch(setAIAdsStep('selection'));
     dispatch(setActivePage('home'));
     setCanGoBack(false);
