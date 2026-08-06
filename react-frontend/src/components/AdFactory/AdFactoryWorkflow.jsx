@@ -494,10 +494,10 @@ export default function AdFactoryWorkflowDarkReal() {
   // quantities > 0 server-side, which previously lit up + unlocked the manual
   // group on an automation-only campaign even though no manual ad was ever made.
   const isManualActive =
-    completedNodes.includes('services') ||
     hasManualResults ||
     !!selectedServices?.image ||
     !!selectedServices?.text;
+
   // Force-collapse the entire auto pipeline when the feature flag is off,
   // OR when the automation is dormant (Meta no longer in platforms). Every
   // downstream check (auto-group expansion, AutomationActiveNode isActive,
@@ -705,10 +705,12 @@ export default function AdFactoryWorkflowDarkReal() {
       const isActive = activeForm === card.id;
       let isEnabled = reduxNode?.isEnabled || completedNodes.includes(card.id);
 
-      // "Prepare Creatives" and "Post Ad" nodes enabled only when Meta (or Google if posting enabled) is selected.
+      // "Prepare Creatives" and "Post Ad" nodes inside Manual Fabrication are enabled only when
+      // Meta (or Google if posting enabled) is selected AND manual image/text generation is active or completed.
       if (card.id === 'preview' || card.id === 'post-ad') {
         const allowedByPlatform = hasMeta || (enableGooglePosting && hasGoogle);
-        isEnabled = isEnabled && allowedByPlatform;
+        const hasManualProgress = isManualActive || completedNodes.includes('image-generation') || completedNodes.includes('text-generation');
+        isEnabled = isEnabled && allowedByPlatform && hasManualProgress;
       }
 
       // Determine status

@@ -1032,25 +1032,91 @@ exports.uploadVoice = async (req, res) => {
        #swagger.responses[400] = { description: 'No voice file received' }
        #swagger.responses[500] = { description: 'Internal server error' }
     */
-    const userId = req?.body?.userId;
-    const file = req.file;
+    const userId =
+      req?.body?.userId ||
+      req?.user?.user_id ||
+      req?.user?._id ||
+      "user";
+    const file = req.file || req.files?.voice?.[0] || req.files?.audio?.[0];
+    let rawSessionId =
+      req?.body?.sessionId ||
+      req?.query?.sessionId ||
+      req?.headers?.["x-session-id"];
+
+    if (typeof rawSessionId === "string") {
+      rawSessionId = rawSessionId.trim();
+    }
+
+    const sessionId =
+      rawSessionId && rawSessionId.length >= 1 && rawSessionId.length <= 128
+        ? rawSessionId
+        : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     if (!file) {
       console.error("No Voice file received");
-      return res.status(400).json({ error: "No Voice file received" });
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        sessionId,
+        message: "No Voice file received",
+        checks: {},
+      });
     }
 
-    const fileName = getFileName(".mp3");
-    const uploadParams = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: `voices/${userId}/${fileName}`,
-      Body: file.buffer,
-      ContentType: "audio/mpeg",
-    };
+    // 1. Hit Voice Validation API first
+    try {
+      const FormData = require("form-data");
+      const formData = new FormData();
+      formData.append("sessionId", sessionId);
+      formData.append("audio", file.buffer, {
+        filename: file.originalname || "voice.mp3",
+        contentType: file.mimetype || "audio/mpeg",
+      });
 
-    await s3Client.send(new PutObjectCommand(uploadParams));
-    const s3Url = `/${uploadParams.Key}`;
-    return res.status(200).json({ data: s3Url});
+      const targetUrl =
+        process.env.VOICE_VALIDATION_API_URL
+
+      const valResponse = await axios.post(targetUrl, formData, {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+
+      // If validation fails or returned error status (400, 429, 503, etc)
+      if (valResponse.status !== 200 || !valResponse.data?.valid) {
+        return res
+          .status(valResponse.status || 400)
+          .json(valResponse.data || { success: false, valid: false, message: "Voice validation failed" });
+      }
+
+      // If validation passed (200 & valid: true), upload to S3 and return S3 URL + validation data
+      const fileName = getFileName(".mp3");
+      const uploadParams = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: `voices/${userId}/${fileName}`,
+        Body: file.buffer,
+        ContentType: "audio/mpeg",
+      };
+
+      await s3Client.send(new PutObjectCommand(uploadParams));
+      const s3Url = `/${uploadParams.Key}`;
+
+      return res.status(200).json({
+        ...valResponse.data,
+        data: s3Url,
+      });
+    } catch (valError) {
+      console.error("Voice validation failed during uploadVoice:", valError.message);
+      return res.status(503).json({
+        success: false,
+        valid: false,
+        sessionId,
+        message: "Voice validation is temporarily unavailable.",
+        checks: {},
+      });
+    }
   } catch (error) {
     console.error("Error in uploadVoice:", error);
     return res.status(500).json({ success: false, error: error.message });
