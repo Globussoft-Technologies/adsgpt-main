@@ -315,25 +315,26 @@ function createWorkspaceMemberAuth(overrides = {}) {
         403,
       );
     }
-    const owner = await loadOwner(selected.workspace);
+    // Confirms the owner's subscription is still eligible to sponsor this
+    // member on every request — not just something issueToken needed.
+    await loadOwner(selected.workspace);
     const latestFeatures = normalizeFeatures(selected.membership.features);
     const claimsAreStale =
       !sameFeatures(user.workspace_features, latestFeatures) ||
       user.workspace_name !== selected.workspace.name;
-    user.workspace_features = latestFeatures;
-    user.workspace_name = selected.workspace.name;
-    return {
-      account,
-      ...selected,
-      refreshedToken: claimsAreStale
-        ? issueToken({
-            account,
-            membership: selected.membership,
-            workspace: selected.workspace,
-            owner,
-          })
-        : null,
-    };
+    if (claimsAreStale) {
+      // Force a clean re-login instead of silently reissuing a token and
+      // trusting every request path (fetch, axios, concurrent in-flight
+      // requests on the client) to apply it exactly once. This reuses the
+      // already-guarded 403 -> logout flow instead of a bespoke silent-
+      // refresh mechanism.
+      throw workspaceError(
+        "WORKSPACE_ACCESS_CHANGED",
+        "Your workspace access changed. Sign in again to continue.",
+        403,
+      );
+    }
+    return { account, ...selected };
   }
 
   return {

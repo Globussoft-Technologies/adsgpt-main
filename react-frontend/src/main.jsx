@@ -8,11 +8,7 @@ import store from '@/store/store';
 import axios from 'axios';
 import { initGA4 } from '@/utils/ga4';
 import { configureHttpCredentials } from '@/utils/configureHttpCredentials';
-import {
-  applyRefreshedWorkspaceToken,
-  clearWorkspaceToken,
-  isWorkspaceMember,
-} from '@/utils/workspaceSession';
+import { clearWorkspaceToken, isWorkspaceMember } from '@/utils/workspaceSession';
 
 initGA4();
 configureHttpCredentials(axios);
@@ -20,13 +16,7 @@ configureHttpCredentials(axios);
 // Add a global response interceptor for all Axios calls
 let workspaceRedirectStarted = false;
 axios.interceptors.response.use(
-  (response) => {
-    const refreshedWorkspaceToken = response?.headers?.['x-workspace-token'];
-    if (refreshedWorkspaceToken) {
-      applyRefreshedWorkspaceToken(refreshedWorkspaceToken);
-    }
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error?.response?.status === 403 && workspaceRedirectStarted) {
       return Promise.reject(error);

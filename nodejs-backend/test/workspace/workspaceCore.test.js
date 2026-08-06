@@ -307,16 +307,22 @@ function query(value) {
     workspace_name: secondWorkspace.name,
     workspace_features: ["adFactory"],
   };
-  const validated = await memberAuth.validateSession(staleClaims);
-  assert.ok(
-    validated.refreshedToken,
-    "a stale feature claim must receive a refreshed delegated token",
+  await assert.rejects(
+    memberAuth.validateSession(staleClaims),
+    (error) =>
+      error.code === "WORKSPACE_ACCESS_CHANGED" && error.statusCode === 403,
+    "a stale feature claim must be rejected so the client re-authenticates, rather than silently patched with a reissued token",
   );
-  assert.deepEqual(
-    jwt.verify(validated.refreshedToken, secret, {
-      algorithms: ["HS512"],
-    }).workspace_features,
-    ["brandIq.myBrands", "brandIq.competitors"],
+
+  const currentClaims = {
+    ...staleClaims,
+    workspace_features: ["brandIq.myBrands", "brandIq.competitors"],
+  };
+  const validated = await memberAuth.validateSession(currentClaims);
+  assert.equal(
+    validated.membership.workspaceId,
+    secondWorkspace._id,
+    "claims that already match the latest membership must be accepted",
   );
 
   let forbidden;

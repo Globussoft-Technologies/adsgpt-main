@@ -243,22 +243,6 @@ export function setWorkspaceToken(token) {
   });
 }
 
-let workspaceTokenRefreshApplied = false;
-
-// A permission change makes every in-flight request from the stale cookie
-// come back carrying a fresh token (the backend re-issues it on every request
-// until the client updates its cookie). A dashboard fires several requests
-// concurrently, so without this guard each of their responses independently
-// calls window.location.reload() — multiple near-simultaneous reloads instead
-// of one. Only the first one needs to act; the reload it triggers picks up
-// the now-current token for everyone.
-export function applyRefreshedWorkspaceToken(token) {
-  if (!token || workspaceTokenRefreshApplied) return;
-  workspaceTokenRefreshApplied = true;
-  setWorkspaceToken(token);
-  window.location.reload();
-}
-
 export function clearWorkspaceToken() {
   Cookies.remove('access-token', { path: '/' });
 }

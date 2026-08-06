@@ -70,10 +70,7 @@ const authenticateJWT = (req, res, next) => {
       try {
         if(user?.created_from=="PAS") user.user_id = `PAS-${user.user_id}`
         if(user?.created_from=="GPT") user.user_id = `GPT-${user.user_id}`
-        const workspaceSession = await validateWorkspaceMemberSession(user);
-        if (workspaceSession?.refreshedToken) {
-          res.set("X-Workspace-Token", workspaceSession.refreshedToken);
-        }
+        await validateWorkspaceMemberSession(user);
         req.user = user;
         next();
       } catch (error) {
@@ -236,10 +233,7 @@ const authenticateJWTInteraction = (req, res, next) => {
         try {
           if (user?.created_from === "PAS") user.user_id = `PAS-${user.user_id}`;
           if (user?.created_from === "GPT") user.user_id = `GPT-${user.user_id}`;
-          const workspaceSession = await validateWorkspaceMemberSession(user);
-          if (workspaceSession?.refreshedToken) {
-            res.set("X-Workspace-Token", workspaceSession.refreshedToken);
-          }
+          await validateWorkspaceMemberSession(user);
           req.user = user;
           return next();
         } catch (error) {
@@ -252,10 +246,7 @@ const authenticateJWTInteraction = (req, res, next) => {
       return jwt.verify(req.session.token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
         if (err) return res.sendStatus(403);
         try {
-          const workspaceSession = await validateWorkspaceMemberSession(user);
-          if (workspaceSession?.refreshedToken) {
-            res.set("X-Workspace-Token", workspaceSession.refreshedToken);
-          }
+          await validateWorkspaceMemberSession(user);
           req.user = user;
           return next();
         } catch (error) {
