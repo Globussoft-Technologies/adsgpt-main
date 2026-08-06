@@ -143,7 +143,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
       },
       User: class {
         constructor(_id) {}
-        async getAdAccounts(_fields) {
+        async getAdAccounts(fields) {
           // Find the most recent decrypt() call to figure out which user
           // we're answering for. Cheap but works for sequential calls.
           const last =
@@ -151,7 +151,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
           const userId = Object.keys(stubs.adAccountsByUser).find(
             (uid) => last === stubs.fbUsers.find((u) => u.userId === uid)?.accessToken,
           );
-          stubs.meCallLog.push({ userId });
+          stubs.meCallLog.push({ userId, fields });
           if (userId === "ERR_USER") {
             throw new Error("simulated meta /me/adaccounts failure");
           }
@@ -165,6 +165,10 @@ Module._load = function patchedLoad(request, parent, isMain) {
             account_status: 1,
             currency: a.currency || "INR",
             timezone_name: a.timezone || "Asia/Kolkata",
+            // Minor currency units, as Meta returns them.
+            amount_spent: a.amount_spent ?? "123456",
+            min_campaign_group_spend_cap: a.min_campaign_group_spend_cap ?? "500000",
+            min_daily_budget: a.min_daily_budget ?? "8000",
           }));
         }
       },
@@ -556,6 +560,41 @@ function resetStubs() {
         assert.equal(parsed.status, true);
         assert.equal(parsed.count, 1);
         assert.equal(parsed.adAccounts[0].id, "1");
+        // The dashboard + V2 wizard read this same key, so the cron's write
+        // must carry the FULL shape — not just the fields discovery itself
+        // needs. A narrower payload here used to blank "Spent" in the account
+        // picker and drop Meta's budget floors from wizard validation until
+        // the 2h TTL expired. See utils/metaAdAccountShape.js.
+        const row = parsed.adAccounts[0];
+        for (const field of [
+          "name",
+          "status",
+          "currency",
+          "timezone",
+          "amountSpent",
+          "minCampaignSpendCap",
+          "minDailyBudget",
+        ]) {
+          assert.ok(
+            row[field] !== undefined,
+            `cached ad account is missing "${field}" — shape drifted from the HTTP endpoint`,
+          );
+        }
+        assert.equal(row.minCampaignSpendCap, 500000);
+        assert.equal(row.minDailyBudget, 8000);
+        // ...and the fields must actually be REQUESTED from Meta, or they'd
+        // be undefined regardless of the mapping.
+        const requested = stubs.meCallLog[0].fields;
+        for (const field of [
+          "amount_spent",
+          "min_campaign_group_spend_cap",
+          "min_daily_budget",
+        ]) {
+          assert.ok(
+            requested.includes(field),
+            `cron did not request "${field}" from /me/adaccounts`,
+          );
+        }
       },
     );
 

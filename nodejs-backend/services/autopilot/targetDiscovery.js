@@ -26,6 +26,10 @@ const FBUsers = require("../../Module/adPosting/facebookUsers");
 const AutopilotSettings = require("../../Module/autopilot/autopilotSettings");
 const { redisClient } = require("../../db/redis");
 const { decrypt } = require("../../utils/crypto");
+const {
+  AD_ACCOUNT_LIST_FIELDS,
+  formatAdAccountForList,
+} = require("../../utils/metaAdAccountShape");
 
 let _logger;
 function getLogger() {
@@ -65,16 +69,14 @@ async function listUserAdAccounts({ userId, facebookId, accessToken }) {
     const api = bizSdk.FacebookAdsApi.init(accessToken);
     bizSdk.FacebookAdsApi.setDefaultApi(api);
     const user = new bizSdk.User("me");
-    let cursor = await user.getAdAccounts(
-      [
-        "id",
-        "name",
-        "account_status",
-        "currency",
-        "timezone_name",
-      ],
-      { limit: 100 },
-    );
+    // Discovery itself only needs id/name/currency/timezone, but this write
+    // lands on the key the dashboard + V2 wizard read, so it must carry the
+    // FULL shape — a narrower payload here blanked "Spent" in the account
+    // picker and dropped Meta's budget floors from wizard validation for the
+    // rest of the TTL. See utils/metaAdAccountShape.js.
+    let cursor = await user.getAdAccounts(AD_ACCOUNT_LIST_FIELDS, {
+      limit: 100,
+    });
     const accounts = [...cursor];
     let pages = 1;
     while (
@@ -86,13 +88,7 @@ async function listUserAdAccounts({ userId, facebookId, accessToken }) {
       accounts.push(...cursor);
       pages += 1;
     }
-    const formatted = accounts.map((a) => ({
-      id: a.id.replace("act_", ""),
-      name: a.name,
-      status: a.account_status,
-      currency: a.currency,
-      timezone: a.timezone_name,
-    }));
+    const formatted = accounts.map(formatAdAccountForList);
     // Refresh the HTTP-endpoint's cache off the back of the fresh fetch.
     try {
       await redisClient.set(

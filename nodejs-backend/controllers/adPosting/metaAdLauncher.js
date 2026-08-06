@@ -25,6 +25,10 @@ const {
   extractMetricValue,
 } = require("../../config/metricsCatalog");
 const { getVisibleMetricKeys } = require("../../Module/metaAds/metaAdsPreference");
+const {
+  AD_ACCOUNT_LIST_FIELDS,
+  formatAdAccountForList,
+} = require("../../utils/metaAdAccountShape");
 const { metricsFingerprint, dateRangeToken } = require("../../utils/metaCacheKeys");
 const { resolveDateRange } = require("../../utils/metaDateRange");
 const {
@@ -982,20 +986,9 @@ class MetaAdLauncher {
 
       const user = new bizSdk.User("me");
 
-      const FIELDS = [
-        "id",
-        "name",
-        "account_status",
-        "currency",
-        "timezone_name",
-        "amount_spent",
-        // Meta's per-currency floors (minor currency units). The V2 wizard
-        // validates the campaign spending limit + budgets against these
-        // before launch — e.g. an INR account's campaign spend-cap
-        // minimum is ₹5,000 (= 500000 paise).
-        "min_campaign_group_spend_cap",
-        "min_daily_budget",
-      ];
+      // Field list + row mapping live in utils/metaAdAccountShape.js because
+      // the Autopilot cron writes this same Redis key — see that file.
+      const FIELDS = AD_ACCOUNT_LIST_FIELDS;
       // Page size 100 (Meta's max for /me/adaccounts) so the typical agency
       // portfolio fits in one call. Then walk pagination via the SDK cursor
       // so an agency with >100 accounts still gets every account back.
@@ -1017,18 +1010,7 @@ class MetaAdLauncher {
         `getAdAccountsList: fetched ${adAccounts.length} ad accounts across ${pages} page(s)`,
       );
 
-      const formattedAccounts = adAccounts.map((account) => ({
-        id: account.id.replace("act_", ""),
-        name: account.name,
-        status: account.account_status,
-        currency: account.currency,
-        timezone: account.timezone_name,
-        amountSpent: formatBudget(account.amount_spent, account.currency),
-        // Raw minor-unit minimums — the frontend converts to major units
-        // for display + validation. 0 when Meta doesn't report a floor.
-        minCampaignSpendCap: Number(account.min_campaign_group_spend_cap) || 0,
-        minDailyBudget: Number(account.min_daily_budget) || 0,
-      }));
+      const formattedAccounts = adAccounts.map(formatAdAccountForList);
 
       const response = {
         status: true,
