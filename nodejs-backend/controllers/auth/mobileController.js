@@ -454,6 +454,46 @@ async function postAmemberInvoice({
   purchasedAt,
   expiresAt,
 }) {
+  // Expire any existing active access records in aMember for this user before granting new access
+  try {
+    const todayStr = formatDateForAmember(new Date());
+    const userAccessResp = await axios.get(`${baseUrl}/access`, {
+      params: { _key: apiKey, "_filter[user_id]": String(amemberUserId) },
+    });
+    const accessRecords = Array.isArray(userAccessResp.data)
+      ? userAccessResp.data
+      : Object.values(userAccessResp.data || {});
+    for (const acc of accessRecords) {
+      if (acc && acc.access_id && acc.expire_date && acc.expire_date > todayStr) {
+        const expireParams = new URLSearchParams({
+          _key: apiKey,
+          expire_date: todayStr,
+        });
+        await axios.put(`${baseUrl}/access/${acc.access_id}`, expireParams.toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        }).catch((e) => console.warn("[postAmemberInvoice] Could not expire previous access:", e.message));
+      }
+    }
+  } catch (prevErr) {
+    console.warn("[postAmemberInvoice] Warning checking previous active access:", prevErr.message);
+  }
+
+  // Expire previous active transactions in MongoDB MobileStoreTransaction
+  await MobileStoreTransaction.updateMany(
+    {
+      amember_user_id: String(amemberUserId),
+      canonical_transaction_id: { $ne: canonicalTransactionId },
+      expires_at: { $gt: new Date() },
+    },
+    {
+      $set: {
+        expires_at: new Date(),
+        "meta.replaced_by": canonicalTransactionId,
+        "meta.replaced_at": new Date(),
+      },
+    }
+  ).catch((err) => console.warn("[postAmemberInvoice] Expire previous active transactions warning:", err.message));
+
   const publicId = `${platform}_${canonicalTransactionId}`;
   const paysysId = platform === "ios" ? "app-store" : "google-play";
   const beginDateStr = formatDateForAmember(purchasedAt);
@@ -1523,8 +1563,9 @@ async function sendApplePaymentSuccess({
     userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
   }
 
+  const amemberProdId = matchedProduct?.amember_product_id || 8;
   const subscriptionType = {
-    [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate),
+    [amemberProdId]: formatDateForAmember(expiresDate),
   };
   const tokenPayload = {
     status: true,
@@ -1607,7 +1648,7 @@ const verifyApplePayment = async (req, res) => {
       decoded = await crossCheckAppleTransaction(decoded);
     } catch (e) {
       console.error("[verifyApplePayment] App Store Server API check failed:", e.message);
-      return res.status(502).json({ ok: false, code: "APPLE_SERVER_ERROR", error: "Apple could not confirm this transaction." });
+      return res.status(403).json({ ok: false, code: "APPLE_SERVER_ERROR", error: "Apple could not confirm this transaction." });
     }
 
     const productId = decoded.productId;
@@ -2029,13 +2070,14 @@ const verifyGooglePayment = async (req, res) => {
       userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
     }
 
+    const googleAmemberProdId = matchedProduct?.amember_product_id || 8;
     const tokenPayload = {
       status: true,
       user_id: amemberUserId,
       login: userProfile?.login || req.user?.login,
       user_email: userProfile?.email || req.user?.user_email,
       hasActivePlan: true,
-      userSubscriptionType: { [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate) },
+      userSubscriptionType: { [googleAmemberProdId]: formatDateForAmember(expiresDate) },
       created_from: "GPT",
     };
 
@@ -2064,7 +2106,7 @@ const verifyGooglePayment = async (req, res) => {
         user_email: userProfile?.email || req.user?.user_email,
         loginProviders: userProfile?.loginProviders || req.user?.loginProviders || [],
         hasActivePlan: true,
-        userSubscriptionType: { [matchedProduct.amember_product_id]: formatDateForAmember(expiresDate) },
+        userSubscriptionType: { [googleAmemberProdId]: formatDateForAmember(expiresDate) },
       },
     });
   } catch (error) {
@@ -2846,7 +2888,7 @@ const AcceptMobileTerms = async (req, res) => {
       );
     } catch (error) {
       console.error("[AcceptMobileTerms] aMember update failed:", error.message);
-      return res.status(502).json({
+      return res.status(500).json({
         ok: false,
         code: "AMEMBER_TERMS_SYNC_FAILED",
         error: "Failed to record terms acceptance in aMember.",
@@ -2989,7 +3031,7 @@ async function getMobileFreeTrial(req, res) {
     });
   } catch (error) {
     console.error("[getMobileFreeTrial] error:", error.response?.data || error.message);
-    return res.status(502).json({
+    return res.status(500).json({
       ok: false,
       code: "AMEMBER_ERROR",
       error: "Failed to fetch or verify the Free Trial from aMember.",
