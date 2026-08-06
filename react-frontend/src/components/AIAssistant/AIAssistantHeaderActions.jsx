@@ -19,6 +19,7 @@ import {
   getHistory,
   listConversations,
 } from '@/apis/aiAssistant/aiAssistantApi';
+import { cleanHistoryText } from './historyText';
 import {
   loadConversation,
   setConversations,
@@ -188,15 +189,15 @@ const AIAssistantHeaderActions = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="truncate text-[13px] text-white/90">
-                              {conv.title || 'Untitled'}
+                              {cleanHistoryText(conv.title) || 'Untitled'}
                             </span>
                             <span className="shrink-0 text-[10px] text-white/40">
                               {formatRelativeTime(conv.updatedAt)}
                             </span>
                           </div>
-                          {conv.lastMessage && (
+                          {cleanHistoryText(conv.lastMessage) && (
                             <p className="mt-0.5 line-clamp-1 text-[11px] text-white/50">
-                              {conv.lastMessage}
+                              {cleanHistoryText(conv.lastMessage)}
                             </p>
                           )}
                         </div>
