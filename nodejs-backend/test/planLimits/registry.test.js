@@ -63,6 +63,34 @@ assert.strictEqual(getPlanLimitDef(undefined), null);
 assert.strictEqual(isValidPlanLimitKey(DEFS[0].key), true);
 assert.strictEqual(isValidPlanLimitKey("nope:missing"), false);
 
+// ── `enabled: false` means invisible AND unenforced ─────────────────────────
+// A disabled limit must not resolve, so checkPlanLimit/requireManagedCampaign
+// no-op on it and a value left in the DB from when it was enabled can't
+// silently keep enforcing. `meta:ad_accounts` is disabled today (management
+// wants campaigns capped, not ad accounts) — if it's ever re-enabled this
+// assertion should be repointed at whatever is disabled then, not deleted.
+assert.ok(
+  DEFS.every((def) => def.enabled !== false),
+  "listPlanLimits() must not expose disabled limits",
+);
+assert.strictEqual(
+  getPlanLimitDef("meta:ad_accounts"),
+  null,
+  "meta:ad_accounts is disabled and must not resolve",
+);
+assert.ok(
+  !PLAN_LIMIT_KEYS.includes("meta:ad_accounts"),
+  "a disabled limit must not appear in PLAN_LIMIT_KEYS",
+);
+assert.ok(
+  !("meta:ad_accounts" in resolvePlanLimitValues({ maxAdAccounts: 3 })),
+  "a stored value for a disabled limit must be ignored, not resolved",
+);
+assert.ok(
+  !serializePlanLimits().some((d) => d.key === "meta:ad_accounts"),
+  "a disabled limit must not render an admin column",
+);
+
 // ── serialization drops the counter thunks (must be JSON-safe for the admin UI)
 const serialized = serializePlanLimits();
 assert.strictEqual(serialized.length, DEFS.length);
@@ -123,10 +151,11 @@ const campaigns = getPlanLimitDef("meta:campaigns");
 assert.ok(campaigns, "meta:campaigns must exist — it's the one hard-enforced limit today");
 const msg = buildPlanLimitMessage(campaigns, { limit: 2, current: 2 });
 assert.ok(msg.includes("2 of 2"), `message should state usage: ${msg}`);
-assert.ok(
-  msg.includes("across all your ad accounts"),
-  `message must convey the cross-account scope, or an under-cap-looking account reads as a bug: ${msg}`,
-);
+// The limit counts CLAIMED SLOTS, not campaigns present in the Meta account,
+// so the message must point at releasing one — telling a user to "delete a
+// campaign" would be wrong advice under this model (they can keep the
+// campaign in Meta and simply stop managing it here).
+assert.ok(/releas/i.test(msg), `message must offer releasing a slot: ${msg}`);
 assert.ok(msg.includes(campaigns.remedy), "message should tell the user how to resolve it");
 
 // Singular vs plural on the unit.

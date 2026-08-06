@@ -47,6 +47,14 @@ const LIMITS = [
     unit: "ad account",
     description:
       "Ad accounts visible across every connected Facebook Business. Advisory only — shows a usage banner, never hides or blocks an account.",
+    // DISABLED 2026-08-06 — management wants campaigns capped, not ad
+    // accounts. Kept (rather than deleted) as a ready-to-enable row: flip
+    // this back to true and the admin column, the counting, and the usage
+    // chip all return with no other change. Same `enabled` convention as
+    // config/modelRegistry.js. While false, this limit is invisible
+    // everywhere and never enforced — any value already stored against it
+    // is ignored, not deleted, so re-enabling restores prior config.
+    enabled: false,
     // "advisory" = counted + surfaced in the UI, but nothing is blocked.
     // "hard"     = a checkPlanLimit() gate refuses the mutation.
     enforcement: "advisory",
@@ -69,23 +77,33 @@ const LIMITS = [
     group: "Meta Ads",
     unit: "campaign",
     description:
-      "Active or paused campaigns, totalled across every ad account on every connected Facebook Business. Deleting or archiving a campaign frees a slot.",
+      "Campaigns the user has claimed a slot for. Connecting an ad account is unrestricted; only these campaigns can be opened, edited, paused/resumed, or automated. Creating a campaign claims a slot; releasing or deleting one frees it.",
     enforcement: "hard",
-    scopeNote: "across all your ad accounts",
+    scopeNote: "on your plan",
     remedy:
-      "Delete or archive an existing campaign (in any account), or upgrade your plan, to create a new one.",
-    counter: () => require("../utils/planUsage").countUserCampaigns,
+      "Release a campaign you're managing (Campaigns list → Manage toggle), or upgrade your plan.",
+    // Counts the user's CLAIMED SLOTS, not campaigns present in Meta. This is
+    // both the product rule ("operate on only N campaigns") and far cheaper
+    // than the account-by-account Meta walk this used to do — one indexed
+    // countDocuments, no Meta calls, no Redis reads.
+    counter: () => require("../services/managedCampaigns").countManagedCampaigns,
     legacyField: "maxCampaigns",
   },
 ];
 
-const BY_KEY = new Map(LIMITS.map((entry) => [entry.key, entry]));
+// `enabled: false` entries stay in the file but are invisible to the rest of
+// the system — not listed in admin, not resolved, not counted, never enforced,
+// and any value already stored against them is ignored rather than deleted.
+// Everything below operates on ACTIVE only; LIMITS is the full authored list.
+const ACTIVE_LIMITS = LIMITS.filter((entry) => entry.enabled !== false);
+const BY_KEY = new Map(ACTIVE_LIMITS.map((entry) => [entry.key, entry]));
 
-/** Every limit definition, in admin-UI display order. */
+/** Every ACTIVE limit definition, in admin-UI display order. */
 function listPlanLimits() {
-  return LIMITS;
+  return ACTIVE_LIMITS;
 }
 
+/** Active limits only — a disabled key resolves to null, so the gates no-op. */
 function getPlanLimitDef(key) {
   return BY_KEY.get(String(key || "")) || null;
 }
@@ -94,14 +112,14 @@ function isValidPlanLimitKey(key) {
   return BY_KEY.has(String(key || ""));
 }
 
-const PLAN_LIMIT_KEYS = LIMITS.map((entry) => entry.key);
+const PLAN_LIMIT_KEYS = ACTIVE_LIMITS.map((entry) => entry.key);
 
 /**
  * The registry minus the `counter` thunks — safe to JSON-serialise to the
  * admin panel, which renders its columns from exactly this.
  */
 function serializePlanLimits() {
-  return LIMITS.map(({ counter, legacyField, ...rest }) => rest);
+  return ACTIVE_LIMITS.map(({ counter, legacyField, ...rest }) => rest);
 }
 
 /** Resolve an entry's counter thunk to the actual async fn. */
@@ -135,7 +153,7 @@ function resolvePlanLimitValues(doc) {
   };
 
   const out = {};
-  for (const def of LIMITS) {
+  for (const def of ACTIVE_LIMITS) {
     const stored = readStored(def.key);
     const legacy = def.legacyField ? doc?.[def.legacyField] : undefined;
     const value = stored ?? legacy ?? null;

@@ -19,6 +19,8 @@ import {
   Pencil,
   Search,
   RefreshCw,
+  Lock,
+  Check,
 } from 'lucide-react';
 import {
   getAdSets,
@@ -30,6 +32,8 @@ import {
   resolveAdSetForEdit,
   resolveAdForEdit,
   getAdPreviewMedia,
+  claimManagedCampaign,
+  releaseManagedCampaign,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -131,15 +135,17 @@ function BudgetBar({ budget, remaining }) {
   );
 }
 
-function ToggleSwitch({ status, onToggle, toggling }) {
+function ToggleSwitch({ status, onToggle, toggling, disabled = false }) {
   const isActive = status === 'ACTIVE';
+  const inert = toggling || disabled;
   return (
     <button
       onClick={onToggle}
-      disabled={toggling}
+      disabled={inert}
+      title={disabled ? 'Manage this campaign to change its status' : undefined}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200
         ${isActive ? 'bg-emerald-500' : 'bg-red-500'}
-        ${toggling ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+        ${inert ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
       <span
         className={`absolute top-1 left-1 h-3 w-3 rounded-full shadow transition-transform duration-200
@@ -293,7 +299,42 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, campaignUsage, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, campaignUsage, managedCampaignIds, onManagedCampaignsChanged, facebookId, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+  // Plan-slot state. `managedCampaignIds === null` means the plan is uncapped
+  // — every helper below then reports "managed", so no lock UI renders and
+  // paying tiers see the table exactly as before this feature.
+  const slotsCapped = managedCampaignIds instanceof Set;
+  const isManaged = (id) => !slotsCapped || managedCampaignIds.has(id);
+  const slotsUsed = slotsCapped ? managedCampaignIds.size : 0;
+  const slotsAllowed = campaignUsage?.allowed ?? null;
+  const slotsFull = slotsCapped && slotsAllowed !== null && slotsUsed >= slotsAllowed;
+  const [slotBusyId, setSlotBusyId] = useState(null);
+
+  const toggleManaged = async (campaign) => {
+    if (slotBusyId) return;
+    setSlotBusyId(campaign.id);
+    try {
+      if (isManaged(campaign.id)) {
+        await releaseManagedCampaign({ campaignId: campaign.id }, { facebookId });
+      } else {
+        await claimManagedCampaign(
+          { campaignId: campaign.id, adAccountId },
+          { facebookId },
+        );
+      }
+      // Re-fetch rather than patching local state: the slot count also drives
+      // the "New Campaign" button and the header counter, and the server is
+      // the authority on whether the claim actually landed.
+      await onManagedCampaignsChanged?.();
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || 'Could not update managed campaigns',
+      );
+    } finally {
+      setSlotBusyId(null);
+    }
+  };
+
   const [statuses, setStatuses]   = useState({});
   const [toggling, setToggling]   = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -307,6 +348,8 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     metricKeys,
     onMetricKeysSaved,
   });
+  // 6 structural columns + metric columns + Actions, plus Manage when capped.
+  const colCount = 7 + metrics.entries.length + (slotsCapped ? 1 : 0);
   // Search by campaign name — client-side over the already-fetched list
   // (same list `useSortedRows` sorts), not a separate API call. Matches
   // the search-input pattern already used in DetailedTargetingPicker.jsx
@@ -392,9 +435,24 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
-        <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
-          {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'}
-        </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+            {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'}
+          </p>
+          {slotsCapped && slotsAllowed !== null && (
+            <span
+              className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 text-10 font-semibold ${
+                slotsFull
+                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300'
+                  : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/60'
+              }`}
+              title="Campaigns you can open, edit, pause and automate on your plan"
+            >
+              <Lock className="h-2.5 w-2.5" />
+              {slotsUsed} of {slotsAllowed} managed
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <div className="relative w-56">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
@@ -470,28 +528,40 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              {slotsCapped && (
+                <th className="w-20 px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Manage</th>
+              )}
               <th className="w-16 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7 + metrics.entries.length} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={colCount} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={7 + metrics.entries.length} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
+              <tr><td colSpan={colCount} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const status  = getStatus(c);
               const budget  = parseBudget(c.daily_budget);
               const remaining = parseBudget(c.budget_remaining);
+              const managed = isManaged(c.id);
               return (
                 <motion.tr
                   key={c.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: idx * 0.03 }}
-                  onClick={() => onDrillDown(c)}
-                  className="group cursor-pointer border-b border-gray-200 transition-colors hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/3 last:border-b-0"
+                  // Unmanaged rows aren't drillable — that block is what makes
+                  // the ad-set/ad endpoints unreachable for a campaign outside
+                  // the plan's slots, which is why those endpoints don't need
+                  // a parent-campaign lookup of their own.
+                  onClick={() => managed && onDrillDown(c)}
+                  className={`group border-b border-gray-200 transition-colors dark:border-white/10 last:border-b-0 ${
+                    managed
+                      ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/3'
+                      : 'cursor-default bg-gray-50/60 dark:bg-white/1.5'
+                  }`}
                 >
                   {/* campaign name */}
                   <td className="pl-5 pr-4 py-4">
@@ -508,7 +578,15 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2.5">
                       <StatusBadge status={status} />
-                      <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, c)} toggling={!!toggling[c.id]} />
+                      <ToggleSwitch
+                        status={status}
+                        onToggle={(e) => {
+                          e.stopPropagation();
+                          if (managed) handleToggle(e, c);
+                        }}
+                        toggling={!!toggling[c.id]}
+                        disabled={!managed}
+                      />
                     </div>
                   </td>
                   {/* objective */}
@@ -545,15 +623,54 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                     values={metrics.metricsById[c.id]}
                     loading={metrics.loading}
                   />
+                  {/* manage slot — only on plans that cap campaigns */}
+                  {slotsCapped && (
+                    <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <button
+                              type="button"
+                              onClick={() => toggleManaged(c)}
+                              disabled={slotBusyId === c.id || (!managed && slotsFull)}
+                              className={`flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                                managed
+                                  ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-700 hover:bg-emerald-400/20 dark:text-emerald-300'
+                                  : 'border-gray-200 bg-gray-100 text-gray-500 hover:bg-gray-200 dark:border-white/8 dark:bg-white/4 dark:text-white/50 dark:hover:bg-white/8'
+                              }`}
+                            >
+                              {slotBusyId === c.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : managed ? (
+                                <Check className="h-3 w-3" />
+                              ) : (
+                                <Lock className="h-3 w-3" />
+                              )}
+                              {managed ? 'Managed' : 'Locked'}
+                            </button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" sideOffset={6} className="max-w-72">
+                          <p className="text-xs leading-relaxed">
+                            {managed
+                              ? "Managed — you can open, edit, pause and automate this campaign. Releasing it frees a slot and does NOT delete the campaign in Meta."
+                              : slotsFull
+                                ? `You're using all ${slotsAllowed} campaign slots on your plan. Release one to manage this campaign instead, or upgrade.`
+                                : 'Not managed — click to use one of your plan’s campaign slots on it.'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </td>
+                  )}
                   {/* actions */}
                   <td className="pr-5 pl-2 py-4">
                     <div className="flex items-center justify-end gap-1.5">
                       {V2_SUPPORTED_OBJECTIVES.has(c.objective) && onLaunchWizard && (
                         <button
                           onClick={(e) => handleEdit(e, c)}
-                          disabled={editingId === c.id}
-                          title="Edit campaign"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                          disabled={editingId === c.id || !managed}
+                          title={managed ? 'Edit campaign' : 'Manage this campaign to edit it'}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {editingId === c.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -567,8 +684,9 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                           e.stopPropagation();
                           setPendingDelete(c);
                         }}
-                        title="Delete campaign"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        disabled={!managed}
+                        title={managed ? 'Delete campaign' : 'Manage this campaign to delete it'}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -837,7 +955,9 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
     const next = getStatus(s) === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setToggling((p) => ({ ...p, [s.id]: true }));
     try {
-      const res = await updateAdStatus('adset', s.id, next);
+      // Parent campaign passed so the managed-campaign plan gate can run
+      // without a Meta lookup — see the validator note on updateAdStatusSchema.
+      const res = await updateAdStatus('adset', s.id, next, campaign?.id);
       setStatuses((p) => ({ ...p, [s.id]: next }));
       globalToast.success(res?.message);
     } catch { globalToast.error('Failed to update ad set status'); }
@@ -1451,7 +1571,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
     const next = getStatus(a) === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setToggling((p) => ({ ...p, [a.id]: true }));
     try {
-      const res = await updateAdStatus('ad', a.id, next);
+      const res = await updateAdStatus('ad', a.id, next, campaign?.id);
       setStatuses((p) => ({ ...p, [a.id]: next }));
       globalToast.success(res?.message);
     } catch { globalToast.error('Failed to update ad status'); }
@@ -1645,6 +1765,11 @@ export function TableViewCampaigns({
   // { allowed, managed } when the plan caps managed campaigns, else null —
   // disables "New Campaign" at cap instead of only failing after the wizard.
   campaignUsage,
+  // Set of campaign ids holding a plan slot; null = uncapped plan, lock
+  // nothing. Rows outside the set render locked and can't be drilled into.
+  managedCampaignIds,
+  onManagedCampaignsChanged,
+  facebookId,
   onLaunchWizard,
   manageNonce,
   // Selectable metric columns. The catalog is the dashboard's single
@@ -1739,7 +1864,7 @@ export function TableViewCampaigns({
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} managedCampaignIds={managedCampaignIds} onManagedCampaignsChanged={onManagedCampaignsChanged} facebookId={facebookId} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (

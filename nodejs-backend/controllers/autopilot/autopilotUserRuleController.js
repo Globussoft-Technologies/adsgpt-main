@@ -41,6 +41,49 @@ function normalizeAttachments(attachments = []) {
   }));
 }
 
+/**
+ * Plan gate for rule attachments.
+ *
+ * Rules attach to specific campaigns and carry their own `evaluateOn`
+ * (campaign | adset | ad), so gating the ATTACHMENT is sufficient — the cron
+ * only ever evaluates attached campaigns, and never has to resolve an ad
+ * set's or ad's parent at execution time.
+ *
+ * Returns null when allowed, or `{status, body}` naming the offending
+ * campaigns. Fails open, like every other plan check.
+ */
+async function attachmentsOutsidePlan(userId, attachments = []) {
+  try {
+    const {
+      getCampaignLimit,
+      listManagedCampaignIds,
+    } = require("../../services/managedCampaigns");
+    if ((await getCampaignLimit(userId)) === null) return null;
+
+    const managed = await listManagedCampaignIds(userId);
+    const blocked = attachments
+      .map((a) => String(a.campaignId))
+      .filter((id) => !managed.has(id));
+    if (blocked.length === 0) return null;
+
+    return {
+      status: 403,
+      body: {
+        status: false,
+        code: "CAMPAIGN_NOT_MANAGED",
+        error:
+          blocked.length === 1
+            ? "That campaign isn't one you're managing on your plan. Add it from the Campaigns list first, or pick a different campaign."
+            : `${blocked.length} of the selected campaigns aren't ones you're managing on your plan. Add them from the Campaigns list first, or pick different campaigns.`,
+        campaignIds: blocked,
+      },
+    };
+  } catch (err) {
+    logger.warn(`[autopilot] attachment plan check failed, allowing: ${err.message}`);
+    return null;
+  }
+}
+
 class AutopilotUserRuleController {
   constructor() {
     this.list = this.list.bind(this);
@@ -122,10 +165,14 @@ class AutopilotUserRuleController {
         });
       }
 
+      const attachments = normalizeAttachments(value.attachments);
+      const blocked = await attachmentsOutsidePlan(userId, attachments);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const doc = await AutopilotUserRule.create({
         ...value,
         userId,
-        attachments: normalizeAttachments(value.attachments),
+        attachments,
       });
       return res.status(201).json({ status: true, rule: doc.toObject() });
     } catch (err) {
@@ -161,6 +208,8 @@ class AutopilotUserRuleController {
       const patch = { ...value };
       if (patch.attachments) {
         patch.attachments = normalizeAttachments(patch.attachments);
+        const blocked = await attachmentsOutsidePlan(userId, patch.attachments);
+        if (blocked) return res.status(blocked.status).json(blocked.body);
       }
 
       // findOneAndUpdate with ownership filter — a forged :id from

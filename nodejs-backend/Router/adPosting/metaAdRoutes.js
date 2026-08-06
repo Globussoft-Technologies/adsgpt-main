@@ -6,6 +6,7 @@ const metaAdControllerV2 = require("../../controllers/adPosting/metaAdLauncherV2
 const campaignTemplateController = require("../../controllers/campaignTemplate.controller");
 const metaAdsPreferenceController = require("../../controllers/adPosting/metaAdsPreferenceController");
 const metaTableMetricsController = require("../../controllers/adPosting/metaTableMetricsController");
+const managedCampaignController = require("../../controllers/adPosting/managedCampaignController");
 const autopilotRoutes = require("../autopilot/autopilotRoutes");
 const metaChatRoutes = require("./metaChatRoutes");
 const adCopyGenerator = require("../../controllers/adPosting/adCopyGeneratorController")
@@ -31,6 +32,11 @@ router.patch("/preferences", metaAdsPreferenceController.updatePreference);
 // cached bundle through a deploy doesn't 404 into a defaults-only dashboard.
 router.get("/analytics/metrics-preference", metaAdsPreferenceController.getLegacyPreference);
 router.patch("/analytics/metrics-preference", metaAdsPreferenceController.updateLegacyPreference);
+// Managed-campaign slots — which campaigns a capped plan spends its
+// allowance on. See services/managedCampaigns.js.
+router.get("/managed-campaigns", managedCampaignController.list);
+router.post("/managed-campaigns", managedCampaignController.claim);
+router.delete("/managed-campaigns", managedCampaignController.release);
 // Metric COLUMNS for the entity tables. Deliberately separate from the
 // entity-list endpoints below: those cache for 2h (stable lists), metrics
 // cache for 5min (volatile). See metaTableMetricsController.js.

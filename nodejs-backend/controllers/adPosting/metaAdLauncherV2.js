@@ -60,6 +60,10 @@ const {
   getFacebookIdFromRequest,
 } = require("../../utils/metaConnection");
 const { checkPlanLimit } = require("../../utils/planLimits");
+const {
+  claimCampaign,
+  requireManagedCampaign,
+} = require("../../services/managedCampaigns");
 
 const CAPPED_BID_STRATEGIES = new Set([
   "LOWEST_COST_WITH_BID_CAP",
@@ -115,6 +119,30 @@ function resolveCellOr400(req) {
     };
   }
   return { ok: true, cell: getCell(objective, conversionLocation) };
+}
+
+/**
+ * Plan gate for campaign-scoped mutations: refuse when the user's plan caps
+ * managed campaigns and THIS campaign isn't one of the claimed slots.
+ *
+ * Returns null when allowed (uncapped plan, managed campaign, no campaignId
+ * available, or a lookup failure — it fails open), or `{status, body}` to
+ * spread into the response. Same shape as resolveCellOr400 above.
+ */
+async function managedCampaignGate(userId, campaignId) {
+  const gate = await requireManagedCampaign(userId, campaignId);
+  if (gate.ok) return null;
+  return {
+    status: gate.status,
+    body: {
+      status: false,
+      code: gate.code,
+      limitKey: gate.limitKey,
+      error: gate.error,
+      limit: gate.limit,
+      campaignId: gate.campaignId,
+    },
+  };
 }
 
 // Short, human-shareable reference code — the kind a user can read off an
@@ -358,6 +386,17 @@ async function createCampaignV2(req, res) {
 
     const campaign = await account.createCampaign([], params);
 
+    // A campaign the user just created is theirs to manage — claim its slot.
+    // `force` because the checkPlanLimit above already reserved room for it;
+    // re-checking here would count the slot this call is about to fill.
+    await claimCampaign(userId, {
+      campaignId: campaign.id,
+      adAccountId,
+      facebookId: getFacebookIdFromRequest(req),
+      source: "create",
+      force: true,
+    });
+
     // V2 reuses V1's surgical cache bust — same Redis keys.
     await invalidateAfterCreate(userId, { adAccountId });
 
@@ -402,6 +441,10 @@ async function createAdSetV2(req, res) {
   }
 
   const userId = req.user.user_id;
+
+  // Adding an ad set to a campaign is an operation ON that campaign.
+  const blocked = await managedCampaignGate(userId, value.campaignId);
+  if (blocked) return res.status(blocked.status).json(blocked.body);
 
   if (value.targeting.ageMin > value.targeting.ageMax) {
     return res.status(400).json({
@@ -987,6 +1030,9 @@ async function createAdV2(req, res) {
 
   const userId = req.user.user_id;
 
+  const blocked = await managedCampaignGate(userId, value.campaignId);
+  if (blocked) return res.status(blocked.status).json(blocked.body);
+
   try {
     await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${value.adAccountId}`);
@@ -1406,6 +1452,10 @@ async function updateCampaignV2(req, res) {
     });
   }
   const userId = req.user.user_id;
+
+  const blocked = await managedCampaignGate(userId, value.campaignId);
+  if (blocked) return res.status(blocked.status).json(blocked.body);
+
   try {
     await initApiForUser(userId, getFacebookIdFromRequest(req));
 
@@ -1778,6 +1828,18 @@ async function updateAdSetV2(req, res) {
     } catch {
       /* non-fatal — proceed without context */
     }
+
+    // This handler already reads `campaign_id` above for its CBO logic, so
+    // unlike the other ad-set/ad endpoints the plan gate here can use Meta's
+    // AUTHORITATIVE parent rather than a client-supplied campaignId — no
+    // extra call, and not spoofable. Falls back to the client value if the
+    // context read failed.
+    const blocked = await managedCampaignGate(
+      userId,
+      existing.campaign_id || value.campaignId,
+    );
+    if (blocked) return res.status(blocked.status).json(blocked.body);
+
     let campaignIsCbo = false;
     let campaignSacs = [];
     if (existing.campaign_id) {
@@ -2049,6 +2111,10 @@ async function updateAdV2(req, res) {
   }
 
   const userId = req.user.user_id;
+
+  const blocked = await managedCampaignGate(userId, value.campaignId);
+  if (blocked) return res.status(blocked.status).json(blocked.body);
+
   try {
     await initApiForUser(userId, getFacebookIdFromRequest(req));
     const account = new AdAccount(`act_${value.adAccountId}`);

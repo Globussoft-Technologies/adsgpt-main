@@ -354,6 +354,12 @@ const targetingSchemaV2 = Joi.object({
 const updateAdSetSchemaV2 = Joi.object({
   adAccountId: Joi.string().required(),
   adSetId: Joi.string().required(),
+  // Parent campaign — OPTIONAL, sent by the frontend (which always knows it
+  // from the drill-down URL) purely so the managed-campaign plan gate can run
+  // without a Meta lookup to resolve adSet → campaign. Absent = gate allows;
+  // the UI blocks drill-down into unmanaged campaigns, so this is the only
+  // practical path anyway. See services/managedCampaigns.js.
+  campaignId: Joi.string().optional(),
   name: Joi.string().min(2).max(120).optional(),
   dailyBudget: Joi.number().integer().min(100).max(BUDGET_DAILY_MAX_MINOR).optional(),
   lifetimeBudget: Joi.number().integer().min(100).max(BUDGET_TOTAL_MAX_MINOR).optional(),
@@ -676,6 +682,9 @@ function buildAdSchemaV2(objective, conversionLocation) {
   const baseShape = {
     adAccountId: Joi.string().required(),
     adSetId: Joi.string().required(),
+    // Optional parent campaign — see updateAdSetSchemaV2's note; used only by
+    // the managed-campaign plan gate, never sent to Meta.
+    campaignId: Joi.string().optional(),
     pageId: Joi.string().required(),
     instagramUserId: Joi.string().optional().allow(""),
     name: Joi.string().min(2).max(120).required(),

@@ -1147,6 +1147,11 @@ export default function CreateCampaignWizardV2({
         if (form.customProductPage) adPayload.customProductPage = form.customProductPage;
       }
 
+      // Parent campaign — for the managed-campaign plan gate only, never
+      // forwarded to Meta. Covers both paths: the campaign just created
+      // above (create-full) and the seeded parent (create-ad / create-adset).
+      if (campaignId) adPayload.campaignId = campaignId;
+
       await createMetaAdV2(adPayload);
 
       globalToast.success(
@@ -1257,6 +1262,9 @@ export default function CreateCampaignWizardV2({
             fc && Number(fc.capFrequency) > 0 && Number(fc.capPeriodDays) > 0;
           payload.frequencyControl = hasValid ? fc : null;
         }
+        // Parent campaign — not sent to Meta, only used by the managed-
+        // campaign plan gate to identify the parent without a lookup.
+        if (context?.campaignId) payload.campaignId = context.campaignId;
         await updateMetaAdSetV2(payload);
       } else if (mode === 'edit-ad') {
         // Rebuild the creative with the EXISTING media (v1 reuses it) +
@@ -1300,6 +1308,7 @@ export default function CreateCampaignWizardV2({
           if (form.deferredDeepLink) adPayload.deferredDeepLink = form.deferredDeepLink;
           if (form.customProductPage) adPayload.customProductPage = form.customProductPage;
         }
+        if (context?.campaignId) adPayload.campaignId = context.campaignId;
         await updateMetaAdV2(adPayload);
       }
       globalToast.success(WIZARD_MODE_META[mode]?.toast || 'Saved.');

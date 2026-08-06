@@ -341,6 +341,9 @@ async function evaluateRuleAtAccount({
   runId,
   userId,
   acctSummary,
+  // Set of campaign ids the user's plan lets them automate, or null when the
+  // plan is uncapped (then nothing is filtered). Resolved once per user run.
+  managedCampaignIds = null,
 }) {
   // Walk the rule's attachments, but only those for THIS account.
   const myAttachments = (rule.attachments || []).filter(
@@ -356,6 +359,13 @@ async function evaluateRuleAtAccount({
       .map((s) => String(s)),
   );
   for (const att of myAttachments) {
+    // Plan gate — skip campaigns outside the user's managed slots. Silent by
+    // design: this is not an error or an orphan, the rule is simply dormant
+    // for that campaign until the user manages it again or upgrades, and
+    // logging it every tick would flood the action log.
+    if (managedCampaignIds && !managedCampaignIds.has(String(att.campaignId))) {
+      continue;
+    }
     // Orphan check — does this campaign still exist on Meta at all?
     const campaignAlive = allIds.has(String(att.campaignId));
     if (!campaignAlive) {
@@ -521,6 +531,29 @@ async function runUserRuleCycle({
           `[autopilot v4] userId=${userId} disabled in settings — skipped`,
         );
         continue;
+      }
+
+      // Plan gate: on a capped plan, only campaigns holding a slot may be
+      // automated. Attaching an unmanaged campaign is already refused at the
+      // API (autopilotUserRuleController), but a rule attached BEFORE a
+      // downgrade — or to a campaign the user has since released — would
+      // otherwise keep running. Resolved once per user per run.
+      // `null` = uncapped plan, every attachment allowed.
+      let managedCampaignIds = null;
+      try {
+        const {
+          getCampaignLimit,
+          listManagedCampaignIds,
+        } = require("../managedCampaigns");
+        if ((await getCampaignLimit(userId)) !== null) {
+          managedCampaignIds = await listManagedCampaignIds(userId);
+        }
+      } catch (err) {
+        // Fail open — an unautomated campaign is a worse outcome than a
+        // briefly-unenforced plan limit.
+        logger.warn(
+          `[autopilot v4] userId=${userId} managed-campaign lookup failed: ${err.message} — proceeding unrestricted`,
+        );
       }
 
       // Token resolution — same per-user OAuth model as v3.
@@ -754,6 +787,7 @@ async function runUserRuleCycle({
                 runId,
                 userId,
                 acctSummary: proxyCounters,
+                managedCampaignIds,
               });
             }
           }

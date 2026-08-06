@@ -32,6 +32,41 @@ export const getCampaigns = async (
   return data;
 };
 
+// ─── managed-campaign slots ──────────────────────────────────────────────────
+// On a plan that caps campaigns, the user picks WHICH campaigns their
+// allowance is spent on; everything else renders locked. `limit: null` from
+// the backend means the plan is uncapped and no lock UI should appear.
+// See nodejs-backend/services/managedCampaigns.js.
+export const getManagedCampaigns = async ({ facebookId } = {}) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/meta-ads/managed-campaigns`,
+    { headers: getAuthHeaders(facebookId) },
+  );
+  return data;
+};
+
+export const claimManagedCampaign = async (
+  { campaignId, adAccountId },
+  { facebookId } = {},
+) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/managed-campaigns`,
+    { campaignId, adAccountId },
+    { headers: getAuthHeaders(facebookId) },
+  );
+  return data;
+};
+
+// Releasing only stops AdsGPT managing the campaign — it is NOT deleted in
+// Meta. Copy at the call site must make that clear.
+export const releaseManagedCampaign = async ({ campaignId }, { facebookId } = {}) => {
+  const { data } = await axios.delete(
+    `${BASE_URL}/adsgpt/meta-ads/managed-campaigns`,
+    { data: { campaignId }, headers: getAuthHeaders(facebookId) },
+  );
+  return data;
+};
+
 export const getAdSets = async (campaignId, adAccountId, { refresh = false } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-ad-sets`, {
     params: refresh ? { campaignId, adAccountId, refresh: 'true' } : { campaignId, adAccountId },
@@ -230,10 +265,15 @@ export const postGoogleAd = async (payload) => {
   return data;
 };
 
-export const updateAdStatus = async (level,id,status) => {
-  const { data } = await axios.patch(`${BASE_URL}/adsgpt/meta-ads/update-status`, { level,id, status }, {
-    headers: getAuthHeaders(),
-  });
+// `campaignId` is only needed when level is 'adset'/'ad' — it lets the
+// managed-campaign plan gate identify the parent without a Meta lookup.
+// Optional: omitting it means the gate allows the call through.
+export const updateAdStatus = async (level, id, status, campaignId) => {
+  const { data } = await axios.patch(
+    `${BASE_URL}/adsgpt/meta-ads/update-status`,
+    campaignId ? { level, id, status, campaignId } : { level, id, status },
+    { headers: getAuthHeaders() },
+  );
   return data;
 };
 export const metaDisconnect = async (userId, facebookId) => {

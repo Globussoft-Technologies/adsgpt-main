@@ -614,6 +614,30 @@ async function attachPlanUsage(response, userId, limitKeys) {
   return response;
 }
 
+// Campaign-list decoration: plan usage PLUS `managedCampaignIds`, the slots
+// the user has claimed. The frontend locks any row not in that list.
+//
+// Attached after the cache read for the same reason as attachPlanUsage — the
+// managed set changes whenever the user toggles a campaign, which is far more
+// often than the 2h entity-list cache turns over. Omitted entirely on an
+// uncapped plan so paying tiers never see a lock state.
+async function attachCampaignPlanState(response, userId) {
+  await attachPlanUsage(response, userId, ["meta:campaigns"]);
+  try {
+    const {
+      getCampaignLimit,
+      listManagedCampaignIds,
+    } = require("../../services/managedCampaigns");
+    if ((await getCampaignLimit(userId)) === null) return response;
+    response.managedCampaignIds = [...(await listManagedCampaignIds(userId))];
+  } catch (err) {
+    // Fail open: no managedCampaignIds means the UI locks nothing, which is
+    // the same posture the server-side gate takes when it can't resolve.
+    logger.warn(`attachCampaignPlanState: ${err.message}`);
+  }
+  return response;
+}
+
 class MetaAdLauncher {
   constructor() {
     this.getAdAccountsList = this.getAdAccountsList.bind(this);
@@ -995,6 +1019,10 @@ class MetaAdLauncher {
           // blob made an admin's cap change invisible for up to REDIS_TTL.
           return res
             .status(200)
+            // `meta:ad_accounts` is currently `enabled: false` in the
+            // registry, so this resolves to nothing and no usage chip
+            // renders. Kept wired so flipping that flag back on restores
+            // the readout with no change here — see planLimitsRegistry.js.
             .json(await attachPlanUsage(JSON.parse(cached), userId, ["meta:ad_accounts"]));
         }
       } else {
@@ -1068,6 +1096,8 @@ class MetaAdLauncher {
       // stable "which accounts count as over the limit" ordering across
       // MULTIPLE Facebook connections is ambiguous; the actual hard stop
       // lives elsewhere.
+      // No-op while `meta:ad_accounts` is disabled in the registry; left
+      // wired so re-enabling it needs no change here.
       return res.status(200).json(await attachPlanUsage(response, userId, ["meta:ad_accounts"]));
     } catch (error) {
       logger.error(
@@ -1104,12 +1134,12 @@ class MetaAdLauncher {
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          // Plan-limit usage is recomputed fresh even on a cache HIT — see
-          // attachPlanUsage's docblock for why baking it into this cached
-          // blob made an admin's cap change invisible for up to REDIS_TTL.
+          // Plan-limit usage + managed-slot state are recomputed fresh even
+          // on a cache HIT — see attachPlanUsage's docblock for why baking
+          // them into this cached blob made a change invisible for REDIS_TTL.
           return res
             .status(200)
-            .json(await attachPlanUsage(JSON.parse(cached), userId, ["meta:campaigns"]));
+            .json(await attachCampaignPlanState(JSON.parse(cached), userId));
         }
       } else {
         await redisClient.del(cacheKey).catch(() => {});
@@ -1170,11 +1200,25 @@ class MetaAdLauncher {
       );
       // --------------------------------
 
-      // Surface the plan's campaign cap so the frontend can proactively
-      // disable "New Campaign" instead of only failing after the whole
-      // wizard is filled out (createCampaignV2 is still the real
-      // enforcement point — this is UX, not the gate).
-      return res.status(200).json(await attachPlanUsage(response, userId, ["meta:campaigns"]));
+      // This list is FRESH from Meta, which makes it the one safe moment to
+      // release slots held by campaigns deleted outside AdsGPT. Scoped to
+      // this ad account — every campaign under the user's OTHER accounts is
+      // absent from this list by definition, not by deletion.
+      try {
+        const { pruneMissingForAccount } = require("../../services/managedCampaigns");
+        await pruneMissingForAccount(
+          userId,
+          adAccountId,
+          formattedCampaigns.map((c) => c.id),
+        );
+      } catch (err) {
+        logger.warn(`getCapaignsByAdAccount: managed-slot prune failed: ${err.message}`);
+      }
+
+      // Surface the plan's campaign cap + which campaigns hold a slot, so the
+      // frontend can lock unmanaged rows and disable "New Campaign" at the
+      // limit (the create/mutate handlers are the real enforcement).
+      return res.status(200).json(await attachCampaignPlanState(response, userId));
     } catch (error) {
       logger.error(`Get campaigns error: ${error.message}`);
 
@@ -1585,7 +1629,26 @@ class MetaAdLauncher {
         });
       }
 
-      const { level, id, status } = value;
+      const { level, id, status, campaignId } = value;
+
+      // Managed-campaign plan gate. When level is 'campaign', `id` IS the
+      // campaign; otherwise fall back to the parent the frontend supplied
+      // (absent → allowed, see the validator's note). Lazy require — see
+      // createCampaign's comment on the circular-import trap in this file.
+      const { requireManagedCampaign } = require("../../services/managedCampaigns");
+      const gate = await requireManagedCampaign(
+        req.user.user_id,
+        level === "campaign" ? id : campaignId,
+      );
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          status: false,
+          code: gate.code,
+          limitKey: gate.limitKey,
+          error: gate.error,
+          limit: gate.limit,
+        });
+      }
 
       const { accessToken } = await initApiForUser(
         req.user.user_id,
@@ -4034,6 +4097,17 @@ class MetaAdLauncher {
 
       const campaign = await account.createCampaign([], params);
 
+      // Claim the plan slot for the campaign the user just made. `force`
+      // because checkPlanLimit above already reserved room for it.
+      const { claimCampaign } = require("../../services/managedCampaigns");
+      await claimCampaign(userId, {
+        campaignId: campaign.id,
+        adAccountId,
+        facebookId: getFacebookIdFromRequest(req),
+        source: "create",
+        force: true,
+      });
+
       await invalidateAfterCreate(userId, { adAccountId });
 
       return res.status(201).json({
@@ -4587,10 +4661,31 @@ class MetaAdLauncher {
       const { adAccountId, campaignId } = value;
       const userId = req.user.user_id;
 
+      // Lazy require — see createCampaign's note on the circular-import trap.
+      const {
+        requireManagedCampaign,
+        releaseCampaign,
+      } = require("../../services/managedCampaigns");
+      const gate = await requireManagedCampaign(userId, campaignId);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          status: false,
+          code: gate.code,
+          limitKey: gate.limitKey,
+          error: gate.error,
+          limit: gate.limit,
+        });
+      }
+
       await initApiForUser(userId, getFacebookIdFromRequest(req));
 
       const campaign = new bizSdk.Campaign(campaignId);
       await campaign.delete();
+
+      // The campaign is gone, so its plan slot is free. Released AFTER the
+      // Meta delete succeeds — releasing first would hand the slot back and
+      // then leave the campaign alive if Meta rejected the delete.
+      await releaseCampaign(userId, campaignId);
 
       // Deleting a campaign cascades server-side, so adset/ad list caches for
       // this user are also stale. Wipe the full status-bearing cache set

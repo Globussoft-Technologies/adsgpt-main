@@ -14,6 +14,14 @@ const updateAdStatusSchema = Joi.object({
     "any.only": "status must be ACTIVE or PAUSED",
     "any.required": "status is required",
   }),
+
+  // Parent campaign — OPTIONAL, and only needed when `level` is adset/ad
+  // (when level is 'campaign', `id` IS the campaign). Sent by the frontend,
+  // which knows it from the drill-down URL, so the managed-campaign plan gate
+  // can run without a Meta lookup to resolve the parent. Absent = allowed;
+  // the UI blocks drill-down into unmanaged campaigns, so that's the only
+  // practical path anyway. See services/managedCampaigns.js.
+  campaignId: Joi.string().optional(),
 });
 
 const applyFixSchema = Joi.object({

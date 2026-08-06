@@ -371,6 +371,44 @@ function createChat({ adAccountId, currency, scope, history, functionDeclaration
   });
 }
 
+// Campaign-id arg names seen across the MCP tool surface. The server is an
+// external package (mcps/meta-2), so we match on shape rather than importing
+// a schema — a tool whose args name a campaign is campaign-scoped.
+const CAMPAIGN_ID_ARG_KEYS = ["campaign_id", "campaignId"];
+
+function extractCampaignId(args = {}) {
+  for (const key of CAMPAIGN_ID_ARG_KEYS) {
+    if (args[key]) return String(args[key]);
+  }
+  return null;
+}
+
+/**
+ * Plan gate for chat-driven WRITES.
+ *
+ * The chatbot can pause/edit campaigns just like the dashboard, so the same
+ * managed-campaign limit has to apply — otherwise "pause campaign X" in chat
+ * routes straight around the UI's lock. Returns an error string to hand back
+ * to the model (so it explains the refusal in its own words) or null when
+ * allowed.
+ *
+ * LIMITATION: only tools whose args carry a campaign id can be checked. A
+ * chat-issued ad-set/ad write that names no parent campaign passes through —
+ * same residual gap as the dashboard's ad-set endpoints, and acceptable for
+ * the same reason (this is a commercial limit, not a security boundary).
+ */
+async function planBlockReasonForWrite(userId, args) {
+  try {
+    const campaignId = extractCampaignId(args);
+    if (!campaignId) return null;
+    const { requireManagedCampaign } = require("../managedCampaigns");
+    const gate = await requireManagedCampaign(userId, campaignId);
+    return gate.ok ? null : gate.error;
+  } catch {
+    return null; // fail open, like every other plan check
+  }
+}
+
 // Execute one auto-exec (read-only or local render) call and return its
 // function-response part. Local tools run in-process and emit their own `card`
 // event (no tool-step rows); MCP tools hit Meta and emit tool_call/tool_result
@@ -562,6 +600,20 @@ async function resumeAfterConfirmation({
   const writeResponseParts = [];
   for (const call of pendingAction.calls) {
     if (approved) {
+      // Plan gate — a chat-approved write must respect the same managed-
+      // campaign limit as the dashboard, or "pause campaign X" in chat walks
+      // straight around the UI's lock.
+      const planBlock = await planBlockReasonForWrite(ctx.userId, call.args);
+      if (planBlock) {
+        ctx.onEvent("tool_declined", { name: call.name, args: call.args });
+        writeResponseParts.push(
+          createPartFromFunctionResponse(call.id, call.name, {
+            error: `${planBlock} Tell the user this and do not retry.`,
+          })
+        );
+        continue;
+      }
+
       ctx.onEvent("tool_call", {
         name: call.name,
         args: call.args,

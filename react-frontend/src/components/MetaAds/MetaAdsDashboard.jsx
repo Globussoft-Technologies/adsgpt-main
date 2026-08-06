@@ -39,6 +39,7 @@ import {
   formatDateRangeLabel,
   PLAN_LIMITS,
   readPlanLimit,
+  readManagedCampaignIds,
 } from './metaAdsUtils';
 import { AnalyticsPanel, AuditTab } from './MetaAdsPanels';
 import MetricsPicker from './MetricsPicker';
@@ -81,6 +82,10 @@ export default function MetaAdsDashboard() {
   // point (see its plan-limit check), this is just avoiding a wasted trip
   // through the whole wizard when the cap is already known to be hit.
   const [campaignUsage, setCampaignUsage] = useState(null);
+  // Campaign ids holding a plan slot. `null` = the plan is uncapped and the
+  // backend sent no managed-slot state, so NOTHING is locked — distinct from
+  // an empty Set, which means "capped, and the user manages none yet".
+  const [managedCampaignIds, setManagedCampaignIds] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   // Date window for every metric on the page. Seeded from the URL so a
   // refresh or a shared link restores the same window — which matters more
@@ -250,6 +255,7 @@ export default function MetaAdsDashboard() {
       if (requestId === campaignsRequestRef.current) {
         setCampaigns(r.campaigns || []);
         setCampaignUsage(readPlanLimit(r, PLAN_LIMITS.metaCampaigns));
+        setManagedCampaignIds(readManagedCampaignIds(r));
       }
     } catch { /* noop */ } finally {
       if (requestId === campaignsRequestRef.current) {
@@ -388,6 +394,7 @@ export default function MetaAdsDashboard() {
         if (requestId === campaignsRequestRef.current) {
           setCampaigns(res.campaigns || []);
           setCampaignUsage(readPlanLimit(res, PLAN_LIMITS.metaCampaigns));
+          setManagedCampaignIds(readManagedCampaignIds(res));
         }
       } catch {
         /* noop */
@@ -456,6 +463,7 @@ export default function MetaAdsDashboard() {
       setSelectedAccount(null);
       setCampaigns([]);
       setCampaignUsage(null);
+      setManagedCampaignIds(null);
       setFacebookSelectorKey((value) => value + 1);
       setShowDisconnectModal(false);
     } catch {
@@ -529,6 +537,7 @@ export default function MetaAdsDashboard() {
               setSelectedAccount(null);
               setCampaigns([]);
               setCampaignUsage(null);
+              setManagedCampaignIds(null);
               setAnalyticsData(null);
             }}
           />
@@ -768,6 +777,9 @@ export default function MetaAdsDashboard() {
                 onRefresh={reloadCampaigns}
                 onNewCampaign={() => openWizard('create-full')}
                 campaignUsage={campaignUsage}
+                managedCampaignIds={managedCampaignIds}
+                onManagedCampaignsChanged={reloadCampaigns}
+                facebookId={activeFacebookId}
                 // Add-Ad-Set / Add-Ad / Edit buttons all open the V2 wizard
                 // with mode/context — only expose them when V2 is enabled.
                 // (V1 wizard doesn't understand these modes.)

@@ -122,6 +122,15 @@ export const readPlanLimit = (payload, limitKey) => {
   return { allowed: entry.limit, managed: entry.current };
 };
 
+// Campaign ids holding a plan slot, as a Set for O(1) row lookups.
+// Returns null when the backend sent no managed-slot state at all, which
+// means the plan is UNCAPPED — distinct from an empty Set ("capped, none
+// claimed yet"). Callers must treat null as "lock nothing".
+export const readManagedCampaignIds = (payload) =>
+  Array.isArray(payload?.managedCampaignIds)
+    ? new Set(payload.managedCampaignIds)
+    : null;
+
 // ─── selectable-metrics catalog helpers ──────────────────────────────────────
 // The backend's config/metricsCatalog.js entries reference icons by string
 // name (JSON can't carry a component reference) — resolve to the actual
