@@ -35,10 +35,12 @@ import {
   applyCreativeTypeToPrompt,
   brandAssetsFor,
   brandFetchMessage,
+  brandLogosOf,
   brandProductImagesOf,
   buildCreditCostsByQuality,
   buildModelConfigs,
   pickLogoUrl,
+  sameBrand,
 } from './briefCatalog';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
@@ -689,7 +691,7 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 // Brand asset accessors + the "which brand's assets?" rule live in
 // ./briefCatalog — pure, and exercised on their own.
 
-const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
+const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAssets }) => {
   // Drop empty/whitespace-URL items at render: an <img src=""> does NOT reliably
   // fire onError in Chromium, so a blank entry would show a permanent broken box
   // that the onError→removeAt path can never clear (BUG 8).
@@ -713,9 +715,19 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
   // Only ever this brand's own assets — see brandAssetsFor. Showing every
   // brand's images whenever the name didn't match exactly is what made the
   // options look the same for every brand.
+  // Saved Brand IQ records PLUS anything we discovered for this brand in this
+  // session. A brand added from its website isn't in Brand IQ yet (and its
+  // saved record may never carry a logo), so offering only saved records left
+  // "Choose brand image" empty even when the scrape had just returned a logo —
+  // the field got its value but there was nothing to re-select.
   const brandImages = useMemo(
-    () => brandAssetsFor(brands, brandName, { logos: isLogoField }),
-    [brands, brandName, isLogoField],
+    () => [
+      ...new Set([
+        ...brandAssetsFor(brands, brandName, { logos: isLogoField }),
+        ...(Array.isArray(extraAssets) ? extraAssets : []),
+      ]),
+    ],
+    [brands, brandName, isLogoField, extraAssets],
   );
 
   const addImages = (urls) => {
@@ -1128,7 +1140,14 @@ const BRAND_DERIVED_KEYS = [
 const formHasBrandFields = (form) =>
   (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
 
-const BrandPicker = ({ form, values, onPick, disabled, onRewritingChange }) => {
+const BrandPicker = ({
+  form,
+  values,
+  onPick,
+  disabled,
+  onRewritingChange,
+  onAssetsDiscovered,
+}) => {
   const dispatch = useDispatch();
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
@@ -1384,6 +1403,15 @@ const BrandPicker = ({ form, values, onPick, disabled, onRewritingChange }) => {
       onPick(patch);
       setSiteDraft('');
       setOpen(false);
+      // Remember what the scrape found so "Choose brand image" can offer it.
+      // Brand IQ may not have this brand yet (or may never store its logo), and
+      // without this the panel stays empty right after a successful scrape.
+      // Tagged with the brand so another brand's assets can never show up here.
+      onAssetsDiscovered?.({
+        brandName: patch.brand_name || '',
+        logos: brandLogosOf(res),
+        images: scraped,
+      });
       // Analyzing can save the brand server-side — refresh so it's listed next time.
       if (userId) dispatch(fetchBrands(userId));
       rewriteBriefFor({
@@ -1617,6 +1645,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   // this runs would use a brief written for the PREVIOUS brand, so the card
   // shows a loader over the prompt and holds Generate until it lands.
   const [rewritingPrompt, setRewritingPrompt] = useState(false);
+  // Assets a website scrape turned up this session: { brandName, logos, images }.
+  // Offered in "Choose brand image" alongside saved Brand IQ records, since a
+  // just-added brand isn't in Brand IQ yet.
+  const [scrapedAssets, setScrapedAssets] = useState(null);
   // Model / quality / aspect-ratio catalogue.
   //
   // Prefer the surface the BROWSER fetches (`useAdCreativeConfig` →
@@ -1946,6 +1978,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             disabled={isLocked}
             onPick={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
             onRewritingChange={setRewritingPrompt}
+            onAssetsDiscovered={setScrapedAssets}
           />
         )}
         {(form.fields || []).map((field) => {
@@ -2040,6 +2073,18 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 creditsPerImage={isRatios ? creditInfo.perImage : undefined}
                 // Lets the image fields offer THIS brand's saved images first.
                 brandName={field.type === 'image_upload' ? values.brand_name : undefined}
+                // Scraped assets, but only while they still belong to the brand
+                // on the card — otherwise the last site's logo would follow the
+                // user onto an unrelated brand.
+                extraAssets={
+                  field.type === 'image_upload' &&
+                  scrapedAssets &&
+                  sameBrand(scrapedAssets.brandName, values.brand_name)
+                    ? field.key === 'brand_logo'
+                      ? scrapedAssets.logos
+                      : scrapedAssets.images
+                    : undefined
+                }
               />
               </div>
             </div>

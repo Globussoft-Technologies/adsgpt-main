@@ -98,6 +98,15 @@ export const pickLogoUrl = (source) =>
 // Ignore case, spacing and punctuation: "H&M", "h & m" and "HM" are one brand.
 const brandKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
+// Do these two names refer to the same brand? Same rule the asset lookup uses,
+// so "Acme" and "Acme Inc." agree in both places.
+export const sameBrand = (a, b) => {
+  const x = brandKey(a);
+  const y = brandKey(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+};
+
 /**
  * The images to offer for the brand the brief is about.
  *
