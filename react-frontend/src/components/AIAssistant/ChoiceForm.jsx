@@ -38,6 +38,7 @@ import {
   brandProductImagesOf,
   buildCreditCostsByQuality,
   buildModelConfigs,
+  pickLogoUrl,
 } from './briefCatalog';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
@@ -1167,8 +1168,10 @@ const BrandPicker = ({ form, values, onPick, disabled, onRewritingChange }) => {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const logoOf = (b) =>
-    (Array.isArray(b?.logoUrls) && b.logoUrls[0]) || b?.logo || b?.iconUrl || '';
+  // Same tolerant lookup the scrape path uses — this one also missed
+  // `brandLogo` / `logoUrl`, so a saved brand storing its logo under either
+  // showed no logo on its row, its trigger, or in the Logo field.
+  const logoOf = pickLogoUrl;
   const fieldKeys = new Set((form.fields || []).map((f) => f.key));
   const currentName = (values.brand_name || '').trim();
   const matched =
@@ -1360,7 +1363,10 @@ const BrandPicker = ({ form, values, onPick, disabled, onRewritingChange }) => {
         }));
       }
       // Not every scrape identifies a logo; only set the field when it did.
-      const scrapedLogo = res?.logo || res?.logoUrl || res?.meta?.logo || res?.favicon || '';
+      // The response's key is `brandLogo` and it holds an ARRAY — reading only
+      // `logo`/`logoUrl` meant a perfectly good logo came back and the Logo
+      // field stayed empty.
+      const scrapedLogo = pickLogoUrl(res);
       if (fieldKeys.has('brand_logo') && scrapedLogo) {
         patch.brand_logo = [{ url: scrapedLogo, filename: 'logo', selected: true }];
       }

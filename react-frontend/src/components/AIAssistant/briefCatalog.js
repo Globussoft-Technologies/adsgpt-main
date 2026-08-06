@@ -60,22 +60,40 @@ export const buildCreditCostsByQuality = (modelConfigs, surfaceModels, inlinedFa
 
 // ─── Brand assets (logos / product images) ──────────────────────────────────
 // Field spellings vary by endpoint — same tolerance as the agent's brand
-// normaliser (Agent/src/utils/brand.py).
-export const brandLogosOf = (b) =>
-  [
-    ...(Array.isArray(b?.logoUrls) ? b.logoUrls : []),
-    b?.brandLogo,
-    b?.logoUrl,
-    b?.logo,
-    b?.iconUrl,
-  ].filter(Boolean);
+// normaliser (Agent/src/utils/brand.py) — and so does the SHAPE: the same key
+// arrives as a bare string from one source and an array from another. The
+// website scrape returns `brandLogo: ["…/logo-puma-black.png"]`, and the old
+// code dropped that value straight into the list, so `.filter(Boolean)` kept
+// the ARRAY as if it were a URL. Normalising every field through urlsFrom is
+// what makes a logo actually reach the Logo field.
+const urlsFrom = (value) =>
+  (Array.isArray(value) ? value : value ? [value] : []).filter(
+    (u) => typeof u === 'string' && u.trim(),
+  );
 
-export const brandProductImagesOf = (b) =>
-  [
-    ...(Array.isArray(b?.imageUrl) ? b.imageUrl : b?.imageUrl ? [b.imageUrl] : []),
-    ...(Array.isArray(b?.imageUrls) ? b.imageUrls : []),
-    ...(Array.isArray(b?.brandImages) ? b.brandImages : []),
-  ].filter(Boolean);
+export const brandLogosOf = (b) => [
+  ...urlsFrom(b?.logoUrls),
+  ...urlsFrom(b?.brandLogo),
+  ...urlsFrom(b?.logoUrl),
+  ...urlsFrom(b?.logo),
+  ...urlsFrom(b?.iconUrl),
+];
+
+export const brandProductImagesOf = (b) => [
+  ...urlsFrom(b?.imageUrl),
+  ...urlsFrom(b?.imageUrls),
+  ...urlsFrom(b?.brandImages),
+  // What the website scrape calls its product imagery.
+  ...urlsFrom(b?.images),
+];
+
+// The single logo to seed the Logo field with, from a saved brand record OR a
+// website-scrape response (the two use different keys and shapes).
+export const pickLogoUrl = (source) =>
+  brandLogosOf(source)[0] ||
+  urlsFrom(source?.meta?.logo)[0] ||
+  urlsFrom(source?.favicon)[0] ||
+  '';
 
 // Ignore case, spacing and punctuation: "H&M", "h & m" and "HM" are one brand.
 const brandKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
