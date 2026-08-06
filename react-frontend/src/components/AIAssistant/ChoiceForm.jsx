@@ -29,6 +29,7 @@ import { submitAssistantChoiceForm } from '@/store/reducers/aiAssistant/aiAssist
 import { fetchBrands, analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
 import { suggestBriefPrompt } from '@/utils/suggestBriefPrompt';
+import { forgetCachedBrief, getCachedBrief, setCachedBrief } from './briefPromptCache';
 import {
   applyBrandToPrompt,
   applyCreativeTypeToPrompt,
@@ -1135,7 +1136,7 @@ const BRAND_DERIVED_KEYS = [
 const formHasBrandFields = (form) =>
   (form.fields || []).some((f) => BRAND_FIELD_KEYS.has(f.key));
 
-const BrandPicker = ({ form, values, onPick, disabled }) => {
+const BrandPicker = ({ form, values, onPick, disabled, onRewritingChange }) => {
   const dispatch = useDispatch();
   const userId = useSelector((s) => s.socket?.userData?.user_id);
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
@@ -1152,8 +1153,10 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   // A brand switch rewrites the brief for the new brand (see `pick`). Only the
   // latest switch matters, so an in-flight rewrite is aborted when another
   // starts — otherwise a slow first response could land after a later one.
-  const [rewriting, setRewriting] = useState(false);
+  // The flag is reported UP to the card, which owns the prompt field's loader
+  // and blocks Generate until the brief matches the brand on screen.
   const rewriteAbort = useRef(null);
+  const setRewriting = onRewritingChange;
   useEffect(() => () => rewriteAbort.current?.abort(), []);
   const wrapRef = useRef(null);
 
@@ -1245,6 +1248,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       brandName: nextName,
       brandDescription: b.description || '',
       product: patch.product ?? values.product,
+      previousBrand: currentName,
     });
   };
 
@@ -1258,8 +1262,18 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
   //
   // The deterministic rename has already landed by the time this runs, so it's
   // a refinement: slow or failing, the card is still on the right brand.
-  const rewriteBriefFor = ({ prompt, brandName, brandDescription, product }) => {
+  const rewriteBriefFor = ({ prompt, brandName, brandDescription, product, previousBrand }) => {
     if (!fieldKeys.has('prompt') || !prompt || !brandName) return;
+    const creativeType = values.creative_type;
+
+    // Comparing two brands means switching back and forth. The first switch to
+    // a brand pays for the model call; returning to it is instant.
+    const cached = getCachedBrief(brandName, creativeType);
+    if (cached) {
+      onPick({ prompt: cached });
+      return;
+    }
+
     rewriteAbort.current?.abort();
     const controller = new AbortController();
     rewriteAbort.current = controller;
@@ -1269,11 +1283,15 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
       brandName,
       brandDescription,
       product,
-      creativeType: values.creative_type,
+      creativeType,
+      previousBrand,
       signal: controller.signal,
     })
       .then((rewritten) => {
-        if (rewritten && !controller.signal.aborted) onPick({ prompt: rewritten });
+        if (rewritten && !controller.signal.aborted) {
+          setCachedBrief(brandName, creativeType, rewritten);
+          onPick({ prompt: rewritten });
+        }
       })
       .catch(() => {
         /* keep the renamed prompt — never block the user on a rewrite */
@@ -1376,6 +1394,7 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
         brandName: patch.brand_name || '',
         brandDescription: patch.brand_description || '',
         product: patch.product ?? values.product,
+        previousBrand: currentName,
       });
     } catch (err) {
       // 409 = the brand is already saved. This used to refresh the list and say
@@ -1438,12 +1457,6 @@ const BrandPicker = ({ form, values, onPick, disabled }) => {
           </Tip>
         </div>
       </label>
-      {rewriting && (
-        <span className="flex items-center gap-1.5 text-[11px] text-white/50">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Rewriting the brief for this brand…
-        </span>
-      )}
       <button
         type="button"
         disabled={disabled}
@@ -1603,6 +1616,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const [editing, setEditing] = useState(false);
   // Double-clicking the header collapses the brief to just its title bar.
   const [collapsed, setCollapsed] = useState(false);
+  // The brief is being regenerated for a newly picked brand. Generating while
+  // this runs would use a brief written for the PREVIOUS brand, so the card
+  // shows a loader over the prompt and holds Generate until it lands.
+  const [rewritingPrompt, setRewritingPrompt] = useState(false);
   // Model / quality / aspect-ratio catalogue.
   //
   // Prefer the surface the BROWSER fetches (`useAdCreativeConfig` →
@@ -1647,6 +1664,11 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       // just in which tool ends up being called.
       if (key === 'creative_type' && prev.prompt) {
         next.prompt = applyCreativeTypeToPrompt(prev.prompt, val, prev.brand_name);
+      }
+      // A hand-edited brief is the user's, not the model's — drop the cached
+      // version so switching away and back doesn't silently discard their work.
+      if (key === 'prompt' && prev.brand_name) {
+        forgetCachedBrief(prev.brand_name, prev.creative_type);
       }
       if (key === 'model') {
         const costs = creditCostsByQuality?.[val];
@@ -1926,6 +1948,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
             values={values}
             disabled={isLocked}
             onPick={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
+            onRewritingChange={setRewritingPrompt}
           />
         )}
         {(form.fields || []).map((field) => {
@@ -1935,6 +1958,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           if (field.key === 'num_images') return null;
           const model = isModelField(field);
           const isRatios = field.key === 'aspect_ratios';
+          const isPromptField = field.key === 'prompt';
           const qualityCosts =
             field.key === 'quality'
               ? creditCostsByQuality?.[values.model || 'auto']
@@ -1988,20 +2012,39 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                     </Tip>
                   )}
                 </label>
-                {field.description && (
-                  <span className="text-[11px] text-white/40">{field.description}</span>
+                {isPromptField && rewritingPrompt ? (
+                  <span className="flex items-center gap-1.5 text-[11px] text-[#15DCFF]">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Writing a brief for this brand…
+                  </span>
+                ) : (
+                  field.description && (
+                    <span className="text-[11px] text-white/40">{field.description}</span>
+                  )
                 )}
               </div>
+              <div className="relative">
+                {/* The brief on screen still belongs to the previous brand
+                    until the rewrite lands, so it's covered rather than left
+                    editable — an edit made here would be overwritten a moment
+                    later, and Generate is held for the same reason. */}
+                {isPromptField && rewritingPrompt && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-lg bg-[#111]/85 text-[12px] text-white/70 backdrop-blur-[2px]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#15DCFF]" />
+                    Rewriting for {(values.brand_name || 'this brand').trim()}…
+                  </div>
+                )}
               <Renderer
                 field={renderedField}
                 value={isRatios ? countsFromValues(values) : values[field.key]}
                 onChange={(v) => setField(isRatios ? 'aspect_ratio_counts' : field.key, v)}
-                disabled={isLocked}
+                disabled={isLocked || (isPromptField && rewritingPrompt)}
                 creditCosts={model ? creditCostsForQuality : undefined}
                 creditsPerImage={isRatios ? creditInfo.perImage : undefined}
                 // Lets the image fields offer THIS brand's saved images first.
                 brandName={field.type === 'image_upload' ? values.brand_name : undefined}
               />
+              </div>
             </div>
           );
         })}
@@ -2090,17 +2133,20 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                     : 'You can change anything before submitting.'}
               </span>
             </div>
+            {/* Held while the brief is being rewritten: generating now would
+                spend credits on a brief still written for the previous brand. */}
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isLocked || !!validationError}
+              disabled={isLocked || !!validationError || rewritingPrompt}
+              title={rewritingPrompt ? 'Writing the brief for this brand…' : undefined}
               className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-medium transition-all ${
-                isLocked || validationError
+                isLocked || validationError || rewritingPrompt
                   ? 'cursor-not-allowed bg-white/[0.06] text-white/35'
                   : 'bg-white text-black hover:bg-white/90 shadow-[0_2px_10px_rgba(255,255,255,0.12)]'
               }`}
             >
-              {submitting ? (
+              {submitting || rewritingPrompt ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />

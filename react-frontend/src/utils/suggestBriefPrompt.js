@@ -29,6 +29,7 @@ export const suggestBriefPrompt = async ({
   brandDescription,
   product,
   creativeType,
+  previousBrand,
   signal,
 }) => {
   const base = String(prompt || '').trim();
@@ -43,6 +44,10 @@ export const suggestBriefPrompt = async ({
       brand_description: String(brandDescription || '').slice(0, 4000),
       product: String(product || '').slice(0, 300),
       creative_type: String(creativeType || ''),
+      // Naming the outgoing brand lets the agent tell the model exactly what
+      // NOT to carry over — without it, a Nike brief became Nvidia-branded
+      // trainers instead of a brief about graphics cards.
+      previous_brand: String(previousBrand || '').slice(0, 200),
     },
     { headers: { Authorization: `Bearer ${getCookies()}` }, signal },
   );
