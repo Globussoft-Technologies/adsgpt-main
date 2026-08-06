@@ -32,6 +32,7 @@ import {
   getAdPreviewMedia,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { StatusBadge, Spinner, EmptyState } from './MetaAdsAtoms';
 import {
   labelObjective,
@@ -292,7 +293,7 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, campaignUsage, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const [statuses, setStatuses]   = useState({});
   const [toggling, setToggling]   = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -420,17 +421,38 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           {metrics.entries.length > 0 && (
             <MetricsWindowLabel dateParams={dateParams} label={dateLabel} />
           )}
-          {onNewCampaign && (
-            <button
-              type="button"
-              onClick={onNewCampaign}
-              disabled={!adAccountId}
-              className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs dark:bg-white dark:text-black"
-            >
-              <Plus className="h-3 w-3" />
-              New Campaign
-            </button>
-          )}
+          {onNewCampaign && (() => {
+            const atLimit = campaignUsage && campaignUsage.managed >= campaignUsage.allowed;
+            const button = (
+              <button
+                type="button"
+                onClick={onNewCampaign}
+                disabled={!adAccountId || atLimit}
+                className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs dark:bg-white dark:text-black"
+              >
+                <Plus className="h-3 w-3" />
+                New Campaign
+              </button>
+            );
+            if (!atLimit) return button;
+            return (
+              <Tooltip delayDuration={150}>
+                {/* Trigger is the SPAN, not the button — a disabled native
+                    button doesn't reliably fire the pointer/focus events
+                    Radix's tooltip listens for across browsers. */}
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">{button}</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6} className="max-w-80">
+                  <p className="text-xs leading-relaxed">
+                    You're managing {campaignUsage.managed} of {campaignUsage.allowed} campaigns
+                    allowed across all your ad accounts. Delete or archive an existing campaign (in
+                    any account), or upgrade your plan, to create a new one.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })()}
         </div>
       </div>
 
@@ -1620,6 +1642,9 @@ export function TableViewCampaigns({
   adAccountId,
   onRefresh,
   onNewCampaign,
+  // { allowed, managed } when the plan caps managed campaigns, else null —
+  // disables "New Campaign" at cap instead of only failing after the wizard.
+  campaignUsage,
   onLaunchWizard,
   manageNonce,
   // Selectable metric columns. The catalog is the dashboard's single
@@ -1714,7 +1739,7 @@ export function TableViewCampaigns({
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (

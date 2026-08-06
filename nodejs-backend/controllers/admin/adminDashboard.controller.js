@@ -151,6 +151,9 @@ async function fetchAmemberProducts() {
   amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
   return allProducts;
 }
+// Exported so other admin controllers (planLimits.controller.js) reuse the
+// same fetch + 5-min cache instead of re-implementing the aMember call.
+exports.fetchAmemberProducts = fetchAmemberProducts;
 
 function buildPlanOptionsFromProducts(products) {
   const byLabel = new Map();

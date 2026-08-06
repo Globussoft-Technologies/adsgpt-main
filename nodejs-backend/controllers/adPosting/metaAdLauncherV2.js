@@ -59,6 +59,7 @@ const logger = require("../../utils/logger");
 const {
   getFacebookIdFromRequest,
 } = require("../../utils/metaConnection");
+const { checkPlanLimit } = require("../../utils/planLimits");
 
 const CAPPED_BID_STRATEGIES = new Set([
   "LOWEST_COST_WITH_BID_CAP",
@@ -281,6 +282,22 @@ async function createCampaignV2(req, res) {
     objectStoreUrl,
     status,
   } = value;
+
+  // Per-plan cap on managed campaigns (admin Plans page). Checked before any
+  // Meta call, so a blocked request costs nothing. checkPlanLimit owns the
+  // counting, the message, and the fail-open behaviour — see
+  // utils/planLimits.js + config/planLimitsRegistry.js.
+  const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
+  if (!campaignLimit.ok) {
+    return res.status(campaignLimit.status).json({
+      status: false,
+      code: campaignLimit.code,
+      limitKey: campaignLimit.limitKey,
+      error: campaignLimit.error,
+      limit: campaignLimit.limit,
+      current: campaignLimit.current,
+    });
+  }
 
   try {
     await initApiForUser(userId, getFacebookIdFromRequest(req));

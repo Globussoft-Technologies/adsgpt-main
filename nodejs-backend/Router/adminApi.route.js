@@ -5,6 +5,7 @@ const adminAuth = require("../controllers/admin/adminAuth.controller");
 const adminDashboard = require("../controllers/admin/adminDashboard.controller");
 const partnerApiKeys = require("../controllers/admin/partnerApiKey.controller");
 const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.controller");
+const planLimits = require("../controllers/admin/planLimits.controller");
 
 router.post("/login", adminAuth.login);
 router.get("/me", requireAdmin, adminAuth.me);
@@ -24,5 +25,10 @@ router.patch("/partner-api-keys/:id/revoke", requireAdmin, partnerApiKeys.revoke
 
 router.get("/token-usage/overview", requireAdmin, tokenUsageDashboard.overview);
 router.get("/token-usage/users/:userId", requireAdmin, tokenUsageDashboard.userDetail);
+
+// Per-plan caps on managed ad accounts / campaigns (Meta Ads). See
+// utils/planLimits.js + utils/planUsage.js for where these are enforced.
+router.get("/plans", requireAdmin, planLimits.listPlans);
+router.patch("/plans/:planId", requireAdmin, planLimits.upsertPlanLimit);
 
 module.exports = router;

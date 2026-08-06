@@ -33,7 +33,13 @@ import { format } from 'date-fns';
 // date pill and AdStudio's DateRangeFilter.
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
-import { DATE_PRESETS, STATUS_MAP, formatDateRangeLabel } from './metaAdsUtils';
+import {
+  DATE_PRESETS,
+  STATUS_MAP,
+  formatDateRangeLabel,
+  PLAN_LIMITS,
+  readPlanLimit,
+} from './metaAdsUtils';
 import { AnalyticsPanel, AuditTab } from './MetaAdsPanels';
 import MetricsPicker from './MetricsPicker';
 import { TableViewCampaigns } from './MetaAdsTableView';
@@ -62,8 +68,19 @@ export default function MetaAdsDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [adAccounts, setAdAccounts] = useState([]);
+  // { allowed, managed } when the user's plan caps managed ad accounts
+  // (admin Plans page), null when unlimited/unknown. Visibility only — the
+  // account list itself is never filtered by this, see getAdAccountsList's
+  // comment on why a hard per-account block isn't implemented.
+  const [adAccountUsage, setAdAccountUsage] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
+  // { allowed, managed } when the user's plan caps managed campaigns (admin
+  // Plans page), null when unlimited/unknown. Drives the proactive "New
+  // Campaign" disabled state — createCampaignV2 is the real enforcement
+  // point (see its plan-limit check), this is just avoiding a wasted trip
+  // through the whole wizard when the cap is already known to be hit.
+  const [campaignUsage, setCampaignUsage] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   // Date window for every metric on the page. Seeded from the URL so a
   // refresh or a shared link restores the same window — which matters more
@@ -232,6 +249,7 @@ export default function MetaAdsDashboard() {
       });
       if (requestId === campaignsRequestRef.current) {
         setCampaigns(r.campaigns || []);
+        setCampaignUsage(readPlanLimit(r, PLAN_LIMITS.metaCampaigns));
       }
     } catch { /* noop */ } finally {
       if (requestId === campaignsRequestRef.current) {
@@ -289,6 +307,7 @@ export default function MetaAdsDashboard() {
     const requestId = ++accountsRequestRef.current;
     if (!facebookId) {
       setAdAccounts([]);
+      setAdAccountUsage(null);
       setSelectedAccount(null);
       setLoadingAccounts(false);
       return;
@@ -300,6 +319,7 @@ export default function MetaAdsDashboard() {
         if (requestId !== accountsRequestRef.current) return;
         const accounts = res.adAccounts || [];
         setAdAccounts(accounts);
+        setAdAccountUsage(readPlanLimit(res, PLAN_LIMITS.metaAdAccounts));
         if (accounts.length) {
           // A cross-connection template apply is waiting to land on a
           // specific account now that this (new) connection's list has
@@ -367,6 +387,7 @@ export default function MetaAdsDashboard() {
         const res = await getCampaigns(selectedAccount.id, { facebookId });
         if (requestId === campaignsRequestRef.current) {
           setCampaigns(res.campaigns || []);
+          setCampaignUsage(readPlanLimit(res, PLAN_LIMITS.metaCampaigns));
         }
       } catch {
         /* noop */
@@ -431,8 +452,10 @@ export default function MetaAdsDashboard() {
       clearSelectedFacebookId(userId, facebookId);
       setSelectedFacebookAccount(null);
       setAdAccounts([]);
+      setAdAccountUsage(null);
       setSelectedAccount(null);
       setCampaigns([]);
+      setCampaignUsage(null);
       setFacebookSelectorKey((value) => value + 1);
       setShowDisconnectModal(false);
     } catch {
@@ -502,8 +525,10 @@ export default function MetaAdsDashboard() {
               ) return;
               setSelectedFacebookAccount(account);
               setAdAccounts([]);
+              setAdAccountUsage(null);
               setSelectedAccount(null);
               setCampaigns([]);
+              setCampaignUsage(null);
               setAnalyticsData(null);
             }}
           />
@@ -531,6 +556,18 @@ export default function MetaAdsDashboard() {
             }
           >
             <div className="w-72 p-1">
+              {/* Visibility only — no account below is actually blocked from
+                  selection. See getAdAccountsList's comment on why a hard
+                  per-account cutoff isn't implemented (accounts arrive in
+                  bulk per Facebook connection, not one at a time). */}
+              {adAccountUsage && adAccountUsage.managed > adAccountUsage.allowed && (
+                <div className="mb-1 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-10 font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                  <Info className="h-3 w-3 shrink-0" />
+                  <span className="truncate">
+                    {adAccountUsage.managed} of {adAccountUsage.allowed} ad accounts used — plan limit reached
+                  </span>
+                </div>
+              )}
               <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
                 {loadingAccounts ? (
                   <div className="flex items-center justify-center py-6">
@@ -730,6 +767,7 @@ export default function MetaAdsDashboard() {
                 adAccountId={selectedAccount?.id}
                 onRefresh={reloadCampaigns}
                 onNewCampaign={() => openWizard('create-full')}
+                campaignUsage={campaignUsage}
                 // Add-Ad-Set / Add-Ad / Edit buttons all open the V2 wizard
                 // with mode/context — only expose them when V2 is enabled.
                 // (V1 wizard doesn't understand these modes.)

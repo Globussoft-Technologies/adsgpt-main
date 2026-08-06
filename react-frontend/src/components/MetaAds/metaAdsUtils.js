@@ -104,6 +104,24 @@ export const getActionVal = (actions, type) =>
 export const getCPAVal = (list, type) =>
   parseFloat(list?.find((a) => a.action_type === type)?.value || 0);
 
+// ─── per-plan limits ─────────────────────────────────────────────────────────
+// Keys mirror nodejs-backend/config/planLimitsRegistry.js — the backend
+// attaches usage as `planLimits: { "<key>": { limit, current } }` on the
+// ad-account and campaign list responses. Kept in one place so a renamed or
+// newly-added limit is a single edit on this side too.
+export const PLAN_LIMITS = {
+  metaAdAccounts: 'meta:ad_accounts',
+  metaCampaigns: 'meta:campaigns',
+};
+
+// -> { allowed, managed } when the user's plan caps this limit, else null
+// (unlimited, or the backend omitted it).
+export const readPlanLimit = (payload, limitKey) => {
+  const entry = payload?.planLimits?.[limitKey];
+  if (!entry || entry.limit == null) return null;
+  return { allowed: entry.limit, managed: entry.current };
+};
+
 // ─── selectable-metrics catalog helpers ──────────────────────────────────────
 // The backend's config/metricsCatalog.js entries reference icons by string
 // name (JSON can't carry a component reference) — resolve to the actual

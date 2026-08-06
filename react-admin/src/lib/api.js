@@ -42,6 +42,8 @@ export const adminApi = {
   tokenUsageOverview: (params) => api.get("/token-usage/overview", { params }),
   tokenUsageUserDetail: (userId, params) =>
     api.get(`/token-usage/users/${encodeURIComponent(userId)}`, { params }),
+  plans: () => api.get("/plans"),
+  updatePlanLimit: (planId, patch) => api.patch(`/plans/${encodeURIComponent(planId)}`, patch),
 };
 
 // Page-view summaries live under /adsgpt/analytics (a different base than the

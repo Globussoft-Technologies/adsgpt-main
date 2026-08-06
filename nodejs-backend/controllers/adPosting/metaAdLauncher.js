@@ -588,6 +588,32 @@ function pickAppStoreUrl(objectStoreUrls, platform) {
   return null;
 }
 
+// Merges plan-limit usage onto a response as
+// `planLimits: { "<limitKey>": { limit, current } }` — called on EVERY
+// request (cache hit or miss), never baked into the cached entity-list
+// payload itself.
+//
+// `metaAdAccounts:*`/`metaCampaigns:*` are cached for REDIS_TTL (2h) because
+// the entity list is stable, but a plan's limit and the user's current usage
+// are NOT stable at that timescale — an admin can change a limit at any
+// moment. Baking usage info into the same cached blob as the entity list
+// (the first version of this did exactly that) meant an admin's change was
+// invisible for up to 2h even after the user hit Refresh, because Refresh
+// only forces the entity-list re-fetch and a cache HIT skips the usage
+// computation entirely. getPlanUsage's own lookup is cached for 5 min
+// (invalidated on admin save) and the counters reuse these SAME entity-list
+// cache entries, so recomputing per request costs a Mongo read and a couple
+// of Redis GETs, not a Meta call.
+//
+// Lazy require — see createCampaign's comment on why this can't be a
+// top-level require in this file.
+async function attachPlanUsage(response, userId, limitKeys) {
+  const { getPlanUsage } = require("../../utils/planLimits");
+  const usage = await getPlanUsage(userId, limitKeys);
+  if (Object.keys(usage).length) response.planLimits = usage;
+  return response;
+}
+
 class MetaAdLauncher {
   constructor() {
     this.getAdAccountsList = this.getAdAccountsList.bind(this);
@@ -964,7 +990,12 @@ class MetaAdLauncher {
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          return res.status(200).json(JSON.parse(cached));
+          // Plan-limit usage is recomputed fresh even on a cache HIT — see
+          // attachPlanUsage's docblock for why baking it into this cached
+          // blob made an admin's cap change invisible for up to REDIS_TTL.
+          return res
+            .status(200)
+            .json(await attachPlanUsage(JSON.parse(cached), userId, ["meta:ad_accounts"]));
         }
       } else {
         // Force-refresh: drop the cached entry so the rest of this handler
@@ -1020,6 +1051,9 @@ class MetaAdLauncher {
       };
 
       // ---------- STORE IN REDIS ----------
+      // Cache the entity list ONLY — plan-usage fields are attached to the
+      // OUTGOING response below, never to what's persisted here. See
+      // attachPlanUsage's docblock.
       await redisClient.set(
         cacheKey,
         JSON.stringify(response),
@@ -1028,7 +1062,13 @@ class MetaAdLauncher {
       );
       // -----------------------------------
 
-      return res.status(200).json(response);
+      // Surface the plan's ad-account cap so the frontend can show a
+      // usage banner ("managing 12 of 10 allowed ad accounts"). Read-only
+      // signal — this endpoint never hides or removes accounts, since a
+      // stable "which accounts count as over the limit" ordering across
+      // MULTIPLE Facebook connections is ambiguous; the actual hard stop
+      // lives elsewhere.
+      return res.status(200).json(await attachPlanUsage(response, userId, ["meta:ad_accounts"]));
     } catch (error) {
       logger.error(
         `Get ad accounts error: ${error.response?.data || error.message}`,
@@ -1064,7 +1104,12 @@ class MetaAdLauncher {
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          return res.status(200).json(JSON.parse(cached));
+          // Plan-limit usage is recomputed fresh even on a cache HIT — see
+          // attachPlanUsage's docblock for why baking it into this cached
+          // blob made an admin's cap change invisible for up to REDIS_TTL.
+          return res
+            .status(200)
+            .json(await attachPlanUsage(JSON.parse(cached), userId, ["meta:campaigns"]));
         }
       } else {
         await redisClient.del(cacheKey).catch(() => {});
@@ -1114,6 +1159,9 @@ class MetaAdLauncher {
       };
 
       // -------- STORE IN REDIS --------
+      // Cache the entity list ONLY — plan-usage fields are attached to the
+      // OUTGOING response below, never to what's persisted here. See
+      // attachPlanUsage's docblock.
       await redisClient.set(
         cacheKey,
         JSON.stringify(response),
@@ -1122,7 +1170,11 @@ class MetaAdLauncher {
       );
       // --------------------------------
 
-      return res.status(200).json(response);
+      // Surface the plan's campaign cap so the frontend can proactively
+      // disable "New Campaign" instead of only failing after the whole
+      // wizard is filled out (createCampaignV2 is still the real
+      // enforcement point — this is UX, not the gate).
+      return res.status(200).json(await attachPlanUsage(response, userId, ["meta:campaigns"]));
     } catch (error) {
       logger.error(`Get campaigns error: ${error.message}`);
 
@@ -3932,6 +3984,31 @@ class MetaAdLauncher {
         bidStrategy,
         status,
       } = value;
+
+      // Per-plan cap on managed campaigns — same gate as V2's
+      // createCampaignV2. Kept here too since V1 create-campaign is still a
+      // reachable endpoint until it's deleted post-migration.
+      //
+      // Required LAZILY (not at module top-level): planLimits.js resolves
+      // counters out of planUsage.js, which requires THIS file back (for
+      // initApiForUser/fetchAllPaged), and this file's own module.exports
+      // isn't populated until it finishes loading. A top-level require here
+      // would create a load-order-dependent cycle where planUsage.js can
+      // capture `undefined` for both. Requiring inside the handler defers
+      // resolution until first invocation, long after both files have
+      // finished loading.
+      const { checkPlanLimit } = require("../../utils/planLimits");
+      const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
+      if (!campaignLimit.ok) {
+        return res.status(campaignLimit.status).json({
+          status: false,
+          code: campaignLimit.code,
+          limitKey: campaignLimit.limitKey,
+          error: campaignLimit.error,
+          limit: campaignLimit.limit,
+          current: campaignLimit.current,
+        });
+      }
 
       await initApiForUser(userId, getFacebookIdFromRequest(req));
       const account = new AdAccount(`act_${adAccountId}`);
