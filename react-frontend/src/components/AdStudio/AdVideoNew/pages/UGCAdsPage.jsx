@@ -862,7 +862,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
 
                 <div className="mt-4.5 flex flex-col gap-2">
                   <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
-                    Additional Notes
+                    Prompt
                   </label>
                   <input
                     placeholder="e.g., white background, aerial drone shot, etc"

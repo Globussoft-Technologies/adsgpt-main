@@ -667,9 +667,9 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
           </div>
         )}
 
-        {/* Additional Notes */}
+        {/* Prompt */}
         <div>
-          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Additional Notes</label>
+          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Prompt</label>
           <input
             className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
             placeholder="e.g. white background, aerial drone shot"
