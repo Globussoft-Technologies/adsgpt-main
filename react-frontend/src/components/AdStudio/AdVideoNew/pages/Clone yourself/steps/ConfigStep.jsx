@@ -169,7 +169,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         label: 'Veo 3.1 Fast (Fast & Social-Ready)',
         tier: 'lower',
         Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-        credit: '9 CREDITS/SECOND',
+        credit: '4 CREDITS/SECOND',
       },
       {
         value: 'veo',
