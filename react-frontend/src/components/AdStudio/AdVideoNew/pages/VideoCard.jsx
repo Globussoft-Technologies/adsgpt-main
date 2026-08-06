@@ -110,6 +110,7 @@ export default function VideoCard({
   const [duration, setDuration] = useState(0);
   const [activeNavIndex, setActiveNavIndex] = useState(videoIndex);
   const [activeVideoUrl, setActiveVideoUrl] = useState(item?.results?.[0]?.url ?? '');
+  const primaryVideoUrl = item?.results?.[0]?.url ?? '';
   const activeVideoSrc = resolveVideoUrl(activeVideoUrl);
   const [showControls, setShowControls] = useState(false);
 
@@ -126,6 +127,11 @@ export default function VideoCard({
     setCurrentTime(0);
     setDuration(0);
   }, [activeVideoSrc]);
+
+  useEffect(() => {
+    if (isAiAds || !primaryVideoUrl) return;
+    setActiveVideoUrl((current) => (current === primaryVideoUrl ? current : primaryVideoUrl));
+  }, [isAiAds, primaryVideoUrl]);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();

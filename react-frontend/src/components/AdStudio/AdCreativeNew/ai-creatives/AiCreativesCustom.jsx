@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   X,
   ChevronDown,
@@ -602,6 +602,38 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     e.stopPropagation();
   };
 
+  const refreshBrandList = useCallback(async () => {
+    brandListAbortRef.current?.abort();
+    const controller = new AbortController();
+    brandListAbortRef.current = controller;
+    setBrandListState('loading');
+    setBrandListError('');
+    try {
+      const items = await fetchBrandList(
+        getUserId(),
+        getAuthToken(),
+        controller.signal,
+      );
+      if (brandListAbortRef.current !== controller) return;
+      setBrandList(items);
+      setBrandListState('loaded');
+    } catch (err) {
+      if (err.name === 'AbortError' || brandListAbortRef.current !== controller) return;
+      setBrandListError(err.message);
+      setBrandListState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    const onBrandsUpdated = (event) => {
+      const updatedUserId = event.detail?.userId;
+      if (updatedUserId && String(updatedUserId) !== String(getUserId())) return;
+      void refreshBrandList();
+    };
+    window.addEventListener('brandiq:brands-updated', onBrandsUpdated);
+    return () => window.removeEventListener('brandiq:brands-updated', onBrandsUpdated);
+  }, [refreshBrandList]);
+
   const openBrandIqPicker = async () => {
     setShowModelPicker(false);
     setShowQualityPicker(false);
@@ -609,23 +641,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     setShowBrandIqPicker((v) => !v);
     if (brandListState === 'loaded' || brandListState === 'loading') return;
 
-    brandListAbortRef.current?.abort();
-    brandListAbortRef.current = new AbortController();
-    setBrandListState('loading');
-    setBrandListError('');
-    try {
-      const items = await fetchBrandList(
-        getUserId(),
-        getAuthToken(),
-        brandListAbortRef.current.signal
-      );
-      setBrandList(items);
-      setBrandListState('loaded');
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      setBrandListError(err.message);
-      setBrandListState('error');
-    }
+    await refreshBrandList();
   };
 
   const handleBrandIqSelect = (item) => {

@@ -749,7 +749,7 @@ export default function RegenerateVoiceModal({
               onPlay={() => { setIsPreviewPlaying(true); syncAudio(); audioRef.current?.play(); }}
               onPause={() => { setIsPreviewPlaying(false); audioRef.current?.pause(); }}
               onSeeked={syncAudio}
-              onEnded={() => audioRef.current?.pause()}
+              onEnded={() => {}}
             />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-white/10 bg-black text-sm text-white/55">

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { clearImageRecreateInputs } from '@/store/reducers/image/imageSlice';
@@ -288,26 +288,42 @@ export function AdSetupStep({
     setBrandImagesPicked([]);
   };
 
-  const handleBrandIqOpen = async () => {
-    setShowBrandIqPicker((open) => !open);
-    if (brandList.length > 0 || brandListState === 'loading') return;
+  const refreshBrandList = useCallback(async () => {
     brandListAbortRef.current?.abort();
-    brandListAbortRef.current = new AbortController();
+    const controller = new AbortController();
+    brandListAbortRef.current = controller;
     setBrandListState('loading');
     setBrandListError('');
     try {
       const items = await fetchBrandList(
         getUserId(),
         getAuthToken(),
-        brandListAbortRef.current.signal,
+        controller.signal,
       );
+      if (brandListAbortRef.current !== controller) return;
       setBrandList(items);
       setBrandListState('loaded');
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError' || brandListAbortRef.current !== controller) return;
       setBrandListError(err.message || 'Failed to load brands');
       setBrandListState('error');
     }
+  }, []);
+
+  useEffect(() => {
+    const onBrandsUpdated = (event) => {
+      const updatedUserId = event.detail?.userId;
+      if (updatedUserId && String(updatedUserId) !== String(getUserId())) return;
+      void refreshBrandList();
+    };
+    window.addEventListener('brandiq:brands-updated', onBrandsUpdated);
+    return () => window.removeEventListener('brandiq:brands-updated', onBrandsUpdated);
+  }, [refreshBrandList]);
+
+  const handleBrandIqOpen = async () => {
+    setShowBrandIqPicker((open) => !open);
+    if (brandList.length > 0 || brandListState === 'loading') return;
+    await refreshBrandList();
   };
 
   const handleBrandIqSelect = (item) => {

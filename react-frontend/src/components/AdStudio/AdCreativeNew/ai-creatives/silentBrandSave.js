@@ -80,6 +80,9 @@ export async function silentSaveBrandFromAutofill({
     // Refresh the cached brand list so the new brand appears in the BrandIQ
     // dropdown without requiring a page reload.
     if (userId) store.dispatch(fetchBrands(userId));
+    window.dispatchEvent(
+      new CustomEvent('brandiq:brands-updated', { detail: { userId } }),
+    );
   } catch {
     // Silent by design.
   }

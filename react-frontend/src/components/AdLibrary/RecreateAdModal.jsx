@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -334,29 +334,45 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
 
   const total = totalImages(aspectCounts);
 
-  const openBrandIqPicker = async () => {
-    setShowModelPicker(false);
-    setShowAspectPicker(false);
-    setShowBrandIqPicker((v) => !v);
-    if (brandListState === 'loaded' || brandListState === 'loading') return;
-
+  const refreshBrandList = useCallback(async () => {
     brandListAbortRef.current?.abort();
-    brandListAbortRef.current = new AbortController();
+    const controller = new AbortController();
+    brandListAbortRef.current = controller;
     setBrandListState('loading');
     setBrandListError('');
     try {
       const items = await fetchBrandList(
         getUserId(),
         getAuthToken(),
-        brandListAbortRef.current.signal,
+        controller.signal,
       );
+      if (brandListAbortRef.current !== controller) return;
       setBrandList(items);
       setBrandListState('loaded');
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError' || brandListAbortRef.current !== controller) return;
       setBrandListError(err.message);
       setBrandListState('error');
     }
+  }, []);
+
+  useEffect(() => {
+    const onBrandsUpdated = (event) => {
+      const updatedUserId = event.detail?.userId;
+      if (updatedUserId && String(updatedUserId) !== String(getUserId())) return;
+      void refreshBrandList();
+    };
+    window.addEventListener('brandiq:brands-updated', onBrandsUpdated);
+    return () => window.removeEventListener('brandiq:brands-updated', onBrandsUpdated);
+  }, [refreshBrandList]);
+
+  const openBrandIqPicker = async () => {
+    setShowModelPicker(false);
+    setShowAspectPicker(false);
+    setShowBrandIqPicker((v) => !v);
+    if (brandListState === 'loaded' || brandListState === 'loading') return;
+
+    await refreshBrandList();
   };
 
   const handleBrandIqSelect = (item) => {
