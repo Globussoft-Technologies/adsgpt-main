@@ -58,44 +58,79 @@ export const buildCreditCostsByQuality = (modelConfigs, surfaceModels, inlinedFa
   return out;
 };
 
-// ─── Brand-URL analysis failures ────────────────────────────────────────────
-// One generic "couldn't analyze that website" for every failure told the user
-// nothing: they couldn't tell a typo from a site that blocks scrapers from our
-// service being down, so they had no idea whether retrying was worth it. Name
-// the host, say what happened, and give the next step — including the way out
-// (fill the brand in by hand), which is always available.
-export const brandFetchMessage = (err, site) => {
-  const status = err?.response?.status;
-  let host = site || 'that site';
-  try {
-    host = new URL(site).hostname.replace(/^www\./, '');
-  } catch {
-    /* keep the raw string */
-  }
-  const backend = err?.response?.data?.message;
+// ─── Brand assets (logos / product images) ──────────────────────────────────
+// Field spellings vary by endpoint — same tolerance as the agent's brand
+// normaliser (Agent/src/utils/brand.py).
+export const brandLogosOf = (b) =>
+  [
+    ...(Array.isArray(b?.logoUrls) ? b.logoUrls : []),
+    b?.brandLogo,
+    b?.logoUrl,
+    b?.logo,
+    b?.iconUrl,
+  ].filter(Boolean);
 
-  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
-    return `${host} took too long to respond. It may be slow or blocking automated visits — try again, or enter the brand details manually.`;
+export const brandProductImagesOf = (b) =>
+  [
+    ...(Array.isArray(b?.imageUrl) ? b.imageUrl : b?.imageUrl ? [b.imageUrl] : []),
+    ...(Array.isArray(b?.imageUrls) ? b.imageUrls : []),
+    ...(Array.isArray(b?.brandImages) ? b.brandImages : []),
+  ].filter(Boolean);
+
+// Ignore case, spacing and punctuation: "H&M", "h & m" and "HM" are one brand.
+const brandKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/**
+ * The images to offer for the brand the brief is about.
+ *
+ * The old rule was `matched.length ? matched : brands` — so ANY brand whose
+ * name didn't match a saved record exactly (a website-added brand, or "Acme"
+ * vs "Acme Inc.") silently fell back to showing EVERY brand's images. The
+ * options then looked identical no matter which brand was selected, which is
+ * indistinguishable from "the options don't switch".
+ *
+ * Now: a named brand only ever offers its OWN assets — matching loosely enough
+ * to survive punctuation and suffixes, and offering nothing rather than
+ * something else if it can't be found. Only when NO brand is chosen do we show
+ * everything, which is a genuinely useful menu rather than a wrong answer.
+ */
+export const brandAssetsFor = (brands, brandName, { logos = false } = {}) => {
+  const list = Array.isArray(brands) ? brands : [];
+  const pick = logos ? brandLogosOf : brandProductImagesOf;
+  const dedupe = (pool) => [
+    ...new Set(pool.flatMap(pick).map(String).filter((u) => u.trim())),
+  ];
+
+  const wanted = brandKey(brandName);
+  if (!wanted) return dedupe(list);
+
+  let matched = list.filter((b) => brandKey(b?.name) === wanted);
+  if (!matched.length) {
+    // "Acme" ⇄ "Acme Inc." — one name containing the other is the same brand.
+    matched = list.filter((b) => {
+      const key = brandKey(b?.name);
+      return key && (key.includes(wanted) || wanted.includes(key));
+    });
   }
-  if (status === 409) {
-    return `${host} is already saved as one of your brands — pick it from the list above.`;
+  return dedupe(matched);
+};
+
+// ─── Brand-URL analysis failures ────────────────────────────────────────────
+// One plain sentence, on OUR side of the fence. An earlier version explained
+// the mechanics — "titan.co.in blocked our request, which some sites do
+// automatically" — which reads as blaming the user's own brand site and
+// exposes plumbing they can do nothing about. Whether the site blocked us,
+// timed out, 404'd or we had an outage, the user's next step is identical, so
+// there is nothing to gain from telling them which it was.
+//
+// The one exception is a brand that is ALREADY saved: that isn't a fetch
+// failure and it sends them somewhere else (the list), so it keeps its own
+// message.
+export const brandFetchMessage = (err) => {
+  if (err?.response?.status === 409) {
+    return 'That brand is already saved — pick it from the list above.';
   }
-  if (status === 404) {
-    return `We couldn't find ${host}. Check the address for a typo and try again.`;
-  }
-  if (status === 401 || status === 403) {
-    return `${host} blocked our request, which some sites do automatically. Enter the brand details manually to continue.`;
-  }
-  if (status === 422 || status === 400) {
-    return backend || `${host} doesn't look like a valid website address. Include the full domain, e.g. example.com.`;
-  }
-  if (status >= 500) {
-    return `We couldn't reach ${host} just now — this one is on us. Try again in a moment, or enter the brand details manually.`;
-  }
-  if (err?.message === 'Network Error') {
-    return `Couldn't reach ${host} — check your connection and try again.`;
-  }
-  return backend || `We couldn't read ${host}. Check the address, or enter the brand details manually to carry on.`;
+  return "We're unable to fetch at this moment. Please fill it manually.";
 };
 
 // ─── Keeping the brief in step with its selections ──────────────────────────

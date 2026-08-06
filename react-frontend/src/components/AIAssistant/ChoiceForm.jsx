@@ -33,7 +33,9 @@ import { forgetCachedBrief, getCachedBrief, setCachedBrief } from './briefPrompt
 import {
   applyBrandToPrompt,
   applyCreativeTypeToPrompt,
+  brandAssetsFor,
   brandFetchMessage,
+  brandProductImagesOf,
   buildCreditCostsByQuality,
   buildModelConfigs,
 } from './briefCatalog';
@@ -683,23 +685,8 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
 // stores [{url, filename, selected}] — the user clicks to pick which images
 // actually feed generation (selected = bordered); the first is selected by
 // default. Broken/unreachable images are dropped so only good ones show or ship.
-// Images already saved on the user's brands, so a reference image or logo can be
-// picked instead of re-uploaded. Field spellings vary by endpoint — same
-// tolerance as the agent's brand normaliser (Agent/src/utils/brand.py).
-const brandLogosOf = (b) =>
-  [
-    ...(Array.isArray(b?.logoUrls) ? b.logoUrls : []),
-    b?.brandLogo,
-    b?.logoUrl,
-    b?.logo,
-    b?.iconUrl,
-  ].filter(Boolean);
-const brandProductImagesOf = (b) =>
-  [
-    ...(Array.isArray(b?.imageUrl) ? b.imageUrl : b?.imageUrl ? [b.imageUrl] : []),
-    ...(Array.isArray(b?.imageUrls) ? b.imageUrls : []),
-    ...(Array.isArray(b?.brandImages) ? b.brandImages : []),
-  ].filter(Boolean);
+// Brand asset accessors + the "which brand's assets?" rule live in
+// ./briefCatalog — pure, and exercised on their own.
 
 const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
   // Drop empty/whitespace-URL items at render: an <img src=""> does NOT reliably
@@ -722,18 +709,13 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
   const selectedCount = arr.filter(isImgSelected).length;
   const isLogoField = field.key === 'brand_logo';
 
-  // Offer the images of the brand the brief is actually about; fall back to
-  // every saved brand's images when nothing is chosen yet, so the option is
-  // never an empty panel.
-  const brandImages = useMemo(() => {
-    const wanted = (brandName || '').trim().toLowerCase();
-    const matched = wanted
-      ? brands.filter((b) => (b?.name || '').trim().toLowerCase() === wanted)
-      : [];
-    const pool = matched.length ? matched : brands;
-    const urls = pool.flatMap((b) => (isLogoField ? brandLogosOf(b) : brandProductImagesOf(b)));
-    return [...new Set(urls.map(String).filter((u) => u.trim()))];
-  }, [brands, brandName, isLogoField]);
+  // Only ever this brand's own assets — see brandAssetsFor. Showing every
+  // brand's images whenever the name didn't match exactly is what made the
+  // options look the same for every brand.
+  const brandImages = useMemo(
+    () => brandAssetsFor(brands, brandName, { logos: isLogoField }),
+    [brands, brandName, isLogoField],
+  );
 
   const addImages = (urls) => {
     const existing = new Set(arr.map((it) => it.url));
@@ -953,8 +935,15 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
       {brandOpen && !disabled && (
         <div className="rounded-lg border border-white/10 bg-black/30 p-2">
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-white/70">
-              {isLogoField ? 'Saved brand logos' : 'Saved brand images'}
+            <span className="truncate text-[11px] font-medium text-white/70">
+              {/* Naming the brand makes it obvious these follow the selection —
+                  and that an empty panel means THIS brand has none, rather than
+                  the picker being broken. */}
+              {brandName
+                ? `${isLogoField ? 'Logos' : 'Images'} from ${brandName}`
+                : isLogoField
+                  ? 'Saved brand logos'
+                  : 'Saved brand images'}
             </span>
             <button
               type="button"
@@ -967,7 +956,9 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName }) => {
           </div>
           {brandImages.length === 0 ? (
             <p className="px-0.5 py-1 text-[11px] text-white/40">
-              No saved {isLogoField ? 'logos' : 'images'} on your brands yet.
+              {brandName
+                ? `No saved ${isLogoField ? 'logos' : 'images'} for ${brandName}.`
+                : `No saved ${isLogoField ? 'logos' : 'images'} on your brands yet.`}
             </p>
           ) : (
             <div className="flex max-h-[132px] flex-wrap gap-2 overflow-y-auto">
