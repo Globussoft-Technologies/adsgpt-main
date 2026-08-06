@@ -73,29 +73,42 @@ function generateAppleServerApiToken() {
   );
 }
 
-async function crossCheckAppleTransaction(payload) {
+async function crossCheckAppleTransaction(payload, retries = 3) {
   const baseUrl =
     payload.environment === "Sandbox"
       ? "https://api.storekit-sandbox.itunes.apple.com/inApps/v1"
       : "https://api.storekit.itunes.apple.com/inApps/v1";
-  const response = await axios.get(
-    `${baseUrl}/transactions/${payload.transactionId}`,
-    {
-      headers: { Authorization: `Bearer ${generateAppleServerApiToken()}` },
-      timeout: 15000,
-    },
-  );
-  const serverPayload = validateApplePayload(
-    verifyAndDecodeAppleJWS(response.data.signedTransactionInfo),
-  );
-  if (
-    String(serverPayload.transactionId) !== String(payload.transactionId) ||
-    String(serverPayload.originalTransactionId) !== String(payload.originalTransactionId) ||
-    serverPayload.productId !== payload.productId
-  ) {
-    throw new Error("Apple transaction does not match App Store Server API data.");
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.get(
+        `${baseUrl}/transactions/${payload.transactionId}`,
+        {
+          headers: { Authorization: `Bearer ${generateAppleServerApiToken()}` },
+          timeout: 15000,
+        },
+      );
+      const serverPayload = validateApplePayload(
+        verifyAndDecodeAppleJWS(response.data.signedTransactionInfo),
+      );
+      if (
+        String(serverPayload.transactionId) !== String(payload.transactionId) ||
+        String(serverPayload.originalTransactionId) !== String(payload.originalTransactionId) ||
+        serverPayload.productId !== payload.productId
+      ) {
+        throw new Error("Apple transaction does not match App Store Server API data.");
+      }
+      return serverPayload;
+    } catch (err) {
+      const isRetryable = err.response && (err.response.status >= 500 || err.response.data?.errorCode === 5000001);
+      if (isRetryable && attempt < retries) {
+        console.warn(`[verifyApplePayment] Apple API 5000001/latency error (attempt ${attempt}/${retries}). Retrying in ${attempt * 2}s...`);
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      } else {
+        throw err;
+      }
+    }
   }
-  return serverPayload;
 }
 
 function validateAppleWebhookTransaction(notificationType, payload) {
@@ -1647,7 +1660,7 @@ const verifyApplePayment = async (req, res) => {
     try {
       decoded = await crossCheckAppleTransaction(decoded);
     } catch (e) {
-      console.error("[verifyApplePayment] App Store Server API check failed:", e.message);
+      console.error("[verifyApplePayment] App Store Server API check failed:", e.message, e.response?.data || e.stack);
       return res.status(403).json({ ok: false, code: "APPLE_SERVER_ERROR", error: "Apple could not confirm this transaction." });
     }
 
