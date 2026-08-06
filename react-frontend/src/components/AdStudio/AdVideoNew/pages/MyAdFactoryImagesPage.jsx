@@ -144,7 +144,7 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPo
       ) : isError || !url ? (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
           <p className="mt-2 text-xs text-gray-400">
-            {item?.error || 'An error occurred during image generation.'}
+            {item?.error || 'We could not generate this image right now. Please try again. Note: Your credits were not deducted.'}
           </p>
         </div>
       ) : (

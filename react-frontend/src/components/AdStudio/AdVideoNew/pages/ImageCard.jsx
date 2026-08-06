@@ -187,7 +187,7 @@ export default function ImageCard({
         ? 'The model was unable to generate the image. Please try again. Note: Your credits were not deducted.'
         : imageStatus === 400
           ? 'This image request was restricted for safety compliance. Please revise your input and try again. Note: Your credits were not deducted.'
-          : 'An error occurred during image generation.';
+          : 'We could not generate this image right now. Please try again. Note: Your credits were not deducted.';
 
   useEffect(() => {
     const url = item?.results?.[0]?.url ?? '';
