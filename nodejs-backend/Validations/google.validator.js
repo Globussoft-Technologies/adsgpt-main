@@ -90,7 +90,11 @@ const createCampaignSchema = Joi.object({
       .messages({
         "string.length": "country code must be 2 characters",
       }),
-  }).optional(),
+    customerMatchUrl: Joi.string().allow("", null).optional(),
+    audienceSegments: Joi.array().optional(),
+    customSegmentKeywords: Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.string()).optional(),
+    placements: Joi.array().items(Joi.string()).optional(),
+  }).unknown(true).optional(),
 
   // EU Political Advertising Transparency Regulation compliance flag
   euPoliticalAds: Joi.boolean().default(false),
@@ -180,7 +184,11 @@ const createAdGroupSchema = Joi.object({
     ageMin: Joi.number().integer().min(18).max(65).optional(),
     ageMax: Joi.number().integer().min(18).max(65).optional(),
     genders: Joi.array().items(Joi.string().valid("MALE", "FEMALE", "UNDETERMINED")).optional(),
-  }).optional(),
+    customerMatchUrl: Joi.string().allow("", null).optional(),
+    audienceSegments: Joi.array().optional(),
+    customSegmentKeywords: Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.string()).optional(),
+    placements: Joi.array().items(Joi.string()).optional(),
+  }).unknown(true).optional(),
 
   // Bidding goal (SEARCH / LEADS / SALES campaigns)
   biddingGoal: Joi.string()

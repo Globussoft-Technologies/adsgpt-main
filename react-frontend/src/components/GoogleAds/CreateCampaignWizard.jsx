@@ -27,6 +27,7 @@ import {
   Layers, Loader2, Target, X, AlertCircle, Plus, Trash2,
   Youtube, Search, Monitor, Zap, ShoppingBag, MapPin, TrendingUp,
   RefreshCw, Smartphone, Store, Key, MapPinned, Bookmark, BookmarkPlus, Users,
+  Info,
 } from 'lucide-react';
 import {
   createGoogleCampaign,
@@ -396,6 +397,8 @@ function StepRail({ steps, currentIndex, onJumpToStep }) {
 function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepErrors, attemptedStepIds, onJumpToStep }) {
   const currentMessages = Object.values(stepErrors || {});
   const isActuallyComplete = Object.keys(rawStepErrors || {}).length === 0;
+  const hasVisibleErrors = currentMessages.length > 0;
+
   return (
     <aside className="scrollbar-thin hidden w-52 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-100 bg-gray-50/60 px-3 py-4 dark:border-white/6 dark:bg-white/[0.02] md:flex">
       <div>
@@ -437,16 +440,33 @@ function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepEr
           })}
         </ul>
       </div>
-      <div className={`rounded-xl px-3 py-2 ${!isActuallyComplete ? 'bg-red-500/10 ring-1 ring-red-500/40' : 'bg-[#4285F4]/15 ring-1 ring-[#4285F4]/40'}`}>
+      <div className={`rounded-xl px-3 py-2 ${
+        isActuallyComplete
+          ? 'bg-[#4285F4]/15 ring-1 ring-[#4285F4]/40'
+          : hasVisibleErrors
+          ? 'bg-red-500/10 ring-1 ring-red-500/40'
+          : 'bg-gray-100 dark:bg-white/5 ring-1 ring-gray-200 dark:ring-white/10'
+      }`}>
         <div className="flex items-center gap-1.5">
-          {!isActuallyComplete
-            ? <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
-            : <Check className="h-3 w-3 shrink-0 text-[#4285F4]" />
-          }
-          <p className={`text-10 font-semibold leading-snug ${!isActuallyComplete ? 'text-red-400' : 'text-[#4285F4]'}`}>
-            {!isActuallyComplete
-              ? (currentMessages.length > 1 ? `${currentMessages.length} fields need attention` : currentMessages[0] || 'Fill required fields')
-              : 'This step is complete'}
+          {isActuallyComplete ? (
+            <Check className="h-3 w-3 shrink-0 text-[#4285F4]" />
+          ) : hasVisibleErrors ? (
+            <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+          ) : (
+            <Info className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
+          )}
+          <p className={`text-10 font-semibold leading-snug ${
+            isActuallyComplete
+              ? 'text-[#4285F4]'
+              : hasVisibleErrors
+              ? 'text-red-400'
+              : 'text-gray-500 dark:text-white/50'
+          }`}>
+            {isActuallyComplete
+              ? 'This step is complete'
+              : hasVisibleErrors
+              ? (currentMessages.length > 1 ? `${currentMessages.length} fields need attention` : currentMessages[0])
+              : 'Fill in required fields'}
           </p>
         </div>
       </div>
@@ -2589,7 +2609,20 @@ export default function CreateCampaignWizard({
   const rawStepErrors = useMemo(() => validateStep(currentStep?.id, form, adType, schema, mode), [currentStep?.id, form, adType, schema, mode]);
   const visibleStepErrors = useMemo(() => {
     const showAll = attemptedStepIds.has(currentStep?.id);
-    return Object.fromEntries(Object.entries(rawStepErrors).filter(([k]) => touched[k] || showAll));
+    if (showAll) return rawStepErrors;
+
+    return Object.fromEntries(
+      Object.entries(rawStepErrors).filter(([field, msg]) => {
+        if (!touched[field]) return false;
+
+        // For count-based minimum requirements (e.g. "At least 2 descriptions...", "At least 3 headlines...", "Add at least one..."),
+        // do not surface premature error before user clicks Continue / attempts step progression
+        const isCountError = /at least|required\s*\(/i.test(msg);
+        if (isCountError) return false;
+
+        return true;
+      })
+    );
   }, [rawStepErrors, touched, attemptedStepIds, currentStep?.id]);
 
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
