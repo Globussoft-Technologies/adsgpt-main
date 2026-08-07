@@ -1578,6 +1578,7 @@ async function run(jobId) {
     // Check managed campaign plan limit BEFORE freezing credits or sending to Python.
     // Only checked if Meta target is configured and no Meta campaign ID has been
     // saved yet from a prior run (subsequent runs reuse createdCampaignId and consume 0 slots).
+    const jobTargets = job.targets || {};
     if (jobTargets.meta && !jobTargets.meta.createdCampaignId) {
       const { checkPlanLimit } = require("../../utils/planLimits");
       const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
@@ -1688,7 +1689,6 @@ async function run(jobId) {
     // stale/missing entry (e.g. left over from the campaign's original
     // single-platform wizard setup) silently drops that platform's variant,
     // causing both platforms to fall back to the same shared text.
-    const jobTargets = job.targets || {};
     const distributionPlatforms = Object.keys(PLATFORM_POSTERS)
       .filter((p) => PLATFORM_POSTERS[p].isConfigured(jobTargets[p]))
       .map((p) => ({ platformName: p }));
