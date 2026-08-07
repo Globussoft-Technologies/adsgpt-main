@@ -1093,6 +1093,11 @@ function AttachmentPicker({ attachments, onChange }) {
   const [accounts, setAccounts] = useState([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [campaignsByAccount, setCampaignsByAccount] = useState({});
+  // Campaign ids holding a plan slot, accumulated across every ad account the
+  // user expands. `null` = the plan is uncapped (the backend sends no slot
+  // state at all), which must disable nothing — distinct from an empty Set,
+  // meaning "capped, and nothing is manageable yet".
+  const [managedCampaignIds, setManagedCampaignIds] = useState(null);
   const [loadingAccount, setLoadingAccount] = useState(null);
   const [openAccount, setOpenAccount] = useState(null);
   const [search, setSearch] = useState('');
@@ -1161,6 +1166,18 @@ function AttachmentPicker({ attachments, onChange }) {
       });
       const list = r?.campaigns || r?.data || [];
       setCampaignsByAccount((prev) => ({ ...prev, [acctKey]: list }));
+      // Plan slots: only campaigns the user manages can be automated, so the
+      // picker must show that BEFORE they submit — the backend rejects a rule
+      // attached to an unmanaged campaign with a 403, and finding that out on
+      // save is a dead end. `managedCampaignIds` is absent on uncapped plans,
+      // which we keep as `null` = "no restriction, disable nothing".
+      if (Array.isArray(r?.managedCampaignIds)) {
+        setManagedCampaignIds((prev) => {
+          const next = new Set(prev || []);
+          r.managedCampaignIds.forEach((id) => next.add(String(id)));
+          return next;
+        });
+      }
     } catch {
       setCampaignsByAccount((prev) => ({ ...prev, [acctKey]: [] }));
     } finally {
@@ -1299,6 +1316,31 @@ function AttachmentPicker({ attachments, onChange }) {
               . Switching Facebook accounts keeps these selections.
             </p>
           )}
+          {/* Attachments that are no longer manageable — e.g. a rule saved
+              before the plan limit changed, or before its campaign was
+              released. The backend refuses to save ANY rule carrying one, so
+              say which and why rather than letting the user hit an opaque
+              403 on submit. Only counts campaigns we've actually loaded, so
+              it can't mis-flag an account the user hasn't expanded yet. */}
+          {(() => {
+            if (!managedCampaignIds || attachments.length === 0) return null;
+            const loadedIds = new Set(
+              Object.values(campaignsByAccount).flatMap((list) =>
+                (list || []).map((c) => String(c.id)),
+              ),
+            );
+            const stale = attachments.filter(
+              (a) => loadedIds.has(a.campaignId) && !managedCampaignIds.has(a.campaignId),
+            );
+            if (stale.length === 0) return null;
+            return (
+              <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                {stale.length} attached campaign{stale.length === 1 ? " isn't" : "s aren't"} being
+                managed on your plan. Remove {stale.length === 1 ? 'it' : 'them'} below, or add{' '}
+                {stale.length === 1 ? 'it' : 'them'} from the Campaigns list, before saving.
+              </p>
+            );
+          })()}
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45" />
             <input
@@ -1355,9 +1397,19 @@ function AttachmentPicker({ attachments, onChange }) {
               const acctKey = `act_${acct.id}`;
               const campaigns = campaignsByAccount[acctKey];
               const isOpen = openAccount === acctKey;
-              const filtered = (campaigns || []).filter((c) =>
-                (c.name || '').toLowerCase().includes(search.toLowerCase())
-              );
+              const filtered = (campaigns || [])
+                .filter((c) => (c.name || '').toLowerCase().includes(search.toLowerCase()))
+                // Manageable campaigns first — on a capped plan the rest can't
+                // be attached at all, so burying them among dozens of locked
+                // rows would make the picker useless. Stable within each group
+                // (Meta's own ordering is preserved), and a no-op when the
+                // plan is uncapped.
+                .sort((a, b) => {
+                  if (!managedCampaignIds) return 0;
+                  const am = managedCampaignIds.has(String(a.id)) ? 0 : 1;
+                  const bm = managedCampaignIds.has(String(b.id)) ? 0 : 1;
+                  return am - bm;
+                });
               const attachedHere = attachments.filter((a) => a.adAccountId === acctKey).length;
               return (
                 <div
@@ -1405,14 +1457,33 @@ function AttachmentPicker({ attachments, onChange }) {
                           const checked = attachments.some(
                             (a) => a.adAccountId === acctKey && a.campaignId === String(c.id)
                           );
+                          // Unmanaged campaigns can't be automated. Kept
+                          // visible (not filtered out) so the user can see
+                          // what's there and why it's unavailable — matches
+                          // how the Campaigns table locks rows. Already-
+                          // attached ones stay clickable so a rule saved
+                          // before a plan change can still be un-attached;
+                          // otherwise the user could never fix a rule the
+                          // backend now refuses to save.
+                          const manageable =
+                            !managedCampaignIds || managedCampaignIds.has(String(c.id));
+                          const locked = !manageable && !checked;
                           return (
                             <button
                               key={c.id}
                               type="button"
+                              disabled={locked}
+                              title={
+                                locked
+                                  ? "Not one of the campaigns you're managing on your plan — add it from the Campaigns list first."
+                                  : undefined
+                              }
                               onClick={() => toggle(acctKey, String(c.id))}
-                              className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors hover:bg-gray-200 dark:hover:bg-white/5 ${
-                                checked ? 'bg-gray-200 dark:bg-white/5' : ''
-                              }`}
+                              className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors ${
+                                locked
+                                  ? 'cursor-not-allowed opacity-45'
+                                  : 'hover:bg-gray-200 dark:hover:bg-white/5'
+                              } ${checked ? 'bg-gray-200 dark:bg-white/5' : ''}`}
                             >
                               <div className="flex min-w-0 items-center gap-2.5">
                                 <span
@@ -1441,11 +1512,18 @@ function AttachmentPicker({ attachments, onChange }) {
                                   </div>
                                 </div>
                               </div>
-                              {c.status && (
-                                <span className="text-10 shrink-0 tracking-wider text-gray-400 uppercase dark:text-white/45">
-                                  {c.status}
-                                </span>
-                              )}
+                              <div className="flex shrink-0 items-center gap-2">
+                                {locked && (
+                                  <span className="text-10 rounded bg-gray-200 px-1.5 py-0.5 font-medium text-gray-500 dark:bg-white/10 dark:text-white/55">
+                                    Not managed
+                                  </span>
+                                )}
+                                {c.status && (
+                                  <span className="text-10 shrink-0 tracking-wider text-gray-400 uppercase dark:text-white/45">
+                                    {c.status}
+                                  </span>
+                                )}
+                              </div>
                             </button>
                           );
                         })
