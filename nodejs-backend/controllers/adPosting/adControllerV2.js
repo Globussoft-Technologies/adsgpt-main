@@ -237,6 +237,25 @@ async function createAdV2(req, res) {
       ads,
     } = value;
 
+    // Plan gate — this posts an ad into an EXISTING campaign, so that
+    // campaign must hold one of the user's plan slots. `campaignId` is
+    // required by the schema above, so there's no missing-parent case here.
+    // Lazy require — circular-import chain, see metaAdLauncher.js.
+    {
+      const { requireManagedCampaign } = require("../../services/managedCampaigns");
+      const gate = await requireManagedCampaign(req.user.user_id, campaignId);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          success: false,
+          code: gate.code,
+          limitKey: gate.limitKey,
+          error: gate.error,
+          limit: gate.limit,
+          campaignId: gate.campaignId,
+        });
+      }
+    }
+
     // ── AdFactory campaign doc (optional — only needed when adFactoryCampaignId is provided) ──
     let campaignDoc = null;
     if (adFactoryCampaignId) {

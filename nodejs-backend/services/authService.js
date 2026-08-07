@@ -50,6 +50,22 @@ const denyWorkspaceRequest = (res, error) => {
     message: 'Could not verify workspace access',
   });
 };
+// The browser answers 401 from a dozen places — "Meta access token is
+// required", "Not authenticated with Canva" — and screens like Autopilot read
+// those as "provider not connected yet". So a dead AdsGPT session cannot be
+// signalled by the bare status: it carries a stable code the client keys its
+// sign-out off. Previously a rejected token answered 403, which the frontend
+// deliberately ignores on the Meta/TikTok routes.
+const denySession = (res, error) => {
+  let code = 'SESSION_MISSING';
+  let message = 'Authentication required';
+  if (error) {
+    const expired = error.name === 'TokenExpiredError';
+    code = expired ? 'SESSION_EXPIRED' : 'SESSION_INVALID';
+    message = expired ? 'Session expired' : 'Invalid session';
+  }
+  return res.status(401).json({ success: false, code, message });
+};
 const requestToken = (req) => {
   const authHeader = String(req.headers?.authorization || '');
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -65,7 +81,7 @@ const authenticateJWT = (req, res, next) => {
   if (token) {
     jwt.verify(token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
       if (err) {
-        return res.sendStatus(403);
+        return denySession(res, err);
       }
       try {
         if(user?.created_from=="PAS") user.user_id = `PAS-${user.user_id}`
@@ -79,7 +95,7 @@ const authenticateJWT = (req, res, next) => {
     });
   }
   else {
-    res.sendStatus(401);
+    denySession(res);
   }
 };
 const verifySecretKey = (req, res, next) => {
@@ -228,7 +244,7 @@ const authenticateJWTInteraction = (req, res, next) => {
 
     if (token) {
       return jwt.verify(token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) return denySession(res, err);
 
         try {
           if (user?.created_from === "PAS") user.user_id = `PAS-${user.user_id}`;
@@ -244,7 +260,7 @@ const authenticateJWTInteraction = (req, res, next) => {
 
     if (req?.session?.token) {
       return jwt.verify(req.session.token, process.env.JWT_SECRET_KEY, options, async (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) return denySession(res, err);
         try {
           await validateWorkspaceMemberSession(user);
           req.user = user;
@@ -255,7 +271,7 @@ const authenticateJWTInteraction = (req, res, next) => {
       });
     }
 
-    return res.sendStatus(401);
+    return denySession(res);
 
   } catch (error) {
     

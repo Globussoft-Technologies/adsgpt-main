@@ -13,6 +13,7 @@ const CampaignModel = require("../../Module/adFactory/adFactory");
 const {
   invalidateAfterCreate,
   formatMetaError,
+  fetchAllPaged,
 } = require("./metaAdLauncher");
 const {
   getFacebookIdFromRequest,
@@ -25,6 +26,99 @@ async function resolvePostAdConnection(req, accountId) {
     facebookId: getFacebookIdFromRequest(req),
     connectionId: accountId,
   });
+}
+
+// ─── per-plan campaign limits on the legacy post-ad surface ──────────────────
+// This controller is a SECOND mutation surface for the same Meta objects the
+// /meta-ads dashboard manages (AdStudio "My Space" + AdFactory post-ad flows).
+// Without these gates a user on a capped plan could create campaigns and post
+// ads here with the limit not applying at all — found by QA, since the
+// campaign picker on this screen also listed unmanaged campaigns.
+//
+// Unlike the dashboard, there's no locked-row UI here to make an unmanaged
+// campaign unreachable, so ad-set/ad handlers that carry only an entity id
+// resolve their parent campaign from Meta rather than trusting the client.
+// One extra read on a low-frequency legacy path is the right trade for a gate
+// that can't be sidestepped by omitting a field.
+//
+// Lazy requires — see metaAdLauncher.js's createCampaign for the
+// circular-import trap this file's dependency chain sits in.
+
+/** `{status, body}` to return, or null when allowed. */
+async function legacyManagedGate(userId, campaignId) {
+  const { requireManagedCampaign } = require("../../services/managedCampaigns");
+  const gate = await requireManagedCampaign(userId, campaignId);
+  if (gate.ok) return null;
+  return {
+    status: gate.status,
+    body: {
+      success: false,
+      code: gate.code,
+      limitKey: gate.limitKey,
+      error: gate.error,
+      limit: gate.limit,
+      campaignId: gate.campaignId,
+    },
+  };
+}
+
+/** `{status, body}` when the plan's campaign allowance is exhausted. */
+async function legacyCreateCampaignGate(userId) {
+  const { checkPlanLimit } = require("../../utils/planLimits");
+  const check = await checkPlanLimit(userId, "meta:campaigns");
+  if (check.ok) return null;
+  return {
+    status: check.status,
+    body: {
+      success: false,
+      code: check.code,
+      limitKey: check.limitKey,
+      error: check.error,
+      limit: check.limit,
+      current: check.current,
+    },
+  };
+}
+
+// Parent-campaign lookups for handlers that only receive a child id. Return
+// null on failure, which the gate treats as "can't determine" → allowed
+// (fail open, consistent with every other plan check).
+async function campaignIdOfAdSet(adSetId) {
+  try {
+    const row = await new AdSet(adSetId).get(["campaign_id"]);
+    return (row?._data || row)?.campaign_id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function campaignIdOfAd(adId) {
+  try {
+    const row = await new Ad(adId).get(["campaign_id"]);
+    return (row?._data || row)?.campaign_id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drop rows whose campaign doesn't hold a plan slot. Returns `rows` untouched
+ * when the plan is uncapped (or on any error — fail open, so a lookup blip
+ * shows too much rather than an empty picker the user can't act in).
+ */
+async function filterToManagedCampaigns(userId, rows, getCampaignId) {
+  try {
+    const {
+      getCampaignLimit,
+      listManagedCampaignIds,
+    } = require("../../services/managedCampaigns");
+    if ((await getCampaignLimit(userId)) === null) return rows;
+    const managed = await listManagedCampaignIds(userId);
+    return rows.filter((row) => managed.has(String(getCampaignId(row))));
+  } catch (err) {
+    logger.warn(`filterToManagedCampaigns failed, returning unfiltered: ${err.message}`);
+    return rows;
+  }
 }
 
 class AdController {
@@ -137,25 +231,42 @@ class AdController {
       const account = new AdAccount(actId);
 
       // Step 1: Create or Get Campaign (shared across all ads)
+      //
+      // Both branches are plan-gated: posting into an EXISTING campaign
+      // requires that campaign to hold a slot, while creating a NEW one has
+      // to fit within the plan's allowance (and then claims a slot, exactly
+      // like the wizard and dashboard paths).
+      const postAdUserId = req.user.user_id;
       let campaign;
       if (campaignDetails?.campaignId) {
-        // console.log(
-        //   "Step 1: Using existing campaign:",
-        //   campaignDetails?.campaignId
-        // );
+        const blocked = await legacyManagedGate(
+          postAdUserId,
+          campaignDetails.campaignId
+        );
+        if (blocked) return res.status(blocked.status).json(blocked.body);
 
         logger.info(
           `Step 1: Using existing campaign: ${campaignDetails?.campaignId}`
         );
         campaign = { id: campaignDetails?.campaignId };
       } else {
-        // console.log("Step 1: Creating campaign...");
+        const blocked = await legacyCreateCampaignGate(postAdUserId);
+        if (blocked) return res.status(blocked.status).json(blocked.body);
+
         campaign = await this.createCampaign(
           account,
           campaignDetails?.campaignName,
           campaignDetails?.campaignObjective
         );
-        // console.log("Campaign created:", campaign.id);
+
+        const { claimCampaign } = require("../../services/managedCampaigns");
+        await claimCampaign(postAdUserId, {
+          campaignId: campaign.id,
+          adAccountId,
+          facebookId: getFacebookIdFromRequest(req),
+          source: "create",
+          force: true,
+        });
       }
 
       // Step 2: Create or Get Ad Set (shared across all ads)
@@ -641,22 +752,43 @@ class AdController {
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
       const account = new AdAccount(`act_${adAccountId}`);
-      const campaigns = await account.getCampaigns(
-        [
-          Campaign.Fields.id,
-          Campaign.Fields.name,
-          Campaign.Fields.status,
-          Campaign.Fields.objective,
-        ],
-        { limit: 50 }
+      // Walk every page, don't just take the first one. This used to be a
+      // bare `{ limit: 50 }` call with no cursor follow, so an account with
+      // more than 50 campaigns silently lost the rest — the picker showed 50
+      // of a real 79 with no indication anything was missing. Page size 100
+      // is Meta's max for this edge; fetchAllPaged follows the cursor from
+      // there (50-page safety cap). Same fix as /get-insights and the
+      // detailed-targeting browse tree — see the meta-ads-manager skill.
+      const campaigns = await fetchAllPaged(
+        account.getCampaigns(
+          [
+            Campaign.Fields.id,
+            Campaign.Fields.name,
+            Campaign.Fields.status,
+            Campaign.Fields.objective,
+          ],
+          { limit: 100 }
+        ),
+        "campaigns (post-ad picker)"
       );
 
-      const formattedCampaigns = campaigns.map((campaign) => ({
+      let formattedCampaigns = campaigns.map((campaign) => ({
         id: campaign.id,
         name: campaign.name,
         status: campaign.status,
         objective: campaign.objective,
       }));
+
+      // On a capped plan, only campaigns holding a slot are operable — so the
+      // picker must not offer the rest. Filtering (rather than showing them
+      // locked, as the dashboard table does) is right here: this is a
+      // "choose where to post" control, and an unpickable option would just
+      // be a dead end. Uncapped plans see everything, unchanged.
+      formattedCampaigns = await filterToManagedCampaigns(
+        req.user.user_id,
+        formattedCampaigns,
+        (c) => c.id
+      );
 
       res.json({
         campaigns: formattedCampaigns,
@@ -694,42 +826,50 @@ class AdController {
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
+      // Both branches paginate — same first-page-only truncation the
+      // campaigns picker above had. Account-wide is the likelier to overflow
+      // (every ad set across every campaign), but a large campaign can pass
+      // 50 ad sets too.
+      const ADSET_PICKER_FIELDS = [
+        AdSet.Fields.id,
+        AdSet.Fields.name,
+        AdSet.Fields.status,
+        AdSet.Fields.daily_budget,
+        AdSet.Fields.campaign_id,
+      ];
       let adSets;
       if (campaignId) {
         // Get ad sets for specific campaign
         const campaign = new Campaign(campaignId);
-        adSets = await campaign.getAdSets(
-          [
-            AdSet.Fields.id,
-            AdSet.Fields.name,
-            AdSet.Fields.status,
-            AdSet.Fields.daily_budget,
-            AdSet.Fields.campaign_id,
-          ],
-          { limit: 50 }
+        adSets = await fetchAllPaged(
+          campaign.getAdSets(ADSET_PICKER_FIELDS, { limit: 100 }),
+          "ad sets (post-ad picker, by campaign)"
         );
       } else {
         // Get all ad sets for account
         const account = new AdAccount(`act_${adAccountId}`);
-        adSets = await account.getAdSets(
-          [
-            AdSet.Fields.id,
-            AdSet.Fields.name,
-            AdSet.Fields.status,
-            AdSet.Fields.daily_budget,
-            AdSet.Fields.campaign_id,
-          ],
-          { limit: 50 }
+        adSets = await fetchAllPaged(
+          account.getAdSets(ADSET_PICKER_FIELDS, { limit: 100 }),
+          "ad sets (post-ad picker, account-wide)"
         );
       }
 
-      const formattedAdSets = adSets.map((adSet) => ({
+      let formattedAdSets = adSets.map((adSet) => ({
         id: adSet.id,
         name: adSet.name,
         status: adSet.status,
         dailyBudget: adSet.daily_budget,
         campaignId: adSet.campaign_id,
       }));
+
+      // Same plan filter as the campaigns picker. Matters most on the
+      // account-wide branch (no campaignId), which would otherwise list ad
+      // sets belonging to campaigns the user can't operate on.
+      formattedAdSets = await filterToManagedCampaigns(
+        req.user.user_id,
+        formattedAdSets,
+        (s) => s.campaignId
+      );
 
       res.json({
         adSets: formattedAdSets,
@@ -961,6 +1101,11 @@ class AdController {
           .status(400)
           .json({ error: "Account ID and Ad Account ID are required" });
 
+      // Plan gate BEFORE creating anything in Meta.
+      const userId = req.user.user_id;
+      const blocked = await legacyCreateCampaignGate(userId);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
@@ -968,6 +1113,19 @@ class AdController {
 
       const account = new AdAccount(`act_${adAccountId}`);
       const campaign = await this.createCampaign(account, name, objective);
+
+      // Claim the slot for the campaign just created — same as the dashboard
+      // and wizard paths, so a campaign made here is immediately manageable
+      // and counts against the plan. `force` because the gate above already
+      // reserved the room.
+      const { claimCampaign } = require("../../services/managedCampaigns");
+      await claimCampaign(userId, {
+        campaignId: campaign.id,
+        adAccountId,
+        facebookId: getFacebookIdFromRequest(req),
+        source: "create",
+        force: true,
+      });
 
       res.json({ success: true, campaignId: campaign.id, name: name });
     } catch (error) {
@@ -996,6 +1154,10 @@ class AdController {
 
       if (!accountId || !adAccountId || !campaignId)
         return res.status(400).json({ error: "Missing required fields" });
+
+      // Adding an ad set is an operation ON the parent campaign.
+      const blocked = await legacyManagedGate(req.user.user_id, campaignId);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
 
       const { accessToken } = await resolvePostAdConnection(req, accountId);
 
@@ -1136,6 +1298,16 @@ class AdController {
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
+
+      // Posting an ad is an operation on the campaign it lands in. The body
+      // usually carries campaignId; fall back to resolving it from the ad set
+      // so a caller can't skip the gate by omitting the field. Gate runs
+      // after initApi because the fallback needs an authenticated SDK.
+      const adGate = await legacyManagedGate(
+        req.user.user_id,
+        campaignId || (await campaignIdOfAdSet(adSetId)),
+      );
+      if (adGate) return res.status(adGate.status).json(adGate.body);
 
       const account = new AdAccount(`act_${adAccountId}`);
 
@@ -1294,6 +1466,9 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
+      const blocked = await legacyManagedGate(req.user.user_id, id);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
@@ -1320,6 +1495,10 @@ class AdController {
       if (!accountId)
         return res.status(400).json({ error: "Account ID is required" });
 
+      const userId = req.user.user_id;
+      const blocked = await legacyManagedGate(userId, id);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const { accessToken } = await resolvePostAdConnection(req, accountId);
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
@@ -1327,6 +1506,12 @@ class AdController {
 
       const campaign = new Campaign(id);
       const result = await campaign.delete();
+
+      // Campaign is gone — free its plan slot. After the delete succeeds, so
+      // a rejected delete doesn't hand back a slot for a live campaign.
+      const { releaseCampaign } = require("../../services/managedCampaigns");
+      await releaseCampaign(userId, id);
+
       res.json({ success: true, result });
     } catch (error) {
       res
@@ -1375,6 +1560,12 @@ class AdController {
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
+      const blocked = await legacyManagedGate(
+        req.user.user_id,
+        await campaignIdOfAdSet(id),
+      );
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const adSet = new AdSet(id);
       const params = {};
       if (name) params[AdSet.Fields.name] = name;
@@ -1401,6 +1592,12 @@ class AdController {
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
+
+      const blocked = await legacyManagedGate(
+        req.user.user_id,
+        await campaignIdOfAdSet(id),
+      );
+      if (blocked) return res.status(blocked.status).json(blocked.body);
 
       const adSet = new AdSet(id);
       const result = await adSet.delete();
@@ -1451,6 +1648,12 @@ class AdController {
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
 
+      const blocked = await legacyManagedGate(
+        req.user.user_id,
+        await campaignIdOfAd(id),
+      );
+      if (blocked) return res.status(blocked.status).json(blocked.body);
+
       const ad = new Ad(id);
       const params = {};
       if (name) params[Ad.Fields.name] = name;
@@ -1476,6 +1679,12 @@ class AdController {
 
       const api = bizSdk.FacebookAdsApi.init(accessToken);
       bizSdk.FacebookAdsApi.setDefaultApi(api);
+
+      const blocked = await legacyManagedGate(
+        req.user.user_id,
+        await campaignIdOfAd(id),
+      );
+      if (blocked) return res.status(blocked.status).json(blocked.body);
 
       const ad = new Ad(id);
       const result = await ad.delete();

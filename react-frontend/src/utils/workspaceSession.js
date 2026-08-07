@@ -233,6 +233,12 @@ export function firstAllowedPath(features = allowedWorkspaceFeatures()) {
   );
 }
 
+// isWorkspaceMember() reads the JWT out of the cookie, so once that cookie
+// lapses we can no longer tell a member from an owner — and the workspace token
+// only lives an hour. This marker outlives the cookie so an expired session
+// still lands back on the workspace login instead of the amember one.
+const WORKSPACE_MEMBER_MARKER = 'workspace-member-session';
+
 export function setWorkspaceToken(token) {
   Cookies.remove('access-token', { path: '/' });
   Cookies.set('access-token', token, {
@@ -241,8 +247,28 @@ export function setWorkspaceToken(token) {
     secure: window.location.protocol === 'https:',
     sameSite: 'lax',
   });
+  try {
+    if (isWorkspaceMember()) localStorage.setItem(WORKSPACE_MEMBER_MARKER, '1');
+    else localStorage.removeItem(WORKSPACE_MEMBER_MARKER);
+  } catch {
+    // Private-mode storage failures must not block sign-in.
+  }
 }
 
 export function clearWorkspaceToken() {
   Cookies.remove('access-token', { path: '/' });
+  try {
+    localStorage.removeItem(WORKSPACE_MEMBER_MARKER);
+  } catch {
+    // Nothing to clean up when storage is unavailable.
+  }
+}
+
+export function wasWorkspaceMember() {
+  if (isWorkspaceMember()) return true;
+  try {
+    return localStorage.getItem(WORKSPACE_MEMBER_MARKER) === '1';
+  } catch {
+    return false;
+  }
 }

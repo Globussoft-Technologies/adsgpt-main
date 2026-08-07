@@ -1,6 +1,27 @@
 import getCookies from '@/utils/getCookies';
+import { handleSessionExpired, isSessionFailure } from '@/utils/sessionExpiry';
 
 let configured = false;
+
+/**
+ * fetch() callers never pass through the Axios response interceptor, so an
+ * expired session on any of the ~49 direct fetch calls would otherwise go
+ * unnoticed. Peek at 401s on a clone so the caller still gets an unread body.
+ */
+async function checkResponseForSessionFailure(response) {
+  if (response?.status !== 401) return;
+  let body = null;
+  try {
+    body = await response.clone().json();
+  } catch {
+    try {
+      body = await response.clone().text();
+    } catch {
+      return;
+    }
+  }
+  if (isSessionFailure(401, body)) handleSessionExpired();
+}
 
 /**
  * Apply AdsGPT authentication consistently to explicitly trusted API origins.
@@ -53,6 +74,9 @@ export function configureHttpCredentials(axios) {
           ...init,
           headers,
           ...(credentials ? { credentials } : {}),
+        }).then((response) => {
+          checkResponseForSessionFailure(response);
+          return response;
         });
       }
     } catch {
