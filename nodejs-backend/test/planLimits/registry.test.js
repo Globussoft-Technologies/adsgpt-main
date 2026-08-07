@@ -150,7 +150,28 @@ assert.strictEqual(resolvePlanLimitValues({ limits: { [first.key]: null } })[fir
 const campaigns = getPlanLimitDef("meta:campaigns");
 assert.ok(campaigns, "meta:campaigns must exist — it's the one hard-enforced limit today");
 const msg = buildPlanLimitMessage(campaigns, { limit: 2, current: 2 });
-assert.ok(msg.includes("2 of 2"), `message should state usage: ${msg}`);
+assert.ok(msg.includes("2"), `message should state the allowance: ${msg}`);
+
+// Must NOT print a "<current> of <limit>" pair. This message only fires when
+// the limit is reached, so both numbers are equal and showing them is noise —
+// and under the pre-slot-model counter, which could exceed the limit, it
+// rendered live as "You're managing 366 of 10 campaigns allowed", which reads
+// as a broken number rather than a plan message.
+assert.ok(
+  !/\d+\s+of\s+\d+/.test(msg),
+  `message must not contain an "N of M" pair: ${msg}`,
+);
+// Defensive: even if a caller passes a nonsensical current > limit, the copy
+// must stay coherent rather than echoing the bad number back at the user.
+const drifted = buildPlanLimitMessage(campaigns, { limit: 10, current: 366 });
+assert.ok(!drifted.includes("366"), `stale/oversized counts must not leak into copy: ${drifted}`);
+assert.ok(!/\d+\s+of\s+\d+/.test(drifted), drifted);
+
+// A plan with a limit of 0 can't be told to "release one" — it has nothing to
+// release, so that case gets its own sentence.
+const zero = buildPlanLimitMessage(campaigns, { limit: 0, current: 0 });
+assert.ok(!/release/i.test(zero), `limit-0 copy must not suggest releasing: ${zero}`);
+assert.ok(/upgrade/i.test(zero), `limit-0 copy should point at upgrading: ${zero}`);
 // The limit counts CLAIMED SLOTS, not campaigns present in the Meta account,
 // so the message must point at releasing one — telling a user to "delete a
 // campaign" would be wrong advice under this model (they can keep the
@@ -158,16 +179,21 @@ assert.ok(msg.includes("2 of 2"), `message should state usage: ${msg}`);
 assert.ok(/releas/i.test(msg), `message must offer releasing a slot: ${msg}`);
 assert.ok(msg.includes(campaigns.remedy), "message should tell the user how to resolve it");
 
-// Singular vs plural on the unit.
-assert.ok(buildPlanLimitMessage(campaigns, { limit: 1, current: 1 }).includes("1 campaign "));
-assert.ok(buildPlanLimitMessage(campaigns, { limit: 5, current: 5 }).includes("5 campaigns "));
+// Singular vs plural on the unit — "1 campaigns" would look sloppy in a
+// message users see on a failed launch.
+const one = buildPlanLimitMessage(campaigns, { limit: 1, current: 1 });
+assert.ok(one.includes("1 campaign,"), one);
+assert.ok(!one.includes("1 campaigns"), one);
+assert.ok(buildPlanLimitMessage(campaigns, { limit: 5, current: 5 }).includes("5 campaigns"));
 
 // A limit with no custom remedy still produces a usable sentence.
 const generic = buildPlanLimitMessage(
   { unit: "widget", scopeNote: "" },
   { limit: 4, current: 4 },
 );
-assert.ok(generic.includes("4 of 4 widgets"), generic);
+assert.ok(generic.includes("4 widgets"), generic);
+assert.ok(!/\d+\s+of\s+\d+/.test(generic), generic);
+assert.ok(/upgrade/i.test(generic), "fallback should still tell the user what to do");
 assert.ok(generic.length > 20, "fallback message should still be actionable");
 
 console.log("planLimits registry tests passed");

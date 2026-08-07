@@ -37,6 +37,16 @@ axios.interceptors.response.use(
     const isProviderAdsApi =
       requestUrl.includes('meta-ads') ||
       requestUrl.includes('tiktok-ads');
+    // A workspace business-rule rejection (e.g. no eligible subscription to
+    // manage workspace members, invitation not found) is not a dead session —
+    // every workspace error carries a WORKSPACE_* code, unlike the bare
+    // res.sendStatus(403) an invalid/expired JWT gets. Forcing a full /logout
+    // for these meant any owner without a workspace-eligible plan got signed
+    // out of the whole app just by opening the Workspace page instead of
+    // seeing the page's own "upgrade your plan" message.
+    const workspaceErrorCode = error?.response?.data?.code;
+    const isWorkspaceBusinessError =
+      typeof workspaceErrorCode === 'string' && workspaceErrorCode.startsWith('WORKSPACE_');
 
     if (
       error?.response?.status === 403 &&
@@ -48,7 +58,11 @@ axios.interceptors.response.use(
       if (window.location.pathname !== '/workspace-login') {
         window.location.replace('/workspace-login?reason=access-changed');
       }
-    } else if (error?.response?.status === 403 && !isProviderAdsApi) {
+    } else if (
+      error?.response?.status === 403 &&
+      !isProviderAdsApi &&
+      !isWorkspaceBusinessError
+    ) {
       window.location.href = '/logout';
     }
     return Promise.reject(error);

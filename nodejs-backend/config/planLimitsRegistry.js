@@ -79,9 +79,10 @@ const LIMITS = [
     description:
       "Campaigns the user has claimed a slot for. Connecting an ad account is unrestricted; only these campaigns can be opened, edited, paused/resumed, or automated. Creating a campaign claims a slot; releasing or deleting one frees it.",
     enforcement: "hard",
-    scopeNote: "on your plan",
+    // No scopeNote: the message template already says "Your plan includes N
+    // campaigns", so adding "on your plan" would repeat it.
     remedy:
-      "Release a campaign you're managing (Campaigns list → Manage toggle), or upgrade your plan.",
+      "Release one from the Campaigns list to free a slot, or upgrade your plan.",
     // Counts the user's CLAIMED SLOTS, not campaigns present in Meta. This is
     // both the product rule ("operate on only N campaigns") and far cheaper
     // than the account-by-account Meta walk this used to do — one indexed
@@ -170,10 +171,26 @@ function resolvePlanLimitValues(doc) {
 function buildPlanLimitMessage(def, { limit, current }) {
   if (typeof def?.message === "function") return def.message({ limit, current });
   const unit = def?.unit || "item";
-  const plural = limit === 1 ? unit : `${unit}s`;
   const scope = def?.scopeNote ? ` ${def.scopeNote}` : "";
+
+  // A limit of 0 means the plan doesn't include this at all. "using 0 of 0"
+  // is nonsense and "release one" is impossible advice, so say the real thing.
+  if (!limit) {
+    return `Your plan doesn't include managing ${unit}s${scope}. Upgrade your plan to continue.`;
+  }
+
+  const plural = limit === 1 ? unit : `${unit}s`;
   const remedy = def?.remedy || "Upgrade your plan to add more.";
-  return `You're managing ${current} of ${limit} ${plural} allowed${scope}. ${remedy}`;
+  // Deliberately NOT "<current> of <limit>". This message only ever fires
+  // when the limit is already reached, so the two numbers are equal and
+  // printing both adds nothing — and when `current` could drift above
+  // `limit` (the pre-slot-model counter walked every campaign in the Meta
+  // account) it rendered as "You're managing 366 of 10 campaigns allowed",
+  // which reads as a bug rather than a plan message. Stating the allowance
+  // once is both clearer and immune to that.
+  return `Your plan includes ${limit} ${plural}${scope}, and you're already using ${
+    limit === 1 ? "it" : `all ${limit}`
+  }. ${remedy}`;
 }
 
 module.exports = {

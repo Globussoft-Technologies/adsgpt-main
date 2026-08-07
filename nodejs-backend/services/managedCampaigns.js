@@ -20,6 +20,24 @@ const logger = require("../utils/logger");
 
 const LIMIT_KEY = "meta:campaigns";
 
+/**
+ * Copy for "you tried to operate on a campaign that isn't holding a slot".
+ *
+ * Split by limit because one template can't phrase all three cases without
+ * reading like machine output — a limit of 1 has no "another" to release, and
+ * a limit of 0 has nothing to release at all. Deliberately never prints a
+ * "<current> of <limit>" pair; see buildPlanLimitMessage for why.
+ */
+function buildNotManagedMessage(limit) {
+  if (!limit) {
+    return "Your plan doesn't include managing campaigns. Upgrade your plan to continue.";
+  }
+  if (limit === 1) {
+    return "This isn't the campaign you're managing. Your plan includes 1 campaign — release it from the Campaigns list to switch to this one, or upgrade your plan.";
+  }
+  return `This campaign isn't one you're managing. Your plan includes ${limit} campaigns — add it from the Campaigns list, releasing another first if all ${limit} are in use.`;
+}
+
 /** null when the plan doesn't cap campaigns at all. */
 async function getCampaignLimit(userId) {
   const limits = await getLimitsForUser(userId);
@@ -140,7 +158,11 @@ async function claimCampaign(userId, { campaignId, adAccountId, facebookId, sour
             limitKey: LIMIT_KEY,
             limit,
             current,
-            error: `You're managing ${current} of ${limit} campaigns allowed on your plan. Release one to manage this campaign instead, or upgrade your plan.`,
+            // No "<current> of <limit>" — they're equal whenever this fires,
+            // and printing both reads like a bug. See buildPlanLimitMessage.
+            error: limit
+              ? `Your plan includes ${limit} campaign${limit === 1 ? "" : "s"}, and you're already using ${limit === 1 ? "it" : `all ${limit}`}. Release one to manage this campaign instead, or upgrade your plan.`
+              : `Your plan doesn't include managing campaigns. Upgrade your plan to continue.`,
           };
         }
       }
@@ -207,7 +229,7 @@ async function requireManagedCampaign(userId, campaignId) {
       limitKey: LIMIT_KEY,
       limit,
       campaignId: String(campaignId),
-      error: `This campaign isn't one of the ${limit} you're managing on your plan. Add it from the Campaigns list (releasing another if you're at the limit), or upgrade your plan.`,
+      error: buildNotManagedMessage(limit),
     };
   } catch (err) {
     logger.warn(`requireManagedCampaign(${campaignId}) failed, allowing through: ${err.message}`);
