@@ -141,23 +141,37 @@ export default function PublishedAdsModal() {
             accountName: defaultMetaAccountName,
           });
         } else if (status && status !== 'success') {
-          flat.push({
-            id: `${run?.runId || 'run'}-failure-${flat.length}`,
-            imageUrl: '',
-            imageStatus: 'failed',
-            headline: '',
-            body: '',
-            description: '',
-            textStatus: 'failed',
-            callToAction: '',
-            linkUrl: '',
-            posted: false,
-            postedAt: run?.completedAt || run?.startedAt || null,
-            status: 'failed',
-            runError: run?.error || `Run ${status}`,
-            platform: 'meta',
-            accountName: defaultMetaAccountName,
-          });
+          const runErr = run?.error || `Run ${status}`;
+          const runTimeStr = run?.completedAt || run?.startedAt || '';
+          const runTime = runTimeStr ? new Date(runTimeStr).getTime() : 0;
+
+          // Prevent rendering duplicate cards for identical preflight failures recorded within 2 minutes of each other
+          const isDup = flat.some(
+            (prev) =>
+              prev.status === 'failed' &&
+              prev.runError === runErr &&
+              (prev.postedAt ? Math.abs(new Date(prev.postedAt).getTime() - runTime) < 120000 : true)
+          );
+
+          if (!isDup) {
+            flat.push({
+              id: `${run?.runId || 'run'}-failure-${flat.length}`,
+              imageUrl: '',
+              imageStatus: 'failed',
+              headline: '',
+              body: '',
+              description: '',
+              textStatus: 'failed',
+              callToAction: '',
+              linkUrl: '',
+              posted: false,
+              postedAt: run?.completedAt || run?.startedAt || null,
+              status: 'failed',
+              runError: runErr,
+              platform: 'meta',
+              accountName: defaultMetaAccountName,
+            });
+          }
         }
         return;
       }

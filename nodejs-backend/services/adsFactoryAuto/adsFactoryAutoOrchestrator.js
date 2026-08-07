@@ -1495,20 +1495,32 @@ async function run(jobId) {
     const recordPreflightFailureAndAlert = async (reason) => {
       job.status = "paused";
       job.schedule.nextRunAt = null;
-      job.failedRuns = (job.failedRuns || 0) + 1;
 
-      const preflightRun = {
-        runId: new (require("mongoose").Types.ObjectId)().toString(),
-        executedAt: new Date(),
-        status: "failed",
-        error: reason,
-        platformErrors: {},
-        platformAdIds: {},
-        automationCreatives: [],
-        rawImages: [],
-        rawTexts: [],
-      };
-      job.runHistory.push(preflightRun);
+      // Avoid appending duplicate preflight failure runs if the last run failed with the exact same reason recently
+      const lastRun = job.runHistory && job.runHistory[job.runHistory.length - 1];
+      const isDupFailure =
+        lastRun &&
+        lastRun.status === "failed" &&
+        lastRun.error === reason &&
+        (!lastRun.executedAt || Date.now() - new Date(lastRun.executedAt).getTime() < 120000);
+
+      let preflightRun = lastRun;
+      if (!isDupFailure) {
+        job.failedRuns = (job.failedRuns || 0) + 1;
+
+        preflightRun = {
+          runId: new (require("mongoose").Types.ObjectId)().toString(),
+          executedAt: new Date(),
+          status: "failed",
+          error: reason,
+          platformErrors: {},
+          platformAdIds: {},
+          automationCreatives: [],
+          rawImages: [],
+          rawTexts: [],
+        };
+        job.runHistory.push(preflightRun);
+      }
       await job.save({ validateBeforeSave: false });
 
       try {
