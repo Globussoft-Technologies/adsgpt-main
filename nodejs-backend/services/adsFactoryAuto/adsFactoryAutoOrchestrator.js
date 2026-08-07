@@ -1492,6 +1492,42 @@ async function run(jobId) {
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
 
+    const recordPreflightFailureAndAlert = async (reason) => {
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      job.failedRuns = (job.failedRuns || 0) + 1;
+
+      const preflightRun = {
+        runId: new (require("mongoose").Types.ObjectId)().toString(),
+        executedAt: new Date(),
+        status: "failed",
+        error: reason,
+        platformErrors: {},
+        platformAdIds: {},
+        automationCreatives: [],
+        rawImages: [],
+        rawTexts: [],
+      };
+      job.runHistory.push(preflightRun);
+      await job.save({ validateBeforeSave: false });
+
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto] could not cancel auto-paused job: ${e.message}`);
+      }
+
+      try {
+        const { notifyAdsFactoryRun } = require("./adsFactoryAlertService");
+        await notifyAdsFactoryRun({ job, campaign, run: preflightRun });
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto] alert email failed (non-fatal): ${e.message}`);
+      }
+
+      throw new Error(reason);
+    };
+
     // ── Step 2b: Verify every configured platform is actually connected ───────
     // isConfigured() only checks the saved template has fields filled in — it
     // doesn't mean the underlying Facebook/Google account is still linked.
@@ -1504,17 +1540,8 @@ async function run(jobId) {
       .map(([platformName]) => platformName);
     if (configuredTargetPlatforms.length === 0) {
       const reason = "No complete platform template is configured for this automation";
-      logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing â€” ${reason}`);
-      job.status = "paused";
-      job.schedule.nextRunAt = null;
-      await job.save({ validateBeforeSave: false });
-      try {
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(jobId);
-      } catch (error) {
-        logger.warn(`[adsFactoryAuto][2b] could not cancel targetless job: ${error.message}`);
-      }
-      throw new Error(reason);
+      logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing — ${reason}`);
+      await recordPreflightFailureAndAlert(reason);
     }
     const disconnectedPlatforms = [];
     for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
@@ -1526,16 +1553,7 @@ async function run(jobId) {
     if (disconnectedPlatforms.length > 0) {
       const reason = `${disconnectedPlatforms.join(", ")} account not connected — reconnect it or remove ${disconnectedPlatforms.length > 1 ? "these platforms" : "this platform"} from the automation`;
       logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing — ${reason}`);
-      job.status = "paused";
-      job.schedule.nextRunAt = null;
-      await job.save({ validateBeforeSave: false });
-      try {
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(jobId);
-      } catch (e) {
-        logger.warn(`[adsFactoryAuto][2b] could not cancel auto-paused job from queue: ${e.message}`);
-      }
-      throw new Error(reason);
+      await recordPreflightFailureAndAlert(reason);
     }
 
     // ── Step 2c: Pre-flight campaign-name conflict check ─────────────────────
@@ -1553,25 +1571,11 @@ async function run(jobId) {
       if (conflictName) nameConflicts.push({ platformName, name: conflictName });
     }
     if (nameConflicts.length > 0) {
-      // Format as "platform: message" segments (joined with " | ") so the
-      // alert email parses them per-platform and runs each through
-      // friendlyPlatformError — same convention the post-time platformErrors
-      // use. The "campaign with this name already exists" phrasing also matches
-      // isPermanentConfigError so the job stays paused.
       const reason = nameConflicts
         .map((c) => `${c.platformName}: A campaign with this name already exists ("${c.name}"). Please choose a different campaign name in this automation's settings and resume it.`)
         .join(" | ");
       logger.warn(`[adsFactoryAuto][2c] job ${jobId} auto-pausing — ${reason}`);
-      job.status = "paused";
-      job.schedule.nextRunAt = null;
-      await job.save({ validateBeforeSave: false });
-      try {
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(jobId);
-      } catch (e) {
-        logger.warn(`[adsFactoryAuto][2c] could not cancel auto-paused job from queue: ${e.message}`);
-      }
-      throw new Error(reason);
+      await recordPreflightFailureAndAlert(reason);
     }
 
     // ── Step 2d: Pre-flight Plan Limit Check ──────────────────────────────────
@@ -1585,16 +1589,7 @@ async function run(jobId) {
       if (!campaignLimit.ok) {
         const reason = `meta: ${campaignLimit.error}`;
         logger.warn(`[adsFactoryAuto][2d] job ${jobId} hit plan limit — ${reason}`);
-        job.status = "paused";
-        job.schedule.nextRunAt = null;
-        await job.save({ validateBeforeSave: false });
-        try {
-          const { cancelJob } = require("./adsFactoryAutoQueue");
-          await cancelJob(jobId);
-        } catch (e) {
-          logger.warn(`[adsFactoryAuto][2d] could not cancel auto-paused job from queue: ${e.message}`);
-        }
-        throw new Error(reason);
+        await recordPreflightFailureAndAlert(reason);
       }
     }
 
@@ -1615,13 +1610,9 @@ async function run(jobId) {
     );
     logger.info(`[adsFactoryAuto][3] credits  required=${creditResult.totalRequired}  success=${creditResult.success}`);
     if (!creditResult.success && creditResult.code === 400) {
-      logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
-      job.status = "paused";
-      // validateBeforeSave: false — legacy jobs missing campaignId must still
-      // be pausable; full-document validation would otherwise reject this
-      // save purely because of that pre-existing, unrelated field.
-      await job.save({ validateBeforeSave: false });
-      throw new Error(`Insufficient credits: ${creditResult.message}`);
+      const reason = `Insufficient credits: ${creditResult.message}`;
+      logger.warn(`[adsFactoryAuto][3] ${reason} — pausing job ${jobId}`);
+      await recordPreflightFailureAndAlert(reason);
     }
 
     // ── Step 4: Freeze credits ────────────────────────────────────────────────
@@ -1639,22 +1630,14 @@ async function run(jobId) {
         },
       });
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
-        logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
-        job.status = "paused";
-        await job.save({ validateBeforeSave: false });
-        throw new Error(
-          `Insufficient credits to reserve campaign run: need ${creditResult.totalRequired}, have ${freeze.remaining}`,
-        );
+        const reason = `Insufficient credits to reserve campaign run: need ${creditResult.totalRequired}, have ${freeze.remaining}`;
+        logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — ${reason} — pausing job`);
+        await recordPreflightFailureAndAlert(reason);
       }
       if (!freeze.ok && freeze.reason !== "CONTENDED" && !freeze.idempotent) {
-        // CONTENDED is transient; other reasons (NO_USER, RECEIPT_WRITE_FAILED,
-        // etc.) are fatal — pause and surface for retry/manual recovery.
-        logger.error(
-          `[autopilot][4] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId} — pausing job`,
-        );
-        job.status = "paused";
-        await job.save({ validateBeforeSave: false });
-        throw new Error(`Credit freeze failed: ${freeze.reason}`);
+        const reason = `Credit freeze failed: ${freeze.reason}`;
+        logger.error(`[autopilot][4] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId} — pausing job`);
+        await recordPreflightFailureAndAlert(reason);
       }
     }
 
