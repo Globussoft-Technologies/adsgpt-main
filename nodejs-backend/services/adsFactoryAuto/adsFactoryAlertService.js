@@ -33,19 +33,78 @@ function getLogger() {
   return _logger;
 }
 
-// Reuse the shared SendGrid sender — same one the Meta Autopilot + newsletter
-// use. Lazy-required to avoid any load-order surprises.
-let _sendEmail;
-function sendEmailFn() {
-  if (_sendEmail === undefined) {
-    try {
-      _sendEmail = require("../autopilot/alertService").sendEmail;
-    } catch (err) {
-      getLogger().error(`[adsFactoryAuto:alert] could not load shared sendEmail: ${err.message}`);
-      _sendEmail = null;
-    }
+let _sgMail;
+function sgMail() {
+  if (_sgMail !== undefined) return _sgMail;
+  const key = process.env.SENDGRID_API_KEY;
+  if (!key) {
+    getLogger().warn("[adsFactoryAuto:alert] email disabled: SENDGRID_API_KEY env var is not set");
+    _sgMail = null;
+    return null;
   }
-  return _sendEmail;
+  try {
+    const sg = require("@sendgrid/mail");
+    sg.setApiKey(key);
+    _sgMail = sg;
+  } catch (err) {
+    getLogger().error(`[adsFactoryAuto:alert] email disabled: @sendgrid/mail load failed — ${err.message}`);
+    _sgMail = null;
+  }
+  return _sgMail;
+}
+
+async function sendEmailFn({ to, subject, text, html }) {
+  const sg = sgMail();
+  if (!sg) return { sent: false, reason: "email-not-configured" };
+  if (!to) return { sent: false, reason: "no-recipient" };
+  const from = process.env.AUTOPILOT_EMAIL_FROM || "autopilot@adsgpt.io";
+
+  const recipients = Array.isArray(to) ? to : [to];
+  const cleanRecipients = recipients
+    .map((r) => String(r || "").trim())
+    .filter(Boolean);
+  if (!cleanRecipients.length) return { sent: false, reason: "no-recipient" };
+
+  try {
+    const msg = {
+      from,
+      subject,
+      text,
+      personalizations: [
+        {
+          to: cleanRecipients.map((email) => ({ email })),
+        },
+      ],
+      tracking_settings: {
+        click_tracking: { enable: false, enable_text: false },
+        open_tracking: { enable: false },
+        subscription_tracking: { enable: false },
+        ganalytics: { enable: false },
+      },
+    };
+    if (html) msg.html = html;
+
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        await sg.send(msg);
+        return { sent: true, recipients: cleanRecipients };
+      } catch (err) {
+        attempts++;
+        if (attempts >= 3) {
+          const sgErrors = err?.response?.body?.errors || err?.response?.body?.error || null;
+          const detail = sgErrors
+            ? Array.isArray(sgErrors) ? sgErrors.map((e) => e.message).join("; ") : String(sgErrors)
+            : err && err.message ? err.message : String(err);
+          return { sent: false, reason: "send-failed", error: detail };
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempts * 1000));
+      }
+    }
+    return { sent: false, reason: "send-failed", error: "Max retry attempts reached" };
+  } catch (err) {
+    return { sent: false, reason: "send-failed", error: err && err.message ? err.message : String(err) };
+  }
 }
 
 let _UserProfile;
@@ -312,11 +371,37 @@ function buildRunEmailHtml(job, campaign, run) {
   const font    = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
   const label    = `font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};`;
 
+  const tz = (job && job.schedule && job.schedule.timezone) || "Asia/Kolkata";
+
+  const formatTime = (d) => {
+    if (!d) return "—";
+    try {
+      return new Date(d).toLocaleTimeString("en-US", {
+        timeZone: tz,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+    } catch (_) {
+      return new Date(d).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    }
+  };
+
+  const formatDate = (d, options) => {
+    if (!d) return "—";
+    try {
+      return new Date(d).toLocaleString("en-GB", { timeZone: tz, ...options });
+    } catch (_) {
+      return new Date(d).toLocaleString("en-GB", options);
+    }
+  };
+
   const nextRunLabel  = job.schedule && job.schedule.nextRunAt
-    ? new Date(job.schedule.nextRunAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    ? formatDate(job.schedule.nextRunAt, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
   const endDateLabel  = job.schedule && job.schedule.endDate
-    ? new Date(job.schedule.endDate).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    ? formatDate(job.schedule.endDate, { day: "2-digit", month: "short", year: "numeric" })
     : null;
 
   // A single section wrapper: uppercase eyebrow label + inner content, divided
@@ -384,8 +469,7 @@ function buildRunEmailHtml(job, campaign, run) {
     html += `</td></tr></table></td></tr>`;
   }
 
-  const formatTime = (d) => d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "—";
-  const startDateStr = run.startedAt ? formatTime(run.startedAt) : "—";
+  const startDateStr = formatTime(run.startedAt || run.executedAt);
   const durationDisplay = durationMs != null
     ? (durationMs < 1000 ? "less than a second" : `${(durationMs / 1000).toFixed(1)}s`)
     : "—";
@@ -629,7 +713,7 @@ async function notifyAdsFactoryRun({ job, campaign, run, toOverride } = {}) {
       return { sent: false, reason: "no-recipient" };
     }
 
-    const send = sendEmailFn();
+    const send = sendEmailFn;
     if (!send) return { sent: false, reason: "email-not-configured" };
 
     const meta = STATUS_META[run.status] || STATUS_META.failed;
@@ -744,7 +828,7 @@ module.exports = {
   notifyAdsFactoryRun,
   resolveOwnerEmail,
   buildSampleRun,
-  sendEmail: sendEmailFn(),
+  sendEmail: sendEmailFn,
   // exported for tests / reuse
   parseEmailRecipients,
   resolveRecipients,

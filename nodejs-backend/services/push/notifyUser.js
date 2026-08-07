@@ -119,4 +119,62 @@ async function notifyUser(userId, { event, socketPayload, push } = {}) {
   }
 }
 
-module.exports = { notifyUser, sendPushToUser };
+/**
+ * Re-evaluate and emit live credits AND session (featureObject, plan details)
+ * updates over socket to all open tabs/rooms for a given user (e.g. after aMember
+ * plan updates, admin changes, or credit top-ups).
+ */
+async function notifyUserSessionUpdate(userId) {
+  if (!userId) return;
+  try {
+    const UserProfile = require("../../Module/user/userProfileModel");
+    const buildFeatureObject = require("../../utils/featureObjectBuilder");
+    const UnifiedCreditController = require("../../controllers/UnifiedCreditController");
+
+    const rawId = String(userId).trim();
+    const gptId = rawId.startsWith("GPT-") ? rawId : `GPT-${rawId}`;
+    const numericId = rawId.replace(/^GPT-/, "");
+
+    const user = await UserProfile.findOne({
+      $or: [{ user_id: gptId }, { amember_user_id: numericId }],
+    }).lean();
+
+    const featureObject = await buildFeatureObject(gptId, user);
+    const creditStatus = await UnifiedCreditController.getCreditStatus(gptId);
+
+    const roomIds = new Set([gptId, numericId]);
+
+    if (global.io) {
+      const sessionUser = {
+        status: true,
+        user_id: numericId,
+        login: user?.login || "",
+        user_name: user?.name || `${user?.name_f || ""} ${user?.name_l || ""}`.trim() || user?.login || "",
+        user_email: user?.email || "",
+        name_f: user?.name_f || "",
+        name_l: user?.name_l || "",
+        userSubscriptionType: user?.subscriptions || {},
+        created_from: user?.created_from || "GPT",
+        featureObject,
+      };
+
+      for (const room of roomIds) {
+        global.io.to(room).emit("session", sessionUser);
+        global.io.to(room).emit("credits", {
+          creditsUsed: creditStatus.used_credits,
+          totalCredits: creditStatus.total_credits,
+          remainingCredits: creditStatus.remaining_credits,
+          frozenCredits: creditStatus.frozen_credits,
+          settledCredits: creditStatus.settled_credits,
+          subscription: creditStatus.subscription,
+          rollover: creditStatus.rollover,
+          topup: creditStatus.topup,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`[notifyUserSessionUpdate] failed for ${userId}: ${err.message}`);
+  }
+}
+
+module.exports = { notifyUser, sendPushToUser, notifyUserSessionUpdate };

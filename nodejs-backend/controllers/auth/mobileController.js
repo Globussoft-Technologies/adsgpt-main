@@ -2615,6 +2615,16 @@ const handleAppleWebhook = async (req, res) => {
       raw_payload: decoded,
     });
 
+    try {
+      const { notifyUserSessionUpdate } = require("../../services/push/notifyUser");
+      if (txInfo?.originalTransactionId) {
+        const tx = await MobileStoreTransaction.findOne({ original_transaction_id: String(txInfo.originalTransactionId) });
+        if (tx && tx.amember_user_id) {
+          notifyUserSessionUpdate(tx.amember_user_id).catch(() => {});
+        }
+      }
+    } catch (_) {}
+
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error("[handleAppleWebhook] error:", error);
@@ -2716,6 +2726,16 @@ const handleGoogleWebhook = async (req, res) => {
         }
       }
     }
+
+    try {
+      const { notifyUserSessionUpdate } = require("../../services/push/notifyUser");
+      if (subNotification?.purchaseToken) {
+        const tx = await MobileStoreTransaction.findOne({ original_transaction_id: String(subNotification.purchaseToken) });
+        if (tx && tx.amember_user_id) {
+          notifyUserSessionUpdate(tx.amember_user_id).catch(() => {});
+        }
+      }
+    } catch (_) {}
 
     return res.status(200).json({ ok: true });
   } catch (error) {
