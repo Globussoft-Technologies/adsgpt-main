@@ -78,10 +78,22 @@ async function fetchProductMeta(productId) {
     const durationDays =
       parsePeriodToDays(secondPeriod) ?? parsePeriodToDays(firstPeriod);
 
+    const firstPrice = billingPlan?.first_price ?? product.first_price ?? "0";
+
     const meta = {
       productId: key,
       credits: Number.isFinite(credits) ? credits : null,
       title: product.title || "",
+      firstPrice: Number(firstPrice),
+      topPlan: (function () {
+        const val =
+          product.topplan ??
+          product.topPlan ??
+          product.top_plan ??
+          product.is_top_plan ??
+          product.meta?.topPlan;
+        return val === "1" || val === "true" || val === true;
+      })(),
       durationDays: Number.isFinite(durationDays) ? durationDays : null,
       firstPeriod,
       secondPeriod,
@@ -1270,4 +1282,5 @@ module.exports = {
   fetchUserDataByName_Email,
   createAdsGptSessionForAmemberUserId,
   syncUserProfile,
+  fetchProductMeta,
 };
