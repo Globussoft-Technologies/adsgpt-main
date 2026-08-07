@@ -183,7 +183,7 @@ function createWorkspaceService(overrides = {}) {
       );
     }
     const selectedFeatures = requireFeatures(features);
-    const { workspace } = await ensureOwnerWorkspace(ownerUserId);
+    const { workspace, sponsor } = await ensureOwnerWorkspace(ownerUserId);
 
     if (await findAdsGptUserByEmail(inviteeEmail)) {
       throw workspaceError(
@@ -261,6 +261,8 @@ function createWorkspaceService(overrides = {}) {
       to: inviteeEmail,
       token: rawToken,
       workspaceName: workspace.name,
+      features: selectedFeatures,
+      ownerName: displayName(sponsor.profile),
     });
     const result = {
       invitation: invitation?.toObject ? invitation.toObject() : invitation,
