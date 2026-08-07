@@ -1238,6 +1238,8 @@ const PERMANENT_CONFIG_ERROR_PATTERNS = [
   /(re-?connect|re-?authenticate).* (facebook|google|meta|account)/i,
   /campaign with this name already exists/i,
   /duplicate campaign name/i,
+  /allowed on your plan/i,
+  /PLAN_LIMIT_REACHED/i,
   // Google Ads permission failures — the account is linked but the OAuth
   // grant no longer has access to that customer (revoked, wrong login-customer,
   // or manager-link removed). These never recover on retry, so auto-pause
@@ -1570,6 +1572,29 @@ async function run(jobId) {
         logger.warn(`[adsFactoryAuto][2c] could not cancel auto-paused job from queue: ${e.message}`);
       }
       throw new Error(reason);
+    }
+
+    // ── Step 2d: Pre-flight Plan Limit Check ──────────────────────────────────
+    // Check managed campaign plan limit BEFORE freezing credits or sending to Python.
+    // Only checked if Meta target is configured and no Meta campaign ID has been
+    // saved yet from a prior run (subsequent runs reuse createdCampaignId and consume 0 slots).
+    if (jobTargets.meta && !jobTargets.meta.createdCampaignId) {
+      const { checkPlanLimit } = require("../../utils/planLimits");
+      const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
+      if (!campaignLimit.ok) {
+        const reason = `meta: ${campaignLimit.error}`;
+        logger.warn(`[adsFactoryAuto][2d] job ${jobId} hit plan limit — ${reason}`);
+        job.status = "paused";
+        job.schedule.nextRunAt = null;
+        await job.save({ validateBeforeSave: false });
+        try {
+          const { cancelJob } = require("./adsFactoryAutoQueue");
+          await cancelJob(jobId);
+        } catch (e) {
+          logger.warn(`[adsFactoryAuto][2d] could not cancel auto-paused job from queue: ${e.message}`);
+        }
+        throw new Error(reason);
+      }
     }
 
     // ── Step 3: Credit check ──────────────────────────────────────────────────
