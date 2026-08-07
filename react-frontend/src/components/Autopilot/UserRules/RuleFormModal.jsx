@@ -806,7 +806,9 @@ function SelectInput({
   placeholder = 'Select…',
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  // Either `top` (menu below the trigger) or `bottom` (flipped above it) is
+  // set, never both — see updatePos.
+  const [pos, setPos] = useState({ top: 0, bottom: null, left: 0, width: 0, maxHeight: 288 });
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -822,12 +824,30 @@ function SelectInput({
       const rect = el.getBoundingClientRect();
       // Flip up if there isn't room below — keeps long lists onscreen
       // when a Condition row sits near the bottom of the modal.
+      //
+      // When flipping, anchor the menu's BOTTOM edge just above the trigger
+      // rather than computing a `top` from an assumed menu height. The
+      // previous version subtracted a hardcoded 280px, so a SHORT menu (the
+      // Facebook-account picker with one connection is ~56px) was placed
+      // 280px up and floated ~220px clear of its trigger, landing over
+      // unrelated fields. Anchoring the bottom is height-agnostic: the menu
+      // sits flush above the trigger whether it has one option or twenty.
+      const GAP = 4;
       const spaceBelow = window.innerHeight - rect.bottom;
-      const top =
-        spaceBelow < 240 && rect.top > 240
-          ? rect.top - 4 - Math.min(280, rect.top - 16)
-          : rect.bottom + 4;
-      setPos({ top, left: rect.left, width: rect.width });
+      const spaceAbove = rect.top;
+      const flipUp = spaceBelow < 240 && spaceAbove > 240;
+      setPos({
+        top: flipUp ? null : rect.bottom + GAP,
+        bottom: flipUp ? window.innerHeight - rect.top + GAP : null,
+        left: rect.left,
+        width: rect.width,
+        // Never taller than the room actually available on that side, so a
+        // long list scrolls internally instead of running off-screen.
+        maxHeight: Math.max(
+          120,
+          Math.min(288, (flipUp ? spaceAbove : spaceBelow) - GAP - 12),
+        ),
+      });
     };
     updatePos();
     const onDocClick = (e) => {
@@ -902,13 +922,16 @@ function SelectInput({
               transition={{ duration: 0.12, ease: 'easeOut' }}
               style={{
                 position: 'fixed',
-                top: pos.top,
+                ...(pos.bottom != null ? { bottom: pos.bottom } : { top: pos.top }),
                 left: pos.left,
                 minWidth: pos.width,
               }}
               className="z-200 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl backdrop-blur-xl dark:border-white/12 dark:bg-[#0F0F0F]/98"
             >
-              <div className="scrollbar-thin max-h-72 overflow-y-auto p-1.5">
+              <div
+                className="scrollbar-thin overflow-y-auto p-1.5"
+                style={{ maxHeight: pos.maxHeight }}
+              >
                 {isGrouped
                   ? options.map((group) => (
                       <div key={group.groupLabel}>
