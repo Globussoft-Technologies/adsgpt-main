@@ -20,15 +20,87 @@ const logger = require("../utils/logger");
 
 const LIMIT_KEY = "meta:campaigns";
 
-/** The plan limit's counter — cheap, unlike walking Meta account-by-account. */
+/** null when the plan doesn't cap campaigns at all. */
+async function getCampaignLimit(userId) {
+  const limits = await getLimitsForUser(userId);
+  const limit = limits?.[LIMIT_KEY];
+  return limit === undefined ? null : limit;
+}
+
+/**
+ * Bring a user's held slots back within their CURRENT plan limit, releasing
+ * the excess.
+ *
+ * Needed because a user's limit can shrink under them — an admin lowering the
+ * plan's cap, or the user moving to a smaller plan — long after the slots were
+ * claimed. Without this, slots claimed under the old limit stayed usable
+ * forever: reducing a plan from 1 to 0 left the already-managed campaign fully
+ * operable, which is precisely the reported bug.
+ *
+ * Runs LAZILY on the next request that resolves the user's slots rather than
+ * as a bulk job when an admin saves. That way it self-heals for every route a
+ * limit can change by (admin edit, plan upgrade/downgrade, aMember sync), and
+ * an admin lowering a popular plan's cap doesn't trigger a mass write across
+ * every subscriber at once.
+ *
+ * Which slots survive: the OLDEST claims. "First come, first served" is the
+ * rule the slots were handed out under, so it's the one users can predict —
+ * and the excess is always the most recently added, which is what they're
+ * likeliest to remember choosing and can re-pick if they upgrade.
+ *
+ * Cheap in the normal case: one indexed count, then return. Only a user who
+ * is actually over their limit pays for the find + delete.
+ */
+async function reconcileSlots(userId) {
+  try {
+    if (!userId) return 0;
+    const limit = await getCampaignLimit(userId);
+    if (limit === null) return 0; // uncapped — nothing to reconcile
+
+    const current = await ManagedCampaign.countDocuments({ userId });
+    if (current <= limit) return 0;
+
+    // Oldest first, keep `limit` of them, release the rest. `limit: 0`
+    // naturally releases everything, which is the reported repro.
+    const keep = await ManagedCampaign.find({ userId }, { _id: 1 })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .lean();
+    const keepIds = keep.map((row) => row._id);
+
+    const res = await ManagedCampaign.deleteMany({
+      userId,
+      _id: { $nin: keepIds },
+    });
+    if (res.deletedCount) {
+      logger.info(
+        `reconcileSlots: released ${res.deletedCount} campaign slot(s) for user ${userId} — plan limit is now ${limit}`,
+      );
+    }
+    return res.deletedCount || 0;
+  } catch (err) {
+    // Fail open: leaving a user briefly over their limit beats throwing from
+    // a read path and breaking their campaigns list.
+    logger.warn(`reconcileSlots(${userId}) failed: ${err.message}`);
+    return 0;
+  }
+}
+
+/**
+ * The plan limit's counter — cheap, unlike walking Meta account-by-account.
+ * Reconciles first so the number always reflects the CURRENT plan limit, even
+ * if the limit shrank since the slots were claimed.
+ */
 async function countManagedCampaigns(userId) {
   if (!userId) return 0;
+  await reconcileSlots(userId);
   return ManagedCampaign.countDocuments({ userId });
 }
 
 /** Set of campaign ids the user manages. Set, not array — callers do lookups. */
 async function listManagedCampaignIds(userId) {
   if (!userId) return new Set();
+  await reconcileSlots(userId);
   const rows = await ManagedCampaign.find({ userId }, { campaignId: 1 }).lean();
   return new Set(rows.map((row) => row.campaignId));
 }
@@ -37,13 +109,6 @@ async function isCampaignManaged(userId, campaignId) {
   if (!userId || !campaignId) return false;
   const row = await ManagedCampaign.exists({ userId, campaignId: String(campaignId) });
   return !!row;
-}
-
-/** null when the plan doesn't cap campaigns at all. */
-async function getCampaignLimit(userId) {
-  const limits = await getLimitsForUser(userId);
-  const limit = limits?.[LIMIT_KEY];
-  return limit === undefined ? null : limit;
 }
 
 /**
@@ -127,6 +192,12 @@ async function requireManagedCampaign(userId, campaignId) {
     if (limit === null) return { ok: true };
     if (!campaignId) return { ok: true };
 
+    // Enforce the CURRENT limit, not whatever it was when the slot was
+    // claimed — a campaign whose slot has since been squeezed out by a
+    // reduced plan limit must stop being operable here too, not just in the
+    // UI. Without this the gate would keep honouring a stale row.
+    await reconcileSlots(userId);
+
     if (await isCampaignManaged(userId, campaignId)) return { ok: true };
 
     return {
@@ -176,6 +247,7 @@ async function pruneMissingForAccount(userId, adAccountId, liveCampaignIds) {
 
 module.exports = {
   LIMIT_KEY,
+  reconcileSlots,
   countManagedCampaigns,
   listManagedCampaignIds,
   isCampaignManaged,

@@ -36,8 +36,21 @@ const ManagedCampaignStub = {
   },
   find(query) {
     if (throwOnRead) throw new Error("mongo down");
-    const res = match(query);
-    return { lean: async () => res };
+    let res = match(query);
+    // Chainable stub mirroring the sort/limit reconcileSlots relies on to
+    // decide WHICH slots survive (oldest first).
+    const chain = {
+      sort: () => {
+        res = [...res].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+        return chain;
+      },
+      limit: (n) => {
+        res = res.slice(0, n);
+        return chain;
+      },
+      lean: async () => res,
+    };
+    return chain;
   },
   async exists(query) {
     if (throwOnRead) throw new Error("mongo down");
@@ -55,16 +68,25 @@ const ManagedCampaignStub = {
     return { deletedCount: before - rows.length };
   },
   async deleteMany(filter) {
-    const live = new Set(filter.campaignId.$nin);
     const before = rows.length;
-    rows = rows.filter(
-      (r) =>
-        !(
-          r.userId === filter.userId &&
-          r.adAccountId === filter.adAccountId &&
-          !live.has(r.campaignId)
-        ),
-    );
+    if (filter._id) {
+      // reconcileSlots shape: keep these _ids, drop the user's rest.
+      const keep = new Set(filter._id.$nin.map(String));
+      rows = rows.filter(
+        (r) => !(r.userId === filter.userId && !keep.has(String(r._id))),
+      );
+    } else {
+      // pruneMissingForAccount shape: per-ad-account orphan cleanup.
+      const live = new Set(filter.campaignId.$nin);
+      rows = rows.filter(
+        (r) =>
+          !(
+            r.userId === filter.userId &&
+            r.adAccountId === filter.adAccountId &&
+            !live.has(r.campaignId)
+          ),
+      );
+    }
     return { deletedCount: before - rows.length };
   },
 };
@@ -83,7 +105,9 @@ const svc = require("../../services/managedCampaigns");
 
 function reset({ limit = null, seed = [] } = {}) {
   planLimitValue = limit;
-  rows = seed.map((r) => ({ adAccountId: "act1", ...r }));
+  // `createdAt` ascending by seed order + a stable `_id`, so tests can assert
+  // WHICH slots reconcileSlots keeps (oldest survive).
+  rows = seed.map((r, i) => ({ _id: `id${i}`, createdAt: i, adAccountId: "act1", ...r }));
   throwOnRead = false;
 }
 
@@ -152,14 +176,25 @@ const run = (name, fn) => fn().then(
     assert.strictEqual(await svc.countManagedCampaigns("u1"), 1, "must not double-consume a slot");
   });
 
-  // The create path reserves its slot upstream via checkPlanLimit, so forcing
-  // past the count here is correct — without it, creating the Nth campaign
-  // would create it in Meta and then fail to claim it, leaving it orphaned.
-  await run("force bypasses the limit for the create path", async () => {
-    reset({ limit: 1, seed: [{ userId: "u1", campaignId: "c1" }] });
+  // The create path reserves its slot upstream via checkPlanLimit, so skipping
+  // the count here is correct — without it, creating the Nth campaign would
+  // create it in Meta and then fail to claim it, leaving it orphaned.
+  await run("force skips the pre-claim limit check (create path)", async () => {
+    reset({ limit: 2, seed: [{ userId: "u1", campaignId: "c1" }] });
     const res = await svc.claimCampaign("u1", { campaignId: "c2", adAccountId: "act1", source: "create", force: true });
     assert.strictEqual(res.ok, true);
-    assert.strictEqual(await svc.countManagedCampaigns("u1"), 2);
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 2, "the claimed slot survives when within the limit");
+  });
+
+  // `force` cannot be used to exceed the plan: reconcileSlots normalises the
+  // count on the next read. In production this never arises — checkPlanLimit
+  // refuses the create BEFORE the campaign is made, so force only ever runs
+  // when a slot is genuinely free — but the invariant is worth pinning so a
+  // future caller can't use `force` as a limit bypass.
+  await run("force cannot overfill past the limit", async () => {
+    reset({ limit: 1, seed: [{ userId: "u1", campaignId: "c1" }] });
+    await svc.claimCampaign("u1", { campaignId: "c2", adAccountId: "act1", source: "create", force: true });
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 1, "excess is reconciled away");
   });
 
   await run("releasing frees a slot", async () => {
@@ -191,6 +226,75 @@ const run = (name, fn) => fn().then(
   await run("prune with a full live list deletes nothing", async () => {
     reset({ limit: 5, seed: [{ userId: "u1", campaignId: "c1", adAccountId: "act1" }] });
     assert.strictEqual(await svc.pruneMissingForAccount("u1", "act1", ["c1"]), 0);
+  });
+
+  // ── reduced plan limit must apply to slots ALREADY held ──────────────────
+  // Reported bug: admin lowers a plan's campaign limit from 1 to 0, but the
+  // campaign the user had already marked Managed stayed fully operable. The
+  // gate honoured the stale row instead of the current limit.
+  await run("limit lowered to 0 releases an already-managed campaign", async () => {
+    reset({ limit: 1, seed: [{ userId: "u1", campaignId: "c1" }] });
+    assert.strictEqual((await svc.requireManagedCampaign("u1", "c1")).ok, true, "managed while limit is 1");
+
+    planLimitValue = 0; // admin drops the plan limit to 0
+    const gate = await svc.requireManagedCampaign("u1", "c1");
+    assert.strictEqual(gate.ok, false, "must NOT stay operable after the limit drops to 0");
+    assert.strictEqual(gate.code, "CAMPAIGN_NOT_MANAGED");
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 0, "slot must be released");
+  });
+
+  await run("count always complies with the current limit", async () => {
+    reset({ limit: 5, seed: [1, 2, 3, 4, 5].map((n) => ({ userId: "u1", campaignId: `c${n}` })) });
+    planLimitValue = 2;
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 2);
+    assert.strictEqual((await svc.listManagedCampaignIds("u1")).size, 2);
+  });
+
+  // Deterministic and predictable: slots were handed out first-come, so the
+  // earliest claims are the ones that survive a squeeze.
+  await run("reconcile keeps the OLDEST claims", async () => {
+    reset({ limit: 4, seed: ["c1", "c2", "c3", "c4"].map((c) => ({ userId: "u1", campaignId: c })) });
+    planLimitValue = 2;
+    const kept = [...(await svc.listManagedCampaignIds("u1"))].sort();
+    assert.deepStrictEqual(kept, ["c1", "c2"], "oldest two survive");
+  });
+
+  await run("reconcile is a no-op when within the limit", async () => {
+    reset({ limit: 3, seed: [{ userId: "u1", campaignId: "c1" }] });
+    assert.strictEqual(await svc.reconcileSlots("u1"), 0);
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 1);
+  });
+
+  await run("reconcile never touches an uncapped plan", async () => {
+    reset({ limit: null, seed: [1, 2, 3].map((n) => ({ userId: "u1", campaignId: `c${n}` })) });
+    assert.strictEqual(await svc.reconcileSlots("u1"), 0);
+    assert.strictEqual((await svc.listManagedCampaignIds("u1")).size, 3, "uncapped users keep everything");
+  });
+
+  await run("reconcile only touches the user it was given", async () => {
+    reset({
+      limit: 1,
+      seed: [
+        { userId: "u1", campaignId: "c1" },
+        { userId: "u1", campaignId: "c2" },
+        { userId: "u2", campaignId: "c3" },
+        { userId: "u2", campaignId: "c4" },
+      ],
+    });
+    await svc.reconcileSlots("u1");
+    assert.strictEqual(rows.filter((r) => r.userId === "u2").length, 2, "another user's slots must survive");
+  });
+
+  // After a squeeze the user can re-pick: releasing isn't required first,
+  // because reconcile already freed the room.
+  await run("user can claim again after a reduction squeezed them", async () => {
+    reset({ limit: 3, seed: ["c1", "c2", "c3"].map((c) => ({ userId: "u1", campaignId: c })) });
+    planLimitValue = 1;
+    assert.strictEqual(await svc.countManagedCampaigns("u1"), 1);
+    // At the new limit, so a fresh claim is refused rather than silently over-filling.
+    assert.strictEqual((await svc.claimCampaign("u1", { campaignId: "c9", adAccountId: "act1" })).ok, false);
+    await svc.releaseCampaign("u1", "c1");
+    assert.strictEqual((await svc.claimCampaign("u1", { campaignId: "c9", adAccountId: "act1" })).ok, true);
   });
 
   // ── fail-open ────────────────────────────────────────────────────────────
