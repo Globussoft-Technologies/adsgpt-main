@@ -7,6 +7,21 @@ const {
   resolvePlanLimitValues,
 } = require("../../config/planLimitsRegistry");
 
+/**
+ * Is an aMember boolean-ish flag set?
+ *
+ * aMember's REST API is inconsistent about how it serialises tinyint columns
+ * — `"1"` (string) in some responses, `1` (number) in others, occasionally a
+ * real boolean. The rest of this codebase compares strictly against `"1"`
+ * (see mobileController.js), which silently treats a numeric `1` as NOT set:
+ * `1 !== "1"` is true, so a disabled product passes straight through the
+ * filter. That's how disabled/archived plans were still reaching the admin
+ * Plans page. Normalise instead of trusting the type.
+ */
+function isAmemberFlagSet(value) {
+  return value === 1 || value === "1" || value === true;
+}
+
 // GET /adsgpt/admin/plans — every active aMember plan, joined with whatever
 // limits have been configured for it, plus the limit REGISTRY itself so the
 // admin panel renders its columns generically. Adding a limit to
@@ -22,12 +37,23 @@ exports.listPlans = async (req, res) => {
     // endpoint, not fetchAmemberProducts() itself — the Users-page plan
     // filter (adminDashboard.controller.js) deliberately keeps disabled/
     // archived plans, since an existing user can still be sitting on one
-    // and needs to stay filterable. Same is_disabled/is_archived idiom as
-    // mobileController.js's resolveAmemberProduct/matchAmemberFreeTrialProduct
-    // (aMember returns these as the strings "1"/"0", not booleans).
+    // and needs to stay filterable.
     const activeProducts = products.filter(
-      (product) => product?.is_disabled !== "1" && product?.is_archived !== "1",
+      (product) => !isAmemberFlagSet(product?.is_disabled) && !isAmemberFlagSet(product?.is_archived),
     );
+
+    // Loud enough to diagnose "why is an archived plan still listed?" from
+    // the logs without adding a debug endpoint, quiet enough not to spam:
+    // one line per admin page load.
+    if (activeProducts.length !== products.length) {
+      console.log(
+        `[plans] ${products.length - activeProducts.length} of ${products.length} aMember products filtered out as disabled/archived`,
+      );
+    } else if (products.length) {
+      console.log(
+        `[plans] ${products.length} aMember products, none flagged disabled/archived`,
+      );
+    }
 
     const plans = activeProducts
       .map((product) => {

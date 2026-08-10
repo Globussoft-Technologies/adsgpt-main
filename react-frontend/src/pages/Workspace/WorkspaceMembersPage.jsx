@@ -64,7 +64,7 @@ function featurePicker(selected, setSelected) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
       {WORKSPACE_FEATURE_GROUPS
         // A matrix group (Ads Manager) deliberately keeps its unavailable
         // cells visible as "Soon" — a roadmap preview. Everywhere else, a
