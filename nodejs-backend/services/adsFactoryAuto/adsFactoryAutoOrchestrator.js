@@ -27,6 +27,7 @@ const { invalidateAfterCreate }                  = require("../../controllers/ad
 const { invalidateAllUserGoogleCache }           = require("../../controllers/adPosting/googleAdController");
 const { decrypt }                                = require("../../utils/crypto");
 const { uploadImageFromUrl }                     = require("../../controllers/adPosting/adControllerV2");
+const { checkPlanLimit }                         = require("../../utils/planLimits");
 
 function adFactoryCtrl() { return require("../../controllers/adFactory"); }
 
@@ -1272,6 +1273,36 @@ function isPermanentConfigError(errorMessage) {
   return PERMANENT_CONFIG_ERROR_PATTERNS.some((re) => re.test(errorMessage));
 }
 
+function shouldCoalesceDuplicateFailureRun(previousRun, nextRun, windowMs = 2 * 60 * 1000) {
+  if (!previousRun || !nextRun) return false;
+  if (previousRun.status !== "failed" || nextRun.status !== "failed") return false;
+
+  const previousError = String(previousRun.error || "").trim();
+  const nextError = String(nextRun.error || "").trim();
+  if (!previousError || previousError !== nextError) return false;
+
+  const previousPosted = previousRun.platformAdIds instanceof Map
+    ? previousRun.platformAdIds.size > 0
+    : Object.keys(previousRun.platformAdIds || {}).length > 0;
+  const nextPosted = nextRun.platformAdIds instanceof Map
+    ? nextRun.platformAdIds.size > 0
+    : Object.keys(nextRun.platformAdIds || {}).length > 0;
+  if (previousPosted || nextPosted) return false;
+
+  if ((previousRun.automationCreatives || []).length > 0) return false;
+  if ((nextRun.automationCreatives || []).length > 0) return false;
+
+  const previousAt = new Date(
+    previousRun.completedAt || previousRun.startedAt || previousRun.executedAt || 0,
+  ).getTime();
+  const nextAt = new Date(
+    nextRun.completedAt || nextRun.startedAt || nextRun.executedAt || 0,
+  ).getTime();
+  if (!previousAt || !nextAt || Number.isNaN(previousAt) || Number.isNaN(nextAt)) return false;
+
+  return Math.abs(nextAt - previousAt) < windowMs;
+}
+
 function buildCreativesFromResults(campaign, callToActionList, destinationUrl, pairsPerCycle) {
   const allTexts  = (campaign.results?.text  || []).filter((t) => t.status === 200 && t.data);
   const allImages = (campaign.results?.image || []).filter((i) => i.status === 200 && i.data);
@@ -1492,54 +1523,6 @@ async function run(jobId) {
     const pairsPerCycle  = job.pairsPerCycle  || 1;
     const model          = job.model          || null;
 
-    const recordPreflightFailureAndAlert = async (reason) => {
-      job.status = "paused";
-      job.schedule.nextRunAt = null;
-
-      // Avoid appending duplicate preflight failure runs if the last run failed with the exact same reason recently
-      const lastRun = job.runHistory && job.runHistory[job.runHistory.length - 1];
-      const isDupFailure =
-        lastRun &&
-        lastRun.status === "failed" &&
-        lastRun.error === reason &&
-        (!lastRun.executedAt || Date.now() - new Date(lastRun.executedAt).getTime() < 120000);
-
-      let preflightRun = lastRun;
-      if (!isDupFailure) {
-        job.failedRuns = (job.failedRuns || 0) + 1;
-
-        preflightRun = {
-          runId: new (require("mongoose").Types.ObjectId)().toString(),
-          executedAt: new Date(),
-          status: "failed",
-          error: reason,
-          platformErrors: {},
-          platformAdIds: {},
-          automationCreatives: [],
-          rawImages: [],
-          rawTexts: [],
-        };
-        job.runHistory.push(preflightRun);
-      }
-      await job.save({ validateBeforeSave: false });
-
-      try {
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(jobId);
-      } catch (e) {
-        logger.warn(`[adsFactoryAuto] could not cancel auto-paused job: ${e.message}`);
-      }
-
-      try {
-        const { notifyAdsFactoryRun } = require("./adsFactoryAlertService");
-        await notifyAdsFactoryRun({ job, campaign, run: preflightRun });
-      } catch (e) {
-        logger.warn(`[adsFactoryAuto] alert email failed (non-fatal): ${e.message}`);
-      }
-
-      throw new Error(reason);
-    };
-
     // ── Step 2b: Verify every configured platform is actually connected ───────
     // isConfigured() only checks the saved template has fields filled in — it
     // doesn't mean the underlying Facebook/Google account is still linked.
@@ -1552,8 +1535,17 @@ async function run(jobId) {
       .map(([platformName]) => platformName);
     if (configuredTargetPlatforms.length === 0) {
       const reason = "No complete platform template is configured for this automation";
-      logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing — ${reason}`);
-      await recordPreflightFailureAndAlert(reason);
+      logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing â€” ${reason}`);
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      await job.save({ validateBeforeSave: false });
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (error) {
+        logger.warn(`[adsFactoryAuto][2b] could not cancel targetless job: ${error.message}`);
+      }
+      throw new Error(reason);
     }
     const disconnectedPlatforms = [];
     for (const [platformName, poster] of Object.entries(PLATFORM_POSTERS)) {
@@ -1565,7 +1557,16 @@ async function run(jobId) {
     if (disconnectedPlatforms.length > 0) {
       const reason = `${disconnectedPlatforms.join(", ")} account not connected — reconnect it or remove ${disconnectedPlatforms.length > 1 ? "these platforms" : "this platform"} from the automation`;
       logger.warn(`[adsFactoryAuto][2b] job ${jobId} auto-pausing — ${reason}`);
-      await recordPreflightFailureAndAlert(reason);
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      await job.save({ validateBeforeSave: false });
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2b] could not cancel auto-paused job from queue: ${e.message}`);
+      }
+      throw new Error(reason);
     }
 
     // ── Step 2c: Pre-flight campaign-name conflict check ─────────────────────
@@ -1583,26 +1584,25 @@ async function run(jobId) {
       if (conflictName) nameConflicts.push({ platformName, name: conflictName });
     }
     if (nameConflicts.length > 0) {
+      // Format as "platform: message" segments (joined with " | ") so the
+      // alert email parses them per-platform and runs each through
+      // friendlyPlatformError — same convention the post-time platformErrors
+      // use. The "campaign with this name already exists" phrasing also matches
+      // isPermanentConfigError so the job stays paused.
       const reason = nameConflicts
         .map((c) => `${c.platformName}: A campaign with this name already exists ("${c.name}"). Please choose a different campaign name in this automation's settings and resume it.`)
         .join(" | ");
       logger.warn(`[adsFactoryAuto][2c] job ${jobId} auto-pausing — ${reason}`);
-      await recordPreflightFailureAndAlert(reason);
-    }
-
-    // ── Step 2d: Pre-flight Plan Limit Check ──────────────────────────────────
-    // Check managed campaign plan limit BEFORE freezing credits or sending to Python.
-    // Only checked if Meta target is configured and no Meta campaign ID has been
-    // saved yet from a prior run (subsequent runs reuse createdCampaignId and consume 0 slots).
-    const jobTargets = job.targets || {};
-    if (jobTargets.meta && !jobTargets.meta.createdCampaignId) {
-      const { checkPlanLimit } = require("../../utils/planLimits");
-      const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
-      if (!campaignLimit.ok) {
-        const reason = `meta: ${campaignLimit.error}`;
-        logger.warn(`[adsFactoryAuto][2d] job ${jobId} hit plan limit — ${reason}`);
-        await recordPreflightFailureAndAlert(reason);
+      job.status = "paused";
+      job.schedule.nextRunAt = null;
+      await job.save({ validateBeforeSave: false });
+      try {
+        const { cancelJob } = require("./adsFactoryAutoQueue");
+        await cancelJob(jobId);
+      } catch (e) {
+        logger.warn(`[adsFactoryAuto][2c] could not cancel auto-paused job from queue: ${e.message}`);
       }
+      throw new Error(reason);
     }
 
     // ── Step 3: Credit check ──────────────────────────────────────────────────
@@ -1614,6 +1614,16 @@ async function run(jobId) {
       rawUserId = parts.slice(1).join("-");
     }
 
+    // Step 2d: Pre-flight Meta managed-campaign plan-limit check.
+    // Only brand-new Meta campaigns consume a slot; later runs reuse the
+    // created campaign id already saved on the job.
+    if (targetsForConnCheck.meta && !targetsForConnCheck.meta.createdCampaignId) {
+      const campaignLimit = await checkPlanLimit(rawUserId || userId, "meta:campaigns");
+      if (!campaignLimit.ok) {
+        throw new Error(`meta: ${campaignLimit.error}`);
+      }
+    }
+
     const ctrl = adFactoryCtrl();
     const creditResult = await ctrl.validateCredits(
       { user_id: rawUserId, created_from },
@@ -1622,9 +1632,13 @@ async function run(jobId) {
     );
     logger.info(`[adsFactoryAuto][3] credits  required=${creditResult.totalRequired}  success=${creditResult.success}`);
     if (!creditResult.success && creditResult.code === 400) {
-      const reason = `Insufficient credits: ${creditResult.message}`;
-      logger.warn(`[adsFactoryAuto][3] ${reason} — pausing job ${jobId}`);
-      await recordPreflightFailureAndAlert(reason);
+      logger.warn(`[adsFactoryAuto][3] insufficient credits — pausing job ${jobId}`);
+      job.status = "paused";
+      // validateBeforeSave: false — legacy jobs missing campaignId must still
+      // be pausable; full-document validation would otherwise reject this
+      // save purely because of that pre-existing, unrelated field.
+      await job.save({ validateBeforeSave: false });
+      throw new Error(`Insufficient credits: ${creditResult.message}`);
     }
 
     // ── Step 4: Freeze credits ────────────────────────────────────────────────
@@ -1642,14 +1656,22 @@ async function run(jobId) {
         },
       });
       if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
-        const reason = `Insufficient credits to reserve campaign run: need ${creditResult.totalRequired}, have ${freeze.remaining}`;
-        logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — ${reason} — pausing job`);
-        await recordPreflightFailureAndAlert(reason);
+        logger.warn(`[adsFactoryAuto][4] freeze INSUFFICIENT — need ${creditResult.totalRequired}, have ${freeze.remaining} — pausing job`);
+        job.status = "paused";
+        await job.save({ validateBeforeSave: false });
+        throw new Error(
+          `Insufficient credits to reserve campaign run: need ${creditResult.totalRequired}, have ${freeze.remaining}`,
+        );
       }
       if (!freeze.ok && freeze.reason !== "CONTENDED" && !freeze.idempotent) {
-        const reason = `Credit freeze failed: ${freeze.reason}`;
-        logger.error(`[autopilot][4] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId} — pausing job`);
-        await recordPreflightFailureAndAlert(reason);
+        // CONTENDED is transient; other reasons (NO_USER, RECEIPT_WRITE_FAILED,
+        // etc.) are fatal — pause and surface for retry/manual recovery.
+        logger.error(
+          `[autopilot][4] campaign freeze failed (${freeze.reason}) for ${campaign.metadata.campaignId} — pausing job`,
+        );
+        job.status = "paused";
+        await job.save({ validateBeforeSave: false });
+        throw new Error(`Credit freeze failed: ${freeze.reason}`);
       }
     }
 
@@ -1684,6 +1706,7 @@ async function run(jobId) {
     // stale/missing entry (e.g. left over from the campaign's original
     // single-platform wizard setup) silently drops that platform's variant,
     // causing both platforms to fall back to the same shared text.
+    const jobTargets = job.targets || {};
     const distributionPlatforms = Object.keys(PLATFORM_POSTERS)
       .filter((p) => PLATFORM_POSTERS[p].isConfigured(jobTargets[p]))
       .map((p) => ({ platformName: p }));
@@ -1897,7 +1920,7 @@ async function run(jobId) {
   // ── Step 9: Save run history ─────────────────────────────────────────────────
   if (job) {
     try {
-      job.runHistory.push({
+      let currentRun = {
         runId,
         startedAt,
         completedAt:   new Date(),
@@ -1910,12 +1933,30 @@ async function run(jobId) {
         automationCreatives: newCreatives || [],
         rawImages:     rawImages,
         rawTexts:      rawTexts,
-      });
-      job.totalRuns          = (job.totalRuns || 0) + 1;
-      job.schedule.lastRunAt = new Date();
-      if (runStatus === "failed") {
-        job.failedRuns = (job.failedRuns || 0) + 1;
+      };
+      const previousRun = Array.isArray(job.runHistory) && job.runHistory.length > 0
+        ? job.runHistory[job.runHistory.length - 1]
+        : null;
+      const coalescedDuplicateFailure = shouldCoalesceDuplicateFailureRun(previousRun, currentRun);
+      if (coalescedDuplicateFailure) {
+        previousRun.completedAt = currentRun.completedAt;
+        previousRun.startedAt = currentRun.startedAt || previousRun.startedAt;
+        previousRun.error = currentRun.error;
+        previousRun.status = currentRun.status;
+        previousRun.platformAdIds = currentRun.platformAdIds;
+        previousRun.platformContext = currentRun.platformContext;
+        previousRun.rawImages = currentRun.rawImages;
+        previousRun.rawTexts = currentRun.rawTexts;
+        previousRun.automationCreatives = currentRun.automationCreatives;
+        currentRun = previousRun;
+      } else {
+        job.runHistory.push(currentRun);
+        job.totalRuns = (job.totalRuns || 0) + 1;
+        if (runStatus === "failed") {
+          job.failedRuns = (job.failedRuns || 0) + 1;
+        }
       }
+      job.schedule.lastRunAt = currentRun.completedAt;
 
       // Platform account/campaign limits (too many ad groups, too many ads
       // per ad set, etc.) or permanent config problems (no linked account,
@@ -1981,6 +2022,8 @@ async function run(jobId) {
       // the save purely because of that pre-existing, unrelated field.
       await job.save({ validateBeforeSave: false });
       logger.info(`[adsFactoryAuto][9] run history saved  totalRuns=${job.totalRuns}  failedRuns=${job.failedRuns || 0}`);
+      job._currentSavedRun = currentRun;
+      job._skipDuplicateRunNotifications = coalescedDuplicateFailure;
 
     } catch (saveErr) {
       logger.error(`[adsFactoryAuto][9] save history FAILED: ${saveErr.message}`);
@@ -1996,10 +2039,11 @@ async function run(jobId) {
     // server never attached to this process), we log loudly instead of silently
     // dropping the event — that silent drop was the "sometimes it doesn't emit"
     // symptom.
-    if (!global.io) {
+    const shouldEmitRunNotifications = !job._skipDuplicateRunNotifications;
+    if (!global.io && shouldEmitRunNotifications) {
       logger.warn(`[adsFactoryAuto][10] SKIPPED socket emit — global.io is not set on this process (jobId=${jobId} runId=${runId}). The client will only see this run on its next GET /activity refetch.`);
     }
-    if (global.io) {
+    if (global.io && shouldEmitRunNotifications) {
       try {
           const adsPosted = Object.keys(postedAdIds).length > 0
             ? postedAdIds
@@ -2266,9 +2310,11 @@ async function run(jobId) {
       // The run entry pushed in Step 9 is the last element of runHistory and
       // carries everything the email needs (status, error, platformAdIds,
       // automationCreatives, rawImages, rawTexts).
-      const lastRun = job.runHistory[job.runHistory.length - 1];
-      const result = await notifyAdsFactoryRun({ job, campaign, run: lastRun });
-      if (result && result.reason && result.reason !== "no-recipient") {
+      const lastRun = job._currentSavedRun || job.runHistory[job.runHistory.length - 1];
+      if (!job._skipDuplicateRunNotifications) {
+        const result = await notifyAdsFactoryRun({ job, campaign, run: lastRun });
+        if (result && result.reason && result.reason !== "no-recipient") {
+        }
       }
     } catch (e) {
       logger.warn(`[adsFactoryAuto][11] alert email failed (non-fatal): ${e.message}`);

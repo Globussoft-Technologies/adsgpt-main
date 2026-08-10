@@ -65,22 +65,20 @@ async function sendEmailFn({ to, subject, text, html }) {
     .filter(Boolean);
   if (!cleanRecipients.length) return { sent: false, reason: "no-recipient" };
 
-  try {
+  const tracking_settings = {
+    click_tracking: { enable: false, enable_text: false },
+    open_tracking: { enable: false },
+    subscription_tracking: { enable: false },
+    ganalytics: { enable: false },
+  };
+
+  async function sendOne(recipient) {
     const msg = {
       from,
+      to: recipient,
       subject,
       text,
-      personalizations: [
-        {
-          to: cleanRecipients.map((email) => ({ email })),
-        },
-      ],
-      tracking_settings: {
-        click_tracking: { enable: false, enable_text: false },
-        open_tracking: { enable: false },
-        subscription_tracking: { enable: false },
-        ganalytics: { enable: false },
-      },
+      tracking_settings,
     };
     if (html) msg.html = html;
 
@@ -88,7 +86,7 @@ async function sendEmailFn({ to, subject, text, html }) {
     while (attempts < 3) {
       try {
         await sg.send(msg);
-        return { sent: true, recipients: cleanRecipients };
+        return { sent: true, recipient };
       } catch (err) {
         attempts++;
         if (attempts >= 3) {
@@ -96,12 +94,39 @@ async function sendEmailFn({ to, subject, text, html }) {
           const detail = sgErrors
             ? Array.isArray(sgErrors) ? sgErrors.map((e) => e.message).join("; ") : String(sgErrors)
             : err && err.message ? err.message : String(err);
-          return { sent: false, reason: "send-failed", error: detail };
+          return { sent: false, recipient, error: detail };
         }
         await new Promise((resolve) => setTimeout(resolve, attempts * 1000));
       }
     }
-    return { sent: false, reason: "send-failed", error: "Max retry attempts reached" };
+    return { sent: false, recipient, error: "Max retry attempts reached" };
+  }
+
+  try {
+    const results = await Promise.all(cleanRecipients.map((recipient) => sendOne(recipient)));
+    const delivered = results.filter((result) => result.sent).map((result) => result.recipient);
+    const failedRecipients = results
+      .filter((result) => !result.sent)
+      .map((result) => ({ recipient: result.recipient, error: result.error || "send-failed" }));
+
+    if (!delivered.length) {
+      return {
+        sent: false,
+        reason: "send-failed",
+        error: failedRecipients.map((f) => `${f.recipient}: ${f.error}`).join("; "),
+        recipients: [],
+        failedRecipients,
+      };
+    }
+    if (failedRecipients.length) {
+      return {
+        sent: true,
+        reason: "partial-send-failed",
+        recipients: delivered,
+        failedRecipients,
+      };
+    }
+    return { sent: true, recipients: delivered, failedRecipients: [] };
   } catch (err) {
     return { sent: false, reason: "send-failed", error: err && err.message ? err.message : String(err) };
   }
@@ -187,6 +212,11 @@ const FRIENDLY_ERROR_PATTERNS = [
       `${platform} couldn't post this ad because of a billing issue on the ${platform} account. ` +
       `Please check the account's billing/payment settings.`,
   },
+  {
+    test: /allowed on your plan|PLAN_LIMIT_REACHED|already using all/i,
+    friendly: () =>
+      "This run was paused because your Meta campaign limit is already fully used on the current plan. Remove an existing managed campaign or upgrade the plan, then resume the automation.",
+  },
 ];
 
 function friendlyPlatformError(platform, rawMessage) {
@@ -217,6 +247,11 @@ const FRIENDLY_GENERAL_PATTERNS = [
     test: /insufficient credits|not enough credits/i,
     friendly: () =>
       "This run was paused because your account is out of credits. Add more credits, then resume the automation from its settings.",
+  },
+  {
+    test: /allowed on your plan|PLAN_LIMIT_REACHED|already using all/i,
+    friendly: () =>
+      "This run was paused because your Meta campaign limit is already fully used on the current plan. Remove an existing managed campaign or upgrade the plan, then resume the automation.",
   },
   {
     test: /campaign with this name already exists|duplicate campaign name/i,
@@ -250,6 +285,22 @@ const escapeHtml = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+function getJobTimezone(job) {
+  return (job && job.schedule && job.schedule.timezone) || "UTC";
+}
+
+function formatDateInTimezone(value, timezone, locale = "en-GB", options = {}) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString(locale, {
+      timeZone: timezone || "UTC",
+      ...options,
+    });
+  } catch (_) {
+    return new Date(value).toLocaleString(locale, options);
+  }
+}
 
 /**
  * Normalize the platformAdIds field (stored as a Mongoose Map or a plain
@@ -351,10 +402,75 @@ function buildRunEmailHtml(job, campaign, run) {
   const campaignName = (campaign && campaign.metadata && campaign.metadata.campaignName) || "Campaign";
   const adIds = normalizePlatformAdIds(run);
   const health = generationHealth(job, run);
+  const tz = getJobTimezone(job);
   const durationMs =
     run.startedAt && run.completedAt
       ? new Date(run.completedAt) - new Date(run.startedAt)
       : null;
+  const summaryStartedLabel = run.startedAt
+    ? formatDateInTimezone(run.startedAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : "—";
+  const summaryNextRunLabel = job && job.schedule && job.schedule.nextRunAt
+    ? formatDateInTimezone(job.schedule.nextRunAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : null;
+  const summaryEndDateLabel = job && job.schedule && job.schedule.endDate
+    ? formatDateInTimezone(job.schedule.endDate, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        timeZoneName: "short",
+      })
+    : null;
+  const htmlStartedLabel = run.startedAt
+    ? formatDateInTimezone(run.startedAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : "—";
+  const htmlNextRunLabel = job && job.schedule && job.schedule.nextRunAt
+    ? formatDateInTimezone(job.schedule.nextRunAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : null;
+  const htmlEndDateLabel = job && job.schedule && job.schedule.endDate
+    ? formatDateInTimezone(job.schedule.endDate, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        timeZoneName: "short",
+      })
+    : null;
 
   // ── Design tokens ─────────────────────────────────────────────────────────
   // Email-safe only: system font stack, table layout, all-inline styles, web
@@ -370,8 +486,6 @@ function buildRunEmailHtml(job, campaign, run) {
 
   const font    = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
   const label    = `font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTE};`;
-
-  const tz = (job && job.schedule && job.schedule.timezone) || "Asia/Kolkata";
 
   const formatTime = (d) => {
     if (!d) return "—";
@@ -608,19 +722,52 @@ function buildRunEmailText(job, campaign, run) {
   const campaignName = (campaign && campaign.metadata && campaign.metadata.campaignName) || "Campaign";
   const adIds = normalizePlatformAdIds(run);
   const health = generationHealth(job, run);
+  const tz = getJobTimezone(job);
   const durationMs =
     run.startedAt && run.completedAt
       ? new Date(run.completedAt) - new Date(run.startedAt)
       : null;
+  const startedLabel = run.startedAt
+    ? formatDateInTimezone(run.startedAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : "—";
+  const nextRunLabel = job && job.schedule && job.schedule.nextRunAt
+    ? formatDateInTimezone(job.schedule.nextRunAt, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+      })
+    : null;
+  const endDateLabel = job && job.schedule && job.schedule.endDate
+    ? formatDateInTimezone(job.schedule.endDate, tz, "en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        timeZoneName: "short",
+      })
+    : null;
 
   const lines = [
     `AdsGPT Ads Factory — ${meta.label} (${run.status})`,
     `Campaign: ${campaignName}`,
     `runId: ${run.runId}${durationMs != null ? `  duration: ${durationMs}ms` : ""}`,
+    `started: ${startedLabel}`,
   ];
-  if (job.schedule && job.schedule.nextRunAt) {
-    lines.push(`next run: ${new Date(job.schedule.nextRunAt).toISOString()}`);
-  }
+  if (nextRunLabel) lines.push(`next run: ${nextRunLabel}`);
+  if (endDateLabel) lines.push(`end date: ${endDateLabel}`);
   lines.push("");
 
   if (run.error) {
@@ -733,7 +880,7 @@ async function notifyAdsFactoryRun({ job, campaign, run, toOverride } = {}) {
     } else {
       logger.info(`[adsFactoryAuto:alert] cycle email sent to ${recipients.length} recipient(s)  runId=${run.runId}`);
     }
-    return { ...result, recipients };
+    return { ...result, requestedRecipients: recipients };
   } catch (err) {
     logger.error(`[adsFactoryAuto:alert] notifyAdsFactoryRun failed (non-fatal): ${err.message}`);
     return { sent: false, reason: "exception", error: err.message };

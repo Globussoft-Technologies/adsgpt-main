@@ -24,6 +24,7 @@ import {
 import { fetchActivity } from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
 import DateRangeFilter from '@/components/AdStudio/AdVideoNew/DateRangeFilter';
 import CreativeGeneratingLoader from '@/components/AdStudio/AdCreatives/CreativeChat/Loader/CreativeGeneratingLoader';
+import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 
 // ----------------------------------------------------------------------------
 // PublishedAdsModal — full-screen dialog that lists ads produced by an
@@ -85,6 +86,7 @@ export default function PublishedAdsModal() {
   // every time the filter recomputes.
   const [customRange, setCustomRange] = useState({ startDate: null, endDate: null });
   const [density, setDensity] = useState('4x');
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   // DateRangeFilter emits dd-MM-yyyy strings; parse back to Date for filtering.
   const handleCustomDateChange = (startStr, endStr) => {
@@ -117,6 +119,34 @@ export default function PublishedAdsModal() {
     const targets = activity?.targets || entry?.targets || {};
     const metaTargetName = targets.meta?.accountName || targets.meta?.name || targets.meta?.config?.template?.payload?.pageName;
     const defaultMetaAccountName = metaTargetName || (targets.meta?.facebookId ? `Meta (${targets.meta.facebookId})` : 'Meta Account');
+    const dedupeFailedCards = (items) => {
+      const kept = [];
+      items.forEach((item) => {
+        if (item?.status !== 'failed' || item?.posted) {
+          kept.push(item);
+          return;
+        }
+
+        const itemTime = item?.postedAt ? new Date(item.postedAt).getTime() : 0;
+        const isDup = kept.some((prev) => {
+          if (prev?.status !== 'failed' || prev?.posted) return false;
+          const prevTime = prev?.postedAt ? new Date(prev.postedAt).getTime() : 0;
+          if (prev.platform !== item.platform) return false;
+          if ((prev.accountName || '') !== (item.accountName || '')) return false;
+          if ((prev.runError || '') !== (item.runError || '')) return false;
+          if ((prev.headline || '') !== (item.headline || '')) return false;
+          if ((prev.body || '') !== (item.body || '')) return false;
+          if ((prev.description || '') !== (item.description || '')) return false;
+          if ((prev.callToAction || '') !== (item.callToAction || '')) return false;
+          if ((prev.linkUrl || '') !== (item.linkUrl || '')) return false;
+          if ((prev.imageUrl || '') !== (item.imageUrl || '')) return false;
+          return prevTime && itemTime ? Math.abs(prevTime - itemTime) < 120000 : true;
+        });
+
+        if (!isDup) kept.push(item);
+      });
+      return kept;
+    };
 
     runs.forEach((run) => {
       const list = Array.isArray(run?.creatives) ? run.creatives : [];
@@ -215,7 +245,7 @@ export default function PublishedAdsModal() {
         });
       });
     });
-    return flat;
+    return dedupeFailedCards(flat);
   }, [runs, activity?.targets, entry?.targets]);
 
   const availablePlatforms = useMemo(() => {
@@ -329,6 +359,7 @@ export default function PublishedAdsModal() {
   if (!campaignId) return null;
 
   const close = () => dispatch(closePublishedAds());
+  const closeLightbox = () => setLightboxImage(null);
   const retry = () => {
     if (campaignId) dispatch(fetchActivity({ campaignId }));
   };
@@ -470,7 +501,12 @@ export default function PublishedAdsModal() {
                   </div>
                   <div className={`grid gap-4 ${densityCfg.cols}`}>
                     {items.map((ad) => (
-                      <PublishedAdCard key={ad.id} ad={ad} brandInfo={brandInfo} />
+                      <PublishedAdCard
+                        key={ad.id}
+                        ad={ad}
+                        brandInfo={brandInfo}
+                        onOpenImage={setLightboxImage}
+                      />
                     ))}
                   </div>
                 </section>
@@ -478,6 +514,12 @@ export default function PublishedAdsModal() {
             </div>
           )}
         </div>
+        {lightboxImage && (
+          <ShowLightBox
+            lightboxImage={lightboxImage}
+            closeLightbox={closeLightbox}
+          />
+        )}
       </motion.div>
     </motion.div>
   );
@@ -620,7 +662,7 @@ function CustomDropdown({ label, options, value, onChange, multi = true }) {
 // for grid use. Renders posted/failed states from the activity payload, plus
 // a `pending` skeleton variant for cycles that are mid-run (socket hasn't
 // arrived yet).
-function PublishedAdCard({ ad, brandInfo }) {
+function PublishedAdCard({ ad, brandInfo, onOpenImage }) {
   const {
     imageUrl,
     imageStatus,
@@ -713,12 +755,18 @@ function PublishedAdCard({ ad, brandInfo }) {
             <span className="text-10 font-medium text-red-600">Image unavailable</span>
           </div>
         ) : (
-          <img
-            src={imageUrl}
-            alt={headline || 'Posted ad'}
-            className="h-full w-full object-contain"
-            onError={() => setImgErrored(true)}
-          />
+          <button
+            type="button"
+            onClick={() => onOpenImage?.(imageUrl)}
+            className="block h-full w-full cursor-zoom-in"
+          >
+            <img
+              src={imageUrl}
+              alt={headline || 'Posted ad'}
+              className="h-full w-full object-contain"
+              onError={() => setImgErrored(true)}
+            />
+          </button>
         )}
       </div>
 

@@ -389,7 +389,9 @@ export default function TemplatePicker({
             label="Ad template"
             empty={
               listError ||
-              (pickedTemplate?.objective ? humanizeObjective(pickedTemplate.objective) : null)
+              (pickedTemplate?.objective
+                ? `Objective: ${humanizeObjective(pickedTemplate.objective)}`
+                : null)
             }
           >
             <InputCommonDropdown
@@ -413,7 +415,7 @@ export default function TemplatePicker({
                   pickedLoading
                     ? 'Loading template…'
                     : templateDailyBudget != null
-                      ? `Template default: ${formatBudget(templateDailyBudget)}`
+                      ? `Uses template budget: ${formatBudget(templateDailyBudget)}`
                       : null
                 }
               >
@@ -425,7 +427,7 @@ export default function TemplatePicker({
                     pattern="[0-9]*"
                     maxLength={7}
                     placeholder={
-                      templateDailyBudget != null ? String(templateDailyBudget) : 'Template default'
+                      templateDailyBudget != null ? String(templateDailyBudget) : 'Use template budget'
                     }
                     value={
                       picked.dailyBudgetOverride != null
