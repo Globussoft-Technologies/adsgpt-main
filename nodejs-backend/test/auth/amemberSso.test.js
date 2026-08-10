@@ -94,6 +94,25 @@ function assertion(overrides = {}) {
   assert.match(clearedLegacy, /^access-token=/);
   assert.match(clearedLegacy, /Max-Age=0/);
 
+  // An expired plan is redirected to the aMember member area, derived from the
+  // API base when AMEMBER_MEMBER_URL is not set explicitly.
+  process.env.AMEMBER_BASE_API_URL = "https://adsgpt-dev.poweradspy.test/amember/api";
+  delete process.env.AMEMBER_MEMBER_URL;
+  assert.equal(
+    controller.memberAreaUrl(),
+    "https://adsgpt-dev.poweradspy.test/amember/member/index",
+  );
+
+  process.env.AMEMBER_MEMBER_URL = "https://members.example.test/amember/";
+  assert.equal(controller.memberAreaUrl(), "https://members.example.test/amember/member/index");
+
+  // A missing or unusable base must not become a 500 on the sign-in path.
+  process.env.AMEMBER_MEMBER_URL = "not a url";
+  assert.equal(controller.memberAreaUrl(), null);
+  process.env.AMEMBER_MEMBER_URL = "";
+  process.env.AMEMBER_BASE_API_URL = "";
+  assert.equal(controller.memberAreaUrl(), null);
+
   console.log("amemberSso tests passed");
 })().catch((error) => {
   console.error(error);

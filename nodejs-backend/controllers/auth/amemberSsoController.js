@@ -32,6 +32,34 @@ function successRedirect(returnPath) {
   return new URL(safeReturnPath(returnPath), base.origin).toString();
 }
 
+// A lapsed plan is the one sign-in failure the user can actually fix, and the
+// place to fix it is aMember's member area — so bounce them there rather than
+// dead-ending on a text page they cannot act on. This mirrors what the app
+// already does when check-access reports `expired` (see RunBackLog).
+// AMEMBER_MEMBER_URL wins when set; otherwise derive the member area from the
+// API base by dropping its trailing /api segment.
+function memberAreaUrl() {
+  const configured = String(process.env.AMEMBER_MEMBER_URL || "").trim();
+  const base =
+    configured ||
+    String(process.env.AMEMBER_BASE_API_URL || "")
+      .trim()
+      .replace(/\/api\/?$/, "");
+  if (!base) return null;
+  try {
+    const url = new URL(base);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (url.protocol !== "https:" && process.env.NODE_ENV === "production") return null;
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/member/index`;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    // A misconfigured base must not turn a plan notice into a 500.
+    return null;
+  }
+}
+
 function serializeSessionCookie(token) {
   const expiryMinutes = Math.max(
     1,
@@ -160,6 +188,10 @@ async function callback(req, res) {
   } catch (error) {
     const status = Number(error.status) || 401;
     console.error("[amember-sso] login failed:", error.code || error.message);
+    if (error.code === "PLAN_EXPIRED") {
+      const renewUrl = memberAreaUrl();
+      if (renewUrl) return res.redirect(303, renewUrl);
+    }
     return res
       .status(status >= 400 && status < 600 ? status : 401)
       .send(
@@ -202,6 +234,7 @@ module.exports = {
   logout,
   consumeAssertion,
   safeReturnPath,
+  memberAreaUrl,
   serializeSessionCookie,
   serializeLegacyAccessTokenCookie,
   clearSessionCookie,
