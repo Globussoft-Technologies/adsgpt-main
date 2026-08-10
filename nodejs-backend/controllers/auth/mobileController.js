@@ -350,11 +350,109 @@ function getStorePlanDescriptor(storePlan) {
   return { tier, isAnnual: segments.includes("annual") };
 }
 
+function getProductCategoryIds(product) {
+  const rows = product?.nested?.["product-product-category"];
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => String(row?.product_category_id || "").trim())
+    .filter(Boolean);
+}
+
+function getProductCreditNumber(product) {
+  const value = Number.parseFloat(product?.credit);
+  return Number.isFinite(value) ? value : null;
+}
+
+function getProductSortOrderNumber(product) {
+  const value = Number.parseInt(product?.sort_order, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+function inferPreferredCategoryId(products, descriptor) {
+  if (!descriptor) return null;
+
+  const cohort = products.filter((product) => {
+    if (!product || product.is_disabled === "1" || product.is_archived === "1") {
+      return false;
+    }
+    const titleWords = String(product.title || "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    const isAnnual = titleWords.includes("annual") || titleWords.includes("yearly");
+    return (
+      ["scale", "growth", "creator", "individual", "starter"].some((tier) =>
+        titleWords.includes(tier),
+      ) && isAnnual === descriptor.isAnnual
+    );
+  });
+
+  const categoryStats = new Map();
+  for (const product of cohort) {
+    const credit = getProductCreditNumber(product);
+    for (const categoryId of getProductCategoryIds(product)) {
+      const current = categoryStats.get(categoryId) || {
+        count: 0,
+        creditSum: 0,
+        creditCount: 0,
+        sortOrderSum: 0,
+        sortOrderCount: 0,
+      };
+      current.count += 1;
+      if (credit !== null) {
+        current.creditSum += credit;
+        current.creditCount += 1;
+      }
+      const sortOrder = getProductSortOrderNumber(product);
+      if (sortOrder !== null) {
+        current.sortOrderSum += sortOrder;
+        current.sortOrderCount += 1;
+      }
+      categoryStats.set(categoryId, current);
+    }
+  }
+
+  let winner = null;
+  for (const [categoryId, stats] of categoryStats.entries()) {
+    const avgCredit =
+      stats.creditCount > 0 ? stats.creditSum / stats.creditCount : Number.POSITIVE_INFINITY;
+    const avgSortOrder =
+      stats.sortOrderCount > 0
+        ? stats.sortOrderSum / stats.sortOrderCount
+        : Number.POSITIVE_INFINITY;
+    if (
+      !winner ||
+      stats.count > winner.count ||
+      (stats.count === winner.count && avgSortOrder < winner.avgSortOrder) ||
+      (stats.count === winner.count &&
+        avgSortOrder === winner.avgSortOrder &&
+        avgCredit < winner.avgCredit) ||
+      (stats.count === winner.count &&
+        avgSortOrder === winner.avgSortOrder &&
+        avgCredit === winner.avgCredit &&
+        Number.parseInt(categoryId, 10) < Number.parseInt(winner.categoryId, 10))
+    ) {
+      winner = { categoryId, count: stats.count, avgCredit, avgSortOrder };
+    }
+  }
+
+  return winner?.categoryId || null;
+}
+
+function scoreAmemberProduct(product, descriptor, products) {
+  const categoryIds = getProductCategoryIds(product);
+  const preferredCategoryId = inferPreferredCategoryId(products || [], descriptor);
+
+  let score = 0;
+  if (preferredCategoryId && categoryIds.includes(preferredCategoryId)) score += 100;
+  return score;
+}
+
 function resolveAmemberProduct(products, storePlan) {
   const descriptor = getStorePlanDescriptor(storePlan);
   if (!descriptor) return null;
 
-  return products
+  const candidates = products
     .filter((product) => {
       if (!product || product.is_disabled === "1" || product.is_archived === "1") {
         return false;
@@ -365,10 +463,32 @@ function resolveAmemberProduct(products, storePlan) {
         .filter(Boolean);
       const isAnnual = titleWords.includes("annual") || titleWords.includes("yearly");
       return titleWords.includes(descriptor.tier) && isAnnual === descriptor.isAnnual;
-    })
-    .sort((left, right) =>
-      Number.parseInt(left.product_id, 10) - Number.parseInt(right.product_id, 10),
-    )[0] || null;
+    });
+
+  if (candidates.length <= 1) {
+    return candidates[0] || null;
+  }
+
+  const preferredCategoryId = inferPreferredCategoryId(candidates, descriptor);
+  if (!preferredCategoryId) {
+    return null;
+  }
+
+  const preferredCandidates = candidates.filter((product) =>
+    getProductCategoryIds(product).includes(preferredCategoryId),
+  );
+  if (preferredCandidates.length === 0) {
+    return null;
+  }
+
+  return preferredCandidates
+    .sort((left, right) => {
+      const scoreDiff =
+        scoreAmemberProduct(right, descriptor, candidates) -
+        scoreAmemberProduct(left, descriptor, candidates);
+      if (scoreDiff !== 0) return scoreDiff;
+      return Number.parseInt(left.product_id, 10) - Number.parseInt(right.product_id, 10);
+    })[0] || null;
 }
 
 function findConfiguredStorePlan(storeProductId) {
