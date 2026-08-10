@@ -65,13 +65,26 @@ function featurePicker(selected, setSelected) {
 
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {WORKSPACE_FEATURE_GROUPS.map((group) => {
-        const availableFeatures = group.features.filter(({ available }) => available);
+      {WORKSPACE_FEATURE_GROUPS
+        // A matrix group (Ads Manager) deliberately keeps its unavailable
+        // cells visible as "Soon" — a roadmap preview. Everywhere else, a
+        // feature gated off by a build flag (e.g. AI Assistant when
+        // VITE_FEATURE_AI_ASSISTANT isn't "true") is hidden outright rather
+        // than shown disabled: a single-feature group's disabled state is
+        // the group-header button itself, which has no dimming style, so it
+        // rendered visually identical to an enabled option while silently
+        // doing nothing on click.
+        .filter((group) => group.matrix || group.features.some((f) => f.available))
+        .map((group) => {
+        const groupFeatures = group.matrix
+          ? group.features
+          : group.features.filter(({ available }) => available);
+        const availableFeatures = groupFeatures.filter(({ available }) => available);
         const selectedCount = availableFeatures.filter(isFeatureActive).length;
         const allSelected =
           availableFeatures.length > 0 && selectedCount === availableFeatures.length;
         const partiallySelected = selectedCount > 0 && !allSelected;
-        const hasOptions = group.features.length > 1;
+        const hasOptions = groupFeatures.length > 1;
 
         return (
           <section
@@ -163,7 +176,7 @@ function featurePicker(selected, setSelected) {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-1.5 p-2">
-                  {group.features.map((feature) => {
+                  {groupFeatures.map((feature) => {
                     const active = isFeatureActive(feature);
                     return (
                       <button
