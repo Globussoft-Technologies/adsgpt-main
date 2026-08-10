@@ -288,6 +288,8 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
 
 let amemberProductsCache = null;
 let amemberProductsCacheExpiry = 0;
+let amemberProductCategoriesCache = null;
+let amemberProductCategoriesCacheExpiry = 0;
 
 async function getAmemberProducts() {
   if (!amemberProductsCache || Date.now() > amemberProductsCacheExpiry) {
@@ -331,6 +333,38 @@ async function getAmemberProducts() {
   return amemberProductsCache || [];
 }
 
+async function getAmemberProductCategoryMap() {
+  if (amemberProductCategoriesCache && Date.now() < amemberProductCategoriesCacheExpiry) {
+    return amemberProductCategoriesCache;
+  }
+
+  try {
+    const apiHost = (baseUrl || "https://adsgpt-dev.poweradspy.com/amember/api").replace(/\/+$/, "");
+    const response = await axios.get(`${apiHost}/product-category`, {
+      params: { _key: apiKey },
+    });
+    const rows = Array.isArray(response.data) ? response.data : Object.values(response.data || {});
+    const categoryMap = new Map(
+      rows
+        .filter((row) => row && typeof row === "object")
+        .map((row) => {
+          const id = String(row.product_category_id || row.id || "").trim();
+          const title = String(row.title || row.name || "").trim();
+          return id && title ? [id, title] : null;
+        })
+        .filter(Boolean),
+    );
+    amemberProductCategoriesCache = categoryMap;
+    amemberProductCategoriesCacheExpiry = Date.now() + 5 * 60 * 1000;
+  } catch (error) {
+    console.error("[mobileController] fetch product categories error:", error.message);
+    amemberProductCategoriesCache = new Map();
+    amemberProductCategoriesCacheExpiry = Date.now() + 60 * 1000;
+  }
+
+  return amemberProductCategoriesCache;
+}
+
 function getConfiguredProductCredit(product) {
   const value = product?.credit;
   if (value === undefined || value === null || String(value).trim() === "") {
@@ -358,6 +392,13 @@ function getProductCategoryIds(product) {
     .filter(Boolean);
 }
 
+function hasMobileCategory(product, categoryMap) {
+  return getProductCategoryIds(product).some((categoryId) => {
+    const categoryTitle = String(categoryMap?.get(categoryId) || "").trim().toLowerCase();
+    return categoryTitle === "mobile";
+  });
+}
+
 function getProductCreditNumber(product) {
   const value = Number.parseFloat(product?.credit);
   return Number.isFinite(value) ? value : null;
@@ -368,87 +409,7 @@ function getProductSortOrderNumber(product) {
   return Number.isFinite(value) ? value : null;
 }
 
-function inferPreferredCategoryId(products, descriptor) {
-  if (!descriptor) return null;
-
-  const cohort = products.filter((product) => {
-    if (!product || product.is_disabled === "1" || product.is_archived === "1") {
-      return false;
-    }
-    const titleWords = String(product.title || "")
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter(Boolean);
-    const isAnnual = titleWords.includes("annual") || titleWords.includes("yearly");
-    return (
-      ["scale", "growth", "creator", "individual", "starter"].some((tier) =>
-        titleWords.includes(tier),
-      ) && isAnnual === descriptor.isAnnual
-    );
-  });
-
-  const categoryStats = new Map();
-  for (const product of cohort) {
-    const credit = getProductCreditNumber(product);
-    for (const categoryId of getProductCategoryIds(product)) {
-      const current = categoryStats.get(categoryId) || {
-        count: 0,
-        creditSum: 0,
-        creditCount: 0,
-        sortOrderSum: 0,
-        sortOrderCount: 0,
-      };
-      current.count += 1;
-      if (credit !== null) {
-        current.creditSum += credit;
-        current.creditCount += 1;
-      }
-      const sortOrder = getProductSortOrderNumber(product);
-      if (sortOrder !== null) {
-        current.sortOrderSum += sortOrder;
-        current.sortOrderCount += 1;
-      }
-      categoryStats.set(categoryId, current);
-    }
-  }
-
-  let winner = null;
-  for (const [categoryId, stats] of categoryStats.entries()) {
-    const avgCredit =
-      stats.creditCount > 0 ? stats.creditSum / stats.creditCount : Number.POSITIVE_INFINITY;
-    const avgSortOrder =
-      stats.sortOrderCount > 0
-        ? stats.sortOrderSum / stats.sortOrderCount
-        : Number.POSITIVE_INFINITY;
-    if (
-      !winner ||
-      stats.count > winner.count ||
-      (stats.count === winner.count && avgSortOrder < winner.avgSortOrder) ||
-      (stats.count === winner.count &&
-        avgSortOrder === winner.avgSortOrder &&
-        avgCredit < winner.avgCredit) ||
-      (stats.count === winner.count &&
-        avgSortOrder === winner.avgSortOrder &&
-        avgCredit === winner.avgCredit &&
-        Number.parseInt(categoryId, 10) < Number.parseInt(winner.categoryId, 10))
-    ) {
-      winner = { categoryId, count: stats.count, avgCredit, avgSortOrder };
-    }
-  }
-
-  return winner?.categoryId || null;
-}
-
-function scoreAmemberProduct(product, descriptor, products) {
-  const categoryIds = getProductCategoryIds(product);
-  const preferredCategoryId = inferPreferredCategoryId(products || [], descriptor);
-
-  let score = 0;
-  if (preferredCategoryId && categoryIds.includes(preferredCategoryId)) score += 100;
-  return score;
-}
-
-function resolveAmemberProduct(products, storePlan) {
+function resolveAmemberProduct(products, storePlan, categoryMap) {
   const descriptor = getStorePlanDescriptor(storePlan);
   if (!descriptor) return null;
 
@@ -462,31 +423,22 @@ function resolveAmemberProduct(products, storePlan) {
         .split(/[^a-z0-9]+/)
         .filter(Boolean);
       const isAnnual = titleWords.includes("annual") || titleWords.includes("yearly");
-      return titleWords.includes(descriptor.tier) && isAnnual === descriptor.isAnnual;
+      return (
+        titleWords.includes(descriptor.tier) &&
+        isAnnual === descriptor.isAnnual &&
+        hasMobileCategory(product, categoryMap)
+      );
     });
 
-  if (candidates.length <= 1) {
-    return candidates[0] || null;
-  }
-
-  const preferredCategoryId = inferPreferredCategoryId(candidates, descriptor);
-  if (!preferredCategoryId) {
-    return null;
-  }
-
-  const preferredCandidates = candidates.filter((product) =>
-    getProductCategoryIds(product).includes(preferredCategoryId),
-  );
-  if (preferredCandidates.length === 0) {
-    return null;
-  }
-
-  return preferredCandidates
+  return candidates
     .sort((left, right) => {
-      const scoreDiff =
-        scoreAmemberProduct(right, descriptor, candidates) -
-        scoreAmemberProduct(left, descriptor, candidates);
-      if (scoreDiff !== 0) return scoreDiff;
+      const leftSortOrder = getProductSortOrderNumber(left);
+      const rightSortOrder = getProductSortOrderNumber(right);
+      if (leftSortOrder !== null && rightSortOrder !== null && leftSortOrder !== rightSortOrder) {
+        return leftSortOrder - rightSortOrder;
+      }
+      if (leftSortOrder !== null && rightSortOrder === null) return -1;
+      if (leftSortOrder === null && rightSortOrder !== null) return 1;
       return Number.parseInt(left.product_id, 10) - Number.parseInt(right.product_id, 10);
     })[0] || null;
 }
@@ -500,9 +452,10 @@ function findConfiguredStorePlan(storeProductId) {
 
 async function matchAmemberProduct(storeProductId) {
   const prods = await getAmemberProducts();
+  const categoryMap = await getAmemberProductCategoryMap();
   const targetId = String(storeProductId || "").trim();
   const storePlan = findConfiguredStorePlan(targetId);
-  const matched = storePlan ? resolveAmemberProduct(prods, storePlan) : null;
+  const matched = storePlan ? resolveAmemberProduct(prods, storePlan, categoryMap) : null;
 
   if (!matched) {
     const error = new Error("The selected subscription plan is currently unavailable. Please contact support.");
@@ -3254,10 +3207,11 @@ async function getMobilePlans(req, res) {
     // Fetch aMember IDs, titles, and credits dynamically. The store catalog
     // contains only the native store Product IDs and subscription levels.
     const prods = await getAmemberProducts();
+    const categoryMap = await getAmemberProductCategoryMap();
     // Join each static Store Product ID to the exact aMember tier and billing
     // period encoded in that ID. IDs, titles, and credits remain live aMember data.
     const plans = configuredStorePlans.flatMap((storePlan) => {
-      const product = resolveAmemberProduct(prods, storePlan);
+      const product = resolveAmemberProduct(prods, storePlan, categoryMap);
       if (!product) return [];
 
       return [{
