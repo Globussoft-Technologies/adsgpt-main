@@ -24,6 +24,7 @@ import usageSlice from '@/store/reducers/profile/usageSlice';
 import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSlice';
 import imageReducer from '@/store/reducers/image/imageSlice';
 import aiAssistantReducer from '@/store/reducers/aiAssistant/aiAssistantSlice';
+import { onboardingReducer } from '@/onboarding';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
@@ -76,6 +77,7 @@ const store = configureStore({
     competitorSearch: competitorSearchReducer,
     image: imageReducer,
     aiAssistant: aiAssistantReducer,
+    onboarding: onboardingReducer,
   },
   preloadedState: {
     prompt: loadState() || undefined,

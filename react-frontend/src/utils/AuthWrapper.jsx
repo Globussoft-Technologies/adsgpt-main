@@ -1,41 +1,56 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Loader } from 'lucide-react';
-import { checkUserExists } from '@/store/actions/tourGuide/tourGuideActions';
-import { setShowTour } from '@/store/reducers/tourGuide/tourGuideSlice';
+import { checkUserExists, openOnboarding } from '@/onboarding';
+import getUserIdFromToken from '@/utils/getUserIdFromToken';
 
+/**
+ * AuthWrapper
+ *
+ * MongoDB is the single source of truth for onboarding status.
+ * Always queries the DB on load. localStorage is only used as a write-through
+ * cache — it is always overwritten to match the DB result.
+ */
 const AuthWrapper = ({ children }) => {
-  const { userExists, loading: userLoading, showTour } = useSelector((state) => state.tourGuide);
-  const { userData } = useSelector((state) => state.socket);
-  const [hasAutoShowed, setHasAutoShowed] = useState(false);
-  const navigate = useNavigate();
-  const userId = userData?.user_id;
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
+  const { userExists, loading: userLoading, hasChecked } = useSelector(
+    (state) => state.tourGuide
+  );
+  const { userData } = useSelector((state) => state.socket);
+
+  const userId = userData?.user_id || getUserIdFromToken();
+
+  // Prevents firing the onboarding decision more than once per session.
+  const onboardingTriggeredRef = useRef(false);
+
+  // ── Step 1: Always query DB on mount / userId change ──
   useEffect(() => {
-    if (userId) dispatch(checkUserExists(userId));
+    if (userId) {
+      onboardingTriggeredRef.current = false;
+      dispatch(checkUserExists(userId));
+    }
   }, [dispatch, userId]);
 
+  // ── Step 2: Act on DB result — DB wins over localStorage ──
   useEffect(() => {
-    // if (!userLoading && userData?.user_id && !userExists && !showTour && !hasAutoShowed) {
-    //   dispatch(setShowTour(true));
-    //   setHasAutoShowed(true);
-    // }
+    if (!userId) return;
+    if (!hasChecked || userLoading) return;
+    if (onboardingTriggeredRef.current) return;
 
-    if (!userLoading && userExists && window.location.pathname === '/onboarding') {
-      navigate('/adstudio', { replace: true });
+    onboardingTriggeredRef.current = true;
+
+    if (userExists) {
+      // DB confirms onboarded — redirect away if somehow on /onboarding
+      if (window.location.pathname === '/onboarding') {
+        navigate('/adstudio', { replace: true });
+      }
+    } else {
+      // DB says NOT onboarded (new user or record deleted) — show onboarding
+      dispatch(openOnboarding());
     }
-  }, [userExists, userLoading, userData?.user_id, navigate, dispatch, showTour, hasAutoShowed]);
-
-  // Show loader while checking authentication status
-  if (userLoading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center">
-        <Loader className="h-8 w-8 animate-spin text-gray-600" />
-      </div>
-    );
-  }
+  }, [hasChecked, userLoading, userId, userExists, dispatch, navigate]);
 
   return children;
 };

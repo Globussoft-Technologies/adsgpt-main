@@ -5,6 +5,7 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
     userId: { type: String, required: true, unique: true },
     name: String,
+    onboardingCompleted: { type: Boolean, default: false },
   });
 
 

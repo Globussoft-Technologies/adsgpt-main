@@ -773,29 +773,11 @@ exports.createAdsCopyChatHistory = async (req, res) => {
 
 
 
-exports.checkUserExists = async (req,res) => {
-  
-  try {
+const onboardingController = require("./onboarding/onboardingController");
 
-    const { userId } = req.params;
-
-    // Check if the user ID exists in the database
-    const userExists = await checkUserExist.findOne({ userId });
-    if (userExists) {
-      // User ID exists in the database
-      return res.status(200).json({ exists: true, message: "User ID exists." });
-    } else {
-        // If userId does not exist, store it in the database
-    const newUser = new checkUserExist({ userId });
-    await newUser.save();
-      // User ID does not exist in the database
-      return res.status(200).json({ exists: false, message: "User ID is available." });
-    }
-  } catch (error) {
-    console.error("Error checking user ID:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
+exports.checkUserExists = onboardingController.checkUserExists;
+exports.completeOnboarding = onboardingController.completeOnboarding;
+exports.resetOnboarding = onboardingController.resetOnboarding;
  
 
 

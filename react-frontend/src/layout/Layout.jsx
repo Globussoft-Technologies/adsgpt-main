@@ -10,6 +10,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import TourGuide from '@/components/layout/TourGuide';
 import AdBlockerModal from '@/components/layout/AdBlockerModal';
+import OnboardingProvider from '@/onboarding';
 import toast, { Toaster } from 'react-hot-toast';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
 import { useEffect, useRef } from 'react';
@@ -93,6 +94,7 @@ const Layout = () => {
               <Outlet />
             </div>
             <TourGuide />
+            <OnboardingProvider />
             {/* <AdBlockerModal /> */}
           </main>
         </SidebarProvider>
@@ -128,6 +130,7 @@ const Layout = () => {
                 <Outlet />
               </div>
               <TourGuide />
+              <OnboardingProvider />
             </main>
           </>
         )}
