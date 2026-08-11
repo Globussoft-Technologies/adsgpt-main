@@ -195,8 +195,17 @@ export default function MetaAdsDashboard() {
     };
   }, []);
   const [selectedFacebookAccount, setSelectedFacebookAccount] = useState(null);
+  // Both sides have to actually exist before the comparison means anything.
+  // `selectedFacebookAccount` starts as null and `userData` starts as `{}`
+  // (socketSlice's initial state — it is NOT persisted), so on the first
+  // render after a hard refresh both `null?.userId` and `userData?.user_id`
+  // evaluate to undefined. A bare `===` then reports a match and the true
+  // branch dereferences the null account:
+  //   "Cannot read properties of null (reading 'facebookId')".
   const activeFacebookId =
-    selectedFacebookAccount?.userId === userData?.user_id
+    selectedFacebookAccount?.facebookId &&
+    userData?.user_id &&
+    selectedFacebookAccount.userId === userData.user_id
       ? selectedFacebookAccount.facebookId
       : '';
   const [facebookSelectorKey, setFacebookSelectorKey] = useState(0);

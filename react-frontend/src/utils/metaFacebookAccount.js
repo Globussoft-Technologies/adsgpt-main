@@ -37,7 +37,14 @@ export const clearSelectedFacebookId = (userId, facebookId) => {
 const getActiveFacebookSelection = () => {
   if (typeof window === 'undefined') return {};
   try {
-    return JSON.parse(window.sessionStorage.getItem(ACTIVE_SELECTION_KEY) || '{}');
+    // `JSON.parse` succeeds on the literal strings "null" / "false" / "0",
+    // returning a non-object that the callers then read `.facebookId` off.
+    // Coalesce anything non-object back to {} so a poisoned sessionStorage
+    // value can't crash the app on boot.
+    const parsed = JSON.parse(
+      window.sessionStorage.getItem(ACTIVE_SELECTION_KEY) || '{}',
+    );
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
