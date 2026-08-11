@@ -1,7 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { ChevronLeft, PlayCircle, Library, Images, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'react-toastify';
@@ -152,20 +152,25 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const modalRef = useRef();
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const isRecreateRoute = ['b-roll', 'ugc', 'avatar'].includes(searchParams.get('page'));
+  const navigate = useNavigate();
+  // Recreate may clear its query parameters while the form is mounting, so
+  // remember its origin rather than deciding later from the current URL.
+  const [fromRecreate] = useState(() =>
+    ['b-roll', 'ugc', 'avatar'].includes(searchParams.get('page'))
+  );
 
   const exitRecreateToMySpace = () => {
-    if (!isRecreateRoute) {
+    if (!fromRecreate) {
       dispatch(setActivePage('home'));
       return;
     }
 
-    setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setMySpaceTab('videos'));
     dispatch(setActivePage('myVideos'));
+    navigate('/my-space');
   };
 
   const displayedActivePage = libraryOnly ? 'myVideos' : activePage;
@@ -228,7 +233,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   }, [savedCount, activePage, dispatch]);
 
   const handleBackNavigation = () => {
-    if (isRecreateRoute) {
+    if (fromRecreate) {
       exitRecreateToMySpace();
       return;
     }
