@@ -6,6 +6,8 @@ import {
   Inbox,
   AlertCircle,
   AlertTriangle,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -15,6 +17,7 @@ import {
   getFormLeads,
   downloadFormLeadsCsv,
 } from '@/apis/metaAds/metaAdsApi';
+import { Dropdown } from './MetaAdsAtoms';
 import { globalToast } from '@/utils/globalToast';
 
 /**
@@ -61,11 +64,111 @@ const fmtDate = (iso) => {
       });
 };
 
-const selectClass =
-  'w-full appearance-none rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 ' +
-  'text-sm text-gray-900 transition-colors hover:border-gray-400 focus:border-gray-400 ' +
-  'focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ' +
-  'dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:border-white/20 dark:focus:border-white/30';
+/**
+ * Labelled picker built on the shared `Dropdown` atom — the same trigger +
+ * menu treatment as the Facebook account and ad account selectors, so the
+ * Leads tab doesn't fall back to an unstyled native <select>.
+ *
+ * `options` are `{ id, name, sub }`; `sub` renders as the dimmed second line.
+ */
+function FieldDropdown({
+  label,
+  value,
+  options,
+  onChange,
+  loading = false,
+  disabled = false,
+  loadingText,
+  emptyText,
+  placeholder,
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.id === value) || null;
+  const isDisabled = disabled || loading || options.length === 0;
+
+  const triggerText = loading
+    ? loadingText
+    : options.length === 0
+      ? emptyText
+      : selected?.name || placeholder;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] font-medium text-gray-500 dark:text-white/50">
+        {label}
+      </label>
+      <Dropdown
+        open={open}
+        onClose={() => setOpen(false)}
+        anchor="left"
+        trigger={
+          <button
+            type="button"
+            aria-label={label}
+            aria-expanded={open}
+            onClick={() => !isDisabled && setOpen((v) => !v)}
+            disabled={isDisabled}
+            className="flex h-9 w-full items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:cursor-default disabled:opacity-70 dark:border-white/6 dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+          >
+            {loading && (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-gray-500 dark:text-white/60" />
+            )}
+            <span
+              className={`flex-1 truncate text-left font-medium ${
+                selected ? '' : 'text-gray-500 dark:text-white/50'
+              }`}
+            >
+              {triggerText}
+            </span>
+            {!isDisabled && (
+              <ChevronDown className="h-3 w-3 shrink-0 text-gray-500 dark:text-[#BEBEBE]" />
+            )}
+          </button>
+        }
+      >
+        {/* Definite width, matching the Facebook / ad-account selectors: the
+            shared Dropdown panel is absolutely positioned and shrink-to-fit,
+            so a w-full child would size to its content, not to the trigger. */}
+        <div className="w-72 p-1">
+          <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+            {options.map((o) => {
+              const active = o.id === value;
+              return (
+                <button
+                  type="button"
+                  key={o.id}
+                  onClick={() => {
+                    onChange(o.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+                    active ? 'bg-gray-100 dark:bg-white/5' : ''
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p
+                      className={`truncate text-xs font-medium ${
+                        active ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                      }`}
+                    >
+                      {o.name}
+                    </p>
+                    {o.sub && (
+                      <p className="truncate text-10 text-gray-500 dark:text-white/55">
+                        {o.sub}
+                      </p>
+                    )}
+                  </div>
+                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Dropdown>
+    </div>
+  );
+}
 
 export default function LeadsTab({ adAccountId, facebookId }) {
   const [pages, setPages] = useState([]);
@@ -220,57 +323,31 @@ export default function LeadsTab({ adAccountId, facebookId }) {
 
       {/* Page + Form pickers */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 shrink-0">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-medium text-gray-500 dark:text-white/50">
-            Facebook Page
-          </label>
-          <select
-            className={selectClass}
-            value={pageId}
-            onChange={(e) => setPageId(e.target.value)}
-            disabled={pagesLoading}
-          >
-            <option value="">
-              {pagesLoading
-                ? 'Loading pages…'
-                : pages.length
-                ? 'Select a Page'
-                : 'No Pages on this ad account'}
-            </option>
-            {pages.map((p) => (
-              <option key={p.id} value={p.id} className="bg-gray-100 dark:bg-[#171717]">
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-medium text-gray-500 dark:text-white/50">
-            Lead Form
-          </label>
-          <select
-            className={selectClass}
-            value={formId}
-            onChange={(e) => setFormId(e.target.value)}
-            disabled={!pageId || formsLoading}
-          >
-            <option value="">
-              {!pageId
-                ? 'Pick a Page first'
-                : formsLoading
-                ? 'Loading forms…'
-                : forms.length
-                ? 'Select a Lead Form'
-                : 'No Lead Forms on this Page'}
-            </option>
-            {forms.map((f) => (
-              <option key={f.id} value={f.id} className="bg-gray-100 dark:bg-[#171717]">
-                {f.name}
-                {f.leadsCount ? ` · ${f.leadsCount} leads` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+        <FieldDropdown
+          label="Facebook Page"
+          value={pageId}
+          onChange={setPageId}
+          loading={pagesLoading}
+          options={pages.map((p) => ({ id: p.id, name: p.name }))}
+          loadingText="Loading pages…"
+          emptyText="No Pages on this ad account"
+          placeholder="Select a Page"
+        />
+        <FieldDropdown
+          label="Lead Form"
+          value={formId}
+          onChange={setFormId}
+          loading={formsLoading}
+          disabled={!pageId}
+          options={forms.map((f) => ({
+            id: f.id,
+            name: f.name,
+            sub: f.leadsCount ? `${f.leadsCount} leads` : null,
+          }))}
+          loadingText="Loading forms…"
+          emptyText={pageId ? 'No Lead Forms on this Page' : 'Pick a Page first'}
+          placeholder="Select a Lead Form"
+        />
       </div>
 
       {/* Toolbar */}
