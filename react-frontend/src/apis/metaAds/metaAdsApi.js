@@ -508,12 +508,14 @@ export const createLeadForm = async (payload) => {
 };
 
 // Captured leads for an Instant Form — powers the dashboard's Leads tab
-// table. Returns { leads, fieldNames, count }. Needs the connected
-// account to have granted the `leads_retrieval` scope.
-export const getFormLeads = async ({ formId, pageId }) => {
+// table. Returns { leads, fieldNames, count, truncated }. `truncated` is
+// true when the form holds more leads than the server-side fetch cap, so
+// `count` must not be presented as the form's real total. Needs the
+// connected account to have granted the `leads_retrieval` scope.
+export const getFormLeads = async ({ formId, pageId, facebookId }) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/get-form-leads`,
-    { params: { formId, pageId }, headers: getAuthHeaders() },
+    { params: { formId, pageId }, headers: getAuthHeaders(facebookId) },
   );
   return data;
 };
@@ -521,13 +523,19 @@ export const getFormLeads = async ({ formId, pageId }) => {
 // Download captured leads as a CSV (opens in Excel). Fetches the file as
 // a blob with auth headers — a plain <a href> can't carry the
 // Authorization header — then triggers a client-side download.
-export const downloadFormLeadsCsv = async ({ formId, pageId, formName }) => {
+export const downloadFormLeadsCsv = async ({
+  formId,
+  pageId,
+  formName,
+  facebookId,
+  truncated = false,
+}) => {
   try {
     const res = await axios.get(
       `${BASE_URL}/adsgpt/meta-ads/export-form-leads`,
       {
         params: { formId, pageId, formName },
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(facebookId),
         responseType: 'blob',
       },
     );
@@ -536,7 +544,11 @@ export const downloadFormLeadsCsv = async ({ formId, pageId, formName }) => {
     const a = document.createElement('a');
     a.href = url;
     const safe = String(formName || 'leads').replace(/[^a-z0-9_-]+/gi, '-');
-    a.download = `leads-${safe}.csv`;
+    // The server sets a matching Content-Disposition, but a blob download
+    // names the file client-side, so the "this export is partial" signal has
+    // to be re-applied here or it's lost the moment the file leaves the app.
+    // `truncated` comes from the same fetch that populated the table.
+    a.download = `leads-${safe}${truncated ? '-partial' : ''}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();

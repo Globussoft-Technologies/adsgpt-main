@@ -505,7 +505,7 @@ function validateAd(form, cell, mode) {
   }
   if (!isBlank(form.deferredDeepLink)) {
     const dl = String(form.deferredDeepLink).trim();
-    const m = dl.match(/^([A-Za-z][A-Za-z0-9+.\-]*):\/\//);
+    const m = dl.match(/^([A-Za-z][A-Za-z0-9+.-]*):\/\//);
     if (!m) {
       e.deferredDeepLink = 'Use your app’s custom URL scheme, e.g. myapp://path.';
     } else if (/^(https?|ftp|file)$/i.test(m[1])) {

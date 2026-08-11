@@ -1,5 +1,14 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Download, Loader2, Inbox, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  RefreshCw,
+  Download,
+  Loader2,
+  Inbox,
+  AlertCircle,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import {
   getMetaPages,
   getLeadForms,
@@ -20,7 +29,17 @@ import { globalToast } from '@/utils/globalToast';
  * Only Instant-Form leads are retrievable — leads captured on the
  * advertiser's own website (the Leads/Website cell) never reach Meta,
  * so they can't appear here.
+ *
+ * `facebookId` is required, not optional: every other surface in
+ * MetaAdsDashboard threads the active connection explicitly and waits for
+ * it. Falling back to the ambient sessionStorage selection would let this
+ * tab resolve Pages against a different connection than the rest of the
+ * dashboard is showing whenever the two disagree.
  */
+
+// Rows rendered at a time. The server caps a fetch at 5,000 leads; painting
+// that many <tr> at once is what made a busy form feel broken.
+const PAGE_SIZE = 100;
 
 // "full_name" → "Full name", "phone_number" → "Phone number".
 const prettifyField = (name) =>
@@ -48,7 +67,7 @@ const selectClass =
   'focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ' +
   'dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:border-white/20 dark:focus:border-white/30';
 
-export default function LeadsTab({ adAccountId }) {
+export default function LeadsTab({ adAccountId, facebookId }) {
   const [pages, setPages] = useState([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [pageId, setPageId] = useState('');
@@ -59,63 +78,104 @@ export default function LeadsTab({ adAccountId }) {
 
   const [leads, setLeads] = useState([]);
   const [fieldNames, setFieldNames] = useState([]);
+  const [truncated, setTruncated] = useState(false);
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [tablePage, setTablePage] = useState(1);
+
+  // Monotonic request ids — a slow response from a previously-selected
+  // Page/Form must not overwrite state belonging to the current one. Mirrors
+  // the campaignsRequestRef / analyticsRequestRef pattern in
+  // MetaAdsDashboard.jsx.
+  const pagesRequestRef = useRef(0);
+  const formsRequestRef = useRef(0);
+  const leadsRequestRef = useRef(0);
 
   const selectedForm = forms.find((f) => f.id === formId) || null;
 
   // ── load Pages for the selected ad account ──────────────────────────
   useEffect(() => {
-    if (!adAccountId) return;
+    if (!adAccountId || !facebookId) return;
+    const requestId = ++pagesRequestRef.current;
     setPagesLoading(true);
     setPages([]);
     setPageId('');
     setForms([]);
     setFormId('');
     setLeads([]);
-    getMetaPages(adAccountId)
-      .then((r) => setPages(r?.pages || []))
-      .catch(() => setPages([]))
-      .finally(() => setPagesLoading(false));
-  }, [adAccountId]);
+    setTruncated(false);
+    getMetaPages(adAccountId, { facebookId })
+      .then((r) => {
+        if (requestId !== pagesRequestRef.current) return;
+        setPages(r?.pages || []);
+      })
+      .catch(() => {
+        if (requestId !== pagesRequestRef.current) return;
+        setPages([]);
+      })
+      .finally(() => {
+        if (requestId !== pagesRequestRef.current) return;
+        setPagesLoading(false);
+      });
+  }, [adAccountId, facebookId]);
 
   // ── load Lead Forms when a Page is picked ───────────────────────────
   useEffect(() => {
-    if (!pageId) {
+    if (!pageId || !facebookId) {
       setForms([]);
       setFormId('');
       return;
     }
+    const requestId = ++formsRequestRef.current;
     setFormsLoading(true);
     setForms([]);
     setFormId('');
     setLeads([]);
+    setTruncated(false);
     setError(null);
-    getLeadForms(pageId)
-      .then((r) => setForms(r?.forms || []))
-      .catch((e) => setError(e?.response?.data?.error || e.message))
-      .finally(() => setFormsLoading(false));
-  }, [pageId]);
+    getLeadForms(pageId, { facebookId })
+      .then((r) => {
+        if (requestId !== formsRequestRef.current) return;
+        setForms(r?.forms || []);
+      })
+      .catch((e) => {
+        if (requestId !== formsRequestRef.current) return;
+        setError(e?.response?.data?.error || e.message);
+      })
+      .finally(() => {
+        if (requestId !== formsRequestRef.current) return;
+        setFormsLoading(false);
+      });
+  }, [pageId, facebookId]);
 
   // ── load leads when a Form is picked ────────────────────────────────
   const loadLeads = useCallback(() => {
-    if (!formId || !pageId) return;
+    if (!formId || !pageId || !facebookId) return;
+    const requestId = ++leadsRequestRef.current;
     setLeadsLoading(true);
     setError(null);
-    getFormLeads({ formId, pageId })
+    getFormLeads({ formId, pageId, facebookId })
       .then((r) => {
+        if (requestId !== leadsRequestRef.current) return;
         setLeads(r?.leads || []);
         setFieldNames(r?.fieldNames || []);
+        setTruncated(!!r?.truncated);
+        setTablePage(1);
       })
       .catch((e) => {
+        if (requestId !== leadsRequestRef.current) return;
         const d = e?.response?.data;
         setError(d?.details || d?.error || e.message);
         setLeads([]);
         setFieldNames([]);
+        setTruncated(false);
       })
-      .finally(() => setLeadsLoading(false));
-  }, [formId, pageId]);
+      .finally(() => {
+        if (requestId !== leadsRequestRef.current) return;
+        setLeadsLoading(false);
+      });
+  }, [formId, pageId, facebookId]);
 
   useEffect(() => {
     loadLeads();
@@ -128,7 +188,9 @@ export default function LeadsTab({ adAccountId }) {
       await downloadFormLeadsCsv({
         formId,
         pageId,
+        facebookId,
         formName: selectedForm?.name,
+        truncated,
       });
     } catch (e) {
       globalToast.error(
@@ -138,6 +200,13 @@ export default function LeadsTab({ adAccountId }) {
       setDownloading(false);
     }
   };
+
+  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
+  const safePage = Math.min(tablePage, totalPages);
+  const visibleLeads = leads.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -210,7 +279,7 @@ export default function LeadsTab({ adAccountId }) {
           <p className="text-xs text-gray-500 dark:text-white/50">
             {leadsLoading
               ? 'Loading leads…'
-              : `${leads.length} lead${leads.length === 1 ? '' : 's'}`}
+              : `${truncated ? 'First ' : ''}${leads.length} lead${leads.length === 1 ? '' : 's'}`}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -233,6 +302,21 @@ export default function LeadsTab({ adAccountId }) {
               )}
               Download Excel (CSV)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Truncation notice — the count above is a floor, not the form's
+          total, and the export is partial in exactly the same way. */}
+      {truncated && formId && !leadsLoading && (
+        <div className="flex shrink-0 items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-13 text-amber-700 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500 dark:text-amber-300" />
+          <div>
+            <div className="font-semibold text-amber-800 dark:text-amber-100">
+              Showing the first {leads.length.toLocaleString()} leads
+            </div>
+            This form has more leads than we load at once, and the CSV export
+            is limited the same way — it downloads as a “partial” file.
           </div>
         </div>
       )}
@@ -282,7 +366,7 @@ export default function LeadsTab({ adAccountId }) {
               </tr>
             </thead>
             <tbody>
-              {leads.map((l) => (
+              {visibleLeads.map((l) => (
                 <tr key={l.id} className="border-t border-gray-200 text-gray-700 dark:border-white/6 dark:text-white/85">
                   <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
                     {fmtDate(l.createdTime)}
@@ -313,6 +397,34 @@ export default function LeadsTab({ adAccountId }) {
           </table>
         ) : null}
       </div>
+
+      {/* Pager — the export always covers every loaded lead, not just the
+          visible page. */}
+      {!leadsLoading && totalPages > 1 && (
+        <div className="flex shrink-0 items-center justify-between text-xs text-gray-500 dark:text-white/55">
+          <span>
+            Page {safePage} of {totalPages} · {leads.length.toLocaleString()} loaded
+          </span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => setTablePage(safePage - 1)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 transition-all hover:border-gray-300 disabled:opacity-40 dark:border-white/10 dark:hover:border-white/25"
+            >
+              <ChevronLeft className="h-3 w-3" /> Prev
+            </button>
+            <button
+              type="button"
+              disabled={safePage >= totalPages}
+              onClick={() => setTablePage(safePage + 1)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 transition-all hover:border-gray-300 disabled:opacity-40 dark:border-white/10 dark:hover:border-white/25"
+            >
+              Next <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,14 @@ const {
   getMetricsCatalog,
   extractMetricValue,
 } = require("../../config/metricsCatalog");
+// Captured-lead helpers (Leads tab read + CSV export). Kept in utils/ so the
+// pure ones stay unit-testable without this controller's require chain.
+const {
+  fetchAllLeadsForForm,
+  normalizeLead,
+  leadFieldNames,
+  leadsToCsv,
+} = require("../../utils/metaLeads");
 const { getVisibleMetricKeys } = require("../../Module/metaAds/metaAdsPreference");
 const {
   AD_ACCOUNT_LIST_FIELDS,
@@ -291,140 +299,6 @@ async function getPageAccessToken(pageId) {
   }
 
   return null;
-}
-
-// ── Captured Lead submissions ───────────────────────────────────────────
-// The dashboard's Leads tab reads + exports leads captured by a Page's
-// Instant Forms. Meta hard-gates the form `leads` edge behind the
-// leads_retrieval OAuth scope (error #200 "Requires leads_retrieval
-// permission" otherwise) — see authController's scope list.
-
-// Fields requested per lead — everything the `leads` edge will surface.
-// `field_data` carries the answers the person submitted; the rest is full
-// attribution + source context so the exported sheet is self-contained.
-const LEAD_FIELDS =
-  "id,created_time,field_data,ad_id,ad_name,adset_id,adset_name," +
-  "campaign_id,campaign_name,form_id,is_organic,platform,partner_name," +
-  "custom_disclaimer_responses";
-
-// "full_name" → "Full name", "phone_number" → "Phone number" — used for
-// the CSV header so the exported sheet reads cleanly in Excel.
-function prettifyLeadField(name) {
-  return String(name || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// Pull every lead for a form, following Meta's cursor pagination. Capped
-// at `maxLeads` (and a hard page-count ceiling) so a runaway form can't
-// exhaust memory or hang the request.
-async function fetchAllLeadsForForm(pageApi, formId, maxLeads = 5000) {
-  const out = [];
-  let after = null;
-  for (let page = 0; page < 100; page++) {
-    const params = { fields: LEAD_FIELDS, limit: 200 };
-    if (after) params.after = after;
-    const result = await pageApi.call("GET", [formId, "leads"], params);
-    const data = result?._data || result || {};
-    const batch = data.data || [];
-    out.push(...batch);
-    if (out.length >= maxLeads) return out.slice(0, maxLeads);
-    after = data?.paging?.cursors?.after || null;
-    if (!after || !data?.paging?.next || batch.length === 0) break;
-  }
-  return out;
-}
-
-// Flatten a raw Meta lead into a self-contained record.
-// `field_data` is an array of { name, values:[…] }; each is collapsed to a
-// single string (multi-value answers joined with "; "). Custom disclaimer
-// / consent checkboxes are flattened to "key: Yes/No" pairs.
-function normalizeLead(raw) {
-  const fields = {};
-  for (const fd of raw?.field_data || []) {
-    if (!fd || !fd.name) continue;
-    fields[fd.name] = Array.isArray(fd.values) ? fd.values.join("; ") : "";
-  }
-  const disclaimers = (raw?.custom_disclaimer_responses || [])
-    .map((d) => {
-      const key = d?.checkbox_key || d?.key || "";
-      return key ? `${key}: ${d?.is_checked ? "Yes" : "No"}` : "";
-    })
-    .filter(Boolean)
-    .join("; ");
-  return {
-    id: raw?.id || "",
-    createdTime: raw?.created_time || null,
-    campaignId: raw?.campaign_id || null,
-    campaignName: raw?.campaign_name || null,
-    adsetId: raw?.adset_id || null,
-    adsetName: raw?.adset_name || null,
-    adId: raw?.ad_id || null,
-    adName: raw?.ad_name || null,
-    formId: raw?.form_id || null,
-    platform: raw?.platform || null,
-    isOrganic: !!raw?.is_organic,
-    source: raw?.is_organic ? "Organic" : "Paid ad",
-    partnerName: raw?.partner_name || null,
-    disclaimerResponses: disclaimers || null,
-    fields,
-  };
-}
-
-// Union of all question field names across the leads, in first-seen order
-// — drives the table columns / CSV header. A form can be edited over time,
-// so different leads may carry different field sets.
-function leadFieldNames(leads) {
-  const seen = [];
-  for (const l of leads) {
-    for (const name of Object.keys(l.fields || {})) {
-      if (!seen.includes(name)) seen.push(name);
-    }
-  }
-  return seen;
-}
-
-// Escape one CSV cell — wrap in quotes, double any embedded quote.
-function csvCell(v) {
-  return `"${(v == null ? "" : String(v)).replace(/"/g, '""')}"`;
-}
-
-// Serialise normalized leads to CSV text — the answer columns plus full
-// attribution + source context so the sheet is self-contained for the
-// advertiser's follow-up. Prefixed with a UTF-8 BOM so Excel reads
-// non-ASCII names / addresses correctly on double-click.
-function leadsToCsv(leads) {
-  const fieldNames = leadFieldNames(leads);
-  const header = [
-    "Lead ID",
-    "Captured",
-    ...fieldNames.map(prettifyLeadField),
-    "Campaign",
-    "Ad set",
-    "Ad",
-    "Platform",
-    "Source",
-    "Partner",
-    "Consent responses",
-    "Form ID",
-  ];
-  const rows = leads.map((l) => [
-    l.id || "",
-    l.createdTime || "",
-    ...fieldNames.map((f) => l.fields?.[f] || ""),
-    l.campaignName || "",
-    l.adsetName || "",
-    l.adName || "",
-    l.platform || "",
-    l.source || "",
-    l.partnerName || "",
-    l.disclaimerResponses || "",
-    l.formId || "",
-  ]);
-  return (
-    "﻿" +
-    [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n")
-  );
 }
 
 // Normalise a Meta ad account id to the `act_<digits>` form Meta's
@@ -2648,15 +2522,20 @@ class MetaAdLauncher {
       }
 
       const pageApi = new bizSdk.FacebookAdsApi(pageToken);
-      const leads = (await fetchAllLeadsForForm(pageApi, formId)).map(
-        normalizeLead,
+      const { leads: rawLeads, truncated } = await fetchAllLeadsForForm(
+        pageApi,
+        formId,
       );
+      const leads = rawLeads.map(normalizeLead);
 
       return res.status(200).json({
         status: true,
         leads,
         fieldNames: leadFieldNames(leads),
         count: leads.length,
+        // True when Meta had more leads than the fetch cap — the UI shows a
+        // banner so `count` is never mistaken for the form's real total.
+        truncated,
       });
     } catch (error) {
       const m = logMetaError("getFormLeads error", error);
@@ -2702,9 +2581,11 @@ class MetaAdLauncher {
       }
 
       const pageApi = new bizSdk.FacebookAdsApi(pageToken);
-      const leads = (await fetchAllLeadsForForm(pageApi, formId)).map(
-        normalizeLead,
+      const { leads: rawLeads, truncated } = await fetchAllLeadsForForm(
+        pageApi,
+        formId,
       );
+      const leads = rawLeads.map(normalizeLead);
       const csv = leadsToCsv(leads);
 
       // Safe filename — strip anything HTTP headers / the OS dislike.
@@ -2714,10 +2595,16 @@ class MetaAdLauncher {
           .replace(/^-+|-+$/g, "")
           .slice(0, 60) || "leads";
 
+      // A partial export has to announce itself in the filename: the banner
+      // in the UI doesn't travel with the file, and this sheet is the thing
+      // the advertiser forwards to sales.
+      const suffix = truncated ? `-first-${leads.length}-of-more` : "";
+
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("X-Leads-Truncated", truncated ? "true" : "false");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="leads-${safeName}.csv"`,
+        `attachment; filename="leads-${safeName}${suffix}.csv"`,
       );
       return res.status(200).send(csv);
     } catch (error) {

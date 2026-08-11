@@ -62,7 +62,6 @@ import { clearSelectedFacebookId, setSelectedFacebookId } from '@/utils/metaFace
 const FEATURE_WIZARD_V2 = import.meta.env.VITE_FEATURE_WIZARD_V2 === 'true';
 import { useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-const FEATURE_LEADS_TAB = import.meta.env.VITE_FEATURE_LEADS_TAB === 'true';
 
 export default function MetaAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
@@ -480,10 +479,7 @@ export default function MetaAdsDashboard() {
    
     // { id: 'audit', label: 'Audit', icon: ClipboardList },
     { id: 'campaigns', label: 'Campaigns', icon: Layers },
-    // Leads tab ships alongside the V2 wizard's Instant-Form features —
-    // gated on the same FEATURE_LEADS_TAB flag so it only appears
-    // where V2 is enabled.
-    ...(FEATURE_LEADS_TAB ? [{ id: 'leads', label: 'Leads', icon: Inbox }] : []),
+    { id: 'leads', label: 'Leads', icon: Inbox },
   ];
 
   return (
@@ -851,9 +847,8 @@ export default function MetaAdsDashboard() {
             </motion.div>
           )}
 
-          {/* leads tab — view + download captured Instant-Form leads.
-              Gated on FEATURE_LEADS_TAB, same as the tab button. */}
-          {FEATURE_LEADS_TAB && activeTab === 'leads' && (
+          {/* leads tab — view + download captured Instant-Form leads. */}
+          {activeTab === 'leads' && (
             <motion.div
               key="leads"
               initial={{ opacity: 0, y: 8 }}
@@ -862,7 +857,10 @@ export default function MetaAdsDashboard() {
               transition={{ duration: 0.2 }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <LeadsTab adAccountId={selectedAccount?.id} />
+              <LeadsTab
+                adAccountId={selectedAccount?.id}
+                facebookId={activeFacebookId}
+              />
             </motion.div>
           )}
 
