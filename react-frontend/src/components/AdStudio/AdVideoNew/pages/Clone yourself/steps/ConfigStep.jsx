@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import axios from 'axios';
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   Pause,
   Play,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { RiGeminiFill } from 'react-icons/ri';
@@ -38,10 +40,14 @@ import {
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { uploadToS3 } from '@/utils/imageUpload';
+import getCookies from '@/utils/getCookies';
 import { globalToast } from '@/utils/globalToast';
 import { toast } from 'react-toastify';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
+const PYTHON_API_CLONE_YOURSELF_VALIDATE_URL = (
+  import.meta.env.VITE_PYTHON_API_CLONE_YOURSELF_VOICE_VALIDATE_URL || ''
+).replace(/\/+$/, '');
 
 // A "proper image URL" must be http(s) and point at a known image extension.
 const IMAGE_URL_REGEX = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
@@ -49,6 +55,31 @@ const isValidImageUrl = (url) => {
   const trimmed = (url || '').trim();
   return /^https?:\/\//i.test(trimmed) && IMAGE_URL_REGEX.test(trimmed);
 };
+const createCloneVoiceValidationSessionId = ({ userId = 'anonymous' } = {}) =>
+  `clone-voice-${userId}-${Date.now()}-${String(Math.random()).replace(/^0\./, '') || '0'}`;
+const getCloneVoiceValidationErrorMessage = (error) =>
+  error?.response?.data?.message ||
+  error?.response?.data?.error ||
+  error?.message ||
+  'Voice validation failed.';
+const normalizeValidatedVoicePath = (path, s3BaseUrl = '') => {
+  if (!path) return '';
+  return path.startsWith('http') ? path : `${s3BaseUrl}${path}`;
+};
+const shouldDisableCloneGenerate = ({
+  isLoading = false,
+  isUploading = false,
+  isVoiceValidating = false,
+  validatedVoicePath = '',
+  voiceError = null,
+  enough = true,
+} = {}) =>
+  isLoading ||
+  isUploading ||
+  isVoiceValidating ||
+  !validatedVoicePath ||
+  Boolean(voiceError) ||
+  !enough;
 
 const AIAvatarCommonDropdown = ({ options = [], placeholder = '', value = '', onChange }) => {
   const Icon = value?.Icon;
@@ -156,11 +187,92 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const [uploadIsPlaying, setUploadIsPlaying] = useState(false);
   const [uploadCurrentTime, setUploadCurrentTime] = useState(0);
   const [uploadDuration, setUploadDuration] = useState(0);
+  const [validatedVoicePath, setValidatedVoicePath] = useState('');
+  const [isVoiceValidating, setIsVoiceValidating] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const audioRef = useRef(null);
   const uploadAudioRef = useRef(null);
+  const voiceValidationRequestRef = useRef(0);
+
+  const setVoiceError = useCallback((message) => {
+    setErrors((prev) => ({ ...prev, voice: message }));
+  }, []);
+
+  const clearVoiceError = useCallback(() => {
+    setErrors((prev) => (prev.voice ? { ...prev, voice: null } : prev));
+  }, []);
+
+  const invalidateActiveVoiceValidation = useCallback(() => {
+    voiceValidationRequestRef.current += 1;
+    setIsVoiceValidating(false);
+  }, []);
+
+  const clearUploadVoice = useCallback(() => {
+    if (uploadFileUrl?.startsWith('blob:')) URL.revokeObjectURL(uploadFileUrl);
+    invalidateActiveVoiceValidation();
+    setValidatedVoicePath('');
+    setVoiceFile(null);
+    setUploadFileUrl(null);
+    setPrefillVoiceName(null);
+    setUploadIsPlaying(false);
+    setUploadCurrentTime(0);
+    setUploadDuration(0);
+  }, [invalidateActiveVoiceValidation, uploadFileUrl]);
+
+  const validateAndUploadVoice = useCallback(async (fileToUpload) => {
+    const userId = userData?.user_id;
+    if (!userId) {
+      setVoiceError('User session missing. Please refresh and try again.');
+      return null;
+    }
+    if (!PYTHON_API_CLONE_YOURSELF_VALIDATE_URL) {
+      setVoiceError('Voice validation URL is missing. Add the frontend env and restart Vite.');
+      return null;
+    }
+
+    const requestId = voiceValidationRequestRef.current + 1;
+    voiceValidationRequestRef.current = requestId;
+    setIsVoiceValidating(true);
+    clearVoiceError();
+
+    try {
+      const formData = new FormData();
+      formData.append('sessionId', createCloneVoiceValidationSessionId({ userId }));
+      formData.append('audio', fileToUpload);
+
+      await axios.post(
+        `${PYTHON_API_CLONE_YOURSELF_VALIDATE_URL}/api/v1/voice-validate/validate`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${getCookies()}`,
+          },
+        }
+      );
+
+      const path = await dispatch(uploadVoice(fileToUpload, userId));
+      if (requestId !== voiceValidationRequestRef.current) return null;
+      if (!path) {
+        setVoiceError('Voice upload failed.');
+        setValidatedVoicePath('');
+        return null;
+      }
+
+      const fullPath = normalizeValidatedVoicePath(path, import.meta.env.VITE_S3_BASE_URL);
+      setValidatedVoicePath(fullPath);
+      return fullPath;
+    } catch (error) {
+      if (requestId !== voiceValidationRequestRef.current) return null;
+      const message = getCloneVoiceValidationErrorMessage(error);
+      setValidatedVoicePath('');
+      setVoiceError(message);
+      return null;
+    } finally {
+      if (requestId === voiceValidationRequestRef.current) setIsVoiceValidating(false);
+    }
+  }, [clearVoiceError, dispatch, setVoiceError, userData?.user_id]);
 
   const videoChatModels = useMemo(
     () => [
@@ -251,8 +363,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if (videoDuration && errors.videoDuration) setErrors((p) => ({ ...p, videoDuration: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((p) => ({ ...p, aspectRatio: null }));
     if (brand_name && errors.brandName) setErrors((p) => ({ ...p, brandName: null }));
-    if ((voiceFile || recordedBlob || uploadFileUrl) && errors.voice) setErrors((p) => ({ ...p, voice: null }));
-  }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name, voiceFile, recordedBlob, uploadFileUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (validatedVoicePath && errors.voice) setErrors((p) => ({ ...p, voice: null }));
+  }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name, validatedVoicePath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!recreateData) return;
@@ -271,27 +383,44 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if (notesValue) setNotes(notesValue);
     if (recreateData.productName) dispatch(setFields({ brand_name: recreateData.productName }));
     if (recreateData.voiceSampleUrl) {
+      invalidateActiveVoiceValidation();
+      setValidatedVoicePath('');
       setUploadFileUrl(recreateData.voiceSampleUrl);
       setPrefillVoiceName(recreateData.voiceSampleUrl.split('/').pop());
       setUploadIsPlaying(false);
       setUploadCurrentTime(0);
       setUploadDuration(0);
     }
-  }, [recreateData, dispatch]);
+  }, [recreateData, dispatch, invalidateActiveVoiceValidation]);
+
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    if (uploadFileUrl?.startsWith('blob:')) URL.revokeObjectURL(uploadFileUrl);
+  }, [recordedUrl, uploadFileUrl]);
 
   // ── Voice recorder helpers ─────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     try {
+      clearVoiceError();
+      invalidateActiveVoiceValidation();
+      setValidatedVoicePath('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setRecordedBlob(blob);
         setRecordedUrl(url);
         setRecorderState('stopped');
+        const voiceFileToUpload = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+        const uploadedPath = await validateAndUploadVoice(voiceFileToUpload);
+        if (!uploadedPath) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start();
@@ -300,9 +429,10 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((p) => p + 1), 1000);
     } catch {
+      setVoiceError('Microphone access denied. Allow mic access or upload a voice file.');
       toast.error('Microphone access denied');
     }
-  }, []);
+  }, [clearVoiceError, invalidateActiveVoiceValidation, setVoiceError, validateAndUploadVoice]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
@@ -327,19 +457,24 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
   const discardRecording = useCallback(() => {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    invalidateActiveVoiceValidation();
+    setValidatedVoicePath('');
     setRecordedBlob(null);
     setRecordedUrl(null);
     setRecorderState('idle');
     setRecordingTime(0);
-  }, [recordedUrl]);
+  }, [invalidateActiveVoiceValidation, recordedUrl]);
 
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
   // Switch mode → clear the other side
   const switchVoiceMode = (mode) => {
     setVoiceMode(mode);
+    clearVoiceError();
     if (mode === 'upload') discardRecording();
-    else setVoiceFile(null);
+    else {
+      clearUploadVoice();
+    }
   };
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -385,7 +520,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if (!videoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
-    if (!voiceFile && !recordedBlob && !uploadFileUrl) newErrors.voice = 'Voice is required';
+    if (!validatedVoicePath) newErrors.voice = 'Please validate a voice sample before generating';
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
 
     try {
@@ -438,25 +573,6 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         }
       }
 
-      // Upload voice (file or recorded blob) to /video/upload-voice
-      let voicePath = '';
-      const voiceSource = voiceMode === 'upload' ? voiceFile : recordedBlob;
-      if (voiceSource) {
-        globalToast.loading('Uploading voice...');
-        const voiceFileToUpload =
-          voiceSource instanceof Blob && !(voiceSource instanceof File)
-            ? new File([voiceSource], `voice-${Date.now()}.webm`, { type: voiceSource.type || 'audio/webm' })
-            : voiceSource;
-        const path = await dispatch(uploadVoice(voiceFileToUpload, userId));
-        globalToast.dismiss();
-        if (!path) {
-          globalToast.error('Voice upload failed');
-          setIsUploading(false);
-          return;
-        }
-        voicePath = path;
-      }
-
       const payload = {
         inputs: {
           type: 'clone',
@@ -470,11 +586,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           tone: 'Casual',
           model: videoModel,
           numberOfVideos: 1,
-          ...(voicePath
-            ? { voiceSampleUrl: voicePath.startsWith('http') ? voicePath : `${import.meta.env.VITE_S3_BASE_URL}${voicePath}` }
-            : uploadFileUrl
-              ? { voiceSampleUrl: uploadFileUrl }
-              : {}),
+          ...(validatedVoicePath ? { voiceSampleUrl: validatedVoicePath } : {}),
         },
       };
 
@@ -769,9 +881,20 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                   <div className="flex items-center gap-2">
                     <Mic className="h-4 w-4 shrink-0 text-blue-400" />
                     <span className="flex-1 truncate text-xs text-gray-700 dark:text-white/80">{voiceFile?.name || prefillVoiceName}</span>
+                    {validatedVoicePath && !isVoiceValidating && !errors.voice && (
+                      <span
+                        title="Voice validated"
+                        className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/15 text-green-400"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                      </span>
+                    )}
                     <button
                       disabled={isUploading || isLoading}
-                      onClick={() => { setVoiceFile(null); setUploadFileUrl(null); setPrefillVoiceName(null); setUploadIsPlaying(false); setUploadCurrentTime(0); setUploadDuration(0); }}
+                      onClick={() => {
+                        clearUploadVoice();
+                        clearVoiceError();
+                      }}
                       className="text-gray-400 hover:text-red-400 disabled:cursor-not-allowed"
                     >
                       <X className="h-4 w-4" />
@@ -830,22 +953,35 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                 disabled={isUploading || isLoading}
                 onClick={(e) => { e.target.value = null; }}
                 onChange={(e) => {
-                  const f = e.target.files[0];
-                  if (!f) return;
+                  void (async () => {
+                    const f = e.target.files[0];
+                    if (!f) return;
                   // accept is only a picker hint — enforce audio-only here so
                   // images/videos/gifs picked via "All files" are rejected.
-                  const isAudio = f.type.startsWith('audio/') || /\.(mp3|aac|wav|m4a|ogg)$/i.test(f.name);
-                  if (!isAudio) {
-                    toast.error('Please upload a valid audio file');
-                    e.target.value = '';
-                    return;
-                  }
-                  if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl);
-                  setVoiceFile(f);
-                  setUploadFileUrl(URL.createObjectURL(f));
-                  setUploadIsPlaying(false);
-                  setUploadCurrentTime(0);
-                  setUploadDuration(0);
+                    const isAudio = f.type.startsWith('audio/') || /\.(mp3|aac|wav|m4a|ogg)$/i.test(f.name);
+                    if (!isAudio) {
+                      setVoiceError('Please upload a valid audio file (.mp3, .aac, .wav, .m4a, .ogg)');
+                      toast.error('Please upload a valid audio file');
+                      e.target.value = '';
+                      return;
+                    }
+                    const previewUrl = URL.createObjectURL(f);
+                    invalidateActiveVoiceValidation();
+                    setValidatedVoicePath('');
+                    clearVoiceError();
+                    if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl);
+                    setVoiceFile(f);
+                    setUploadFileUrl(previewUrl);
+                    setUploadIsPlaying(false);
+                    setUploadCurrentTime(0);
+                    setUploadDuration(0);
+                    const uploadedPath = await validateAndUploadVoice(f);
+                    if (!uploadedPath) {
+                      setVoiceFile(null);
+                      URL.revokeObjectURL(previewUrl);
+                      setUploadFileUrl(null);
+                    }
+                  })();
                 }}
               />
             </div>
@@ -959,6 +1095,12 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
               {recorderState === 'stopped' && recordedUrl && (
                 <div className="flex flex-col gap-1">
+                  {validatedVoicePath && !isVoiceValidating && !errors.voice && (
+                    <div className="mb-1 flex items-center gap-1 text-[12px] text-green-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Voice validated</span>
+                    </div>
+                  )}
                   {/* progress bar */}
                   <input
                     type="range"
@@ -982,7 +1124,13 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               )}
             </div>
           )}
+          {isVoiceValidating && (
+            <span className="mt-1 text-[12px] text-blue-400">Validating voice sample...</span>
+          )}
           {errors.voice && <span className="mt-1 text-[12px] text-red-400">{errors.voice}</span>}
+          {voiceMode === 'upload' && uploadFileUrl && !validatedVoicePath && !isVoiceValidating && !errors.voice && prefillVoiceName && (
+            <span className="mt-1 text-[12px] text-amber-400">Re-upload this voice sample to validate it before generating.</span>
+          )}
         </div>
 
         {/* Prompt */}
@@ -1014,10 +1162,24 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
             )
           )}
           <button
-            disabled={isLoading || isUploading || !enough}
+            disabled={shouldDisableCloneGenerate({
+              isLoading,
+              isUploading,
+              isVoiceValidating,
+              validatedVoicePath,
+              voiceError: errors.voice,
+              enough,
+            })}
             onClick={handleGenerateClick}
             className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${
-              isLoading || isUploading || !enough
+              shouldDisableCloneGenerate({
+                isLoading,
+                isUploading,
+                isVoiceValidating,
+                validatedVoicePath,
+                voiceError: errors.voice,
+                enough,
+              })
                 ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30'
                 : 'bg-gray-900 dark:bg-white'
             }`}
