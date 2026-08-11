@@ -144,11 +144,18 @@ async function createServer() {
 
   // * 6. Middleware setup
   App.use(apiLimiter);
-  App.use(mongoSanitize());
   App.use(bodyParser.json({ limit: "50mb" }));
   App.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
   App.use(express.json());
   App.use(express.urlencoded({ extended: true }));
+  // mongoSanitize MUST stay below the body parsers. It only walks keys that are
+  // already populated — `['body','params','headers','query'].forEach(k => { if (req[k]) … })`
+  // in express-mongo-sanitize — so mounting it above express.json() leaves
+  // req.body completely untouched and operator payloads such as
+  // {"userId":{"$ne":null}} reach Mongo unfiltered. req.query/req.params are
+  // populated by Express before user middleware, which is why the old order
+  // still appeared to work. Guarded by test/security/mongoSanitizeOrder.test.js.
+  App.use(mongoSanitize());
 
   App.use(
     session({
