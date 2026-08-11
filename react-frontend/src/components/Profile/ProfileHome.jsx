@@ -363,7 +363,7 @@ export default function ProfileHome() {
                 </div>
               )}
               {/* cancel button */}
-              {import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true' && subscriptionType !== '8' && (
+              {subscriptionType !== '8' && (
                 <a
                   href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
                   target="_blank"
