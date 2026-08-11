@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import axios from 'axios';
 import {
-  setActivePage,
   setAvatars,
   setImageAndScript,
   setRecreateInputs,
@@ -2240,7 +2239,7 @@ const UploadImagesContent = ({ onBack, onUploadComplete, onUseCamera }) => {
     </div>
   );
 };
-const AvatarAdsPage = ({ handleGenerate }) => {
+const AvatarAdsPage = ({ handleGenerate, onClose }) => {
   const { avatars, avatarsLoading, imageAndScript, recreateInputs, currentAvatarStep } =
     useSelector((state) => state.adVideoNew);
   const dispatch = useDispatch();
@@ -2394,7 +2393,7 @@ const AvatarAdsPage = ({ handleGenerate }) => {
                 Create your AI Avatar video
               </h2>
               <button
-                onClick={() => dispatch(setActivePage('home'))}
+                onClick={onClose}
                 className="rounded-full p-2 text-gray-500 transition hover:bg-black/5 hover:text-black dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <X className="h-6 w-6 2xl:h-8 2xl:w-8" />

@@ -152,6 +152,21 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const modalRef = useRef();
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const isRecreateRoute = ['b-roll', 'ugc', 'avatar'].includes(searchParams.get('page'));
+
+  const exitRecreateToMySpace = () => {
+    if (!isRecreateRoute) {
+      dispatch(setActivePage('home'));
+      return;
+    }
+
+    setSearchParams({}, { replace: true });
+    dispatch(setRecreateInputs(null));
+    dispatch(setImageAndScript(null));
+    dispatch(setAvatarStep('options'));
+    dispatch(setMySpaceTab('videos'));
+    dispatch(setActivePage('myVideos'));
+  };
 
   const displayedActivePage = libraryOnly ? 'myVideos' : activePage;
   const page = pageConfig[displayedActivePage];
@@ -213,6 +228,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   }, [savedCount, activePage, dispatch]);
 
   const handleBackNavigation = () => {
+    if (isRecreateRoute) {
+      exitRecreateToMySpace();
+      return;
+    }
+
     if (activePage === 'avatar') {
       const generatedData = imageAndScript?.data || imageAndScript;
       const urlId = searchParams.get('id');
@@ -523,6 +543,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                 <PageComponent
                   pageVideo={pageVideo}
                   handleGenerate={handleGenerate}
+                  onClose={exitRecreateToMySpace}
                   videoType={videoType}
                 />
               )}

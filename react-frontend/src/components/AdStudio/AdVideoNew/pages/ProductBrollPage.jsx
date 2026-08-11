@@ -22,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { generateVideoAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
-import { setActivePage, setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
 import emitter from '@/utils/eventEmitter';
 import { AnimatePresence } from 'framer-motion';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
@@ -36,7 +36,7 @@ const availableRatios = [
   { value: '16:9', label: '16:9', icon: RectangleHorizontal },
 ];
 
-const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
+const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('4s');
@@ -446,7 +446,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate }) => {
       {/* Form */}
       <div className="relative flex max-h-[85vh] flex-col gap-5 overflow-y-auto py-8 pr-3 pl-4 text-zinc-900 2xl:px-5 dark:text-white">
         <button
-          onClick={() => dispatch(setActivePage('home'))}
+          onClick={onClose}
           className="absolute top-4 right-4 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <X className="h-4 w-4 2xl:h-6 2xl:w-6" />

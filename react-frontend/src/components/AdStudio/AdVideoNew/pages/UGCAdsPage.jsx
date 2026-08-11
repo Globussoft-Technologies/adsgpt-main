@@ -31,7 +31,7 @@ import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions'
 import { RiGeminiFill } from 'react-icons/ri';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
-import { setActivePage, setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
@@ -44,7 +44,7 @@ const availableRatios = [
   { value: '16:9', label: '16:9', icon: RectangleHorizontal },
 ];
 
-const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
+const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const dispatch = useDispatch();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { isLoading, recreateInputs } = useSelector((state) => state.adVideoNew);
@@ -488,7 +488,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate }) => {
             <Clapperboard className="h-6 w-6 text-gray-900 dark:text-white" />
             <h2 className="text-xl font-semibold tracking-tight">Create your UGC ad</h2>
             <button
-              onClick={() => dispatch(setActivePage('home'))}
+              onClick={onClose}
               className="absolute -top-2 -right-4 rounded-full p-2 text-gray-500 dark:text-white/50 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
             >
               <X className="h-6 w-6" />
