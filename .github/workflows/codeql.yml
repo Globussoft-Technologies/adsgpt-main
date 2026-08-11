@@ -31,9 +31,11 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
-          # 'security-and-quality' is the broadest query suite; drop to
-          # 'security-extended' or default if PR runs get too slow/noisy.
-          queries: security-and-quality
+          # 'security-extended' = every security query, without the
+          # maintainability pack. Do not go back to 'security-and-quality':
+          # it adds ~738 lint alerts (662 of them unused variables) that
+          # drown the ~425 real security findings. Lint belongs in ESLint.
+          queries: security-extended
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
