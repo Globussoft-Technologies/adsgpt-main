@@ -1470,8 +1470,31 @@ async function run(jobId) {
         job.schedule.timezone || "UTC"
       );
     }
-    if (effectiveEndBoundary && new Date() > effectiveEndBoundary) {
-      logger.info(`[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} (inclusive boundary ${effectiveEndBoundary.toISOString()}), marking completed`);
+    const rawEndBoundaryGraceMinutes = process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES;
+    const hasEndBoundaryGraceEnv = rawEndBoundaryGraceMinutes !== undefined && rawEndBoundaryGraceMinutes !== "";
+    const endBoundaryGraceMinutes = hasEndBoundaryGraceEnv
+      ? Number(rawEndBoundaryGraceMinutes)
+      : null;
+    const endBoundaryGraceMs =
+      Number.isFinite(endBoundaryGraceMinutes) && endBoundaryGraceMinutes >= 0
+        ? endBoundaryGraceMinutes * 60 * 1000
+        : null;
+    if (
+      effectiveEndBoundary &&
+      (
+        endBoundaryGraceMs == null
+          ? new Date() > effectiveEndBoundary
+          : new Date() > new Date(effectiveEndBoundary.getTime() + endBoundaryGraceMs)
+      )
+    ) {
+      logger.info(
+        `[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} ` +
+        (
+          endBoundaryGraceMs == null
+            ? `(inclusive boundary ${effectiveEndBoundary.toISOString()}), marking completed`
+            : `(inclusive boundary ${effectiveEndBoundary.toISOString()} + ${endBoundaryGraceMinutes}m grace), marking completed`
+        )
+      );
       await AdsFactoryJob.updateOne(
         { _id: job._id },
         { $set: { status: "completed" }, $unset: { lifecycleKey: 1 } },
