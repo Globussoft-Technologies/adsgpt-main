@@ -7,11 +7,13 @@ const { estimateCostUsd } = require("../config/geminiPricing");
  * actual LLM response path the caller is in the middle of returning. Callers
  * do not await this.
  *
- * `usageMetadata` is passed through as returned by either Gemini SDK
- * (@google/generative-ai's UsageMetadata or @google/genai's
- * GenerateContentResponseUsageMetadata) — field names line up directly,
- * `thoughtsTokenCount`/`toolUsePromptTokenCount` simply won't be present on
- * the older SDK's shape and default to 0.
+ * `usageMetadata` is passed through as returned by @google/genai
+ * (GenerateContentResponseUsageMetadata). Any field the model doesn't report
+ * for a given call defaults to 0.
+ *
+ * NOTE: the `sdk` enum on the TokenUsage schema still accepts
+ * "generative-ai" so historical rows written before the SDK consolidation
+ * remain readable; nothing writes that value any more.
  *
  * `resolvedModel` (response.modelVersion, when the caller has it) is priced
  * in preference to `model`, since `model` may be an alias like

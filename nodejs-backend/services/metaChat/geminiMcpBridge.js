@@ -1,8 +1,5 @@
-const {
-  GoogleGenAI,
-  createPartFromFunctionResponse,
-} = require("@google/genai");
-const { getNextGeminiApiKey } = require("./geminiKeyPool");
+const { createPartFromFunctionResponse } = require("@google/genai");
+const { getClient, MODELS } = require("../ai/geminiClient");
 const {
   LOCAL_TOOL_DECLARATIONS,
   localHandlers,
@@ -11,11 +8,8 @@ const {
 } = require("./localTools");
 const { logTokenUsage } = require("../tokenUsage");
 
-// NOTE: `gemini-2.5-flash` was observed returning empty candidates (0 output
-// tokens, finishReason STOP) for this tool-heavy (~30k-token) prompt, which
-// surfaced as blank chat replies. `gemini-flash-latest` handles the same
-// prompt correctly. Override with GEMINI_MODEL if needed.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// Model id (and the reason for it) lives in services/ai/geminiClient MODELS.
+const GEMINI_MODEL = MODELS.CHAT;
 
 // How many of the most recent user-initiated turns to keep in the raw Gemini
 // history we persist and re-send on every turn. Without a cap this grows
@@ -360,8 +354,7 @@ function isReadOnly(annotations) {
 }
 
 function createChat({ adAccountId, currency, scope, history, functionDeclarations }) {
-  const ai = new GoogleGenAI({ apiKey: getNextGeminiApiKey() });
-  return ai.chats.create({
+  return getClient().chats.create({
     model: GEMINI_MODEL,
     config: {
       tools: [{ functionDeclarations }],

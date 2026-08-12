@@ -15,7 +15,7 @@
 const bizSdk = require("facebook-nodejs-business-sdk");
 const crypto = require("crypto");
 const dayjs = require("dayjs");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { generateJson, MODELS } = require("../../services/ai/geminiClient");
 
 const AdAccount = bizSdk.AdAccount;
 const Campaign = bizSdk.Campaign;
@@ -529,16 +529,6 @@ class LLMAuditController {
       });
 
       // ─── Call Gemini ─────────────────────────────────────────
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-pro",
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema,
-          temperature: 0.3,
-        },
-      });
-
       const prompt = buildPrompt({
         accountName: accountInfo.name,
         currency: accountInfo.currency,
@@ -547,13 +537,16 @@ class LLMAuditController {
         adData,
       });
 
-      const llmResult = await model.generateContent(prompt);
-      const rawText = llmResult?.response?.text?.() || "";
-
       let parsed;
       try {
-        parsed = JSON.parse(rawText);
+        ({ json: parsed } = await generateJson({
+          model: MODELS.REASONING,
+          prompt,
+          responseSchema,
+          temperature: 0.3,
+        }));
       } catch (err) {
+        if (err.code !== "GEMINI_INVALID_JSON") throw err;
         logger.error(`LLM output parse failed: ${err.message}`);
         return res.status(502).json({
           status: false,

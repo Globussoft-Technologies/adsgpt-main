@@ -1,9 +1,7 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { generateJson, MODELS } = require('../services/ai/geminiClient');
 const brandNameLists = require('../Module/brandNames/brandNamesSchema');
 const { buildCompetitorDiscoveryPrompt, KEYWORD_VERSION } = require('../AI/Prompts/competitorDiscoveryPrompt');
 const { searchAdsByKeywords } = require('../services/adsSearch/competitorSearch');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ── Stale PENDING detection ─────────────────────────────────────────────
 // If a discovery job has been PENDING for longer than this, we consider it
@@ -87,15 +85,6 @@ async function runDiscoveryJob(userId, brandId) {
     // console.log(`[runDiscoveryJob] Started for brand ${brandId}`);
 
     // ── 1. Gemini keyword generation ───────────────────────────────────
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema,
-        temperature: 0.3,
-      },
-    });
-
     const prompt = buildCompetitorDiscoveryPrompt({
       brandName: brand.brandName,
       brandDescription: brand.brandDescription,
@@ -103,15 +92,15 @@ async function runDiscoveryJob(userId, brandId) {
       region: brand.region,
     });
 
-    const llmResult = await model.generateContent(prompt, { timeout: 60000 });
-    const rawText = llmResult?.response?.text?.() || '';
-
-    let parsed;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch (err) {
-      throw new Error(`Gemini JSON parse failed: ${err.message}. Raw: ${rawText.substring(0, 200)}`);
-    }
+    // GeminiJsonError already carries the "Gemini JSON parse failed: … Raw: …"
+    // message this used to build by hand, and propagates the same way.
+    const { json: parsed } = await generateJson({
+      model: MODELS.FAST,
+      prompt,
+      responseSchema,
+      temperature: 0.3,
+      timeoutMs: 60000,
+    });
 
     const competitors = (parsed?.competitors || [])
       .filter(c => c.name && typeof c.name === 'string')

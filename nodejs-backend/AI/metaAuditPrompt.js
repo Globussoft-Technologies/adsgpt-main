@@ -1,42 +1,42 @@
-const { SchemaType } = require("@google/generative-ai");
+const { Type } = require("../services/ai/geminiClient");
 const {
   ALLOWED_ACTION_TYPES,
   buildLLMActionCatalog,
 } = require("../config/metaFixActions");
 
 const responseSchema = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
     findings: {
-      type: SchemaType.ARRAY,
+      type: Type.ARRAY,
       items: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
           severity: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             enum: ["critical", "warning", "opportunity"],
           },
           entity_type: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             enum: ["campaign", "adset", "ad"],
           },
-          entity_id: { type: SchemaType.STRING },
-          entity_name: { type: SchemaType.STRING },
-          title: { type: SchemaType.STRING },
-          reasoning: { type: SchemaType.STRING },
+          entity_id: { type: Type.STRING },
+          entity_name: { type: Type.STRING },
+          title: { type: Type.STRING },
+          reasoning: { type: Type.STRING },
           fix: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
               action_type: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 enum: ALLOWED_ACTION_TYPES,
               },
-              params_json: { type: SchemaType.STRING },
+              params_json: { type: Type.STRING },
               risk_level: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 enum: ["low", "medium", "high"],
               },
-              reversible: { type: SchemaType.BOOLEAN },
+              reversible: { type: Type.BOOLEAN },
             },
             required: ["action_type", "params_json", "risk_level", "reversible"],
           },

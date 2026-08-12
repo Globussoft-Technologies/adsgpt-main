@@ -1,4 +1,4 @@
-const {SchemaType} = require("@google/generative-ai");
+const { Type } = require("../services/ai/geminiClient");
 
 const CTA_ENUM = [
   "LEARN_MORE",
@@ -43,12 +43,12 @@ const CTA_ENUM = [
 
 
 const responseSchema = {
-     type:SchemaType.OBJECT,
+     type:Type.OBJECT,
      properties:{
-          primary_text: {type:SchemaType.STRING},
-          headline:{type:SchemaType.STRING},
-          description:{type:SchemaType.STRING},
-          call_to_action:{type:SchemaType.STRING,enum:CTA_ENUM}
+          primary_text: {type:Type.STRING},
+          headline:{type:Type.STRING},
+          description:{type:Type.STRING},
+          call_to_action:{type:Type.STRING,enum:CTA_ENUM}
      },
      required:[
           "primary_text",

@@ -1,12 +1,10 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { generateJson, MODELS } = require('../services/ai/geminiClient');
 const brandNameLists = require('../Module/brandNames/brandNamesSchema');
 const { buildBrandCategoryPrompt } = require('../AI/Prompts/brandCategoryPrompt');
 const {
   CATEGORY_VERSION,
   isValidCategory,
 } = require('../utils/categoryTaxonomy');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // How many brands to classify concurrently in the background warm-up. Kept
 // low so one active user with many un-classified brands can't burst the
@@ -52,15 +50,6 @@ const responseSchema = {
 // (null = model unsure / value not in the 45). Throws on an API/parse error
 // so the caller can record a FAILED job.
 async function classifyBrandCategory(brand) {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema,
-      temperature: 0,
-    },
-  });
-
   const prompt = buildBrandCategoryPrompt({
     brandName: brand.brandName,
     brandDescription: brand.brandDescription,
@@ -69,15 +58,19 @@ async function classifyBrandCategory(brand) {
     targetAudiences: brand.targetAudiences,
   });
 
-  const llmResult = await model.generateContent(prompt, { timeout: 30000 });
-  const rawText = llmResult?.response?.text?.() || '';
-
   let parsed;
   try {
-    parsed = JSON.parse(rawText);
+    ({ json: parsed } = await generateJson({
+      model: MODELS.FAST,
+      prompt,
+      responseSchema,
+      temperature: 0,
+      timeoutMs: 30000,
+    }));
   } catch (err) {
-    console.log(`Gemini JSON parse failed: ${err.message}. Raw: ${rawText.substring(0, 200)}`)
-    throw new Error(`Gemini JSON parse failed: ${err.message}. Raw: ${rawText.substring(0, 200)}`);
+    // Callers record this on the brand's categoryJob as FAILED.
+    console.log(err.message);
+    throw err;
   }
 
   return isValidCategory(parsed?.category) ? parsed.category : null;

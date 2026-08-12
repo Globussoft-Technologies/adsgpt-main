@@ -1,7 +1,5 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { generateJson, MODELS } = require('../services/ai/geminiClient');
 const brandNameLists = require('../Module/brandNames/brandNamesSchema');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const responseSchema = {
   type: 'object',
@@ -67,15 +65,6 @@ const getAudienceSuggestions = async (req, res) => {
       return res.status(200).json({ suggestions: brand.audienceSuggestions, cached: true });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema,
-        temperature: 0.4,
-      },
-    });
-
     const prompt = buildAudiencePrompt({
       brandName: brand.brandName,
       brandDescription: brand.brandDescription,
@@ -83,13 +72,16 @@ const getAudienceSuggestions = async (req, res) => {
       websiteUrl: brand.websiteUrl,
     });
 
-    const llmResult = await model.generateContent(prompt);
-    const rawText = llmResult?.response?.text?.() || '';
-
     let parsed;
     try {
-      parsed = JSON.parse(rawText);
+      ({ json: parsed } = await generateJson({
+        model: MODELS.FAST,
+        prompt,
+        responseSchema,
+        temperature: 0.4,
+      }));
     } catch (err) {
+      if (err.code !== 'GEMINI_INVALID_JSON') throw err;
       return res.status(502).json({ message: 'LLM returned invalid JSON', details: err.message });
     }
 

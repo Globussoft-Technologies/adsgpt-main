@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { generateJson, MODELS } = require("../../services/ai/geminiClient");
 const {
   buildAdCopyPrompt,
   responseSchema,
@@ -7,8 +7,6 @@ const {
 const { generateAdCopySchema } = require("../../Validations/meta.validator");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const logger = require("../../utils/logger");
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 exports.generateAdCopy = async (req, res) => {
   const userId = req.user.user_id;
@@ -53,27 +51,20 @@ exports.generateAdCopy = async (req, res) => {
   }
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.8,
-      },
-    });
-
-    const result = await model.generateContent(
-      buildAdCopyPrompt({
-        prompt: value.prompt,
-      }),
-    );
-
-    const raw = result?.response?.text?.() || "";
-
     let adCopy;
     try {
-      adCopy = JSON.parse(raw);
+      ({ json: adCopy } = await generateJson({
+        model: MODELS.FAST,
+        prompt: buildAdCopyPrompt({
+          prompt: value.prompt,
+        }),
+        responseSchema,
+        temperature: 0.8,
+      }));
     } catch (e) {
+      // Anything that isn't a bad-output error is a genuine call failure —
+      // rethrow so the outer catch releases credits and returns 500.
+      if (e.code !== "GEMINI_INVALID_JSON") throw e;
       await UnifiedCreditController.releaseCredits(reservationKey);
       logger.error(`[ad-copy-gen] invalid JSON from Gemini: ${e.message}`);
       return res

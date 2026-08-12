@@ -1,17 +1,11 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 const { URL } = require("node:url");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { generateJson, MODELS } = require("../services/ai/geminiClient");
 const { redisClient: redis } = require("../db/redis");
-
-
-// initialize client with your API key
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Use Gemini to analyze and extract structured data from text
 async function analyzeContentWithGemini(mainText) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
-
   const prompt = `
     You are an AI that extracts structured insights from website content.
     Given the following text, return JSON with three fields:
@@ -26,20 +20,14 @@ async function analyzeContentWithGemini(mainText) {
     ${mainText}
   `;
 
-  const result = await model.generateContent(prompt);
-  const response = result?.response ? result.response : null;
-  const text = response ? response.text() : null;
-
-  const cleaned = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "");
-
-  // Try parsing JSON from the model output
+  // Unparseable output degrades to null insights (the scrape still returns);
+  // a genuine API failure still propagates to the caller as it did before.
   try {
-    return JSON.parse(cleaned.trim());
+    const { json } = await generateJson({ model: MODELS.LITE, prompt });
+    return json;
   } catch (e) {
-    console.error("⚠️ Could not parse JSON, raw output:", text);
+    if (e.code !== "GEMINI_INVALID_JSON") throw e;
+    console.error("⚠️ Could not parse JSON, raw output:", e.rawText);
     return null;
   }
 }
