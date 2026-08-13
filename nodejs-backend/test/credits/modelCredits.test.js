@@ -3,8 +3,34 @@
 const assert = require("node:assert/strict");
 
 const creditsApi = require("../../controllers/creditsApiController");
+const modelConfigurationService = require("../../services/modelConfigurationService");
 const { SURFACE_CATALOG } = require("../../config/surfaceCatalog");
 const { finalizeSchema } = require("../../Validations/creditsApiValidator");
+
+const imageModelFixture = {
+  canonicalKey: "gemini-3.1-flash-image-preview",
+  displayName: "Nano Banana 2",
+  type: "image",
+  enabled: true,
+  archived: false,
+  credits: 3,
+  pricing: { per_image: 0.101 },
+  qualityTiers: [
+    { quality: "low", credits: 1, pricing: { per_image: 0.04 } },
+    { quality: "medium", credits: 2, pricing: { per_image: 0.067 } },
+    { quality: "high", credits: 3, pricing: { per_image: 0.101 } },
+    { quality: "ultra_high", credits: 4, pricing: { per_image: 0.151 } },
+  ],
+  surfaces: {
+    ad_creative: {
+      enabled: true,
+      aspectRatios: SURFACE_CATALOG.ad_creative[
+        "gemini-3.1-flash-image-preview"
+      ].aspectRatios,
+      durations: [],
+    },
+  },
+};
 
 async function getImageModels() {
   let statusCode = 0;
@@ -27,7 +53,16 @@ async function getImageModels() {
 }
 
 (async () => {
-  const models = await getImageModels();
+  const originalGetAllModels = modelConfigurationService.getAllModels;
+  const originalGetRuntimeCredit = modelConfigurationService.getRuntimeCredit;
+  modelConfigurationService.getAllModels = async () => [imageModelFixture];
+  modelConfigurationService.getRuntimeCredit = (entry, quality) => {
+    const tier = entry?.qualityTiers?.find((item) => item.quality === quality);
+    return Number(tier?.credits ?? entry?.credits) || 0;
+  };
+
+  try {
+    const models = await getImageModels();
   const nanoBanana2 = models.find(
     (model) => model.model === "gemini-3.1-flash-image-preview",
   );
@@ -84,7 +119,11 @@ async function getImageModels() {
   assert.equal(value.media[0].aspect_ratio, "4:5");
   assert.equal(value.media[0].quality, "high");
 
-  console.log("Assistant model credit contract tests passed");
+    console.log("Assistant model credit contract tests passed");
+  } finally {
+    modelConfigurationService.getAllModels = originalGetAllModels;
+    modelConfigurationService.getRuntimeCredit = originalGetRuntimeCredit;
+  }
 })().catch((error) => {
   console.error(error);
   process.exit(1);
