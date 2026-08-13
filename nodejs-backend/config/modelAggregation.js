@@ -1,86 +1,86 @@
 /**
- * Mongo aggregation helpers derived from the model registry.
+ * Mongo aggregation helpers derived from the DB-backed model catalog.
  *
- * The same `effective_cost` / `effective_credits` math runs in three places
- * (generatedMedia.controller, admin/adminDashboard.controller, and any future
- * report). This module is the one place where the $switch branches are built
- * — every consumer imports from here so adding a model never means editing a
- * raw aggregation pipeline again.
+ * These stages are built from the warmed runtime cache, which is refreshed at
+ * startup and after every Admin model mutation. The static seed registry is
+ * intentionally not used at runtime.
  */
 
-const { MODEL_REGISTRY, allKeysFor, imageEntries, videoEntries } = require("./modelRegistry");
+const modelConfigurationService = require("../services/modelConfigurationService");
 
-/**
- * Build $switch branches that map any known model alias → its credits-per-unit.
- *
- * For images: per-image credits.
- * For videos: per-second credits (the caller multiplies by an assumed
- *   duration — historically 5s — for old records that lack credit_deduction).
- *
- * Reads env vars at call time so changes to deployment env don't require a
- * process restart.
- */
+function runtimeModels(type) {
+  return modelConfigurationService.getRuntimeModels({ type });
+}
+
+function keys(entry) {
+  return modelConfigurationService.getRuntimeKeys(entry);
+}
+
+function modelMatch(entry) {
+  return { $in: ["$cleanModel", keys(entry)] };
+}
+
+function qualityModelMatch(entry, quality) {
+  return {
+    $and: [
+      modelMatch(entry),
+      { $eq: [{ $toLower: { $ifNull: ["$quality", ""] } }, String(quality).toLowerCase()] },
+    ],
+  };
+}
+
 function buildCreditLookupBranches() {
-  return MODEL_REGISTRY.map((entry) => {
-    const raw = parseFloat(process.env[entry.creditEnvVar]);
-    const value = Number.isFinite(raw)
-      ? raw
-      : entry.type === "video"
-        ? entry.aggregationCreditDefault ?? entry.creditDefault
-        : entry.creditDefault;
-    return {
-      case: { $in: ["$cleanModel", allKeysFor(entry)] },
-      then: value,
-    };
-  });
+  const branches = [];
+  for (const entry of runtimeModels()) {
+    const tiers = Array.isArray(entry.qualityTiers) ? entry.qualityTiers : [];
+    if (entry.type === "image" && tiers.length) {
+      for (const tier of tiers) {
+        branches.push({
+          case: qualityModelMatch(entry, tier.quality),
+          then: Number(tier.credits) || 0,
+        });
+      }
+      branches.push({
+        case: modelMatch(entry),
+        then: Math.max(...tiers.map((tier) => Number(tier.credits) || 0)),
+      });
+    } else {
+      branches.push({ case: modelMatch(entry), then: Number(entry.credits) || 0 });
+    }
+  }
+  return branches;
 }
 
-/** Canonical keys of all video models — used by the "× 5s assumed duration" branch. */
-function videoCanonicalKeys() {
-  return videoEntries().map((e) => e.canonicalKey);
-}
-
-/**
- * Build $switch branches that map any known model alias → its USD cost
- * fallback. Used to back-fill `effective_cost` for OLD GeneratedMedia records
- * where the cost field is 0.
- *
- * IMAGE models: returns 0 (matches existing behaviour — historical records
- *   pre-date the per_image flat rate; new records save the real cost upfront
- *   via modelPricingConfig.getImageCost). Flip this to entry.pricing.per_image
- *   if/when you decide to back-fill historical image rows.
- * VIDEO models: pricePerSec × $duration.
- */
 function buildCostFallbackBranches() {
   const branches = [];
 
-  for (const entry of imageEntries()) {
-    branches.push({
-      case: { $in: ["$cleanModel", allKeysFor(entry)] },
-      then: 0,
-    });
+  for (const entry of runtimeModels("image")) {
+    const tiers = Array.isArray(entry.qualityTiers) ? entry.qualityTiers : [];
+    for (const tier of tiers) {
+      const price = Number(tier.pricing?.per_image) || 0;
+      branches.push({ case: qualityModelMatch(entry, tier.quality), then: price });
+    }
+    const highestPrice = tiers.length
+      ? Math.max(...tiers.map((tier) => Number(tier.pricing?.per_image) || 0))
+      : Number(entry.pricing?.per_image) || 0;
+    branches.push({ case: modelMatch(entry), then: highestPrice });
   }
 
-  for (const entry of videoEntries()) {
-    const perSec = entry.pricing?.per_second ?? 0;
+  for (const entry of runtimeModels("video")) {
+    const perSecond = Number(entry.pricing?.per_second) || 0;
     branches.push({
-      case: { $in: ["$cleanModel", allKeysFor(entry)] },
-      then: { $multiply: ["$duration", perSec] },
+      case: modelMatch(entry),
+      then: { $multiply: ["$duration", perSecond] },
     });
   }
 
   return branches;
 }
 
-/**
- * Standard pipeline stages that derive `effective_credits` and `effective_cost`
- * on each document, mirroring the historical math in generatedMedia.controller.
- *
- * Stages assume a `model` field is present; they emit:
- *   cleanModel         trimmed model string
- *   effective_credits  credit_deduction if > 0, else fallback × (5 for video)
- *   effective_cost     cost if > 0, else flat-image / per-sec × duration
- */
+function videoCanonicalKeys() {
+  return runtimeModels("video").map((entry) => entry.canonicalKey);
+}
+
 function buildEffectiveCostStages() {
   return [
     { $addFields: { cleanModel: { $trim: { input: "$model" } } } },
@@ -97,8 +97,6 @@ function buildEffectiveCostStages() {
     },
     {
       $addFields: {
-        // For OLD video records whose credit_deduction is 0, the fallback
-        // above resolved to a per-second value — multiply by an assumed 5s.
         effective_credits: {
           $cond: [
             { $gt: [{ $ifNull: ["$credit_deduction", 0] }, 0] },

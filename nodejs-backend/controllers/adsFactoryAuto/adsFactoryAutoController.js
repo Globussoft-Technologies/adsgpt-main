@@ -12,7 +12,7 @@ const {
 const logger = require("../../utils/logger");
 const { _runningJobs } = require("../../services/adsFactoryAuto/adsFactoryAutoOrchestrator");
 const UnifiedCreditController = require("../UnifiedCreditController");
-const { getCreditDeduction, imageEntries } = require("../../config/modelRegistry");
+const modelConfigurationService = require("../../services/modelConfigurationService");
 
 async function ownsFacebookConnection(userId, target) {
   if (!target?.facebookId || !target?.connectionId) return false;
@@ -1635,8 +1635,8 @@ class AdsFactoryAutoController {
           if (d > 0) return d;
         }
         // fallback: first active image model
-        const first = imageEntries({ activeOnly: true })[0];
-        return first ? getCreditDeduction(first.canonicalKey) : 0;
+        const first = modelConfigurationService.getRuntimeModels({ type: "image", activeOnly: true })[0];
+        return first ? modelConfigurationService.getRuntimeCredit(first) : 0;
       })();
 
       const textDeduction  = UnifiedCreditController.getModelDeduction("ADSGPT-TEXT") || 0;

@@ -23,6 +23,7 @@ const googleAuthController = require("./controllers/adPosting/googleAuthControll
 const tiktokAuthController = require("./controllers/adPosting/tiktokAuthController");
 const { pub, sub } = require("./db/redis");
 const connectMongoDB = require("./db/mongo");
+const modelConfigurationService = require("./services/modelConfigurationService");
 const {
   parseAllowedOrigins,
   isOriginAllowed,
@@ -99,6 +100,8 @@ async function createServer() {
   }
   // * 2. Connect to MongoDB
   await connectMongoDB();
+  await modelConfigurationService.refreshCache();
+  console.log("AI model configuration cache warmed");
   runCronJobs();
 
   // * Ads Factory Auto-Pilot — start BullMQ worker + reload active jobs

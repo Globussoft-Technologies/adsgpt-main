@@ -517,8 +517,8 @@ export const initSocket = (url) => (dispatch, getState) => {
         }));
         if (event === 'imageComplete') {
           dispatch(setAiAdsSessionStatus('completed'));
+          dispatch(setAiAdsSceneLoading(false));
         }
-        dispatch(setAiAdsSceneLoading(false));
         return;
       }
 

@@ -44,6 +44,14 @@ export const adminApi = {
     api.get(`/token-usage/users/${encodeURIComponent(userId)}`, { params }),
   plans: () => api.get("/plans"),
   updatePlanLimit: (planId, patch) => api.patch(`/plans/${encodeURIComponent(planId)}`, patch),
+  models: (params) => api.get("/models", { params }),
+  createModel: (payload) => api.post("/models", payload),
+  updateModel: (canonicalKey, payload) => api.patch(`/models/${encodeURIComponent(canonicalKey)}`, payload),
+  updateModelStatus: (canonicalKey, status) =>
+    api.patch(`/models/${encodeURIComponent(canonicalKey)}/status/${status}`),
+  updateModelSurfaces: (canonicalKey, surfaces) =>
+    api.patch(`/models/${encodeURIComponent(canonicalKey)}/surfaces`, { surfaces }),
+  archiveModel: (canonicalKey) => api.delete(`/models/${encodeURIComponent(canonicalKey)}`),
 };
 
 // Page-view summaries live under /adsgpt/analytics (a different base than the

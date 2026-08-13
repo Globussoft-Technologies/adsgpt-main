@@ -2,9 +2,9 @@ const GeneratedMedia = require("../../Module/generatedMedia/generated.media");
 const UserProfile = require("../../Module/user/userProfileModel");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { buildEffectiveCostStages } = require("../../config/modelAggregation");
+const modelConfigurationService = require("../../services/modelConfigurationService");
 const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 const axios = require("axios");
-const { MODEL_REGISTRY, allKeysFor } = require("../../config/modelRegistry");
 
 let amemberProductsCache = null;
 let amemberProductsCacheExpiry = 0;
@@ -30,6 +30,55 @@ function buildDateMatch(from, to) {
   if (from) range.$gte = parseRangeStart(from);
   if (to) range.$lte = parseRangeEnd(to);
   return { createdAt: range };
+}
+
+async function addEffectiveGenerationCredits(media) {
+  const modelCache = new Map();
+  const result = [];
+
+  for (const item of media) {
+    const storedCredits = Number(item.credit_deduction) || 0;
+    const storedCost = Number(item.cost) || 0;
+    if (storedCredits > 0 && storedCost > 0) {
+      result.push({
+        ...item,
+        effective_credit_deduction: storedCredits,
+        effective_cost: storedCost,
+      });
+      continue;
+    }
+
+    const modelKey = String(item.model || "").trim();
+    if (!modelCache.has(modelKey)) {
+      modelCache.set(modelKey, await modelConfigurationService.resolveModelByAlias(modelKey));
+    }
+
+    const configuredModel = modelCache.get(modelKey);
+    const tiers = Array.isArray(configuredModel?.qualityTiers)
+      ? configuredModel.qualityTiers
+      : [];
+    const requestedQuality = String(item.quality || "").trim().toLowerCase();
+    const selectedTier =
+      tiers.find((tier) => String(tier.quality).toLowerCase() === requestedQuality) ||
+      tiers.reduce(
+        (highest, tier) =>
+          Number(tier.credits) > Number(highest?.credits || 0) ? tier : highest,
+        null,
+      );
+
+    const effectiveCredits = item.type === "image"
+      ? Number(selectedTier?.credits) || 0
+      : storedCredits;
+    const effectiveCost = storedCost > 0
+      ? storedCost
+      : item.type === "image"
+        ? modelConfigurationService.getRuntimeImagePrice(configuredModel, item.quality)
+        : modelConfigurationService.getRuntimeVideoPrice(configuredModel, item.duration);
+
+    result.push({ ...item, effective_credit_deduction: effectiveCredits, effective_cost: effectiveCost });
+  }
+
+  return result;
 }
 
 function parseFiniteNumber(value) {
@@ -96,14 +145,14 @@ function uniqueStringOptions(values) {
   return Array.from(byLabel.values()).sort((a, b) => a.localeCompare(b)).map(toOption);
 }
 
-function buildModelOptionsFromRegistry() {
-  return MODEL_REGISTRY
-    .filter((entry) => entry.enabled !== false)
+function buildModelOptionsFromCatalog() {
+  return modelConfigurationService
+    .getRuntimeModels({ activeOnly: true })
     .map((entry) => ({
       value: entry.canonicalKey,
-      label: entry.label || entry.canonicalKey,
+      label: entry.displayName || entry.label || entry.canonicalKey,
       type: entry.type,
-      aliases: allKeysFor(entry),
+      aliases: modelConfigurationService.getRuntimeKeys(entry),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -111,13 +160,13 @@ function buildModelOptionsFromRegistry() {
 function modelValuesForFilter(model) {
   const selected = String(model || "").trim();
   if (!selected) return [];
-  const entry = MODEL_REGISTRY.find(
+  const entry = modelConfigurationService.getRuntimeModels().find(
     (candidate) =>
       candidate.canonicalKey === selected ||
-      normalizeOptionKey(candidate.label) === normalizeOptionKey(selected) ||
-      allKeysFor(candidate).some((key) => normalizeOptionKey(key) === normalizeOptionKey(selected)),
+      normalizeOptionKey(candidate.displayName || candidate.label) === normalizeOptionKey(selected) ||
+      modelConfigurationService.getRuntimeKeys(candidate).some((key) => normalizeOptionKey(key) === normalizeOptionKey(selected)),
   );
-  return entry ? allKeysFor(entry) : [selected];
+  return entry ? modelConfigurationService.getRuntimeKeys(entry) : [selected];
 }
 
 function normalizeAmemberProducts(data) {
@@ -338,7 +387,7 @@ exports.usersFilterOptions = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        models: buildModelOptionsFromRegistry(),
+        models: buildModelOptionsFromCatalog(),
         plans: Array.from(planMap.values()).sort((a, b) => a.label.localeCompare(b.label)),
       },
     });
@@ -574,6 +623,7 @@ exports.userDetail = async (req, res) => {
       ]),
     ]);
 
+    const mediaWithEffectiveCredits = await addEffectiveGenerationCredits(media);
     const summary = totals[0] || { generations: 0, cost: 0, credits: 0, images: 0, videos: 0 };
 
     return res.json({
@@ -604,8 +654,8 @@ exports.userDetail = async (req, res) => {
         page: pageNumber,
         limit: limitNumber,
         total,
-        hasMore: skip + media.length < total,
-        data: media,
+        hasMore: skip + mediaWithEffectiveCredits.length < total,
+        data: mediaWithEffectiveCredits,
       },
     });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Calculator, KeyRound, LayoutDashboard, Layers, LogOut, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Calculator, Cpu, KeyRound, LayoutDashboard, Layers, LogOut, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { clearAdminToken } from "@/lib/auth";
 import { resetStoredDateRange } from "@/lib/dateRangeStore";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ const NAV = [
   { to: "/calculator", label: "Calculator", icon: Calculator },
   { to: "/partner-api-keys", label: "Partner API Keys", icon: KeyRound },
   { to: "/plans", label: "Plans & Limits", icon: Layers },
+  { to: "/models", label: "AI Models", icon: Cpu },
 ];
 
 export default function AdminLayout() {

@@ -34,8 +34,8 @@ const SHOW_POST_AD_NAV = true;
 // change. Keyed by both the stored label and the raw model id, so old and new
 // records both resolve.
 const MODEL_LABEL_OVERRIDES = {
-  'gemini-3.1-flash-image-preview': 'Nano Banana 2',
-  'gemini-3-pro-image-preview': 'Nano Banana Pro',
+  'gemini-3.1-flash-image': 'Nano Banana 2',
+  'gemini-3-pro-image': 'Nano Banana Pro',
   'gpt-image-1.5': 'OpenAI 1.5',
   'gpt-image-2': 'OpenAI 2.0',
   // 'Seedream 5.0 lite': 'Imagen',

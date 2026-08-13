@@ -13,10 +13,7 @@ const {
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
-const {
-  getExtraDeduction,
-  getExtraCostPerSecond,
-} = require("../config/modelRegistry");
+const modelConfigurationService = require("../services/modelConfigurationService");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { s3Client } = require("../storage/s3");
 const axios = require("axios");
@@ -30,8 +27,17 @@ const GeneratedMediaController = require("./generatedMedia.controller");
 
 const getFileName = (extension) => `${Date.now()}${extension}`;
 
-const AI_ADS_REGEN_IMAGE_CREDIT =
-  parseFloat(process.env.AI_ADS_REGEN_IMAGE_CREDIT_DEDUCTION) || 2;
+const AI_ADS_REGEN_IMAGE_CHARGE_TYPE = "ai_ads_scene_regen_image";
+
+async function getAiAdsRegenImageCredits(modelValue) {
+  const model = await modelConfigurationService.resolveModelByAlias(modelValue);
+  const charge = modelConfigurationService.getRuntimeExtra(
+    model,
+    AI_ADS_REGEN_IMAGE_CHARGE_TYPE,
+  );
+  const credits = Number(charge?.credits);
+  return Number.isFinite(credits) && credits >= 0 ? credits : null;
+}
 
 const normalizeAiAdsCleanVideoUrl = (value) => {
   if (typeof value !== "string") return null;
@@ -582,10 +588,12 @@ exports.updateVideoResult = async (req, res) => {
       // so this settlement stays correct if other types get a surcharge
       // registered in modelRegistry.js later — no hardcoded type check to
       // maintain here.
-      const detectionCredit = getExtraDeduction(
-        resultData?.model,
-        priorDoc.inputs?.type,
-      );
+      const detectionCredit = Number(
+        modelConfigurationService.getRuntimeExtra(
+          modelConfigurationService.getRuntimeModel(resultData?.model),
+          priorDoc.inputs?.type,
+        )?.credits,
+      ) || 0;
 
       const totalCreditsToDeduct = durationInSeconds * (creditPerSecond + detectionCredit);
 
@@ -621,7 +629,10 @@ exports.updateVideoResult = async (req, res) => {
       );
       const extraCostPerSec =
         priorDoc.inputs?.type === "clone"
-          ? getExtraCostPerSecond(resultData?.model, "clone")
+          ? modelConfigurationService.getRuntimeExtraUsdPerUnit(
+              modelConfigurationService.getRuntimeModel(resultData?.model),
+              "clone",
+            )
           : 0;
       const actualVideoCost = baseVideoCost + extraCostPerSec * durationInSeconds;
 
@@ -1890,7 +1901,14 @@ exports.regenerateScene = async (req, res) => {
         (seg.regenerate === "image" || seg.regenerate === "both") &&
         seg.deduct === true
     );
-    const creditsNeeded = billableSegments.length * AI_ADS_REGEN_IMAGE_CREDIT;
+    const regenImageCredits = await getAiAdsRegenImageCredits(inputs.model);
+    if (billableSegments.length > 0 && regenImageCredits == null) {
+      return res.status(409).json({
+        success: false,
+        error: "AI Ads image regeneration is not configured for this model.",
+      });
+    }
+    const creditsNeeded = billableSegments.length * (regenImageCredits || 0);
 
     // Atomic freeze for this regen request. updateSceneResult finds the
     // receipt via meta.regenSessionId and settles with the actual successful
@@ -1908,7 +1926,7 @@ exports.regenerateScene = async (req, res) => {
         meta: {
           service_type: "ai_ads_scene_regen",
           regenSessionId: sessionId,
-          perScene: AI_ADS_REGEN_IMAGE_CREDIT,
+          perScene: regenImageCredits,
           expectedBillable: billableSegments.length,
         },
       });
@@ -2318,11 +2336,14 @@ exports.updateSceneResult = async (req, res) => {
       );
 
       // Settle the regen freeze: the oldest reservation for this session
-      // gets `billableCount × AI_ADS_REGEN_IMAGE_CREDIT` debited; the rest of
+      // gets `billableCount × configured regeneration charge` debited; the rest of
       // its hold is refunded (covers partial-failure refunds for free).
       // If no receipt exists (legacy in-flight regen), fall back to deduct.
       try {
-        const actualCharge = billableCount * AI_ADS_REGEN_IMAGE_CREDIT;
+        const regenImageCredits = await getAiAdsRegenImageCredits(
+          record.inputs?.model,
+        );
+        const actualCharge = billableCount * (regenImageCredits || 0);
         const settleResult = await UnifiedCreditController.settleByMeta(
           { "meta.regenSessionId": sessionId },
           actualCharge,
@@ -3671,7 +3692,12 @@ exports.generateImageAndScriptClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    const detectionCredit = getExtraDeduction(selectedModel, "clone");
+    const detectionCredit = Number(
+      modelConfigurationService.getRuntimeExtra(
+        modelConfigurationService.getRuntimeModel(selectedModel),
+        "clone",
+      )?.credits,
+    ) || 0;
 
     // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =
@@ -4015,7 +4041,12 @@ exports.generateCloneVideo = async (req, res) => {
     const selectedModel = inputs.model;
     const durationNum = Number(inputs.duration.replace("s", "")) || 0;
     
-    const detectionCredit = getExtraDeduction(selectedModel, "clone");
+    const detectionCredit = Number(
+      modelConfigurationService.getRuntimeExtra(
+        modelConfigurationService.getRuntimeModel(selectedModel),
+        "clone",
+      )?.credits,
+    ) || 0;
     
     const videoMinCount = durationNum * (UnifiedCreditController.getModelDeduction(selectedModel) + detectionCredit);
     const numberOfVideos = inputs.numberOfVideos;
@@ -4180,7 +4211,12 @@ exports.regenerateFrameClone = async (req, res) => {
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
-    const detectionCredit = getExtraDeduction(selectedModel, "clone");
+    const detectionCredit = Number(
+      modelConfigurationService.getRuntimeExtra(
+        modelConfigurationService.getRuntimeModel(selectedModel),
+        "clone",
+      )?.credits,
+    ) || 0;
 
     // Calculate how many credits 1 video takes: duration * (model_multiplier + detection_credit)
     const videoMinCount =

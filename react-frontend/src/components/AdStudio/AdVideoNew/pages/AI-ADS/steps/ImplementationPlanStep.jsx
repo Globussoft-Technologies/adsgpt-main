@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { regenerateAiAdsSceneAction, generateAiAdsVideoAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneError } from '@/store/reducers/adStudio/adVideoNewSlice';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
+import { fetchAiAdsVideoModels } from '@/utils/fetchModelCredits';
 
 const CustomLoader = ({ label }) => (
   <div className="flex h-full w-full flex-col items-center justify-center gap-4">
@@ -65,6 +66,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
   const sceneData = useSelector((state) => state.adVideoNew.aiAdsSceneData);
   const isLoading = useSelector((state) => state.adVideoNew.aiAdsSceneLoading);
   const sceneError = useSelector((state) => state.adVideoNew.aiAdsSceneError);
+  const [regenImageCredits, setRegenImageCredits] = useState(null);
 
   const sessionId =
     sceneData?._id ||
@@ -73,6 +75,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
     null;
 
   const scenes = sceneData?.data?.scenes || sceneData?.scenes || [];
+  const selectedModel = sceneData?.data?.inputs?.model || sceneData?.inputs?.model;
   const sessionStatus = sceneData?.data?.status || sceneData?.status;
   const isPending = sessionStatus === 'pending';
   const isEffectivelyLoading = isLoading || (isPending && scenes.length === 0);
@@ -114,6 +117,23 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
   // image prompt overlay — which scene's overlay is open + the typed prompt
   const [imagePromptIdx, setImagePromptIdx] = useState(null);
   const [imagePromptText, setImagePromptText] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedModel) return undefined;
+    fetchAiAdsVideoModels()
+      .then((models) => {
+        if (cancelled) return;
+        const selected = models.find(
+          (model) => model.canonical === selectedModel || model.label === selectedModel,
+        );
+        setRegenImageCredits(selected?.regenerationImageCredits ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setRegenImageCredits(null);
+      });
+    return () => { cancelled = true; };
+  }, [selectedModel]);
   const openLightbox = (images, index) => setLightbox({ open: true, images, index });
   const closeLightbox = () => setLightbox((prev) => ({ ...prev, open: false }));
 
@@ -130,7 +150,8 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
     if (!sessionId) return;
     const scene = scenes[globalIdx];
     // `deduct` tells the backend whether this scene already had a working
-    // image. true → user is replacing a working image (paid 2 credits on
+    // image. true → user is replacing a working image (the configured
+    // regeneration charge applies on
     // success). false → user is recovering from a failure that never produced
     // an image (free retry until first success). Backend validates this flag
     // against DB to prevent the frontend from underpaying.
@@ -438,7 +459,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
                           const promptToSend = imagePromptText;
                           askConfirm({
                             title: 'Regenerate Image',
-                            message: <>We will use the AdsGPT Video Model to Re-generate this image, and <strong className="text-gray-900 dark:text-white">2 credits</strong> will be deducted for the process do you want to continue?</>,
+                            message: <>We will use the AdsGPT Video Model to re-generate this image, and <strong className="text-gray-900 dark:text-white">{regenImageCredits == null ? 'the configured credits' : `${regenImageCredits} credits`}</strong> will be deducted for the process. Do you want to continue?</>,
                             confirmLabel: 'Regenerate',
                             onConfirm: () => {
                               closeConfirm();

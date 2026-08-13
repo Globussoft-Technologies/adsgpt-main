@@ -1,7 +1,7 @@
 const creditConfig = require("../config/creditConfig");
 const UserProfile = require("../Module/user/userProfileModel");
 const CreditReservation = require("../Module/credit/creditReservationModel");
-const { getCreditDeduction, getCreditDeductionByQuality } = require("../config/modelRegistry");
+const modelConfigurationService = require("../services/modelConfigurationService");
 
 const TOPUP_PLAN_ID = "18";
 
@@ -33,7 +33,7 @@ class UnifiedCreditController {
 
   /**
    * Get the credit deduction amount for a specific model.
-   * Resolves canonical keys AND aliases via the model registry; unknown
+   * Resolves canonical keys AND aliases via the DB-backed model catalog; unknown
    * models return 0 (matches previous default).
    */
   static getModelDeduction(model) {
@@ -42,13 +42,15 @@ class UnifiedCreditController {
       const v = parseFloat(process.env[envVar]);
       return Number.isFinite(v) ? v : fallback;
     }
-    return getCreditDeduction(model);
+    return modelConfigurationService.getRuntimeCredit(
+      modelConfigurationService.getRuntimeModel(model),
+    );
   }
 
   /**
    * Quality-aware variant of getModelDeduction. NEW + additive — the original
    * above is left untouched. Image models resolve their (model, quality) tier
-   * credits via the registry; SPECIAL_CASES and tier-less models behave exactly
+   * credits via the DB-backed catalog; SPECIAL_CASES and tier-less models behave exactly
    * as getModelDeduction (quality ignored). Unknown/missing quality → "high".
    */
   static getModelDeductionByQuality(model, quality) {
@@ -57,7 +59,10 @@ class UnifiedCreditController {
       const v = parseFloat(process.env[envVar]);
       return Number.isFinite(v) ? v : fallback;
     }
-    return getCreditDeductionByQuality(model, quality);
+    return modelConfigurationService.getRuntimeCredit(
+      modelConfigurationService.getRuntimeModel(model),
+      quality,
+    );
   }
 
   /**

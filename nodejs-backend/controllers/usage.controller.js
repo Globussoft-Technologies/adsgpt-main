@@ -2,8 +2,8 @@ const Usage = require("../Module/usage/usage.model");
 const GeneratedMedia = require("../Module/generatedMedia/generated.media");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
-const { imageEntries, videoEntries, findModel, getExtraDeduction, getCreditDeductionByQuality } = require("../config/modelRegistry");
-const { SURFACE_CATALOG, SURFACE_SLUGS } = require("../config/surfaceCatalog");
+const { SURFACE_SLUGS } = require("../config/surfaceCatalog");
+const modelConfigurationService = require("../services/modelConfigurationService");
 
 const createUsage = async (req, res) => {
   try {
@@ -215,8 +215,13 @@ const getUserGenerationStats = async (req, res) => {
 // entries fall back to whatever the registry says (matches the old
 // `parseFloat(... || N)` defaults that were already aligned with the registry).
 function creditsFor(entry) {
-  const raw = parseFloat(process.env[entry.creditEnvVar]);
-  return Number.isFinite(raw) ? raw : entry.creditDefault;
+  if (entry.type === "image" && entry.credits != null) {
+    return Number(entry.credits) || 0;
+  }
+  if (entry.type === "image" && Array.isArray(entry.qualityTiers) && entry.qualityTiers.length) {
+    return Math.max(...entry.qualityTiers.map((tier) => Number(tier.credits) || 0));
+  }
+  return Number(entry.credits) || 0;
 }
 
 function unitLabelFor(type) {
@@ -227,25 +232,32 @@ function unitLabelFor(type) {
 // historical { label, value } shape — `credits` is internal, used only to sort.
 function rowFor(entry) {
   const credits = creditsFor(entry);
-  return { label: entry.label, credits, value: `${credits} ${unitLabelFor(entry.type)}` };
+  return {
+    label: entry.displayName || entry.label,
+    credits,
+    value: `${credits} ${unitLabelFor(entry.type)}`,
+  };
 }
 
 // Surface-aware row — adds canonical, numeric credits/sec and the surface's
 // allowed durations + aspect ratios so the frontend can build its pickers.
 function surfaceRowFor(entry, caps, media) {
   const isVideo = entry.type === "video";
-  // Video: per-second registry value. Image: default (high) quality tier via
-  // the registry's quality-aware helper, which falls back to the flat top-level
-  // value for tier-less models.
-  let credits = isVideo ? creditsFor(entry) : getCreditDeductionByQuality(entry.canonicalKey);
-  if (media && Array.isArray(entry.extraDeduction)) {
-    credits += getExtraDeduction(entry.canonicalKey, media);
+  // Video: per-second registry value. Image: highest configured quality-tier
+  // credit, so the catalog ordering reflects the maximum charge for the model.
+  const imageTierCredits = (entry.qualityTiers || [])
+    .map((tier) => Number(tier.credits) || 0);
+  let credits = creditsFor(entry);
+  const extraCharge = (entry.extraCharges || []).find((charge) => charge.type === media);
+  if (extraCharge) {
+    credits += Number(extraCharge.credits) || 0;
   }
 
   const creditField = isVideo ? "creditsPerSecond" : "creditsPerImage";
   const row = {
     canonical: entry.canonicalKey,
-    label: entry.label,
+    aliases: entry.aliases || [],
+    label: entry.displayName || entry.label,
     type: entry.type,
     value: `${credits} ${unitLabelFor(entry.type)}`,
     [creditField]: credits,
@@ -256,6 +268,15 @@ function surfaceRowFor(entry, caps, media) {
 
   if (entry.icon) row.icon = entry.icon;
 
+  if (media === "ai_ads" && isVideo) {
+    const regenCharge = (entry.extraCharges || []).find(
+      (charge) => charge.type === "ai_ads_scene_regen_image",
+    );
+    row.regenerationImageCredits = regenCharge
+      ? Number(regenCharge.credits) || 0
+      : null;
+  }
+
   // Image models expose their supported qualities (names) plus the per-quality
   // credit tiers (credits only — USD pricing stays server-side) so the frontend
   // can build the quality picker.
@@ -263,7 +284,7 @@ function surfaceRowFor(entry, caps, media) {
     row.qualities = entry.qualityTiers.map((t) => t.quality);
     row.qualityTiers = entry.qualityTiers.map((t) => ({
       quality: t.quality,
-      creditsPerImage: getCreditDeductionByQuality(entry.canonicalKey, t.quality),
+      creditsPerImage: Number(t.credits) || 0,
     }));
   }
 
@@ -339,8 +360,7 @@ const getModelCreditDeduction = async (req, res) => {
 
     // ─── Surface-filtered catalog ──────────────────────────────────────────
     if (media) {
-      const surface = SURFACE_CATALOG[media];
-      if (!surface) {
+      if (!SURFACE_SLUGS.includes(media)) {
         return res.status(400).json({
           success: false,
           message: `Unknown media surface "${media}". Valid surfaces: ${SURFACE_SLUGS.join(", ")}`,
@@ -350,13 +370,12 @@ const getModelCreditDeduction = async (req, res) => {
       const imageModels = [];
       const videoModels = [];
 
-      for (const [canonical, caps] of Object.entries(surface)) {
-        const entry = findModel(canonical);
-        // Skip unknown or disabled models — keeps the surface in lockstep with
-        // the registry's enabled flag (no dead pickers).
-        if (!entry || entry.enabled === false) continue;
+      const entries = await modelConfigurationService.getModelsForSurface(media);
+      for (const entry of entries) {
         const isVideo = entry.type === "video";
         if (isVideo ? !wantVideo : !wantImage) continue;
+        const surfaces = modelConfigurationService._surfacesObject(entry);
+        const caps = surfaces[media] || {};
         (isVideo ? videoModels : imageModels).push(surfaceRowFor(entry, caps, media));
       }
 
@@ -375,15 +394,18 @@ const getModelCreditDeduction = async (req, res) => {
     }
 
     // ─── Full catalog (no media) — back-compatible { label, value } shape ──
+    const enabledModels = await modelConfigurationService.getEnabledModels();
     const imageModels = wantImage
-      ? imageEntries({ activeOnly: true })
+      ? enabledModels
+          .filter((entry) => entry.type === "image")
           .map(rowFor)
           .sort(sortByCredits)
           .map(({ label, value }) => ({ label, value }))
       : [];
 
     const videoModels = wantVideo
-      ? videoEntries({ activeOnly: true })
+      ? enabledModels
+          .filter((entry) => entry.type === "video")
           .map(rowFor)
           .sort(sortByCredits)
           .map(({ label, value }) => ({ label, value }))

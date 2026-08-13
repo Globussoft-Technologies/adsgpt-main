@@ -215,6 +215,7 @@ const handleAdCreativeResponse = async (data, socket) => {
           video: "",
           credit_deduction: creditPerImage,
           cost: actualImageCost, // 0 now; auto-corrects once Python sends tokens via socket
+          quality: data?.inputs?.quality || "high",
         });
       }
 

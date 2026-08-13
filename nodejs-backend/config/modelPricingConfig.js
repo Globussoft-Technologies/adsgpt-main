@@ -1,84 +1,38 @@
 /**
- * IMAGE: cost per image (USD) — flat per_image rate or token-based.
- * VIDEO: cost per second of video (USD/sec).
+ * Runtime model pricing facade.
  *
- * The actual price tables and aliases live in ./modelRegistry.js — this file
- * is just the public read API. Adding a model = ONE entry there.
- *
- * `imagePricing` and `videoPricing` are exposed as derived maps for callers
- * that look up by string key (e.g. existing aggregation code).
+ * MongoDB-backed AI model configuration is the only runtime source of model
+ * pricing. The seed registry is intentionally not imported here.
  */
 
-const { MODEL_REGISTRY, findModel, findQualityTier, imageEntries, videoEntries } = require("./modelRegistry");
+const modelConfigurationService = require("../services/modelConfigurationService");
 
-function buildImagePricingMap() {
-  const map = {};
-  for (const entry of imageEntries()) {
-    for (const key of [entry.canonicalKey, ...(entry.aliases || [])]) {
-      map[key] = entry.pricing;
-    }
-  }
-  return map;
-}
-
-function buildVideoPricingMap() {
-  const map = {};
-  for (const entry of videoEntries()) {
-    const perSec = entry.pricing?.per_second ?? 0;
-    for (const key of [entry.canonicalKey, ...(entry.aliases || [])]) {
-      map[key] = perSec;
-    }
-  }
-  return map;
+function resolve(model) {
+  return modelConfigurationService.getRuntimeModel(model);
 }
 
 const modelPricingConfig = {
-  // Derived once at module-load. Registry is module-scope constant data, so
-  // these maps are safe to cache.
-  imagePricing: buildImagePricingMap(),
-  videoPricing: buildVideoPricingMap(),
-
-  /**
-   * Get actual cost (USD) for an image generation.
-   * Flat per_image rate short-circuits the token math.
-   */
   getImageCost(model, inputTokens = 0, outputTokens = 0) {
-    const entry = findModel(model);
-    const pricing = entry?.pricing;
-    if (!pricing) return 0;
-
-    if (pricing.per_image != null) return pricing.per_image;
-
-    const inputCost = (inputTokens / 1_000_000) * (pricing.input_per_million || 0);
-    const outputCost = (outputTokens / 1_000_000) * (pricing.output_per_million || 0);
-    return parseFloat((inputCost + outputCost).toFixed(6));
+    return modelConfigurationService.getRuntimeImagePrice(
+      resolve(model),
+      undefined,
+      inputTokens,
+      outputTokens,
+    );
   },
 
-  /**
-   * Get actual cost (USD) for an image generation at a specific quality.
-   * NEW + additive — getImageCost above is left untouched. When the
-   * (model, quality) combo resolves to a qualityTier, that tier's flat
-   * pricing.per_image wins. Models without qualityTiers fall back to the
-   * original getImageCost (token-based / top-level flat rate).
-   */
   getImageCostByQuality(model, quality, inputTokens = 0, outputTokens = 0) {
-    const tier = findQualityTier(model, quality);
-    if (tier?.pricing?.per_image != null) return tier.pricing.per_image;
-    return this.getImageCost(model, inputTokens, outputTokens);
+    return modelConfigurationService.getRuntimeImagePrice(
+      resolve(model),
+      quality,
+      inputTokens,
+      outputTokens,
+    );
   },
 
-  /**
-   * Get actual cost (USD) for a video generation.
-   */
   getVideoCost(model, durationSeconds = 0) {
-    const entry = findModel(model);
-    const pricePerSec = entry?.pricing?.per_second ?? 0;
-    return parseFloat((pricePerSec * durationSeconds).toFixed(4));
+    return modelConfigurationService.getRuntimeVideoPrice(resolve(model), durationSeconds);
   },
 };
 
 module.exports = modelPricingConfig;
-
-// Re-export the registry from a stable path so callers can `require("../config/modelPricingConfig").registry`
-// if they need to introspect the full table without a second require.
-modelPricingConfig.registry = MODEL_REGISTRY;

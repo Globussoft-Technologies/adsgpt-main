@@ -21,6 +21,46 @@ const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
  const AdCreativeImages = require("../Module/adCreative/adCreativeImages");
 const { assembleAdFactoryImages } = require("../services/adFactory/adFactoryImagesService");
+const modelConfigurationService = require("../services/modelConfigurationService");
+
+// The DB/React flow uses canonical model keys. The existing Python Ad Factory
+// contract still accepts its legacy image selectors, so translate only in the
+// outbound Node -> Python payload. Canonical keys remain stored in MongoDB and
+// are used for credit calculation and history.
+function toPythonAdFactoryModel(modelValue) {
+  if (!modelValue || ["auto", "google", "openai"].includes(modelValue)) return modelValue;
+
+  const entry = modelConfigurationService.getRuntimeModel(modelValue);
+  const canonical = String(entry?.canonicalKey || modelValue).toLowerCase();
+  const aliases = (entry?.aliases || []).map((alias) => String(alias).toLowerCase());
+
+  if (canonical.startsWith("gemini-") || aliases.includes("google")) return "google";
+  if (canonical.startsWith("gpt-image-") || aliases.includes("openai")) return "openai";
+
+  return modelValue;
+}
+
+function buildPythonAdFactoryPayload(payload) {
+  const services = payload?.services;
+  const selected = services?.servicesSelected;
+  if (!Array.isArray(selected)) return payload;
+
+  return {
+    ...payload,
+    services: {
+      ...services,
+      servicesSelected: selected.map((service) => ({
+        ...service,
+        serviceParams: {
+          ...service.serviceParams,
+          ...(service.serviceName === "image"
+            ? { model: toPythonAdFactoryModel(service.serviceParams?.model) }
+            : {}),
+        },
+      })),
+    },
+  };
+}
 
 // const getFileName = (extension) => `${Date.now()}${extension}`;
 
@@ -760,8 +800,9 @@ exports.sendAdFactoryRequest = async (
       },
     };
     try {
-      logger.info(`Sending payload to python ${JSON.stringify(payload)}`);
-      const pythonResponse = await axios.post(AD_FACTORY_API, payload);
+      const pythonPayload = buildPythonAdFactoryPayload(payload);
+      logger.info(`Sending payload to python ${JSON.stringify(pythonPayload)}`);
+      const pythonResponse = await axios.post(AD_FACTORY_API, pythonPayload);
       return {
         message: "All nodes completed, sent to Python team",
         allNodesSuccess: true,

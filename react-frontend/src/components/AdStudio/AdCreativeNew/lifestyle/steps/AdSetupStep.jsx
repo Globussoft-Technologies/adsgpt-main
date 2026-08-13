@@ -606,7 +606,7 @@ export function AdSetupStep({
   const [logoUrl, setLogoUrl] = useState(brandInfo.brandLogoUrl ?? '');
   const [logoFiles, setLogoFiles] = useState([]);
 
-  const [model, setModel] = useState('gemini-3.1-flash-image-preview'); // Nano Banana 2 (canonical apiId)
+  const [model, setModel] = useState('');
   const [quality, setQuality] = useState('high');
   const [ratioCounts, setRatioCounts] = useState({});
 
@@ -614,6 +614,11 @@ export function AdSetupStep({
   // `ad_creative` surface (shared cache, fallback baked in).
   const { models: configModels } = useAdCreativeConfig();
   const selectedModel = configModels.find((m) => m.apiId === model);
+  // The database catalog owns the initial model. State keeps the canonical
+  // ID for the request while the picker displays the configured label.
+  useEffect(() => {
+    if (!model && configModels.length > 0) setModel(configModels[0].apiId);
+  }, [configModels, model]);
   // Per-image credits for the selected model + quality (falls back to the
   // model's default/high tier, then 7).
   const creditsPerImage =

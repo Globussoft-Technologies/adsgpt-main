@@ -9,7 +9,7 @@ const mongoose = require("mongoose");
 const axios = require("axios");
 const logger = require("../utils/logger");
 const modelPricingConfig = require("../config/modelPricingConfig");
-const { findModel } = require("../config/modelRegistry");
+const modelConfigurationService = require("../services/modelConfigurationService");
 const GeneratedMediaController = require("./generatedMedia.controller");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
 const { notifyUser } = require("../services/push/notifyUser");
@@ -36,8 +36,8 @@ const buildDbInputs = (value) => {
     const totalImages = userInputs.aspectRatioPerImage.reduce((sum, r) => sum + r.numberOfImages, 0);
 
     // Resolve model to get its label
-    const modelEntry = findModel(userInputs.Model);
-    const modelLabel = modelEntry ? modelEntry.label : null;
+    const modelEntry = modelConfigurationService.getRuntimeModel(userInputs.Model);
+    const modelLabel = modelEntry ? (modelEntry.displayName || modelEntry.label) : null;
 
     const dbInputs = {
         type,
@@ -796,6 +796,7 @@ exports.updateImageResult = async (req, res) => {
                     video: "",
                     credit_deduction: perImage,
                     cost: actualImageCost,
+                    quality: priorDoc?.inputs?.quality || "high",
                     duration: timing?.totalMs || 0,
                 });
                 const newCount = new GeneratedCount({

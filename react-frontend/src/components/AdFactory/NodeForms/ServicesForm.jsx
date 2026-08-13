@@ -39,12 +39,20 @@ import {
 } from '@/store/reducers/AdFactory/AdFactorySlice';
 import { setActiveForm } from '@/store/reducers/AdFactory/AdFactorySlice';
 import { useSearchParams } from 'react-router-dom';
+import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
 // Intentionally-hidden Video Ads section, kept for quick re-enable. Named flag
 // avoids a literal `false &&` (no-constant-binary-expression).
 const SHOW_VIDEO_ADS_SECTION = false;
+
+// Ad Factory-only picker guidance. Model availability and pricing remain
+// DB-backed; these are presentation hints for this specific workflow.
+const AD_FACTORY_MODEL_DESCRIPTIONS = {
+  'gemini-3-pro-image-preview': 'Best for Lifestyle & People',
+  'gpt-image-1.5': 'Balanced, Fast',
+};
 
 const schema = Yup.object({
   servicesSelected: Yup.object({
@@ -69,10 +77,7 @@ const schema = Yup.object({
     }
   ),
 
-  imageModelProvider: Yup.string().oneOf(
-    ['auto', 'openai','openai2', 'google'],
-    'Invalid image model provider'
-  ),
+  imageModelProvider: Yup.string().required('Select an image model'),
   // videoModelProvider: Yup.string().oneOf(
   //   ['auto', 'openai', 'google'],
   //   'Invalid video model provider'
@@ -87,7 +92,28 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
     (state) => state.adFactoryNew
   );
   const { credits, userData } = useSelector((state) => state.socket);
+  const [adFactoryModels, setAdFactoryModels] = useState([]);
+  const [adFactoryConfigStatus, setAdFactoryConfigStatus] = useState('loading');
   const isSubmitting = loading;
+
+  useEffect(() => {
+    let cancelled = false;
+    setAdFactoryConfigStatus('loading');
+    fetchAdFactoryConfig()
+      .then((models) => {
+        if (!cancelled) {
+          setAdFactoryModels(models);
+          setAdFactoryConfigStatus('ok');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAdFactoryModels([]);
+          setAdFactoryConfigStatus('error');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [dispatch]);
 
   // --- Automation mode gating ----------------------------------------------
   // Show the "Run on Schedule" option when Meta OR Google is selected. The
@@ -168,7 +194,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
       image: 0,
       video: 0,
     },
-    imageModelProvider: 'google',
+    imageModelProvider: adFactoryModels[0]?.apiId || '',
     videoModelProvider: 'auto',
   };
   productionAndServices?.servicesSelected?.forEach((item) => {
@@ -176,10 +202,10 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
     initialValues.servicesSelected[serviceName] = serviceParams?.quantity;
 
     if (serviceName === 'image' && serviceParams?.model) {
-      const validModels = ['google', 'openai'];
-      initialValues.imageModelProvider = validModels.includes(serviceParams.model)
-        ? serviceParams.model
-        : 'google';
+      const matchingModel = adFactoryModels.find(
+        (model) => model.apiId === serviceParams.model || model.aliases.includes(serviceParams.model),
+      );
+      initialValues.imageModelProvider = matchingModel?.apiId || adFactoryModels[0]?.apiId || '';
     }
     // if (serviceName === 'video') {
     //   initialValues.videoModelProvider = serviceParams?.model;
@@ -235,7 +261,10 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
   //   };
   const calculateCreditCost = (values) => {
     const imageQty = values.servicesSelected.image || 0;
-    const imageCostPerUnit = 7;
+    const selectedModel = adFactoryModels.find(
+      (model) => model.apiId === values.imageModelProvider,
+    );
+    const imageCostPerUnit = Number(selectedModel?.creditsPerImage) || 0;
 
     const imageCost = imageQty * imageCostPerUnit;
 
@@ -252,8 +281,18 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
     const errors = {};
 
     const imageQty = values.servicesSelected.image || 0;
-    const imageCostPerUnit = 7;
+    const selectedModel = adFactoryModels.find(
+      (model) => model.apiId === values.imageModelProvider,
+    );
+    const imageCostPerUnit = Number(selectedModel?.creditsPerImage) || 0;
     const totalImageCost = imageQty * imageCostPerUnit;
+
+    if (imageQty > 0 && !selectedModel) {
+      errors.serviceError = adFactoryConfigStatus === 'error'
+        ? 'Unable to load image models. Please retry.'
+        : 'Select an available image model.';
+      return errors;
+    }
 
     // If no credits left at all
     if (availableCredits <= 0 && imageQty > 0) {
@@ -574,15 +613,13 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                                   value={values.imageModelProvider}
                                   onChange={(value) => setFieldValue('imageModelProvider', value)}
                                   placeholder="Select model"
-                                  options={[
-                                    {
-                                      value: 'google',
-                                      label: 'Nano Banana Pro (Best for Lifestyle & People)',
-                                    },
-                                    { value: 'openai', label: 'OpenAI 1.5 (Balanced, Fast)' },
-                                    // { value: 'openai2', label: 'OpenAI 2.0 (Photorealistic, Best Quality)' },
-                                  ]}
-                                  disabled={isSubmitting}
+                                  options={adFactoryModels.map((model) => ({
+                                    value: model.apiId,
+                                    label: AD_FACTORY_MODEL_DESCRIPTIONS[model.apiId]
+                                      ? `${model.label} (${AD_FACTORY_MODEL_DESCRIPTIONS[model.apiId]})`
+                                      : model.label,
+                                  }))}
+                                  disabled={isSubmitting || adFactoryConfigStatus === 'loading'}
                                 />
                               </div>
                               {errors.imageModelProvider && touched.imageModelProvider && (
@@ -604,8 +641,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                             </div>
                           ) : ( */}
                                 <div className="text-right">
-                                  Cost per image: 7 credits
-                                  {/* {values.imageModelProvider === 'google' ? '1 credit' : '7 credits'} */}
+                                  Cost per image: {costs.image ? `${costs.image / (values.servicesSelected.image || 1)} credits` : '—'}
                                 </div>
                                 {/* )} */}
                               </div>
@@ -736,7 +772,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                             {costs.image > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-sm text-emerald-500 dark:text-emerald-300 2xl:text-base">
-                                  Images ({values.imageModelProvider}):
+                                  Images ({adFactoryModels.find((model) => model.apiId === values.imageModelProvider)?.label || 'selected model'}):
                                 </span>
                                 <span className="text-sm text-gray-900 2xl:text-base dark:text-white">
                                   {costs.image} credits

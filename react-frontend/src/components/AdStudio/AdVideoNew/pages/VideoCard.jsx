@@ -207,7 +207,6 @@ export default function VideoCard({
       if (!active) {
         onFullscreenChange?.(null);
         setActiveNavIndex(videoIndex);
-        setActiveVideoUrl(item?.results?.[0]?.url ?? '');
       }
     };
 

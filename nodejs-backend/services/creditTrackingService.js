@@ -2,17 +2,13 @@
 const mongoose = require('mongoose');
 const { createAdsCopyChat } = require('../sockets/setupSockets');
 const { redisGetSet } = require('../controllers/adCopy');
-const { imageEntries, videoEntries } = require('../config/modelRegistry');
+const modelConfigurationService = require('./modelConfigurationService');
 
 // Generation-model canonical keys come from the registry. ADSGPT-TEXT / -CHAT
 // / -VIDEO aren't generation models (they're for ad copy / chat / generic
 // video tracking) — keep them as static additions.
 const NON_GENERATION_MODELS = ["ADSGPT-TEXT", "ADSGPT-CHAT", "ADSGPT-VIDEO"];
-const MODEL_ENUM = [
-  ...imageEntries().map((e) => e.canonicalKey),
-  ...videoEntries().map((e) => e.canonicalKey),
-  ...NON_GENERATION_MODELS,
-];
+const MODEL_ENUM = undefined;
 
 const creditDeductionSchema = new mongoose.Schema({
   user_id: {
@@ -23,7 +19,8 @@ const creditDeductionSchema = new mongoose.Schema({
   model: {
     type: String,
     required: true,
-    enum: MODEL_ENUM
+    // Runtime model validation is DB-backed; a schema enum would freeze the
+    // catalog and reject models added from Admin after process startup.
   },
   service_type: {
     type: String,
@@ -57,6 +54,13 @@ class CreditTrackingService {
    */
   static async recordCreditDeduction(deductionData) {
     try {
+      const knownSpecialModel = ["ADSGPT-TEXT", "ADSGPT-CHAT", "ADSGPT-VIDEO"].includes(deductionData.model);
+      const configured = knownSpecialModel
+        ? true
+        : await modelConfigurationService.resolveModelByAlias(deductionData.model);
+      if (!configured) {
+        throw new Error(`Unknown model: ${deductionData.model}`);
+      }
       const deduction = new CreditDeduction(deductionData);
       console.log(deduction,"deductiondeduction");
       await deduction.save();

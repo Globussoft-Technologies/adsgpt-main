@@ -146,7 +146,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // default — user must click one to make it the active logo.
   const [brandLogoOptions, setBrandLogoOptions] = useState([]);
   const [competitorAdRef, setCompetitorAdRef] = useState('');
-  const [model, setModel] = useState('gemini-3.1-flash-image-preview'); // Nano Banana 2 (canonical apiId)
+  const [model, setModel] = useState('');
   const [quality, setQuality] = useState('high');
   const [aspectCounts, setAspectCounts] = useState({});
 
@@ -154,6 +154,12 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   // `ad_creative` surface (shared cache, hardcoded fallback baked in).
   const { models: configModels } = useAdCreativeConfig();
   const selectedModel = configModels.find((m) => m.apiId === model);
+
+  // The database catalog owns the initial model. Keep the canonical ID in
+  // state for the generation payload, but never hardcode a model here.
+  useEffect(() => {
+    if (!model && configModels.length > 0) setModel(configModels[0].apiId);
+  }, [configModels, model]);
   // Per-image credits for the selected model + quality (falls back to the
   // model's default/high tier, then 7).
   const creditsPerImage =
@@ -1161,7 +1167,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
                       icon={<ModelIcon apiId={selectedModel?.apiId} />}
-                      label={selectedModel?.label || model}
+                      label={selectedModel?.label || 'Select model'}
                       onClick={() => {
                         setShowModelPicker((v) => !v);
                         setShowQualityPicker(false);

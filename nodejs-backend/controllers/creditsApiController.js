@@ -2,13 +2,7 @@ const UnifiedCreditController = require("./UnifiedCreditController");
 const GeneratedMediaController = require("./generatedMedia.controller");
 const CreditReservation = require("../Module/credit/creditReservationModel");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
-const {
-  MODEL_REGISTRY,
-  findModel,
-  getCreditDeduction,
-  getCreditDeductionByQuality,
-} = require("../config/modelRegistry");
-const { SURFACE_CATALOG } = require("../config/surfaceCatalog");
+const modelConfigurationService = require("../services/modelConfigurationService");
 const {
   freezeSchema,
   finalizeSchema,
@@ -382,37 +376,28 @@ const _publicModel = (entry) => {
     isImage && Array.isArray(entry.qualityTiers)
       ? entry.qualityTiers.map((tier) => ({
           quality: tier.quality,
-          credit: getCreditDeductionByQuality(
-            entry.canonicalKey,
-            tier.quality,
-          ),
+          credit: modelConfigurationService.getRuntimeCredit(entry, tier.quality),
           price: tier.pricing?.per_image ?? entry.pricing?.per_image ?? 0,
         }))
       : [];
   const surfaceCapabilities = Object.fromEntries(
-    Object.entries(SURFACE_CATALOG)
-      .filter(([, catalog]) => catalog[entry.canonicalKey])
-      .map(([surface, catalog]) => {
-        const caps = catalog[entry.canonicalKey];
-        return [
-          surface,
-          {
-            durations: [...(caps.durations || [])],
-            aspect_ratios: [...(caps.aspectRatios || [])],
-          },
-        ];
-      }),
+    Object.entries(modelConfigurationService._surfacesObject(entry))
+      .filter(([, caps]) => caps?.enabled === true)
+      .map(([surface, caps]) => [surface, {
+        durations: [...(caps.durations || [])],
+        aspect_ratios: [...(caps.aspectRatios || caps.aspect_ratios || [])],
+      }]),
   );
 
   return {
     model: entry.canonicalKey,
-    label: entry.label,
+    label: entry.displayName || entry.label,
     type: entry.type,
     // Profile and Ad Creative both default an omitted quality to "high".
     // Matching that here removes the stale flat image value from Agent billing.
     credit: isImage
-      ? getCreditDeductionByQuality(entry.canonicalKey, "high")
-      : getCreditDeduction(entry.canonicalKey),
+      ? modelConfigurationService.getRuntimeCredit(entry, "high")
+      : modelConfigurationService.getRuntimeCredit(entry),
     quality_tiers: qualityTiers,
     price:
       entry.type === "video"
@@ -498,14 +483,14 @@ exports.getModels = async (req, res) => {
 
   // Single-model lookup short-circuits everything else.
   if (model) {
-    const entry = findModel(String(model));
+    const entry = await modelConfigurationService.resolveModelByAlias(String(model));
     if (!entry) {
       return res.status(404).json({ ok: false, reason: "NOT_FOUND", model });
     }
     return res.status(200).json({ ok: true, model: _publicModel(entry) });
   }
 
-  let entries = MODEL_REGISTRY;
+  let entries = await modelConfigurationService.getAllModels({ includeArchived: false });
   if (type) {
     entries = entries.filter((e) => e.type === String(type));
   }

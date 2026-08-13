@@ -658,12 +658,14 @@ function MediaCard({ item }) {
         </div>
         <div className="flex items-center justify-between text-slate-500">
           <span>{formatDate(item.createdAt)}</span>
-          <span className="font-semibold tabular-nums text-rose-600">{formatUsd(item.cost)}</span>
+          <span className="font-semibold tabular-nums text-rose-600">{formatUsd(item.effective_cost ?? item.cost)}</span>
         </div>
         <div className="flex items-center justify-between text-slate-500">
           <span className="truncate">{item.source || "—"}</span>
           <span className="tabular-nums">
-            {item.credit_deduction ? `${item.credit_deduction} cr` : "—"}
+            {item.effective_credit_deduction || item.credit_deduction
+              ? `${item.effective_credit_deduction || item.credit_deduction} cr`
+              : "—"}
             {item.duration ? ` · ${item.duration}s` : ""}
           </span>
         </div>

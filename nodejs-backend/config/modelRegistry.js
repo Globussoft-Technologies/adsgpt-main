@@ -54,6 +54,8 @@
  *                  user-facing pickers (frontend dropdowns, /usage endpoint).
  */
 
+const modelConfigurationService = require("../services/modelConfigurationService");
+
 const MODEL_REGISTRY = [
   // ───────────────────── IMAGE ─────────────────────
   {
@@ -326,6 +328,8 @@ for (const entry of MODEL_REGISTRY) {
 function findModel(model) {
   if (!model || typeof model !== "string") return undefined;
   const key = model.trim();
+  const cached = modelConfigurationService.getCachedModel(key);
+  if (cached) return cached;
   return _byKey.get(key) || _byAlias.get(key);
 }
 
@@ -338,15 +342,20 @@ function allKeysFor(entry) {
 function getCreditDeduction(model) {
   const entry = findModel(model);
   if (!entry) return 0;
+  if (entry.credits != null) return Number(entry.credits) || 0;
+  if (Array.isArray(entry.qualityTiers) && entry.qualityTiers.length) {
+    return Math.max(...entry.qualityTiers.map((tier) => Number(tier.credits ?? tier.creditDefault) || 0));
+  }
   const raw = parseFloat(process.env[entry.creditEnvVar]);
-  return Number.isFinite(raw) ? raw : entry.creditDefault;
+  return Number.isFinite(raw) ? raw : (entry.creditDefault ?? 0);
 }
 
 /** Read a model's extra per-unit surcharge (e.g. clone detection) from env, fall back to registry default. */
 function getExtraDeduction(model, type) {
   const entry = findModel(model);
-  const extra = entry?.extraDeduction?.find((d) => d.type === type);
+  const extra = (entry?.extraCharges || entry?.extraDeduction)?.find((d) => d.type === type);
   if (!extra) return 0;
+  if (extra.credits != null) return Number(extra.credits) || 0;
   const raw = parseFloat(process.env[extra.envVar]);
   return Number.isFinite(raw) ? raw : extra.deduction;
 }
@@ -359,15 +368,19 @@ function getExtraDeduction(model, type) {
  */
 function getExtraCostPerSecond(model, type) {
   const entry = findModel(model);
-  const extra = entry?.extraDeduction?.find((d) => d.type === type);
+  const extra = (entry?.extraCharges || entry?.extraDeduction)?.find((d) => d.type === type);
   return Number(extra?.costPerSecond) || 0;
 }
 
 function imageEntries({ activeOnly = false } = {}) {
+  const cached = modelConfigurationService.getCachedModels({ type: "image", activeOnly });
+  if (cached.length) return cached;
   return MODEL_REGISTRY.filter((e) => e.type === "image" && (!activeOnly || e.enabled !== false));
 }
 
 function videoEntries({ activeOnly = false } = {}) {
+  const cached = modelConfigurationService.getCachedModels({ type: "video", activeOnly });
+  if (cached.length) return cached;
   return MODEL_REGISTRY.filter((e) => e.type === "video" && (!activeOnly || e.enabled !== false));
 }
 
@@ -388,6 +401,8 @@ const DEFAULT_IMAGE_QUALITY = "high";
  * declare no qualityTiers (video, disabled image models).
  */
 function findQualityTier(model, quality) {
+  const cachedTier = modelConfigurationService.getCachedQualityTier(model, quality);
+  if (cachedTier) return cachedTier;
   const entry = findModel(model);
   const tiers = entry?.qualityTiers;
   if (!Array.isArray(tiers) || tiers.length === 0) return undefined;
@@ -408,6 +423,7 @@ function findQualityTier(model, quality) {
 function getCreditDeductionByQuality(model, quality) {
   const tier = findQualityTier(model, quality);
   if (tier) {
+    if (tier.credits != null) return Number(tier.credits) || 0;
     const raw = parseFloat(process.env[tier.creditEnvVar]);
     return Number.isFinite(raw) ? raw : tier.creditDefault;
   }

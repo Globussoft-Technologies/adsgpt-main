@@ -25,6 +25,27 @@ body {
     #f8fafc;
 }
 
+@keyframes model-editor-enter {
+  from {
+    opacity: 0.35;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.model-editor-enter {
+  animation: model-editor-enter 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-editor-enter {
+    animation: none;
+  }
+}
+
 @layer base {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),

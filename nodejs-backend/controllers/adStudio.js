@@ -144,6 +144,7 @@ const handleAdCreativeResponse = async (data) => {
           video: "",
           credit_deduction: creditPerImage,
           cost: actualImageCost, // 0 now; auto-corrects once Python sends tokens via socket
+          quality: data?.inputs?.quality || "high",
         });
 
         // NEW: Save to refined Count module for cleanStats API

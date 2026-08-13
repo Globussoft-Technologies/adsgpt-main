@@ -18,6 +18,7 @@ const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const normalizeModels = (rows) =>
   (Array.isArray(rows) ? rows : []).map((r) => ({
     apiId: r.canonical,
+    aliases: Array.isArray(r.aliases) ? r.aliases : [],
     label: r.label,
     icon: r.icon || null,
     aspectRatios: Array.isArray(r.aspectRatios) ? r.aspectRatios : [],
@@ -30,12 +31,16 @@ const normalizeModels = (rows) =>
     creditsPerImage: r.creditsPerImage,
   }));
 
-export const fetchAdCreativeConfig = async () => {
+const fetchSurfaceImageConfig = async (media) => {
   const token = getCookies();
   const res = await axios.get(`${BACKEND_HOST}/adsgpt/usage/model-credit-value`, {
-    params: { media: 'ad_creative', type: 'image' },
+    params: { media, type: 'image' },
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.data?.success) throw new Error('Ad creative config request failed');
   return normalizeModels(res.data.data?.imageModels || []);
 };
+
+export const fetchAdCreativeConfig = () => fetchSurfaceImageConfig('ad_creative');
+
+export const fetchAdFactoryConfig = () => fetchSurfaceImageConfig('ad_factory');

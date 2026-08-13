@@ -55,3 +55,25 @@ export const fetchAdCreativeImageTiers = async () => {
     return [];
   }
 };
+
+export const fetchAiAdsVideoModels = async () => {
+  const token = getCookies();
+  const response = await axios.get(`${BACKEND_HOST}/adsgpt/usage/model-credit-value`, {
+    params: { media: 'ai_ads', type: 'video' },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.data?.success) throw new Error('AI Ads model config request failed');
+  return response.data.data?.videoModels || [];
+};
+
+// Clone pricing includes the model rate plus the DB extraCharges entry whose
+// type is "clone".
+export const fetchCloneVideoModels = async () => {
+  const token = getCookies();
+  const response = await axios.get(`${BACKEND_HOST}/adsgpt/usage/model-credit-value`, {
+    params: { media: 'clone', type: 'video' },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.data?.success) throw new Error('Clone model config request failed');
+  return response.data.data?.videoModels || [];
+};

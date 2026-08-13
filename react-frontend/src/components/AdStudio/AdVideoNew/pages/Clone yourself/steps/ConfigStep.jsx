@@ -38,7 +38,7 @@ import {
   generateCloneImageAndScript,
   uploadVoice,
 } from '@/store/actions/adVideoNew/Advideoactions';
-import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { fetchCloneVideoModels } from '@/utils/fetchModelCredits';
 import { uploadToS3 } from '@/utils/imageUpload';
 import getCookies from '@/utils/getCookies';
 import { globalToast } from '@/utils/globalToast';
@@ -146,11 +146,11 @@ const AIAvatarCommonDropdown = ({ options = [], placeholder = '', value = '', on
 
 const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData }) => {
   const dispatch = useDispatch();
-  const { modelCredits } = useSelector((state) => state.prompt);
   const { brand_name } = useSelector((state) => state.adFactoryNew);
   const { userData, credits } = useSelector((state) => state.socket);
   const { isLoading } = useSelector((state) => state.adVideoNew);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
+  const [cloneModelConfigs, setCloneModelConfigs] = useState([]);
 
   const [productUrl, setProductUrl] = useState('');
   const [videoModel, setVideoModel] = useState('');
@@ -281,7 +281,13 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         label: 'Veo 3.1 Fast (Fast & Social-Ready)',
         tier: 'lower',
         Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-        credit: '4 CREDITS/SECOND',
+        credit: (() => {
+          const configured = cloneModelConfigs.find(
+            (model) => model?.canonical === 'veo-3.1-fast',
+          );
+          const rate = Number(configured?.creditsPerSecond);
+          return Number.isFinite(rate) ? `${rate} CREDITS/SECOND` : null;
+        })(),
       },
       // {
       //   value: 'veo',
@@ -306,7 +312,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       //     ?.value,
       // },
     ],
-    [modelCredits]
+    [cloneModelConfigs]
   );
 
   const videoTimer = useMemo(() => {
@@ -325,8 +331,20 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   }, [videoModel, userData]);
 
   useEffect(() => {
-    dispatch(fetchModelCreditsAction());
-  }, [dispatch]);
+    let cancelled = false;
+    fetchCloneVideoModels()
+      .then((models) => {
+        if (!cancelled) setCloneModelConfigs(Array.isArray(models) ? models : []);
+      })
+      .catch((error) => {
+        console.error('Error fetching Clone Yourself model credits:', error);
+        if (!cancelled) setCloneModelConfigs([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (videoTimer.length > 0) setVideoDuration(videoTimer[0].value);
@@ -609,9 +627,12 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const selectedModelCredit = parseFloat(
     videoChatModels.find((model) => model.value === videoModel)?.credit
   );
-  const creditsPerSecond = Number.isFinite(selectedModelCredit) ? selectedModelCredit : 9;
-  const est = Math.ceil(creditsPerSecond * (parseFloat(videoDuration) || 0));
-  const enough = availableCredits >= est;
+  const hasCreditConfig = Number.isFinite(selectedModelCredit);
+  const creditsPerSecond = hasCreditConfig ? selectedModelCredit : 0;
+  const est = hasCreditConfig
+    ? Math.ceil(creditsPerSecond * (parseFloat(videoDuration) || 0))
+    : 0;
+  const enough = hasCreditConfig && availableCredits >= est;
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
@@ -1149,7 +1170,11 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         {/* Generate */}
         <div className="mt-auto mb-3 flex items-center justify-end gap-2">
           {videoModel && videoDuration && (
-            enough ? (
+            !hasCreditConfig ? (
+              <span className="rounded-full border border-amber-500/70 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-200">
+                Pricing unavailable
+              </span>
+            ) : enough ? (
               <ShadcnTooltip label={`Will use: ${est} credits, ${availableCredits - est} left after`}>
                 <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/20 dark:text-white/90">
                   ~{est} credits

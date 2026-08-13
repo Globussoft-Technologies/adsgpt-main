@@ -11,7 +11,7 @@
  *   error       status is some other numeric HTTP code (e.g. 400/500)
  */
 
-const { findModel } = require("../../config/modelRegistry");
+const modelConfigurationService = require("../modelConfigurationService");
 
 // Resolve a results.image[].data value (string URL, or object holding the URL)
 // to a plain URL string. Mirrors the extraction used across the AdFactory code.
@@ -59,7 +59,8 @@ function mapImageEntry(entry, { campaignId, campaignName, model, origin, now }) 
     entry?.timestamp || (status === "generating" ? new Date(now) : null);
   // Human-facing label resolved from the model registry (canonicalKey OR alias).
   // Falls back to the raw model string so the frontend always has something.
-  const modelLabel = findModel(model)?.label || model || null;
+  const configuredModel = modelConfigurationService.getRuntimeModel(model);
+  const modelLabel = configuredModel?.displayName || configuredModel?.label || model || null;
   return {
     url: resolveImageUrl(entry?.data),
     prompt: entry?.prompt || null,

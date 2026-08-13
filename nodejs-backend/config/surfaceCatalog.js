@@ -46,6 +46,10 @@ const ADCREATIVE_IMAGE = {
 
 const SURFACE_CATALOG = {
   ad_creative: ADCREATIVE_IMAGE,
+  // Ad Factory has its own DB-controlled image model selection. The runtime
+  // model catalog is stored on each model document; this empty map only
+  // registers the surface slug for validation and API discovery.
+  ad_factory: {},
   ai_ads: {
     "veo-3.1-fast": { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
     veo: { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
