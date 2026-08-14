@@ -52,7 +52,11 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 // come from the backend `ad_creative` surface via useAdCreativeConfig — no
 // longer hardcoded. Icons stay frontend-owned, chosen by model id: OpenAI →
 // SiOpenai react-icon, Seedream → Seedance logo, everything else → Gemini.
-function ModelIcon({ apiId }) {
+function ModelIcon({ apiId, icon }) {
+  const iconValue = String(icon || '');
+  if (/^(data:image\/|https?:\/\/|\/)/i.test(iconValue)) {
+    return <img src={iconValue} alt="" className="h-3.5 w-3.5 object-contain" />;
+  }
   const id = String(apiId || '');
   if (/gpt-image/i.test(id)) {
     return <SiOpenai size={14} className="text-gray-500 dark:text-white/80" />;
@@ -1808,7 +1812,7 @@ function ModelPickerPill({ value, onChange }) {
         className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
-          <ModelIcon apiId={value} />
+          <ModelIcon apiId={value} icon={selectedModel?.icon} />
         </span>
         {selectedModel?.label || value}
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
@@ -1832,7 +1836,7 @@ function ModelPickerPill({ value, onChange }) {
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
-                  <ModelIcon apiId={opt.apiId} />
+                  <ModelIcon apiId={opt.apiId} icon={opt.icon} />
                 </span>
                 <span className="flex-1">{opt.label}</span>
               </button>

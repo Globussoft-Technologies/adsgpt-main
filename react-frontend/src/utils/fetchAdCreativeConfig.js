@@ -15,11 +15,14 @@ import getCookies from '@/utils/getCookies';
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 
+
 const normalizeModels = (rows) =>
   (Array.isArray(rows) ? rows : []).map((r) => ({
     apiId: r.canonical,
     aliases: Array.isArray(r.aliases) ? r.aliases : [],
     label: r.label,
+    // Keep legacy symbolic provider values for the existing hardcoded icon
+    // mapping used by Ad Creative (google/openai/etc.).
     icon: r.icon || null,
     aspectRatios: Array.isArray(r.aspectRatios) ? r.aspectRatios : [],
     qualities: Array.isArray(r.qualities) ? r.qualities : [],

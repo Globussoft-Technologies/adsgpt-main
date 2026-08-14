@@ -76,7 +76,11 @@ const MAX_REFS_TOTAL = 5;
 
 // Icons are frontend-owned, chosen by model id: OpenAI → SiOpenai react-icon,
 // Seedream → Seedance logo, everything else → Gemini image.
-function ModelIcon({ apiId }) {
+function ModelIcon({ apiId, icon }) {
+  const iconValue = String(icon || '');
+  if (/^(data:image\/|https?:\/\/|\/)/i.test(iconValue)) {
+    return <img src={iconValue} alt="" className="h-3.5 w-3.5 object-contain" />;
+  }
   const id = String(apiId || '');
   if (/gpt-image/i.test(id)) {
     return <SiOpenai size={14} className="text-gray-700 dark:text-white/80" />;
@@ -1019,7 +1023,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       }}
                       className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
                     >
-                      <ModelIcon apiId={selectedModel?.apiId} />
+                      <ModelIcon apiId={selectedModel?.apiId} icon={selectedModel?.icon} />
                       {selectedModel?.label || model}
                       <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
                     </button>
@@ -1042,7 +1046,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                               }`}
                             >
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                                <ModelIcon apiId={opt.apiId} />
+                                <ModelIcon apiId={opt.apiId} icon={opt.icon} />
                               </span>
                               <span className="flex-1">{opt.label}</span>
                             </button>

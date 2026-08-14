@@ -68,10 +68,15 @@ const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 // rendered via <img>. The picker handles both shapes.
 // Model list, labels, apiIds, aspect ratios, qualities and per-quality credits
 // now come from the backend `ad_creative` surface via useAdCreativeConfig — no
-// longer hardcoded here. Icons stay frontend-owned and are chosen by model id
-// (the API's `icon` field is not relied on): OpenAI → SiOpenai react-icon,
-// Seedream → Seedance logo, everything else → Gemini image.
-function ModelIcon({ apiId }) {
+// longer hardcoded here. A DB-backed image icon is preferred when available;
+// the existing provider-specific mappings remain the fallback for legacy
+// models and models without an uploaded icon.
+function ModelIcon({ apiId, icon }) {
+  const iconValue = String(icon || '');
+  if (/^(data:image\/|https?:\/\/|\/)/i.test(iconValue)) {
+    return <img src={iconValue} alt="" className="h-3.5 w-3.5 object-contain" />;
+  }
+
   const id = String(apiId || '');
   if (/gpt-image/i.test(id)) {
     return <SiOpenai size={14} className="text-gray-600 dark:text-white/80" />;
@@ -1166,7 +1171,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   )}
                   <div ref={modelPickerWrapperRef} className="relative">
                     <PillButton
-                      icon={<ModelIcon apiId={selectedModel?.apiId} />}
+                      icon={<ModelIcon apiId={selectedModel?.apiId} icon={selectedModel?.icon} />}
                       label={selectedModel?.label || 'Select model'}
                       onClick={() => {
                         setShowModelPicker((v) => !v);
@@ -1197,7 +1202,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 aria-hidden
                                 className="flex h-4 w-4 shrink-0 items-center justify-center"
                               >
-                                <ModelIcon apiId={opt.apiId} />
+                                <ModelIcon apiId={opt.apiId} icon={opt.icon} />
                               </span>
                               <span className="flex-1">{opt.label}</span>
                             </button>

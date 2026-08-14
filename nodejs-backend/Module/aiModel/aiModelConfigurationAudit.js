@@ -5,7 +5,7 @@ const auditSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ["create", "update", "enable", "disable", "archive", "surface_update"],
+      enum: ["create", "update", "enable", "disable", "archive", "surface_update", "icon_update", "icon_remove"],
       index: true,
     },
     canonicalKey: { type: String, required: true, index: true },
