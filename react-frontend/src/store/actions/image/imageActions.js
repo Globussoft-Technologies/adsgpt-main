@@ -16,6 +16,7 @@ import {
   historyLoadSucceeded,
   historyLoadFailed,
 } from '@/store/reducers/image/imageSlice';
+import { GA4Events } from '@/utils/ga4';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -46,13 +47,63 @@ function normalizeImageRecord(raw) {
   };
 }
 
+function triggerImageRequested(type) {
+  if (type === 'recreate_ads') {
+    GA4Events.adLibraryRecreateRequested({ source: 'ad_library_recreate_form', success: true });
+  } else if (type === 'lifestyle') {
+    GA4Events.adCreativeLifestyleAdRequested({ source: 'lifestyle_ad_form', success: true });
+  } else if (type === 'product_shot') {
+    GA4Events.adCreativeProductShotRequested({ source: 'product_shot_form', success: true });
+  } else if (type === 'brand_awareness') {
+    GA4Events.adCreativeBrandAwarenessRequested({ source: 'brand_awareness_form', success: true });
+  } else if (type === 'apps_saas') {
+    GA4Events.adCreativeAppsSaasRequested({ source: 'apps_saas_form', success: true });
+  } else {
+    GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
+  }
+}
+
+function triggerImageGenerated(type) {
+  if (type === 'recreate_ads') {
+    GA4Events.adLibraryRecreateGenerated({ source: 'ad_library_recreate_studio', success: true });
+  } else if (type === 'lifestyle') {
+    GA4Events.adCreativeLifestyleAdGenerated({ source: 'lifestyle_ad_studio', success: true });
+  } else if (type === 'product_shot') {
+    GA4Events.adCreativeProductShotGenerated({ source: 'product_shot_studio', success: true });
+  } else if (type === 'brand_awareness') {
+    GA4Events.adCreativeBrandAwarenessGenerated({ source: 'brand_awareness_studio', success: true });
+  } else if (type === 'apps_saas') {
+    GA4Events.adCreativeAppsSaasGenerated({ source: 'apps_saas_studio', success: true });
+  } else {
+    GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
+  }
+}
+
+function triggerImageFailed(type) {
+  if (type === 'recreate_ads') {
+    GA4Events.adLibraryRecreateFailed({ source: 'ad_library_recreate_studio', success: false });
+  } else if (type === 'lifestyle') {
+    GA4Events.adCreativeLifestyleAdFailed({ source: 'lifestyle_ad_studio', success: false });
+  } else if (type === 'product_shot') {
+    GA4Events.adCreativeProductShotFailed({ source: 'product_shot_studio', success: false });
+  } else if (type === 'brand_awareness') {
+    GA4Events.adCreativeBrandAwarenessFailed({ source: 'brand_awareness_studio', success: false });
+  } else if (type === 'apps_saas') {
+    GA4Events.adCreativeAppsSaasFailed({ source: 'apps_saas_studio', success: false });
+  } else {
+    GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
+  }
+}
+
 // ── submit + auto-poll ──────────────────────────────────────────────────
 //
 // `body` is the full request body produced by buildImageInputs(). On success
 // we read the sessionId out of the response (the backend may name it
 // `sessionId`, `imageId`, or `id` — check all three) and kick off polling.
 export const generateImageAction = (body) => async (dispatch) => {
-  dispatch(submitStarted(body?.type ?? null));
+  const imageType = body?.type ?? null;
+  dispatch(submitStarted(imageType));
+  triggerImageRequested(imageType);
   try {
     const data = await generateImage(body);
     const normalized = normalizeImageRecord(data);
@@ -61,11 +112,15 @@ export const generateImageAction = (body) => async (dispatch) => {
     }
     dispatch(submitSucceeded(normalized.sessionId));
     // If the backend already came back completed (sync mode), no polling needed.
-    if (normalized.status === 'completed' || normalized.status === 'failed') {
+    if (normalized.status === 'completed' && normalized.url) {
       dispatch(pollUpdated(normalized));
+      triggerImageGenerated(imageType);
+    } else if (normalized.status === 'failed' || (normalized.status === 'completed' && !normalized.url)) {
+      dispatch(pollUpdated(normalized));
+      triggerImageFailed(imageType);
     } else {
       // TODO: replace with a socket listener once the backend emits a completion event.
-      dispatch(pollImageAction(normalized.sessionId));
+      dispatch(pollImageAction(normalized.sessionId, imageType));
     }
     return data;
   } catch (err) {
@@ -79,6 +134,7 @@ export const generateImageAction = (body) => async (dispatch) => {
       err.message ||
       'Generation failed';
     dispatch(submitFailed(msg));
+    triggerImageFailed(imageType);
     throw err;
   }
 };
@@ -88,13 +144,19 @@ export const generateImageAction = (body) => async (dispatch) => {
 // Self-cancelling: each tick checks that the session it was started for is
 // still the active one. If the user navigated away (resetCurrent dispatched)
 // or another tick already finished it, we exit and never schedule the next.
-export const pollImageAction = (sessionId) => async (dispatch, getState) => {
+export const pollImageAction = (sessionId, imageType) => async (dispatch, getState) => {
   const tick = async () => {
     const cur = getState().image.current;
     if (cur.sessionId !== sessionId || cur.status !== 'pending') return;
     try {
       const raw = await getImageById(sessionId);
-      dispatch(pollUpdated(normalizeImageRecord(raw)));
+      const normalized = normalizeImageRecord(raw);
+      dispatch(pollUpdated(normalized));
+      if (normalized.status === 'completed' && normalized.url) {
+        triggerImageGenerated(imageType);
+      } else if (normalized.status === 'failed' || (normalized.status === 'completed' && !normalized.url)) {
+        triggerImageFailed(imageType);
+      }
       const after = getState().image.current;
       if (after.status === 'pending') {
         setTimeout(tick, POLL_INTERVAL_MS);
@@ -102,6 +164,7 @@ export const pollImageAction = (sessionId) => async (dispatch, getState) => {
     } catch (err) {
       // Treat polling errors as a generation failure so the UI can recover.
       dispatch(pollUpdated({ status: 'failed', error: err.message }));
+      triggerImageFailed(imageType);
     }
   };
   tick();

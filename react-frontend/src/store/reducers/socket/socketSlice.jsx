@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { triggerLogout } from '@/utils/logout';
 import emitter from '@/utils/eventEmitter';
-import { setGA4User } from '@/utils/ga4';
+import { GA4Events, setGA4User } from '@/utils/ga4';
 import {
   clearBotTimeout,
   setLoading,
@@ -331,6 +331,7 @@ export const initSocket = (url) => (dispatch, getState) => {
       dispatch(updateAdcopyBotConversation(data));
       if (data?.isLastChunk) {
         dispatch(setTyping(false));
+        GA4Events.adCopyGenerated({ source: 'adcopy_chat', success: true });
       }
     });
 
@@ -359,6 +360,7 @@ export const initSocket = (url) => (dispatch, getState) => {
       ) {
         notifiedSessionIds.add(data?.chatId);
         showNotification(data?.sessionId, data?.type, dispatch);
+        GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
       } else if (
         data?.sessionId &&
         data?.type === 'image' &&
@@ -369,6 +371,7 @@ export const initSocket = (url) => (dispatch, getState) => {
         notifiedSessionIds.add(data?.chatId);
         const reason = data.images[0]?.base_image_with_logo || data.images[0];
         showFailureNotification('image', reason);
+        GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
       }
     });
 
@@ -422,12 +425,35 @@ export const initSocket = (url) => (dispatch, getState) => {
       const url = completedData?.video?.url || completedData?.video?.results?.[0]?.url;
       const hasVideoUrl = url && url !== 'failed' && url !== '400' && url !== 'planExpired';
 
+      const vType = completedData?.video?.inputs?.type || completedData?.video?.type;
       if (hasVideoUrl && videoId && !notifiedVideoIds.has(videoId)) {
         notifiedVideoIds.add(videoId);
         showNotificationForMyVideo(dispatch);
+        if (vType === 'ai_ads') {
+          GA4Events.adVideoAIAdsGenerated({ source: 'ai_ads_studio', success: true });
+        } else if (vType === 'broll') {
+          GA4Events.adVideoProductBrollsGenerated({ source: 'product_brolls_studio', success: true });
+        } else if (vType === 'clone') {
+          GA4Events.adVideoCloneYourselfGenerated({ source: 'clone_yourself_studio', success: true });
+        } else if (vType === 'avatar') {
+          GA4Events.adVideoAIAvatarsGenerated({ source: 'ai_avatars_studio', success: true });
+        } else {
+          GA4Events.adVideoAIUGCAdsGenerated({ source: 'ai_ugc_ads_studio', success: true });
+        }
       } else if (!hasVideoUrl && videoId && !notifiedVideoIds.has(videoId)) {
         notifiedVideoIds.add(videoId);
         showFailureNotification('video', url);
+        if (vType === 'ai_ads') {
+          GA4Events.adVideoAIAdsFailed({ source: 'ai_ads_studio', success: false });
+        } else if (vType === 'broll') {
+          GA4Events.adVideoProductBrollsFailed({ source: 'product_brolls_studio', success: false });
+        } else if (vType === 'clone') {
+          GA4Events.adVideoCloneYourselfFailed({ source: 'clone_yourself_studio', success: false });
+        } else if (vType === 'avatar') {
+          GA4Events.adVideoAIAvatarsFailed({ source: 'ai_avatars_studio', success: false });
+        } else {
+          GA4Events.adVideoAIUGCAdsFailed({ source: 'ai_ugc_ads_studio', success: false });
+        }
       }
     });
 
@@ -468,14 +494,19 @@ export const initSocket = (url) => (dispatch, getState) => {
         completedData?.image?.results?.[0]?.generatedImageUrl;
       const hasUrl = url && url !== 'failed' && url !== '400' && url !== 'planExpired';
 
+      const imgType = completedData?.image?.inputs?.type || completedData?.image?._doc?.inputs?.type;
       if (hasUrl && imageId && !notifiedImageIds.has(imageId)) {
         notifiedImageIds.add(imageId);
-        // Use the image-specific notification — the video one fired the
-        // wrong toast ("Video Generation Complete") on AdCreative runs.
         showNotificationForMyImage(dispatch);
+        if (imgType === 'recreate_ads') {
+          GA4Events.adLibraryRecreateGenerated({ source: 'ad_library_recreate_studio', success: true });
+        }
       } else if (!hasUrl && imageId && !notifiedImageIds.has(imageId)) {
         notifiedImageIds.add(imageId);
         showFailureNotification('image', url);
+        if (imgType === 'recreate_ads') {
+          GA4Events.adLibraryRecreateFailed({ source: 'ad_library_recreate_studio', success: false });
+        }
       }
     });
 

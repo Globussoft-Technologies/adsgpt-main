@@ -15,6 +15,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
+import { GA4Events } from '@/utils/ga4';
 import { acceptInvitation, getInvitation } from '@/apis/workspaces/workspaceApi';
 import {
   featureIdsOf,
@@ -91,6 +92,7 @@ export default function WorkspaceInvitationAcceptPage() {
         path: firstAllowedPath(result.features),
         workspaceName: invitation?.workspaceName || result.workspaceName || 'your workspace',
       });
+      GA4Events.workspaceInvitationAccepted({ source: 'workspace_invitation_accept_page', success: true });
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Unable to accept invitation');
     } finally {

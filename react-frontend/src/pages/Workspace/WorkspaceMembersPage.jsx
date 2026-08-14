@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { GA4Events } from '@/utils/ga4';
 import {
   getWorkspaces,
   inviteMember,
@@ -284,6 +285,7 @@ export default function WorkspaceMembersPage() {
         const invitedEmail = email.trim();
         await inviteMember(invitedEmail, selectedFeatures);
         toast.success(`Invitation sent to ${invitedEmail}`);
+        GA4Events.workspaceInvitationSent({ source: 'workspace_members_page', success: true });
       }
       setDialog(null);
       setEmail('');
@@ -310,6 +312,7 @@ export default function WorkspaceMembersPage() {
       } else {
         await revokeInvitation(dialog.invitation.id);
         toast.success('Invitation revoked');
+        GA4Events.workspaceInvitationRevoked({ source: 'workspace_members_page', success: true });
       }
       setDialog(null);
       setEmail('');

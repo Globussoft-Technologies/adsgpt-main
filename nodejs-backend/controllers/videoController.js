@@ -24,6 +24,7 @@ const Avatar = require("../Module/videoGeneration/avatarModel");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const { notifyUser } = require("../services/push/notifyUser");
 const GeneratedMediaController = require("./generatedMedia.controller");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 const getFileName = (extension) => `${Date.now()}${extension}`;
 
@@ -652,6 +653,51 @@ exports.updateVideoResult = async (req, res) => {
       // the freeze in full. Leaving the receipt dangling would cause the
       // sweep cron to refund a successful generation 60 minutes later.
       await UnifiedCreditController.releaseCredits(sessionId);
+    }
+
+    const vType = preRecord?.inputs?.type;
+    const vUserId = preRecord?.userId;
+
+    if (vType === "ai_ads") {
+      trackBackendGA4Event("ad_video_ai_ads", {
+        user_id: vUserId,
+        feature: "ad_video",
+        action_name: videoStatus === 200 ? "ai_ads_generated" : "ai_ads_failed",
+        source: "ai_ads_studio",
+        success: videoStatus === 200,
+      });
+    } else if (vType === "broll") {
+      trackBackendGA4Event("ad_video_product_brolls", {
+        user_id: vUserId,
+        feature: "ad_video",
+        action_name: videoStatus === 200 ? "product_brolls_generated" : "product_brolls_failed",
+        source: "product_brolls_studio",
+        success: videoStatus === 200,
+      });
+    } else if (vType === "clone") {
+      trackBackendGA4Event("ad_video_clone_yourself", {
+        user_id: vUserId,
+        feature: "ad_video",
+        action_name: videoStatus === 200 ? "clone_yourself_generated" : "clone_yourself_failed",
+        source: "clone_yourself_studio",
+        success: videoStatus === 200,
+      });
+    } else if (vType === "avatar") {
+      trackBackendGA4Event("ad_video_ai_avatars", {
+        user_id: vUserId,
+        feature: "ad_video",
+        action_name: videoStatus === 200 ? "ai_avatars_generated" : "ai_avatars_failed",
+        source: "ai_avatars_studio",
+        success: videoStatus === 200,
+      });
+    } else if (vType === "ugc" || vType === "ugc_ads" || vType === "ai_ugc_ads") {
+      trackBackendGA4Event("ad_video_ai_ugc_ads", {
+        user_id: vUserId,
+        feature: "ad_video",
+        action_name: videoStatus === 200 ? "ai_ugc_ads_generated" : "ai_ugc_ads_failed",
+        source: "ai_ugc_ads_studio",
+        success: videoStatus === 200,
+      });
     }
 
     // Notify over websocket (web + foreground app, using the userId room so it

@@ -61,6 +61,7 @@ function buildPythonAdFactoryPayload(payload) {
     },
   };
 }
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 // const getFileName = (extension) => `${Date.now()}${extension}`;
 
@@ -109,6 +110,13 @@ exports.createCampaign = async (req, res) => {
     });
 
     await campaign.save();
+    trackBackendGA4Event("ad_factory", {
+      user_id: userId,
+      feature: "ad_factory",
+      action_name: "ad_factory_campaign_added",
+      source: "ad_factory_form",
+      success: true,
+    });
     return res.status(201).json({
       success: true,
       message: "Campaign created successfully",
@@ -739,6 +747,13 @@ exports.deleteCampaign = async (req, res) => {
     // Delete all related history documents
     await CampaignHistory.deleteMany({ campaignId });
     await Campaign.deleteOne({ _id: campaignId });
+    trackBackendGA4Event("ad_factory", {
+      user_id: userId,
+      feature: "ad_factory",
+      action_name: "ad_factory_campaign_deleted",
+      source: "ad_factory_form",
+      success: true,
+    });
     return res.status(200).json({
       success: true,
       message: "Campaign deleted successfully",
@@ -1294,12 +1309,26 @@ exports.updateCampaign = async (req, res) => {
         subscriptionTypeKey,
         subscriptionTypeValue,
       );
+      trackBackendGA4Event("ad_factory", {
+        user_id: user?.user_id || req.body?.userId,
+        feature: "ad_factory",
+        action_name: "ad_factory_campaign_updated",
+        source: "ad_factory_form",
+        success: true,
+      });
       return res.status(200).json({
         success: true,
         message: `${nodeType} updated successfully`,
         pythonResult,
       });
     }
+    trackBackendGA4Event("ad_factory", {
+      user_id: user?.user_id || req.body?.userId,
+      feature: "ad_factory",
+      action_name: "ad_factory_campaign_updated",
+      source: "ad_factory_form",
+      success: true,
+    });
     return res.status(200).json({
       success: true,
       message: `${nodeType} updated successfully`,

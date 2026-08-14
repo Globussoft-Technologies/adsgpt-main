@@ -53,6 +53,7 @@ import FacebookAccountSelector from './FacebookAccountSelector';
 import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
+import { GA4Events } from '@/utils/ga4';
 import Cookies from 'js-cookie';
 import { clearSelectedFacebookId, setSelectedFacebookId } from '@/utils/metaFacebookAccount';
 
@@ -239,6 +240,15 @@ export default function MetaAdsDashboard() {
   // open the wizard, then strip the query param so a refresh / back-nav
   // doesn't keep re-opening it.
   const autoOpenWizardMode = searchParams.get('openWizard');
+  useEffect(() => {
+    if (searchParams.get('auth') === 'success') {
+      GA4Events.adsManagerConnectedWithMeta({ source: 'meta_oauth', success: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete('auth');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     if (!autoOpenWizardMode) return;
     setActiveTab('campaigns');

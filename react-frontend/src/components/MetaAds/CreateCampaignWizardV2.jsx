@@ -31,6 +31,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
+import { GA4Events, generateStableId } from '@/utils/ga4';
 // eslint-disable-next-line no-unused-vars -- motion is used as <motion.div> below; the project's lint rule doesn't track JSX dotted access.
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaMeta } from 'react-icons/fa6';
@@ -789,6 +790,11 @@ export default function CreateCampaignWizardV2({
   };
 
   const handleLaunch = async () => {
+    if (launchError) {
+      try { GA4Events.publishRetried({ platform: 'meta' }); } catch (e) {}
+    } else {
+      try { GA4Events.publishStarted({ platform: 'meta' }); } catch (e) {}
+    }
     setLaunching(true);
     setLaunchError(null);
     try {
@@ -1157,6 +1163,7 @@ export default function CreateCampaignWizardV2({
       globalToast.success(
         WIZARD_MODE_META[mode]?.toast || WIZARD_MODE_META['create-full'].toast,
       );
+      GA4Events.adsManagerAddedNewCampaign({ source: 'create_campaign_wizard_v2', success: true });
       onCreated?.();
       onClose?.();
     } catch (e) {

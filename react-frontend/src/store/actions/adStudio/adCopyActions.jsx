@@ -15,6 +15,7 @@ import { fetchAdHistoryTitles, saveHistory } from './adHistoryActions';
 import axios from 'axios';
 import { emitWhenConnected } from '@/utils/socketEmitter';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
+import { GA4Events } from '@/utils/ga4';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 
 // 1. Thunk to fetch suggestions
@@ -104,6 +105,7 @@ export const submitAdCopyRequest = (suggestion, isSidebarOpen) => async (dispatc
   dispatch(addConversation(botMessage));
   // socketio.emit('adCopyRequest', payload);
   emitWhenConnected('adCopyRequest', payload);
+  GA4Events.adCopyRequested({ source: 'adcopy_prompt', success: true });
   // 6. Timeout guard (2 minutes = 120000ms)
   triggerTimeoutGuard(dispatch, botId, sessionId, getState);
 
@@ -164,6 +166,7 @@ export const regenerateAdCopy =
     dispatch(addConversation(botMessage));
     // socketio.emit('adCopyRequest', payload);
     emitWhenConnected('adCopyRequest', payload);
+    GA4Events.adCopyRequested({ source: 'adcopy_regenerate', success: true });
 
     // 6. Timeout guard (2 minutes = 120000ms)
     triggerTimeoutGuard(dispatch, botId, sessionId, getState);

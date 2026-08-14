@@ -11,6 +11,7 @@ const {
   listTemplates,
 } = require("../../config/autopilotRuleTemplates");
 const logger = require("../../utils/logger");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 
 /**
  * HTTP layer for user-defined Autopilot rules.
@@ -174,6 +175,15 @@ class AutopilotUserRuleController {
         userId,
         attachments,
       });
+
+      trackBackendGA4Event("ads_manager_autopilot", {
+        user_id: userId,
+        feature: "autopilot",
+        action_name: "added_new_rule",
+        source: "autopilot_settings",
+        success: true,
+      });
+
       return res.status(201).json({ status: true, rule: doc.toObject() });
     } catch (err) {
       logger.error(`[autopilot] /rules POST error: ${err.message}`);

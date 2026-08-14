@@ -28,9 +28,16 @@ import {
 import ShowProductImages from '../Cards/ShowProductImages';
 import { useNavigate } from 'react-router-dom';
 import { setBrandIQLoading } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+import { GA4Events, generateStableId } from '@/utils/ga4';
+import { useEffect, useRef } from 'react';
 
 const OnBoardBrandDialog = () => {
   const [brandDetailsFormNumber, setBrandDetailsFormNumber] = useState(0);
+  const flowIdRef = useRef(generateStableId('onboard'));
+
+  useEffect(() => {
+    GA4Events.onboardingStarted({ flow_id: flowIdRef.current });
+  }, []);
   const { loading } = useSelector((state) => state.brandIQTabs);
   const [isOpen, setIsOpen] = useState(true);
   const { userData } = useSelector((state) => state.socket);
@@ -97,6 +104,7 @@ const OnBoardBrandDialog = () => {
       }
 
       setOriginalFileUrls(originalUrls);
+      GA4Events.brandSetupStarted({ flow_id: flowIdRef.current });
       setBrandDetailsFormNumber(1);
     } catch (error) {
       setAnalysisError('Failed to analyze website. Please try again or enter details manually.');
@@ -107,6 +115,7 @@ const OnBoardBrandDialog = () => {
   };
 
   const handleSkipToManual = () => {
+    GA4Events.brandSetupStarted({ flow_id: flowIdRef.current });
     setBrandDetailsFormNumber(1);
   };
 
@@ -288,6 +297,8 @@ const OnBoardBrandDialog = () => {
           linkedinUrl: values.linkedinUrl || '',
         };
         await dispatch(createBrandList(newBrand));
+        GA4Events.onboardingCompleted({ flow_id: flowIdRef.current });
+        GA4Events.brandCreated({ flow_id: flowIdRef.current, feature: 'brand_iq' });
         setIsOpen(false);
         formik.resetForm();
         navigate('/brandiq', { state: { from: 'onBoard' } });
@@ -889,19 +900,17 @@ const OnBoardBrandDialog = () => {
                 {[1, 2].map((step) => (
                   <div key={step} className="flex items-center gap-1.5">
                     <div
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-medium ${
-                        brandDetailsFormNumber >= step
+                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-medium ${brandDetailsFormNumber >= step
                           ? 'border-white bg-blue-500/10 text-white'
                           : 'border-[#676E74] text-[#676E74]'
-                      }`}
+                        }`}
                     >
                       {step}
                     </div>
                     {step < 2 && (
                       <div
-                        className={`h-1 w-16 ${
-                          brandDetailsFormNumber > step ? 'bg-white' : 'bg-[#676E74]'
-                        }`}
+                        className={`h-1 w-16 ${brandDetailsFormNumber > step ? 'bg-white' : 'bg-[#676E74]'
+                          }`}
                       />
                     )}
                   </div>

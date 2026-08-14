@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { listAIAudits } from '@/apis/autopilot/llmAuditApi';
+import { GA4Events } from '@/utils/ga4';
 
 // relative time helper
 const rel = (iso) => {
@@ -87,7 +88,10 @@ function EmptyList({ onRun, running }) {
         ))}
       </div>
       <button
-        onClick={onRun}
+        onClick={() => {
+          GA4Events.autopilotUsingAiAudit({ source: 'ai_audit_tab', success: true });
+          onRun?.();
+        }}
         disabled={running}
         className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-3 text-sm font-bold text-black shadow-lg shadow-[#15DCFF]/10 transition-all hover:brightness-110 disabled:opacity-50"
       >

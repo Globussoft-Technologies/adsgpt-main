@@ -13,6 +13,7 @@ const modelConfigurationService = require("../services/modelConfigurationService
 const GeneratedMediaController = require("./generatedMedia.controller");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
 const { notifyUser } = require("../services/push/notifyUser");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 // Format Joi validation errors into user-friendly messages
 const formatValidationError = (errorDetails) => {
@@ -423,6 +424,47 @@ exports.generateImage = async (req, res) => {
 
         if (targetApi) {
             try {
+                if (value.type === "lifestyle") {
+                    trackBackendGA4Event("ad_creative_lifestyle_ad", {
+                        user_id: userId,
+                        feature: "ad_creative",
+                        action_name: "lifestyle_ad_requested",
+                        source: "lifestyle_ad_form",
+                        success: true,
+                    });
+                } else if (value.type === "product_shot") {
+                    trackBackendGA4Event("ad_creative_product_shot", {
+                        user_id: userId,
+                        feature: "ad_creative",
+                        action_name: "product_shot_requested",
+                        source: "product_shot_form",
+                        success: true,
+                    });
+                } else if (value.type === "brand_awareness") {
+                    trackBackendGA4Event("ad_creative_brand_awareness", {
+                        user_id: userId,
+                        feature: "ad_creative",
+                        action_name: "brand_awareness_requested",
+                        source: "brand_awareness_form",
+                        success: true,
+                    });
+                } else if (value.type === "apps_saas") {
+                    trackBackendGA4Event("ad_creative_apps_saas", {
+                        user_id: userId,
+                        feature: "ad_creative",
+                        action_name: "apps_saas_requested",
+                        source: "apps_saas_form",
+                        success: true,
+                    });
+                } else if (value.type === "recreate_ads") {
+                    trackBackendGA4Event("ad_library", {
+                        user_id: userId,
+                        feature: "ad_library",
+                        action_name: "ad_library_recreate_requested",
+                        source: "ad_library_recreate_form",
+                        success: true,
+                    });
+                }
                 console.log(`[generateImage]  Sending to Python API: ${targetApi}`);
                 console.log(`[generateImage]  Payload:`, JSON.stringify({ type: value.type, brandName: value.brandInfo.brandName, sessionId: imageId }, null, 2));
 
@@ -816,6 +858,98 @@ exports.updateImageResult = async (req, res) => {
             // generation 60 minutes later. Intermediate statuses like "pending"
             // intentionally fall through — they're partial updates, freeze stays.
             await UnifiedCreditController.releaseCredits(sessionId);
+        }
+
+        if (priorDoc?.inputs?.type === "lifestyle") {
+            if (status === "completed" && images && images.length > 0) {
+                trackBackendGA4Event("ad_creative_lifestyle_ad", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "lifestyle_ad_generated",
+                    source: "lifestyle_ad_studio",
+                    success: true,
+                });
+            } else {
+                trackBackendGA4Event("ad_creative_lifestyle_ad", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "lifestyle_ad_failed",
+                    source: "lifestyle_ad_studio",
+                    success: false,
+                });
+            }
+        } else if (priorDoc?.inputs?.type === "product_shot") {
+            if (status === "completed" && images && images.length > 0) {
+                trackBackendGA4Event("ad_creative_product_shot", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "product_shot_generated",
+                    source: "product_shot_studio",
+                    success: true,
+                });
+            } else {
+                trackBackendGA4Event("ad_creative_product_shot", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "product_shot_failed",
+                    source: "product_shot_studio",
+                    success: false,
+                });
+            }
+        } else if (priorDoc?.inputs?.type === "brand_awareness") {
+            if (status === "completed" && images && images.length > 0) {
+                trackBackendGA4Event("ad_creative_brand_awareness", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "brand_awareness_generated",
+                    source: "brand_awareness_studio",
+                    success: true,
+                });
+            } else {
+                trackBackendGA4Event("ad_creative_brand_awareness", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "brand_awareness_failed",
+                    source: "brand_awareness_studio",
+                    success: false,
+                });
+            }
+        } else if (priorDoc?.inputs?.type === "apps_saas") {
+            if (status === "completed" && images && images.length > 0) {
+                trackBackendGA4Event("ad_creative_apps_saas", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "apps_saas_generated",
+                    source: "apps_saas_studio",
+                    success: true,
+                });
+            } else {
+                trackBackendGA4Event("ad_creative_apps_saas", {
+                    user_id: userId,
+                    feature: "ad_creative",
+                    action_name: "apps_saas_failed",
+                    source: "apps_saas_studio",
+                    success: false,
+                });
+            }
+        } else if (priorDoc?.inputs?.type === "recreate_ads") {
+            if (status === "completed" && images && images.length > 0) {
+                trackBackendGA4Event("ad_library", {
+                    user_id: userId,
+                    feature: "ad_library",
+                    action_name: "ad_library_recreate_generated",
+                    source: "ad_library_recreate_studio",
+                    success: true,
+                });
+            } else {
+                trackBackendGA4Event("ad_library", {
+                    user_id: userId,
+                    feature: "ad_library",
+                    action_name: "ad_library_recreate_failed",
+                    source: "ad_library_recreate_studio",
+                    success: false,
+                });
+            }
         }
 
         // Notify over websocket (web + foreground app) and, when the image

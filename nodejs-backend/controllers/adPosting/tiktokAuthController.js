@@ -4,6 +4,7 @@ const TiktokUsers = require("../../Module/adPosting/tiktokUsers");
 const { encrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { invalidateAllUserTiktokCache, TIKTOK_API_BASE, getTiktokProxyAgent } = require("../../utils/tiktokHelpers");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 
 const ALLOWED_REDIRECT_ORIGIN = process.env.FRONTEND_URL;
 
@@ -202,6 +203,12 @@ class TiktokAuthController {
       // 4. Bust any existing TikTok cache for this user
       await invalidateAllUserTiktokCache(userId).catch(() => {});
 
+      trackBackendGA4Event('account_connected', {
+        user_id: userId,
+        platform: 'tiktok',
+        success: true,
+      });
+
       logger.info(`TikTok auth success for userId: ${userId}`);
 
       // 5. Redirect back to frontend
@@ -214,6 +221,11 @@ class TiktokAuthController {
         `TikTok auth callback error:`,
         error.response?.data || error.message
       );
+      trackBackendGA4Event('account_connection_failed', {
+        platform: 'tiktok',
+        success: false,
+        error_code: 'OAUTH_FAILED',
+      });
       const errorUrl = new URL(feUrl || ALLOWED_REDIRECT_ORIGIN);
       errorUrl.searchParams.set("error", "tiktok_token_exchange_failed");
       errorUrl.searchParams.set(

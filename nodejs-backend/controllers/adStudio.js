@@ -6,9 +6,17 @@ const { updateAdCreativeConversation } = require("./newHistory");
 const UnifiedCreditController = require("./UnifiedCreditController");
 const axios = require("axios");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 exports.sendCreativeRequest = async (payload) => {
   try {
+    trackBackendGA4Event('ad_creative_ai_creatives', {
+      user_id: payload?.user_id,
+      feature: 'ad_creative',
+      action_name: 'ai_creatives_requested',
+      source: 'ai_creatives_form',
+      success: true,
+    });
     const apiUrl = process.env.CREATIVE_REQUEST_API;
     const response = await axios.post(apiUrl, payload);
     return { ok: true, data: response.data };
@@ -82,6 +90,13 @@ const handleAdCreativeResponse = async (data) => {
 
     // If no successful images → release entire freeze, no charge.
     if (successfulImages.length === 0) {
+      trackBackendGA4Event('ad_creative_ai_creatives', {
+        user_id,
+        feature: 'ad_creative',
+        action_name: 'ai_creatives_failure',
+        source: 'ai_creatives_studio',
+        success: false,
+      });
       if (reservationKey && !data?.isRegenerate) {
         await UnifiedCreditController.releaseCredits(reservationKey);
       }
@@ -93,6 +108,14 @@ const handleAdCreativeResponse = async (data) => {
       );
       return;
     }
+
+    trackBackendGA4Event('ad_creative_ai_creatives', {
+      user_id,
+      feature: 'ad_creative',
+      action_name: 'ai_creatives_generated',
+      source: 'ai_creatives_studio',
+      success: true,
+    });
 
     const creditPerImage = UnifiedCreditController.getModelDeduction(model);
 

@@ -64,6 +64,7 @@ const {
   claimCampaign,
   requireManagedCampaign,
 } = require("../../services/managedCampaigns");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 
 const CAPPED_BID_STRATEGIES = new Set([
   "LOWEST_COST_WITH_BID_CAP",
@@ -165,6 +166,13 @@ function generateTraceId() {
 function metaErrorResponse(err, action, req) {
   const m = logMetaError(`${action} error`, err);
   const traceId = generateTraceId();
+
+  trackBackendGA4Event('publish_failed', {
+    user_id: req?.user?.user_id,
+    platform: 'meta',
+    success: false,
+    error_code: m.code || 'PUBLISH_FAILED',
+  });
 
   // Fire-and-forget — a Mongo hiccup must never compound the original
   // Meta error by making the response itself fail or hang.

@@ -44,6 +44,7 @@ import {
   createMetaAd,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 import LibraryPicker from './LibraryPicker';
 
 const MONTHS = [
@@ -2200,6 +2201,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
 
       setCreated({});
       globalToast.success('Campaign, ad set and ad created — live now');
+      GA4Events.adsManagerAddedNewCampaign({ source: 'create_campaign_wizard_v1', success: true });
       onCreated?.();
       onClose?.();
     } catch (err) {

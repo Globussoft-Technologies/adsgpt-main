@@ -4,6 +4,7 @@ const GoogleUsers = require("../../Module/adPosting/googleUsers");
 const { encrypt, decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
 const { invalidateAllUserGoogleCache } = require("./googleAdController");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 
 const ALLOWED_REDIRECT_ORIGIN = process.env.FRONTEND_URL;
 
@@ -163,6 +164,12 @@ class GoogleAuthController {
       // Bust per-user Google caches so the next read hits Google fresh
       await invalidateAllUserGoogleCache(userId).catch(() => {});
 
+      trackBackendGA4Event('account_connected', {
+        user_id: userId,
+        platform: 'google',
+        success: true,
+      });
+
       logger.info(`Google auth success for userId: ${userId}`);
 
       // Redirect back to the frontend — exactly like Meta's flow.
@@ -175,6 +182,11 @@ class GoogleAuthController {
       res.redirect(redirectUrl.toString());
     } catch (error) {
       logger.error(`Google auth callback error: ${error.response?.data?.error || error.message}`);
+      trackBackendGA4Event('account_connection_failed', {
+        platform: 'google',
+        success: false,
+        error_code: 'OAUTH_FAILED',
+      });
       res.redirect(`${feUrl}?error=google_token_exchange_failed`);
     }
   }

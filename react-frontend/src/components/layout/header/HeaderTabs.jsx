@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { GA4Events } from '@/utils/ga4';
+import { GA4Events, trackGA4PageView } from '@/utils/ga4';
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 
 const HeaderTabs = ({
@@ -59,6 +59,7 @@ const HeaderTabs = ({
                   if (tab.id === 'adVideo' && isPlan) {
                     window.location.href = import.meta.env.VITE_GUEST_USER_SIGNUP_URL;
                   } else {
+                    trackGA4PageView(`/adstudio/${tab.id}`);
                     GA4Events.featureVisited({ tab: tab.id });
                     onTabChange(tab.id);
                   }

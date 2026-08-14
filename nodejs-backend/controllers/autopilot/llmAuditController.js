@@ -27,6 +27,7 @@ const MetaFixLog = require("../../Module/adPosting/metaFixLog");
 const AutopilotActionLog = require("../../Module/autopilot/autopilotActionLog");
 
 const logger = require("../../utils/logger");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 const { redisClient } = require("../../db/redis");
 const {
   getFacebookIdFromRequest,
@@ -449,6 +450,14 @@ class LLMAuditController {
 
       if (!adAccountId)
         return res.status(400).json({ error: "adAccountId is required" });
+
+      trackBackendGA4Event("ads_manager_autopilot", {
+        user_id: userId,
+        feature: "autopilot",
+        action_name: "using_ai_audit",
+        source: "ai_audit_tab",
+        success: true,
+      });
 
       // Use the unified token resolver — caller's per-user FB OAuth token
       // from the facebookUsers collection.

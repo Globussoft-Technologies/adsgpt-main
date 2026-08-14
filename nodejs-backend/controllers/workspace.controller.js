@@ -17,6 +17,7 @@ const {
 } = require(
   "../services/workspace/workspaceConfig",
 );
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 function sendError(res, error) {
   const { statusCode, body } = workspaceErrorResponse(error, {
@@ -103,6 +104,13 @@ async function invite(req, res) {
       email: req.body?.email,
       features: req.body?.features,
     });
+    trackBackendGA4Event("workspace", {
+      user_id: req.user?.user_id || req.user?.actorUserId || "anonymous",
+      feature: "workspace",
+      action_name: "workspace_invitation_sent",
+      source: "workspace_members_page",
+      success: true,
+    });
     return res.status(201).json({
       success: true,
       invitation: {
@@ -163,6 +171,13 @@ async function revoke(req, res) {
       ownerUserId: req.user.user_id,
       workspaceId: workspace.workspace._id,
       invitationId: req.params.invitationId,
+    });
+    trackBackendGA4Event("workspace", {
+      user_id: req.user?.user_id || req.user?.actorUserId || "anonymous",
+      feature: "workspace",
+      action_name: "workspace_invitation_revoked",
+      source: "workspace_members_page",
+      success: true,
     });
     return res.json({ success: true });
   } catch (error) {

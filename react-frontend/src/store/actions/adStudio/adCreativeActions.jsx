@@ -22,6 +22,7 @@ import { emitWhenConnected } from '@/utils/socketEmitter';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
 import { resetAdVideoNewSlice } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
+import { GA4Events } from '@/utils/ga4';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const INTERNAL_EMAIL = import.meta.env.VITE_INTERNAL_EMAIL_DOMAINS?.split(',') || [];
@@ -150,6 +151,7 @@ export const submitAdCreativeRequest = (isSidebarOpen) => async (dispatch, getSt
   }
   // socketio.emit('adCreativeRequest', payload);
   emitWhenConnected('adCreativeRequest', payload);
+  GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
 
   // 6. Timeout guard (2 minutes = 120000ms)
   triggerTimeoutGuard(dispatch, botId, sessionId, getState);

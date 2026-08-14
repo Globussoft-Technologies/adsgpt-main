@@ -6,6 +6,7 @@ const { default: mongoose } = require("mongoose");
 const logger = require("../utils/logger");
 const { updateAdCopyConversation } = require("./newHistory");
 const UnifiedCreditController = require("./UnifiedCreditController");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 exports.redisGetSet = new Redis({
   host: process.env.HOST,
@@ -15,6 +16,13 @@ exports.redisGetSet = new Redis({
 });
 
 const emitAdCopyError = (payload, message) => {
+  trackBackendGA4Event('generation_failed', {
+    user_id: payload?.user_id,
+    feature: 'ad_copy',
+    asset_type: 'copy',
+    success: false,
+    error_code: 'GENERATION_ERROR',
+  });
   emitToSocket(payload?.socket_id, "adCopyResponse", {
     user_id: payload?.user_id,
     sessionId: payload?.sessionId,
@@ -124,6 +132,13 @@ const consumeAdCopyStream = (stream, requestPayload) => {
 };
 
 exports.sendAdCopyRequest = async (payload) => {
+  trackBackendGA4Event('ad_copy', {
+    user_id: payload?.user_id,
+    feature: 'ad_copy',
+    action_name: 'adcopy_requested',
+    source: 'adcopy_prompt',
+    success: true,
+  });
   const apiUrl = process.env.ADCOPY_REQUEST_API;
   try {
     if (!apiUrl) throw new Error("ADCOPY_REQUEST_API env var is not set");
@@ -174,6 +189,14 @@ const handleAdCopyChunk = (data) => {
 const handleAdCopyFinal = async (data) => {
   try {
     if (!data?.socket_id) return;
+
+    trackBackendGA4Event('ad_copy', {
+      user_id: data.user_id,
+      feature: 'ad_copy',
+      action_name: 'adcopy_generated',
+      source: 'adcopy_chat',
+      success: true,
+    });
 
     const payload = {
       adCopyText: data.adCopyText,

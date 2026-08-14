@@ -8,6 +8,7 @@ const {
 const {
   workspaceErrorResponse,
 } = require("../services/workspace/workspaceConfig");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 function sendError(res, error) {
   const { statusCode, body } = workspaceErrorResponse(error, {
@@ -35,6 +36,13 @@ async function acceptInvitation(req, res) {
       firstName: req.body?.firstName,
       lastName: req.body?.lastName,
       password: req.body?.password,
+    });
+    trackBackendGA4Event("workspace", {
+      user_id: session?.actorUserId || session?.user?.user_id || "anonymous",
+      feature: "workspace",
+      action_name: "workspace_invitation_accepted",
+      source: "workspace_invitation_accept_page",
+      success: true,
     });
     return res.json({ success: true, ...session });
   } catch (error) {

@@ -16,10 +16,39 @@ import {
 } from '@/store/reducers/adFactoryAutomation/constants';
 import { computeNextRunAt } from '@/store/reducers/adFactoryAutomation/nextRun';
 import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
+import { GA4Events } from '@/utils/ga4';
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
 // const AUTOPILOT_BASE = `https://h9pxq91j-7000.inc1.devtunnels.ms/adsgpt/ads-factory/autopilot`;
+
+function extractPlatformsFromConfig(config, getState) {
+  const platforms = [];
+  if (config?.template?.id || config?.template?.enabled) {
+    platforms.push('meta');
+  }
+  if (config?.googleTemplate?.id || config?.googleTemplate?.enabled) {
+    platforms.push('google');
+  }
+  if (config?.tiktokTemplate?.id || config?.tiktokTemplate?.enabled) {
+    platforms.push('tiktok');
+  }
+
+  if (platforms.length === 0 && typeof getState === 'function') {
+    const distPlatforms = getState()?.adFactoryNew?.distribution?.platforms || [];
+    distPlatforms.forEach((p) => {
+      const name = String(p?.platformName || p?.name || '').toLowerCase().trim();
+      if (name && !platforms.includes(name)) {
+        platforms.push(name);
+      }
+    });
+  }
+
+  if (platforms.length === 0) {
+    platforms.push('meta');
+  }
+  return platforms;
+}
 
 // Meta Ads V2 templates — saved snapshots of the wizard form used as the
 // `targets.meta.template` payload on autopilot job creation.
@@ -692,6 +721,8 @@ export const saveAutomation = createAsyncThunk(
     // and-forget; the synchronous schedule mirror above is enough for the
     // user to see the right time immediately.
     dispatch(fetchAutomationStats(campaignId));
+    const activePlatforms = extractPlatformsFromConfig(config, getState);
+    GA4Events.adFactoryCampaignStarted(activePlatforms, { source: 'ad_factory_automation', success: true });
 
     return { campaignId, entry };
   }
@@ -939,6 +970,8 @@ export const deleteAutomation = createAsyncThunk(
       }
     }
 
+    const activePlatforms = extractPlatformsFromConfig(previous?.config, getState);
+    GA4Events.adFactoryCampaignStopped(activePlatforms, { source: 'ad_factory_automation', success: true });
     return campaignId;
   }
 );

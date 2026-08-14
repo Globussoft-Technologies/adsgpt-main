@@ -10,6 +10,7 @@ const FormData = require('form-data');
 const { Readable } = require("stream");
 const Campaign = require("../Module/adFactory/adFactory");
 const { FailResp } = require("./responses/response");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 const AWS_IMAGE_VIEW_URL = process.env.AWS_IMAGE_VIEW_URL;
 const UPLOAD_TO_S3 = process.env.UPLOAD_TO_S3 === 'true';
@@ -19,8 +20,8 @@ const NAS_UPLOAD_URL = `${process.env.NEW_NAS_UPLOAD_URL}/ads-gpt-download`;
 const uploadToS3 = async (userId, brandId, fileBase64, type) => {
   if (!fileBase64) return null;
   const matches = fileBase64.match(
-  /^(?:data:image\/[a-zA-Z0-9.+-]+;base64,(.+)|https:\/\/.+\.(png|jpe?g|gif|webp|ico))$/i
-);
+    /^(?:data:image\/[a-zA-Z0-9.+-]+;base64,(.+)|https:\/\/.+\.(png|jpe?g|gif|webp|ico))$/i
+  );
 
   if (!matches) throw new Error('Invalid base64 format');
 
@@ -134,7 +135,7 @@ const getBrandsList = async (req, res) => {
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(skip, skip + limit);
 
-    
+
     const allCampaignIds = [
       ...new Set(
         sortedBrands.flatMap(b => b.campaignIds || [])
@@ -143,9 +144,9 @@ const getBrandsList = async (req, res) => {
 
     const campaigns = allCampaignIds.length
       ? await Campaign.find(
-          { _id: { $in: allCampaignIds }, userId },
-          { _id: 1, "metadata.campaignName": 1 }
-        ).lean()
+        { _id: { $in: allCampaignIds }, userId },
+        { _id: 1, "metadata.campaignName": 1 }
+      ).lean()
       : [];
 
     const campaignMap = {};
@@ -190,7 +191,7 @@ const getBrandsList = async (req, res) => {
     // the extra query only happens when there's actually work to do — in the
     // steady state every brand is DONE and this is a no-op.
     if (Array.isArray(user.brands) && user.brands.some(needsClassify)) {
-      enrichUserBrands(userId).catch(() => {});
+      enrichUserBrands(userId).catch(() => { });
     }
 
     return res.status(200).json(response);
@@ -366,6 +367,14 @@ const updateBrandsList = async (req, res) => {
     }
     await user.save({ validateBeforeSave: true });
 
+    trackBackendGA4Event('brand_iq', {
+      user_id: userId,
+      feature: 'brand_iq',
+      action_name: 'brand_updated',
+      source: 'brand_form',
+      success: true,
+    });
+
     res.status(200).json({
       message: 'Brand updated successfully',
       brand: {
@@ -421,7 +430,7 @@ const createBrands = async (req, res) => {
   }
 
   try {
-    
+
     const exists = await brandNameLists.findOne({
       user_id: userId,
       'brands.brandName': brandName,
@@ -471,12 +480,12 @@ const createBrands = async (req, res) => {
             category: isValidCategory(category) ? category : null,
             categoryJob: isValidCategory(category)
               ? {
-                  status: 'DONE',
-                  startedAt: new Date(),
-                  completedAt: new Date(),
-                  errorMessage: null,
-                  categoryVersion: CATEGORY_VERSION,
-                }
+                status: 'DONE',
+                startedAt: new Date(),
+                completedAt: new Date(),
+                errorMessage: null,
+                categoryVersion: CATEGORY_VERSION,
+              }
               : null,
           },
         },
@@ -485,6 +494,14 @@ const createBrands = async (req, res) => {
     );
 
     const newBrand = user.brands.find((b) => b.id === brandId);
+
+    trackBackendGA4Event('brand_iq', {
+      user_id: userId,
+      feature: 'brand_iq',
+      action_name: 'brand_added',
+      source: 'brand_form',
+      success: true,
+    });
 
     res.status(201).json({
       message: 'Brand added successfully',
@@ -518,7 +535,7 @@ const createBrands = async (req, res) => {
 
 
 const deleteBrand = async (req, res) => {
-  const { userId, id: brandId, consent = false} = req.body;
+  const { userId, id: brandId, consent = false } = req.body;
 
   if (!userId || !brandId) {
     return res.status(400).json({
@@ -568,6 +585,14 @@ const deleteBrand = async (req, res) => {
       { user_id: userId },
       { $pull: { brands: { id: brandId } } }
     );
+
+    trackBackendGA4Event('brand_iq', {
+      user_id: userId,
+      feature: 'brand_iq',
+      action_name: 'brand_deleted',
+      source: 'brand_list',
+      success: true,
+    });
 
     res.status(200).json({
       message: consent

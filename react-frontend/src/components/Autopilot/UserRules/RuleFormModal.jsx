@@ -19,6 +19,7 @@ import {
 import { createUserRule, updateUserRule, testUserRule } from '@/apis/autopilot/autopilotApi';
 import { getAdAccounts, getCampaigns, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 
 /**
  * Form modal for creating + editing a user-defined Autopilot rule.
@@ -295,6 +296,9 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
       const res = isEdit ? await updateUserRule(rule._id, payload) : await createUserRule(payload);
       if (res.status && res.rule) {
         globalToast.success(isEdit ? 'Rule updated.' : 'Rule created.');
+        if (!isEdit) {
+          GA4Events.autopilotAddedNewRule({ source: 'autopilot_rule_modal', success: true });
+        }
         onSaved && onSaved(res.rule);
         onClose && onClose();
       } else {

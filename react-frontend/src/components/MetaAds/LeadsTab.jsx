@@ -19,6 +19,7 @@ import {
 } from '@/apis/metaAds/metaAdsApi';
 import { Dropdown } from './MetaAdsAtoms';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 
 /**
  * Leads tab — view + download captured Lead Form submissions.
@@ -196,6 +197,10 @@ export default function LeadsTab({ adAccountId, facebookId }) {
   const leadsRequestRef = useRef(0);
 
   const selectedForm = forms.find((f) => f.id === formId) || null;
+
+  useEffect(() => {
+    GA4Events.adsManagerUsingLeads({ source: 'leads_tab', success: true });
+  }, []);
 
   // ── load Pages for the selected ad account ──────────────────────────
   useEffect(() => {

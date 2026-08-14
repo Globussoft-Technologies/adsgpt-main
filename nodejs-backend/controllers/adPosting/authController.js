@@ -6,6 +6,7 @@ const {
   safeFacebookReturnUrl,
   buildFacebookReturnUrl,
 } = require("../../utils/oauthReturnUrl");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 
 // Cache prefixes that are scoped per-user and embed Meta data which becomes
 // stale the moment a user re-auths Facebook (new ad accounts granted, token
@@ -214,6 +215,20 @@ class AuthController {
       // account list and the user wouldn't see newly granted accounts.
       await bustPerUserCaches(user.userId);
 
+      trackBackendGA4Event('account_connected', {
+        user_id: user.userId,
+        platform: 'meta',
+        success: true,
+      });
+
+      trackBackendGA4Event('ads_manager', {
+        user_id: user.userId,
+        feature: 'ads_manager',
+        action_name: 'connected_with_meta',
+        source: 'meta_oauth',
+        success: true,
+      });
+
       // Return to the initiating web page or mobile app callback.
       const redirectUrl = buildFacebookReturnUrl(
         feUrl,
@@ -226,6 +241,12 @@ class AuthController {
         "Auth callback error:",
         error.response?.data || error.message
       );
+      trackBackendGA4Event('account_connection_failed', {
+        user_id: userId,
+        platform: 'meta',
+        success: false,
+        error_code: error.oauthErrorCode || 'TOKEN_EXCHANGE_FAILED',
+      });
       res.redirect(
         buildFacebookReturnUrl(
           feUrl,

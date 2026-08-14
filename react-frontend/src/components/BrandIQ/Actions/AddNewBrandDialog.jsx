@@ -28,6 +28,7 @@ import {
 } from '@/utils/MyBrand/FileHandle';
 import { setBrandIQError } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { useDynamicBackground } from '@/hooks/useDynamicBackground';
+import { GA4Events } from '@/utils/ga4';
 
 const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
   const [brandDetailsFormNumber, setBrandDetailsFormNumber] = useState(1);
@@ -476,10 +477,12 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
             }
           }
           await dispatch(updateBrandList(newBrand)).unwrap();
+          GA4Events.brandUpdated({ feature: 'brand_iq' });
           setRemovedImages([]);
           setEditingBrand(false);
         } else {
           await dispatch(createBrandList(newBrand)).unwrap();
+          GA4Events.brandCreated({ feature: 'brand_iq' });
         }
         setBrandDetailsFormNumber(1);
         setBrandLogos([]);
@@ -509,6 +512,9 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
 
   const handleOpenChange = (open) => {
     setIsOpen(open);
+    if (open) {
+      GA4Events.brandSetupStarted();
+    }
     if (brandData) setEditingBrand(open);
     if (!open) {
       setTimeout(() => {

@@ -8,6 +8,7 @@ import {
   getSelectedFacebookId,
   setSelectedFacebookId,
 } from '@/utils/metaFacebookAccount';
+import { GA4Events } from '@/utils/ga4';
 
 const BASE_URL = import.meta.env.VITE_SOCKET_URL;
 
@@ -121,6 +122,7 @@ export default function FacebookAccountSelector({
 
   const connect = () => {
     if (!userId) return;
+    try { GA4Events.accountConnectionStarted('meta'); } catch (e) {}
     const feUrl = window.location.href;
     window.location.href = `${BASE_URL}/api/auth/facebook?userId=${encodeURIComponent(userId)}&feUrl=${encodeURIComponent(feUrl)}`;
   };

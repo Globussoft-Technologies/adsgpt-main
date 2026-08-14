@@ -3,6 +3,7 @@ import { Bot, Plus, SendHorizonal, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { streamChat, confirmAction, pickChatMedia, getChatHistory } from '@/apis/metaAds/metaChatApi';
+import { GA4Events } from '@/utils/ga4';
 import ChatMessageList from './ChatMessageList';
 import SuggestionChips from './cards/SuggestionChips';
 import ChatHistoryMenu from './ChatHistoryMenu';
@@ -352,6 +353,7 @@ const MetaAdsChatPanel = ({
       setInput('');
       restoreComposerFocusRef.current = true;
       setIsStreaming(true);
+      GA4Events.adsManagerUsingChatbot({ source: 'chat_panel_send', success: true });
       controllerRef.current = streamChat({
         sessionId,
         adAccountId,

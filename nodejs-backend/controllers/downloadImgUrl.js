@@ -5,6 +5,7 @@ const { fileTypeFromBuffer } = require("file-type");
 const axios = require("axios");
 const { PassThrough } = require("stream")
 const { pipeline } = require("stream/promises")
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 
 const downloadImgUrl = (req, res) => {
@@ -43,8 +44,17 @@ const fetchImage = (url, res, redirectCount) => {
         }
 
         res.setHeader("Content-Type", response.headers["content-type"] || "image/jpeg");
+        trackBackendGA4Event('asset_exported', {
+            asset_type: 'image',
+            success: true
+        });
         response.pipe(res); // 🚀 Stream directly to response
     }).on("error", (err) => {
+        trackBackendGA4Event('asset_export_failed', {
+            asset_type: 'image',
+            success: false,
+            error_code: 'EXPORT_ERROR'
+        });
         res.status(500).json({ error: "Error fetching image", details: err.message });
     });
 };

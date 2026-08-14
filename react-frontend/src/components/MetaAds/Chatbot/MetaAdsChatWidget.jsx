@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bot } from 'lucide-react';
+import { GA4Events } from '@/utils/ga4';
 import MetaAdsChatPanel from './MetaAdsChatPanel';
 
 const DEFAULT_WIDTH = 400;
@@ -92,7 +93,10 @@ const MetaAdsChatWidget = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.15 }}
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              setOpen(true);
+              GA4Events.adsManagerUsingChatbot({ source: 'chat_widget_launcher', success: true });
+            }}
             aria-label="Open Ads Chat"
             className="fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] text-white shadow-lg shadow-[#6b72f8]/30 transition-transform hover:scale-105"
           >

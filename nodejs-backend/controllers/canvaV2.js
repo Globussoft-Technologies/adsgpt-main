@@ -2,6 +2,7 @@ const axios = require("axios");
 const sharp = require("sharp");
 const crypto = require("crypto");
 const CanvaToken = require("../Module/canva/CanvaToken");
+const { trackBackendGA4Event } = require("../utils/ga4");
 
 const CLIENT_ID = process.env.CANVA_CLIENT_ID;
 const CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET;
@@ -203,6 +204,12 @@ exports.oauthRedirect = async (req, res) => {
       { upsert: true }
     );
 
+    trackBackendGA4Event('account_connected', {
+      user_id,
+      platform: 'canva',
+      success: true,
+    });
+
     if (!image_url) {
       // Connected from Profile page — no image to edit, just close/redirect
       const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -216,6 +223,11 @@ exports.oauthRedirect = async (req, res) => {
       `/adsgpt/canva/v2/upload?id=${user_id}&url=${encodeURIComponent(image_url)}`
     );
   } catch (err) {
+    trackBackendGA4Event('account_connection_failed', {
+      platform: 'canva',
+      success: false,
+      error_code: 'OAUTH_FAILED',
+    });
     return res.status(500).send("OAuth token exchange failed");
   }
 };

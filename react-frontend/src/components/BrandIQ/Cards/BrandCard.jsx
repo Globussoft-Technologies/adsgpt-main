@@ -12,6 +12,7 @@ import AddNewBrand from '../Actions/AddNewBrand';
 import BrandCardCarousel from './BrandCardCarousel';
 import { globalToast } from '@/utils/globalToast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { GA4Events } from '@/utils/ga4';
 const BrandCard = ({ brand }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingBrand, setEditingBrand] = useState(false);
@@ -124,6 +125,7 @@ const BrandCard = ({ brand }) => {
     try {
       const payload = { userId: userData?.user_id, id: brand?.id };
       await dispatch(deleteBrand(payload)).unwrap();
+      GA4Events.brandDeleted({ feature: 'brand_iq' });
       setIsDialogOpen(false);
       dispatch(fetchBrands(userData?.user_id));
       globalToast.success('Brand deleted successfully!');

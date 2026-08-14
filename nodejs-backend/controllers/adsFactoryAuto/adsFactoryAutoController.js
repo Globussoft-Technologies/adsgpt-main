@@ -33,6 +33,8 @@ function isJobRunLocked(job) {
   return !!(expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date());
 }
 
+const { trackBackendGA4Event } = require("../../utils/ga4");
+
 // ─── Controller ───────────────────────────────────────────────────────────────
 
 class AdsFactoryAutoController {
@@ -131,6 +133,21 @@ class AdsFactoryAutoController {
         { $set: { "metadata.jobId": job._id.toString() } }
       );
       campaignLinked = true;
+
+      const platforms = [];
+      if (value.targets?.meta) platforms.push("meta");
+      if (value.targets?.google) platforms.push("google");
+      if (value.targets?.tiktok) platforms.push("tiktok");
+      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+
+      trackBackendGA4Event("ad_factory", {
+        user_id: userId,
+        feature: "ad_factory",
+        action_name: `ad_factory_campaign_started_${platformStr}`,
+        source: "ad_factory_automation",
+        platforms: platformStr,
+        success: true,
+      });
 
       return res.status(201).json({ success: true, data: job });
     } catch (err) {
@@ -573,6 +590,22 @@ class AdsFactoryAutoController {
           );
         }
       }
+
+      const platforms = [];
+      if (job.targets?.meta) platforms.push("meta");
+      if (job.targets?.google) platforms.push("google");
+      if (job.targets?.tiktok) platforms.push("tiktok");
+      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+
+      trackBackendGA4Event("ad_factory", {
+        user_id: userId,
+        feature: "ad_factory",
+        action_name: `ad_factory_campaign_stopped_${platformStr}`,
+        source: "ad_factory_automation",
+        platforms: platformStr,
+        success: true,
+      });
+
       return res.json({ success: true, message: "Job archived" });
     } catch (err) {
       logger.error(`[adsFactoryAuto:deleteJob] ${err.message}`);
@@ -628,6 +661,21 @@ class AdsFactoryAutoController {
         job.schedule.nextRunAt = nextTime;
         await job.save();
       }
+
+      const platforms = [];
+      if (job.targets?.meta) platforms.push("meta");
+      if (job.targets?.google) platforms.push("google");
+      if (job.targets?.tiktok) platforms.push("tiktok");
+      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+
+      trackBackendGA4Event("ad_factory", {
+        user_id: userId,
+        feature: "ad_factory",
+        action_name: `ad_factory_campaign_stopped_${platformStr}`,
+        source: "ad_factory_automation",
+        platforms: platformStr,
+        success: true,
+      });
 
       return res.json({ success: true, data: job });
     } catch (err) {

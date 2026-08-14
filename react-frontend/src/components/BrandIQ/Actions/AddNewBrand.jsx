@@ -43,6 +43,7 @@ import ShowProductImages from '../Cards/ShowProductImages';
 import { useNavigate } from 'react-router-dom';
 import { setBrandIQError, setBrandIQLoading } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 import { getCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
 import { showCompetitorAdsReadyNotification } from '@/utils/showNotification';
 const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
@@ -345,7 +346,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       }
       setAnalysisError(
         error?.response?.data?.detail ||
-          'Failed to analyze website. Please try again or enter details manually.'
+        'Failed to analyze website. Please try again or enter details manually.'
       );
       console.error('Website analysis error:', error);
     } finally {
@@ -593,12 +594,14 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             }
           }
           await dispatch(updateBrandList(brandPayload)).unwrap();
+          GA4Events.brandUpdated({ feature: 'brand_iq' });
           setRemovedImages([]);
           setEditingBrand(false);
           globalToast.success('Brand updated successfully!');
         } else {
           // Create new brand
           const result = await dispatch(createBrandList(brandPayload)).unwrap();
+          GA4Events.brandCreated({ feature: 'brand_iq' });
           globalToast.success('Brand created successfully!');
           const createdBrandName = result?.data?.brandName || values.brandName.trim();
           const createdBrandId = result?.data?.id;
@@ -1296,11 +1299,10 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 key={chip}
                 type="button"
                 onClick={() => formik.setFieldValue('region', chip)}
-                className={`rounded-full border px-3 py-1 text-xs transition-all ${
-                  formik.values.region === chip
+                className={`rounded-full border px-3 py-1 text-xs transition-all ${formik.values.region === chip
                     ? 'border-blue-500 bg-blue-500/20 text-gray-900 dark:text-white'
                     : 'border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/5 text-gray-400 hover:border-black/20 dark:hover:border-white/40 hover:text-black dark:hover:text-white'
-                }`}
+                  }`}
               >
                 {chip}
               </button>
@@ -1357,11 +1359,10 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                         isSelected ? prev.filter((a) => a !== audience) : [...prev, audience]
                       );
                     }}
-                    className={`rounded-full border px-3 py-1 text-xs transition-all ${
-                      isSelected
+                    className={`rounded-full border px-3 py-1 text-xs transition-all ${isSelected
                         ? 'border-[#2BB8FC]/60 bg-[#2BB8FC]/20 text-[#1593c9] dark:text-[#7dd9f8]'
                         : 'border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/5 text-gray-400 hover:border-black/20 dark:hover:border-white/40 hover:text-black dark:hover:text-white'
-                    }`}
+                      }`}
                   >
                     {audience}
                   </button>
@@ -1489,19 +1490,17 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 {[1, 2].map((step) => (
                   <div key={step} className="flex items-center gap-1.5">
                     <div
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-medium ${
-                        brandDetailsFormNumber >= step
+                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-medium ${brandDetailsFormNumber >= step
                           ? 'border-gray-900 bg-blue-500/10 text-gray-900 dark:border-white dark:text-white'
                           : 'border-[#676E74] text-[#676E74]'
-                      }`}
+                        }`}
                     >
                       {step}
                     </div>
                     {step < 2 && (
                       <div
-                        className={`h-1 w-16 ${
-                          brandDetailsFormNumber > step ? 'bg-gray-900 dark:bg-white' : 'bg-[#676E74]'
-                        }`}
+                        className={`h-1 w-16 ${brandDetailsFormNumber > step ? 'bg-gray-900 dark:bg-white' : 'bg-[#676E74]'
+                          }`}
                       />
                     )}
                   </div>

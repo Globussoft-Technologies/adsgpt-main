@@ -24,6 +24,7 @@ import {
   updateBrandInfo,
   updateHistory,
 } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
+import { GA4Events } from '@/utils/ga4';
 
 export const createCampaign = createAsyncThunk(
   'adFactory/createCampaign',
@@ -37,6 +38,7 @@ export const createCampaign = createAsyncThunk(
       });
       if (res?.data?.campaignId) {
         dispatch(resetNodeStatuses());
+        GA4Events.adFactoryCampaignAdded({ source: 'ad_factory_form', success: true });
       }
       return res?.data?.campaignId;
     } catch (err) {
@@ -148,9 +150,9 @@ export const Analyzingsweburl = createAsyncThunk(
       }
       return rejectWithValue(
         err?.response?.data?.detail ||
-          err?.response?.data?.error ||
-          err?.message ||
-          'Failed to analyze website URL'
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to analyze website URL'
       );
     }
   }
@@ -173,10 +175,10 @@ export const AnalyzingsweburlForImages = createAsyncThunk(
       // `message` for older payload shapes.
       return rejectWithValue(
         err?.response?.data?.detail
-          || err?.response?.data?.error
-          || err?.response?.data?.message
-          || err?.message
-          || 'Failed to analyze website URL'
+        || err?.response?.data?.error
+        || err?.response?.data?.message
+        || err?.message
+        || 'Failed to analyze website URL'
       );
     }
   }
@@ -199,6 +201,7 @@ export const updateCampaign = createAsyncThunk(
           userId: socket?.userData?.user_id,
         };
         dispatch(fetchCampaignById(fetchPayload));
+        GA4Events.adFactoryCampaignUpdated({ source: 'ad_factory_form', success: true });
       }
       return res?.data;
     } catch (err) {
@@ -214,7 +217,7 @@ export const updateCampaign = createAsyncThunk(
       if (err?.response?.status === 409) {
         return rejectWithValue(
           err?.response?.data?.message ||
-            'This campaign name already exists. Please try a different campaign name.'
+          'This campaign name already exists. Please try a different campaign name.'
         );
       }
       return rejectWithValue(
@@ -300,9 +303,9 @@ const transformFromFinalFormat = (transformedCreatives) => {
       reverseCtaMap[transformed?.callToAction] ||
       (transformed?.callToAction
         ? transformed?.callToAction
-            .toLowerCase()
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, (l) => l.toUpperCase())
+          .toLowerCase()
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (l) => l.toUpperCase())
         : 'Learn More');
 
     return {
@@ -597,10 +600,11 @@ export const deleteAdFactoryCampaign = createAsyncThunk(
       );
       dispatch(setDeleteCampaignId(payload?.campaignId));
 
-      if (res.data.success === true) {
-        toast.success(res.data.message);
+      if (res?.data?.success) {
+        toast.success(res.data?.message || 'Campaign deleted');
         await dispatch(fetchCampaigns(payload?.userId));
         await dispatch(setDeleteDialogOpen(false));
+        GA4Events.adFactoryCampaignDeleted({ source: 'ad_factory_form', success: true });
       }
       // Return the deleted campaign ID for state update
       return {
@@ -618,7 +622,7 @@ export const deleteAdFactoryCampaign = createAsyncThunk(
   }
 );
 
- // same function i am using because in some cases we need to delete campaign if autofill failed but we dont want to show toast in that case so created another function without toast
+// same function i am using because in some cases we need to delete campaign if autofill failed but we dont want to show toast in that case so created another function without toast
 
 export const deleteAdFactoryCampaignn = createAsyncThunk(
   'adFactory/deleteAdFactoryCampaign',
@@ -636,10 +640,11 @@ export const deleteAdFactoryCampaignn = createAsyncThunk(
       );
       dispatch(setDeleteCampaignId(payload?.campaignId));
 
-      if (res.data.success === true) {
+      if (res?.data?.success) {
         // toast.success(res.data.message);
         await dispatch(fetchCampaigns(payload?.userId));
         await dispatch(setDeleteDialogOpen(false));
+        GA4Events.adFactoryCampaignDeleted({ source: 'ad_factory_form', success: true });
       }
       // Return the deleted campaign ID for state update
       return {

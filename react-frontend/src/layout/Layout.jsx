@@ -63,7 +63,14 @@ const Layout = () => {
       dispatch(setCurrentSeesionId(sessionId));
     }
     startGlobalInteractionTracking(location, null, 'pageRedirect', userData, sessionId);
-    trackGA4PageView(location.pathname);
+    GA4Events.sessionStarted();
+
+    const targetTab = (activeAdStudioTabId || '').replace('New', '');
+    const targetPath = location.pathname === '/adstudio' && targetTab
+      ? `/adstudio/${targetTab}`
+      : location.pathname;
+
+    trackGA4PageView(targetPath);
     GA4Events.featureVisitedByRoute(location.pathname);
 
     // Save time spent on previous page then record new page entry
