@@ -129,10 +129,12 @@ export const generateImageAction = (body) => async (dispatch) => {
     // see "brandInfo.brandName is not allowed to be empty" instead of
     // "Request failed with status code 400".
     const msg =
-      err.response?.data?.error ||
-      err.response?.data?.message ||
-      err.message ||
-      'Generation failed';
+      err.response?.status === 502
+        ? 'The generation service is temporarily unavailable. Please try again in a little while. Note: Your credits were not deducted.'
+        : err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          'Generation failed';
     dispatch(submitFailed(msg));
     triggerImageFailed(imageType);
     throw err;

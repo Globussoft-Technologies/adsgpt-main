@@ -7,6 +7,16 @@ const partnerApiKeys = require("../controllers/admin/partnerApiKey.controller");
 const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.controller");
 const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
+const multer = require("multer");
+
+const modelIconUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    callback(null, allowed.includes(file.mimetype));
+  },
+});
 
 router.post("/login", adminAuth.login);
 router.get("/me", requireAdmin, adminAuth.me);
@@ -39,6 +49,9 @@ router.post("/models", requireAdmin, modelConfiguration.createModel);
 router.patch("/models/:canonicalKey", requireAdmin, modelConfiguration.updateModel);
 router.patch("/models/:canonicalKey/status/:status", requireAdmin, modelConfiguration.setStatus);
 router.patch("/models/:canonicalKey/surfaces", requireAdmin, modelConfiguration.updateSurfaces);
+router.patch("/models/:canonicalKey/unarchive", requireAdmin, modelConfiguration.unarchiveModel);
+router.post("/models/:canonicalKey/icon", requireAdmin, modelIconUpload.single("icon"), modelConfiguration.uploadIcon);
+router.delete("/models/:canonicalKey/icon", requireAdmin, modelConfiguration.removeIcon);
 router.delete("/models/:canonicalKey", requireAdmin, modelConfiguration.archiveModel);
 
 module.exports = router;

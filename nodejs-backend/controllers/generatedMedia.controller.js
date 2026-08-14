@@ -1,4 +1,5 @@
 const GeneratedMedia = require('../Module/generatedMedia/generated.media');
+const modelConfigurationService = require('../services/modelConfigurationService');
 const {
   buildCreditLookupBranches,
   buildEffectiveCostStages,
@@ -38,6 +39,21 @@ class GeneratedMediaController {
         return { success: false, message: "userId and model are required" };
       }
 
+      // Image credit metadata must come from the current DB-backed model
+      // configuration. Some generation callers include a stale/default
+      // credit_deduction in their result payload, so do not trust that value
+      // when a model configuration exists.
+      let effectiveCreditDeduction = credit_deduction || 0;
+      if (type === "image") {
+        const configuredModel = await modelConfigurationService.resolveModelByAlias(model);
+        if (configuredModel) {
+          effectiveCreditDeduction = modelConfigurationService.getRuntimeCredit(
+            configuredModel,
+            quality || "high",
+          );
+        }
+      }
+
       const newMedia = new GeneratedMedia({
         userId,
         // user_name,
@@ -49,7 +65,7 @@ class GeneratedMediaController {
         source: source || "",
         image: image || "",
         video: video || "",
-        credit_deduction: credit_deduction || 0,
+        credit_deduction: effectiveCreditDeduction,
         cost: cost || 0,
         duration: duration || 0,
         aspect_ratio: aspect_ratio || "",

@@ -22,7 +22,7 @@ import {
   checkFbUser,
   checkGoogleUser,
 } from '@/store/actions/adFactoryNew/adFactoryActions';
-import { useImageCreditsForModel } from '@/utils/hooks/useImageCreditsForModel';
+import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
 import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 import FrequencySection from './FrequencySection';
@@ -276,6 +276,8 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
     return initial;
   });
+  const [adFactoryModels, setAdFactoryModels] = useState([]);
+  const [adFactoryModelsLoading, setAdFactoryModelsLoading] = useState(true);
   const [metaAccountsLoading, setMetaAccountsLoading] = useState(true);
   const isMetaConnected = !!(
     values?.template?.facebookId && values?.template?.facebookConnectionId
@@ -283,6 +285,16 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   const anyPlatformConnected =
     (hasMetaSelected && isMetaConnected) ||
     (hasGoogleSelected && isGoogleConnected);
+
+  useEffect(() => {
+    let active = true;
+    setAdFactoryModelsLoading(true);
+    fetchAdFactoryConfig()
+      .then((models) => { if (active) setAdFactoryModels(Array.isArray(models) ? models : []); })
+      .catch(() => { if (active) setAdFactoryModels([]); })
+      .finally(() => { if (active) setAdFactoryModelsLoading(false); });
+    return () => { active = false; };
+  }, []);
 
 
   // Re-fetch in case anything changed since the slice was first hydrated.
@@ -321,17 +333,28 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
   }, [dispatch, userData?.user_id, hasGoogleSelected]);
 
-  // Resolve the credit cost for the currently picked image model. The form
-  // stores the backend's provider key (e.g. 'google'); the shared hook
-  // wants the API's display label (e.g. 'Nano Banana Pro'), so we map
-  // value → label via MODEL_OPTIONS first. The hook handles the fetch +
-  // cache + fallback internally.
-  const selectedModelLabel = useMemo(
-    () =>
-      MODEL_OPTIONS.find((m) => m.value === values.imageModelProvider)?.label,
-    [values.imageModelProvider]
-  );
-  const creditsPerImage = useImageCreditsForModel(selectedModelLabel);
+  // Existing Automation jobs retain their legacy values (google/openai).
+  // Models added in Admin use their canonical key as the submitted value.
+  const modelOptions = useMemo(() => {
+    const liveOptions = adFactoryModels.map((model) => {
+      const aliases = Array.isArray(model.aliases) ? model.aliases.map((alias) => String(alias).toLowerCase()) : [];
+      const legacyValue = aliases.includes('google') ? 'google' : aliases.includes('openai') ? 'openai' : model.apiId;
+      return { value: legacyValue, label: model.label, Icon: model.icon ? <img src={model.icon} alt="" className="size-4 rounded object-contain" /> : undefined, creditsPerImage: Number(model.creditsPerImage) || 0 };
+    });
+    return liveOptions.length ? liveOptions : MODEL_OPTIONS.map((model) => ({ ...model, creditsPerImage: 7 }));
+  }, [adFactoryModels]);
+  const selectedModel = modelOptions.find((model) => model.value === values.imageModelProvider);
+  const creditsPerImage = selectedModel?.creditsPerImage || (adFactoryModelsLoading ? 7 : 0);
+
+  // A newly added DB model becomes the initial choice when no legacy value is
+  // available. Existing saved google/openai values remain untouched whenever
+  // their corresponding DB model is present.
+  useEffect(() => {
+    if (adFactoryModelsLoading || !modelOptions.length) return;
+    if (!modelOptions.some((model) => model.value === values.imageModelProvider)) {
+      updateValues({ imageModelProvider: modelOptions[0].value });
+    }
+  }, [adFactoryModelsLoading, modelOptions, values.imageModelProvider]);
 
   // Per-platform CTA validators. Each platform is validated independently and
   // only when it is actually ready to post, because the CTA section lives
@@ -680,6 +703,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
         model={values.imageModelProvider}
         onModelChange={(imageModelProvider) => updateValues({ imageModelProvider })}
         creditsPerImage={creditsPerImage}
+        modelOptions={modelOptions}
         disabled={!anyPlatformConnected}
       />
 

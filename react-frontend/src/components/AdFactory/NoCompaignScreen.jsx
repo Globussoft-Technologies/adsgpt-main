@@ -66,16 +66,20 @@ const NoCompaignScreen = () => {
   const [editedCampaignName, setEditedCampaignName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInitialCampaignFetch, setIsInitialCampaignFetch] = useState(false);
 
   const { campaigns, deleteCampaignId, deleteDialogOpen, loading } = useSelector(
     (state) => state.adFactoryNew
   );
   const { userData } = useSelector((state) => state.socket);
+  const userId = userData?.user_id;
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
   const campaignsList = campaigns?.data || [];
+  const showCampaignLoader =
+    (!userId && campaignsList.length === 0) || loading || isInitialCampaignFetch;
 
   const handleCampaignClick = (campaign) => {
     const CampainId = campaign?.metadata?.campaignId;
@@ -190,10 +194,19 @@ const NoCompaignScreen = () => {
   }, [editDialogOpen]);
 
   useEffect(() => {
-    if (userData?.user_id) {
-      dispatch(fetchCampaigns(userData?.user_id));
-    }
-  }, [dispatch]);
+    if (!userId) return undefined;
+
+    let isMounted = true;
+    setIsInitialCampaignFetch(true);
+
+    Promise.resolve(dispatch(fetchCampaigns(userId))).finally(() => {
+      if (isMounted) setIsInitialCampaignFetch(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [dispatch, userId]);
 
   return (
     <>
@@ -214,7 +227,7 @@ const NoCompaignScreen = () => {
           </div>
         )}
         {/* Show loader when loading */}
-        {loading ? (
+        {showCampaignLoader ? (
           <div className="flex min-h-[55vh] w-full items-center justify-center">
             <Loader className="h-8 w-8 animate-spin text-gray-600" />
           </div>

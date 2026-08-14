@@ -168,7 +168,11 @@ const handleAdCreativeResponse = async (data, socket) => {
       return;
     }
 
-    const creditPerImage = UnifiedCreditController.getModelDeduction(model);
+    const imageQuality = data?.inputs?.quality || "high";
+    const creditPerImage = UnifiedCreditController.getModelDeductionByQuality(
+      model,
+      imageQuality,
+    );
     const totalCreditsToDeduct = creditPerImage * successfulImages.length;
 
     // NOTE: DB save (GeneratedMedia) is handled by Python hitting POST /createUsage
@@ -215,7 +219,7 @@ const handleAdCreativeResponse = async (data, socket) => {
           video: "",
           credit_deduction: creditPerImage,
           cost: actualImageCost, // 0 now; auto-corrects once Python sends tokens via socket
-          quality: data?.inputs?.quality || "high",
+          quality: imageQuality,
         });
       }
 

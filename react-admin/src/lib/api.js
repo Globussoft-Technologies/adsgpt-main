@@ -51,6 +51,14 @@ export const adminApi = {
     api.patch(`/models/${encodeURIComponent(canonicalKey)}/status/${status}`),
   updateModelSurfaces: (canonicalKey, surfaces) =>
     api.patch(`/models/${encodeURIComponent(canonicalKey)}/surfaces`, { surfaces }),
+  unarchiveModel: (canonicalKey) =>
+    api.patch(`/models/${encodeURIComponent(canonicalKey)}/unarchive`),
+  uploadModelIcon: (canonicalKey, file) => {
+    const form = new FormData();
+    form.append("icon", file);
+    return api.post(`/models/${encodeURIComponent(canonicalKey)}/icon`, form);
+  },
+  removeModelIcon: (canonicalKey) => api.delete(`/models/${encodeURIComponent(canonicalKey)}/icon`),
   archiveModel: (canonicalKey) => api.delete(`/models/${encodeURIComponent(canonicalKey)}`),
 };
 

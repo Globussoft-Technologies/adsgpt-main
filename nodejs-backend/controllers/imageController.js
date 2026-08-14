@@ -840,6 +840,8 @@ exports.updateImageResult = async (req, res) => {
                     cost: actualImageCost,
                     quality: priorDoc?.inputs?.quality || "high",
                     duration: timing?.totalMs || 0,
+                }).catch((saveError) => {
+                    console.error("Failed to save generated image media:", saveError);
                 });
                 const newCount = new GeneratedCount({
                     userId: userId,

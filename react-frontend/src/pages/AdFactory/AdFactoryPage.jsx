@@ -20,6 +20,7 @@ import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 export default function AdFactoryPage() {
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
+  const userId = userData?.user_id;
 // console.log(userData,"userdata")
   const [searchParams] = useSearchParams();
 
@@ -30,8 +31,9 @@ export default function AdFactoryPage() {
   // console.log(queryCampaignId)
 
   useEffect(() => {
-    dispatch(fetchBrands(userData?.user_id));
-  }, [dispatch, userData?.user_id]);
+    if (!userId) return;
+    dispatch(fetchBrands(userId));
+  }, [dispatch, userId]);
 
   useEffect(() => {
     if (googleAuth === 'success') {
@@ -47,9 +49,10 @@ export default function AdFactoryPage() {
   }, [googleAuth, dispatch]);
 
   useEffect(() => {
-    dispatch(checkFbUser(userData?.user_id));
-    dispatch(checkGoogleUser(userData?.user_id));
-  }, [dispatch, userData?.user_id]);
+    if (!userId) return;
+    dispatch(checkFbUser(userId));
+    dispatch(checkGoogleUser(userId));
+  }, [dispatch, userId]);
 
   // Bootstrap a campaign on mount: load its data, and trigger the MANUAL
   // pipeline only if it isn't currently running under automation.
@@ -66,9 +69,9 @@ export default function AdFactoryPage() {
   // is in the "automation visible" set (active/paused/completed/failed).
   // `cancelled` flag prevents the emit from firing after unmount.
   useEffect(() => {
-    if (!queryCampaignId) return undefined;
+    if (!queryCampaignId || !userId) return undefined;
     dispatch(
-      fetchCampaignById({ campaignId: queryCampaignId, userId: userData?.user_id }),
+      fetchCampaignById({ campaignId: queryCampaignId, userId }),
     );
 
     // Pre-automation behavior: kick the manual pipeline unconditionally. The
@@ -90,7 +93,7 @@ export default function AdFactoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryCampaignId, userData?.user_id, dispatch]);
+  }, [queryCampaignId, userId, dispatch]);
 
   return (
     <div className="relative h-full w-full">

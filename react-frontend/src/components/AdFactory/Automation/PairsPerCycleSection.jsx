@@ -23,6 +23,7 @@ export default function PairsPerCycleSection({
   model,
   onModelChange,
   creditsPerImage,
+  modelOptions = MODEL_OPTIONS,
   disabled,
 }) {
   const ads = clamp(Number(value) || MIN_ADS, MIN_ADS, MAX_ADS);
@@ -70,8 +71,8 @@ export default function PairsPerCycleSection({
 
         <InputCommonDropdown
           label="Image model"
-          options={MODEL_OPTIONS}
-          value={model || 'google'}
+          options={modelOptions}
+          value={model || modelOptions[0]?.value || 'google'}
           onChange={(next) => onModelChange?.(next)}
           disabled={disabled}
         />

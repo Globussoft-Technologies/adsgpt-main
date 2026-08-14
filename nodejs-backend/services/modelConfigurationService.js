@@ -98,7 +98,12 @@ function createModelConfigurationService({ model = AIModelConfiguration } = {}) 
   }
 
   async function getModelsForSurface(surface, { type, includeDisabled = false } = {}) {
-    const rows = includeDisabled ? await getAllModels({ includeArchived: false }) : await getEnabledModels();
+    // Surface catalogs are exposed to Admin/user-facing model pickers. Read
+    // the current DB state here instead of the process cache so an Admin
+    // enable/unarchive performed in another process is visible immediately.
+    const query = { archived: { $ne: true } };
+    if (!includeDisabled) query.enabled = { $ne: false };
+    const rows = await model.find(query).sort({ sortOrder: 1, canonicalKey: 1 }).lean();
     return rows.filter((row) => {
       if (type && row.type !== type) return false;
       return surfacesObject(row)[surface]?.enabled === true;

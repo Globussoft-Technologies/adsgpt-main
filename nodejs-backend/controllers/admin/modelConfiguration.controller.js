@@ -115,7 +115,50 @@ function createModelConfigurationController({ model = AIModelConfiguration, audi
     return updateModel({ ...req, body: { enabled: false, archived: true } }, res);
   }
 
-  return { listModels, getModel, createModel, updateModel, setStatus, updateSurfaces, archiveModel };
+  async function unarchiveModel(req, res) {
+    return updateModel({ ...req, body: { enabled: true, archived: false } }, res);
+  }
+
+  async function uploadIcon(req, res) {
+    try {
+      const canonicalKey = String(req.params.canonicalKey);
+      const existing = await model.findOne({ canonicalKey }).lean();
+      if (!existing) return res.status(404).json({ success: false, message: "Model not found" });
+      if (!req.file) return res.status(400).json({ success: false, message: "Icon file is required" });
+
+      const icon = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      const updated = await model.findOneAndUpdate(
+        { canonicalKey },
+        { $set: { icon } },
+        { new: true, runValidators: true },
+      ).lean();
+      await writeAudit("icon_update", req, canonicalKey, existing, updated);
+      return res.json({ success: true, model: updated });
+    } catch (error) {
+      console.error("Upload AI model icon error:", error);
+      return res.status(500).json({ success: false, message: "Failed to upload model icon" });
+    }
+  }
+
+  async function removeIcon(req, res) {
+    try {
+      const canonicalKey = String(req.params.canonicalKey);
+      const existing = await model.findOne({ canonicalKey }).lean();
+      if (!existing) return res.status(404).json({ success: false, message: "Model not found" });
+      const updated = await model.findOneAndUpdate(
+        { canonicalKey },
+        { $set: { icon: null } },
+        { new: true, runValidators: true },
+      ).lean();
+      await writeAudit("icon_remove", req, canonicalKey, existing, updated);
+      return res.json({ success: true, model: updated });
+    } catch (error) {
+      console.error("Remove AI model icon error:", error);
+      return res.status(500).json({ success: false, message: "Failed to remove model icon" });
+    }
+  }
+
+  return { listModels, getModel, createModel, updateModel, setStatus, updateSurfaces, archiveModel, unarchiveModel, uploadIcon, removeIcon };
 }
 
 const controller = createModelConfigurationController();
