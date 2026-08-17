@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Upload,
@@ -10,6 +10,7 @@ import {
   Plus,
   Sparkles,
   Timer,
+  Loader2,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 
@@ -19,7 +20,8 @@ import { RiGeminiFill } from 'react-icons/ri';
 import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneLoading } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
+import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
+import { getModelAspectRatios } from '@/utils/videoModelCapabilities';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
@@ -126,10 +128,10 @@ const durationOptions = [
   { value: '40', label: '40s' },
 ];
 
-const aspectRatioOptions = [
-  { value: '9:16', label: '9:16' },
-  { value: '16:9', label: '16:9' },
-];
+// const aspectRatioOptions = [
+//   { value: '9:16', label: '9:16' },
+//   { value: '16:9', label: '16:9' },
+// ];
 
 // If the saved duration isn't in the active list (e.g. '4'/'6' were removed),
 // pick the closest available value so the field is never blank on recreate.
@@ -165,8 +167,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   const title = isBrand ? 'Brand Details' : 'Product Details';
   const dispatch = useDispatch();
   const { modelCredits } = useSelector((state) => state.prompt);
-  const surfaceModels = useVideoSurfaceModels('ai_ads');
-  const availableCanonicalKeys = new Set(surfaceModels.map((entry) => entry.canonical));
+  const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('ai_ads');
+  const availableCanonicalKeys = useMemo(
+    () => new Set(surfaceModels.map((entry) => entry.canonical || entry.model)),
+    [surfaceModels]
+  );
   const { credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
   const [submitting, setSubmitting] = useState(false);
@@ -227,6 +232,10 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       voiceName: data?.voice?.voiceName || data?.voiceName || '',
     },
   }));
+  const aspectRatioOptions = useMemo(
+    () => getModelAspectRatios(surfaceModels, 'ai_ads', formData.model),
+    [surfaceModels, formData.model]
+  );
 
   // URL-based images from analysis (not File objects)
   // brandImages takes priority — these are already on S3 from BrandIQ, no re-upload needed
@@ -508,11 +517,33 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     // },
   ].filter((option) => availableCanonicalKeys.has(option.value));
 
+  const visibleModelOptions = surfaceModels.map((model) => {
+    const value = model.canonical || model.model;
+    const metadata = modelOptions.find((option) => option.value === value);
+    return {
+      value,
+      label: model.label || metadata?.label || value,
+      tier: metadata?.tier,
+      Icon: metadata?.Icon || <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+      credit: model.value || metadata?.credit,
+    };
+  });
+
   useEffect(() => {
-    if (!modelOptions.some((option) => option.value === formData.model)) {
-      updateField('model', modelOptions[0]?.value || '');
+    if (!visibleModelOptions.length) return;
+
+    const nextModel = visibleModelOptions[0].value;
+    if (!visibleModelOptions.some((option) => option.value === formData.model) && formData.model !== nextModel) {
+      updateField('model', nextModel);
     }
-  }, [modelOptions, formData.model]);
+  }, [surfaceModels, formData.model]);
+
+  useEffect(() => {
+    if (isAspectRatioLoading || !aspectRatioOptions.length) return;
+    if (!aspectRatioOptions.some((option) => option.value === formData.aspectRatio)) {
+      updateField('aspectRatio', aspectRatioOptions[0].value);
+    }
+  }, [aspectRatioOptions, formData.aspectRatio, isAspectRatioLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
@@ -570,8 +601,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
-                      options={modelOptions}
-                      value={modelOptions.find((opt) => opt.value === formData.model)}
+                      options={visibleModelOptions}
+                      value={visibleModelOptions.find((opt) => opt.value === formData.model)}
                       onChange={(val) => { updateField('model', val); setErrors((prev) => ({ ...prev, model: '' })); }}
                     />
                   </div>
@@ -594,13 +625,14 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 <div className="flex flex-col items-end">
                   <div className={errors.aspectRatio ? 'rounded-full ring-1 ring-red-500' : ''}>
                     <CommonDropdown
-                      label="Aspect Ratio"
+                      label={isAspectRatioLoading ? 'Loading ratios...' : 'Aspect Ratio'}
                       type="b-roll"
                       side="top"
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={aspectRatioOptions}
-                      value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio)}
+                      value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio) || (isAspectRatioLoading ? { label: 'Loading ratios...', Icon: <Loader2 className="h-3 w-3 animate-spin" /> } : undefined)}
                       onChange={(val) => { updateField('aspectRatio', val); setErrors((prev) => ({ ...prev, aspectRatio: '' })); }}
+                      disabled={isAspectRatioLoading || !aspectRatioOptions.length}
                     />
                   </div>
                   {errors.aspectRatio && <p className="mt-1 text-[10px] text-red-400">{errors.aspectRatio}</p>}

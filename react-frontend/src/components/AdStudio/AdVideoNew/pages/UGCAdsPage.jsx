@@ -4,9 +4,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
   CloudUpload,
   LinkIcon,
-  RectangleHorizontal,
-  RectangleVertical,
-  Square,
   X,
   Clapperboard,
   ChevronLeft,
@@ -28,7 +25,8 @@ import {
 import { analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { toast } from 'react-toastify';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
+import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
+import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
 import { RiGeminiFill } from 'react-icons/ri';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
@@ -39,12 +37,6 @@ import { globalToast } from '@/utils/globalToast';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
-const availableRatios = [
-  { value: '9:16', label: '9:16', icon: RectangleVertical },
-  { value: '1:1', label: '1:1', icon: Square, onlyModels: ['kling_3.0'] },
-  { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-];
-
 const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const dispatch = useDispatch();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,7 +44,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const [localRecreateData, setLocalRecreateData] = useState(recreateInputs);
   const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
   const { modelCredits } = useSelector((state) => state.prompt);
-  const surfaceModels = useVideoSurfaceModels('ugc');
+  const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('ugc');
   const availableCanonicalKeys = useMemo(
     () => new Set(surfaceModels.map((entry) => entry.canonical)),
     [surfaceModels]
@@ -69,6 +61,10 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('');
   const [aspectRatio, setAspectRatio] = useState('');
+  const aspectRatioOptions = useMemo(
+    () => getModelAspectRatios(surfaceModels, 'ugc', videoModel),
+    [surfaceModels, videoModel]
+  );
   const [promotion, setPromotion] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -217,6 +213,13 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
       }
     }
   }, [videoModel, aspectRatio, imageOrientation]);
+
+  useEffect(() => {
+    if (isAspectRatioLoading || !aspectRatioOptions.length) return;
+    if (!aspectRatioOptions.some((option) => option.value === aspectRatio)) {
+      setAspectRatio(aspectRatioOptions[0].value);
+    }
+  }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
 
   useEffect(() => {
     const selectedImg = uploadedImages[selectedImageIndex];
@@ -707,13 +710,11 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                 {/* Aspect Ratio */}
                 <div className="flex flex-col gap-3">
                   <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
-                    Aspect Ratio *
+                    Aspect Ratio * {isAspectRatioLoading && <Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin" />}
                   </label>
                   <div className="flex gap-4">
-                    {availableRatios
-                      .filter((r) => !r.onlyModels || r.onlyModels.includes(videoModel))
+                    {aspectRatioOptions
                       .map((ratio) => {
-                        const Icon = ratio.icon;
                         const isSelected = aspectRatio === ratio.value;
                         const isKling = videoModel === 'kling_3.0';
                         let isDisabled = false;
@@ -730,9 +731,9 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                         return (
                           <button
                             key={ratio.value}
-                            disabled={isDisabled}
+                            disabled={isDisabled || isAspectRatioLoading}
                             onClick={() => {
-                              if (isDisabled) return;
+                              if (isDisabled || isAspectRatioLoading) return;
                               setAspectRatio(ratio.value);
                             }}
                             className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
@@ -745,9 +746,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                                     : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
                             }`}
                           >
-                            <Icon
-                              className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`}
-                            />
+                            <AspectRatioPreview ratio={ratio.value} className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`} />
                             {ratio.label}
                           </button>
                         );

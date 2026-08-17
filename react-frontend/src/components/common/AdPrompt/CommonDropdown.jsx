@@ -11,6 +11,7 @@ const CommonDropdown = ({
   className = '',
   side,
   triggerVariant = 'default',
+  disabled = false,
 }) => {
   const Icon = value?.Icon;
   const dropdownLabel = label;
@@ -20,9 +21,10 @@ const CommonDropdown = ({
   // const selectedOption = options?.find((opt) => opt.value === value?.value);
   // const SelectedIcon = selectedOption?.Icon;
   return (
-    <Select value={value?.value} onValueChange={onChange}>
+    <Select value={value?.value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         hideIcon
+        disabled={disabled}
         className={
           isVoiceChip
             ? `group relative flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-3 py-1 text-[12px] font-medium text-gray-900 opacity-100 shadow-[0_0_8px_rgba(52,211,153,0.2)] transition hover:bg-emerald-400/10 focus-visible:border-emerald-400/50 focus-visible:ring-0 sm:text-[13px] dark:bg-emerald-400/10 dark:text-white dark:hover:bg-emerald-400/10 ${className}`

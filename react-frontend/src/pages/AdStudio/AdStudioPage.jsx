@@ -61,6 +61,7 @@ const AdStudioPage = () => {
 
   // Fetch brands on load
   useEffect(() => {
+    if (!userData?.user_id) return;
     dispatch(fetchBrands(userData?.user_id));
   }, [dispatch, userData?.user_id]);
 

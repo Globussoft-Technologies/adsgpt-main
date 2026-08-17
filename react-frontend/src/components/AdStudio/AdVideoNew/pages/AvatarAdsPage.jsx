@@ -18,7 +18,8 @@ import {
   getVideoById,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
+import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
+import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
 import avatarLibraryImg from '@/assets/layouts/adVideoNew/avatarLibrary.png';
 import avatarUploadImg from '@/assets/layouts/adVideoNew/avatarUpload.png';
 import avatarUploadBgImg from '@/assets/layouts/adVideoNew/avatarUploadBg.png';
@@ -35,9 +36,6 @@ import {
   Filter,
   CloudUpload,
   LinkIcon,
-  RectangleHorizontal,
-  RectangleVertical,
-  Square,
   X,
   ListFilter,
   ImagePlus,
@@ -791,7 +789,7 @@ const AvatarConfigForm = ({
 }) => {
   const isCustomAvatar = customAvatarImages.length > 0;
   const { modelCredits } = useSelector((state) => state.prompt);
-  const surfaceModels = useVideoSurfaceModels('avatar');
+  const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('avatar');
   const availableCanonicalKeys = useMemo(
     () => new Set(surfaceModels.map((entry) => entry.canonical)),
     [surfaceModels]
@@ -804,6 +802,10 @@ const AvatarConfigForm = ({
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('');
   const [aspectRatio, setAspectRatio] = useState('');
+  const aspectRatioOptions = useMemo(
+    () => getModelAspectRatios(surfaceModels, 'avatar', videoModel),
+    [surfaceModels, videoModel]
+  );
   const [promotion, setPromotion] = useState('');
   const [notes, setNotes] = useState('');
   const [hasProductImage, setHasProductImage] = useState(null);
@@ -956,6 +958,13 @@ const AvatarConfigForm = ({
       }
     }
   }, [videoModel, aspectRatio, imageOrientation]);
+
+  useEffect(() => {
+    if (isAspectRatioLoading || !aspectRatioOptions.length) return;
+    if (!aspectRatioOptions.some((option) => option.value === aspectRatio)) {
+      setAspectRatio(aspectRatioOptions[0].value);
+    }
+  }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
 
   useEffect(() => {
     const rawUrl = uploadedImages.length > 0 ? uploadedImages[0].preview : productUrl.trim();
@@ -1226,11 +1235,6 @@ const AvatarConfigForm = ({
     setVideoDuration(videoTimer[0].value);
   }, [videoTimer]);
 
-  const availableRatios = [
-    { value: '9:16', label: '9:16', icon: RectangleVertical },
-    { value: '1:1', label: '1:1', icon: Square, onlyModels: ['kling_3.0'] },
-    { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-  ];
   const handlePaste = async (e) => {
     const items = e.clipboardData.items;
 
@@ -1545,10 +1549,9 @@ const AvatarConfigForm = ({
         )}
 
         <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Aspect Ratio*</label>
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Aspect Ratio* {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}</label>
           <div className="flex flex-wrap gap-3">
-            {availableRatios
-              .filter((r) => !r.onlyModels || r.onlyModels.includes(videoModel))
+            {aspectRatioOptions
               .map((ratio) => {
                 const isSelected = aspectRatio === ratio.value;
                 const isKling = videoModel === 'kling_3.0';
@@ -1566,9 +1569,9 @@ const AvatarConfigForm = ({
                 return (
                   <button
                     key={ratio.value}
-                    disabled={isDisabled}
+                    disabled={isDisabled || isAspectRatioLoading}
                     onClick={() => {
-                      if (isDisabled) return;
+                      if (isDisabled || isAspectRatioLoading) return;
                       setAspectRatio(ratio.value);
                     }}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${
@@ -1581,7 +1584,7 @@ const AvatarConfigForm = ({
                             : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
                     }`}
                   >
-                    <ratio.icon className="h-4 w-4" />
+                    <AspectRatioPreview ratio={ratio.value} className="h-4 w-4" />
                     {ratio.label}
                   </button>
                 );

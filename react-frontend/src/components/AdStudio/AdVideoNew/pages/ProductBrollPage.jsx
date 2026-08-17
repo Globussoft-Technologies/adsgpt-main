@@ -5,9 +5,7 @@ import UpgradeModal from '../UpgradeModal';
 import {
   CloudUpload,
   LinkIcon,
-  RectangleHorizontal,
-  RectangleVertical,
-  Square,
+  Loader2,
   X,
 } from 'lucide-react';
 import { RiGeminiFill } from 'react-icons/ri';
@@ -27,15 +25,10 @@ import emitter from '@/utils/eventEmitter';
 import { AnimatePresence } from 'framer-motion';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
+import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
+import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
-
-const availableRatios = [
-  { value: '9:16', label: '9:16', icon: RectangleVertical },
-  { value: '1:1', label: '1:1', icon: Square, onlyModels: ['kling_3.0'] },
-  { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-];
 
 const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +39,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   // const [productName, setProductName] = useState('');
   const [promotion, setPromotion] = useState('');
   const [notes, setNotes] = useState('');
-  const [aspectRatio, setAspectRatio] = useState(availableRatios[1].value);
+  const [aspectRatio, setAspectRatio] = useState('');
   const [imageOrientation, setImageOrientation] = useState(null); // 'portrait', 'landscape', 'square'
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -60,10 +53,14 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   const dispatch = useDispatch();
   const productName = brand_name || brandInfo?.brandName || '';
   const { video_model, modelCredits } = useSelector((state) => state.prompt);
-  const surfaceModels = useVideoSurfaceModels('broll');
+  const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('broll');
   const availableCanonicalKeys = useMemo(
     () => new Set(surfaceModels.map((entry) => entry.canonical)),
     [surfaceModels]
+  );
+  const aspectRatioOptions = useMemo(
+    () => getModelAspectRatios(surfaceModels, 'broll', videoModel),
+    [surfaceModels, videoModel]
   );
   const { credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
@@ -182,6 +179,13 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
       }
     }
   }, [videoModel, aspectRatio, imageOrientation]);
+
+  useEffect(() => {
+    if (isAspectRatioLoading || !aspectRatioOptions.length) return;
+    if (!aspectRatioOptions.some((option) => option.value === aspectRatio)) {
+      setAspectRatio(aspectRatioOptions[0].value);
+    }
+  }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
 
   useEffect(() => {
     if (uploadedImages.length > 0) {
@@ -590,12 +594,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         {/* Aspect Ratio */}
         <div>
-          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Aspect Ratio *</label>
+          <label className="flex items-center gap-2 text-sm text-zinc-900 2xl:text-base dark:text-white">Aspect Ratio * {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}</label>
 
           <div className="mt-2 flex flex-wrap gap-3">
-            {availableRatios
-              .filter((r) => !r.onlyModels || r.onlyModels.includes(videoModel))
-              .map(({ value, label, icon: Icon }) => {
+            {aspectRatioOptions
+              .map(({ value, label }) => {
                 const isSelected = value === aspectRatio;
                 const isKling = videoModel === 'kling_3.0';
                 let isDisabled = false;
@@ -610,7 +613,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                   <div
                     key={value}
                     onClick={() => {
-                      if (isDisabled) return;
+                      if (isDisabled || isAspectRatioLoading) return;
                       setAspectRatio(value);
                       setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                     }}
@@ -624,7 +627,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                   >
                     <button
                       type="button"
-                      disabled={isDisabled}
+                      disabled={isDisabled || isAspectRatioLoading}
                       className={`flex min-w-20 items-center justify-between gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all 2xl:min-w-22 2xl:py-2 ${
                         isSelected
                           ? 'bg-zinc-100 text-zinc-800 dark:bg-[#2d2d2d] dark:text-white'
@@ -633,7 +636,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                             : 'bg-white text-zinc-700 hover:border-black/10 hover:text-zinc-900 dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:hover:border-white/10 dark:hover:text-white'
                       }`}
                     >
-                      <Icon className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                      <AspectRatioPreview ratio={value} className="h-4 w-4 2xl:h-5 2xl:w-5" />
                       <span className="text-xs 2xl:text-sm">{label}</span>
                     </button>
                   </div>
