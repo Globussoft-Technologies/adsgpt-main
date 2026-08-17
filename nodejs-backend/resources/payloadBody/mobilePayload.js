@@ -98,6 +98,46 @@ exports.mobileAuthResponse = {
   nextAction: "OPEN_APP",
 };
 
+// ─── V2 Auth & Onboarding Payloads ───────────────────────────────────────────
+
+exports.v2EmailAuthPayload = {
+  $email: "user@example.com",
+  $password: "password123",
+};
+
+exports.v2GoogleAuthPayload = {
+  $firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  platform: "web",
+};
+
+exports.v2AppleAuthPayload = {
+  $firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  platform: "ios",
+};
+
+exports.v2UpdateProfilePayload = {
+  $firstName: "John",
+  $lastName: "Doe",
+  $phoneNumber: "+1234567890",
+};
+
+exports.v2AuthSuccessResponse = {
+  success: true,
+  statusCode: 200,
+  data: {
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
+    user: {
+      id: "GPT-12345",
+      email: "user@example.com",
+      fullName: "John Doe",
+      isNewUser: false,
+      isOnboarded: true,
+      hasActivePlan: true,
+      phoneNumber: "+1234567890"
+    }
+  }
+};
+
 exports.mobilePaymentVerifyResponse = {
   ok: true,
   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6...",

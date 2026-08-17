@@ -1463,50 +1463,39 @@ async function run(jobId) {
     // projection so runtime and preview agree.
     let effectiveEndBoundary = null;
     if (job.schedule.endDate) {
-      const { resolveInclusiveEndDate } = require("./adsFactoryAutoQueue");
+      const {
+        resolveInclusiveEndDate,
+        resolveEndBoundaryGraceMinutes,
+        hasPassedEndBoundaryWithGrace,
+      } = require("./adsFactoryAutoQueue");
       effectiveEndBoundary = resolveInclusiveEndDate(
         job.schedule.endDate,
         job.schedule.hour,
         job.schedule.timezone || "UTC"
       );
-    }
-    const rawEndBoundaryGraceMinutes = process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES;
-    const hasEndBoundaryGraceEnv = rawEndBoundaryGraceMinutes !== undefined && rawEndBoundaryGraceMinutes !== "";
-    const endBoundaryGraceMinutes = hasEndBoundaryGraceEnv
-      ? Number(rawEndBoundaryGraceMinutes)
-      : null;
-    const endBoundaryGraceMs =
-      Number.isFinite(endBoundaryGraceMinutes) && endBoundaryGraceMinutes >= 0
-        ? endBoundaryGraceMinutes * 60 * 1000
-        : null;
-    if (
-      effectiveEndBoundary &&
-      (
-        endBoundaryGraceMs == null
-          ? new Date() > effectiveEndBoundary
-          : new Date() > new Date(effectiveEndBoundary.getTime() + endBoundaryGraceMs)
-      )
-    ) {
-      logger.info(
-        `[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} ` +
-        (
-          endBoundaryGraceMs == null
-            ? `(inclusive boundary ${effectiveEndBoundary.toISOString()}), marking completed`
-            : `(inclusive boundary ${effectiveEndBoundary.toISOString()} + ${endBoundaryGraceMinutes}m grace), marking completed`
-        )
-      );
-      await AdsFactoryJob.updateOne(
-        { _id: job._id },
-        { $set: { status: "completed" }, $unset: { lifecycleKey: 1 } },
-      );
-      try {
-        const { cancelJob } = require("./adsFactoryAutoQueue");
-        await cancelJob(job._id.toString());
-      } catch (e) {
-        logger.warn(`[adsFactoryAuto][1] could not cancel completed job from queue: ${e.message}`);
+      const endBoundaryGraceMinutes = resolveEndBoundaryGraceMinutes();
+      if (hasPassedEndBoundaryWithGrace({
+        effectiveEndBoundary,
+        now: new Date(),
+        rawGraceMinutes: process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES,
+      })) {
+        logger.info(
+          `[adsFactoryAuto][1] job ${jobId} reached endDate=${job.schedule.endDate} ` +
+          `(inclusive boundary ${effectiveEndBoundary.toISOString()} + ${endBoundaryGraceMinutes}m grace), marking completed`
+        );
+        await AdsFactoryJob.updateOne(
+          { _id: job._id },
+          { $set: { status: "completed" }, $unset: { lifecycleKey: 1 } },
+        );
+        try {
+          const { cancelJob } = require("./adsFactoryAutoQueue");
+          await cancelJob(job._id.toString());
+        } catch (e) {
+          logger.warn(`[adsFactoryAuto][1] could not cancel completed job from queue: ${e.message}`);
+        }
+        await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
+        return;
       }
-      await releaseRunLock(jobId, runLockToken, runLockHeartbeat);
-      return;
     }
 
     // ── Step 2: Load campaign ─────────────────────────────────────────────────

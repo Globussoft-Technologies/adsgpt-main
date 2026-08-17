@@ -10,6 +10,7 @@ const MobileStoreTransaction = require("../../Module/mobilePayments/mobileStoreT
 const MobileStoreWebhookEvent = require("../../Module/mobilePayments/mobileStoreWebhookEventModel");
 const mobileStorePlans = require("../../config/mobileStorePlans");
 const { fetchUserDataByName, syncUserProfile } = require("./authController");
+const BrandsList = require("../../Module/brandNames/brandNamesSchema");
 
 const apiKey = process.env.AMEMBER_API_KEY;
 const baseUrl = process.env.AMEMBER_BASE_API_URL;
@@ -339,7 +340,7 @@ async function getAmemberProductCategoryMap() {
   }
 
   try {
-    const apiHost = (baseUrl || "https://adsgpt-dev.poweradspy.com/amember/api").replace(/\/+$/, "");
+    const apiHost = (baseUrl || "").replace(/\/+$/, "");
     const response = await axios.get(`${apiHost}/product-category`, {
       params: { _key: apiKey },
     });
@@ -3333,6 +3334,576 @@ const ForgotPassword = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// V2 AUTH HANDLERS  (PRD §API 1A · 1B · 1C · 1D)
+// Namespace : POST /api/v2/auth/email | /google | /apple
+//
+// Design rules:
+//  • ALL existing functions above are 100 % untouched.
+//  • These handlers reuse every private helper already in this file
+//    (verifyFirebaseToken, findUserByEmailOrFirebaseUid, createAmemberUser,
+//     isPlanActive, syncUserProfile, generateToken, …).
+//  • Returns the unified V2 envelope:
+//      { success, statusCode, data: { token, user: { id, email, fullName,
+//        isNewUser, isOnboarded } } }
+//  • isOnboarded is derived at runtime: user has ≥1 brand in BrandsList = true.
+//    No schema fields added to UserProfile.
+//  • API 1D: non-blocking socket "user_onboarding_status" event emitted
+//    after every successful auth, wrapped in try/catch.
+// ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Derive whether onboarding is complete for a given user_id.
+ * Returns true if the user has created at least one brand (step 2.3 done).
+ * No schema fields required — purely from the existing BrandsList collection.
+ */
+async function _v2IsOnboarded(userId) {
+  try {
+    if (!userId) return false;
+    const record = await BrandsList.findOne({ user_id: userId }, { brands: 1 }).lean();
+    return Array.isArray(record?.brands) && record.brands.length > 0;
+  } catch {
+    return false; // non-fatal — never block auth
+  }
+}
+
+/**
+ * Emit "user_onboarding_status" to the authenticated user's socket room.
+ * 100 % non-blocking — wrapped in try/catch, never throws.
+ *
+ * @param {string}  email       – user email (legacy FE room key)
+ * @param {string}  userId      – MongoDB user_id, e.g. "GPT-12345"
+ * @param {boolean} isOnboarded – whether onboarding is completed
+ */
+function _v2EmitOnboardingStatus(email, userId, isOnboarded) {
+  try {
+    const io = global.io;
+    if (!io) return;
+    const payload = { email, isOnboarded: Boolean(isOnboarded), timestamp: new Date() };
+    // Emit to both room-key styles used across the codebase
+    if (email)  io.to(email).emit("user_onboarding_status", payload);
+    if (userId) io.to(userId).emit("user_onboarding_status", payload);
+  } catch (socketErr) {
+    console.warn("[v2Auth] Non-critical socket emit warning:", socketErr.message);
+  }
+}
+
+/**
+ * Build the standard V2 success response envelope.
+ * isOnboarded is passed in — computed by the caller via _v2IsOnboarded().
+ */
+function _v2BuildSuccessResponse(token, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded) {
+  return {
+    success: true,
+    statusCode: 200,
+    data: {
+      token,
+      user: {
+        id: mongoProfile?.user_id || `GPT-${amemberUserId}`,
+        email: email || "",
+        fullName: fullName || "",
+        isNewUser: Boolean(isNewUser),
+        isOnboarded: Boolean(isOnboarded),
+        hasActivePlan: Boolean(hasActivePlan),
+        phoneNumber: mongoProfile?.phoneNumber || "",
+      },
+    },
+  };
+}
+
+// ── API 1A : POST /api/v2/auth/email ─────────────────────────────────────────
+
+/**
+ * Email + password authentication via aMember.
+ * Existing getUserDetails / getFromAmemberUserDetails are NOT touched.
+ */
+const v2EmailAuth = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Email Auth (Signup & Login)'
+    #swagger.description = 'Unified email authentication endpoint that authenticates a user against aMember and resolves or creates their profile. Used by both web and mobile in V2.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/v2EmailAuthPayload' }
+        }
+      }
+    }
+    #swagger.responses[200] = {
+      description: 'Successfully authenticated user',
+      schema: { $ref: '#/components/schemas/v2AuthSuccessResponse' }
+    }
+  */
+  try {
+    const { email, password } = req.body || {};
+
+    // Input validation
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "email is required.", code: "INVALID_INPUT",
+      });
+    }
+    if (!password || typeof password !== "string") {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "password is required.", code: "INVALID_INPUT",
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Hit aMember check-access/by-login-pass (same backend call as getUserDetails)
+    const amemberUrl = `${baseUrl}/check-access/by-login-pass`;
+    const qs = new URLSearchParams({ _key: apiKey, login: cleanEmail, pass: password });
+    let userData;
+    try {
+      const resp = await fetch(`${amemberUrl}?${qs}`);
+      userData = await resp.json();
+    } catch (fetchErr) {
+      console.error("[v2Auth/email] aMember fetch error:", fetchErr.response?.data || fetchErr.message);
+      return res.status(500).json({
+        success: false, statusCode: 500,
+        error: "We're having trouble logging you in right now. Please try again in a moment.",
+        code: "AUTH_SERVICE_ERROR",
+      });
+    }
+
+    if (!userData?.ok) {
+      return res.status(401).json({
+        success: false, statusCode: 401,
+        error: "Invalid email or password.", code: "INVALID_CREDENTIALS",
+      });
+    }
+
+    const hasActivePlan = isPlanActive(userData);
+
+    // Sync Mongo profile (creates on first login, updates on subsequent logins)
+    if (hasActivePlan) {
+      try { await syncUserProfile(userData); }
+      catch (syncErr) { console.error("[v2Auth/email] syncUserProfile warning:", syncErr.message); }
+    }
+
+    const mongoProfile = await UserProfile.findOne({ user_id: `GPT-${userData.user_id}` });
+    const isNewUser   = !mongoProfile;
+    const fullName    = `${userData.name_f ?? ""} ${userData.name_l ?? ""}`.trim();
+
+    const tokenPayload = {
+      status: userData.ok,
+      user_id: userData.user_id,
+      login: userData.login,
+      user_name: fullName,
+      user_email: userData.email,
+      name_f: userData.name_f ?? "",
+      name_l: userData.name_l ?? "",
+      userSubscriptionType: userData.subscriptions || {},
+      hasActivePlan,
+      created_from: "GPT",
+    };
+
+    const jwtToken = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+    const userId    = `GPT-${userData.user_id}`;
+
+    // Derive isOnboarded from brands (API 1D)
+    const isOnboarded = await _v2IsOnboarded(userId);
+
+    return res.status(200).json(
+      _v2BuildSuccessResponse(jwtToken, mongoProfile, userData.user_id, userData.email, fullName, isNewUser, isOnboarded, hasActivePlan),
+    );
+  } catch (error) {
+    console.error("[v2Auth/emailAuth] Unexpected error:", error);
+    return res.status(500).json({
+      success: false, statusCode: 500,
+      error: "An unexpected error occurred. Please try again.",
+      code: "INTERNAL_ERROR",
+    });
+  }
+};
+
+// ── Shared Firebase core (Google & Apple) ────────────────────────────────────
+
+/**
+ * Resolve a Firebase-authenticated user for V2 endpoints.
+ * Handles BOTH new (signup) and returning (login) users in one call —
+ * no need for separate signup/login endpoints like the mobile routes have.
+ *
+ * @param {string} firebaseIdToken  Firebase ID token from client
+ * @param {string} expectedProvider "google.com" | "apple.com"
+ * @param {string} providerLabel    "google" | "apple"
+ * @param {string} [platform]       optional hint from request body
+ */
+async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, providerLabel, platform) {
+  const decoded = await verifyFirebaseToken(firebaseIdToken);
+
+  if (decoded.firebase?.sign_in_provider !== expectedProvider) {
+    const err = new Error(`Please use ${providerLabel} to authenticate with this endpoint.`);
+    err.code   = "INVALID_PROVIDER";
+    err.status = 400;
+    throw err;
+  }
+
+  const email      = decoded.email ? decoded.email.toLowerCase() : null;
+  const firebaseUid = decoded.uid;
+  const displayName = decoded.name || "";
+  const firstName   = displayName.split(" ")[0] || "";
+  const lastName    = displayName.split(" ").slice(1).join(" ") || "";
+
+  if (!email) {
+    const label = providerLabel.charAt(0).toUpperCase() + providerLabel.slice(1);
+    const err   = new Error(`${label} account must have a verified email address.`);
+    err.code    = `INVALID_${providerLabel.toUpperCase()}_TOKEN`;
+    err.status  = 400;
+    throw err;
+  }
+
+  let { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+  let isNewUser   = false;
+  let amemberUserId;
+  let hasActivePlan = false;
+  let userSubscriptionType = {};
+
+  if (mongoProfile || amemberUser) {
+    // ── Returning user ──────────────────────────────────────────────────────
+    amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+
+    if (mongoProfile) {
+      if (!mongoProfile.firebase_uid) mongoProfile.firebase_uid = firebaseUid;
+      if (!mongoProfile.loginProviders) mongoProfile.loginProviders = [];
+      if (!mongoProfile.loginProviders.includes(providerLabel)) {
+        mongoProfile.loginProviders.push(providerLabel);
+      }
+      if (platform) mongoProfile.platform = platform;
+      mongoProfile.last_login_at = new Date();
+      await mongoProfile.save();
+    }
+
+    const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || email);
+    if (userData?.ok) {
+      hasActivePlan = isPlanActive(userData);
+      userSubscriptionType = userData.subscriptions || {};
+      await syncUserProfile(userData);
+      if (mongoProfile?._id) mongoProfile = await UserProfile.findById(mongoProfile._id);
+    }
+  } else {
+    // ── New user: provision aMember account + Mongo profile ─────────────────
+    isNewUser = true;
+    const generatedLogin = emailToLogin(email);
+
+    const newAmemberUser = await createAmemberUser({
+      login:       generatedLogin,
+      email,
+      password:    generateRandomString(16),
+      firstName,
+      lastName,
+      phoneNumber: "",
+    });
+    amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
+
+    // Reuse a previously soft-deleted profile if one exists
+    const existingDeleted = await UserProfile.findOne({
+      $or: [{ email: email.toLowerCase() }, { firebase_uid: firebaseUid }],
+    });
+
+    if (existingDeleted) {
+      existingDeleted.is_deleted             = false;
+      existingDeleted.deleted_at             = null;
+      existingDeleted.delete_reason          = "";
+      existingDeleted.user_id                = `GPT-${amemberUserId}`;
+      existingDeleted.amember_user_id        = amemberUserId;
+      existingDeleted.firebase_uid           = firebaseUid;
+      existingDeleted.login                  = generatedLogin;
+      existingDeleted.name                   = displayName;
+      existingDeleted.name_f                 = firstName;
+      existingDeleted.name_l                 = lastName;
+      existingDeleted.loginProviders         = [providerLabel];
+      existingDeleted.last_login_at          = new Date();
+      if (platform) existingDeleted.platform = platform;
+      await existingDeleted.save();
+      mongoProfile = existingDeleted;
+    } else {
+      mongoProfile = await UserProfile.create({
+        user_id:         `GPT-${amemberUserId}`,
+        login:           generatedLogin,
+        name:            displayName,
+        name_f:          firstName,
+        name_l:          lastName,
+        email,
+        created_from:    "GPT",
+        amember_user_id: amemberUserId,
+        firebase_uid:    firebaseUid,
+        loginProviders:  [providerLabel],
+        last_login_at:   new Date(),
+        platform:        platform || "",
+      });
+    }
+  }
+
+  // Build JWT (same shape as existing mobile handlers)
+  const tokenPayload = {
+    status:              true,
+    user_id:             amemberUserId,
+    firebase_uid:        firebaseUid,
+    auth_provider:       expectedProvider,
+    login:               amemberUser?.login || mongoProfile?.login || email,
+    user_email:          email,
+    hasActivePlan,
+    userSubscriptionType,
+    created_from:        "GPT",
+  };
+
+  const jwtToken  = generateToken(tokenPayload, secretKey, tokenExpiryTime);
+  const fullName  = mongoProfile?.name || displayName || "";
+
+  return { jwtToken, mongoProfile, email, fullName, isNewUser, amemberUserId, hasActivePlan };
+}
+
+// ── API 1B : POST /api/v2/auth/google ────────────────────────────────────────
+
+/**
+ * Unified Google auth (signup + login) for web & mobile.
+ * Input: { firebaseIdToken: string, platform?: string }
+ */
+const v2GoogleAuth = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Google Auth (Signup & Login)'
+    #swagger.description = 'Unified Google authentication endpoint. Verifies a Firebase ID token and resolves or creates the user profile. Used by both web and mobile in V2.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/v2GoogleAuthPayload' }
+        }
+      }
+    }
+    #swagger.responses[200] = {
+      description: 'Successfully authenticated Google user',
+      schema: { $ref: '#/components/schemas/v2AuthSuccessResponse' }
+    }
+  */
+  try {
+    const { firebaseIdToken, platform } = req.body || {};
+
+    if (!firebaseIdToken) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "firebaseIdToken is required.", code: "INVALID_INPUT",
+      });
+    }
+
+    const { jwtToken, mongoProfile, email, fullName, isNewUser, amemberUserId, hasActivePlan } =
+      await _v2ResolveFirebaseUser(firebaseIdToken, "google.com", "google", platform);
+
+    const userId = mongoProfile?.user_id || `GPT-${amemberUserId}`;
+    const isOnboarded = await _v2IsOnboarded(userId);
+
+    return res.status(200).json(
+      _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
+    );
+  } catch (error) {
+    console.error("[v2Auth/googleAuth] error:", error.response?.data || error.message || error);
+    const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
+    const status = isAxios ? 500 : (error.status || 500);
+    const errMsg = isAxios ? "We're having trouble logging you in right now. Please try again in a moment." : (error.message || "Google authentication failed.");
+    
+    return res.status(status).json({
+      success: false, statusCode: status,
+      error: errMsg,
+      code: isAxios ? "AUTH_SERVICE_ERROR" : (error.code || "GOOGLE_AUTH_ERROR"),
+    });
+  }
+};
+
+// ── API 1C : POST /api/v2/auth/apple ─────────────────────────────────────────
+
+/**
+ * Unified Apple auth (signup + login) for web & mobile.
+ * Input: { firebaseIdToken: string, platform?: string }
+ */
+const v2AppleAuth = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Apple Auth (Signup & Login)'
+    #swagger.description = 'Unified Apple authentication endpoint. Verifies a Firebase ID token and resolves or creates the user profile. Used by both web and mobile in V2.'
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/v2AppleAuthPayload' }
+        }
+      }
+    }
+    #swagger.responses[200] = {
+      description: 'Successfully authenticated Apple user',
+      schema: { $ref: '#/components/schemas/v2AuthSuccessResponse' }
+    }
+  */
+  try {
+    const { firebaseIdToken, platform } = req.body || {};
+
+    if (!firebaseIdToken) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "firebaseIdToken is required.", code: "INVALID_INPUT",
+      });
+    }
+
+    const { jwtToken, mongoProfile, email, fullName, isNewUser, amemberUserId, hasActivePlan } =
+      await _v2ResolveFirebaseUser(firebaseIdToken, "apple.com", "apple", platform || "ios");
+
+    const userId = mongoProfile?.user_id || `GPT-${amemberUserId}`;
+    const isOnboarded = await _v2IsOnboarded(userId);
+
+    return res.status(200).json(
+      _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
+    );
+  } catch (error) {
+    console.error("[v2Auth/appleAuth] error:", error.response?.data || error.message || error);
+    const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
+    const status = isAxios ? 500 : (error.status || 500);
+    const errMsg = isAxios ? "We're having trouble logging you in right now. Please try again in a moment." : (error.message || "Apple authentication failed.");
+    
+    return res.status(status).json({
+      success: false, statusCode: status,
+      error: errMsg,
+      code: isAxios ? "AUTH_SERVICE_ERROR" : (error.code || "APPLE_AUTH_ERROR"),
+    });
+  }
+};
+
+// ── API 2.1 : POST /api/v2/user/profile ─────────────────────────────────────
+
+/**
+ * Helper to sync the V2 profile back to aMember to prevent data loss.
+ */
+async function _v2UpdateAmemberProfile(amemberUserId, { firstName, lastName, phoneNumber }) {
+  if (!amemberUserId) return;
+  try {
+    const url = `${baseUrl}/users/${amemberUserId}?_key=${apiKey}`;
+    const params = new URLSearchParams();
+    if (firstName) params.append("name_f", firstName);
+    if (lastName) params.append("name_l", lastName);
+    if (phoneNumber) params.append("phone", phoneNumber);
+    
+    await axios.put(url, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch (e) {
+    console.error("[_v2UpdateAmemberProfile] error:", e.response?.data || e.message);
+  }
+}
+
+/**
+ * Save onboarding profile details (firstName, lastName, phoneNumber).
+ * Requires JWT auth (applied at route level via authenticateJWT).
+ */
+const v2UpdateOnboardingProfile = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Update Onboarding Profile'
+    #swagger.description = 'Saves the user profile details (first name, last name, phone number) during step 2.1 of the V2 onboarding flow.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.requestBody = {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: '#/components/schemas/v2UpdateProfilePayload' }
+        }
+      }
+    }
+  */
+  try {
+    const { firstName, lastName, phoneNumber } = req.body || {};
+    const userId = req.user?.user_id; // already "GPT-XXX" after authService decode
+
+    if (!firstName || typeof firstName !== "string" || !firstName.trim()) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "firstName is required.", code: "INVALID_INPUT",
+      });
+    }
+    if (!lastName || typeof lastName !== "string" || !lastName.trim()) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "lastName is required.", code: "INVALID_INPUT",
+      });
+    }
+    if (!phoneNumber || typeof phoneNumber !== "string" || !phoneNumber.trim()) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "phoneNumber is required.", code: "INVALID_INPUT",
+      });
+    }
+    const digitCount = phoneNumber.replace(/\D/g, "").length;
+    if (digitCount < 7 || digitCount > 15) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "A valid phone number is required (7–15 digits).",
+        code: "INVALID_PHONE_NUMBER",
+      });
+    }
+    if (!userId) {
+      return res.status(401).json({
+        success: false, statusCode: 401,
+        error: "Authentication required.", code: "AUTH_REQUIRED",
+      });
+    }
+
+    const cleanFirst = firstName.trim();
+    const cleanLast  = lastName.trim();
+    const cleanPhone = phoneNumber.trim();
+
+    const updated = await UserProfile.findOneAndUpdate(
+      { user_id: userId },
+      {
+        $set: {
+          name_f:      cleanFirst,
+          name_l:      cleanLast,
+          name:        `${cleanFirst} ${cleanLast}`.trim(),
+          phoneNumber: cleanPhone,
+        },
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false, statusCode: 404,
+        error: "User profile not found. Please sign in again.",
+        code: "PROFILE_NOT_FOUND",
+      });
+    }
+
+    // Critical: Sync back to aMember so subsequent logins don't overwrite this with stale data
+    const amemberUserId = userId.replace("GPT-", "");
+    await _v2UpdateAmemberProfile(amemberUserId, { 
+      firstName: cleanFirst, 
+      lastName: cleanLast, 
+      phoneNumber: cleanPhone 
+    });
+
+    return res.status(200).json({
+      success: true,
+      statusCode: 200,
+      data: {
+        userId:      updated.user_id,
+        firstName:   updated.name_f,
+        lastName:    updated.name_l,
+        fullName:    updated.name,
+        phoneNumber: updated.phoneNumber,
+      },
+    });
+  } catch (error) {
+    console.error("[v2Auth/updateOnboardingProfile] error:", error);
+    return res.status(500).json({
+      success: false, statusCode: 500,
+      error: "An unexpected error occurred. Please try again.",
+      code: "INTERNAL_ERROR",
+    });
+  }
+};
+
 module.exports = {
   MobileSignup,
   GoogleSignup,
@@ -3355,4 +3926,14 @@ module.exports = {
   getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
+  // ── V2 Auth (Step 1) ────────────────────────────────────────────────────────
+  v2EmailAuth,
+  v2GoogleAuth,
+  v2AppleAuth,
+  // ── V2 User (Step 2.1) ──────────────────────────────────────────────────────
+  v2UpdateOnboardingProfile,
+  // Exposed for unit testing only
+  _v2EmitOnboardingStatus,
+  _v2BuildSuccessResponse,
+  _v2ResolveFirebaseUser,
 };

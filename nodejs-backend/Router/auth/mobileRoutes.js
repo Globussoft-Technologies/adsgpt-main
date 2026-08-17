@@ -21,6 +21,11 @@ const {
   getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
+  // ── V2 handlers (Step 1 — PRD §API 1A·1B·1C·1D ·2.1) ────────────────────────────
+  v2EmailAuth,
+  v2GoogleAuth,
+  v2AppleAuth,
+  v2UpdateOnboardingProfile,
 } = require("../../controllers/auth/mobileController");
 
 // Auth Endpoints (Mounted at /adsgpt/mobile/*)
@@ -48,5 +53,18 @@ router.get("/payments/subscription-details", authenticateJWT, getMobileSubscript
 // Webhook Endpoints
 router.post("/webhooks/apple/notifications", handleAppleWebhook);
 router.post("/webhooks/google/notifications", handleGoogleWebhook);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V2 STEP 1 ROUTES  — Mounted at /mobile/v2/* via MainRouter.js
+// (Defined here so all mobile/auth handlers stay in one place.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Auth (no JWT — these ARE the login endpoints)
+router.post("/v2/auth/email",  v2EmailAuth);                           // API 1A
+router.post("/v2/auth/google", v2GoogleAuth);                          // API 1B
+router.post("/v2/auth/apple",  v2AppleAuth);                           // API 1C
+
+// Onboarding profile (JWT required)
+router.post("/v2/user/profile", authenticateJWT, v2UpdateOnboardingProfile); // API 2.1
 
 module.exports = router;

@@ -58,6 +58,11 @@ const {
   mobilePaymentVerifyResponse,
   mobileSubscriptionDetailsResponse,
   mobileWebhookResponse,
+  v2EmailAuthPayload,
+  v2GoogleAuthPayload,
+  v2AppleAuthPayload,
+  v2UpdateProfilePayload,
+  v2AuthSuccessResponse,
 } = require("./resources/payloadBody/mobilePayload");
 
 // For local development on port 7000, detect if MODE=DEV
@@ -179,6 +184,13 @@ const doc = {
       mobilePaymentVerifyResponse,
       mobileSubscriptionDetailsResponse,
       mobileWebhookResponse,
+
+      // V2 Auth & Onboarding Payloads
+      v2EmailAuthPayload,
+      v2GoogleAuthPayload,
+      v2AppleAuthPayload,
+      v2UpdateProfilePayload,
+      v2AuthSuccessResponse,
 
       // Dashboard
       access_Routes,

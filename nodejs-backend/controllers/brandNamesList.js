@@ -439,6 +439,10 @@ const createBrands = async (req, res) => {
       return res.status(409).json({ message: 'Brand name already exists for this user' });
     }
 
+    // Determine if this is their very first brand (for onboarding socket emit)
+    const userDoc = await brandNameLists.findOne({ user_id: userId }).select("brands").lean();
+    const isFirstBrand = !userDoc || !userDoc.brands || userDoc.brands.length === 0;
+
     const brandId = uuidv4();
 
     const logoUrls = Array.isArray(logoBase64s)
@@ -502,6 +506,20 @@ const createBrands = async (req, res) => {
       source: 'brand_form',
       success: true,
     });
+
+    // ── V2 Onboarding Sync: Blast socket event ONLY on the first brand creation
+    if (isFirstBrand) {
+      try {
+        if (global.io) {
+          global.io.to(userId).emit("user_onboarding_status", { 
+            isOnboarded: true, 
+            timestamp: new Date() 
+          });
+        }
+      } catch (socketErr) {
+        console.warn("[createBrands] Non-critical socket emit warning:", socketErr.message);
+      }
+    }
 
     res.status(201).json({
       message: 'Brand added successfully',

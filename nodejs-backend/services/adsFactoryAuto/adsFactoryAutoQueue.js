@@ -1,6 +1,44 @@
 const { Queue, Worker } = require("bullmq");
 const logger = require("../../utils/logger");
 
+const DEFAULT_END_BOUNDARY_GRACE_MINUTES = 5;
+
+function resolveEndBoundaryGraceMinutes(
+  rawValue = process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES,
+) {
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
+    return DEFAULT_END_BOUNDARY_GRACE_MINUTES;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_END_BOUNDARY_GRACE_MINUTES;
+  }
+
+  return parsed;
+}
+
+function resolveEndBoundaryGraceMs(rawValue) {
+  return resolveEndBoundaryGraceMinutes(rawValue) * 60 * 1000;
+}
+
+function applyEndBoundaryGrace(boundary, rawGraceMinutes) {
+  if (!boundary) return null;
+  const endBoundary = new Date(boundary);
+  return new Date(endBoundary.getTime() + resolveEndBoundaryGraceMs(rawGraceMinutes));
+}
+
+function hasPassedEndBoundaryWithGrace({
+  effectiveEndBoundary,
+  now = new Date(),
+  rawGraceMinutes,
+}) {
+  if (!effectiveEndBoundary) return false;
+  const boundary = new Date(effectiveEndBoundary);
+  const current = new Date(now);
+  return current.getTime() > applyEndBoundaryGrace(boundary, rawGraceMinutes).getTime();
+}
+
 function resolvePresetCron(frequency, hour = 0) {
   const h = parseInt(hour, 10) || 0;
   switch (frequency) {
@@ -185,6 +223,7 @@ function resolveScheduleForQueue(schedule) {
 
 function repeatWindow(schedule) {
   let start = null;
+  let end = null;
   if (schedule.startDate) {
     const rawStart = new Date(schedule.startDate);
     const now = new Date();
@@ -194,9 +233,15 @@ function repeatWindow(schedule) {
       start = rawStart;
     }
   }
+  if (schedule.endDate) {
+    end = applyEndBoundaryGrace(
+      schedule.endDate,
+      process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES,
+    );
+  }
   return {
     ...(start ? { startDate: start } : {}),
-    ...(schedule.endDate ? { endDate: new Date(schedule.endDate) } : {}),
+    ...(end ? { endDate: end } : {}),
   };
 }
 
@@ -659,12 +704,16 @@ async function reloadActiveJobs() {
 }
 
 module.exports = {
+  applyEndBoundaryGrace,
+  DEFAULT_END_BOUNDARY_GRACE_MINUTES,
   scheduleJob,
   cancelJob,
   runJobNow,
   startWorker,
   reloadActiveJobs,
+  hasPassedEndBoundaryWithGrace,
   resolveScheduleForQueue,
+  resolveEndBoundaryGraceMinutes,
   resolvePresetCron,
   resolveInclusiveEndDate,
   getNextRunTime,
