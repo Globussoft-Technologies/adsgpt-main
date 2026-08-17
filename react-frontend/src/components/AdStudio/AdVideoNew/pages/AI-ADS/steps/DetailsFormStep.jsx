@@ -19,6 +19,7 @@ import { RiGeminiFill } from 'react-icons/ri';
 import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneLoading } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
@@ -164,6 +165,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   const title = isBrand ? 'Brand Details' : 'Product Details';
   const dispatch = useDispatch();
   const { modelCredits } = useSelector((state) => state.prompt);
+  const surfaceModels = useVideoSurfaceModels('ai_ads');
+  const availableCanonicalKeys = new Set(surfaceModels.map((entry) => entry.canonical));
   const { credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
   const [submitting, setSubmitting] = useState(false);
@@ -503,7 +506,13 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     //   Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
     //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
     // },
-  ];
+  ].filter((option) => availableCanonicalKeys.has(option.value));
+
+  useEffect(() => {
+    if (!modelOptions.some((option) => option.value === formData.model)) {
+      updateField('model', modelOptions[0]?.value || '');
+    }
+  }, [modelOptions, formData.model]);
 
 
 

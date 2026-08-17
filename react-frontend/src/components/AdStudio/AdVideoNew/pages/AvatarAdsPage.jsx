@@ -18,6 +18,7 @@ import {
   getVideoById,
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
 import avatarLibraryImg from '@/assets/layouts/adVideoNew/avatarLibrary.png';
 import avatarUploadImg from '@/assets/layouts/adVideoNew/avatarUpload.png';
 import avatarUploadBgImg from '@/assets/layouts/adVideoNew/avatarUploadBg.png';
@@ -790,6 +791,11 @@ const AvatarConfigForm = ({
 }) => {
   const isCustomAvatar = customAvatarImages.length > 0;
   const { modelCredits } = useSelector((state) => state.prompt);
+  const surfaceModels = useVideoSurfaceModels('avatar');
+  const availableCanonicalKeys = useMemo(
+    () => new Set(surfaceModels.map((entry) => entry.canonical)),
+    [surfaceModels]
+  );
   const { brand_name } = useSelector((state) => state.adFactoryNew);
   const { userData, credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
@@ -920,9 +926,15 @@ const AvatarConfigForm = ({
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
           ?.value,
       },
-    ],
-    [modelCredits]
+    ].filter((option) => availableCanonicalKeys.has(option.value)),
+    [modelCredits, availableCanonicalKeys]
   );
+
+  useEffect(() => {
+    if (!videoChatModels.some((option) => option.value === videoModel)) {
+      setVideoModel(videoChatModels[0]?.value || '');
+    }
+  }, [videoChatModels, videoModel]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());

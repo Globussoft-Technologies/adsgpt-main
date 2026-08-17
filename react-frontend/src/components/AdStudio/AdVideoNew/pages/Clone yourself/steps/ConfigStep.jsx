@@ -311,7 +311,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
       //     ?.value,
       // },
-    ],
+    ].filter((option) => cloneModelConfigs.some((model) => model?.canonical === option.value)),
     [cloneModelConfigs]
   );
 
@@ -345,6 +345,12 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!videoChatModels.some((option) => option.value === videoModel)) {
+      setVideoModel(videoChatModels[0]?.value || '');
+    }
+  }, [videoChatModels, videoModel]);
 
   useEffect(() => {
     if (videoTimer.length > 0) setVideoDuration(videoTimer[0].value);

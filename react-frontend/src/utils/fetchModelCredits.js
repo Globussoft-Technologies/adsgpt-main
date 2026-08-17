@@ -77,3 +77,13 @@ export const fetchCloneVideoModels = async () => {
   if (!response.data?.success) throw new Error('Clone model config request failed');
   return response.data.data?.videoModels || [];
 };
+
+export const fetchVideoSurfaceModels = async (media) => {
+  const token = getCookies();
+  const response = await axios.get(`${BACKEND_HOST}/adsgpt/usage/model-credit-value`, {
+    params: { media, type: 'video' },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.data?.success) throw new Error(`${media} model config request failed`);
+  return response.data.data?.videoModels || [];
+};

@@ -28,6 +28,7 @@ import {
 import { analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { toast } from 'react-toastify';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
 import { RiGeminiFill } from 'react-icons/ri';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
@@ -51,6 +52,11 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const [localRecreateData, setLocalRecreateData] = useState(recreateInputs);
   const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
   const { modelCredits } = useSelector((state) => state.prompt);
+  const surfaceModels = useVideoSurfaceModels('ugc');
+  const availableCanonicalKeys = useMemo(
+    () => new Set(surfaceModels.map((entry) => entry.canonical)),
+    [surfaceModels]
+  );
   const { userData, credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
 
@@ -181,13 +187,13 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
           ?.value,
       },
-    ],
-    [modelCredits]
+    ].filter((option) => availableCanonicalKeys.has(option.value)),
+    [modelCredits, availableCanonicalKeys]
   );
 
   useEffect(() => {
-    if (videoChatModels.length && !videoModel) {
-      setVideoModel(videoChatModels[0].value);
+    if (!videoChatModels.some((option) => option.value === videoModel)) {
+      setVideoModel(videoChatModels[0]?.value || '');
     }
   }, [videoChatModels, videoModel]);
 

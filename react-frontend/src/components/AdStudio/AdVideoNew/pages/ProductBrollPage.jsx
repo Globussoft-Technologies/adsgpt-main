@@ -27,6 +27,7 @@ import emitter from '@/utils/eventEmitter';
 import { AnimatePresence } from 'framer-motion';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
+import { useVideoSurfaceModels } from '@/utils/hooks/useVideoSurfaceModels';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -59,6 +60,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   const dispatch = useDispatch();
   const productName = brand_name || brandInfo?.brandName || '';
   const { video_model, modelCredits } = useSelector((state) => state.prompt);
+  const surfaceModels = useVideoSurfaceModels('broll');
+  const availableCanonicalKeys = useMemo(
+    () => new Set(surfaceModels.map((entry) => entry.canonical)),
+    [surfaceModels]
+  );
   const { credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
 
@@ -146,13 +152,13 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
           ?.value,
       },
-    ],
-    [modelCredits]
+    ].filter((option) => availableCanonicalKeys.has(option.value)),
+    [modelCredits, availableCanonicalKeys]
   );
 
   useEffect(() => {
-    if (videoChatModels.length && !videoModel) {
-      setVideoModel(videoChatModels[0].value);
+    if (!videoChatModels.some((option) => option.value === videoModel)) {
+      setVideoModel(videoChatModels[0]?.value || '');
     }
   }, [videoChatModels, videoModel]);
 
