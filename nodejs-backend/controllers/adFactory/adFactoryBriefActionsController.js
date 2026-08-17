@@ -35,6 +35,11 @@ const { buildResultSlotUpdate } = require("../../services/adFactory/resultSlots"
 const { estimateBriefCredits } = require("../../services/adFactory/briefCreditEstimate");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const Campaign = require("../../Module/adFactory/adFactory");
+// Runs createJob/deleteJob in-process and captures what they sent, so a
+// brief-created job is identical to a canvas-created one by construction.
+// Shared with the CRUD controller, which uses it to sync edits through
+// `updateJob`. See utils/callController.js for why.
+const { callController } = require("../../utils/callController");
 const logger = require("../../utils/logger");
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(String(id || ""));
@@ -49,32 +54,6 @@ async function findOwnedBrief(id, userId) {
   return AdFactoryBrief.findOne({ _id: id, userId });
 }
 
-/**
- * Run a controller method that expects (req, res) and capture what it sent.
- *
- * `createJob` is a full controller action — validation, ownership checks,
- * duplicate-job detection, queue scheduling, the campaign back-link, GA4, and
- * rollback if any of it throws. Calling it rather than reimplementing its body
- * is what makes a brief-created job identical to a canvas-created one by
- * construction instead of by careful copying, and it is what
- * test/adFactory/v2JobParity.test.js pins.
- */
-function callController(fn, req) {
-  return new Promise((resolve, reject) => {
-    const res = {
-      statusCode: 200,
-      status(code) {
-        this.statusCode = code;
-        return this;
-      },
-      json(body) {
-        resolve({ statusCode: this.statusCode, body });
-        return this;
-      },
-    };
-    Promise.resolve(fn(req, res)).catch(reject);
-  });
-}
 
 // ─── brief → creatives ───────────────────────────────────────────────────────
 
@@ -310,6 +289,55 @@ exports.activateBrief = async (req, res) => {
       return res.status(400).json({ success: false, error: err.message, field: err.field });
     }
     logger.error(`[adFactory:brief:activate] ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.stopBrief = async (req, res) => {
+  /*
+    #swagger.tags = ['Ad Factory 2.0']
+    #swagger.summary = 'Stop the automation for a brief'
+    #swagger.description = 'Archives the underlying autopilot job and cancels its queue entry. Run history is preserved — the deliveries timeline keeps showing past cycles. Irreversible: restarting means activating again.'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user.user_id;
+    const brief = await findOwnedBrief(req.params.id, userId);
+    if (!brief) {
+      return res.status(404).json({ success: false, error: "Brief not found" });
+    }
+    if (!brief.jobId) {
+      return res.status(409).json({
+        success: false,
+        code: "BRIEF_NOT_LIVE",
+        error: "This brief isn't running on a schedule.",
+      });
+    }
+
+    // `deleteJob` is a SOFT delete — it archives, cancels the queue entry, and
+    // deliberately keeps `runHistory` so campaign-level views keep showing past
+    // runs. That is exactly the behaviour a brief wants: stopping deliveries
+    // must not erase the record of what was already delivered and paid for.
+    //
+    // It also owns the checks that matter: 409 while a run is mid-flight, so
+    // stopping can't tear the job out from under a posting that is half done.
+    const { statusCode, body } = await callController(
+      adsFactoryAutoController.deleteJob.bind(adsFactoryAutoController),
+      { ...req, params: { id: String(brief.jobId) }, user: req.user },
+    );
+
+    if (statusCode >= 400) return res.status(statusCode).json(body);
+
+    // `jobId` is KEPT on purpose. The timeline endpoint reads it, and clearing
+    // it here would throw away the history `deleteJob` just went out of its way
+    // to preserve — the user would stop their automation and watch every past
+    // delivery vanish with it.
+    brief.status = "ended";
+    await brief.save();
+
+    return res.status(200).json({ success: true, data: { status: brief.status } });
+  } catch (err) {
+    logger.error(`[adFactory:brief:stop] ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

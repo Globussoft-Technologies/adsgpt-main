@@ -20,11 +20,25 @@
 
 const Joi = require("joi");
 
+// Same by-construction check the autopilot schedule uses, so a zone accepted
+// when the brief is created cannot be rejected when it is activated.
+const { joiTimezone } = require("../../utils/timezone");
+
 // Length ceiling on the pasted URL. Long enough for real campaign URLs with
 // tracking parameters, short enough that nobody posts a novel.
 const MAX_URL_LENGTH = 2048;
 
 // ─── Create ──────────────────────────────────────────────────────────────────
+
+// The one thing the CLIENT knows and the server cannot infer.
+//
+// `delivery.frequency.timezone` defaults to "UTC" in the schema and nothing was
+// ever setting it, so every schedule ran on UTC: a user in India picking 9:00 AM
+// got ads at 2:30 PM. The server has no way to guess — the browser does, from
+// `Intl.DateTimeFormat().resolvedOptions().timeZone` — so it is taken at
+// creation. Optional, because a client that doesn't send one is no worse off
+// than before.
+const TIMEZONE = Joi.string().trim().max(64).custom(joiTimezone);
 
 // The URL path. `url` is the only required field in the entire flow.
 const createFromUrlSchema = Joi.object({
@@ -36,6 +50,7 @@ const createFromUrlSchema = Joi.object({
   // Re-run inference for a URL we already have a brief for, bypassing both our
   // dedupe and (eventually) Python's 7-day cache.
   forceRefresh: Joi.boolean().default(false),
+  timezone: TIMEZONE,
 });
 
 // The brand path — zero typed fields; everything comes from the saved brand.
@@ -43,6 +58,7 @@ const createFromBrandSchema = Joi.object({
   brandId: Joi.string().trim().required().messages({
     "any.required": "Pick one of your saved brands",
   }),
+  timezone: TIMEZONE,
 });
 
 // ─── Update ──────────────────────────────────────────────────────────────────

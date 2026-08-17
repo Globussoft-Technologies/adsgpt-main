@@ -26,6 +26,9 @@ const briefService = require("../../services/adFactory/briefService");
 const { briefGenerationView, _internals: genInternals } = require("../../services/adFactory/briefGenerationView");
 const { estimateBriefCredits } = require("../../services/adFactory/briefCreditEstimate");
 const { sliceRuns } = require("../../services/adFactory/runSlices");
+const { briefToJobPatch } = require("../../services/adFactory/briefToJobPatch");
+const adsFactoryAutoController = require("../adsFactoryAuto/adsFactoryAutoController");
+const { callController } = require("../../utils/callController");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { assertSafeUrl, UnsafeUrlError } = require("../../utils/safeUrl");
 const {
@@ -92,6 +95,7 @@ exports.createBrief = async (req, res) => {
       userId,
       url: safe.href,
       forceRefresh: value.forceRefresh,
+      timezone: value.timezone,
     });
 
     // Already done or already running — nothing to kick off.
@@ -125,7 +129,9 @@ exports.createBriefFromBrand = async (req, res) => {
   */
   try {
     const { error, value } = createFromBrandSchema.validate(
-      { brandId: req.params.brandId },
+      // The brand id is a path param; the timezone is the one thing the client
+      // sends in the body, because only the browser knows it.
+      { brandId: req.params.brandId, ...(req.body?.timezone ? { timezone: req.body.timezone } : {}) },
       { abortEarly: false },
     );
     if (error) {
@@ -157,6 +163,7 @@ exports.createBriefFromBrand = async (req, res) => {
       userId,
       brandId: value.brandId,
       brand,
+      timezone: value.timezone,
     });
 
     // A brand with a saved website gets the same inference pass as the URL
@@ -335,10 +342,30 @@ exports.updateBrief = async (req, res) => {
 
     // Merge per section so a partial PATCH doesn't wipe sibling fields the
     // client didn't send.
+    //
+    // The merge goes one level DEEPER than the section for nested groups,
+    // because a shallow spread replaces them wholesale. `delivery.budget` and
+    // `delivery.frequency` are the ones that bite: sending
+    // `{ delivery: { budget: { daily: 900 } } }` — which is exactly what the
+    // budget control sends — silently dropped `currency`, and editing one
+    // cadence field would have wiped the rest of the schedule.
+    //
+    // Only these two are nested; every other section field is a scalar or an
+    // array, and arrays must replace rather than merge (a merged `ratios` could
+    // never shrink).
+    const NESTED = { delivery: ["budget", "frequency"] };
+
     for (const section of ["brand", "offer", "delivery", "generation"]) {
       if (!value[section]) continue;
       const current = brief[section]?.toObject?.() || brief[section] || {};
-      brief[section] = { ...current, ...value[section] };
+      const incoming = { ...value[section] };
+
+      for (const key of NESTED[section] || []) {
+        if (!incoming[key] || typeof incoming[key] !== "object") continue;
+        incoming[key] = { ...(current[key] || {}), ...incoming[key] };
+      }
+
+      brief[section] = { ...current, ...incoming };
     }
 
     // A user edit supersedes whatever we inferred for that field. Recording it
@@ -377,12 +404,78 @@ exports.updateBrief = async (req, res) => {
       );
     }
 
-    return res.status(200).json({ success: true, data: brief });
+    // Keeping the projection in step is only half the job. The campaign covers
+    // WHAT gets made; the cadence, pairs-per-run and image model live on the
+    // AdsFactoryJob, and until this existed nothing wrote to them — so editing
+    // the schedule of a live brief saved, displayed, and then did nothing.
+    const jobSync = await syncLiveJob(brief, req.user);
+
+    return res.status(200).json({ success: true, data: brief, jobSync });
   } catch (err) {
     logger.error(`[adFactory:brief:update] ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+/**
+ * Push a brief's job-owned fields onto its live automation.
+ *
+ * Returns a report rather than throwing, because the edit is already saved by
+ * the time this runs and the brief itself is not wrong — but the caller MUST
+ * relay the report. `updateJob` legitimately refuses in two cases the user can
+ * act on:
+ *
+ *   409 mid-run     — editing now would double-post; retry when the run ends
+ *   409 completed   — the job is over; the change applies to the next one
+ *
+ * Swallowing those would recreate the exact bug this function was written to
+ * fix, one layer further in: the schedule saved, shown, and not running.
+ *
+ * @returns {null|{applied: boolean, changed?: string[], reason?: string}}
+ *          `null` when the brief has no automation — the common case, and not
+ *          something the UI should say anything about.
+ */
+async function syncLiveJob(brief, user) {
+  if (!brief.jobId) return null;
+
+  try {
+    const job = await AdsFactoryJob.findOne({ _id: brief.jobId, userId: user.user_id }).lean();
+    // Archived or missing: Stop already ran, or the job was removed. Nothing to
+    // keep in step, and no failure to report.
+    if (!job || job.status === "archived") return null;
+
+    const { patch, changed } = briefToJobPatch(brief, job);
+    // The Adjust panel saves per field, so most edits touch nothing the job
+    // owns. `updateJob` rebuilds the queue entry whenever a schedule is
+    // present, so calling it with an unchanged one would drag `nextRunAt`
+    // around while the user edits their headline.
+    if (!changed.length) return null;
+
+    const { statusCode, body } = await callController(
+      adsFactoryAutoController.updateJob.bind(adsFactoryAutoController),
+      { params: { id: String(brief.jobId) }, body: patch, user },
+    );
+
+    if (statusCode >= 400) {
+      logger.warn(
+        `[adFactory:brief:update] job sync refused brief=${brief._id} job=${brief.jobId} ` +
+          `status=${statusCode}: ${body?.error}`,
+      );
+      return { applied: false, changed, reason: body?.error || "Could not update the schedule" };
+    }
+
+    logger.info(
+      `[adFactory:brief:update] job sync applied brief=${brief._id} job=${brief.jobId} ` +
+        `fields=${changed.join(",")}`,
+    );
+    return { applied: true, changed };
+  } catch (err) {
+    // An unexpected failure here must not fail the PATCH — the brief is saved
+    // either way — but it must still be visible, not silently dropped.
+    logger.error(`[adFactory:brief:update] job sync failed brief=${brief._id}: ${err.message}`);
+    return { applied: false, reason: "Could not update the schedule" };
+  }
+}
 
 exports.deleteBrief = async (req, res) => {
   /*

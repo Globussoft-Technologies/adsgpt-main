@@ -39,12 +39,46 @@ function hasPassedEndBoundaryWithGrace({
   return current.getTime() > applyEndBoundaryGrace(boundary, rawGraceMinutes).getTime();
 }
 
-function resolvePresetCron(frequency, hour = 0) {
+// Anchor a weekly/monthly cadence to the day the schedule starts.
+//
+// A cron pattern needs a concrete day; "weekly" only says how often. The start
+// date is the one the user actually chose, so a schedule starting Tuesday
+// repeats on Tuesdays. Falling back to today (rather than to a hardcoded
+// Monday) keeps a job created without a start date running on its own anniversary.
+const anchorDate = (startDate) => {
+  const d = startDate ? new Date(startDate) : new Date();
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+};
+
+/**
+ * Preset frequency → cron pattern.
+ *
+ * `weekly` and `monthly` USED TO FALL THROUGH TO null. That was not a
+ * theoretical gap: `createJobSchema` accepts any frequency string, and
+ * `briefToJobPayload` lists both as valid presets with `weekly` as its DEFAULT
+ * — so every Ad Factory Quick setup job took this branch, got
+ * `cronExpression: null`, and was handed to BullMQ as `repeat: { pattern: null }`.
+ * The job was created, reported active, showed no next run, and never fired.
+ *
+ * v1's own form never exposed weekly (it spells that as `custom` with
+ * repeatUnit "week"), which is why the hole survived: nothing reached it until
+ * a second front door started sending the names the schema already allowed.
+ *
+ * Anything still unrecognised returns null deliberately — the caller logs and
+ * refuses rather than inventing a cadence for a word it doesn't know.
+ */
+function resolvePresetCron(frequency, hour = 0, startDate = null) {
   const h = parseInt(hour, 10) || 0;
   switch (frequency) {
     case "daily": return `0 ${h} * * *`;
     case "every_weekday": return `0 ${h} * * 1-5`;
     case "every_weekend": return `0 ${h} * * 0,6`;
+    // Same shape the `custom` branch builds for a one-day weekly recurrence,
+    // so the two paths cannot drift.
+    case "weekly": return `0 ${h} * * ${anchorDate(startDate).getUTCDay()}`;
+    // Days 29–31 do not exist in every month and cron simply skips those
+    // months, silently dropping runs. Clamped to 28 so every month fires.
+    case "monthly": return `0 ${h} ${Math.min(anchorDate(startDate).getUTCDate(), 28)} * *`;
     default: return null;
   }
 }
@@ -211,10 +245,21 @@ function resolveScheduleForQueue(schedule) {
     };
   }
 
-  // Preset (daily / every_weekday / every_weekend) → dynamic cron based on hour
+  // Preset (daily / weekly / monthly / every_weekday / every_weekend) → cron.
+  // weekly and monthly are anchored on the start date, so they need it here.
+  const cronExpression = resolvePresetCron(frequency, schedule.hour, schedule.startDate);
+  if (!cronExpression) {
+    // A pattern of null reaches BullMQ as a repeat with nothing to repeat on:
+    // the job is created, reports active, and never fires. Failing loudly is
+    // the only way an unknown frequency stops being a silent dead job.
+    throw new Error(
+      `Unsupported schedule frequency "${frequency}" — no cron pattern could be built for it.`,
+    );
+  }
+
   return {
     type: "cron",
-    cronExpression: resolvePresetCron(frequency, schedule.hour),
+    cronExpression,
     timezone: tz,
     startDate: startBoundary,
     endDate: endBoundary,

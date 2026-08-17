@@ -9,6 +9,7 @@ import {
   updateBrief,
   generateFromBrief,
   activateBrief,
+  stopBrief,
   getBriefTimeline,
   pauseJob,
   resumeJob,
@@ -193,6 +194,23 @@ export const setAutomationPaused = createAsyncThunk(
   },
 );
 
+// Stop is not a stronger pause — it archives the job and cancels the queue
+// entry, and there is no un-stop. Restarting means activating again, which
+// creates a new job. Past deliveries survive; the server keeps `runHistory`.
+export const stopAutomation = createAsyncThunk(
+  'adFactoryBrief/stop',
+  async (briefId, { rejectWithValue }) => {
+    try {
+      return await stopBrief(briefId);
+    } catch (err) {
+      // 409 while a cycle is mid-run is the one the user can act on: wait for
+      // it to finish. Relay the server's own wording rather than a generic
+      // failure, because "try again in a few minutes" is the actual advice.
+      return rejectWithValue(message(err, "We couldn't stop deliveries."));
+    }
+  },
+);
+
 export const fetchTimeline = createAsyncThunk(
   'adFactoryBrief/timeline',
   async (briefId, { rejectWithValue }) => {
@@ -217,6 +235,9 @@ const initialState = {
   // Previous generation batches, summarised server-side from CampaignHistory.
   history: [],
   timeline: { summary: null, rows: [], loading: false },
+  // Whether the last edit reached the live job — see saveBriefEdits.fulfilled.
+  // Null when there was nothing to sync, which is the usual case.
+  jobSync: null,
   // History. Loaded on the front door so a brief is reachable without its URL.
   briefs: [],
   briefsLoading: false,
@@ -368,6 +389,15 @@ const adFactoryBriefSlice = createSlice({
           state.brief.provenance = payload.data.provenance;
           state.brief.status = payload.data.status;
         }
+        // Whether a cadence edit actually reached the running job.
+        //
+        // `null` for every edit that touches nothing the job owns, which is
+        // almost all of them — the UI says nothing in that case. It is only
+        // populated when the server TRIED, so `applied: false` means the
+        // schedule on screen is not the schedule running, and the user has to
+        // be told. Saying nothing here would rebuild the original bug in the
+        // client.
+        state.jobSync = payload?.jobSync || null;
       })
       .addCase(saveBriefEdits.rejected, (state, { payload }) => {
         state.saving = false;
@@ -432,6 +462,28 @@ const adFactoryBriefSlice = createSlice({
         state.error = typeof payload === 'string' ? payload : payload?.message;
       })
 
+      // Stop shares `pausing` with pause/resume on purpose: they are the same
+      // three buttons in the same header, and one busy flag is what stops a
+      // user firing Stop while a Pause is still in flight.
+      .addCase(stopAutomation.pending, (state) => {
+        state.pausing = true;
+        state.error = null;
+      })
+      .addCase(stopAutomation.fulfilled, (state) => {
+        state.pausing = false;
+        if (state.brief) state.brief.status = BRIEF_STATUS.ENDED;
+        // The job is archived, not deleted — `selectStep` keeps `ended` on the
+        // deliveries screen so the record of what already ran stays reachable.
+        if (state.timeline?.summary) {
+          state.timeline.summary.status = 'archived';
+          state.timeline.summary.nextRunAt = null;
+        }
+      })
+      .addCase(stopAutomation.rejected, (state, { payload }) => {
+        state.pausing = false;
+        state.error = typeof payload === 'string' ? payload : payload?.message;
+      })
+
       .addCase(fetchTimeline.pending, (state) => {
         state.timeline.loading = true;
       })
@@ -462,6 +514,7 @@ export const selectRun = (s) => s.adFactoryBrief.run;
 export const selectEstimate = (s) => s.adFactoryBrief.estimate;
 export const selectHistory = (s) => s.adFactoryBrief.history;
 export const selectTimeline = (s) => s.adFactoryBrief.timeline;
+export const selectJobSync = (s) => s.adFactoryBrief.jobSync;
 export const selectBriefs = (s) => s.adFactoryBrief.briefs;
 export const selectBriefsLoading = (s) => s.adFactoryBrief.briefsLoading;
 export const selectIsPausing = (s) => s.adFactoryBrief.pausing;

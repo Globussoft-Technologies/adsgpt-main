@@ -8,37 +8,11 @@ const customFrequencySchema = Joi.object({
   repeatOnDays: Joi.array().items(Joi.string()).default([]),
 });
 
-// Timezones are validated by CONSTRUCTION, not against a list.
-//
-// `Intl.supportedValuesOf("timeZone")` returns whatever names the linked ICU
-// build considers canonical, and that set is both incomplete and version-
-// dependent. On this runtime it rejects every one of these, all of which are
-// valid IANA zones that browsers really do emit from
-// `Intl.DateTimeFormat().resolvedOptions().timeZone`:
-//
-//   Asia/Kolkata       (ICU offers the legacy alias Asia/Calcutta)
-//   Asia/Ho_Chi_Minh   (Asia/Saigon)
-//   Asia/Yangon        (Asia/Rangoon)
-//   Europe/Kyiv        (Europe/Kiev)
-//   UTC                (an alias, not a zone, so it is never listed)
-//
-// `Asia/Kolkata` is the one that matters most here: it is what an Indian
-// user's browser sends, this product's primary market, and the enum turned it
-// into a 400 with a 417-name message the user could not act on. "UTC" had the
-// same problem from the other side — it is this schema's own declared default,
-// so a client echoing the default back was rejected by it.
-//
-// Constructing a DateTimeFormat accepts canonical names and aliases alike and
-// cannot drift as ICU updates, so it is both broader and more stable than any
-// list we could pin.
-const isValidTimezone = (value, helpers) => {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return value;
-  } catch {
-    return helpers.error("any.invalid", { message: `"${value}" is not a known timezone` });
-  }
-};
+// Timezones are validated by CONSTRUCTION, not against a list — an enum built
+// from `Intl.supportedValuesOf` rejects Asia/Kolkata and UTC among others.
+// Shared with the Quick setup brief validator so both front doors accept
+// exactly the same set; utils/timezone.js carries the full reasoning.
+const { joiTimezone: isValidTimezone } = require("../../utils/timezone");
 
 const scheduleSchema = Joi.object({
   frequency:       Joi.string().required(),

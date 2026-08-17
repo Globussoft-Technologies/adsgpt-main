@@ -13,6 +13,7 @@ import BriefFailed from '@/components/AdFactory/v2/BriefFailed';
 import BriefList from '@/components/AdFactory/v2/BriefList';
 import RunPicker, { CURRENT } from '@/components/AdFactory/v2/RunPicker';
 import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
+import SchedulePanel from '@/components/AdFactory/v2/SchedulePanel';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import LaunchConnection, {
   emptyConnection,
@@ -30,6 +31,7 @@ import {
   generateAds,
   activateAutomation,
   setAutomationPaused,
+  stopAutomation,
   fetchBriefs,
   removeBrief,
   fetchTimeline,
@@ -55,6 +57,7 @@ import {
   selectHistory,
   selectStep,
   selectTimeline,
+  selectJobSync,
   selectIsPausing,
   selectBriefs,
   selectBriefsLoading,
@@ -103,7 +106,11 @@ export default function AdFactoryV2Page() {
   // not the plumbing or the UI's current state.
   const [connection, setConnection] = useState(emptyConnection);
   const [scheduleOn, setScheduleOn] = useState(false);
-  const [frequency, setFrequency] = useState('weekly');
+  // NOTE: the cadence is NOT local state. It used to be — `frequency` lived in
+  // a useState here — which meant the dropdown changed the UI and nothing else:
+  // `activateBrief` builds its payload server-side from the STORED brief, so
+  // whatever the user picked was discarded and every job was created weekly.
+  // It is read from and written to the brief like every other field.
   // Adjust starts OPEN. Before any ads exist the page is otherwise a summary
   // line and a budget box on a lot of empty space, so the fields may as well be
   // there to check — which is the whole point of showing what we inferred.
@@ -132,6 +139,7 @@ export default function AdFactoryV2Page() {
   const generating = useSelector(selectIsGenerating);
   const needsRefetch = useSelector(selectNeedsRefetch);
   const timeline = useSelector(selectTimeline);
+  const jobSync = useSelector(selectJobSync);
   const pausing = useSelector(selectIsPausing);
   const briefs = useSelector(selectBriefs);
   const briefsLoading = useSelector(selectBriefsLoading);
@@ -440,6 +448,68 @@ export default function AdFactoryV2Page() {
     [dispatch, brief?.jobId],
   );
 
+  const handleStop = useCallback(() => {
+    if (!briefId) return;
+    dispatch(stopAutomation(briefId));
+  }, [dispatch, briefId]);
+
+  // The cadence, from either place it can be edited.
+  //
+  // `pairsPerCycle` sits on `delivery` and the other three on
+  // `delivery.frequency`, so one change can span two objects — hence a patch
+  // built here rather than the single-field `handleEdit`. The server merges
+  // `delivery.frequency` one level deep, so sending only the changed key keeps
+  // its siblings.
+  //
+  // For a LIVE brief this is also what reaches the running job: the PATCH
+  // response carries `jobSync`, and SchedulePanel shows it when the job refused.
+  const handleCadenceChange = useCallback(
+    (change) => {
+      if (!briefId) return;
+
+      const { pairsPerCycle, ...scheduleBits } = change;
+      const patch = {};
+
+      if (Object.keys(scheduleBits).length) {
+        // `frequency` is what the pills call it; `preset` is what the brief
+        // calls it. Translating here keeps the control ignorant of the schema.
+        const { frequency: preset, ...rest } = scheduleBits;
+        const next = {
+          ...(brief?.delivery?.frequency || {}),
+          ...rest,
+          ...(preset ? { preset } : {}),
+        };
+        patch.frequency = next;
+        dispatch(applyLocalEdit({ section: 'delivery', field: 'frequency', value: next }));
+      }
+
+      if (pairsPerCycle != null) {
+        patch.pairsPerCycle = pairsPerCycle;
+        dispatch(applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle }));
+      }
+
+      dispatch(saveBriefEdits({ briefId, patch: { delivery: patch } }));
+    },
+    [dispatch, briefId, brief?.delivery?.frequency],
+  );
+
+  // Read straight off the brief, with the same defaults the schema uses, so the
+  // controls show what will actually run rather than a local guess.
+  const cadence = useMemo(
+    () => ({
+      frequency: brief?.delivery?.frequency?.preset || 'weekly',
+      hour: brief?.delivery?.frequency?.hour ?? 9,
+      timezone: brief?.delivery?.frequency?.timezone || '',
+      pairsPerCycle: brief?.delivery?.pairsPerCycle ?? 3,
+    }),
+    [
+      brief?.delivery?.frequency?.preset,
+      brief?.delivery?.frequency?.hour,
+      brief?.delivery?.frequency?.timezone,
+      brief?.delivery?.pairsPerCycle,
+    ],
+  );
+
   const host = useMemo(() => {
     const url = brief?.source?.url || '';
     try {
@@ -674,8 +744,8 @@ export default function AdFactoryV2Page() {
               <KeepTheseComing
                 enabled={scheduleOn}
                 onToggle={setScheduleOn}
-                frequency={frequency}
-                onFrequencyChange={setFrequency}
+                frequency={cadence.frequency}
+                onCadenceChange={handleCadenceChange}
                 onActivate={handleActivate}
                 activating={activating}
                 isMetaConnected={isConnectionComplete(connection)}
@@ -685,10 +755,10 @@ export default function AdFactoryV2Page() {
                   pageId: connection.pageId,
                   pageLabel: connection.pageName,
                 }}
-                pairsPerCycle={brief.delivery?.pairsPerCycle ?? 3}
+                pairsPerCycle={cadence.pairsPerCycle}
                 budget={budget}
-                hour={brief.delivery?.frequency?.hour ?? 9}
-                timezone={brief.delivery?.frequency?.timezone}
+                hour={cadence.hour}
+                timezone={cadence.timezone}
                 objectiveLabel={objectiveLabel}
                 creditsPerCycle={estimate?.total ?? null}
                 firstRunLabel={nextRunLabel}
@@ -726,16 +796,34 @@ export default function AdFactoryV2Page() {
               </motion.div>
             )}
           </AnimatePresence>
+          {/* The cadence and the three lifecycle controls. Until this existed
+              a live brief could only be paused: the setup card renders before
+              activation only, so there was no way to change the time, the
+              frequency, or to stop. */}
+          <SchedulePanel
+            status={timeline?.summary?.status}
+            frequency={cadence.frequency}
+            hour={cadence.hour}
+            timezone={cadence.timezone}
+            pairsPerCycle={cadence.pairsPerCycle}
+            nextRunAt={timeline?.summary?.nextRunAt}
+            onCadenceChange={handleCadenceChange}
+            onPause={() => handlePause(true)}
+            onResume={() => handlePause(false)}
+            onStop={handleStop}
+            busy={pausing}
+            saving={saving}
+            // Only when the server tried and the job refused — `applied: true`
+            // and `null` both mean the screen is telling the truth.
+            syncWarning={jobSync && jobSync.applied === false ? jobSync.reason : ''}
+          />
           <RunTimeline
             summary={timeline?.summary}
             rows={timeline?.rows}
             loading={timeline?.loading}
             onRetry={handleGenerate}
             brandName={brief.brand?.name}
-            pairsPerCycle={brief.delivery?.pairsPerCycle}
-            onPause={() => handlePause(true)}
-            onResume={() => handlePause(false)}
-            pausing={pausing}
+            pairsPerCycle={cadence.pairsPerCycle}
           />
         </div>
       )}

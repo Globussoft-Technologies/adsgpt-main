@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ExternalLink, Loader2, Pause, Play } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
 
 import { motion } from 'framer-motion';
 
@@ -46,9 +46,6 @@ export default function RunTimeline({
   onRetry,
   brandName,
   pairsPerCycle,
-  onPause,
-  onResume,
-  pausing = false,
 }) {
   const M = useMotionPresets();
 
@@ -81,31 +78,19 @@ export default function RunTimeline({
       <PanelHeader
         title={brandName || 'Deliveries'}
         subtitle={cadence || 'Not scheduled yet'}
+        // Pause / Resume / Stop live on SchedulePanel directly above this, next
+        // to the cadence they act on. They were here too, which put two copies
+        // of the same control on one screen — the thing that made "Keep these
+        // coming" confusing the first time round.
         right={
-          <span className="flex items-center gap-2.5">
-            <span
-              className={`rounded-full px-2.5 py-1 text-10 font-extrabold tracking-wider ${
-                live
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/55'
-              }`}
-            >
-              {live ? 'LIVE' : String(summary?.status || 'paused').toUpperCase()}
-            </span>
-            {/* Stopping something that is spending money must be reachable from
-                the screen that shows it spending. */}
-            {live && onPause && (
-              <GhostBtn onClick={onPause} disabled={pausing}>
-                <Pause className="h-3.5 w-3.5" />
-                <span>Pause</span>
-              </GhostBtn>
-            )}
-            {!live && summary?.status === 'paused' && onResume && (
-              <GhostBtn onClick={onResume} disabled={pausing}>
-                <Play className="h-3.5 w-3.5" />
-                <span>Resume</span>
-              </GhostBtn>
-            )}
+          <span
+            className={`rounded-full px-2.5 py-1 text-10 font-extrabold tracking-wider ${
+              live
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                : 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/55'
+            }`}
+          >
+            {live ? 'LIVE' : String(summary?.status || 'paused').toUpperCase()}
           </span>
         }
       />

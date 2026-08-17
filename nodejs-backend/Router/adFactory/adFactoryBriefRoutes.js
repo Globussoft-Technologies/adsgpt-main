@@ -31,6 +31,10 @@ router.post("/adopt/:campaignId", authenticateJWT, ctrl.adoptCampaign);
 // win, and kept as POSTs because each one creates or changes something.
 router.post("/:id/generate", authenticateJWT, requireBasePlan, actions.generateFromBrief);
 router.post("/:id/activate", authenticateJWT, requireBasePlan, actions.activateBrief);
+// Ungated, and deliberately so: stopping is how a user STOPS spending. Putting
+// a plan check between someone and the off switch is the one place gating would
+// actively cost them money.
+router.post("/:id/stop", authenticateJWT, actions.stopBrief);
 router.get("/:id/timeline", authenticateJWT, actions.getBriefTimeline);
 
 // Static routes before `/:id` so they can't be shadowed.

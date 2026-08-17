@@ -3,15 +3,8 @@ import { Check, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Switch } from '@/components/Autopilot/_atoms';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-
 import { Panel, PanelBody, PanelFooter, PanelHeader, PrimaryBtn } from './Panel';
+import CadencePills from './CadencePills';
 import { useMotionPresets } from './_motion';
 
 // ----------------------------------------------------------------------------
@@ -34,18 +27,11 @@ import { useMotionPresets } from './_motion';
 // don't need one.
 // ----------------------------------------------------------------------------
 
-const FREQUENCIES = [
-  { value: 'daily', label: 'day' },
-  { value: 'weekly', label: 'week' },
-  { value: 'biweekly', label: '2 weeks' },
-  { value: 'monthly', label: 'month' },
-];
-
 export default function KeepTheseComing({
   enabled,
   onToggle,
   frequency = 'weekly',
-  onFrequencyChange,
+  onCadenceChange,
   onActivate,
   activating = false,
   isMetaConnected = false,
@@ -60,11 +46,6 @@ export default function KeepTheseComing({
   objectiveLabel,
 }) {
   const M = useMotionPresets();
-
-  const tz =
-    timezone ||
-    Intl.DateTimeFormat().resolvedOptions().timeZone ||
-    'your timezone';
 
   // Narrower than the stages around it, and centred. This is a commitment, not
   // a browse — the column is short so the whole decision is in one glance.
@@ -90,39 +71,18 @@ export default function KeepTheseComing({
         {enabled && (
           <motion.div key="body" {...M.expand}>
             <PanelBody className="flex flex-col gap-4">
-            {/* Cadence, as a sentence rather than a form. */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Same shadcn Select as everywhere else, trimmed to sit inside
-                  the pill: no border or background of its own, because the
-                  Pill already provides both. A native <select> here rendered
-                  an OS-drawn list that ignored the dark palette. */}
-              <Pill label="EVERY">
-                <Select value={frequency} onValueChange={(v) => onFrequencyChange?.(v)}>
-                  <SelectTrigger className="h-auto! w-auto gap-1.5 border-0 bg-transparent p-0 text-13 font-bold text-gray-900 shadow-none focus:ring-0 dark:text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="z-9999 border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white">
-                    {FREQUENCIES.map((f) => (
-                      <SelectItem
-                        key={f.value}
-                        value={f.value}
-                        className="text-13 dark:focus:bg-white/10"
-                      >
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Pill>
-              <Pill label="AT">
-                <b className="tabular-nums">{clock(hour)}</b>
-                <span className="text-gray-400 dark:text-white/45">{shortZone(tz)}</span>
-              </Pill>
-              <Pill>
-                <b className="tabular-nums">{pairsPerCycle}</b>
-                <span className="text-gray-400 dark:text-white/45">pairs per run</span>
-              </Pill>
-            </div>
+            {/* Cadence, as a sentence rather than a form — and editable.
+                Every value here was previously fixed text, so the hour and
+                timezone silently stayed on the schema defaults and every
+                schedule ran at 9:00 UTC. */}
+            <CadencePills
+              frequency={frequency}
+              hour={hour}
+              timezone={timezone}
+              pairsPerCycle={pairsPerCycle}
+              onChange={onCadenceChange}
+              disabled={activating}
+            />
 
             {/* What it runs against. */}
             <dl className="flex flex-col border-t border-gray-200 pt-1 dark:border-white/10">
@@ -181,19 +141,6 @@ export default function KeepTheseComing({
   );
 }
 
-function Pill({ label, children }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-13 text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white">
-      {label && (
-        <span className="text-10 font-extrabold tracking-wider text-gray-400 dark:text-white/45">
-          {label}
-        </span>
-      )}
-      {children}
-    </span>
-  );
-}
-
 // A row reads as done only when we actually have the id — an unconnected
 // account showing a tick is the one thing that would make this checklist
 // worthless.
@@ -218,26 +165,3 @@ function Row({ label, value, hint, done }) {
   );
 }
 
-// 9 → "9:00 AM". The pill reads as a sentence, and 24-hour time in the middle
-// of one reads as a setting rather than a time of day.
-function clock(hour) {
-  const h = Number(hour);
-  if (!Number.isFinite(h)) return '';
-  const suffix = h < 12 ? 'AM' : 'PM';
-  const twelve = h % 12 === 0 ? 12 : h % 12;
-  return `${twelve}:00 ${suffix}`;
-}
-
-// "Asia/Kolkata" → "IST"-ish. Falls back to the last path segment rather than
-// printing a full IANA name into a pill.
-function shortZone(tz) {
-  try {
-    const parts = new Intl.DateTimeFormat(undefined, {
-      timeZone: tz,
-      timeZoneName: 'short',
-    }).formatToParts(new Date());
-    return parts.find((p) => p.type === 'timeZoneName')?.value || tz.split('/').pop();
-  } catch {
-    return String(tz).split('/').pop();
-  }
-}

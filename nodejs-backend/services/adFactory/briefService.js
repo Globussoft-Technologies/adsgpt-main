@@ -83,7 +83,19 @@ async function isWithinFreeQuota(userId) {
  *
  * @returns {{ brief: object, isNew: boolean, reused: boolean }}
  */
-async function createOrReuseUrlBrief({ userId, url, forceRefresh = false }) {
+/**
+ * The client's IANA zone, applied only when we have one.
+ *
+ * `delivery.frequency.timezone` defaults to "UTC" in the schema and nothing ever
+ * set it, so every Quick setup schedule ran on UTC — a user in India choosing
+ * 9:00 AM got their ads at 2:30 PM. The server cannot infer this; the browser
+ * reports it. Returned as a spreadable fragment so a request without one leaves
+ * the schema default exactly as it was.
+ */
+const deliveryFor = (timezone) =>
+  timezone ? { delivery: { frequency: { timezone } } } : {};
+
+async function createOrReuseUrlBrief({ userId, url, forceRefresh = false, timezone = "" }) {
   // Match on the canonical key, not the raw string. `dell.com`,
   // `https://www.dell.com/` and the same link with a utm tag are one page, and
   // matching on `source.url` treated them as three — which is how one account
@@ -120,6 +132,7 @@ async function createOrReuseUrlBrief({ userId, url, forceRefresh = false }) {
   const brief = await AdFactoryBrief.create({
     userId,
     source: { type: "url", url, urlKey },
+    ...deliveryFor(timezone),
     status: "inferring",
   });
   return { brief, isNew: true, reused: false };
@@ -295,7 +308,7 @@ function describeInferenceFailure(err) {
  *
  * @returns {Promise<{ brief: object, shouldInfer: boolean }>}
  */
-async function createBrandBrief({ userId, brandId, brand }) {
+async function createBrandBrief({ userId, brandId, brand, timezone = "" }) {
   const provenance = {};
 
   // Brand images are stored as bare S3 KEYS, not URLs — `getBrandsList` is what
@@ -362,6 +375,7 @@ async function createBrandBrief({ userId, brandId, brand }) {
     brand: brandFields,
     offer: { audience, cta: { url: websiteUrl } },
     generation: { seedImages },
+    ...deliveryFor(timezone),
     provenance,
     // A brand with a website still owes us the voice/guidelines pass; one
     // without is immediately usable, if thinner.

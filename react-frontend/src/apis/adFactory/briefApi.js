@@ -24,9 +24,26 @@ const authHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
+// The one fact the server cannot infer and the browser already knows.
+//
+// `delivery.frequency.timezone` defaulted to "UTC" and nothing ever set it, so
+// every schedule ran on UTC — pick 9:00 AM in India and the ads went out at
+// 2:30 PM. Sent at creation so the very first schedule is already right.
+const browserTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    return '';
+  }
+};
+
 // Start inference from a pasted URL. Resolves as soon as the brief exists.
 export const createBrief = async ({ url, forceRefresh = false }) => {
-  const { data } = await axios.post(BRIEFS, { url, forceRefresh }, { headers: authHeaders() });
+  const { data } = await axios.post(
+    BRIEFS,
+    { url, forceRefresh, timezone: browserTimezone() },
+    { headers: authHeaders() },
+  );
   return data;
 };
 
@@ -35,7 +52,7 @@ export const createBrief = async ({ url, forceRefresh = false }) => {
 export const createBriefFromBrand = async (brandId) => {
   const { data } = await axios.post(
     `${BRIEFS}/from-brand/${encodeURIComponent(brandId)}`,
-    {},
+    { timezone: browserTimezone() },
     { headers: authHeaders() },
   );
   return data;
@@ -125,6 +142,19 @@ export const pauseJob = async (jobId) => {
 export const resumeJob = async (jobId) => {
   const { data } = await axios.post(
     `${AUTOPILOT}/jobs/${jobId}/resume`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+// Stop is a brief route rather than the job's DELETE, because the brief has to
+// change state alongside it. Archives the job and cancels its queue entry; run
+// history survives, so the deliveries timeline keeps showing what was already
+// delivered.
+export const stopBrief = async (briefId) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/${briefId}/stop`,
     {},
     { headers: authHeaders() },
   );
