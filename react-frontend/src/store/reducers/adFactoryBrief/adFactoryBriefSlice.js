@@ -378,9 +378,16 @@ const adFactoryBriefSlice = createSlice({
         state.generating = true;
         state.error = null;
         state.errorCode = null;
-        // Show the run as started immediately. Pressing a button and seeing
-        // nothing change for two minutes is the worst possible answer.
-        state.run = { ...state.run, status: 'running' };
+        // Clear the previous batch and show skeletons for the one being made.
+        //
+        // This used to keep `pairs` and only flip status, so a REGENERATE left
+        // the old ads on screen with no loaders — nothing visibly happened
+        // until the first poll came back, which reads as a dead button. The
+        // first generate looked right only because there were no old ads to
+        // leave behind. The previous batch is not lost: it moves into Earlier
+        // runs the moment the snapshot is written.
+        const want = Number(state.brief?.generation?.imageCount) || 3;
+        state.run = { status: 'running', pairs: [], pending: want, failed: 0, requested: want };
       })
       .addCase(generateAds.fulfilled, (state) => {
         state.run = { ...state.run, status: 'running' };

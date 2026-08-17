@@ -50,6 +50,7 @@ export default function CreativePreview({
   regenerating = false,
   creditsHeld,
   ratio = '4:5',
+  readOnly = false,
 }) {
   const M = useMotionPresets();
   const pairs = run?.pairs || [];
@@ -64,11 +65,13 @@ export default function CreativePreview({
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-0.5">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-          {running && ready === 0
-            ? 'Making your ads…'
-            : ready > 0
-              ? `${ready} ${ready === 1 ? 'ad' : 'ads'} ready`
-              : 'Generation finished'}
+          {readOnly
+            ? `${ready} ${ready === 1 ? 'ad' : 'ads'} from this run`
+            : running && ready === 0
+              ? 'Making your ads…'
+              : ready > 0
+                ? `${ready} ${ready === 1 ? 'ad' : 'ads'} ready`
+                : 'Generation finished'}
         </h3>
         {running && (
           <span className="text-xs text-gray-500 dark:text-white/55">
@@ -100,7 +103,7 @@ export default function CreativePreview({
                 pair={pair}
                 ratio={ratio}
                 callToAction={callToAction}
-                onRegenerate={onRegenerateOne ? () => onRegenerateOne(i) : undefined}
+                onRegenerate={!readOnly && onRegenerateOne ? () => onRegenerateOne(i) : undefined}
               />
             </motion.div>
           ))}
@@ -133,7 +136,7 @@ export default function CreativePreview({
 
           "Keep these coming" appears only once an ad exists: offering it sooner
           asks the user to commit to something they haven't seen. */}
-      {(running || ready > 0) && (
+      {!readOnly && (running || ready > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#14181D]">
           <p className="text-xs text-gray-500 dark:text-white/55">
             {running ? (

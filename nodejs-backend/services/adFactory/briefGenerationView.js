@@ -90,9 +90,14 @@ function normalizeCopy(data) {
 /**
  * @param {object} campaign  A Campaign document or plain object.
  * @param {object} [opts]
- * @param {number} [opts.limit]  How many pairs this run asked for. Defaults to
- *                               the campaign's own image quantity so a brief
- *                               asking for 5 doesn't silently show 3.
+ * @param {number} [opts.since]  Index the CURRENT run starts at, from
+ *                               runSlices.sliceRuns. Preferred over `limit`:
+ *                               it is the real boundary between this run and
+ *                               the last, whereas the quantity setting is only
+ *                               a proxy and goes wrong the moment the user
+ *                               changes "ads per run" between runs.
+ * @param {number} [opts.limit]  Fallback when there is no history to bound
+ *                               against — the campaign's own image quantity.
  * @returns {{ status, images, texts, pairs, pending, failed, requested }}
  */
 function briefGenerationView(campaign, opts = {}) {
@@ -113,9 +118,20 @@ function briefGenerationView(campaign, opts = {}) {
     ? Math.floor(Number(opts.limit))
     : requestedFromServices();
 
-  // Filter FIRST, then take this run's tail — see property 3 above.
-  const images = rawImages.filter(isDelivered).slice(-limit);
-  const texts = rawTexts.filter(isDelivered).slice(-limit);
+  // Filter FIRST, then take this run's slice — see property 3 above.
+  //
+  // `since` is the exact boundary the previous run ended at, so it is used
+  // whenever the caller knows it. The quantity-based tail is only a guess: with
+  // "ads per run" changed from 3 to 1 between runs it shows one ad for a run
+  // that made three, which is precisely what was on screen before this.
+  const deliveredImages = rawImages.filter(isDelivered);
+  const deliveredTexts = rawTexts.filter(isDelivered);
+  const from = Number.isFinite(Number(opts.since)) && Number(opts.since) >= 0
+    ? Math.min(Number(opts.since), deliveredImages.length)
+    : Math.max(0, deliveredImages.length - limit);
+
+  const images = deliveredImages.slice(from);
+  const texts = deliveredTexts.slice(from);
 
   // Pending is a count, not a list: a slot with nothing in it has nothing to
   // render, and the UI only needs to know how many skeletons to draw.

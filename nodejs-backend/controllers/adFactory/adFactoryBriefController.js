@@ -23,8 +23,9 @@ const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const CampaignHistory = require("../../Module/adFactory/adFactoryHistory");
 const brandNameLists = require("../../Module/brandNames/brandNamesSchema");
 const briefService = require("../../services/adFactory/briefService");
-const { briefGenerationView } = require("../../services/adFactory/briefGenerationView");
+const { briefGenerationView, _internals: genInternals } = require("../../services/adFactory/briefGenerationView");
 const { estimateBriefCredits } = require("../../services/adFactory/briefCreditEstimate");
+const { sliceRuns } = require("../../services/adFactory/runSlices");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const { assertSafeUrl, UnsafeUrlError } = require("../../utils/safeUrl");
 const {
@@ -206,12 +207,54 @@ exports.getBrief = async (req, res) => {
     // that name over it would silently replace the user's settings with a
     // results payload. `generation` is what to make; `run` is what came back.
     let run = { status: "idle", pairs: [], pending: 0, failed: 0, requested: 0 };
+    let history = [];
+
     if (brief.campaignId) {
       const campaign = await Campaign.findOne({
         _id: brief.campaignId,
         userId: req.user.user_id,
       }).lean();
-      if (campaign) run = briefGenerationView(campaign);
+
+      if (campaign) {
+        // Snapshots hold the CUMULATIVE results as they stood at each
+        // regenerate, so their lengths are boundaries between runs rather than
+        // batch sizes. Ascending, because sliceRuns walks them in order.
+        const snaps = await CampaignHistory.find({
+          userId: req.user.user_id,
+          campaignId: brief.campaignId.toString(),
+        })
+          .select("version createdAt previousData.results.image")
+          .sort({ version: 1 })
+          .limit(20)
+          .lean();
+
+        const { runs, currentFrom } = sliceRuns(campaign.results, snaps);
+
+        // The live batch starts where the last snapshot ended — an exact
+        // boundary, unlike "the last N" which breaks as soon as ads-per-run
+        // changes between runs.
+        run = briefGenerationView(campaign, { since: currentFrom });
+
+        // Newest first. Each run carries the SAME pair shape as the live run
+        // (`imageUrl` + normalised `copy`), because the version picker renders
+        // a past batch through the same card component — an image-only payload
+        // would draw those cards without their headlines.
+        history = runs
+          .slice()
+          .reverse()
+          .filter((r) => r.adCount > 0)
+          .map((r) => ({
+            version: r.version,
+            at: r.at,
+            adCount: r.adCount,
+            partial: r.partial,
+            pairs: r.images.map((image, i) => ({
+              imageUrl: image.data,
+              prompt: image.prompt || "",
+              copy: genInternals.normalizeCopy(r.texts[i]?.data),
+            })),
+          }));
+      }
     }
 
     // What one run will cost, priced the same way the freeze is (see
@@ -221,40 +264,6 @@ exports.getBrief = async (req, res) => {
       brief,
       UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
     );
-
-    // Previous runs. Full control versions a campaign into CampaignHistory
-    // before each regenerate and reads it back at
-    // GET /campaign/get-history/:userId/:campaignId — but Quick setup
-    // deliberately never tells the client its campaign id, so that route is
-    // unreachable from here. Summarised onto the brief instead: enough to list
-    // and open a previous batch, without shipping whole campaign snapshots on
-    // every poll.
-    let history = [];
-    if (brief.campaignId) {
-      const rows = await CampaignHistory.find({
-        userId: req.user.user_id,
-        campaignId: brief.campaignId.toString(),
-      })
-        .select("version createdAt previousData.results")
-        .sort({ version: -1 })
-        .limit(20)
-        .lean();
-
-      history = rows.map((h) => {
-        const images = (h.previousData?.results?.image || []).filter(
-          (i) => i?.status === 200 && i?.data,
-        );
-        return {
-          version: h.version,
-          at: h.createdAt,
-          adCount: images.length,
-          // The images themselves, so a previous batch can be shown without a
-          // second round trip. Copy is left out — it is the bulky half and is
-          // only needed once a version is actually opened.
-          images: images.map((i) => i.data),
-        };
-      });
-    }
 
     return res
       .status(200)

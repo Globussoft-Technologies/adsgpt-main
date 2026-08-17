@@ -11,7 +11,7 @@ import AdjustPanel from '@/components/AdFactory/v2/AdjustPanel';
 import CreativePreview from '@/components/AdFactory/v2/CreativePreview';
 import BriefFailed from '@/components/AdFactory/v2/BriefFailed';
 import BriefList from '@/components/AdFactory/v2/BriefList';
-import PreviousRuns from '@/components/AdFactory/v2/PreviousRuns';
+import RunPicker, { CURRENT } from '@/components/AdFactory/v2/RunPicker';
 import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import LaunchConnection, {
@@ -111,6 +111,8 @@ export default function AdFactoryV2Page() {
   // It is still not the toll gate the previous attempt made it: nothing blocks
   // on it, and it gets out of the way the moment ads become the page (below).
   const [adjustOpen, setAdjustOpen] = useState(true);
+  // Which batch the cards are showing. CURRENT = the live run.
+  const [viewRun, setViewRun] = useState(CURRENT);
   // Whether the default has been resolved for the brief now loaded. Without
   // this the effect below would re-open the panel every time the brief object
   // changes identity, fighting the user each time they closed it.
@@ -147,6 +149,22 @@ export default function AdFactoryV2Page() {
   // Neither `vite build` nor eslint caught it — the reference is valid, just
   // too early — which is why it only surfaced when the page was opened.
   const hasCreatives = (run?.pairs?.length || 0) > 0;
+
+  // A past run renders through the SAME card component as the live one — the
+  // server ships each historical batch in the identical pair shape for exactly
+  // that reason. Its status is forced to success: an old batch is finished by
+  // definition, so it must never inherit the live run's skeletons.
+  const viewedRun = useMemo(() => {
+    if (viewRun === CURRENT) return run;
+    const past = (history || []).find((h) => String(h.version) === String(viewRun));
+    if (!past) return run;
+    return { status: 'success', pairs: past.pairs || [], pending: 0, failed: 0, requested: past.adCount };
+  }, [viewRun, run, history]);
+
+  // Starting a new run always snaps back to it; watching a two-minute
+  // generation from inside last week's batch is not what anyone means by
+  // pressing Regenerate.
+  const isViewingPast = viewRun !== CURRENT;
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -304,6 +322,7 @@ export default function AdFactoryV2Page() {
     // The ads are about to become the page, so the fields step aside. A clear
     // cause the user just triggered, rather than the panel closing on its own.
     setAdjustOpen(false);
+    setViewRun(CURRENT);
     dispatch(generateAds(briefId));
   }, [dispatch, briefId, persistBudget]);
 
@@ -619,19 +638,23 @@ export default function AdFactoryV2Page() {
             </div>
           )}
 
+          <RunPicker
+            history={history}
+            value={viewRun}
+            onChange={setViewRun}
+            currentCount={run?.pairs?.length || 0}
+          />
+
           <CreativePreview
-            run={run}
+            run={viewedRun}
             callToAction={ctaLabel}
             ratio={brief.delivery?.ratios?.[0] || '4:5'}
             onRegenerate={handleGenerate}
             onContinue={handleWantSchedule}
             regenerating={generating}
-            creditsHeld={estimate?.total ?? null}
+            creditsHeld={isViewingPast ? null : estimate?.total ?? null}
+            readOnly={isViewingPast}
           />
-
-          {/* Under the current ads, never above them — the batch you just made
-              is the page; the ones before it are reference. */}
-          <PreviousRuns history={history} />
 
           {/* ── 4 ── Only once there is something to schedule. Asking "keep
               these coming" before any ad exists asks the user to commit to
