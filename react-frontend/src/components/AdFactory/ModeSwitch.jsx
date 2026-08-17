@@ -19,15 +19,13 @@ import React from 'react';
 
 export const UI_MODE = Object.freeze({ QUICK: 'quick', FULL: 'full' });
 
-// Labels are "New" / "Old" by request. Worth recording the trade-off rather
-// than silently reversing it later: the proposal argued against version-flavoured
-// naming because it makes whichever side you are on feel like a mistake, and
-// "Old" says that more plainly than "v1" did — Full control is the DEFAULT and a
-// permanently supported mode, not a deprecation. Descriptive labels are a
-// one-line change here if that reads badly to users.
+// Descriptive, not version-flavoured. "New" / "Old" was tried and reverted:
+// naming one side "Old" tells everyone sitting on the default — which is Full
+// control, a permanently supported mode — that they are on the deprecated
+// thing. These labels say what each mode IS.
 const OPTIONS = [
-  { value: UI_MODE.QUICK, label: 'New' },
-  { value: UI_MODE.FULL, label: 'Old' },
+  { value: UI_MODE.QUICK, label: 'Quick setup' },
+  { value: UI_MODE.FULL, label: 'Full control' },
 ];
 
 export default function ModeSwitch({ mode, onChange, disabled = false, busy = false }) {

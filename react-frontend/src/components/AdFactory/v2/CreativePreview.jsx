@@ -23,6 +23,18 @@ import { useMotionPresets } from './_motion';
 const S3 = import.meta.env.VITE_S3_BASE_URL || '';
 
 // Python returns either an absolute URL or an S3 key beginning with a slash.
+// "1:1" -> 1, "4:5" -> 0.8, "1.91:1" -> 1.91. The card must be shaped like the
+// creative it holds: a 1:1 image in a hardcoded 4/5 box gets its sides cropped
+// by object-cover, which ate the left edge of every headline — "POWERADSPY"
+// rendered as "OWERADSPY". The ratio badge said 1:1 while the frame said
+// otherwise.
+const aspectOf = (ratio) => {
+  const [w, h] = String(ratio || '')
+    .split(':')
+    .map(Number);
+  return Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? `${w} / ${h}` : '4 / 5';
+};
+
 const srcOf = (data) => {
   const s = String(data || '');
   if (!s) return '';
@@ -165,12 +177,18 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
   const copy = pair.copy || {};
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#101316]">
-      <div className="relative aspect-4/5 bg-gray-100 dark:bg-white/5">
+      <div
+        className="relative bg-gray-100 dark:bg-white/5"
+        style={{ aspectRatio: aspectOf(ratio) }}
+      >
         <img
           src={srcOf(pair.imageUrl)}
           alt={copy.headline || 'Generated ad'}
           loading="lazy"
-          className="h-full w-full object-cover"
+          // `contain`, not `cover`. These are finished ads with text baked into
+          // the pixels — cropping one to fill a box removes words the user is
+          // being asked to approve. Letterboxing is the honest failure mode.
+          className="h-full w-full object-contain"
         />
         <RatioBadge ratio={ratio} />
       </div>
@@ -210,7 +228,10 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
 function SkeletonCard({ ratio }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#101316]">
-      <div className="relative aspect-4/5 animate-pulse bg-gray-100 dark:bg-white/5">
+      <div
+        className="relative animate-pulse bg-gray-100 dark:bg-white/5"
+        style={{ aspectRatio: aspectOf(ratio) }}
+      >
         <RatioBadge ratio={ratio} />
       </div>
       <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-3 dark:border-white/10">

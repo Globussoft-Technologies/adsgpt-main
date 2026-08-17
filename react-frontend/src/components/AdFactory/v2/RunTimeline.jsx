@@ -155,6 +155,20 @@ function Metric({ label, value, small = false }) {
   );
 }
 
+const BULLET = {
+  live: 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]',
+  part: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)]',
+  fail: 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)]',
+  next: 'border-2 border-gray-300 bg-transparent dark:border-white/30',
+};
+
+const PILL = {
+  live: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  part: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  fail: 'bg-red-500/15 text-red-600 dark:text-red-400',
+  next: 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/50',
+};
+
 function Cycle({ row, last, onRetry, motionProps }) {
   const scheduled = row.scheduled || row.status === 'scheduled';
   const failedOnly = !scheduled && row.liveCount === 0 && row.failedCount > 0;
@@ -264,17 +278,3 @@ function shortZone(tz) {
     return String(tz).split('/').pop();
   }
 }
-
-const BULLET = {
-  live: 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]',
-  part: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)]',
-  fail: 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)]',
-  next: 'border-2 border-gray-300 bg-transparent dark:border-white/30',
-};
-
-const PILL = {
-  live: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-  part: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  fail: 'bg-red-500/15 text-red-600 dark:text-red-400',
-  next: 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/50',
-};

@@ -137,6 +137,17 @@ export default function AdFactoryV2Page() {
 
   const urlBriefId = searchParams.get('briefId');
 
+  // Declared HERE, with the state it derives from, because effects below read
+  // it in their dependency arrays. It used to sit just above the render, which
+  // put it in the temporal dead zone for those effects: the deps array is
+  // evaluated during render, so the first paint threw
+  // "Cannot access 'hasCreatives' before initialization" and took the whole
+  // route down.
+  //
+  // Neither `vite build` nor eslint caught it — the reference is valid, just
+  // too early — which is why it only surfaced when the page was opened.
+  const hasCreatives = (run?.pairs?.length || 0) > 0;
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (urlBriefId) dispatch(fetchBrief(urlBriefId));
@@ -368,7 +379,6 @@ export default function AdFactoryV2Page() {
   // server refuses outright if an automation is still delivering.
   const handleDeleteBrief = useCallback(
     (id, label) => {
-      // eslint-disable-next-line no-alert
       if (!window.confirm(`Delete “${label}”? This removes the brief and its ads setup.`)) return;
       dispatch(removeBrief(id));
     },
@@ -421,7 +431,6 @@ export default function AdFactoryV2Page() {
   }, [brief]);
 
   const canGenerate = Number(budget) > 0;
-  const hasCreatives = (run?.pairs?.length || 0) > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   // No header here: the page title comes from TopHeader and the mode switch is

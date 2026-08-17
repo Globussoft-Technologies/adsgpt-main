@@ -43,6 +43,31 @@ export const STEP = {
   DELIVERIES: 'deliveries', // live automation — deliveries are the page
 };
 
+// Persist the chosen mode so a reload keeps the user where they were, the same
+// way brandIQTabsSlice remembers its active tab. Wrapped because localStorage
+// throws outright in private-mode Safari and with storage disabled — a browser
+// setting must not take the page down.
+const MODE_STORAGE_KEY = 'adFactoryUiMode';
+
+const getPersistedMode = () => {
+  try {
+    // Anything other than the two known values falls back to Full control.
+    // Nobody is placed into Quick setup by a stale or hand-edited key.
+    return localStorage.getItem(MODE_STORAGE_KEY) === 'quick' ? 'quick' : 'full';
+  } catch {
+    return 'full';
+  }
+};
+
+const persistMode = (mode) => {
+  try {
+    localStorage.setItem(MODE_STORAGE_KEY, mode);
+  } catch {
+    // Not being able to remember the choice is not worth an error; the mode
+    // still applies for this session.
+  }
+};
+
 const message = (err, fallback) =>
   err?.response?.data?.error || err?.message || fallback;
 
@@ -213,9 +238,10 @@ const initialState = {
   // The socket event carries only a status, so a full read follows it.
   needsRefetch: false,
 
-  // Which UI this session is using. Full control is the default for everyone —
-  // nobody is moved into a different mode without asking for it.
-  uiMode: 'full',
+  // Which UI to render. Full control remains the default for anyone who has
+  // never chosen — nobody is moved into a different mode without asking — but
+  // once chosen, the choice survives a reload.
+  uiMode: getPersistedMode(),
 };
 
 const adFactoryBriefSlice = createSlice({
@@ -224,7 +250,9 @@ const adFactoryBriefSlice = createSlice({
   reducers: {
     resetBrief: (state) => ({ ...initialState, uiMode: state.uiMode }),
     setUiMode: (state, { payload }) => {
-      state.uiMode = payload?.uiMode === 'quick' ? 'quick' : 'full';
+      const next = payload?.uiMode === 'quick' ? 'quick' : 'full';
+      state.uiMode = next;
+      persistMode(next);
     },
     setPendingBudget: (state, { payload }) => {
       state.pendingBudget = payload;

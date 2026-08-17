@@ -147,6 +147,12 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
     editOffer('cta', { ...(offer.cta || {}), button: '' });
   };
 
+  // An ad needs an image, so the image count is what "ads per run" means. A
+  // campaign adopted from Full control may carry mismatched counts; this shows
+  // the honest number and only normalises the two when the user actually
+  // changes it, rather than silently rewriting their data on open.
+  const adsPerRun = generation.imageCount ?? 3;
+
   const toggleIn = (list, value) => {
     const cur = Array.isArray(list) ? list : [];
     return cur.includes(value) ? cur.filter((x) => x !== value) : [...cur, value];
@@ -518,7 +524,7 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                 title="How the ads are made"
                 hint={`${(delivery.platforms || ['meta']).join(', ')} · ${
                   (delivery.ratios || []).join(' ') || 'auto ratios'
-                } · ${generation.imageCount ?? 3} images`}
+                } · ${generation.imageCount ?? 3} ads`}
               >
                 <FieldBlock label="Platforms">
                   <PillGroup>
@@ -552,18 +558,24 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                     ))}
                   </PillGroup>
                 </FieldBlock>
-                <FieldBlock label="Images per run">
+                {/* ONE number, because an ad IS an image plus a copy. Two
+                    independent counts could only ever disagree, and the pairing
+                    downstream is by index — 3 images against 2 copies makes a
+                    third card with no words on it, which is not a thing anyone
+                    asked for.
+
+                    The brief still stores imageCount and textCount separately:
+                    Python is told both, Full control may legitimately set them
+                    apart, and collapsing the SCHEMA would lose that. Only this
+                    control is merged, and it writes both. */}
+                <FieldBlock label="Ads per run" hint="one image + one copy each">
                   <Stepper
-                    value={generation.imageCount ?? 3}
-                    onChange={(n) => onEditField?.('generation', 'imageCount', n)}
-                    suffix="images"
-                  />
-                </FieldBlock>
-                <FieldBlock label="Copies per run">
-                  <Stepper
-                    value={generation.textCount ?? 3}
-                    onChange={(n) => onEditField?.('generation', 'textCount', n)}
-                    suffix="variants"
+                    value={adsPerRun}
+                    onChange={(n) => {
+                      onEditField?.('generation', 'imageCount', n);
+                      onEditField?.('generation', 'textCount', n);
+                    }}
+                    suffix="ads"
                   />
                 </FieldBlock>
                 <FieldBlock label="Image model">
