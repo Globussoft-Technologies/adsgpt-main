@@ -1,15 +1,12 @@
 const mongoose = require("mongoose");
 
-// Aspect ratios + quality tiers offered by the `ad_creative` image surface.
-// Keep in sync with surfaceCatalog.js (ADCREATIVE_IMAGE) and modelRegistry.js
-// (qualityTiers). ultra_high is currently only exposed by Nano Banana 2.
-const IMAGE_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "2:3", "3:4", "16:9", "21:9", "3:2", "4:3", "5:4", "1:4", "4:1", "1:8", "8:1"];
+// Quality names remain constrained; aspect ratios are validated by Python.
 const IMAGE_QUALITIES = ["low", "medium", "high", "ultra_high"];
 
 const resultSchema = new mongoose.Schema(
     {
         generatedImageUrl: { type: String },
-        aspectRatio: { type: String, enum: IMAGE_ASPECT_RATIOS },
+        aspectRatio: { type: String },
         prompt: { type: String, default: "" },
         promptTokens: { type: Number, default: 0 },
         completionTokens: { type: Number, default: 0 },
@@ -62,14 +59,12 @@ const imageSchema = new mongoose.Schema(
             numberOfImages: { type: Number, required: true },
             aspectRatio: {
                 type: String,
-                enum: IMAGE_ASPECT_RATIOS,
             },
 
             aspectRatioPerImage: [
                 {
                     aspectRatio: {
                         type: String,
-                        enum: IMAGE_ASPECT_RATIOS,
                     },
                     numberOfImages: Number,
                 }
