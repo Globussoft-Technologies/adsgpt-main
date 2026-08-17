@@ -1,0 +1,33 @@
+{
+  "_comment": "CAPTURED from a real Python callback on 2026-08-17 for campaign 6a82c1e12bdbe9d1198e665f. Not hand-written: the invented fixture used a flat {headline, primaryText} and hid a bug where every preview card rendered blank copy, because Python actually nests per platform and snake_cases the body.",
+  "campaignId": "6a82c1e12bdbe9d1198e665f",
+  "userId": "GPT-435",
+  "jobId": null,
+  "type": "text",
+  "result": [
+    {
+      "status": 200,
+      "data": {
+        "meta": {
+          "headline": "Scale Your Ads with AI, Fast!",
+          "primary_text": "Create high-converting ads & videos in minutes using AdsGPT's AI. Automate your campaigns, save time & boost ROI. Sign up…",
+          "description": "Automate ad creation & optimize performance with AI. Drive sign-ups today."
+        }
+      },
+      "error": null,
+      "model": "auto"
+    },
+    {
+      "status": 200,
+      "data": {
+        "meta": {
+          "headline": "Unlock AI-Powered Ad Creation",
+          "primary_text": "AdsGPT helps marketers, agencies & businesses generate diverse ad creatives & videos. Drive sign-ups & scale efficiently.…",
+          "description": "Boost ad performance & efficiency with AdsGPT's innovative AI platform."
+        }
+      },
+      "error": null,
+      "model": "auto"
+    }
+  ]
+}

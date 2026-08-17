@@ -1,0 +1,11 @@
+{
+  "_comment": "CAPTURED from a real Python callback on 2026-08-17. Image data is a RELATIVE S3 key, not a URL — the preview resolves it against VITE_S3_BASE_URL.",
+  "campaignId": "6a82c1e12bdbe9d1198e665f",
+  "userId": "GPT-435",
+  "jobId": null,
+  "type": "image",
+  "result": [
+    { "status": 200, "data": "/creatives/GPT-435/1786954292250.webp", "model": "google", "error": null, "prompt": "A high-quality, realistic advertisement image showcasing the AdsGPT platform. (1:1 ratio)" },
+    { "status": 200, "data": "/creatives/GPT-435/1786954292260.webp", "model": "google", "error": null, "prompt": "A professional and innovative advertisement for AdsGPT, composed in a 1:1 ratio." }
+  ]
+}

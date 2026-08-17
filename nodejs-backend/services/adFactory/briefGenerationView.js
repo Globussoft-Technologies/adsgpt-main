@@ -1,0 +1,149 @@
+/**
+ * briefGenerationView — the campaign's generation state, as the preview screen
+ * needs it.
+ *
+ * PURE. No DB, no SDK, no network.
+ *
+ * Quick setup keeps no results of its own: generation rides the v1 campaign
+ * pipeline, so Python writes to `campaign.results` exactly as it always has and
+ * there is one webhook, one credit meter and one place results live. This is
+ * the read side of that decision.
+ *
+ * Three properties of `campaign.results` make a naive read wrong, and all three
+ * are learned from how the orchestrator handles the same arrays:
+ *
+ *   1. The arrays are APPEND-ONLY ACROSS RUNS. The orchestrator pushes one
+ *      empty slot per requested item before every run, so after three cycles
+ *      the array holds three runs' worth. Reading all of it shows the user ads
+ *      from last week alongside the ones they just made.
+ *
+ *   2. Empty placeholder slots are normal. A slot is pushed as `{}` and filled
+ *      by the webhook, so `status`/`data` are absent until Python answers. They
+ *      are pending, not failures, and must not render as broken cards.
+ *
+ *   3. Python does not guarantee the last N entries are this run's successful
+ *      ones — a stale placeholder can sit at the tail. So filter to real
+ *      results FIRST, then take the last N. Slicing before filtering is the
+ *      bug that previously made successful runs report as failures in run
+ *      history.
+ *
+ * Image and copy are paired by INDEX, which is the same pairing
+ * `buildCreativesFromResults` uses when it posts them, so the preview shows the
+ * user the pairs that would actually go live rather than an arbitrary mix.
+ */
+
+const plain = (v) => (v && typeof v.toObject === "function" ? v.toObject() : v || {});
+const arr = (v) => (Array.isArray(v) ? v : []);
+
+const DEFAULT_LIMIT = 3;
+
+// A slot Python has actually answered with something usable.
+const isDelivered = (entry) => {
+  const e = plain(entry);
+  return e.status === 200 && e.data != null && e.data !== "";
+};
+
+// A slot Python answered with a failure — worth showing, unlike a pending one.
+const isFailed = (entry) => {
+  const e = plain(entry);
+  return Boolean(e.error) || (typeof e.status === "number" && e.status !== 200);
+};
+
+/**
+ * Copy comes back as either a string or an object; the schema types it Mixed.
+ * Normalise so the card never has to branch, and never renders "[object
+ * Object]" because a shape changed upstream.
+ */
+function normalizeCopy(data) {
+  if (data == null) return null;
+  if (typeof data === "string") return { primaryText: data, headline: "", description: "" };
+  const d = plain(data);
+
+  // Python generates DISTINCT copy per platform, nested under the platform key
+  // and snake_cased: { meta: { headline, primary_text, description },
+  //                    google: { headline, description } }
+  //
+  // This is what the orchestrator's buildCreativesFromResults reads
+  // (textData.meta.primary_text / textData.google.description), so the preview
+  // must read the same place or it shows blank cards for copy that exists and
+  // is about to be posted. Meta first because Quick setup is Meta-first; the
+  // flat shapes after it are older/simpler responses, kept so a change upstream
+  // degrades instead of blanking.
+  const meta = plain(d.meta);
+  const google = plain(d.google);
+
+  const headline = meta.headline || google.headline || d.headline || d.title || "";
+  const primaryText =
+    meta.primary_text ||
+    google.description ||
+    d.primaryText ||
+    d.primary_text ||
+    d.message ||
+    d.body ||
+    d.text ||
+    "";
+  const description = meta.description || google.description || d.description || "";
+
+  return { primaryText, headline, description };
+}
+
+/**
+ * @param {object} campaign  A Campaign document or plain object.
+ * @param {object} [opts]
+ * @param {number} [opts.limit]  How many pairs this run asked for. Defaults to
+ *                               the campaign's own image quantity so a brief
+ *                               asking for 5 doesn't silently show 3.
+ * @returns {{ status, images, texts, pairs, pending, failed, requested }}
+ */
+function briefGenerationView(campaign, opts = {}) {
+  const c = plain(campaign);
+  const results = plain(c.results);
+
+  const rawImages = arr(results.image).map(plain);
+  const rawTexts = arr(results.text).map(plain);
+
+  const requestedFromServices = () => {
+    const selected = arr(plain(c.services).servicesSelected).map(plain);
+    const image = selected.find((s) => s.serviceName === "image");
+    const n = Number(plain(image?.serviceParams).quantity);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_LIMIT;
+  };
+
+  const limit = Number.isFinite(Number(opts.limit)) && Number(opts.limit) > 0
+    ? Math.floor(Number(opts.limit))
+    : requestedFromServices();
+
+  // Filter FIRST, then take this run's tail — see property 3 above.
+  const images = rawImages.filter(isDelivered).slice(-limit);
+  const texts = rawTexts.filter(isDelivered).slice(-limit);
+
+  // Pending is a count, not a list: a slot with nothing in it has nothing to
+  // render, and the UI only needs to know how many skeletons to draw.
+  const pending = Math.max(0, limit - images.length - rawImages.filter(isFailed).slice(-limit).length);
+  const failed = rawImages.filter(isFailed).slice(-limit).length;
+
+  // Index pairing, matching how these are posted.
+  const pairs = images.map((image, i) => ({
+    imageUrl: image.data,
+    prompt: image.prompt || "",
+    copy: normalizeCopy(texts[i]?.data),
+  }));
+
+  // The campaign owns generation state; the brief deliberately does not
+  // duplicate it. `results.status` is what the orchestrator and the webhook
+  // both write, so it is the one to read.
+  const status =
+    results.status === "in-progress" || c.status === "in-progress"
+      ? "running"
+      : failed > 0 && images.length > 0
+        ? "partial"
+        : failed > 0
+          ? "failed"
+          : images.length > 0
+            ? "success"
+            : "idle";
+
+  return { status, images, texts, pairs, pending, failed, requested: limit };
+}
+
+module.exports = { briefGenerationView, _internals: { isDelivered, isFailed, normalizeCopy } };

@@ -1,0 +1,24 @@
+{
+  "_comment": "A lead-gen page — a services business with a consultation form. Exercises the objective heuristic away from its default, and carries a callToAction array so the CTA path is covered even though Python has that field commented out today.",
+  "brandInfo": {
+    "brandName": "Meridian Fit",
+    "brandDescription": "Personal training studios across Bengaluru. Book a free consultation with a certified coach.",
+    "brandLogo": ["https://meridianfit.in/logo.png"],
+    "brandImages": ["https://meridianfit.in/studio.jpg"],
+    "category": "health",
+    "brandVoice": ["motivating", "no-nonsense"],
+    "brandGuidelines": {
+      "toneOfVoice": "encouraging without hype",
+      "dos": ["Show real members"],
+      "donts": ["No crash-diet language"],
+      "colorPalette": ["#1B2A4A", "#F25C26"]
+    }
+  },
+  "objectives": {
+    "primaryObjective": "Get people to book a free consultation",
+    "coreIdea": "Your first session costs nothing.",
+    "additionalGuidelines": "",
+    "targetAudience": ["office workers 28-45", "first-time gym joiners"],
+    "callToAction": ["Book a free consult", "Learn more"]
+  }
+}

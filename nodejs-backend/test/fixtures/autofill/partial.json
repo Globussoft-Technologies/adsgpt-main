@@ -1,0 +1,23 @@
+{
+  "_comment": "A thin scrape — a sparse single-page site. Guidelines missing entirely, no images, no audience, and an N/A sentinel where the LLM had nothing. The brief must degrade field-by-field rather than throw.",
+  "brandInfo": {
+    "brandName": "Kadai Foods",
+    "brandDescription": "Small-batch masalas ground in Madurai.",
+    "brandLogo": [],
+    "brandImages": [],
+    "category": "N/A",
+    "brandVoice": ["direct"],
+    "brandGuidelines": {
+      "toneOfVoice": "N/A",
+      "dos": [],
+      "donts": [],
+      "colorPalette": ["#8C2F1E", "not-a-hex", "#E8D9B5"]
+    }
+  },
+  "objectives": {
+    "primaryObjective": "Get people to learn about our spice blends",
+    "coreIdea": "",
+    "additionalGuidelines": "N/A",
+    "targetAudience": []
+  }
+}

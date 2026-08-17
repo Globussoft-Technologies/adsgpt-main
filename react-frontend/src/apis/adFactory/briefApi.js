@@ -1,0 +1,139 @@
+import axios from 'axios';
+import getCookies from '@/utils/getCookies';
+
+// ----------------------------------------------------------------------------
+// Ad Factory Quick setup — brief endpoints.
+//
+// The whole front door is `createBrief({ url })`: one field in, a fully
+// inferred brief out. Everything Full control asks for across six modals is
+// resolved behind that call.
+//
+// `POST /briefs` answers 202, not 200 — reading a page takes ~35s cold, and
+// holding an HTTP connection open that long turns every slow page into a
+// browser timeout. The brief id comes back immediately; completion arrives on
+// the `adFactoryBriefReady` socket event, with a slow poll as the safety net.
+// ----------------------------------------------------------------------------
+
+const BASE_URL = import.meta.env.VITE_SOCKET_URL;
+// MainRouter is mounted at /adsgpt (nodejs-backend/index.js), and briefs at
+// /ad-factory/briefs within it.
+const BRIEFS = `${BASE_URL}/adsgpt/ad-factory/briefs`;
+
+const authHeaders = () => ({
+  Authorization: `Bearer ${getCookies()}`,
+  'Content-Type': 'application/json',
+});
+
+// Start inference from a pasted URL. Resolves as soon as the brief exists.
+export const createBrief = async ({ url, forceRefresh = false }) => {
+  const { data } = await axios.post(BRIEFS, { url, forceRefresh }, { headers: authHeaders() });
+  return data;
+};
+
+// The zero-typing path. A brand with a saved website also runs inference, so
+// the response says whether to show the wait screen.
+export const createBriefFromBrand = async (brandId) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/from-brand/${encodeURIComponent(brandId)}`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+// Open a Full control campaign in Quick setup. Idempotent — the same campaign
+// always resolves to the same brief.
+export const adoptCampaign = async (campaignId, url = '') => {
+  const { data } = await axios.post(
+    `${BRIEFS}/adopt/${encodeURIComponent(campaignId)}`,
+    { url },
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+// Carries `run` alongside the brief: the creatives generated so far, already
+// filtered to the latest cycle and paired image-to-copy.
+export const getBrief = async (briefId) => {
+  const { data } = await axios.get(`${BRIEFS}/${briefId}`, { headers: authHeaders() });
+  return data;
+};
+
+export const listBriefs = async () => {
+  const { data } = await axios.get(BRIEFS, { headers: authHeaders() });
+  return data;
+};
+
+// Partial. Only the sections being changed need sending; the server merges per
+// section so siblings aren't wiped.
+export const updateBrief = async (briefId, patch) => {
+  const { data } = await axios.patch(`${BRIEFS}/${briefId}`, patch, { headers: authHeaders() });
+  return data;
+};
+
+export const deleteBrief = async (briefId) => {
+  const { data } = await axios.delete(`${BRIEFS}/${briefId}`, { headers: authHeaders() });
+  return data;
+};
+
+// 202 — Python generates over a couple of minutes and results arrive on the
+// campaign, surfaced through `getBrief().run`.
+export const generateFromBrief = async (briefId) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/${briefId}/generate`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+// Creates the AdsFactoryJob. No saved Meta template needed — one is synthesised
+// from the objective and budget.
+export const activateBrief = async (briefId, connection) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/${briefId}/activate`,
+    { connection },
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+// The live Meta wizard schema, so the objective / conversion-location / button
+// pickers can never offer a combination Meta would reject. Served by the Ads
+// Manager surface (`/meta-ads/wizard-schema`) — one schema, both products.
+export const getWizardSchema = async () => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/wizard-schema`, {
+    headers: authHeaders(),
+  });
+  return data?.schema || data?.data || data;
+};
+
+// Pause / resume go to the AUTOPILOT job routes, not a brief route. The job is
+// the same document either front door creates, so Quick setup controls it with
+// the same endpoints Full control does rather than growing a parallel pair.
+const AUTOPILOT = `${BASE_URL}/adsgpt/ads-factory/autopilot`;
+
+export const pauseJob = async (jobId) => {
+  const { data } = await axios.post(
+    `${AUTOPILOT}/jobs/${jobId}/pause`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+export const resumeJob = async (jobId) => {
+  const { data } = await axios.post(
+    `${AUTOPILOT}/jobs/${jobId}/resume`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
+export const getBriefTimeline = async (briefId) => {
+  const { data } = await axios.get(`${BRIEFS}/${briefId}/timeline`, {
+    headers: authHeaders(),
+  });
+  return data;
+};

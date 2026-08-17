@@ -1,0 +1,35 @@
+{
+  "_comment": "A full, healthy autofill response — every field populated, the shape defined by python-backend/adfactory/gateway_api/src/schemas/autofill.py. Note callToAction/promotionalInfo are absent: both are commented out in that schema today (docs/AD_FACTORY_2.md 10.2).",
+  "brandInfo": {
+    "brandName": "Tulsi & Co.",
+    "brandDescription": "Ayurvedic skincare made in small batches in Coimbatore. Cold-pressed oils, no parabens, refill-first packaging.",
+    "brandLogo": ["https://tulsiandco.in/static/logo.svg"],
+    "brandImages": [
+      "https://tulsiandco.in/static/hero-refill.jpg",
+      "https://tulsiandco.in/static/kit-flatlay.jpg",
+      "https://tulsiandco.in/static/batch-41.jpg"
+    ],
+    "category": "beauty",
+    "brandVoice": ["warm", "grounded", "unfussy"],
+    "brandGuidelines": {
+      "toneOfVoice": "friendly and plain-spoken",
+      "dos": ["Name the ingredient", "Show the refill", "Keep claims modest"],
+      "donts": [
+        "Avoid clinical jargon",
+        "Don't promise overnight results",
+        "No before/after skin claims"
+      ],
+      "colorPalette": ["#2F4F3A", "#C9A227", "#F0EBE1", "#7A5C3E"]
+    }
+  },
+  "objectives": {
+    "primaryObjective": "Sell refill kits directly to repeat customers",
+    "coreIdea": "The same bottle, forever — refills cost less and ship flat.",
+    "additionalGuidelines": "Lead with the refill economics, not the ingredient list.",
+    "targetAudience": [
+      "clean-beauty switchers",
+      "women 25-40 in metro India",
+      "refill-conscious buyers"
+    ]
+  }
+}

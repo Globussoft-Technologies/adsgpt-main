@@ -9,6 +9,18 @@
 export const IS_AUTOMATION_ENABLED =
   import.meta.env.VITE_FEATURE_AUTOMATION === 'true';
 
+// Ad Factory "Quick setup". Build-wide AVAILABILITY only — it decides whether
+// the mode switch and the new page exist in this build, not which one a user
+// sees. Full control stays the default for everyone; Quick setup is reached by
+// deliberately flipping the header switch.
+//
+// Set VITE_FEATURE_AD_FACTORY_V2=true to expose it. A real env read, so the
+// flag-off path is verifiable: the previous attempt hardcoded this to `true`
+// while its own comment said otherwise, which meant "flag off ⇒ zero change to
+// existing behaviour" could never actually be tested.
+export const IS_AD_FACTORY_V2 =
+  import.meta.env.VITE_FEATURE_AD_FACTORY_V2 === 'true';
+
 // Landing Page Analyzer — hidden in prod (flag unset) while the BE ships; set
 // VITE_FEATURE_LANDING_ANALYZER=true in an environment to expose the FE there.
 export const IS_LANDING_ANALYZER_ENABLED =

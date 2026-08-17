@@ -15,12 +15,15 @@ import { setAdsDialogOpen, setAdsDialogType } from '@/store/reducers/adFactoryNe
 import { emitWhenConnected } from '@/utils/socketEmitter';
 import { useSearchParams } from 'react-router-dom';
 import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
-import { IS_AUTOMATION_ENABLED } from '@/utils/featureFlags';
+import { IS_AUTOMATION_ENABLED, IS_AD_FACTORY_V2 } from '@/utils/featureFlags';
+import AdFactoryV2Page from './v2/AdFactoryV2Page';
+import { selectUiMode } from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
 
 export default function AdFactoryPage() {
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
   const userId = userData?.user_id;
+  const uiMode = useSelector(selectUiMode);
 // console.log(userData,"userdata")
   const [searchParams] = useSearchParams();
 
@@ -95,12 +98,43 @@ export default function AdFactoryPage() {
     };
   }, [queryCampaignId, userId, dispatch]);
 
-  return (
-    <div className="relative h-full w-full">
-      {/* <h3 className="absolute top-3 left-4 text-2xl font-medium 2xl:text-[32px]">Ad Factory</h3> */}
-      <div className="w-full overflow-y-auto">
-        {queryCampaignId ? <AdFactoryWorkflowDarkReal /> : <NoCompaignScreen />}
+  // ── Which UI renders ──────────────────────────────────────────────────────
+  // IS_AD_FACTORY_V2 decides whether Quick setup EXISTS in this build. With it
+  // off, everything below collapses to exactly what shipped before — no
+  // switch, no extra wrapper, the canvas rendered as it always was.
+  //
+  // FULL CONTROL IS THE DEFAULT FOR EVERYONE. Quick setup is only reached by
+  // deliberately flipping the switch; nobody is moved into a different UI
+  // without asking for it.
+  //
+  // The mode is a session preference rather than a per-campaign field. Quick
+  // setup works on briefs and the canvas works on campaigns; a brief owns its
+  // campaign, so "which document am I looking at" is answered by the URL
+  // (?briefId= or ?campaignId=), not by a flag on one of them.
+  const renderQuickSetup = IS_AD_FACTORY_V2 && uiMode === 'quick';
+
+  if (!IS_AD_FACTORY_V2) {
+    return (
+      <div className="relative h-full w-full">
+        <div className="w-full overflow-y-auto">
+          {queryCampaignId ? <AdFactoryWorkflowDarkReal /> : <NoCompaignScreen />}
+        </div>
       </div>
+    );
+  }
+
+  // The mode switch lives in TopHeader now, beside the page title, in the same
+  // slot /adstudio and /brandiq use for their tabs. It was floating at the top
+  // of the page body with nothing to align to.
+  return (
+    <div className="relative flex h-full w-full flex-col">
+      {renderQuickSetup ? (
+        <AdFactoryV2Page />
+      ) : (
+        <div className="w-full flex-1 overflow-y-auto">
+          {queryCampaignId ? <AdFactoryWorkflowDarkReal /> : <NoCompaignScreen />}
+        </div>
+      )}
     </div>
   );
 }

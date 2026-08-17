@@ -18,6 +18,7 @@ import userInteractionSlice from '@/store/reducers/userInteraction/userInteracti
 import adFactorySlice from '@/store/reducers/AdFactory/AdFactorySlice';
 import adFactoryNewSlice from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import adFactoryAutomationSlice from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import adFactoryBriefSlice from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
 import modelCreditsSlice from '@/store/reducers/modelCredits/modelCreditsSlice';
 import adCreativeConfigSlice from '@/store/reducers/adCreativeConfig/adCreativeConfigSlice';
 import usageSlice from '@/store/reducers/profile/usageSlice';
@@ -71,6 +72,8 @@ const store = configureStore({
     adFactory: adFactorySlice,
     adFactoryNew: adFactoryNewSlice,
     adFactoryAutomation: adFactoryAutomationSlice,
+    // Quick setup. One slice, replacing the three above for that path.
+    adFactoryBrief: adFactoryBriefSlice,
     modelCredits: modelCreditsSlice,
     adCreativeConfig: adCreativeConfigSlice,
     usage: usageSlice,

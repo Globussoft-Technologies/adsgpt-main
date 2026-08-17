@@ -90,6 +90,12 @@ import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import ThemeToggle from './ThemeToggle';
 import AIAssistantHeaderActions from '@/components/AIAssistant/AIAssistantHeaderActions';
+import ModeSwitch from '@/components/AdFactory/ModeSwitch';
+import { IS_AD_FACTORY_V2 } from '@/utils/featureFlags';
+import {
+  selectUiMode as selectAdFactoryUiMode,
+  setUiMode,
+} from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
 const adStudioTabs = [
   { id: 'adCopy', label: 'Ad Copy', icon: NotebookPen },
   // HIDE-MARK — legacy Ad Creative tab. The new generator (id
@@ -224,6 +230,7 @@ export default function TopHeader() {
     [location.pathname] // re-runs every time pathname changes
   );
   const { userData } = useSelector((state) => state.socket);
+  const adFactoryUiMode = useSelector(selectAdFactoryUiMode);
   // if (
   //   userData?.featureObject?.['Ad Creative Video'] > 0 ||
   //   Object.keys(userData?.userSubscriptionType || {})[0] === AUTO_GENERATED_PLAN_ID
@@ -415,6 +422,18 @@ export default function TopHeader() {
               >
                 {headerName}
               </h1>
+            )}
+            {/* Ad Factory's mode switch sits beside the title, the same slot
+                /adstudio and /brandiq put their tabs in. It was in the page
+                body before, which floated it above the content with nothing to
+                align to. */}
+            {currentRoute === '/adfactory' && IS_AD_FACTORY_V2 && (
+              <ModeSwitch
+                mode={adFactoryUiMode}
+                onChange={(next) =>
+                  next !== adFactoryUiMode && dispatch(setUiMode({ uiMode: next }))
+                }
+              />
             )}
             {currentRoute === '/adstudio' && (
               <HeaderTabs
