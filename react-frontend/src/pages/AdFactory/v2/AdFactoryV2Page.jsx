@@ -11,6 +11,7 @@ import AdjustPanel from '@/components/AdFactory/v2/AdjustPanel';
 import CreativePreview from '@/components/AdFactory/v2/CreativePreview';
 import BriefFailed from '@/components/AdFactory/v2/BriefFailed';
 import BriefList from '@/components/AdFactory/v2/BriefList';
+import PreviousRuns from '@/components/AdFactory/v2/PreviousRuns';
 import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import LaunchConnection, {
@@ -51,6 +52,7 @@ import {
   selectPendingBudget,
   selectRun,
   selectEstimate,
+  selectHistory,
   selectStep,
   selectTimeline,
   selectIsPausing,
@@ -102,13 +104,24 @@ export default function AdFactoryV2Page() {
   const [connection, setConnection] = useState(emptyConnection);
   const [scheduleOn, setScheduleOn] = useState(false);
   const [frequency, setFrequency] = useState('weekly');
-  const [adjustOpen, setAdjustOpen] = useState(false);
+  // Adjust starts OPEN. Before any ads exist the page is otherwise a summary
+  // line and a budget box on a lot of empty space, so the fields may as well be
+  // there to check — which is the whole point of showing what we inferred.
+  //
+  // It is still not the toll gate the previous attempt made it: nothing blocks
+  // on it, and it gets out of the way the moment ads become the page (below).
+  const [adjustOpen, setAdjustOpen] = useState(true);
+  // Whether the default has been resolved for the brief now loaded. Without
+  // this the effect below would re-open the panel every time the brief object
+  // changes identity, fighting the user each time they closed it.
+  const adjustDefaulted = useRef(false);
 
   const brief = useSelector(selectBrief);
   const briefId = useSelector(selectBriefId);
   const step = useSelector(selectStep);
   const run = useSelector(selectRun);
   const estimate = useSelector(selectEstimate);
+  const history = useSelector(selectHistory);
   const error = useSelector(selectBriefError);
   const errorCode = useSelector(selectBriefErrorCode);
   const inferring = useSelector(selectIsInferring);
@@ -189,6 +202,15 @@ export default function AdFactoryV2Page() {
     }
   }, [briefId, searchParams, setSearchParams]);
 
+  // A brief that already has ads, or is live, opens collapsed — there the ads
+  // and the delivery history are the page, and twenty fields above them is
+  // noise. Resolved once per brief, not on every render.
+  useEffect(() => {
+    if (!brief || adjustDefaulted.current) return;
+    adjustDefaulted.current = true;
+    if (hasCreatives || step === STEP.DELIVERIES) setAdjustOpen(false);
+  }, [brief, hasCreatives, step]);
+
   // ── Budget ────────────────────────────────────────────────────────────────
   // Collected on the wait screen before a brief exists, then persisted onto
   // the brief once there is one.
@@ -268,6 +290,9 @@ export default function AdFactoryV2Page() {
     // when they press Generate, and the payload is built server-side from the
     // stored brief.
     persistBudget();
+    // The ads are about to become the page, so the fields step aside. A clear
+    // cause the user just triggered, rather than the panel closing on its own.
+    setAdjustOpen(false);
     dispatch(generateAds(briefId));
   }, [dispatch, briefId, persistBudget]);
 
@@ -594,6 +619,10 @@ export default function AdFactoryV2Page() {
             regenerating={generating}
             creditsHeld={estimate?.total ?? null}
           />
+
+          {/* Under the current ads, never above them — the batch you just made
+              is the page; the ones before it are reference. */}
+          <PreviousRuns history={history} />
 
           {/* ── 4 ── Only once there is something to schedule. Asking "keep
               these coming" before any ad exists asks the user to commit to

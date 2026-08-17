@@ -32,6 +32,8 @@ const {
 } = require("../../services/adFactory/briefToJobPayload");
 const { BriefProjectionError } = require("../../services/adFactory/briefToCampaignDoc");
 const { buildResultSlotUpdate } = require("../../services/adFactory/resultSlots");
+const { estimateBriefCredits } = require("../../services/adFactory/briefCreditEstimate");
+const UnifiedCreditController = require("../UnifiedCreditController");
 const Campaign = require("../../Module/adFactory/adFactory");
 const logger = require("../../utils/logger");
 
@@ -97,6 +99,32 @@ exports.generateFromBrief = async (req, res) => {
 
     const campaign = await materializeCampaign(brief);
 
+    // ── Snapshot the previous run ────────────────────────────────────────────
+    // Full control versions a campaign before regenerating one that already
+    // succeeded: storeAdFactoryHistory copies the whole document — creatives
+    // included — into CampaignHistory with a version number, readable at
+    // GET /campaign/get-history/:userId/:campaignId.
+    //
+    // Quick setup never did this, so a regenerate pushed a new batch of slots
+    // and the previous batch fell out of view for good. It stayed in
+    // results.text/image (the arrays are append-only), but nothing could reach
+    // it, and Full control could show a history for a canvas campaign that
+    // Quick setup could not show for its own.
+    //
+    // Same store, same condition, same version counter — so a brief's history
+    // is readable from either mode, which is the point of the two sharing one
+    // campaign in the first place.
+    if (campaign.status === "success") {
+      await adFactoryController
+        .storeAdFactoryHistory(campaign.toObject ? campaign.toObject() : campaign)
+        .catch((err) =>
+          // Losing a snapshot must not cost the user the run they asked for.
+          logger.warn(
+            `[adFactory:brief:generate] history snapshot failed brief=${brief._id}: ${err.message}`,
+          ),
+        );
+    }
+
     // Pre-allocate the slots Python's callback writes into. This is NOT
     // optional bookkeeping: updateGenerationResult fills slots positionally
     // (`results.text.$` filtered on `status: null`), so with no slots the
@@ -117,8 +145,62 @@ exports.generateFromBrief = async (req, res) => {
     }
     await Campaign.updateOne({ _id: campaign._id }, slotUpdate);
 
-    // The same call the canvas makes. Credits freeze and settle against
-    // `campaign:<id>` inside this path, so there is exactly one meter.
+    // ── Freeze the run's cost ────────────────────────────────────────────────
+    // This has to happen HERE, and an earlier comment in this file claimed
+    // wrongly that it came for free with sendAdFactoryRequest. It does not.
+    //
+    // In Full control the freeze lives in `updateCampaign`, gated on
+    // `nodeType === "services"` — the canvas saving its services node. Quick
+    // setup never touches that endpoint, so nothing was ever frozen. The settle
+    // still ran on the result callback (`settleAdFactoryCampaign` ->
+    // `releasePartial("campaign:<id>")`), found no reservation, and no-oped —
+    // so a run generated real ads and cost the user nothing.
+    //
+    // The key MUST be `campaign:<metadata.campaignId>`, because that is the key
+    // the settle looks for. Priced with the same arithmetic validateCredits
+    // uses, via the estimator already serving the UI, so the quote the user saw
+    // and the amount held are the same number.
+    const estimate = estimateBriefCredits(
+      brief,
+      UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
+    );
+    const required = estimate?.total || 0;
+    const reservationKey = `campaign:${campaign.metadata.campaignId}`;
+
+    if (required > 0) {
+      const check = await UnifiedCreditController.checkCredits(campaign.userId, required);
+      if (!check.isAllowed) {
+        return res.status(400).json({
+          success: false,
+          code: "INSUFFICIENT_CREDITS",
+          error: check.message || "You don't have enough credits for this run.",
+          required,
+          available: Math.max(0, (check.totalAllowed || 0) - (check.currentUsage || 0)),
+        });
+      }
+
+      const freeze = await UnifiedCreditController.freezeCredits({
+        userId: campaign.userId,
+        reservationKey,
+        amount: required,
+        meta: {
+          service_type: "adfactory_campaign",
+          campaignId: campaign.metadata.campaignId,
+          briefId: brief._id.toString(),
+        },
+      });
+      if (!freeze.ok && freeze.reason === "INSUFFICIENT") {
+        return res.status(400).json({
+          success: false,
+          code: "INSUFFICIENT_CREDITS",
+          error: "You don't have enough credits for this run.",
+          required,
+          available: freeze.remaining,
+        });
+      }
+    }
+
+    // The same call the canvas makes.
     const result = await adFactoryController.sendAdFactoryRequest(
       campaign.metadata.campaignId,
       "adFactory",
@@ -130,6 +212,17 @@ exports.generateFromBrief = async (req, res) => {
       logger.error(
         `[adFactory:brief:generate] python rejected brief=${brief._id}: ${result?.error || result?.message}`,
       );
+      // A run that never started must not leave credits held. Settlement
+      // normally happens on the result callback, which will never arrive here.
+      await UnifiedCreditController.releaseCredits(reservationKey).catch((e) =>
+        logger.warn(`[adFactory:brief:generate] could not release hold: ${e.message}`),
+      );
+      // Put the campaign back too — it was flipped to in-progress for a run
+      // that isn't happening, and the orchestrator skips a tick on that.
+      await Campaign.updateOne(
+        { _id: campaign._id },
+        { $set: { status: "error", "results.status": "error" } },
+      ).catch(() => {});
       return res.status(502).json({
         success: false,
         error: result?.error || result?.message || "Generation could not be started.",

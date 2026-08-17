@@ -189,6 +189,8 @@ const initialState = {
   // What one run costs, priced server-side the same way the freeze is. Null
   // when unpriceable — the UI shows nothing rather than a misleading zero.
   estimate: null,
+  // Previous generation batches, summarised server-side from CampaignHistory.
+  history: [],
   timeline: { summary: null, rows: [], loading: false },
   // History. Loaded on the front door so a brief is reachable without its URL.
   briefs: [],
@@ -299,6 +301,7 @@ const adFactoryBriefSlice = createSlice({
         state.briefId = brief._id;
         state.run = brief.run || initialState.run;
         state.estimate = brief.estimate ?? null;
+        state.history = brief.history || [];
         if (brief.status === BRIEF_STATUS.INFERRING && !state.inferStartedAt) {
           state.inferStartedAt = Date.now();
         }
@@ -422,6 +425,7 @@ export const selectBrief = (s) => s.adFactoryBrief.brief;
 export const selectBriefId = (s) => s.adFactoryBrief.briefId;
 export const selectRun = (s) => s.adFactoryBrief.run;
 export const selectEstimate = (s) => s.adFactoryBrief.estimate;
+export const selectHistory = (s) => s.adFactoryBrief.history;
 export const selectTimeline = (s) => s.adFactoryBrief.timeline;
 export const selectBriefs = (s) => s.adFactoryBrief.briefs;
 export const selectBriefsLoading = (s) => s.adFactoryBrief.briefsLoading;

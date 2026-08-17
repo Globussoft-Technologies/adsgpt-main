@@ -20,6 +20,7 @@
 const AdFactoryBrief = require("../../Module/adFactory/adFactoryBrief");
 const Campaign = require("../../Module/adFactory/adFactory");
 const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
+const CampaignHistory = require("../../Module/adFactory/adFactoryHistory");
 const brandNameLists = require("../../Module/brandNames/brandNamesSchema");
 const briefService = require("../../services/adFactory/briefService");
 const { briefGenerationView } = require("../../services/adFactory/briefGenerationView");
@@ -221,9 +222,43 @@ exports.getBrief = async (req, res) => {
       UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
     );
 
+    // Previous runs. Full control versions a campaign into CampaignHistory
+    // before each regenerate and reads it back at
+    // GET /campaign/get-history/:userId/:campaignId — but Quick setup
+    // deliberately never tells the client its campaign id, so that route is
+    // unreachable from here. Summarised onto the brief instead: enough to list
+    // and open a previous batch, without shipping whole campaign snapshots on
+    // every poll.
+    let history = [];
+    if (brief.campaignId) {
+      const rows = await CampaignHistory.find({
+        userId: req.user.user_id,
+        campaignId: brief.campaignId.toString(),
+      })
+        .select("version createdAt previousData.results")
+        .sort({ version: -1 })
+        .limit(20)
+        .lean();
+
+      history = rows.map((h) => {
+        const images = (h.previousData?.results?.image || []).filter(
+          (i) => i?.status === 200 && i?.data,
+        );
+        return {
+          version: h.version,
+          at: h.createdAt,
+          adCount: images.length,
+          // The images themselves, so a previous batch can be shown without a
+          // second round trip. Copy is left out — it is the bulky half and is
+          // only needed once a version is actually opened.
+          images: images.map((i) => i.data),
+        };
+      });
+    }
+
     return res
       .status(200)
-      .json({ success: true, data: { ...brief.toObject(), run, estimate } });
+      .json({ success: true, data: { ...brief.toObject(), run, estimate, history } });
   } catch (err) {
     logger.error(`[adFactory:brief:get] ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
