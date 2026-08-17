@@ -323,17 +323,19 @@ export const GA4Events = {
     });
   },
 
-  // Ad Copy Module (Unified Event: ad_copy)
+  // Ad Copy Module (Event: ad_studio)
   generationStarted: (params = {}) => {
-    trackGA4Event('generation_started', {
+    trackGA4Event('ad_studio', {
+      feature: 'ad_copy',
+      action_name: 'ad_copy_requested',
       ...params,
     });
   },
 
   adCopyRequested: (params = {}) => {
-    trackGA4Event('ad_copy', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_copy',
-      action_name: 'adcopy_requested',
+      action_name: 'ad_copy_requested',
       source: params.source || 'adcopy_prompt',
       success: true,
       ...params,
@@ -341,9 +343,9 @@ export const GA4Events = {
   },
 
   adCopyGenerationStarted: (params = {}) => {
-    trackGA4Event('ad_copy', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_copy',
-      action_name: 'adcopy_requested',
+      action_name: 'ad_copy_requested',
       source: params.source || 'adcopy_prompt',
       success: true,
       ...params,
@@ -351,9 +353,9 @@ export const GA4Events = {
   },
 
   adCopyGenerated: (params = {}) => {
-    trackGA4Event('ad_copy', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_copy',
-      action_name: 'adcopy_generated',
+      action_name: 'ad_copy_generated',
       source: params.source || 'adcopy_chat',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -361,20 +363,20 @@ export const GA4Events = {
   },
 
   adCopyViewed: (params = {}) => {
-    trackGA4Event('ad_copy', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_copy',
-      action_name: 'adcopy_viewed',
+      action_name: 'ad_copy_viewed',
       source: params.source || 'adcopy_tab',
       success: true,
       ...params,
     });
   },
 
-  // AI Creatives (Event: ad_creative_ai_creatives)
+  // AI Creatives (Event: ad_studio)
   adCreativeAICreativesRequested: (params = {}) => {
-    trackGA4Event('ad_creative_ai_creatives', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'ai_creatives_requested',
+      action_name: 'ad_creative_ai_creatives_requested',
       source: params.source || 'ai_creatives_form',
       success: true,
       ...params,
@@ -382,9 +384,9 @@ export const GA4Events = {
   },
 
   adCreativeAICreativesGenerated: (params = {}) => {
-    trackGA4Event('ad_creative_ai_creatives', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'ai_creatives_generated',
+      action_name: 'ad_creative_ai_creatives_generated',
       source: params.source || 'ai_creatives_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -392,20 +394,20 @@ export const GA4Events = {
   },
 
   adCreativeAICreativesFailure: (params = {}) => {
-    trackGA4Event('ad_creative_ai_creatives', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'ai_creatives_failure',
+      action_name: 'ad_creative_ai_creatives_failed',
       source: params.source || 'ai_creatives_studio',
       success: false,
       ...params,
     });
   },
 
-  // Lifestyle Ad (Event: ad_creative_lifestyle_ad)
+  // Lifestyle Ad (Event: ad_studio)
   adCreativeLifestyleAdRequested: (params = {}) => {
-    trackGA4Event('ad_creative_lifestyle_ad', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'lifestyle_ad_requested',
+      action_name: 'ad_creative_lifestyle_ad_requested',
       source: params.source || 'lifestyle_ad_form',
       success: true,
       ...params,
@@ -413,9 +415,9 @@ export const GA4Events = {
   },
 
   adCreativeLifestyleAdGenerated: (params = {}) => {
-    trackGA4Event('ad_creative_lifestyle_ad', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'lifestyle_ad_generated',
+      action_name: 'ad_creative_lifestyle_ad_generated',
       source: params.source || 'lifestyle_ad_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -423,20 +425,20 @@ export const GA4Events = {
   },
 
   adCreativeLifestyleAdFailed: (params = {}) => {
-    trackGA4Event('ad_creative_lifestyle_ad', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'lifestyle_ad_failed',
+      action_name: 'ad_creative_lifestyle_ad_failed',
       source: params.source || 'lifestyle_ad_studio',
       success: false,
       ...params,
     });
   },
 
-  // Product Shot (Event: ad_creative_product_shot)
+  // Product Shot (Event: ad_studio)
   adCreativeProductShotRequested: (params = {}) => {
-    trackGA4Event('ad_creative_product_shot', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'product_shot_requested',
+      action_name: 'ad_creative_product_shot_requested',
       source: params.source || 'product_shot_form',
       success: true,
       ...params,
@@ -444,9 +446,9 @@ export const GA4Events = {
   },
 
   adCreativeProductShotGenerated: (params = {}) => {
-    trackGA4Event('ad_creative_product_shot', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'product_shot_generated',
+      action_name: 'ad_creative_product_shot_generated',
       source: params.source || 'product_shot_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -454,20 +456,20 @@ export const GA4Events = {
   },
 
   adCreativeProductShotFailed: (params = {}) => {
-    trackGA4Event('ad_creative_product_shot', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'product_shot_failed',
+      action_name: 'ad_creative_product_shot_failed',
       source: params.source || 'product_shot_studio',
       success: false,
       ...params,
     });
   },
 
-  // Brand Awareness (Event: ad_creative_brand_awareness)
+  // Brand Awareness (Event: ad_studio)
   adCreativeBrandAwarenessRequested: (params = {}) => {
-    trackGA4Event('ad_creative_brand_awareness', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'brand_awareness_requested',
+      action_name: 'ad_creative_brand_awareness_requested',
       source: params.source || 'brand_awareness_form',
       success: true,
       ...params,
@@ -475,9 +477,9 @@ export const GA4Events = {
   },
 
   adCreativeBrandAwarenessGenerated: (params = {}) => {
-    trackGA4Event('ad_creative_brand_awareness', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'brand_awareness_generated',
+      action_name: 'ad_creative_brand_awareness_generated',
       source: params.source || 'brand_awareness_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -485,20 +487,20 @@ export const GA4Events = {
   },
 
   adCreativeBrandAwarenessFailed: (params = {}) => {
-    trackGA4Event('ad_creative_brand_awareness', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'brand_awareness_failed',
+      action_name: 'ad_creative_brand_awareness_failed',
       source: params.source || 'brand_awareness_studio',
       success: false,
       ...params,
     });
   },
 
-  // Apps / SaaS (Event: ad_creative_apps_saas)
+  // Apps / SaaS (Event: ad_studio)
   adCreativeAppsSaasRequested: (params = {}) => {
-    trackGA4Event('ad_creative_apps_saas', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'apps_saas_requested',
+      action_name: 'ad_creative_apps_saas_requested',
       source: params.source || 'apps_saas_form',
       success: true,
       ...params,
@@ -506,9 +508,9 @@ export const GA4Events = {
   },
 
   adCreativeAppsSaasGenerated: (params = {}) => {
-    trackGA4Event('ad_creative_apps_saas', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'apps_saas_generated',
+      action_name: 'ad_creative_apps_saas_generated',
       source: params.source || 'apps_saas_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -516,20 +518,20 @@ export const GA4Events = {
   },
 
   adCreativeAppsSaasFailed: (params = {}) => {
-    trackGA4Event('ad_creative_apps_saas', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_creative',
-      action_name: 'apps_saas_failed',
+      action_name: 'ad_creative_apps_saas_failed',
       source: params.source || 'apps_saas_studio',
       success: false,
       ...params,
     });
   },
 
-  // AI UGC Ads (Event: ad_video_ai_ugc_ads)
+  // AI UGC Ads (Event: ad_studio)
   adVideoAIUGCAdsRequested: (params = {}) => {
-    trackGA4Event('ad_video_ai_ugc_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ugc_ads_requested',
+      action_name: 'ad_video_ai_ugc_ads_requested',
       source: params.source || 'ai_ugc_ads_form',
       success: true,
       ...params,
@@ -537,9 +539,9 @@ export const GA4Events = {
   },
 
   adVideoAIUGCAdsGenerated: (params = {}) => {
-    trackGA4Event('ad_video_ai_ugc_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ugc_ads_generated',
+      action_name: 'ad_video_ai_ugc_ads_generated',
       source: params.source || 'ai_ugc_ads_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
@@ -547,134 +549,134 @@ export const GA4Events = {
   },
 
   adVideoAIUGCAdsFailed: (params = {}) => {
-    trackGA4Event('ad_video_ai_ugc_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ugc_ads_failed',
+      action_name: 'ad_video_ai_ugc_ads_failed',
       source: params.source || 'ai_ugc_ads_studio',
       success: false,
       ...params,
     });
   },
 
-  // AI Ads (Event: ad_video_ai_ads)
+  // AI Ads (Event: ad_studio)
   adVideoAIAdsRequested: (params = {}) => {
-    trackGA4Event('ad_video_ai_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ads_requested',
+      action_name: 'ad_video_ai_ads_requested',
       source: params.source || 'ai_ads_form',
       success: true,
       ...params,
     });
   },
   adVideoAIAdsGenerated: (params = {}) => {
-    trackGA4Event('ad_video_ai_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ads_generated',
+      action_name: 'ad_video_ai_ads_generated',
       source: params.source || 'ai_ads_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
     });
   },
   adVideoAIAdsFailed: (params = {}) => {
-    trackGA4Event('ad_video_ai_ads', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_ads_failed',
+      action_name: 'ad_video_ai_ads_failed',
       source: params.source || 'ai_ads_studio',
       success: false,
       ...params,
     });
   },
 
-  // Product B-Rolls (Event: ad_video_product_brolls)
+  // Product B-Rolls (Event: ad_studio)
   adVideoProductBrollsRequested: (params = {}) => {
-    trackGA4Event('ad_video_product_brolls', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'product_brolls_requested',
+      action_name: 'ad_video_product_brolls_requested',
       source: params.source || 'product_brolls_form',
       success: true,
       ...params,
     });
   },
   adVideoProductBrollsGenerated: (params = {}) => {
-    trackGA4Event('ad_video_product_brolls', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'product_brolls_generated',
+      action_name: 'ad_video_product_brolls_generated',
       source: params.source || 'product_brolls_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
     });
   },
   adVideoProductBrollsFailed: (params = {}) => {
-    trackGA4Event('ad_video_product_brolls', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'product_brolls_failed',
+      action_name: 'ad_video_product_brolls_failed',
       source: params.source || 'product_brolls_studio',
       success: false,
       ...params,
     });
   },
 
-  // Clone Yourself (Event: ad_video_clone_yourself)
+  // Clone Yourself (Event: ad_studio)
   adVideoCloneYourselfRequested: (params = {}) => {
-    trackGA4Event('ad_video_clone_yourself', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'clone_yourself_requested',
+      action_name: 'ad_video_clone_yourself_requested',
       source: params.source || 'clone_yourself_form',
       success: true,
       ...params,
     });
   },
   adVideoCloneYourselfGenerated: (params = {}) => {
-    trackGA4Event('ad_video_clone_yourself', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'clone_yourself_generated',
+      action_name: 'ad_video_clone_yourself_generated',
       source: params.source || 'clone_yourself_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
     });
   },
   adVideoCloneYourselfFailed: (params = {}) => {
-    trackGA4Event('ad_video_clone_yourself', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'clone_yourself_failed',
+      action_name: 'ad_video_clone_yourself_failed',
       source: params.source || 'clone_yourself_studio',
       success: false,
       ...params,
     });
   },
 
-  // AI Avatars (Event: ad_video_ai_avatars)
+  // AI Avatars (Event: ad_studio)
   adVideoAIAvatarsRequested: (params = {}) => {
-    trackGA4Event('ad_video_ai_avatars', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_avatars_requested',
+      action_name: 'ad_video_ai_avatars_requested',
       source: params.source || 'ai_avatars_form',
       success: true,
       ...params,
     });
   },
   adVideoAIAvatarsGenerated: (params = {}) => {
-    trackGA4Event('ad_video_ai_avatars', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_avatars_generated',
+      action_name: 'ad_video_ai_avatars_generated',
       source: params.source || 'ai_avatars_studio',
       success: params.success !== undefined ? params.success : true,
       ...params,
     });
   },
   adVideoAIAvatarsFailed: (params = {}) => {
-    trackGA4Event('ad_video_ai_avatars', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_video',
-      action_name: 'ai_avatars_failed',
+      action_name: 'ad_video_ai_avatars_failed',
       source: params.source || 'ai_avatars_studio',
       success: false,
       ...params,
     });
   },
 
-  // Ad Library (Event: ad_library)
+  // Ad Library (Event: ad_studio)
   adLibraryRecreateRequested: (params = {}) => {
-    trackGA4Event('ad_library', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_library',
       action_name: 'ad_library_recreate_requested',
       source: params.source || 'ad_library_recreate_form',
@@ -684,7 +686,7 @@ export const GA4Events = {
   },
 
   adLibraryRecreateGenerated: (params = {}) => {
-    trackGA4Event('ad_library', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_library',
       action_name: 'ad_library_recreate_generated',
       source: params.source || 'ad_library_recreate_studio',
@@ -694,7 +696,7 @@ export const GA4Events = {
   },
 
   adLibraryRecreateFailed: (params = {}) => {
-    trackGA4Event('ad_library', {
+    trackGA4Event('ad_studio', {
       feature: 'ad_library',
       action_name: 'ad_library_recreate_failed',
       source: params.source || 'ad_library_recreate_studio',
@@ -803,7 +805,7 @@ export const GA4Events = {
   adsManagerConnectedWithMeta: (params = {}) => {
     trackGA4Event('ads_manager', {
       feature: 'ads_manager',
-      action_name: 'connected_with_meta',
+      action_name: 'ads_manager_connected_with_meta',
       source: params.source || 'meta_oauth',
       success: true,
       ...params,
@@ -813,7 +815,7 @@ export const GA4Events = {
   adsManagerUsingChatbot: (params = {}) => {
     trackGA4Event('ads_manager', {
       feature: 'ads_manager',
-      action_name: 'using_chatbot',
+      action_name: 'ads_manager_using_chatbot',
       source: params.source || 'ads_manager_chat',
       success: true,
       ...params,
@@ -823,7 +825,7 @@ export const GA4Events = {
   adsManagerAddedNewCampaign: (params = {}) => {
     trackGA4Event('ads_manager', {
       feature: 'ads_manager',
-      action_name: 'added_new_campaign',
+      action_name: 'ads_manager_added_new_campaign',
       source: params.source || 'meta_ads_dashboard',
       success: true,
       ...params,
@@ -833,18 +835,18 @@ export const GA4Events = {
   adsManagerUsingLeads: (params = {}) => {
     trackGA4Event('ads_manager', {
       feature: 'ads_manager',
-      action_name: 'using_leads',
+      action_name: 'ads_manager_using_leads',
       source: params.source || 'leads_tab',
       success: true,
       ...params,
     });
   },
 
-  // Autopilot inside Ads Manager (Event: ads_manager_autopilot)
+  // Autopilot inside Ads Manager (Event: ads_manager)
   autopilotUsingAiAudit: (params = {}) => {
-    trackGA4Event('ads_manager_autopilot', {
-      feature: 'autopilot',
-      action_name: 'using_ai_audit',
+    trackGA4Event('ads_manager', {
+      feature: 'ads_manager',
+      action_name: 'ads_manager_autopilot_using_ai_audit',
       source: params.source || 'ai_audit_tab',
       success: true,
       ...params,
@@ -852,9 +854,9 @@ export const GA4Events = {
   },
 
   autopilotAddedNewRule: (params = {}) => {
-    trackGA4Event('ads_manager_autopilot', {
-      feature: 'autopilot',
-      action_name: 'added_new_rule',
+    trackGA4Event('ads_manager', {
+      feature: 'ads_manager',
+      action_name: 'ads_manager_autopilot_added_new_rule',
       source: params.source || 'autopilot_settings',
       success: true,
       ...params,

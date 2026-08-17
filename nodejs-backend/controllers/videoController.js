@@ -659,42 +659,42 @@ exports.updateVideoResult = async (req, res) => {
     const vUserId = preRecord?.userId;
 
     if (vType === "ai_ads") {
-      trackBackendGA4Event("ad_video_ai_ads", {
+      trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "ai_ads_generated" : "ai_ads_failed",
+        action_name: videoStatus === 200 ? "ad_video_ai_ads_generated" : "ad_video_ai_ads_failed",
         source: "ai_ads_studio",
         success: videoStatus === 200,
       });
     } else if (vType === "broll") {
-      trackBackendGA4Event("ad_video_product_brolls", {
+      trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "product_brolls_generated" : "product_brolls_failed",
+        action_name: videoStatus === 200 ? "ad_video_product_brolls_generated" : "ad_video_product_brolls_failed",
         source: "product_brolls_studio",
         success: videoStatus === 200,
       });
     } else if (vType === "clone") {
-      trackBackendGA4Event("ad_video_clone_yourself", {
+      trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "clone_yourself_generated" : "clone_yourself_failed",
+        action_name: videoStatus === 200 ? "ad_video_clone_yourself_generated" : "ad_video_clone_yourself_failed",
         source: "clone_yourself_studio",
         success: videoStatus === 200,
       });
     } else if (vType === "avatar") {
-      trackBackendGA4Event("ad_video_ai_avatars", {
+      trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "ai_avatars_generated" : "ai_avatars_failed",
+        action_name: videoStatus === 200 ? "ad_video_ai_avatars_generated" : "ad_video_ai_avatars_failed",
         source: "ai_avatars_studio",
         success: videoStatus === 200,
       });
     } else if (vType === "ugc" || vType === "ugc_ads" || vType === "ai_ugc_ads") {
-      trackBackendGA4Event("ad_video_ai_ugc_ads", {
+      trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "ai_ugc_ads_generated" : "ai_ugc_ads_failed",
+        action_name: videoStatus === 200 ? "ad_video_ai_ugc_ads_generated" : "ad_video_ai_ugc_ads_failed",
         source: "ai_ugc_ads_studio",
         success: videoStatus === 200,
       });

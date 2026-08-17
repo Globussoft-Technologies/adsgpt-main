@@ -451,10 +451,10 @@ class LLMAuditController {
       if (!adAccountId)
         return res.status(400).json({ error: "adAccountId is required" });
 
-      trackBackendGA4Event("ads_manager_autopilot", {
+      trackBackendGA4Event("ads_manager", {
         user_id: userId,
-        feature: "autopilot",
-        action_name: "using_ai_audit",
+        feature: "ads_manager",
+        action_name: "ads_manager_autopilot_using_ai_audit",
         source: "ai_audit_tab",
         success: true,
       });

@@ -16,9 +16,10 @@ exports.redisGetSet = new Redis({
 });
 
 const emitAdCopyError = (payload, message) => {
-  trackBackendGA4Event('generation_failed', {
+  trackBackendGA4Event('ad_studio', {
     user_id: payload?.user_id,
     feature: 'ad_copy',
+    action_name: 'ad_copy_failed',
     asset_type: 'copy',
     success: false,
     error_code: 'GENERATION_ERROR',
@@ -132,10 +133,10 @@ const consumeAdCopyStream = (stream, requestPayload) => {
 };
 
 exports.sendAdCopyRequest = async (payload) => {
-  trackBackendGA4Event('ad_copy', {
+  trackBackendGA4Event('ad_studio', {
     user_id: payload?.user_id,
     feature: 'ad_copy',
-    action_name: 'adcopy_requested',
+    action_name: 'ad_copy_requested',
     source: 'adcopy_prompt',
     success: true,
   });
@@ -190,10 +191,10 @@ const handleAdCopyFinal = async (data) => {
   try {
     if (!data?.socket_id) return;
 
-    trackBackendGA4Event('ad_copy', {
+    trackBackendGA4Event('ad_studio', {
       user_id: data.user_id,
       feature: 'ad_copy',
-      action_name: 'adcopy_generated',
+      action_name: 'ad_copy_generated',
       source: 'adcopy_chat',
       success: true,
     });

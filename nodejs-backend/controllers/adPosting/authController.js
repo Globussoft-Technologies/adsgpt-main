@@ -224,7 +224,7 @@ class AuthController {
       trackBackendGA4Event('ads_manager', {
         user_id: user.userId,
         feature: 'ads_manager',
-        action_name: 'connected_with_meta',
+        action_name: 'ads_manager_connected_with_meta',
         source: 'meta_oauth',
         success: true,
       });

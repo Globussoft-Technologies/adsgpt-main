@@ -176,10 +176,10 @@ class AutopilotUserRuleController {
         attachments,
       });
 
-      trackBackendGA4Event("ads_manager_autopilot", {
+      trackBackendGA4Event("ads_manager", {
         user_id: userId,
-        feature: "autopilot",
-        action_name: "added_new_rule",
+        feature: "ads_manager",
+        action_name: "ads_manager_autopilot_added_new_rule",
         source: "autopilot_settings",
         success: true,
       });
