@@ -45,8 +45,7 @@ const consoleTransport = new winston.transports.Console({
   format: consoleFormat,
 });
 
-// Create the logger with the defined transports and settings
-module.exports = winston.createLogger({
+const logger = winston.createLogger({
   level: process.env.ENV === "dev" ? "debug" : "info",
   format: fileFormat,
   transports: [
@@ -54,3 +53,20 @@ module.exports = winston.createLogger({
     ...(process.env.ENV === "dev" ? [consoleTransport] : []),
   ],
 });
+
+const scrub = (v) =>
+  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+
+const LEVELS = new Set(["error", "warn", "info", "http", "verbose", "debug", "silly"]);
+
+const safeLogger = new Proxy(logger, {
+  get(target, prop, receiver) {
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value !== "function") return value;
+    if (!LEVELS.has(prop)) return value.bind(target);
+    return (...args) => value.apply(target, args.map(scrub));
+  },
+});
+
+module.exports = safeLogger;
+

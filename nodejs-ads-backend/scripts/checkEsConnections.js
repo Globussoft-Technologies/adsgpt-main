@@ -59,7 +59,11 @@ async function main() {
   console.log('\n======================================\n');
 }
 
+const scrub = (v) =>
+  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+
 main().catch((err) => {
-  console.error('Fatal error:', err.message);
+  console.error(scrub('Fatal error:'), scrub(err.message));
   process.exit(1);
 });
+

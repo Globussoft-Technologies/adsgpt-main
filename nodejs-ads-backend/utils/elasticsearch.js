@@ -4,6 +4,10 @@ const axios = require('axios')
 const { processAdsAdata, processExploreAdsAdata , processExploreAdsAdataPAS, processCommonAdsData} = require("./adsHandler");
 const logger = require("../controllers/Loggers/logs");
 
+const scrub = (v) =>
+  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+
+
 const INDEX_NAME = process.env.INDEX_NAME;
 
 exports.getAdsES = async (payload, ids, nerSkip = 0, vectorSkip = 0) => {
@@ -585,7 +589,7 @@ queryVector3 = timeMappings[2].vector;
 
     return processExploreAdsAdata(response.hits.hits.map((hit) => hit._source))
   } catch (error) {
-    console.error('Error fetching ads data:', error.body ? error.body : error.message);
+    console.error(scrub('Error fetching ads data:'), scrub(error.body ? error.body : error.message));
     throw error; 
   }
 }

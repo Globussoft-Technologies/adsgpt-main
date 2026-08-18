@@ -2,6 +2,10 @@ require("dotenv").config();
 const axios = require('axios');
 const sharp = require('sharp');
 
+const scrub = (v) =>
+  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+
+
 exports.adsDataPayloadFormat = (uid, chatId, sessionId, data, token, socket_id) => {
   return {
     uid,
@@ -113,7 +117,7 @@ exports.processAdsAdata = async (esData, networks = []) => {
     // Filter out null/undefined/empty objects
     return processedResults.filter(ad => ad && Object.keys(ad).length > 0);
   } catch (error) {
-    console.error("Error processing ads data:", error);
+    console.error(scrub("Error processing ads data:"), scrub(error));
     return [];
   }
 };
@@ -264,7 +268,7 @@ exports.processExploreAdsAdataPAS = async (esData, network) => {
     );
     return results.filter(Boolean);
   } catch (error) {
-    console.error("Error processing ads:", error);
+    console.error(scrub("Error processing ads:"), scrub(error));
     return [];
   }
 };
@@ -334,7 +338,7 @@ exports.processCommonAdsData = (data = [], network) => {
       })
       .filter(Boolean);
   } catch (error) {
-    console.error("Error processing common ads:", error);
+    console.error(scrub("Error processing common ads:"), scrub(error));
     return [];
   }
 };

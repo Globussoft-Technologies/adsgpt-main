@@ -54,4 +54,19 @@ const logger = createLogger({
   transports: transportsList,
 });
 
-module.exports = logger;
+const scrub = (v) =>
+  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+
+const LEVELS = new Set(["error", "warn", "info", "http", "verbose", "debug", "silly"]);
+
+const safeLogger = new Proxy(logger, {
+  get(target, prop, receiver) {
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value !== "function") return value;
+    if (!LEVELS.has(prop)) return value.bind(target);
+    return (...args) => value.apply(target, args.map(scrub));
+  },
+});
+
+module.exports = safeLogger;
+
