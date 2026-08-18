@@ -22,22 +22,22 @@
 
 // Frequency presets a brief can express.
 //
-// Two deliberate omissions:
-//   • `does_not_repeat` — a brief that isn't repeating has no business
-//     creating a scheduled job at all.
-//   • `custom` — the API requires a `customFrequency` block alongside it
-//     (repeatEvery / repeatUnit / repeatOnDays) and the brief model has
-//     nowhere to hold those. Emitting `custom` without the block produces a
-//     400 at activation, so it is not offered here. Quick setup's schedule is
-//     one dropdown by design; custom cadences are a Full control capability.
-//     A `custom` value can therefore only arrive via a hand-crafted PATCH, and
-//     falls back to the default below rather than failing at launch.
+// `does_not_repeat` is the one deliberate omission: a brief that isn't
+// repeating has no business creating a scheduled job at all.
+//
+// `custom` USED to be omitted too, because the API requires a `customFrequency`
+// block alongside it (repeatEvery / repeatUnit / repeatOnDays) and the brief
+// model had nowhere to hold those — emitting the word without the block is a
+// 400 at activation. `delivery.frequency.custom` now exists, so the cadence a
+// user actually wants ("every 2 weeks on Tuesdays") is expressible instead of
+// being silently downgraded to weekly.
 const FREQUENCY_PRESETS = Object.freeze([
   "daily",
   "weekly",
   "monthly",
   "every_weekday",
   "every_weekend",
+  "custom",
 ]);
 
 // Short form keys → the API's snake_case, mirroring the mapping the v1
@@ -48,6 +48,7 @@ const FREQUENCY_ALIASES = Object.freeze({
 });
 
 const { getCell, isCellImplemented } = require("../../config/wizardSchema");
+const { normalizeCustom } = require("./customCadence");
 
 const DEFAULT_FREQUENCY = "weekly";
 const DEFAULT_HOUR = 9;
@@ -195,13 +196,21 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
     ? Math.max(1, Math.min(200, Math.round(Number(delivery.pairsPerCycle))))
     : DEFAULT_PAIRS;
 
+  const resolvedFrequency = resolveFrequency(frequency.preset);
+
   const payload = {
     campaignId,
     schedule: {
-      frequency: resolveFrequency(frequency.preset),
+      frequency: resolvedFrequency,
       startDate,
       hour,
       timezone,
+      // Required by scheduleSchema when the frequency is custom, and meaningless
+      // otherwise. Built by the same normaliser the edit path uses so a cadence
+      // cannot mean one thing at creation and another at update.
+      ...(resolvedFrequency === "custom"
+        ? { customFrequency: normalizeCustom(frequency.custom) }
+        : {}),
     },
     pairsPerCycle,
     targets: {

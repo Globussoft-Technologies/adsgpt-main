@@ -219,17 +219,51 @@ group("defaults, so nothing is asked twice", () => {
     assert.equal(briefToJobPayload(b, connection()).schedule.frequency, "weekly");
   });
 
-  test('"custom" falls back — it needs a customFrequency block a brief cannot hold', () => {
-    // Emitting `custom` without the block the API requires alongside it
-    // produces a 400 at activation. Quick setup's schedule is one dropdown;
-    // custom cadences stay a Full control capability.
+  test('"custom" is emitted WITH the block scheduleSchema requires', () => {
+    // This used to fall back to weekly, because the brief had nowhere to hold
+    // repeatEvery / repeatUnit / repeatOnDays and emitting the word without
+    // them is a 400 at activation. `delivery.frequency.custom` now exists, so
+    // "every 2 weeks on Tuesdays" survives instead of being downgraded.
     const b = brief();
     b.delivery.frequency.preset = "custom";
+    b.delivery.frequency.custom = {
+      repeatEvery: 2,
+      repeatUnit: "week",
+      repeatOnDays: ["tuesday"],
+    };
     const payload = briefToJobPayload(b, connection());
-    assert.equal(payload.schedule.frequency, "weekly");
-    assert.equal(payload.schedule.customFrequency, undefined);
+    assert.equal(payload.schedule.frequency, "custom");
+    assert.deepEqual(payload.schedule.customFrequency, {
+      repeatEvery: 2,
+      repeatUnit: "week",
+      repeatOnDays: ["tuesday"],
+    });
     const { error } = validate(payload);
     assert.equal(error, undefined, msgs(error));
+  });
+
+  test('"custom" with no block still validates — the normaliser fills it', () => {
+    // The block is REQUIRED by scheduleSchema, so a half-built custom cadence
+    // must not reach it. An empty repeatOnDays is legitimate: the queue
+    // resolves it to the start date's own weekday.
+    const b = brief();
+    b.delivery.frequency.preset = "custom";
+    delete b.delivery.frequency.custom;
+    const payload = briefToJobPayload(b, connection());
+    assert.equal(payload.schedule.frequency, "custom");
+    assert.deepEqual(payload.schedule.customFrequency, {
+      repeatEvery: 1,
+      repeatUnit: "week",
+      repeatOnDays: [],
+    });
+    assert.equal(validate(payload).error, undefined);
+  });
+
+  test("a non-custom frequency carries no customFrequency block", () => {
+    const b = brief();
+    b.delivery.frequency.preset = "daily";
+    b.delivery.frequency.custom = { repeatEvery: 3, repeatUnit: "week" };
+    assert.equal(briefToJobPayload(b, connection()).schedule.customFrequency, undefined);
   });
 
   test("short aliases map to the API's names", () => {

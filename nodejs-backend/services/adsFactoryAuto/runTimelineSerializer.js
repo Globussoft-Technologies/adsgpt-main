@@ -101,14 +101,34 @@ function serializeRun(run, index, context = {}) {
     liveCount,
     failedCount,
     error: r.error || null,
-    creatives: creatives.map((c) => ({
-      creativeId: c.creativeId,
-      imageUrl: c.imageUrl || "",
-      headline: c.headline || c.platformText?.meta?.headline || "",
-      message: c.message || c.platformText?.meta?.message || "",
-      platform: c.platform || "",
-      postedAdIds: mapToObject(c.postedAdIds),
-    })),
+    creatives: creatives.map((c) => {
+      const postedAdIds = mapToObject(c.postedAdIds);
+      return {
+        creativeId: c.creativeId,
+        imageUrl: c.imageUrl || "",
+        headline: c.headline || c.platformText?.meta?.headline || "",
+        message: c.message || c.platformText?.meta?.message || "",
+        platform: c.platform || "",
+        postedAdIds,
+        // Per-ad outcome and deep links, so a published-ads view can show WHICH
+        // creative went live rather than a run-level count. The run-level
+        // `links` above are built from `metaAdId`, which records only ONE ad —
+        // on a 3-pair run it deep-links to the first and says nothing about the
+        // rest, and on a partial run it cannot show which one failed.
+        posted: Object.keys(postedAdIds).length > 0,
+        adLinks: Object.entries(postedAdIds)
+          .map(([platform, adId]) => {
+            const url =
+              platform === "meta"
+                ? metaAdLink(context.metaAdAccountId, adId)
+                : platform === "google"
+                  ? googleAdLink(context.googleCustomerId)
+                  : null;
+            return url ? { platform, adId: String(adId), url } : null;
+          })
+          .filter(Boolean),
+      };
+    }),
     links,
     platformContext,
     scheduled: false,

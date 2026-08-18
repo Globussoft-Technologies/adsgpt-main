@@ -35,6 +35,9 @@ router.post("/:id/activate", authenticateJWT, requireBasePlan, actions.activateB
 // a plan check between someone and the off switch is the one place gating would
 // actively cost them money.
 router.post("/:id/stop", authenticateJWT, actions.stopBrief);
+// An extra cycle on demand. Gated like the other paths that spend — it posts
+// real ads and burns real credits, exactly as a scheduled run does.
+router.post("/:id/run-now", authenticateJWT, requireBasePlan, actions.runBriefNow);
 router.get("/:id/timeline", authenticateJWT, actions.getBriefTimeline);
 
 // Static routes before `/:id` so they can't be shadowed.

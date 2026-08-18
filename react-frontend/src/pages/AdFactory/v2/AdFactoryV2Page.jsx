@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import SourceInput from '@/components/AdFactory/v2/SourceInput';
-import InferringWithBudget from '@/components/AdFactory/v2/InferringWithBudget';
+import Inferring from '@/components/AdFactory/v2/Inferring';
 import BriefSummary from '@/components/AdFactory/v2/BriefSummary';
 import AdjustPanel from '@/components/AdFactory/v2/AdjustPanel';
 import CreativePreview from '@/components/AdFactory/v2/CreativePreview';
@@ -32,6 +32,7 @@ import {
   activateAutomation,
   setAutomationPaused,
   stopAutomation,
+  runNow,
   fetchBriefs,
   removeBrief,
   fetchTimeline,
@@ -59,6 +60,8 @@ import {
   selectTimeline,
   selectJobSync,
   selectIsPausing,
+  selectIsRunningNow,
+  selectRunNowQueued,
   selectBriefs,
   selectBriefsLoading,
 } from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
@@ -70,7 +73,7 @@ import { getSocket } from '@/store/reducers/socket/socketSlice';
 // The five stages the user meets, in order:
 //
 //   1  SourceInput          a URL, or a saved brand
-//   2  InferringWithBudget  the ~35s read, spent collecting input 2 of 2
+//   2  Inferring            the ~35s read, and nothing else
 //   3  BriefSummary + CreativePreview   the ads, with the brief as ONE LINE
 //   4  KeepTheseComing      the subscription
 //   5  RunTimeline          deliveries — the home of a live brief
@@ -141,6 +144,8 @@ export default function AdFactoryV2Page() {
   const timeline = useSelector(selectTimeline);
   const jobSync = useSelector(selectJobSync);
   const pausing = useSelector(selectIsPausing);
+  const runningNow = useSelector(selectIsRunningNow);
+  const runNowQueued = useSelector(selectRunNowQueued);
   const briefs = useSelector(selectBriefs);
   const briefsLoading = useSelector(selectBriefsLoading);
   const { loading, saving, activating } = useSelector((s) => s.adFactoryBrief);
@@ -249,10 +254,20 @@ export default function AdFactoryV2Page() {
   }, [brief, hasCreatives, step]);
 
   // ── Budget ────────────────────────────────────────────────────────────────
-  // Collected on the wait screen before a brief exists, then persisted onto
-  // the brief once there is one.
+  // Asked ONCE, on the brief screen, next to Generate — the button it pays for.
+  //
+  // It used to be collected on the wait screen too, on the theory that a 35s
+  // read may as well collect input 2 of 2. That asked for a number before there
+  // was anything to judge it against, and then showed the same field again a
+  // moment later.
+  //
+  // `pendingBudget` is the in-flight keystrokes; `brief.delivery.budget.daily`
+  // is what is saved. The typed value wins while it exists so the input doesn't
+  // fight the user mid-edit.
   const budget = useMemo(
-    () => brief?.delivery?.budget?.daily ?? pendingBudget ?? '',
+    () => (pendingBudget !== '' && pendingBudget != null
+      ? pendingBudget
+      : brief?.delivery?.budget?.daily ?? ''),
     [brief, pendingBudget],
   );
 
@@ -281,18 +296,17 @@ export default function AdFactoryV2Page() {
     );
   }, [dispatch, briefId, pendingBudget, savedBudget]);
 
-  // Once inference finishes, write the budget typed during the wait.
+  // NOTE: there is deliberately no effect flushing `pendingBudget`.
   //
-  // This effect dispatches, so its dependencies decide whether it terminates.
-  // It previously depended on a callback that closed over the whole `brief`:
-  // every save produced a new brief object, which produced a new callback,
-  // which re-ran the effect — several hundred PATCHes a minute, each one also
-  // re-materialising the campaign server-side. Both halves are fixed: the
-  // callback now closes over a primitive, and the guard inside it compares
-  // against a value that actually updates.
-  useEffect(() => {
-    if (!inferring && briefId && pendingBudget) persistBudget();
-  }, [inferring, briefId, pendingBudget, persistBudget]);
+  // One existed to write whatever was typed during the wait, once inference
+  // finished. With the wait-screen field gone nothing can set the budget before
+  // a brief exists, so it had no job left — and it was actively harmful: it
+  // depended on `pendingBudget`, which changes on every keystroke, so typing
+  // "800" into the brief screen's budget box dispatched a PATCH for 8, then 80,
+  // then 800, each one re-materialising the campaign server-side.
+  //
+  // The budget is written on blur and again just before Generate, which are the
+  // two moments it actually needs to be saved.
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleUrl = useCallback(
@@ -455,11 +469,14 @@ export default function AdFactoryV2Page() {
 
   // The cadence, from either place it can be edited.
   //
-  // `pairsPerCycle` sits on `delivery` and the other three on
-  // `delivery.frequency`, so one change can span two objects — hence a patch
-  // built here rather than the single-field `handleEdit`. The server merges
-  // `delivery.frequency` one level deep, so sending only the changed key keeps
-  // its siblings.
+  // `pairsPerCycle` sits on `delivery`; frequency, hour, timezone, endDate and
+  // the custom block all sit on `delivery.frequency` — so one change can span
+  // two objects, hence a patch built here rather than the single-field
+  // `handleEdit`. The server merges `delivery.frequency` one level deep, so
+  // sending only the changed key keeps its siblings.
+  //
+  // `endDate: null` is a real value, not an omission: clearing the date is how
+  // a fixed-length run becomes a standing one.
   //
   // For a LIVE brief this is also what reaches the running job: the PATCH
   // response carries `jobSync`, and SchedulePanel shows it when the job refused.
@@ -501,14 +518,34 @@ export default function AdFactoryV2Page() {
       hour: brief?.delivery?.frequency?.hour ?? 9,
       timezone: brief?.delivery?.frequency?.timezone || '',
       pairsPerCycle: brief?.delivery?.pairsPerCycle ?? 3,
+      custom: brief?.delivery?.frequency?.custom || null,
+      endDate: brief?.delivery?.frequency?.endDate || null,
     }),
     [
       brief?.delivery?.frequency?.preset,
       brief?.delivery?.frequency?.hour,
       brief?.delivery?.frequency?.timezone,
+      brief?.delivery?.frequency?.custom,
+      brief?.delivery?.frequency?.endDate,
       brief?.delivery?.pairsPerCycle,
     ],
   );
+
+  // A list, so it replaces rather than merges — removing a recipient is the
+  // main thing anyone does to one.
+  const handleAlertEmailsChange = useCallback(
+    (emails) => {
+      if (!briefId) return;
+      dispatch(applyLocalEdit({ field: 'alertEmails', value: emails }));
+      dispatch(saveBriefEdits({ briefId, patch: { alertEmails: emails } }));
+    },
+    [dispatch, briefId],
+  );
+
+  const handleRunNow = useCallback(() => {
+    if (!briefId) return;
+    dispatch(runNow(briefId));
+  }, [dispatch, briefId]);
 
   const host = useMemo(() => {
     const url = brief?.source?.url || '';
@@ -598,13 +635,7 @@ export default function AdFactoryV2Page() {
 
       {/* ── 2 ── */}
       {step === STEP.INFERRING && (
-        <InferringWithBudget
-          host={host}
-          startedAt={inferStartedAt}
-          budget={budget}
-          onBudgetChange={(v) => dispatch(setPendingBudget(v))}
-          onStartOver={handleStartOver}
-        />
+        <Inferring host={host} startedAt={inferStartedAt} onStartOver={handleStartOver} />
       )}
 
       {step === STEP.FAILED && brief && (
@@ -745,6 +776,10 @@ export default function AdFactoryV2Page() {
                 enabled={scheduleOn}
                 onToggle={setScheduleOn}
                 frequency={cadence.frequency}
+                custom={cadence.custom}
+                endDate={cadence.endDate}
+                alertEmails={brief.alertEmails}
+                onAlertEmailsChange={handleAlertEmailsChange}
                 onCadenceChange={handleCadenceChange}
                 onActivate={handleActivate}
                 activating={activating}
@@ -806,11 +841,18 @@ export default function AdFactoryV2Page() {
             hour={cadence.hour}
             timezone={cadence.timezone}
             pairsPerCycle={cadence.pairsPerCycle}
+            custom={cadence.custom}
+            endDate={cadence.endDate}
+            alertEmails={brief.alertEmails}
+            onAlertEmailsChange={handleAlertEmailsChange}
             nextRunAt={timeline?.summary?.nextRunAt}
             onCadenceChange={handleCadenceChange}
             onPause={() => handlePause(true)}
             onResume={() => handlePause(false)}
             onStop={handleStop}
+            onRunNow={handleRunNow}
+            runningNow={runningNow}
+            runNowQueued={runNowQueued}
             busy={pausing}
             saving={saving}
             // Only when the server tried and the job refused — `applied: true`

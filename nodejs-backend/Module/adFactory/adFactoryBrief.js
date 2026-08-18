@@ -147,6 +147,17 @@ const DeliverySchema = new mongoose.Schema(
       endDate: { type: Date, default: null },
       hour: { type: Number, default: 9, min: 0, max: 23 },
       timezone: { type: String, default: "UTC" },
+      // Only read when `preset === "custom"`, and REQUIRED by the job's
+      // scheduleSchema in that case. Without somewhere to hold these, custom
+      // cadences could not be expressed at all — the brief could name `custom`
+      // but not say what it repeated on, which is a 400 at activation. That is
+      // why briefToJobPayload used to refuse the word outright.
+      custom: {
+        repeatEvery: { type: Number, default: 1, min: 1, max: 52 },
+        repeatUnit: { type: String, enum: ["day", "week"], default: "week" },
+        // Lowercase day names — the queue's DOW_MAP keys.
+        repeatOnDays: { type: [String], default: [] },
+      },
     },
   },
   { _id: false },
@@ -190,6 +201,25 @@ const AdFactoryBriefSchema = new mongoose.Schema(
     offer: { type: OfferSchema, default: () => ({}) },
     delivery: { type: DeliverySchema, default: () => ({}) },
     generation: { type: GenerationSchema, default: () => ({}) },
+
+    // Who gets the cycle-summary email after every run.
+    //
+    // `briefToJobPayload` has read `brief.alertEmails` since it was written and
+    // this field did not exist, so the read always returned undefined and no
+    // Quick setup job ever had alerts configured — a dead branch that looked
+    // wired. Stored as an array because that is what a list control edits; the
+    // job flattens it to one comma-separated string at the boundary, matching
+    // the Meta Autopilot's own `alerts.emailTo` convention.
+    //
+    // Capped at 5, which is what adsFactoryAlertService actually sends to.
+    alertEmails: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: (v) => !Array.isArray(v) || v.length <= 5,
+        message: "At most 5 alert recipients",
+      },
+    },
 
     provenance: { type: ProvenanceSchema, default: () => ({}) },
 

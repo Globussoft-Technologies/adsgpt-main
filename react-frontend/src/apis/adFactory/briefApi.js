@@ -161,6 +161,17 @@ export const stopBrief = async (briefId) => {
   return data;
 };
 
+// One extra cycle, right now. The schedule is untouched — this is an additional
+// run, not a reschedule. Refuses if a cycle is already in flight.
+export const runBriefNow = async (briefId) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/${briefId}/run-now`,
+    {},
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
 export const getBriefTimeline = async (briefId) => {
   const { data } = await axios.get(`${BRIEFS}/${briefId}/timeline`, {
     headers: authHeaders(),

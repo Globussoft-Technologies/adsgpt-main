@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Check, ChevronDown, Globe } from 'lucide-react';
+import { Check, ChevronDown, Globe, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -41,6 +42,23 @@ const FREQUENCIES = [
   { value: 'every_weekday', label: 'weekday' },
   { value: 'every_weekend', label: 'weekend' },
   { value: 'monthly', label: 'month' },
+  { value: 'custom', label: 'custom…' },
+];
+
+// Lowercase names, matching the queue's own DOW_MAP keys. Sent verbatim.
+const DAYS = [
+  ['monday', 'M'],
+  ['tuesday', 'T'],
+  ['wednesday', 'W'],
+  ['thursday', 'T'],
+  ['friday', 'F'],
+  ['saturday', 'S'],
+  ['sunday', 'S'],
+];
+
+const UNITS = [
+  { value: 'day', label: 'days' },
+  { value: 'week', label: 'weeks' },
 ];
 
 // Matches the server's clamp in briefToJobPatch. Offering 200 in a dropdown
@@ -93,44 +111,174 @@ export default function CadencePills({
   hour = 9,
   timezone,
   pairsPerCycle = 3,
+  custom,
+  endDate,
   onChange,
   disabled = false,
 }) {
   const tz = timezone || browserTimezone();
+  const isCustom = frequency === 'custom';
 
   const set = (patch) => onChange?.(patch);
 
+  // The block the API REQUIRES alongside a custom frequency. Defaults live here
+  // so switching to "custom…" produces something valid immediately rather than
+  // a half-built cadence the server has to guess at.
+  const c = {
+    repeatEvery: custom?.repeatEvery ?? 1,
+    repeatUnit: custom?.repeatUnit ?? 'week',
+    repeatOnDays: custom?.repeatOnDays ?? [],
+  };
+
+  const toggleDay = (day) => {
+    const next = c.repeatOnDays.includes(day)
+      ? c.repeatOnDays.filter((d) => d !== day)
+      : [...c.repeatOnDays, day];
+    set({ custom: { ...c, repeatOnDays: next } });
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Pill label="EVERY">
-        <PillSelect
-          value={frequency}
-          onValueChange={(v) => set({ frequency: v })}
-          disabled={disabled}
-          options={FREQUENCIES}
-          width="w-auto"
-        />
-      </Pill>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill label="EVERY">
+          <PillSelect
+            value={frequency}
+            onValueChange={(v) =>
+              // Switching INTO custom carries the block with it, so the very
+              // first PATCH is already valid.
+              set(v === 'custom' ? { frequency: v, custom: c } : { frequency: v })
+            }
+            disabled={disabled}
+            options={FREQUENCIES}
+          />
+        </Pill>
 
-      <Pill label="AT">
-        <PillSelect
-          value={String(hour)}
-          onValueChange={(v) => set({ hour: Number(v) })}
-          disabled={disabled}
-          options={HOURS.map((h) => ({ value: String(h), label: clock(h) }))}
-        />
-        <TimezonePicker value={tz} onChange={(v) => set({ timezone: v })} disabled={disabled} />
-      </Pill>
+        <Pill label="AT">
+          <PillSelect
+            value={String(hour)}
+            onValueChange={(v) => set({ hour: Number(v) })}
+            disabled={disabled}
+            options={HOURS.map((h) => ({ value: String(h), label: clock(h) }))}
+          />
+          <TimezonePicker value={tz} onChange={(v) => set({ timezone: v })} disabled={disabled} />
+        </Pill>
 
-      <Pill>
-        <PillSelect
-          value={String(pairsPerCycle)}
-          onValueChange={(v) => set({ pairsPerCycle: Number(v) })}
-          disabled={disabled}
-          options={PAIR_CHOICES.map((n) => ({ value: String(n), label: String(n) }))}
-        />
-        <span className="text-gray-400 dark:text-white/45">pairs per run</span>
-      </Pill>
+        <Pill>
+          <PillSelect
+            value={String(pairsPerCycle)}
+            onValueChange={(v) => set({ pairsPerCycle: Number(v) })}
+            disabled={disabled}
+            options={PAIR_CHOICES.map((n) => ({ value: String(n), label: String(n) }))}
+          />
+          <span className="text-gray-400 dark:text-white/45">pairs per run</span>
+        </Pill>
+
+        {/* Optional, and it says so. An end date is the difference between a
+            campaign and a standing order, and without one there was no way to
+            express "run this for a month". */}
+        <Pill label="UNTIL">
+          <input
+            type="date"
+            value={endDate ? String(endDate).slice(0, 10) : ''}
+            disabled={disabled}
+            onChange={(e) => set({ endDate: e.target.value || null })}
+            className="bg-transparent text-13 font-bold text-gray-900 outline-none disabled:opacity-60 dark:scheme-dark dark:text-white"
+          />
+          {endDate && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => set({ endDate: null })}
+              className="text-xs text-gray-400 hover:text-gray-900 dark:text-white/45 dark:hover:text-white"
+              aria-label="Clear end date"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          {!endDate && <span className="text-xs text-gray-400 dark:text-white/45">no end</span>}
+        </Pill>
+      </div>
+
+      {/* Custom unfolds under the sentence rather than inside it — three more
+          controls on the same line stops reading as a sentence at all. */}
+      <AnimatePresence initial={false}>
+        {isCustom && (
+          <motion.div
+            key="custom"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <Pill label="REPEAT EVERY">
+                <input
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={c.repeatEvery}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    set({
+                      custom: {
+                        ...c,
+                        repeatEvery: Math.min(52, Math.max(1, Number(e.target.value) || 1)),
+                      },
+                    })
+                  }
+                  className="w-10 bg-transparent text-13 font-bold text-gray-900 tabular-nums outline-none disabled:opacity-60 dark:text-white"
+                />
+                <PillSelect
+                  value={c.repeatUnit}
+                  onValueChange={(v) => set({ custom: { ...c, repeatUnit: v } })}
+                  disabled={disabled}
+                  options={UNITS}
+                />
+              </Pill>
+
+              {/* Day selection only means something for a weekly recurrence —
+                  "every 3 days on Tuesdays" is not a cadence. */}
+              {c.repeatUnit === 'week' && (
+                <Pill label="ON">
+                  <span className="flex items-center gap-1">
+                    {DAYS.map(([day, letter], i) => {
+                      const active = c.repeatOnDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => toggleDay(day)}
+                          aria-pressed={active}
+                          aria-label={day}
+                          className={`size-6 rounded-lg text-10 font-bold transition disabled:opacity-60 ${
+                            active
+                              ? 'bg-[#6b72f8] text-white'
+                              : 'bg-gray-200 text-gray-500 hover:bg-gray-300 dark:bg-white/10 dark:text-white/55 dark:hover:bg-white/20'
+                          }`}
+                        >
+                          {/* Two Tuesdays' worth of "T" and two "S" — the
+                              aria-label carries the real name for screen
+                              readers, and the key is the day, not the letter. */}
+                          <span aria-hidden>{letter}</span>
+                          <span className="sr-only">{DAYS[i][0]}</span>
+                        </button>
+                      );
+                    })}
+                  </span>
+                </Pill>
+              )}
+            </div>
+
+            {c.repeatUnit === 'week' && c.repeatOnDays.length === 0 && (
+              <p className="pt-1.5 text-xs text-gray-400 dark:text-white/45">
+                No days picked — it&apos;ll run on the same weekday it starts.
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

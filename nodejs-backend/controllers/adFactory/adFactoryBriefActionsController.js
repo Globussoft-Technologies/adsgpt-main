@@ -342,6 +342,43 @@ exports.stopBrief = async (req, res) => {
   }
 };
 
+exports.runBriefNow = async (req, res) => {
+  /*
+    #swagger.tags = ['Ad Factory 2.0']
+    #swagger.summary = 'Run this brief\'s automation immediately'
+    #swagger.description = 'Queues one cycle right now, independent of the schedule. The schedule is unchanged — this is an extra run, not a reschedule.'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user.user_id;
+    const brief = await findOwnedBrief(req.params.id, userId);
+    if (!brief) {
+      return res.status(404).json({ success: false, error: "Brief not found" });
+    }
+    if (!brief.jobId) {
+      return res.status(409).json({
+        success: false,
+        code: "BRIEF_NOT_LIVE",
+        error: "This brief isn't running on a schedule yet.",
+      });
+    }
+
+    // `runNow` owns the checks worth having: a paused job refuses (resume
+    // first), a completed one refuses, and a job already mid-run 409s rather
+    // than posting the same cycle twice. Relayed verbatim — every one of them
+    // is advice the user can act on.
+    const { statusCode, body } = await callController(
+      adsFactoryAutoController.runNow.bind(adsFactoryAutoController),
+      { ...req, params: { id: String(brief.jobId) }, user: req.user },
+    );
+
+    return res.status(statusCode).json(body);
+  } catch (err) {
+    logger.error(`[adFactory:brief:runNow] ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // ─── Deliveries ──────────────────────────────────────────────────────────────
 
 exports.getBriefTimeline = async (req, res) => {

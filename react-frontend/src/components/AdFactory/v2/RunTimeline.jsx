@@ -1,7 +1,7 @@
-import React from 'react';
-import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, ChevronDown, ExternalLink, Loader2 } from 'lucide-react';
 
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
 import { useMotionPresets } from './_motion';
@@ -155,6 +155,7 @@ const PILL = {
 };
 
 function Cycle({ row, last, onRetry, motionProps }) {
+  const [open, setOpen] = useState(false);
   const scheduled = row.scheduled || row.status === 'scheduled';
   const failedOnly = !scheduled && row.liveCount === 0 && row.failedCount > 0;
   const partial = row.liveCount > 0 && row.failedCount > 0;
@@ -204,28 +205,59 @@ function Cycle({ row, last, onRetry, motionProps }) {
           <p className="mt-1 text-xs text-gray-400 dark:text-white/40">Nothing to do — we&apos;ll run it for you.</p>
         )}
 
+        {/* Thumbnails summarise; the expansion is the published-ads view.
+            v1 had a 1000-line modal for this. The data was already on the row —
+            what was missing was per-creative outcome, so a 3-pair run showed one
+            "View on Meta" link built from `metaAdId` and said nothing about the
+            other two, or about which one failed. */}
         {row.creatives?.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {row.creatives.slice(0, 6).map((c, i) => (
-              <img
-                key={c.creativeId || i}
-                src={srcOf(c.imageUrl)}
-                alt={c.headline || ''}
-                loading="lazy"
-                className="h-12 w-10 rounded-md border border-gray-200 object-cover dark:border-white/10"
-              />
-            ))}
-            {row.creatives[0]?.headline && (
-              <span className="truncate text-xs text-gray-500 dark:text-white/50">
-                {row.creatives
-                  .slice(0, 2)
-                  .map((c) => c.headline)
-                  .filter(Boolean)
-                  .map((h) => `“${h}”`)
-                  .join(' · ')}
+          <>
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              className="mt-2.5 flex w-full items-center gap-2 text-left"
+            >
+              <span className="flex flex-wrap items-center gap-2">
+                {row.creatives.slice(0, 6).map((c, i) => (
+                  <img
+                    key={c.creativeId || i}
+                    src={srcOf(c.imageUrl)}
+                    alt={c.headline || ''}
+                    loading="lazy"
+                    className={`h-12 w-10 rounded-md border object-cover ${
+                      c.posted === false
+                        ? 'border-red-500/40 opacity-50'
+                        : 'border-gray-200 dark:border-white/10'
+                    }`}
+                  />
+                ))}
               </span>
-            )}
-          </div>
+              <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-white/50">
+                {open ? 'Hide ads' : `${row.creatives.length === 1 ? 'the ad' : 'all ads'}`}
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`}
+                />
+              </span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {open && (
+                <motion.ul
+                  key="ads"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                  className="m-0 mt-2.5 flex list-none flex-col gap-1.5 overflow-hidden p-0"
+                >
+                  {row.creatives.map((c, i) => (
+                    <PublishedAd key={c.creativeId || i} creative={c} />
+                  ))}
+                </motion.ul>
+              )}
+            </AnimatePresence>
+          </>
         )}
 
         {row.error && (
@@ -241,6 +273,63 @@ function Cycle({ row, last, onRetry, motionProps }) {
         )}
       </div>
     </motion.li>
+  );
+}
+
+// One published ad: what it says, whether it went live, and where to see it.
+//
+// `posted` is per-creative and comes from that creative's own `postedAdIds`, so
+// a partial run shows exactly which pair failed rather than a count. `posted`
+// is checked against `false` explicitly — an older timeline payload has no such
+// field, and treating undefined as "failed" would mark every historical ad red.
+function PublishedAd({ creative }) {
+  const failed = creative.posted === false;
+  const link = (creative.adLinks || [])[0];
+
+  return (
+    <li className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-white/10 dark:bg-white/4">
+      {creative.imageUrl ? (
+        <img
+          src={srcOf(creative.imageUrl)}
+          alt=""
+          loading="lazy"
+          className="h-11 w-9 shrink-0 rounded-md object-cover"
+        />
+      ) : (
+        <span className="h-11 w-9 shrink-0 rounded-md bg-gray-200 dark:bg-white/10" />
+      )}
+
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="truncate text-13 font-semibold text-gray-900 dark:text-white">
+          {creative.headline || 'Untitled ad'}
+        </b>
+        {creative.message && (
+          <span className="truncate text-xs text-gray-500 dark:text-white/50">
+            {creative.message}
+          </span>
+        )}
+      </span>
+
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-10 font-bold ${
+          failed ? PILL.fail : PILL.live
+        }`}
+      >
+        {failed ? 'NOT POSTED' : 'LIVE'}
+      </span>
+
+      {link && (
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"
+        >
+          View
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+    </li>
   );
 }
 

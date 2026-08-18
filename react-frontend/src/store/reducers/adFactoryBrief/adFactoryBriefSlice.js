@@ -10,6 +10,7 @@ import {
   generateFromBrief,
   activateBrief,
   stopBrief,
+  runBriefNow,
   getBriefTimeline,
   pauseJob,
   resumeJob,
@@ -211,6 +212,22 @@ export const stopAutomation = createAsyncThunk(
   },
 );
 
+// An extra cycle on demand. Deliberately NOT merged into `pausing`: this one
+// spends credits and posts ads, so it gets its own busy flag and its own
+// confirmation rather than sharing state with the lifecycle buttons.
+export const runNow = createAsyncThunk(
+  'adFactoryBrief/runNow',
+  async (briefId, { rejectWithValue }) => {
+    try {
+      return await runBriefNow(briefId);
+    } catch (err) {
+      // Paused / completed / already-running all come back as advice the user
+      // can act on, so the server's own wording is what gets shown.
+      return rejectWithValue(message(err, "We couldn't start a run."));
+    }
+  },
+);
+
 export const fetchTimeline = createAsyncThunk(
   'adFactoryBrief/timeline',
   async (briefId, { rejectWithValue }) => {
@@ -247,6 +264,10 @@ const initialState = {
   generating: false,
   activating: false,
   pausing: false,
+  runningNow: false,
+  // A queued extra cycle. Cleared on the next timeline read, once the run it
+  // refers to is actually visible there.
+  runNowQueued: false,
 
   error: null,
   // Set when the failure has a code the UI acts on (NO_BASE_PLAN → upgrade).
@@ -289,7 +310,14 @@ const adFactoryBriefSlice = createSlice({
     // changed. The PATCH that follows is the source of truth.
     applyLocalEdit: (state, { payload }) => {
       const { section, field, value } = payload || {};
-      if (!state.brief || !section || !field) return;
+      if (!state.brief || !field) return;
+      // A root-level field (`alertEmails`) has no section. Without this branch
+      // the edit was a silent no-op and the control showed stale values until a
+      // refetch — removing a recipient would appear not to work.
+      if (!section) {
+        state.brief[field] = value;
+        return;
+      }
       state.brief[section] = { ...(state.brief[section] || {}), [field]: value };
     },
     // `adFactoryBriefReady` — inference finished. Carries a status only.
@@ -346,6 +374,13 @@ const adFactoryBriefSlice = createSlice({
         state.loading = false;
         const brief = payload?.data;
         if (!brief) return;
+        // Switching briefs drops the in-flight budget keystrokes. The input
+        // prefers `pendingBudget` over the saved value so it stays editable
+        // after the first save; without this, opening a second brief would
+        // show the first one's typed number over its own.
+        if (state.briefId && String(state.briefId) !== String(brief._id)) {
+          state.pendingBudget = '';
+        }
         state.brief = brief;
         state.briefId = brief._id;
         state.run = brief.run || initialState.run;
@@ -484,11 +519,31 @@ const adFactoryBriefSlice = createSlice({
         state.error = typeof payload === 'string' ? payload : payload?.message;
       })
 
+      .addCase(runNow.pending, (state) => {
+        state.runningNow = true;
+        state.error = null;
+        state.runNowQueued = false;
+      })
+      .addCase(runNow.fulfilled, (state) => {
+        state.runningNow = false;
+        // The cycle is queued, not finished. Nothing in the timeline changes
+        // until the orchestrator picks it up, so the UI acknowledges the queue
+        // rather than pretending ads exist.
+        state.runNowQueued = true;
+      })
+      .addCase(runNow.rejected, (state, { payload }) => {
+        state.runningNow = false;
+        state.error = typeof payload === 'string' ? payload : payload?.message;
+      })
+
       .addCase(fetchTimeline.pending, (state) => {
         state.timeline.loading = true;
       })
       .addCase(fetchTimeline.fulfilled, (state, { payload }) => {
         state.timeline = { ...(payload?.data || { summary: null, rows: [] }), loading: false };
+        // The queued run is now either in the rows or still pending on the
+        // orchestrator's side; either way the banner has served its purpose.
+        state.runNowQueued = false;
       })
       .addCase(fetchTimeline.rejected, (state) => {
         state.timeline.loading = false;
@@ -515,6 +570,8 @@ export const selectEstimate = (s) => s.adFactoryBrief.estimate;
 export const selectHistory = (s) => s.adFactoryBrief.history;
 export const selectTimeline = (s) => s.adFactoryBrief.timeline;
 export const selectJobSync = (s) => s.adFactoryBrief.jobSync;
+export const selectIsRunningNow = (s) => s.adFactoryBrief.runningNow;
+export const selectRunNowQueued = (s) => s.adFactoryBrief.runNowQueued;
 export const selectBriefs = (s) => s.adFactoryBrief.briefs;
 export const selectBriefsLoading = (s) => s.adFactoryBrief.briefsLoading;
 export const selectIsPausing = (s) => s.adFactoryBrief.pausing;

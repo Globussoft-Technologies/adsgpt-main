@@ -368,6 +368,13 @@ exports.updateBrief = async (req, res) => {
       brief[section] = { ...current, ...incoming };
     }
 
+    // Root-level fields, which the section loop above cannot reach. An array
+    // REPLACES rather than merges — the whole point of editing a recipient list
+    // is being able to remove someone from it.
+    if (Array.isArray(value.alertEmails)) {
+      brief.alertEmails = value.alertEmails;
+    }
+
     // A user edit supersedes whatever we inferred for that field. Recording it
     // is what stops the UI continuing to flag a value the user has already
     // confirmed — and what keeps provenance honest about who decided what.

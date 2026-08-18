@@ -5,6 +5,7 @@ import { Switch } from '@/components/Autopilot/_atoms';
 
 import { Panel, PanelBody, PanelFooter, PanelHeader, PrimaryBtn } from './Panel';
 import CadencePills from './CadencePills';
+import AlertEmails from './AlertEmails';
 import { useMotionPresets } from './_motion';
 
 // ----------------------------------------------------------------------------
@@ -31,6 +32,10 @@ export default function KeepTheseComing({
   enabled,
   onToggle,
   frequency = 'weekly',
+  custom,
+  endDate,
+  alertEmails,
+  onAlertEmailsChange,
   onCadenceChange,
   onActivate,
   activating = false,
@@ -80,7 +85,15 @@ export default function KeepTheseComing({
               hour={hour}
               timezone={timezone}
               pairsPerCycle={pairsPerCycle}
+              custom={custom}
+              endDate={endDate}
               onChange={onCadenceChange}
+              disabled={activating}
+            />
+
+            <AlertEmails
+              value={alertEmails}
+              onChange={onAlertEmailsChange}
               disabled={activating}
             />
 

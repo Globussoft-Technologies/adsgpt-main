@@ -26,23 +26,39 @@
  * does — which the caller reads as "don't call updateJob at all", also avoiding
  * the schema's `.min(1)` 400.
  *
- * WHAT IS DELIBERATELY NOT SYNCED
+ * THE TEMPLATE FIELDS
  *
- *   • budget — lives in `targets.meta.template.payload`, and updateJob only
- *     pushes budget changes through to an already-created campaign for GOOGLE
- *     (see adsFactoryAutoController.updateJob). Meta has no such sync in v1
- *     either, so leaving it out is parity, not a regression. Wiring it means
- *     deciding what to do about the live Meta campaign, which is its own change.
+ * Budget, CTA and destination link live inside
+ * `targets.meta.template.payload`, not at the top level. `updateJob` accepts
+ * exactly six keys there (EDITABLE_META_PAYLOAD_FIELDS) and REJECTS BY NAME any
+ * other field that differs from what is saved — so the patch sends only the
+ * editable keys that actually changed, never the whole payload back.
+ *
+ * The budget key is `adSetBudget`, not `dailyBudget`. That is deliberate in the
+ * synthesizer: a root `dailyBudget` is copied to the campaign without the
+ * major→minor conversion, which would send ₹800 to Meta as ₹8.
+ *
+ * WHAT IS STILL NOT SYNCED
+ *
  *   • targets / connection — changing the ad account under a running job is
  *     what Stop is for.
- *   • alerts — the brief has no field to carry them yet.
+ *   • the LIVE Meta campaign's budget. `updateJob` pushes budget changes
+ *     straight through to an already-created campaign for Google only; Meta has
+ *     no equivalent in v1 either. The saved template is what every run builds
+ *     its ad set from, so a budget change here takes effect on the NEXT run
+ *     rather than retroactively. That is a real limit, and the UI says so
+ *     ("changes apply from the next run") rather than implying otherwise.
  */
 
 const { _internals: payloadInternals } = require("./briefToJobPayload");
 
-// Same mapping the create path uses. Sharing it is what stops Quick setup
-// producing a frequency `createJob` accepts but `updateJob` rejects.
-const { resolveFrequency } = payloadInternals;
+// Same mappings the create path uses. Sharing them is what stops Quick setup
+// producing values `createJob` accepts but `updateJob` rejects.
+const { resolveFrequency, ctaValidForCell } = payloadInternals;
+
+// Shared with the create path so a custom cadence cannot mean one thing at
+// activation and another at the next edit.
+const { normalizeCustom, sameCustom } = require("./customCadence");
 
 const plain = (v) => (v && typeof v.toObject === "function" ? v.toObject() : v || {});
 
@@ -109,15 +125,27 @@ function briefToJobPatch(brief = {}, job = {}) {
         wantEnd !== day(jobSchedule.endDate) && "endDate",
       ].filter(Boolean);
 
-  if (scheduleDiff.length) {
+  // `custom` carries its own block, and `scheduleSchema` REQUIRES it when the
+  // frequency is custom — sending custom without it is a 400. Compared as a
+  // whole because the three fields only mean anything together.
+  const wantCustom =
+    wantFrequency === "custom"
+      ? normalizeCustom(frequency.custom, plain(jobSchedule.customFrequency))
+      : null;
+  const customChanged =
+    wantCustom && !sameCustom(wantCustom, plain(jobSchedule.customFrequency));
+
+  if (scheduleDiff.length || customChanged) {
     patch.schedule = {
       frequency: wantFrequency,
       ...(Number.isInteger(wantHour) ? { hour: wantHour } : {}),
       ...(wantTimezone ? { timezone: wantTimezone } : {}),
       ...(keepStart ? { startDate: keepStart } : {}),
       ...(wantEnd ? { endDate: wantEnd } : {}),
+      ...(wantCustom ? { customFrequency: wantCustom } : {}),
     };
     changed.push(...scheduleDiff.map((f) => `schedule.${f}`));
+    if (customChanged) changed.push("schedule.custom");
   }
 
   // ─── pairsPerCycle ─────────────────────────────────────────────────────────
@@ -138,6 +166,75 @@ function briefToJobPatch(brief = {}, job = {}) {
   if (model && model !== "auto" && String(model) !== String(j.model || "")) {
     patch.model = String(model);
     changed.push("model");
+  }
+
+  // ─── alerts ────────────────────────────────────────────────────────────────
+  //
+  // Stored on the job as ONE comma-separated string, matching the Meta
+  // Autopilot's own `autopilotSettings.alerts.emailTo` convention; the brief
+  // holds an array because that is what a list control edits.
+  //
+  // An empty array is a real value here, unlike endDate: the brief has a
+  // control that can express "no recipients", so clearing it must clear the
+  // job. Only skipped when the brief has no alertEmails key at all.
+  if (Array.isArray(b.alertEmails)) {
+    const emailTo = b.alertEmails
+      .map((e) => String(e || "").trim())
+      .filter(Boolean)
+      .join(",");
+    if (emailTo !== String(plain(j.alerts).emailTo || "")) {
+      patch.alerts = { emailTo };
+      changed.push("alerts");
+    }
+  }
+
+  // ─── the meta template's editable payload keys ─────────────────────────────
+  //
+  // Only budget, CTA and link. Every other key in the payload is rejected by
+  // name if it differs, so nothing else is sent — and echoing the whole payload
+  // back would be a request that fails the moment the synthesizer's output
+  // changes shape.
+  const offer = plain(b.offer);
+  const metaTemplate = plain(plain(plain(j.targets).meta).template);
+  const savedPayload = plain(metaTemplate.payload);
+  const payloadDiff = {};
+
+  // `adSetBudget`, not `dailyBudget` — see the header.
+  const daily = Number(plain(delivery.budget).daily);
+  if (Number.isFinite(daily) && daily > 0 && daily !== Number(savedPayload.adSetBudget)) {
+    payloadDiff.adSetBudget = daily;
+    changed.push("budget");
+  }
+
+  // A CTA is only sent when the CURRENT objective's wizardSchema cell allows
+  // it. A user can change the objective without touching the CTA, leaving e.g.
+  // SHOP_NOW on a Leads brief — pushing that onto the job would turn an edit
+  // into a Meta rejection hours later inside a cron worker.
+  const cta = plain(offer.cta);
+  const validCta = ctaValidForCell(cta.button, offer.primaryObjective, offer.conversionLocation);
+  if (validCta && validCta !== savedPayload.callToAction) {
+    payloadDiff.callToAction = validCta;
+    changed.push("cta");
+  }
+
+  if (cta.url && String(cta.url) !== String(savedPayload.linkUrl || "")) {
+    payloadDiff.linkUrl = String(cta.url);
+    changed.push("linkUrl");
+  }
+
+  // The schema requires the connection ids alongside a targets patch, and the
+  // whole block is pointless without a template to patch into.
+  const metaTarget = plain(plain(j.targets).meta);
+  if (Object.keys(payloadDiff).length && metaTemplate.payload && metaTarget.facebookId) {
+    patch.targets = {
+      meta: {
+        facebookId: String(metaTarget.facebookId),
+        connectionId: String(metaTarget.connectionId),
+        // `template.payload` is required by updateTargetsSchema; the controller
+        // then copies across only the keys in its editable allowlist.
+        template: { payload: payloadDiff },
+      },
+    };
   }
 
   return { patch, changed };

@@ -115,7 +115,29 @@ const updateBriefSchema = Joi.object({
       startDate: Joi.date().iso().allow(null),
       endDate: Joi.date().iso().allow(null),
       hour: Joi.number().integer().min(0).max(23),
-      timezone: Joi.string().trim().max(64),
+      timezone: TIMEZONE,
+      // Read only when preset is "custom". The job's own scheduleSchema
+      // REQUIRES this block in that case, so a brief that could name `custom`
+      // without carrying it would 400 at activation.
+      custom: Joi.object({
+        repeatEvery: Joi.number().integer().min(1).max(52),
+        repeatUnit: Joi.string().valid("day", "week"),
+        repeatOnDays: Joi.array()
+          .items(
+            Joi.string()
+              .lowercase()
+              .valid(
+                "sunday",
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+              ),
+          )
+          .max(7),
+      }),
     }),
   }),
 
@@ -126,6 +148,10 @@ const updateBriefSchema = Joi.object({
     textCount: Joi.number().integer().min(0).max(50),
     seedImages: Joi.array().items(Joi.string().trim()).max(50),
   }),
+
+  // Cycle-summary recipients. Capped at 5 to match adsFactoryAlertService,
+  // which only sends to the first five.
+  alertEmails: Joi.array().items(Joi.string().trim().email().max(254)).max(5),
 })
   .min(1)
   .messages({ "object.min": "Nothing to update" });

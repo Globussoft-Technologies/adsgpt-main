@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Loader2, Pause, Play, Square } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Pause, Play, Square, Zap } from 'lucide-react';
 
 import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
 import CadencePills from './CadencePills';
+import AlertEmails from './AlertEmails';
 
 // ----------------------------------------------------------------------------
 // SchedulePanel — the cadence of a LIVE brief, and the controls that change it.
@@ -28,11 +29,18 @@ export default function SchedulePanel({
   hour,
   timezone,
   pairsPerCycle,
+  custom,
+  endDate,
+  alertEmails,
+  onAlertEmailsChange,
   nextRunAt,
   onCadenceChange,
   onPause,
   onResume,
   onStop,
+  onRunNow,
+  runningNow = false,
+  runNowQueued = false,
   busy = false,
   saving = false,
   syncWarning,
@@ -59,6 +67,19 @@ export default function SchedulePanel({
         right={
           <span className="flex items-center gap-2">
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400 dark:text-white/45" />}
+            {/* An extra cycle without waiting for the schedule. Live only — a
+                paused job refuses server-side, and offering a button that
+                always errors is worse than not offering it. */}
+            {live && onRunNow && (
+              <GhostBtn onClick={onRunNow} disabled={busy || runningNow}>
+                {runningNow ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Zap className="h-3.5 w-3.5" />
+                )}
+                <span>Run now</span>
+              </GhostBtn>
+            )}
             {live && (
               <GhostBtn onClick={onPause} disabled={busy}>
                 <Pause className="h-3.5 w-3.5" />
@@ -87,9 +108,34 @@ export default function SchedulePanel({
           hour={hour}
           timezone={timezone}
           pairsPerCycle={pairsPerCycle}
+          custom={custom}
+          endDate={endDate}
           onChange={onCadenceChange}
           disabled={over || busy}
         />
+
+        {/* Queued, not finished. Nothing appears in the timeline until the
+            orchestrator picks it up, so this says what actually happened
+            rather than implying ads exist. */}
+        {runNowQueued && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-400">
+              A run is queued. It&apos;ll appear below once it starts — this is an extra cycle, so
+              your schedule is unchanged.
+            </p>
+          </div>
+        )}
+
+        {!over && (
+          <div className="border-t border-gray-200 pt-3.5 dark:border-white/10">
+            <AlertEmails
+              value={alertEmails}
+              onChange={onAlertEmailsChange}
+              disabled={busy}
+            />
+          </div>
+        )}
 
         {/* The one message that must never be swallowed: the brief now says one
             thing and the running job still does another. */}

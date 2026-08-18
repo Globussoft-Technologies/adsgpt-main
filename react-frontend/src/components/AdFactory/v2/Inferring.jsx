@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Notice, Panel, PanelBody, PanelHeader } from './Panel';
-import { FieldBlock } from './briefFields';
 
 // ----------------------------------------------------------------------------
-// InferringWithBudget — the ~35-second wait, spent productively.
+// Inferring — the ~35-second wait.
 //
 // Reading a page takes about 35s cold (measured). That is long enough that a
 // bare spinner reads as "broken".
@@ -16,20 +15,17 @@ import { FieldBlock } from './briefFields';
 //   2. Show real elapsed time against the measured estimate, and say so plainly
 //      when it overruns instead of parking at 99%.
 //
-// The flow needs a budget anyway, so we ask for it here. The wait stops being
-// dead time and becomes input 2 of 2.
+// This screen used to ask for the daily budget, on the theory that the wait may
+// as well collect input 2 of 2. It doesn't any more. The budget belongs next to
+// the thing it pays for — it sits on the brief screen, beside Generate, where
+// the user can see what they're buying. Asking here meant asking before there
+// was anything to judge the number against, and then showing the same field
+// again a moment later.
 // ----------------------------------------------------------------------------
 
 const ESTIMATE_MS = 35_000;
 
-export default function InferringWithBudget({
-  host,
-  startedAt,
-  budget,
-  onBudgetChange,
-  onStartOver,
-  currencySymbol = '₹',
-}) {
+export default function Inferring({ host, startedAt, onStartOver }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -53,8 +49,8 @@ export default function InferringWithBudget({
           title={`Reading ${host || 'your page'}…`}
           subtitle={
             overrunning
-              ? "This page is taking longer than usual. We're still going — you can keep filling in the budget below."
-              : "We're pulling out your brand, audience and objective. Nothing to do while you wait — except the one thing below."
+              ? "This page is taking longer than usual. We're still going."
+              : "We're pulling out your brand, audience and objective. Nothing to do — this only takes a moment."
           }
           right={
             <span className="shrink-0 text-xs text-gray-500 tabular-nums dark:text-white/60">
@@ -77,25 +73,6 @@ export default function InferringWithBudget({
               style={{ width: `${pct}%` }}
             />
           </div>
-
-          <FieldBlock
-            label="While we read — what's your daily budget?"
-            hint="nothing spends until you launch"
-          >
-            <div className="flex h-9 w-44 items-center gap-1.5 rounded-xl border border-gray-300 bg-gray-100 px-3 transition-colors focus-within:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/6">
-              <span className="text-xs text-gray-400 dark:text-white/45 2xl:text-13">{currencySymbol}</span>
-              <input
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={budget ?? ''}
-                onChange={(e) => onBudgetChange?.(e.target.value)}
-                placeholder="800"
-                className="w-full min-w-0 bg-transparent text-xs text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/45 2xl:text-13"
-              />
-              <span className="shrink-0 text-10 text-gray-400 dark:text-white/45">/day</span>
-            </div>
-          </FieldBlock>
 
           {overrunning && (
             <Notice tone="warn" icon={AlertCircle}>

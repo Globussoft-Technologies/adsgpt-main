@@ -379,6 +379,61 @@ group("parity — nothing the canvas showed is missing", () => {
   });
 });
 
+group("per-creative outcome, for the published-ads view", () => {
+  // The run-level `links` are built from `metaAdId`, which records ONE ad. On a
+  // 3-pair run that deep-links to the first and says nothing about the other
+  // two; on a partial run it cannot show which creative failed. These are what
+  // let the UI list published ads individually.
+  const job = {
+    status: "active",
+    schedule: { frequency: "weekly", hour: 9 },
+    targets: { meta: { template: { payload: { adAccountId: "act_998877" } } } },
+    runHistory: [
+      {
+        runId: "r1",
+        status: "partial",
+        startedAt: "2026-08-17T09:00:00Z",
+        metaAdId: "111",
+        automationCreatives: [
+          { creativeId: "c1", imageUrl: "/a.webp", headline: "One", postedAdIds: { meta: "111" } },
+          { creativeId: "c2", imageUrl: "/b.webp", headline: "Two", postedAdIds: {} },
+        ],
+      },
+    ],
+  };
+
+  const row = serializeRunTimeline(job).rows.find((r) => r.runId === "r1");
+
+  test("a creative that produced an ad is marked posted", () => {
+    assert.equal(row.creatives[0].posted, true);
+  });
+
+  test("a creative that produced none is NOT marked posted", () => {
+    assert.equal(row.creatives[1].posted, false);
+    assert.deepEqual(row.creatives[1].adLinks, []);
+  });
+
+  test("each posted creative carries its own deep link and ad id", () => {
+    const [link] = row.creatives[0].adLinks;
+    assert.equal(link.platform, "meta");
+    assert.equal(link.adId, "111");
+    assert.match(link.url, /act=998877/);
+    assert.match(link.url, /selected_ad_ids=111/);
+  });
+
+  test("no ad account means no link rather than a half-built URL", () => {
+    const bare = { ...job, targets: { meta: { template: { payload: {} } } } };
+    const r = serializeRunTimeline(bare).rows.find((x) => x.runId === "r1");
+    assert.deepEqual(r.creatives[0].adLinks, []);
+    // Still marked posted — the ad exists, we just cannot link to it.
+    assert.equal(r.creatives[0].posted, true);
+  });
+
+  test("posted count matches the run's own liveCount", () => {
+    assert.equal(row.creatives.filter((c) => c.posted).length, row.liveCount);
+  });
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${pass} passed, ${fail} failed`);
