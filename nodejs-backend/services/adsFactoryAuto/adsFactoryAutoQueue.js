@@ -275,7 +275,7 @@ function repeatWindow(schedule) {
     if (rawStart.toDateString() === now.toDateString()) {
       start = new Date(now.getTime() - 60 * 1000);
     } else if (rawStart > now) {
-      start = rawStart;
+      start = new Date(rawStart.getTime() - 60 * 1000);
     }
   }
   if (schedule.endDate) {

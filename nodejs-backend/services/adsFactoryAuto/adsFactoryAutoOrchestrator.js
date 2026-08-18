@@ -2023,6 +2023,11 @@ async function run(jobId) {
           ? await getNextRunTime(jobId) : null;
         if (nextTime) {
           job.schedule.nextRunAt = nextTime;
+        } else if (job.schedule?.frequency !== "does_not_repeat" && job.status !== "paused") {
+          // If BullMQ no longer has a nextRunTime, the repeating schedule has naturally finished (endDate reached).
+          job.status = "completed";
+          job.schedule.nextRunAt = null;
+          job.lifecycleKey = undefined;
         }
       } catch (e) {
         logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);

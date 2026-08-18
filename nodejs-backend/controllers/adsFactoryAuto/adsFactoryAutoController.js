@@ -1198,7 +1198,7 @@ class AdsFactoryAutoController {
         success: true,
         skip: skipNum,
         limit: limitNum,
-        data: {
+        data: [{
           jobId:        job._id,
           status:       job.status,
           totalRuns:    totalRuns,
@@ -1212,16 +1212,18 @@ class AdsFactoryAutoController {
           lastRunAt,
           schedule: {
             frequency:  job.schedule?.frequency  || "",
+            hour:       job.schedule?.hour       ?? null,
+            timezone:   job.schedule?.timezone   || "UTC",
             lastRunAt:  job.schedule?.lastRunAt  || "",
             nextRunAt:  dynamicNextRun,
-            startDate:  job.schedule?.startDate  || "",
-            endDate:    job.schedule?.endDate    || "",
+            startDate:  job.schedule?.startDate ? require("../../services/adsFactoryAuto/adsFactoryAutoQueue").zonedDateTimeToUtc(job.schedule.startDate, job.schedule.hour, job.schedule.timezone) : "",
+            endDate:    job.schedule?.endDate   ? require("../../services/adsFactoryAuto/adsFactoryAutoQueue").zonedDateTimeToUtc(job.schedule.endDate, job.schedule.hour, job.schedule.timezone) : "",
           },
           createdAt: job.createdAt,
           generationHealth,
           platforms: platformDetails,
           recentRuns,
-        },
+        }],
       });
     } catch (err) {
       logger.error(`[adsFactoryAuto:getJobStats] ${err.message}`);
@@ -1525,8 +1527,8 @@ class AdsFactoryAutoController {
             createdAt:     job.createdAt,
             schedule: {
               frequency:       job.schedule?.frequency,
-              startDate:       job.schedule?.startDate       || null,
-              endDate:         job.schedule?.endDate         || null,
+              startDate:       job.schedule?.startDate ? require("../../services/adsFactoryAuto/adsFactoryAutoQueue").zonedDateTimeToUtc(job.schedule.startDate, job.schedule.hour, job.schedule.timezone) : null,
+              endDate:         job.schedule?.endDate   ? require("../../services/adsFactoryAuto/adsFactoryAutoQueue").zonedDateTimeToUtc(job.schedule.endDate, job.schedule.hour, job.schedule.timezone) : null,
               hour:            job.schedule?.hour            ?? null,
               timezone:        job.schedule?.timezone        || "UTC",
               nextRunAt:       (job.status === "completed" || job.status === "paused") ? null : (job.schedule?.nextRunAt || null),
@@ -1609,24 +1611,23 @@ class AdsFactoryAutoController {
       }
       const cronExpr = schedule.cronExpression || resolvePresetCron(schedule.frequency, schedule.hour) || null;
       const tz       = schedule.timezone || "UTC";
-      const fromDate = schedule.startDate ? new Date(schedule.startDate) : new Date();
+      const { zonedDateTimeToUtc } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+      
+      let fromDate = new Date();
+      if (schedule.startDate) {
+        fromDate = zonedDateTimeToUtc(schedule.startDate, schedule.hour, tz);
+        // Prevent exact-tick skip for future dates (matches queue logic)
+        if (fromDate > new Date()) {
+          fromDate = new Date(fromDate.getTime() - 60000); 
+        }
+      }
 
       // ── 1. Next run time ────────────────────────────────────────────────────
       let nextRunAt = null;
       if (schedule.frequency === "does_not_repeat") {
         // One-shot: runs on startDate at the chosen hour in the job's timezone.
         if (schedule.startDate) {
-          const hour = Number(schedule.hour) || 0;
-          const cronOnce = `0 ${hour} * * *`;
-          try {
-            const cronParser = require("cron-parser");
-            nextRunAt = cronParser.parseExpression(cronOnce, {
-              currentDate: new Date(schedule.startDate),
-              tz,
-            }).next().toDate();
-          } catch (_) {
-            nextRunAt = new Date(schedule.startDate);
-          }
+          nextRunAt = zonedDateTimeToUtc(schedule.startDate, schedule.hour, tz);
         } else {
           nextRunAt = new Date();
         }
