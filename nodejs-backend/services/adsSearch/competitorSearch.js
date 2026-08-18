@@ -192,31 +192,45 @@ function isValidMediaUrl(url) {
   return true;
 }
 
+function urlParts(url) {
+  try {
+    const { hostname, pathname } = new URL(url);
+    return { host: hostname.toLowerCase(), path: pathname.toLowerCase() };
+  } catch {
+    return { host: '', path: '' };
+  }
+}
+
+function hostIs(host, ...domains) {
+  return domains.some((domain) => host === domain || host.endsWith(`.${domain}`));
+}
+
 function isVideoFileUrl(url) {
   if (!url || typeof url !== 'string') return false;
   const lower = url.toLowerCase();
+  const { host, path } = urlParts(url);
   // Direct video file extensions
   if (/\.(mp4|mov|webm|mkv|avi|flv)(\?|$)/.test(lower)) return true;
   // Facebook video CDN domains (video-fra5-2.xx.fbcdn.net/... .mp4)
-  if (lower.includes('video-') && lower.includes('.fbcdn.net')) return true;
+  if (hostIs(host, 'fbcdn.net') && host.includes('video-')) return true;
   // Instagram video CDN
-  if (lower.includes('.cdninstagram.com') && /\/(v|video)\//.test(lower)) return true;
+  if (hostIs(host, 'cdninstagram.com') && /^\/(v|video)\//.test(path)) return true;
   // YouTube direct video URLs (not thumbnails)
-  if (lower.includes('youtube.com') && lower.includes('/videoplayback')) return true;
-  if (lower.includes('googlevideo.com')) return true;
+  if (hostIs(host, 'youtube.com') && path.includes('/videoplayback')) return true;
+  if (hostIs(host, 'googlevideo.com')) return true;
   // YouTube watch/shorts/live page URLs — these are web pages, not images
-  if (lower.includes('youtube.com') && /\/(watch|shorts|live|embed)([\/?#]|$)/.test(lower)) return true;
-  if (lower.includes('youtu.be')) return true;
+  if (hostIs(host, 'youtube.com') && /^\/(watch|shorts|live|embed)([\/?#]|$)/.test(path)) return true;
+  if (hostIs(host, 'youtu.be')) return true;
   return false;
 }
 
 function isBlockedCdnUrl(url) {
   if (!url || typeof url !== 'string') return false;
-  const lower = url.toLowerCase();
+  const { host } = urlParts(url);
   // Facebook CDN URLs expire or get blocked by browsers
-  if (lower.includes('fbcdn.net')) return true;
+  if (hostIs(host, 'fbcdn.net')) return true;
   // Instagram CDN URLs
-  if (lower.includes('instagram.com') || lower.includes('cdninstagram.com')) return true;
+  if (hostIs(host, 'instagram.com', 'cdninstagram.com')) return true;
   return false;
 }
 
