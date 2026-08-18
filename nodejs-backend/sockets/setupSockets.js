@@ -387,12 +387,12 @@ const emitCampaignCreditStatus = async (_result, _type, userData, campaignId) =>
       if (sockets?.length) {
         break;
       }
-      console.log(`No sockets for ${campaignId}, retrying... (${i + 1}/3)`);
+      logger.info(`No sockets for ${campaignId}, retrying... (${i + 1}/3)`);
       await new Promise((res) => setTimeout(res, 300));
     }
 
     if (!sockets?.length) {
-      console.log(
+      logger.info(
         `No active sockets found for campaign ${campaignId} after 3 retries`,
       );
       return;
@@ -465,14 +465,14 @@ const settleAdFactoryCampaign = async (campaign, campaignId) => {
       `campaign:${campaignId}`,
       actualCharge,
     );
-    console.log(
+    logger.info(
       `[credits] AdFactory campaign ${campaignId} settled: ` +
         `actualCharge=${actualCharge} [${detailTrace.join(", ")}] ` +
         `releaseResult=${JSON.stringify(result)}`,
     );
     return result;
   } catch (err) {
-    console.error(
+    logger.error(
       `[credits] settleAdFactoryCampaign failed for ${campaignId}:`,
       err,
     );

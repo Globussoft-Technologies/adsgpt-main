@@ -211,8 +211,7 @@ const handleAdCopyFinal = async (data) => {
     emitToSocket(data.socket_id, "finalAdCopyResponse", payload);
     logger.info(`Ad Copy Response: ${JSON.stringify(payload)}`);
   } catch (error) {
-    console.error("Error in adCopy final response:", error);
-    logger.error(`Error in adCopy final response: ${error}`);
+    logger.error("Error in adCopy final response:", error);
   }
 };
 
@@ -221,7 +220,7 @@ exports.saveSocketId = async (userId, socketId) => {
     await this.redisGetSet.set(`user:${userId}`, socketId);
     // console.log(`User ${userId} registered with socket ID ${socketId}`);
   } catch (error) {
-    console.error(`Failed to save user ${userId} with socket ID ${socketId}`, error);
+    logger.error(`Failed to save user ${userId} with socket ID ${socketId}`, error);
   }
 };
 
@@ -315,7 +314,7 @@ exports.handleAdCopyResponse = async (data, socket) => {
       });
     } 
   } catch (error) {
-    console.error("Error in responseToNode event:", error);
+    logger.error("Error in responseToNode event:", error);
   }
 };
 
@@ -347,7 +346,7 @@ exports.clearSocketIds = async (disconnectedId) => {
       }
     }
   } catch (error) {
-    console.error("Error in disconnect event:", error);
+    logger.error("Error in disconnect event:", error);
   }
 };
 
@@ -489,7 +488,7 @@ exports.storeAdCopyChat = async (req) => {
     return { success: true, message: "New chat data added to existing session" };
 
   } catch (error) {
-    console.error("Error storing/updating chat data:", error);
+    logger.error("Error storing/updating chat data:", error);
     return { success: false, message: "Failed to store or update chat data" };
   }
 };
@@ -523,8 +522,8 @@ exports.createAdsCopyChatHistory = async (req, res) => {
 
       return res.status(200).json({ message: "Chat updated or created successfully" });
   } catch (error) {
-      console.error("Error creating/updating chat:", error);
-      return res.status(500).json({ message: "Failed to create or update chat" });
+    logger.error("Error creating/updating chat:", error);
+    return res.status(500).json({ message: "Failed to create or update chat" });
   }
 };
 // exports.createAdsCopyChat2 = async (req, res) => {
@@ -961,7 +960,7 @@ exports.getadsCopyChatsByResponder = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching chats:", error);
+    logger.error("Error fetching chats:", error);
     res.status(500).json({ 
       code: 500, 
       message: "Failed to get chats",
@@ -1035,7 +1034,7 @@ exports.getAdsCopyMessagesBySession = async (req, res) => {
 
       res.status(200).json({ code: 200, message: session.data });
   } catch (error) {
-      console.error(error);
+      logger.error(error);
       res.status(500).json({ code: 500, message: 'Failed to get messages' });
   }
 };
@@ -1086,7 +1085,7 @@ exports.deleteAdCopyChatByUidAndSessionId = async (req, res) => {
 
       return res.status(200).json({ code: 200, message: `Chat with uid: ${uid} and sessionId: ${sessionId} deleted successfully.` });
   } catch (error) {
-      console.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
+      logger.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
       return res.status(500).json({ code: 500, message: 'Failed to delete' });
   }
 };

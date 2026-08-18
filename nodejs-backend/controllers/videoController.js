@@ -1572,7 +1572,7 @@ exports.generateAvatarVideo = async (req, res) => {
 
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
 
-    console.log(
+    logger.info(
       `[credits] generateAvatarVideo ENTER user=${userId} videoId=${id} ` +
         `model=${selectedModel} duration=${inputs.duration} numVideos=${numberOfVideos} ` +
         `totalRequired=${totalRequiredCredits}`,
@@ -2600,7 +2600,7 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       `[AI Ads] Received video callback for sessionId ${sessionId}: videoStatus=${videoStatus}`
     );
 
-    console.log(
+    logger.info(
       `[credits] updateAiAdsVideoResult ENTER session=${sessionId} videoStatus=${videoStatus}`,
     );
 
@@ -2609,7 +2609,7 @@ exports.updateAiAdsVideoResult = async (req, res) => {
       "inputs.type": "ai_ads",
     });
     if (!record) {
-      console.warn(
+      logger.warn(
         `[credits] updateAiAdsVideoResult 404 session=${sessionId} — no AI Ads record`,
       );
       return res.status(404).json({ success: false, error: "AI Ads session not found" });
@@ -2625,12 +2625,12 @@ exports.updateAiAdsVideoResult = async (req, res) => {
     // sending an isVoiceRegenerate flag. The generic /video/update-result path
     // uses the same detection. Whichever endpoint Python actually calls, the
     // voice regen is handled and never falls into the dup-guard below.
-    console.log(
+    logger.info(
       `[updateAiAdsVideoResult] session=${sessionId} regenState=${record.regenState} ` +
         `isVoiceRegenerate=${isVoiceRegenerate} videoStatus=${videoStatus}`,
     );
     if (record.regenState === "processing") {
-      console.log(
+      logger.info(
         `[AI Ads] voice-regen completion DETECTED (ai-ads endpoint) session=${sessionId} ` +
           `regenType=${record.pendingRegen?.regenType} — appending version`,
       );
@@ -2650,7 +2650,7 @@ exports.updateAiAdsVideoResult = async (req, res) => {
     // a prior callback already settled or released the freeze. Running again
     // would NO_RECEIPT-fallthrough into deductCredits and double-charge.
     if (record.status === "completed" || record.status === "failed") {
-      console.warn(
+      logger.warn(
         `[credits] updateAiAdsVideoResult DUPLICATE session=${sessionId} ` +
           `prior_status=${record.status} new_videoStatus=${videoStatus} ` +
           `— skipping credit work`,

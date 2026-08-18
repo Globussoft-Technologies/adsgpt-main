@@ -19,7 +19,7 @@ const s3 = new S3Client({
 
 // Modular logger function
 const logger = (testingMode, ...args) => {
-  if (testingMode) console.log(...args);
+  if (testingMode) appLogger.info(...args);
 };
 
 // Ensure directories exist
