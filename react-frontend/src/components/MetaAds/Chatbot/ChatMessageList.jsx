@@ -34,7 +34,8 @@ const Markdown = ({ children }) => (
 // Small gradient avatar shared by the header and every assistant message.
 const BotAvatar = ({ size = 'h-6 w-6' }) => (
   <div
-    className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#15DCFF] to-[#6b72f8]`}
+    style={{ background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)' }}
+    className={`flex ${size} shrink-0 items-center justify-center rounded-full shadow-xs`}
   >
     <Bot className="h-3.5 w-3.5 text-white" />
   </div>
@@ -53,8 +54,12 @@ const TypingDots = () => (
     {[0, 1, 2].map((i) => (
       <span
         key={i}
-        className="h-1.5 w-1.5 animate-bounce rounded-full bg-gradient-to-br from-[#15DCFF] to-[#6b72f8]"
-        style={{ animationDelay: `${i * 0.12}s`, animationDuration: '0.9s' }}
+        className="h-1.5 w-1.5 animate-bounce rounded-full"
+        style={{
+          background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)',
+          animationDelay: `${i * 0.12}s`,
+          animationDuration: '0.9s',
+        }}
       />
     ))}
   </div>

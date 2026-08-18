@@ -198,14 +198,14 @@ const TagInput = ({
   return (
     <div ref={containerRef} className="space-y-2">
       <div
-        className="input-gradient-border flex min-h-9 cursor-text bg-gray-100 px-4 py-2 backdrop-blur-md transition 2xl:min-h-[49px] dark:bg-[#383838]/50"
+        className="adfactory-brand-tag-field input-gradient-border flex min-h-9 cursor-text bg-gray-100 px-4 py-2 backdrop-blur-md transition 2xl:min-h-[49px] dark:bg-[#383838]/50"
         onClick={focusInput}
       >
         <div className="flex flex-wrap items-center gap-2 p-2 2xl:p-2.5">
           {values.map((tag, index) => (
             <div
               key={index}
-              className="group flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-sm text-gray-900 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:hover:bg-white/30"
+              className="adfactory-brand-tag-chip group flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-sm text-gray-900 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:hover:bg-white/30"
             >
               <span className="text-xs break-all 2xl:text-sm">{tag}</span>
               <button
@@ -230,7 +230,7 @@ const TagInput = ({
             onBlur={handleBlur}
             placeholder={values.length === 0 ? placeholder : ''}
             disabled={disabled}
-            className="flex-1 bg-transparent pl-3 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 disabled:opacity-50 2xl:text-base placeholder:2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
+            className="adfactory-brand-tag-input flex-1 bg-transparent pl-3 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 disabled:opacity-50 2xl:text-base placeholder:2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
             style={{ minWidth: '120px' }}
           />
         </div>
@@ -242,7 +242,7 @@ const TagInput = ({
             {tagSuggestions?.map((item, idx) => (
               <div
                 key={idx}
-                className={`cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white ${
+                className={`adfactory-brand-suggestion-chip cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white ${
                   values.includes(item) ? 'cursor-not-allowed opacity-50' : ''
                 }`}
                 onClick={() => handleTagSuggestionClick(item)}
@@ -625,7 +625,7 @@ export default function BrandForm({ onComplete }) {
           const hasValues = hasFormValues(values);
 
           return (
-            <Form className="">
+            <Form className="adfactory-brand-form">
               <div className="max-h-[calc(100svh-280px)] space-y-4 overflow-y-auto p-2 sm:pr-6">
                 <div className="flex flex-col">
                   {/* BRAND NAME */}
@@ -636,8 +636,8 @@ export default function BrandForm({ onComplete }) {
                     <ResetButton disabled={isFormSubmitting} hasValues={hasValues} />
                   </div>
                   <div className="flex w-full items-center justify-between gap-1">
-                    <div className="input w-full">
-                      <BrandSelect />
+                    <div className="w-full">
+                      <BrandSelect surfaceVariant="neutral-form" />
                     </div>
                   </div>
                   <span className="mt-1 text-xs text-red-400 2xl:text-sm">
@@ -653,7 +653,7 @@ export default function BrandForm({ onComplete }) {
                   <Field
                     as="textarea"
                     name="brandDescription"
-                    className={`max-h-20 w-full resize-none rounded-[20px] border border-black/10 bg-gray-100 px-[18px] py-3 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:max-h-[91px] 2xl:text-base placeholder:2xl:text-base dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandDescription && touched.brandDescription ? 'border-red-500' : ''}`}
+                    className={`adfactory-brand-field max-h-20 w-full resize-none rounded-[20px] border border-black/10 bg-gray-100 px-[18px] py-3 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:max-h-[91px] 2xl:text-base placeholder:2xl:text-base dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandDescription && touched.brandDescription ? 'border-red-500' : ''}`}
                     placeholder="Briefly describe your brand including key features."
                     rows={3}
                     disabled={isFormSubmitting}
@@ -681,9 +681,9 @@ export default function BrandForm({ onComplete }) {
                       render={(helpers) => (
                         <>
                           <div className="input-gradient-border">
-                            <div className="backdrop-blur-100 flex h-9 w-full items-center justify-between rounded-full bg-gray-100 p-1 2xl:h-[49px] dark:bg-[#383838]/50">
+                            <div className="adfactory-brand-field backdrop-blur-100 flex h-9 w-full items-center justify-between rounded-full bg-gray-100 p-1 2xl:h-[49px] dark:bg-[#383838]/50">
                               <div
-                                className={`flex h-full cursor-pointer items-center gap-1 rounded-full bg-black/5 px-4 transition-colors hover:bg-black/10 dark:bg-white/20 dark:hover:bg-[#454545] ${
+                                className={`adfactory-brand-upload-button flex h-full cursor-pointer items-center gap-1 rounded-full bg-black/5 px-4 transition-colors hover:bg-black/10 dark:bg-white/20 dark:hover:bg-[#454545] ${
                                   Object.values(uploadingLogos).some(Boolean)
                                     ? 'cursor-not-allowed opacity-50'
                                     : ''
@@ -766,7 +766,7 @@ export default function BrandForm({ onComplete }) {
                     <div className="input-gradient-border">
                       <Field
                         name="category"
-                        className={`h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.category && touched.category ? 'border-red-500' : ''}`}
+                        className={`adfactory-brand-field h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.category && touched.category ? 'border-red-500' : ''}`}
                         placeholder="Enter Category"
                         disabled={isFormSubmitting}
                       />
@@ -824,7 +824,7 @@ export default function BrandForm({ onComplete }) {
                       <div className="input-gradient-border">
                         <Field
                           name="brandGuidelines.toneOfVoice"
-                          className={`h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandGuidelines?.toneOfVoice && touched.brandGuidelines?.toneOfVoice ? 'border-red-500' : ''}`}
+                          className={`adfactory-brand-field h-9 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.brandGuidelines?.toneOfVoice && touched.brandGuidelines?.toneOfVoice ? 'border-red-500' : ''}`}
                           placeholder="Choose your brand tone"
                           disabled={isFormSubmitting}
                         />
@@ -834,7 +834,7 @@ export default function BrandForm({ onComplete }) {
                           {toneOfVoiceTags?.map((item, idx) => (
                             <div
                               key={idx}
-                              className="cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white"
+                              className="adfactory-brand-suggestion-chip cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 2xl:text-base dark:bg-[#373637] dark:text-white"
                               onClick={() => {
                                 if (!isFormSubmitting) {
                                   setFieldValue('brandGuidelines.toneOfVoice', item);

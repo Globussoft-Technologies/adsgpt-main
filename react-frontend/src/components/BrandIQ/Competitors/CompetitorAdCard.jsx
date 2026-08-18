@@ -56,7 +56,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-white dark:border-none dark:bg-[#1a1a1a] text-gray-900 dark:text-white shadow-lg transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-xl"
+        className="group relative box-border w-full cursor-pointer overflow-hidden rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface)] text-[#24211D] shadow-[0_2px_12px_rgba(80,70,58,0.04)] transition-all duration-300 ease-out hover:scale-[1.015] hover:shadow-lg dark:border-none dark:bg-[#1a1a1a] dark:text-white"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={onClick}

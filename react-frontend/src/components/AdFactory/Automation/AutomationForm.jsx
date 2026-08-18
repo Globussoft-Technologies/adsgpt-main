@@ -640,7 +640,7 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
   }, [canActivate, saving, validationErrors, availableCredits, isEditMode]);
 
   return (
-    <div className="flex flex-col gap-2.5 2xl:gap-3">
+    <div className="adfactory-automation-form flex flex-col gap-2.5 2xl:gap-3">
       {/* Connection pills — render only for platforms that are actually
           selected on the campaign's Platforms node. A Meta-only campaign
           sees just the Meta pill; a Google-only one sees just Google; both
@@ -800,28 +800,30 @@ function WhereToPostSection({
       <div className="flex items-center gap-2.5">
         <span
           className={`flex size-6 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-            anyActive ? 'bg-emerald-400/20 text-emerald-400' : 'bg-white/10 text-[#cfcfd4]'
+            anyActive
+              ? 'bg-emerald-400/20 text-emerald-600 dark:text-emerald-400'
+              : 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-[#cfcfd4]'
           }`}
         >
           {anyActive ? '✓' : '4'}
         </span>
-        <h2 className="text-[15px] font-semibold text-white">Where to post</h2>
+        <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">Where to post</h2>
       </div>
 
       <div className="flex items-start gap-2.5 rounded-xl border border-[#15DCFF]/15 bg-[#15DCFF]/5 px-3 py-2.5">
         <Info className="mt-px size-3.5 shrink-0 text-[#15DCFF]" />
-        <p className="text-[12.5px] leading-relaxed text-[#b9d9e0]">
-          Turn on <b className="text-white">at least one</b> platform and choose its template.
-          Your ad runs <b className="text-white">only</b> on the platforms you turn on.
+        <p className="text-[12.5px] leading-relaxed text-cyan-800 dark:text-[#b9d9e0]">
+          Turn on <b className="text-gray-900 dark:text-white">at least one</b> platform and choose its template.
+          Your ad runs <b className="text-gray-900 dark:text-white">only</b> on the platforms you turn on.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#8a8a90]">
+      <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-gray-600 dark:text-[#8a8a90]">
         <span className="font-medium">Posting to:</span>
         {metaActive && <DestPill platform="meta" />}
         {googleActive && <DestPill platform="google" />}
         {!anyActive && (
-          <span className="text-xs italic text-[#6a6a70]">
+          <span className="text-xs italic text-gray-500 dark:text-[#6a6a70]">
             nothing yet — turn on a platform below
           </span>
         )}

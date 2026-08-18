@@ -1396,7 +1396,7 @@ export default function CreateCampaignWizardV2({
           exit={{ scale: 0.96, opacity: 0 }}
           transition={{ duration: 0.18, exit: { duration: 0.06 } }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-5xl max-h-[90vh] rounded-2xl border border-none bg-white shadow-2xl flex flex-col overflow-hidden dark:border-white/10 dark:bg-[#141414]"
+          className="light-glass-dialog relative w-full max-w-5xl max-h-[90vh] rounded-2xl border border-none bg-white shadow-2xl flex flex-col overflow-hidden dark:border-white/10 dark:bg-[#141414]"
         >
           {/* Close button — pinned to the top-right corner of the modal so
               it's always reachable regardless of the header content. */}

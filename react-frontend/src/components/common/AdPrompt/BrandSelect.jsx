@@ -86,7 +86,7 @@ export default function BrandSearch() {
 
           {/* Dropdown list */}
           {open && (
-            <CommandList className="backdrop-blur-100 absolute top-full z-10 mt-1 max-h-52 w-full overflow-auto rounded-xl border border-black/10 bg-white p-2 shadow-lg 2xl:max-h-60 dark:border-white/20 dark:bg-[#0D0D0D]/90">
+            <CommandList className="absolute top-full left-0 z-[9999] mt-1 max-h-52 w-full overflow-auto rounded-xl border border-black/10 bg-white p-2 shadow-xl 2xl:max-h-60 dark:border-white/20 dark:bg-[#0D0D0D]">
               <CommandEmpty className="text-zinc-600 dark:text-[#AFAFAF]">No brand found.</CommandEmpty>
               {filteredBrands.map((b) => (
                 <CommandItem

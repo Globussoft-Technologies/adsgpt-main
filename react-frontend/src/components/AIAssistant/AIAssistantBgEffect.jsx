@@ -13,9 +13,13 @@ import './AIAssistantBgEffect.css';
 // Assistant's right-side Creative Studio panel — that panel spans the full
 // page height, and at -40% essentially none of the blob's color was visible
 // behind it. Same size/blur/color as Ad Factory, just repositioned to be seen.
+// A third light-mode-only aura adds lower-page depth without changing the
+// original Ad Factory artwork or any dark-mode layer.
 const AIAssistantBgEffect = () => (
   <>
     <div className="aia-bg-blob fixed -top-[18%] right-[2vw] z-0 h-[19vw] w-[19vw] rounded-full opacity-50 blur-[100px] dark:opacity-100" />
+
+    <div className="aia-bg-bottom-aura" aria-hidden="true" />
 
     <img
       src={bottomEffectImage}

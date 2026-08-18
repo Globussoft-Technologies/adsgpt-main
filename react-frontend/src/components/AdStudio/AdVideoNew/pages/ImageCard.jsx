@@ -479,7 +479,7 @@ export default function ImageCard({
         </div>
       )}
 
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f]">
+    <div className="my-space-media-card group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f]">
       {enableInfo && <InfoTooltip />}
 
       {/* Selection Checkbox */}

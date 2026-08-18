@@ -2245,7 +2245,7 @@ export default function CreateCampaignWizard({ open, onClose, account, onCreated
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 12 }}
           transition={{ duration: 0.18 }}
-          className="relative flex max-h-[98vh] 2xl:max-h-[92vh] w-full max-w-3xl scale-80 min-w-[370px] flex-col overflow-hidden rounded-2xl border border-none bg-white dark:border-white/10 dark:bg-[#141414] shadow-2xl 2xl:max-w-5xl 2xl:scale-100"
+          className="light-glass-dialog relative flex max-h-[98vh] 2xl:max-h-[92vh] w-full max-w-3xl scale-80 min-w-[370px] flex-col overflow-hidden rounded-2xl border border-none bg-white dark:border-white/10 dark:bg-[#141414] shadow-2xl 2xl:max-w-5xl 2xl:scale-100"
         >
           {/* header — surfaces destination account prominently so users
               never confuse which Meta account they're publishing into. */}

@@ -341,7 +341,7 @@ const AutopilotOverview = ({
       {/* Activity over time + Top firing rules */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <Section>
+          <Section className="!bg-[var(--ws-surface)] dark:!bg-[#14181D]">
             <ChartHeader
               title="Activity over time"
               subtitle="Daily actions, stacked by type"
@@ -359,7 +359,7 @@ const AutopilotOverview = ({
           </Section>
         </div>
         <div className="lg:col-span-2">
-          <Section className="h-full">
+          <Section className="h-full !bg-[var(--ws-surface)] dark:!bg-[#14181D]">
             <div className="flex h-full flex-col">
               <ChartHeader
                 title="Top firing rules"
@@ -374,7 +374,7 @@ const AutopilotOverview = ({
       </div>
 
       {/* Per-account breakdown */}
-      <Section className="overflow-hidden p-0!">
+      <Section className="overflow-hidden !bg-[var(--ws-surface)] p-0! dark:!bg-[#14181D]">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-white/10">
           <div>
             <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">
@@ -399,7 +399,7 @@ const AutopilotOverview = ({
       </Section>
 
       {/* Run my rules now */}
-      <Section className="p-4!">
+      <Section className="!bg-[var(--ws-surface)] p-4! dark:!bg-[#14181D]">
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">Run my rules now</h3>
@@ -478,14 +478,14 @@ const SummaryHeader = ({ accountCount, from, to, onDateChange, loading }) => (
 const KpiCard = ({ icon: Icon, tone = 'cyan', label, value, sub }) => {
   const toneCls =
     tone === 'emerald'
-      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10'
+      ? 'text-emerald-700 bg-emerald-500/15 dark:text-emerald-400 dark:bg-emerald-400/15'
       : tone === 'lime'
-        ? 'text-lime-300 bg-lime-400/10'
+        ? 'text-emerald-700 bg-emerald-500/15 dark:text-emerald-400 dark:bg-emerald-400/15'
         : tone === 'indigo'
-          ? 'text-indigo-300 bg-indigo-400/10'
-          : 'text-[#15DCFF] bg-[#15DCFF]/10';
+          ? 'text-indigo-700 bg-indigo-500/15 dark:text-indigo-300 dark:bg-indigo-400/15'
+          : 'text-[#0082FB] bg-[#0082FB]/15 dark:text-[#15DCFF] dark:bg-[#15DCFF]/15';
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-colors hover:border-gray-300 2xl:p-5 dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15">
+    <div className="rounded-2xl workspace-card p-4 transition-colors hover:border-gray-300 2xl:p-5 dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15">
       <div className="flex items-start justify-between gap-2">
         <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
           {label}
@@ -509,48 +509,33 @@ const DeltaChip = ({ sign, pct }) => {
     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
     : isDown
       ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-      : 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55';
+      : 'border-0 bg-[#e2e6ed] text-gray-800 dark:bg-white/10 dark:text-white/85';
   const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-10 font-bold 2xl:text-[11px] ${cls}`}
+        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-10 font-bold 2xl:text-[11px] ${cls}`}
       >
         {Icon && <Icon className="h-3 w-3" />}
         {Math.abs(pct)}%
       </span>
-      <span className="text-gray-500 2xl:text-xs dark:text-white/70">vs prior period</span>
+      <span className="text-[11px] font-semibold text-gray-700 dark:text-white/85">vs prior period</span>
     </span>
   );
 };
 
 // ─── status cards ──────────────────────────────────────────────────────────
 const StatusCard = ({ label, value, sub }) => (
-  <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl 2xl:p-5 dark:border-white/10 dark:bg-[#14181D]">
-    <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
+  <div className="rounded-2xl border-0 bg-[var(--ws-surface)] p-4 shadow-xs dark:bg-[#14181D] 2xl:p-5">
+    <div className="text-[11px] font-bold tracking-wider text-gray-800 uppercase dark:text-white/90">
       {label}
     </div>
     <div className="mt-1.5 text-base font-bold text-gray-900 2xl:text-[17px] dark:text-white">{value}</div>
-    <div className="mt-1.5 truncate text-10 text-gray-500 2xl:text-xs dark:text-white/70">{sub}</div>
+    <div className="mt-1.5 truncate text-[11px] font-medium text-gray-700 dark:text-white/85">{sub}</div>
   </div>
 );
 
 // Next scheduled run.
-//
-// Previously hardcoded "next run = next top of the hour", which only
-// holds if AUTOPILOT_CRON env is `0 * * * *`. Production uses other
-// schedules (e.g. `30 * * * *`), so the prediction was consistently
-// wrong by whatever the minute-offset is.
-//
-// Now we derive from the most recent action-log row's `runAt`:
-// next_run = lastRunAt + 1h, recomputed when `lastRunAt` rolls forward.
-// This adapts to whatever hourly minute-offset the cron is configured
-// for, with no backend changes. Limitation: only correct for HOURLY
-// cron patterns — if cadence changes (e.g. every-15min), expose
-// AUTOPILOT_CRON via /config and parse it instead.
-//
-// Fallback: when there's no last-run yet (fresh tenant, no actions
-// recorded), fall back to the next top-of-hour as a best-effort guess.
 const CRON_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const NextRunCard = ({ lastRunAt }) => {
   const [now, setNow] = useState(() => new Date());
@@ -559,10 +544,6 @@ const NextRunCard = ({ lastRunAt }) => {
     return () => clearInterval(t);
   }, []);
 
-  // Compute next run. If a last-run timestamp exists, roll forward by
-  // CRON_INTERVAL_MS until we land in the future — guards against
-  // showing a stale "next run was 3h ago" if the dashboard sat open
-  // through several cron ticks without auto-refresh.
   let next;
   if (lastRunAt) {
     const last = new Date(lastRunAt);
@@ -574,8 +555,6 @@ const NextRunCard = ({ lastRunAt }) => {
     }
   }
   if (!next) {
-    // No last-run reference — fall back to next top-of-hour. Wrong if
-    // the cron is offset, but we have nothing better to anchor on.
     next = new Date(now);
     next.setHours(now.getHours() + 1, 0, 0, 0);
   }
@@ -586,15 +565,15 @@ const NextRunCard = ({ lastRunAt }) => {
     minute: '2-digit',
   });
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl 2xl:p-5 dark:border-white/10 dark:bg-[#14181D]">
-      <div className="text-10 font-bold tracking-wider text-gray-500 uppercase 2xl:text-[11px] dark:text-white/55">
+    <div className="rounded-2xl border-0 bg-[var(--ws-surface)] p-4 shadow-xs dark:bg-[#14181D] 2xl:p-5">
+      <div className="text-[11px] font-bold tracking-wider text-gray-800 uppercase dark:text-white/90">
         Next scheduled run
       </div>
       <div className="mt-1.5 flex items-center gap-2 text-base font-bold text-gray-900 2xl:text-[17px] dark:text-white">
-        <Clock className="h-3.5 w-3.5 text-[#15DCFF] 2xl:h-4 2xl:w-4" />
+        <Clock className="h-3.5 w-3.5 text-[#0082FB] dark:text-[#15DCFF] 2xl:h-4 2xl:w-4" />
         {timeLabel}
       </div>
-      <div className="mt-1.5 text-10 text-gray-500 2xl:text-xs dark:text-white/70">
+      <div className="mt-1.5 text-[11px] font-medium text-gray-700 dark:text-white/85">
         in {minsUntil} min · every hour
       </div>
     </div>
@@ -606,12 +585,12 @@ const ChartHeader = ({ title, subtitle, legend }) => (
   <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
     <div>
       <h3 className="text-sm font-bold text-gray-900 2xl:text-15 dark:text-white">{title}</h3>
-      {subtitle && <p className="mt-0.5 text-xs text-gray-500 2xl:text-13 dark:text-white/70">{subtitle}</p>}
+      {subtitle && <p className="mt-0.5 text-xs font-medium text-gray-700 2xl:text-13 dark:text-white/85">{subtitle}</p>}
     </div>
     {legend && (
       <div className="flex flex-wrap gap-3">
         {legend.map((l) => (
-          <div key={l.label} className="flex items-center gap-1.5 text-10 text-gray-500 2xl:text-xs dark:text-white/70">
+          <div key={l.label} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-800 2xl:text-xs dark:text-white/85">
             <span className={`h-2 w-2 rounded-full ${l.color}`} />
             {l.label}
           </div>
@@ -763,7 +742,7 @@ const RULE_BAR_TONES = [
 const TopRulesList = ({ rules }) => {
   if (!rules.length) {
     return (
-      <div className="flex h-full min-h-45 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 p-3 text-center text-xs text-gray-500 2xl:min-h-50 2xl:text-13 dark:border-white/10 dark:bg-white/3 dark:text-white/55">
+      <div className="flex h-full min-h-45 items-center justify-center rounded-xl border border-gray-200 bg-[var(--ws-surface)] p-3 text-center text-xs text-gray-500 2xl:min-h-50 2xl:text-13 dark:border-white/10 dark:bg-white/3 dark:text-white/55">
         No rules have fired in this window.
       </div>
     );
@@ -838,7 +817,7 @@ const PerAccountTable = ({
   }
   if (!accounts.length) {
     return (
-      <div className="p-8 text-center text-xs text-gray-500 2xl:text-13 dark:text-white/70">
+      <div className="p-8 text-center text-xs font-medium text-gray-700 2xl:text-13 dark:text-white/80">
         No actions in this window. Run a dry-run below to populate.
       </div>
     );
@@ -847,7 +826,7 @@ const PerAccountTable = ({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] text-xs 2xl:text-13">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-100 text-left dark:border-white/10 dark:bg-white/2">
+          <tr className="border-0 bg-[#e2e6ed] text-left dark:bg-white/10">
             <Th>Account</Th>
             <Th>Total</Th>
             <Th tone="rose">Pause</Th>
@@ -858,9 +837,6 @@ const PerAccountTable = ({
         </thead>
         <tbody>
           {(() => {
-            // Max total across accounts — TOTAL column's progress bar
-            // scales relative to this so the eye can compare the heaviest
-            // vs lightest account at a glance.
             const maxTotal = Math.max(1, ...accounts.map((a) => a.total || 0));
             return accounts.map((a) => {
               const total = a.total || 0;
@@ -871,13 +847,13 @@ const PerAccountTable = ({
               return (
                 <tr
                   key={a.adAccountId}
-                  className="border-b border-gray-200 align-top last:border-b-0 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/3"
+                  className="border-b border-gray-200/50 align-top last:border-b-0 hover:bg-[#eaf0f6] dark:border-white/5 dark:hover:bg-white/5 transition-colors"
                 >
                 <td className="px-3 py-3">
                   <div className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
                     {a.adAccountName || '(unnamed)'}
                   </div>
-                  <div className="font-mono text-10 text-gray-500 2xl:text-[11px] dark:text-white/55">
+                  <div className="font-mono text-[11px] font-medium text-gray-700 2xl:text-[11px] dark:text-white/80">
                     {a.adAccountId}
                   </div>
                 </td>
@@ -889,10 +865,10 @@ const PerAccountTable = ({
                 />
                 <CountCell value={pause} pct={pct(pause)} tone="rose" />
                 <CountCell value={alert} pct={pct(alert)} tone="cyan" />
-                <td className="px-3 py-3 text-xs whitespace-nowrap text-gray-600 2xl:text-13 dark:text-white/85">
+                <td className="px-3 py-3 text-xs whitespace-nowrap text-gray-700 2xl:text-13 dark:text-white/85">
                   {enrich.lastAt ? (
                     <>
-                      <div className="font-medium">
+                      <div className="font-semibold">
                         {new Date(enrich.lastAt).toLocaleString(undefined, {
                           month: 'short',
                           day: 'numeric',
@@ -900,7 +876,7 @@ const PerAccountTable = ({
                           minute: '2-digit',
                         })}
                       </div>
-                      <div className="text-10 text-gray-500 2xl:text-[11px] dark:text-white/60">
+                      <div className="text-[11px] font-medium text-gray-700 2xl:text-[11px] dark:text-white/75">
                         {timeAgo(enrich.lastAt)}
                       </div>
                     </>
@@ -930,15 +906,15 @@ const PerAccountTable = ({
 const Th = ({ children, tone }) => {
   const toneCls =
     tone === 'rose'
-      ? 'text-rose-300'
+      ? 'text-rose-600 dark:text-rose-300'
       : tone === 'cyan'
-        ? 'text-cyan-300'
+        ? 'text-cyan-700 dark:text-cyan-300'
         : tone === 'emerald'
-          ? 'text-emerald-300'
-          : 'text-gray-500 dark:text-white/60';
+          ? 'text-emerald-700 dark:text-emerald-300'
+          : 'text-gray-800 dark:text-white/90';
   return (
     <th
-      className={`px-3 py-2.5 text-10 font-bold tracking-wider uppercase 2xl:py-3 2xl:text-[11px] ${toneCls}`}
+      className={`px-3 py-2.5 text-[11px] font-bold tracking-wider uppercase 2xl:py-3 ${toneCls}`}
     >
       {children}
     </th>
@@ -948,11 +924,11 @@ const Th = ({ children, tone }) => {
 const CountCell = ({ value, pct, tone = 'white', hidePct = false }) => {
   const accent =
     tone === 'rose'
-      ? { fg: 'text-rose-300', bar: 'bg-rose-400' }
+      ? { fg: 'text-rose-600 dark:text-rose-300', bar: 'bg-rose-500' }
       : tone === 'cyan'
-        ? { fg: 'text-cyan-300', bar: 'bg-cyan-400' }
+        ? { fg: 'text-cyan-700 dark:text-cyan-300', bar: 'bg-cyan-500' }
         : tone === 'emerald'
-          ? { fg: 'text-emerald-300', bar: 'bg-emerald-400' }
+          ? { fg: 'text-emerald-700 dark:text-emerald-300', bar: 'bg-emerald-500' }
           : { fg: 'text-gray-900 dark:text-white', bar: 'bg-gray-400 dark:bg-white/60' };
   const showBar = pct != null && pct > 0;
   return (

@@ -278,7 +278,7 @@ function LevelPills({ level, campaign, adSet }) {
 
 function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/[0.10] dark:bg-[#141414]">
+    <div className="overflow-hidden rounded-2xl workspace-card dark:border-white/[0.10] dark:bg-[#141414]">
       {toolbar}
       <div className="scrollbar-thin overflow-x-auto">
         <table className="w-full border-collapse">
@@ -432,7 +432,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
         <div className="flex min-w-0 items-center gap-2">
@@ -486,7 +486,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                 type="button"
                 onClick={onNewCampaign}
                 disabled={!adAccountId || atLimit}
-                className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs dark:bg-white dark:text-black"
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#59D2EA] to-[#7C6BEA] px-3 py-1.5 text-[11px] font-semibold text-[#17212B] ring-1 ring-black/8 transition-all hover:brightness-[0.97] disabled:cursor-not-allowed disabled:opacity-50 dark:from-[#159BB8] dark:to-[#6654D2] dark:text-white dark:ring-white/15 dark:hover:brightness-110 2xl:text-xs"
               >
                 <Plus className="h-3 w-3" />
                 New Campaign
@@ -536,10 +536,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={colCount} className="py-14"><Spinner /></td></tr>
+              <tr className="meta-ads-table-static-row"><td colSpan={colCount} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={colCount} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
+              <tr className="meta-ads-table-static-row"><td colSpan={colCount} className="py-14"><EmptyState message={query ? `No campaigns match "${query}"` : 'No campaigns found for this account'} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const status  = getStatus(c);
@@ -715,7 +715,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
                 <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -965,7 +965,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ad sets in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
@@ -1180,7 +1180,7 @@ function AdDrawer({ ad, onClose }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#181818]"
+      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#181818]"
     >
       {/* ── header ── */}
       <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/12">
@@ -1581,7 +1581,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       {/* main table */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
           <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
             Ads in <span className="text-gray-900 dark:text-white">{adSet.name}</span>

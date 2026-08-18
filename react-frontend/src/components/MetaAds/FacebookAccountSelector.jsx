@@ -30,6 +30,11 @@ export default function FacebookAccountSelector({
   const onChangeRef = useRef(onChange);
   const onLoadingChangeRef = useRef(onLoadingChange);
   const preferredFacebookIdRef = useRef(preferredFacebookId);
+  const accountsRef = useRef(accounts);
+
+  useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
@@ -44,12 +49,16 @@ export default function FacebookAccountSelector({
   }, [loading]);
 
   const select = useCallback(
-    (facebookId, nextAccounts = []) => {
+    (facebookId, nextAccounts) => {
       const id = facebookId ? String(facebookId) : '';
       setSelectedId(id);
-      setSelectedFacebookId(userId, id);
+      if (userId) {
+        setSelectedFacebookId(userId, id);
+      }
+      const accountList =
+        nextAccounts && nextAccounts.length > 0 ? nextAccounts : accountsRef.current;
       onChangeRef.current?.(
-        nextAccounts.find((account) => account.facebookId === id) || null,
+        accountList.find((account) => account.facebookId === id) || null,
       );
     },
     [userId],
@@ -122,7 +131,11 @@ export default function FacebookAccountSelector({
 
   const connect = () => {
     if (!userId) return;
-    try { GA4Events.accountConnectionStarted('meta'); } catch (e) {}
+    try {
+      GA4Events?.accountConnectionStarted?.('meta');
+    } catch {
+      // ignore analytics tracking failures
+    }
     const feUrl = window.location.href;
     window.location.href = `${BASE_URL}/api/auth/facebook?userId=${encodeURIComponent(userId)}&feUrl=${encodeURIComponent(feUrl)}`;
   };
@@ -130,7 +143,7 @@ export default function FacebookAccountSelector({
   if (variant === 'card') {
     if (loading) {
       return (
-        <div className={`flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-3 text-xs text-gray-500 dark:border-white/10 dark:bg-[#13171A] dark:text-white/60 ${className}`}>
+        <div className={`flex items-center gap-2 rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-3 text-xs text-[#7A7369] shadow-xs dark:border-white/10 dark:bg-[#13171A] dark:text-white/60 ${className}`}>
           <Loader2 className="h-4 w-4 animate-spin text-[#1877F2]" />
           <span>Loading Facebook accounts…</span>
         </div>
@@ -140,8 +153,8 @@ export default function FacebookAccountSelector({
     if (accounts.length === 0) {
       return (
         <div className={`flex items-center gap-2 self-start rounded-full border border-amber-500/30 bg-amber-500/10 py-1 pr-1 pl-3 ${className}`}>
-          <AlertTriangle className="size-3.5 shrink-0 text-amber-300" />
-          <span className="text-xs text-white">Meta not connected — required to activate</span>
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
+          <span className="text-xs font-medium text-amber-900 dark:text-white">Meta not connected — required to activate</span>
           <button
             type="button"
             onClick={connect}
@@ -156,7 +169,7 @@ export default function FacebookAccountSelector({
     }
 
     return (
-      <div className={`w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-2.5 dark:border-white/10 dark:bg-[#13171A] ${className}`}>
+      <div className={`w-full max-w-sm rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-2.5 shadow-xs dark:border-white/10 dark:bg-[#13171A] ${className}`}>
         <div className="max-h-60 overflow-y-auto space-y-1.5 pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
           {accounts.map((account) => {
             const active = account.facebookId === selectedId;
@@ -166,33 +179,33 @@ export default function FacebookAccountSelector({
                 onClick={() => !disabled && select(account.facebookId, accounts)}
                 className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-all cursor-pointer ${
                   active
-                    ? 'bg-gray-100 dark:bg-[#1C2228] border border-transparent dark:border-white/5'
-                    : 'hover:bg-gray-50 dark:hover:bg-white/5 opacity-80'
+                    ? 'bg-[#E5DFD5] dark:bg-[#1C2228] border border-transparent dark:border-white/5'
+                    : 'hover:bg-[#EDE7DF] dark:hover:bg-white/5 opacity-80'
                 }`}
               >
                 <div className="min-w-0 flex-1">
                   <p
                     className={`truncate text-xs font-semibold ${
-                      active ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                      active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
                     }`}
                   >
                     {account.name}
                   </p>
-                  <p className="truncate text-[11px] text-gray-500 dark:text-white/55 mt-0.5">
+                  <p className="truncate text-[11px] text-[#7A7369] dark:text-white/55 mt-0.5">
                     {account.email || `Facebook ID: ${account.facebookId}`}
                   </p>
                 </div>
-                {active && <Check className="h-4 w-4 shrink-0 text-[#15DCFF]" />}
+                {active && <Check className="h-4 w-4 shrink-0 text-[#0082FB]" />}
               </div>
             );
           })}
         </div>
-        <div className="mt-2 border-t border-gray-200 pt-2 dark:border-white/10">
+        <div className="mt-2 border-t border-[#DDD7CD] pt-2 dark:border-white/10">
           <button
             type="button"
             onClick={connect}
             disabled={disabled}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-gray-100 dark:text-[#65A4FF] dark:hover:bg-white/5 disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EDE7DF] dark:text-[#65A4FF] dark:hover:bg-white/5 disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Facebook account
@@ -229,7 +242,7 @@ export default function FacebookAccountSelector({
             aria-expanded={open}
             onClick={() => !disabled && !loading && accounts.length > 0 && setOpen((value) => !value)}
             disabled={disabled || loading || accounts.length === 0}
-            className="flex h-9 min-w-48 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:cursor-default disabled:opacity-70 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+            className="flex h-9 min-w-48 items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 text-xs text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] disabled:cursor-default disabled:opacity-70 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
           >
             {loading ? (
               <>
@@ -263,32 +276,32 @@ export default function FacebookAccountSelector({
                     select(account.facebookId, accounts);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
-                    active ? 'bg-gray-100 dark:bg-white/5' : ''
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-[#EDE7DF] dark:hover:bg-white/5 ${
+                    active ? 'bg-[#E5DFD5] dark:bg-white/5' : ''
                   }`}
                 >
                   <div className="min-w-0">
                     <p
                       className={`truncate text-xs font-medium ${
-                        active ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                        active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
                       }`}
                     >
                       {account.name}
                     </p>
-                    <p className="truncate text-10 text-gray-500 dark:text-white/55">
+                    <p className="truncate text-[11px] text-[#7A7369] dark:text-white/55">
                       {account.email || `Facebook ID: ${account.facebookId}`}
                     </p>
                   </div>
-                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />}
+                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[#0082FB]" />}
                 </button>
               );
             })}
           </div>
-          <div className="mt-1 border-t border-gray-200 pt-1 dark:border-white/10">
+          <div className="mt-1 border-t border-[#DDD7CD] pt-1 dark:border-white/10">
             <button
               type="button"
               onClick={connect}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-gray-100 dark:text-[#65A4FF] dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EDE7DF] dark:text-[#65A4FF] dark:hover:bg-white/5"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Facebook account
@@ -297,7 +310,7 @@ export default function FacebookAccountSelector({
               <Link
                 to="/profile"
                 onClick={() => setOpen(false)}
-                className="mt-1 flex w-full items-center gap-2 rounded-xl bg-red-500/10 px-3 py-2.5 text-left text-xs font-medium text-red-400 transition-colors hover:bg-red-500/15"
+                className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#7A7369] transition-colors hover:bg-[#EDE7DF] hover:text-[#24211D] dark:text-white/70 dark:hover:bg-white/5 dark:hover:text-white"
               >
                 <Settings2 className="h-3.5 w-3.5" />
                 Manage accounts

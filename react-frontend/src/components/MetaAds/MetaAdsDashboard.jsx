@@ -51,6 +51,7 @@ import LeadsTab from './LeadsTab';
 import MetaAdsChatWidget from './Chatbot/MetaAdsChatWidget';
 import FacebookAccountSelector from './FacebookAccountSelector';
 import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
+import ThemeToggle from '@/components/layout/header/ThemeToggle';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import { IS_META_ADS_CHAT_ENABLED, isAdsChatAllowedForEmail } from '@/utils/featureFlags';
 import { GA4Events } from '@/utils/ga4';
@@ -516,23 +517,24 @@ export default function MetaAdsDashboard() {
         }}
       />
       {/* ambient glow */}
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-96 -translate-x-1/2 rounded-full bg-gray-200 blur-3xl dark:bg-white/3" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 hidden h-64 w-96 -translate-x-1/2 rounded-full blur-3xl dark:block dark:bg-white/3" />
 
       {/* ── header ─────────────────────────────────────────────────────────── */}
-      <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 pr-14 2xl:px-6 2xl:py-4 2xl:pr-16 dark:border-white/[0.06]">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/20">
-            <FaMeta className="h-5 w-5 text-[#0082FB]" />
-          </div>
-          <div className="flex flex-col gap-3">
+      <div className="ads-operations-divider relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] px-5 py-3 pr-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
+              <FaMeta className="h-7 w-7 text-[#0082FB] 2xl:h-7.5 2xl:w-7.5" />
+            </div>
             <AdsManagerModeSwitcher
               activeMode="manager"
               platform="Meta"
               autopilotAvailable
-              appearance="tabs"
             />
-            <p className="text-[15px] text-gray-500 dark:text-[#BEBEBE]">Manage · Analyse · Optimise</p>
           </div>
+          <p className="px-1 text-xs font-medium text-[#7A7369] dark:text-[#BEBEBE]">
+            Manage · Analyse · Optimise
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -563,7 +565,7 @@ export default function MetaAdsDashboard() {
             trigger={
               <button
                 onClick={() => setAccountOpen((p) => !p)}
-                className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+                className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-2 text-xs text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
               >
                 {loadingAccounts ? (
                   <Loader2 className="h-3 w-3 animate-spin text-gray-500 dark:text-[#BEBEBE]" />
@@ -638,11 +640,11 @@ export default function MetaAdsDashboard() {
               trigger={
                 <button
                   onClick={() => setDateOpen((p) => !p)}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+                  className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-2 text-xs text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
                 >
-                  <Calendar className="h-3 w-3 text-gray-900 dark:text-white" />
+                  <Calendar className="h-3 w-3 text-[#24211D] dark:text-white" />
                   <span className="font-medium">{formatDateRangeLabel(dateRange)}</span>
-                  <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
+                  <ChevronDown className="h-3 w-3 text-[#7A7369] dark:text-[#BEBEBE]" />
                 </button>
               }
             >
@@ -677,12 +679,15 @@ export default function MetaAdsDashboard() {
               </div>
             </Dropdown>
           )}
+          <div className="ml-1 2xl:ml-2">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
       {/* ── account summary strip ──────────────────────────────────────────── */}
       {selectedAccount && !loadingAccounts && (
-        <div className="relative z-30 flex flex-shrink-0 flex-wrap items-center justify-between gap-5 border-b border-gray-200 px-5 py-2 2xl:px-6 dark:border-white/[0.04]">
+        <div className="ads-operations-divider relative z-30 flex flex-shrink-0 flex-wrap items-center justify-between gap-5 border-b border-gray-200 px-5 py-2 2xl:px-6 dark:border-white/[0.04]">
           {[
             {
               label: 'Account',
@@ -732,7 +737,7 @@ export default function MetaAdsDashboard() {
       )}
 
       {/* ── tabs ──────────────────────────────────────────────────────────── */}
-      <div className="relative z-40 flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-5 2xl:px-6 dark:border-white/6">
+      <div className="ads-operations-divider relative z-40 flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-5 2xl:px-6 dark:border-white/6">
         <div className="flex items-center gap-0.5">
           {TABS.map((tab) => {
             const { id, label } = tab;
@@ -828,7 +833,7 @@ export default function MetaAdsDashboard() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setMetricsPickerOpen(true)}
-                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
+                    className="flex items-center gap-1.5 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-1.5 text-10 font-medium text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] hover:text-[#24211D] dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
                   >
                     <SlidersHorizontal className="h-3 w-3" />
                     Customize metrics
@@ -836,7 +841,7 @@ export default function MetaAdsDashboard() {
                   <button
                     onClick={() => loadAnalytics({ refresh: true })}
                     disabled={loadingInsights}
-                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
+                    className="flex items-center gap-1.5 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-1.5 text-10 font-medium text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] hover:text-[#24211D] disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
                   >
                     <RefreshCw className={`h-3 w-3 ${loadingInsights ? 'animate-spin' : ''}`} />
                     Refresh
@@ -963,7 +968,7 @@ export default function MetaAdsDashboard() {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              className="w-full max-w-sm rounded-2xl border border-[#DDD7CD] bg-[#F7F4EE] p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
                 <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />

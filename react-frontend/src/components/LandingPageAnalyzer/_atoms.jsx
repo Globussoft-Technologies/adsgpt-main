@@ -6,7 +6,7 @@ import { prioBand } from './helpers';
 export const Card = ({ children, className = '', style }) => (
   <div
     style={style}
-    className={`rounded-[20px] border border-gray-200 bg-white dark:border-white/10 dark:bg-gradient-to-b dark:from-[#16181f] dark:to-[#111217] ${className}`}
+    className={`rounded-[20px] workspace-card dark:border-white/10 dark:bg-gradient-to-b dark:from-[#16181f] dark:to-[#111217] ${className}`}
   >
     {children}
   </div>

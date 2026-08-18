@@ -98,7 +98,8 @@ const MetaAdsChatWidget = ({
               GA4Events.adsManagerUsingChatbot({ source: 'chat_widget_launcher', success: true });
             }}
             aria-label="Open Ads Chat"
-            className="fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] text-white shadow-lg shadow-[#6b72f8]/30 transition-transform hover:scale-105"
+            style={{ background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)' }}
+            className="fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg shadow-[#6b72f8]/30 transition-transform hover:scale-105"
           >
             <Bot className="h-6 w-6" />
           </motion.button>

@@ -9,6 +9,7 @@ const CreativeFilterDropdown = ({
   onChange,
   onClear,
   contentClassName = '',
+  triggerClassName = '',
 }) => {
   // Find the selected option from options array
   const selectedOption = options.find((opt) => opt.value === value?.value);
@@ -16,23 +17,21 @@ const CreativeFilterDropdown = ({
   return (
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
-        className={`items-center gap-0 rounded-[50px] border-none bg-transparent bg-none !p-0 text-[9px] text-zinc-700 shadow-none transition-all duration-200 ease-in hover:bg-transparent dark:border-none dark:text-[#AFAFAF] [&>svg]:hidden`}
+        className={`adstudio-creative-filter-trigger !h-auto items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-colors 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white [&>svg]:hidden ${triggerClassName}`}
       >
-        <div className="backdrop-blur-100 relative flex items-center gap-2 rounded-full border border-black/10 bg-white/70 p-2 text-xs text-zinc-700 transition-colors hover:text-black has-[>svg]:px-4 md:px-3 md:py-1.5 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white">
-          <span className="flex items-center gap-1.5 capitalize 2xl:gap-2">
-            {/* Show selected icon (as React element), else ListFilter */}
-            {selectedOption?.Icon ? (
-              selectedOption.Icon
-            ) : (
-              <ListFilter className="text-zinc-700 dark:text-[#afafaf]" />
-            )}
-            <span className="hidden !text-[9px] font-light text-zinc-700 md:block 2xl:!text-sm dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
-              {selectedLabel}
-            </span>
+        <span className="flex items-center gap-1.5 capitalize 2xl:gap-2">
+          {/* Show selected icon (as React element), else ListFilter */}
+          {selectedOption?.Icon ? (
+            selectedOption.Icon
+          ) : (
+            <ListFilter className="text-zinc-700 dark:text-[#afafaf]" />
+          )}
+          <span className="hidden text-xs font-medium text-[#24211D] md:block 2xl:text-sm dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+            {selectedLabel}
           </span>
-        </div>
+        </span>
       </SelectTrigger>
-      <SelectContent className={`mt-2 min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}>
+      <SelectContent className={`mt-2 min-w-fit border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}>
         {label && (
           <div className="text-10 flex items-center justify-between px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">
             {label}
@@ -54,8 +53,10 @@ const CreativeFilterDropdown = ({
             <SelectItem
               key={optionValue}
               value={optionValue}
-              className={`group cursor-pointer text-[10px] text-zinc-800 2xl:text-xs hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 data-highlighted:bg-zinc-100 data-highlighted:text-zinc-900 [&_svg]:text-current! dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:hover:text-white dark:focus:bg-[#0D0D0D]/50 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/50 dark:data-highlighted:text-white ${
-                value?.value === optionValue ? 'bg-zinc-100 dark:bg-[#0D0D0D]/50' : 'bg-transparent'
+              className={`group cursor-pointer text-[10px] text-zinc-800 2xl:text-xs hover:bg-[var(--ws-surface-header)] hover:text-zinc-900 focus:bg-[var(--ws-surface-header)] focus:text-zinc-900 data-highlighted:bg-[var(--ws-surface-header)] data-highlighted:text-zinc-900 [&_svg]:text-current! dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:hover:text-white dark:focus:bg-[#0D0D0D]/50 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/50 dark:data-highlighted:text-white ${
+                value?.value === optionValue
+                  ? 'bg-[var(--ws-surface-header)] dark:bg-[#0D0D0D]/50'
+                  : 'bg-transparent'
               }`}
               >
               {Icon}

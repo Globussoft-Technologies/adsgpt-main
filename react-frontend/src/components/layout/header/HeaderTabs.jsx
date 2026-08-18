@@ -44,7 +44,7 @@ const HeaderTabs = ({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0, opacity: 0 }}
           transition={{ duration: 0.1, ease: 'easeOut' }}
-          className="backdrop-blur-80 rounded-10 fixed top-18 right-4 flex flex-col gap-2 border border-black/10 bg-white p-4 lg:relative lg:inset-0 lg:flex-row lg:items-center lg:gap-0 lg:border-none lg:bg-transparent lg:p-1 dark:border-slate-600/40 dark:bg-[#0D0D0D]"
+          className="brand-iq-tabs fixed top-18 right-4 z-50 flex flex-col gap-2 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md lg:relative lg:inset-0 lg:flex-row lg:items-center lg:gap-0 dark:border-transparent dark:bg-[#0D0D0D]"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -64,18 +64,18 @@ const HeaderTabs = ({
                     onTabChange(tab.id);
                   }
                 }}
-                className={`2xl:text-13 relative flex items-center rounded-full px-[11px] py-[5px] text-[10px] font-medium whitespace-nowrap transition 2xl:px-4 2xl:py-[7px] ${
+                className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 ${
                   isActive
-                    ? 'text-zinc-900 dark:text-white'
-                    : 'text-zinc-500 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
+                    ? 'font-bold text-zinc-900 dark:text-white'
+                    : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
                 }`}
               >
                 <div
                   id={`tour_header_${tab.label.replace(/\s+/g, '-').toLocaleLowerCase()}_tabs`}
-                  className="flex gap-1 2xl:gap-2"
+                  className="flex items-center gap-1.5 2xl:gap-2"
                 >
-                  {Icon && <Icon className="h-[13px] w-[13px] 2xl:h-5 2xl:w-5" />}
-                  {tab.label}
+                  {Icon && <Icon className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-[#AFAFAF]'}`} />}
+                  <span>{tab.label}</span>
                   {tab?.id === 'adVideo' && (
                     <span className="h-fit rounded-[4px] bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] px-1.5 py-[1px] text-[8px] font-semibold text-white uppercase">
                       Beta
@@ -84,8 +84,8 @@ const HeaderTabs = ({
 
                   {isActive && (
                     <motion.div
-                      layoutId="activeTabBg"
-                      className="absolute inset-0 -z-10 rounded-full bg-zinc-200 from-[#3C3C3C] to-[#3C3C3C] dark:bg-gradient-to-br"
+                      layoutId="headerTabBg"
+                      className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
                       transition={{ type: 'spring', duration: 0.4 }}
                     />
                   )}

@@ -1181,7 +1181,7 @@ export default function AdFactoryWorkflowDarkReal() {
             e.stopPropagation();
             handleBackClick();
           }}
-          className="group flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2.5 text-sm font-medium text-gray-700 backdrop-blur-md transition-all duration-300 hover:bg-white hover:text-black hover:shadow-lg dark:border-transparent dark:bg-[#0D0D0D]/80 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
+          className="group flex items-center gap-2 rounded-full border border-black/[0.04] bg-white/35 px-4 py-2 text-sm font-medium text-gray-700 backdrop-blur-lg transition-all duration-300 hover:border-black/10 hover:bg-white/75 hover:text-black hover:shadow-xs dark:border-white/10 dark:bg-[#0D0D0D]/70 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           <span>Back</span>
@@ -1191,7 +1191,7 @@ export default function AdFactoryWorkflowDarkReal() {
             e.stopPropagation();
             handleReset();
           }}
-          className="group flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2.5 text-sm font-medium text-gray-700 backdrop-blur-md transition-all duration-300 hover:bg-white hover:text-black hover:shadow-lg dark:border-transparent dark:bg-[#0D0D0D]/80 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
+          className="group flex items-center gap-2 rounded-full border border-black/[0.04] bg-white/35 px-4 py-2 text-sm font-medium text-gray-700 backdrop-blur-lg transition-all duration-300 hover:border-black/10 hover:bg-white/75 hover:text-black hover:shadow-xs dark:border-white/10 dark:bg-[#0D0D0D]/70 dark:text-gray-300 dark:hover:bg-[#1A1A1A] dark:hover:text-white"
           title="Reset Flow"
         >
           <RotateCcw className="h-4 w-4 transition-transform group-hover:rotate-180" />
@@ -1234,15 +1234,32 @@ export default function AdFactoryWorkflowDarkReal() {
           panOnScroll={false}
           zoomOnDoubleClick={false}
           preventScrolling={false}
-          className="bg-transparent dark:bg-gray-900/50"
+          className={isDarkMode ? 'bg-transparent dark:bg-gray-900/50' : 'bg-transparent'}
         >
           <Background color={isDarkMode ? '#333' : '#a3acba'} gap={16} />
           <Controls />
-          <img
-            src={FlowChartEffectBg}
-            className="pointer-events-none fixed top-1/2 left-1/2 z-[-1] h-screen w-screen -translate-x-1/2 -translate-y-1/2 object-cover select-none"
-            alt=""
-          />
+          {!isDarkMode ? (
+            <>
+              <div
+                className="pointer-events-none absolute inset-0 z-[-1] transition-all duration-300"
+                style={{
+                  background:
+                    'radial-gradient(ellipse 90% 80% at 50% 50%, rgba(248, 250, 252, 0.2) 0%, rgba(241, 245, 249, 0.1) 65%, transparent 100%)',
+                }}
+              />
+              <img
+                src={FlowChartEffectBg}
+                className="pointer-events-none fixed top-1/2 left-1/2 z-[-2] h-screen w-screen -translate-x-1/2 -translate-y-1/2 object-cover opacity-38 select-none transition-opacity duration-300"
+                alt=""
+              />
+            </>
+          ) : (
+            <img
+              src={FlowChartEffectBg}
+              className="pointer-events-none fixed top-1/2 left-1/2 z-[-1] h-screen w-screen -translate-x-1/2 -translate-y-1/2 object-cover select-none"
+              alt=""
+            />
+          )}
         </ReactFlow>
       </div>
       {/* Node Modal */}

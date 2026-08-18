@@ -34,7 +34,9 @@ const ActionButton = ({ active, label, onClick, children, disabled }) => (
     title={label}
     aria-label={label}
     className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
-      active ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white'
+      active
+        ? 'bg-black/10 text-zinc-900 dark:bg-white/10 dark:text-white'
+        : 'text-zinc-600 hover:bg-black/5 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/5 dark:hover:text-white'
     }`}
   >
     {children}

@@ -55,8 +55,8 @@ const DateRangeFilter = ({ onDateChange, onClear }) => {
         <PopoverTrigger asChild>
           <button
             className={cn(
-              'flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-4 py-2 text-xs text-gray-600 backdrop-blur-md transition-all hover:border-black/20 hover:text-black 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white',
-              hasSelection && 'border-[#15DCFF]/50 text-gray-900 dark:text-white'
+              'adstudio-media-toolbar-control flex items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-semibold text-[#24211D] shadow-xs backdrop-blur-md transition-all hover:bg-[var(--ws-surface-header)] hover:text-[#24211D] 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white',
+              hasSelection && 'adstudio-media-toolbar-control-active border-[#15DCFF]/50 text-gray-900 dark:text-white'
             )}
           >
             <CalendarIcon className={cn('h-4 w-4', hasSelection && 'text-[#15DCFF]')} />
@@ -76,7 +76,7 @@ const DateRangeFilter = ({ onDateChange, onClear }) => {
           // z-[1002] lifts the popover above any modal backdrop. The default
           // popover z-55 sits below z-1001 modals (e.g. PublishedAdsModal),
           // which would otherwise eat the click and hide the calendar.
-          className="z-1002 w-auto overflow-hidden rounded-2xl border-black/10 bg-white p-0 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]"
+          className="z-1002 w-auto overflow-hidden rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-0 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]"
           align="end"
         >
           <div className="date-range-picker-dark p-1">

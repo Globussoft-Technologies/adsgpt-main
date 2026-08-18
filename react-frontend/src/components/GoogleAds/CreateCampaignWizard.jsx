@@ -3002,7 +3002,7 @@ export default function CreateCampaignWizard({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
       <div
-        className="relative flex h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-[#141414]"
+        className="light-glass-dialog relative flex h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-[#141414]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* close button — pinned top-right */}

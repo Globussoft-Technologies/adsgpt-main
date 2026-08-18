@@ -241,7 +241,7 @@ const UserRulesSection = () => {
       <CollapsibleCard
         title={
           <span className="inline-flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/6 dark:text-white/75">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-700 dark:border-white/10 dark:bg-white/6 dark:text-white/85">
               <Shield className="h-3.5 w-3.5" />
             </span>
             <span>Your Autopilot rules</span>

@@ -173,7 +173,7 @@ const PlatformPicker = ({
       logo: (
         <div className="flex items-center gap-3">
           <img src={metaIcon} alt="Meta" className="h-10 w-10 shrink-0" />
-          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">Meta</span>
+          <span className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-[#1C2B33]">Meta</span>
         </div>
       ),
     },
@@ -185,7 +185,7 @@ const PlatformPicker = ({
       logo: (
         <div className="flex items-center gap-3">
           <img src={googleAdsIcon} alt="Google Ads" className="h-12 w-12 shrink-0" />
-          <span className="text-2xl font-semibold tracking-tight text-[#1C2B33]">Google Ads</span>
+          <span className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-[#1C2B33]">Google Ads</span>
         </div>
       ),
     },
@@ -197,7 +197,7 @@ const PlatformPicker = ({
       logo: (
         <div className="flex items-center gap-3">
           <img src={tiktokIcon} alt="TikTok" className="h-12 w-12 shrink-0" />
-          <span className="text-2xl font-bold tracking-tight text-[#1C2B33]">TikTok</span>
+          <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-[#1C2B33]">TikTok</span>
         </div>
       ),
     },
@@ -260,14 +260,14 @@ const PlatformPicker = ({
                 onMouseEnter={() => setHoveredCard(platform.id)}
                 onMouseLeave={() => setHoveredCard(null)}
                 onClick={handleClick}
-                className={`relative overflow-hidden rounded-2xl border border-gray-200 transition-all duration-300 dark:border-transparent ${
+                className={`relative overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] transition-all duration-300 dark:border-transparent dark:bg-transparent ${
                   platform.enabled
-                    ? `${isConnected ? 'cursor-pointer' : 'cursor-default'} shadow-md hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/40`
+                    ? `${isConnected ? 'cursor-pointer' : 'cursor-default'} hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[rgba(80,70,58,0.12)] dark:shadow-md dark:hover:shadow-black/40`
                     : 'cursor-not-allowed'
                 }`}
               >
-                {/* White logo area */}
-                <div className="relative flex h-40 items-center justify-center bg-white transition-all duration-300">
+                {/* Logo area */}
+                <div className="relative flex h-40 items-center justify-center border-b border-[#DDD7CD] bg-[#FCFAF7] transition-all duration-300 dark:border-b-0 dark:border-transparent dark:bg-white">
                   {platform.logo}
 
                   {/* A routed connection request keeps the action visible; normal
@@ -299,14 +299,14 @@ const PlatformPicker = ({
                     )}
                 </div>
 
-                {/* Dark info area */}
-                <div className="bg-gray-50 p-4 dark:bg-[#1A1A1A]">
+                {/* Info area */}
+                <div className="bg-[#EDE7DF] p-4 text-[#24211D] shadow-[inset_0_1px_2px_rgba(80,70,58,0.03)] dark:border-transparent dark:bg-[#1A1A1A] dark:shadow-none">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
+                    <h3 className="text-sm font-semibold text-[#24211D] 2xl:text-base dark:text-white">
                       {platform.name}
                     </h3>
                     {!platform.enabled && (
-                      <span className="2xl:text-5 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md">
+                      <span className="platform-coming-soon 2xl:text-5 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-md">
                         Coming Soon
                       </span>
                     )}
@@ -317,7 +317,7 @@ const PlatformPicker = ({
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-500 2xl:text-sm dark:text-[#AFAFAF]">
+                  <p className="mt-2 text-xs leading-relaxed text-[#7A7369] 2xl:text-sm dark:text-[#AFAFAF]">
                     {platform.description}
                   </p>
                 </div>

@@ -343,19 +343,21 @@ export default function TemplatePicker({
       className={`flex flex-col gap-3 rounded-2xl border p-4 transition-colors ${
         isActive
           ? 'border-emerald-400/35 bg-emerald-400/6'
-          : 'border-white/10 bg-white/2'
-      } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
+          : 'border-black/10 bg-black/[0.02] dark:border-white/10 dark:bg-white/2'
+      } ${disabled ? 'pointer-events-none opacity-70 dark:opacity-50' : ''}`}
     >
       {/* Header — icon tile + name + sublabel + Publishing tag + Switch.
           Always visible so the user can flip the toggle even when OFF. */}
       <div className="flex items-center gap-3">
         <PlatformGlyph platform={platform} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-sm font-semibold text-white">{cfg.displayName}</span>
-          <span className="text-[11.5px] text-[#8a8a90]">{cfg.channels}</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">{cfg.displayName}</span>
+          <span className="text-[11.5px] text-gray-500 dark:text-[#8a8a90]">{cfg.channels}</span>
         </div>
 
-        {loadingList && <Loader2 className="size-3.5 animate-spin text-[#AFAFAF]" />}
+        {loadingList && (
+          <Loader2 className="size-3.5 animate-spin text-gray-500 dark:text-[#AFAFAF]" />
+        )}
 
         {isActive && (
           <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-emerald-400">
@@ -376,9 +378,9 @@ export default function TemplatePicker({
       {showPickerBody && (
         <div className="flex flex-col gap-3">
           {locked && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-              <Lock className="mt-px size-3.5 shrink-0 text-[#AFAFAF]" />
-              <p className="text-[12px] leading-relaxed text-[#b0b0b6]">
+            <div className="flex items-start gap-2.5 rounded-xl border border-black/10 bg-black/[0.03] px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+              <Lock className="mt-px size-3.5 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
+              <p className="text-[12px] leading-relaxed text-gray-600 dark:text-[#b0b0b6]">
                 Template and campaign name are locked while this automation
                 exists — you can still update budget and call-to-action. To
                 change them, create a new automation.
@@ -408,7 +410,7 @@ export default function TemplatePicker({
               <Field
                 label={
                   <>
-                    Daily budget <span className="text-[#6a6a70]">· optional</span>
+                    Daily budget <span className="text-gray-400 dark:text-[#6a6a70]">· optional</span>
                   </>
                 }
                 empty={
@@ -420,7 +422,7 @@ export default function TemplatePicker({
                 }
               >
                 <div className="relative">
-                  <Coins className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#AFAFAF]" />
+                  <Coins className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-gray-500 dark:text-[#AFAFAF]" />
                   <input
                     type="text"
                     inputMode="numeric"
@@ -451,7 +453,7 @@ export default function TemplatePicker({
                     }}
                     onChange={(e) => handleBudgetChange(e.target.value)}
                     disabled={disabled || pickedLoading}
-                    className={`h-10 w-full rounded-full bg-[#383838]/50 pr-5 pl-11 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`adfactory-automation-input h-10 w-full rounded-full bg-gray-200 pr-5 pl-11 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:focus:bg-[#383838]/70 dark:disabled:opacity-50 ${
                       budgetError ? 'ring-1 ring-red-500/60' : ''
                     }`}
                   />
@@ -467,7 +469,7 @@ export default function TemplatePicker({
               <Field
                 label={
                   <>
-                    Campaign name <span className="text-[#6a6a70]">· optional</span>
+                    Campaign name <span className="text-gray-400 dark:text-[#6a6a70]">· optional</span>
                   </>
                 }
                 empty={
@@ -485,7 +487,7 @@ export default function TemplatePicker({
                   value={picked.campaignName ?? ''}
                   onChange={(e) => handleCampaignNameChange(e.target.value)}
                   disabled={disabled || pickedLoading || locked}
-                  className={`h-10 w-full rounded-full bg-[#383838]/50 px-4 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`adfactory-automation-input h-10 w-full rounded-full bg-gray-200 px-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:focus:bg-[#383838]/70 dark:disabled:opacity-50 ${
                     campaignNameError ? 'ring-1 ring-red-500/60' : ''
                   }`}
                 />
@@ -540,7 +542,7 @@ function Switch({ enabled, onToggle, disabled, label }) {
       disabled={disabled}
       onClick={onToggle}
       className={`relative h-6 w-10.5 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${
-        enabled ? 'bg-emerald-400' : 'bg-white/20'
+        enabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-white/20'
       }`}
     >
       <span
@@ -581,14 +583,14 @@ function EmptyState({ cfg, message }) {
     <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/22 bg-amber-500/6 p-3">
       <Inbox className="mt-0.5 size-4 shrink-0 text-amber-400" />
       <div className="flex flex-col gap-2 text-xs">
-        <p className="leading-relaxed text-amber-200/90">
+        <p className="leading-relaxed text-amber-800 dark:text-amber-200/90">
           {message || `${cfg.emptyTitle} ${cfg.emptyHint}`}
         </p>
         <a
           href={cfg.deepLinkHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/25"
+          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-400/25 dark:border-amber-400/40 dark:text-amber-100"
         >
           {cfg.deepLinkLabel}
           <ExternalLink className="size-3" />
@@ -602,7 +604,7 @@ function Row({ label, value }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span>{label}</span>
-      <span className="truncate text-[#E3E3E3]">{value}</span>
+      <span className="truncate text-gray-700 dark:text-[#E3E3E3]">{value}</span>
     </div>
   );
 }
@@ -610,9 +612,9 @@ function Row({ label, value }) {
 function Field({ label, children, empty }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[11.5px] font-medium text-[#8a8a90]">{label}</label>
+      <label className="text-[11.5px] font-medium text-gray-500 dark:text-[#8a8a90]">{label}</label>
       {children}
-      {empty && <span className="text-[11px] text-[#AFAFAF] italic">{empty}</span>}
+      {empty && <span className="text-[11px] text-gray-500 italic dark:text-[#AFAFAF]">{empty}</span>}
     </div>
   );
 }

@@ -227,7 +227,7 @@ const mergeInsights = (rows, insightsRows = []) => {
 
 // ─── small atoms ────────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, label, value }) => (
-  <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-all duration-300 hover:border-gray-300 hover:bg-gray-50 2xl:p-5 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3">
+  <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl workspace-card p-4 transition-all duration-300 hover:border-gray-300 2xl:p-5 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3">
     {/* top row: icon left, label right */}
     <div className="flex items-start justify-between">
       <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5">
@@ -853,7 +853,7 @@ const TikTokAdsDashboard = () => {
 
           {/* KPI cards */}
           {loadingStats ? (
-            <div className="mb-6 rounded-xl border border-gray-200 bg-white dark:border-white/8 dark:bg-[#161616]">
+            <div className="mb-6 rounded-xl workspace-card dark:border-white/8 dark:bg-[#161616]">
               <Spinner label="Loading performance..." />
             </div>
           ) : (
@@ -868,7 +868,7 @@ const TikTokAdsDashboard = () => {
 
           {/* Performance over time (matches Meta Ads Manager) */}
           {!loadingStats && (
-            <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/8 dark:bg-[#161616]">
+            <div className="mb-6 rounded-2xl workspace-card p-4 dark:border-white/8 dark:bg-[#161616]">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
                   <TrendingUp className="h-4 w-4" /> Performance over time
@@ -941,7 +941,7 @@ const TikTokAdsDashboard = () => {
 
           {/* ── Campaigns tab ── */}
           {tab === 'campaigns' && (
-          <div className="rounded-xl border border-gray-200 bg-white dark:border-white/8 dark:bg-[#161616]">
+          <div className="rounded-xl workspace-card dark:border-white/8 dark:bg-[#161616]">
             {/* Breadcrumb + Create */}
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 text-sm dark:border-white/8">
               <div className="flex items-center gap-1">
@@ -1183,7 +1183,7 @@ const TikTokAdsDashboard = () => {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
                 <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -1232,7 +1232,7 @@ const TikTokAdsDashboard = () => {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              className="w-full max-w-sm overflow-hidden rounded-2xl workspace-card shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/8">
                 <div className="min-w-0">

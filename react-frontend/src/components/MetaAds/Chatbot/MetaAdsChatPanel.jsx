@@ -476,7 +476,10 @@ const MetaAdsChatPanel = ({
           order, and the composer (later in the DOM) was winning that tie. */}
       <div className="relative z-20 flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-white/10">
         <div className="flex items-center gap-2.5">
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] shadow-sm shadow-[#6b72f8]/30">
+          <div
+            style={{ background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)' }}
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full shadow-sm shadow-[#6b72f8]/30"
+          >
             <Bot className="h-4.5 w-4.5 text-white" />
             <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-400 dark:border-[#161616]" />
           </div>
@@ -515,7 +518,10 @@ const MetaAdsChatPanel = ({
 
       {messages.length === 0 && !isStreaming ? (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] shadow-lg shadow-[#6b72f8]/25">
+          <div
+            style={{ background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)' }}
+            className="relative flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg shadow-[#6b72f8]/25"
+          >
             <Sparkles className="h-6 w-6 text-white" />
           </div>
           <div className="flex flex-col gap-1">

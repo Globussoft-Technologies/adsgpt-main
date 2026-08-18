@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Loader2, LogOut, Plus, Trash2 } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
@@ -259,7 +259,7 @@ export default function ProfileHome() {
   };
 
   return (
-    <div className="flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
+    <div className="profile_container flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
       <div className="mx-auto flex w-full max-w-[43rem] flex-col gap-6 lg:max-w-6xl lg:gap-8 2xl:max-w-7xl">
         {/* Two-column area: Profile + Subscription (left), Integrations (right), Credits full width below */}
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
@@ -318,14 +318,13 @@ export default function ProfileHome() {
               {' '}
               {userData?.user_email || 'user@email.com'}
             </p>
-            {
-              <Link
-                to={'/logout'}
-                className="block w-[135px] max-w-max items-center gap-2 rounded-full bg-zinc-200 px-5 py-[7px] text-xs font-medium whitespace-nowrap text-zinc-800 backdrop-blur-2xl transition-colors hover:bg-zinc-300 disabled:opacity-40 disabled:hover:bg-zinc-200 2xl:text-sm dark:bg-white/20 dark:text-white dark:hover:bg-white/30 dark:disabled:hover:bg-white/20"
-              >
-                Sign Out
-              </Link>
-            }
+            <Link
+              to={'/logout'}
+              className="lm-pill-btn account-signout-button mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-black/10 bg-white/90 px-3.5 py-1 text-xs font-semibold text-zinc-800 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:border-black/20 hover:bg-zinc-100 hover:text-zinc-900 2xl:px-4 2xl:py-1.5 2xl:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:-translate-y-0.5 dark:hover:scale-[1.02] dark:hover:border-white/30 dark:hover:bg-white/20 dark:hover:text-white dark:hover:shadow-md"
+            >
+              <LogOut className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
+              <span>Sign Out</span>
+            </Link>
           </div>
         </div>
 
@@ -334,7 +333,7 @@ export default function ProfileHome() {
           <h3 className="mb-[16px] text-lg font-semibold text-zinc-800 2xl:text-2xl dark:text-[#E0E0E0]">
             Subscription
           </h3>
-          <div className="relative flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+          <div className="profile-account-card relative flex items-center justify-between gap-3 rounded-2xl border border-[#DDD7CD] bg-[var(--ws-surface)] p-6 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.06),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-md dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:shadow-none">
             <div className="upper w-full">
               <p className="text-sm font-semibold text-zinc-900 2xl:text-lg dark:text-white">
                 {' '}
@@ -350,12 +349,12 @@ export default function ProfileHome() {
             <div className="flex shrink-0 items-center gap-2">
               {subscriptionType !== '9' && subscriptionType !== '12' && (
                 <div className="inline-block rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
-                  <button className="rounded-[50px] bg-white px-3 py-1 text-xs hover:bg-gray-50 dark:bg-[#2A2A2A] dark:hover:bg-[#333333]">
+                  <button className="flex items-center gap-2 rounded-[50px] bg-white px-3 py-1 text-[11px] font-medium 2xl:text-sm dark:bg-[#282828] dark:text-[#CCCCCC]">
                     <a
-                      href={import.meta.env.VITE_SIGNUP_URL}
+                      href={import.meta.env.VITE_SUBSCRIPTION_UPGRADE_URL}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text text-[11px] font-semibold whitespace-nowrap text-transparent hover:from-[#3F51B5] hover:to-[#3A91B7] 2xl:text-sm dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
+                      className="bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] bg-clip-text font-semibold whitespace-nowrap text-transparent dark:from-[#7EA7F3] dark:to-[#6FD3F7]"
                     >
                       Upgrade Plan
                     </a>
@@ -368,26 +367,12 @@ export default function ProfileHome() {
                   href={import.meta.env.VITE_SUBSCRIPTION_CANCELLATION_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-[50px] cursor-pointer border border-red-500 px-3 py-1 text-[11px] font-medium whitespace-nowrap text-red-500 transition-colors hover:bg-red-50 2xl:text-sm dark:border-red-400 dark:text-red-400 dark:hover:bg-red-900/20"
+                  className="rounded-[50px] cursor-pointer border border-red-500 bg-white px-3 py-1 text-[11px] font-medium whitespace-nowrap text-red-500 transition-colors hover:bg-red-50 2xl:text-sm dark:border-red-400 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
                 >
                   Cancel
                 </a>
               )}
             </div>
-
-            {/* ✅ Upgrade button only if topPlan is false */}
-            {/* {userData?.featureObject?.planDetails?.topPlan === false && (
-              <div className="inline-block rounded-[50px] bg-gradient-to-r from-[#3F51B5] to-[#3A91B7] p-[1px]">
-                <a
-                  href={import.meta.env.VITE_AMEMBER_URL+ "/signup"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block h-[50px] rounded-[50px] bg-[#2A2A2A] px-7 py-2.5 text-center text-[20px] font-semibold text-white"
-                >
-                  Upgrade Plan
-                </a>
-              </div>
-            )} */}
           </div>
         </div>
         {/* Credits Section */}
@@ -396,16 +381,16 @@ export default function ProfileHome() {
             Credits
           </h3>
 
-          <div className="flex flex-col gap-4 rounded-2xl border border-black/5 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] 2xl:p-6 dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+          <div className="profile-account-card profile-account-card--ambient flex flex-col gap-4 rounded-2xl border border-[#DDD7CD] bg-[var(--ws-surface)] p-5 2xl:p-6 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.06),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-md dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:shadow-none">
             {/* AdCreative Credits */}
             <div className="flex flex-col items-center gap-2">
               <p className="text-13 font-bold text-zinc-900 dark:text-white">Total Credits</p>
 
-              <div className="flex w-[180px] items-center space-x-2 rounded-lg border border-black/10 bg-zinc-50 p-2.5 dark:border-white/5 dark:bg-[#333333]/50">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 dark:bg-white/5">
-                  <img src={adCreativeLogo} className="h-7 w-7" />
+              <div className="flex w-[180px] items-center space-x-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#DDD7CD] bg-[#FCFAF7] dark:border-white/10 dark:bg-white/5">
+                  <img src={adCreativeLogo} className="h-5 w-5" />
                 </div>
-                <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                <span className="text-sm font-bold text-[#24211D] dark:text-white">
                   {credits?.creditsUsed || 0}/{credits?.totalCredits || 0}
                 </span>
               </div>
@@ -414,12 +399,12 @@ export default function ProfileHome() {
               {/* Subscription Credits */}
               {!hasPlan8 && (
               <div className="flex flex-col items-center gap-1">
-                <p className="text-13 font-bold text-zinc-900 dark:text-white">Subscription</p>
-                <div className="flex w-[180px] items-center space-x-2 rounded-lg border border-black/10 bg-zinc-50 p-2.5 dark:border-white/5 dark:bg-[#333333]/50">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/5">
-                    <img src={adCreativeLogo} className="h-7 w-7" />
+                <p className="text-13 font-bold text-[#24211D] dark:text-white">Subscription</p>
+                <div className="flex w-[180px] items-center space-x-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#DDD7CD] bg-[#FCFAF7] dark:border-white/10 dark:bg-white/5">
+                    <img src={adCreativeLogo} className="h-5 w-5" />
                   </div>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                  <span className="text-sm font-bold text-[#24211D] dark:text-white">
                     {credits?.subscription?.used || 0}/{credits?.subscription?.total || 0}
                   </span>
                 </div>
@@ -429,12 +414,12 @@ export default function ProfileHome() {
               {/* Rollover Credits — hidden for free plan (plan 8) */}
               {!hasPlan8 && (
                 <div className="flex flex-col items-center gap-1">
-                  <p className="text-13 font-bold text-zinc-900 dark:text-white">Rolled Over</p>
-                  <div className="flex w-[180px] items-center space-x-2 rounded-lg border border-black/10 bg-zinc-50 p-2.5 dark:border-white/5 dark:bg-[#333333]/50">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-100 dark:bg-white/5">
-                      <img src={adCreativeLogo} className="h-7 w-7" />
+                  <p className="text-13 font-bold text-[#24211D] dark:text-white">Rolled Over</p>
+                  <div className="flex w-[180px] items-center space-x-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#DDD7CD] bg-[#FCFAF7] dark:border-white/10 dark:bg-white/5">
+                      <img src={adCreativeLogo} className="h-5 w-5" />
                     </div>
-                    <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                    <span className="text-sm font-bold text-[#24211D] dark:text-white">
                       {credits?.rollover?.used || 0}/{credits?.rollover?.total || 0}
                     </span>
                   </div>
@@ -523,7 +508,7 @@ export default function ProfileHome() {
         {/* Integrations Section */}
         <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2">
           <h3 className="mb-0 text-lg font-semibold text-zinc-800 2xl:text-2xl dark:text-[#E0E0E0]">Integrations</h3>
-          <div className="rounded-2xl border border-black/5 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+          <div className="profile-account-card rounded-2xl border border-[#DDD7CD] bg-[var(--ws-surface)] p-5 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.06),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-md dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:shadow-none">
           <div className="flex flex-col divide-y divide-black/5 dark:divide-white/5">
 
             {/* ── Meta ── */}
@@ -577,7 +562,7 @@ export default function ProfileHome() {
                   {metaAccounts.map((account) => (
                     <div
                       key={account.facebookId}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-black/5 bg-zinc-50 px-3 py-2 dark:border-white/5 dark:bg-white/[0.03]"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] px-3.5 py-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-xs font-medium text-zinc-800 dark:text-white/90">
@@ -706,7 +691,7 @@ export default function ProfileHome() {
         </div>{/* end Integrations */}
         </div>{/* end two-column area */}
 
-        <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:border-transparent dark:bg-[#303030]/50 dark:shadow-none">
+        <div className="profile-account-card profile-account-card--ambient rounded-2xl border border-[#DDD7CD] bg-[var(--ws-surface)] p-6 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.06),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-md dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:shadow-none">
           <h3 className="mb-4 text-lg font-semibold text-zinc-800 dark:text-[#E0E0E0]">
             Generated Image & Video Usage
           </h3>

@@ -11,6 +11,7 @@ import {
   Calendar,
   X,
   ArrowLeft,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCompetitorAds, refreshCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
@@ -719,16 +720,26 @@ const CompetitorsHome = () => {
                 Sort: {sortOptions.find((o) => o.value === activeSort)?.label || 'Newest'}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent className="rounded-xl border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
-              {sortOptions.map((opt) => (
-                <SelectItem
-                  key={opt.value}
-                  value={opt.value}
-                  className="text-xs text-gray-700 outline-none hover:bg-gray-100 hover:text-gray-900 data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-[#02C8C4] data-[state=checked]:to-[#5867EB] data-[state=checked]:text-white dark:text-white/70 dark:hover:bg-white/10"
-                >
-                  {opt.label}
-                </SelectItem>
-              ))}
+            <SelectContent className="min-w-36 overflow-hidden rounded-[18px] border border-black/10 bg-white p-1.5 text-gray-900 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#18181b] dark:text-white">
+              {sortOptions.map((opt) => {
+                const isSelected = activeSort === opt.value;
+                return (
+                  <SelectItem
+                    key={opt.value}
+                    value={opt.value}
+                    className={`cursor-pointer rounded-[10px] px-3 py-2 text-xs font-medium transition-all outline-none ${
+                      isSelected
+                        ? 'bg-gradient-to-r! from-[#02C8C4]! to-[#5867EB]! text-white! font-semibold shadow-xs focus:bg-gradient-to-r! focus:from-[#02C8C4]! focus:to-[#5867EB]! focus:text-white!'
+                        : 'text-gray-700! hover:bg-gray-100! hover:text-gray-900! dark:text-white/80! dark:hover:bg-white/10! dark:hover:text-white! focus:bg-gray-100! dark:focus:bg-white/10! focus:text-gray-900! dark:focus:text-white!'
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <span>{opt.label}</span>
+                      {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-white" />}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

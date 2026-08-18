@@ -36,6 +36,7 @@ import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
 import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
 import MyClaudeImagesPage from './pages/MyClaudeImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
+import ThemeToggle from '@/components/layout/header/ThemeToggle';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 
@@ -397,7 +398,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="flex w-full items-center justify-between gap-2 p-4 pr-14 text-gray-900 2xl:pr-16 dark:text-white">
+          <div className="flex w-full items-center justify-between gap-2 p-4 pr-5 2xl:pr-8 text-gray-900 dark:text-white">
             <div className="flex items-center gap-3">
               {!libraryOnly && (
                 <button
@@ -410,7 +411,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               )}
 
               {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs */}
-              <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-gray-100 p-1 backdrop-blur-md dark:border-slate-600/40 dark:bg-[#0D0D0D]">
+              <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D]">
                 {availableMySpaceTabs.map(({ id, label, Icon }) => {
                   const isActive = mySpaceTab === id;
                   return (
@@ -418,20 +419,20 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                       key={id}
                       type="button"
                       onClick={() => dispatch(setMySpaceTab(id))}
-                      className={`2xl:text-13 relative flex items-center rounded-full px-[11px] py-[5px] text-[10px] font-medium whitespace-nowrap transition 2xl:px-4 2xl:py-[7px] ${
+                      className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 ${
                         isActive
-                          ? 'text-gray-900 dark:text-white'
-                          : 'text-gray-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
+                          ? 'text-zinc-900 font-bold dark:text-white'
+                          : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
                       }`}
                     >
-                      <div className="flex gap-1 2xl:gap-2">
-                        <Icon className="h-[13px] w-[13px] 2xl:h-5 2xl:w-5" />
-                        {label}
+                      <div className="flex items-center gap-1.5 2xl:gap-2">
+                        <Icon className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-[#AFAFAF]'}`} />
+                        <span>{label}</span>
                       </div>
                       {isActive && (
                         <motion.div
                           layoutId="mySpaceTabBg"
-                          className="absolute inset-0 -z-10 rounded-full bg-white shadow-sm dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
+                          className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
                           transition={{ type: 'spring', duration: 0.4 }}
                         />
                       )}
@@ -450,6 +451,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   label="Source"
                   value={availableImageSources.find((p) => p.value === imageSource)}
                   onChange={(value) => setImageSource(value)}
+                  triggerClassName="adstudio-media-toolbar-control"
                 />
               )}
               <DateRangeFilter onDateChange={handleDateChange} onClear={handleClearDates} />
@@ -460,6 +462,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   value={selectVideoType.find((p) => p.value === videoType)}
                   onChange={(value) => setVideoType(value)}
                   onClear={() => setVideoType('')}
+                  triggerClassName="adstudio-media-toolbar-control"
                 />
               ) : imageSource === 'adCreative' ? (
                 // The image-type filter only applies to the AdCreative gallery;
@@ -470,8 +473,12 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   value={selectImageType.find((p) => p.value === imageType)}
                   onChange={(value) => setImageType(value)}
                   onClear={() => setImageType('')}
+                  triggerClassName="adstudio-media-toolbar-control"
                 />
               ) : null}
+              <div className="ml-1.5 2xl:ml-3">
+                <ThemeToggle />
+              </div>
             </div>
           </div>
 
@@ -528,7 +535,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   : 'h-fit scale-75 2xl:scale-100'
               } ${
                 activePage !== 'ugc'
-                  ? 'rounded-[30px] border border-black/10 bg-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
+                  ? 'rounded-[30px] border border-black/5 bg-white/70 shadow-[0_2px_12px_rgba(0,0,0,0.03)] backdrop-blur-md dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
                   : ''
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'

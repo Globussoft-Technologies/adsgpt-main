@@ -122,7 +122,7 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
         <AdFactoryBgEffect />
 
         <motion.div
-          className="relative max-h-[95vh] w-[95%] max-w-[600px] scale-100 rounded-[30px] border border-black/10 bg-white px-3 pt-8 pb-6 shadow-xl sm:px-6 lg:w-full 2xl:max-h-[92vh] 2xl:max-w-[800px] 2xl:p-8 2xl:px-10 2xl:pt-10 dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none"
+          className="relative max-h-[95vh] w-[95%] max-w-[600px] scale-100 rounded-[30px] border border-black/5 bg-[#EEF1F3]/95 backdrop-blur-2xl px-3 pt-8 pb-6 shadow-[0_20px_60px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.08)] sm:px-6 lg:w-full 2xl:max-h-[92vh] 2xl:max-w-[800px] 2xl:p-8 2xl:px-10 2xl:pt-10 dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none"
           initial={{ scale: 0.8, opacity: 0, y: 40 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.8, opacity: 0 }}

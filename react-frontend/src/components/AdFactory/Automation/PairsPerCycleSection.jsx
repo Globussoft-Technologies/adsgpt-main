@@ -34,19 +34,19 @@ export default function PairsPerCycleSection({
 
   return (
     <section
-      className={`flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/2 px-4 py-3 transition ${
-        disabled ? 'pointer-events-none opacity-50' : ''
+      className={`flex flex-col gap-2.5 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition dark:border-white/10 dark:bg-white/2 ${
+        disabled ? 'pointer-events-none opacity-70 dark:opacity-50' : ''
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Layers className="size-4 text-[#15DCFF]" />
-          <h3 className="text-sm font-semibold text-white 2xl:text-base">
+          <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
             Ads per cycle
             <span className="ml-0.5 text-red-400">*</span>
           </h3>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-[#E3E3E3]">
+        <span className="rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-[#E3E3E3]">
           {cost} credit{cost === 1 ? '' : 's'} / cycle
         </span>
       </div>
@@ -66,7 +66,7 @@ export default function PairsPerCycleSection({
           }}
           disabled={disabled}
           placeholder="Enter quantity"
-          className="h-10 w-full rounded-full bg-[#383838]/50 px-5 text-sm text-white outline-none transition placeholder:text-[#AFAFAF] focus:bg-[#383838]/70 disabled:cursor-not-allowed disabled:opacity-50"
+          className="adfactory-automation-input h-10 w-full rounded-full bg-gray-200 px-5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:focus:bg-[#383838]/70 dark:disabled:opacity-50"
         />
 
         <InputCommonDropdown

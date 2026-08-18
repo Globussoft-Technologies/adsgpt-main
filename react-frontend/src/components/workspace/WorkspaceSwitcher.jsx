@@ -80,18 +80,18 @@ export default function WorkspaceSwitcher() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-9 max-w-64 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs font-medium text-gray-900 transition-all hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+          className="flex h-9 max-w-64 items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 text-xs font-medium text-[#24211D] shadow-[0_1px_3px_rgba(80,70,58,0.05)] backdrop-blur-md transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
         >
-          <Layers3 className="h-4 w-4 shrink-0 text-cyan-500" />
+          <Layers3 className="h-4 w-4 shrink-0 text-[#02A8A4] dark:text-cyan-500" />
           <span className="truncate">{current.name}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#7A7369] dark:text-zinc-500" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-72 rounded-2xl border-gray-200 bg-white p-2 text-zinc-900 shadow-2xl dark:border-white/[0.08] dark:bg-[#171717] dark:text-white"
+        className="w-72 rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-2 text-[#24211D] shadow-[0_16px_40px_rgba(80,70,58,0.10)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#171717] dark:text-white"
       >
-        <p className="px-2 py-1 text-[10px] font-semibold tracking-[0.18em] text-zinc-500 uppercase">
+        <p className="px-2 py-1 text-[10px] font-semibold tracking-[0.18em] text-[#7A7369] uppercase dark:text-zinc-500">
           Switch workspace
         </p>
         <div className="mt-1 space-y-1">
@@ -109,19 +109,19 @@ export default function WorkspaceSwitcher() {
                   onClick={() => selectWorkspace(workspace)}
                   className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                     active
-                      ? 'border-gray-200 bg-gray-50 dark:border-white/[0.06] dark:bg-white/[0.04]'
-                      : 'border-transparent hover:bg-gray-50 dark:hover:bg-white/[0.035]'
+                      ? 'border-[#DDD7CD] bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-white/[0.04]'
+                      : 'border-transparent hover:bg-[#F7F4EE] dark:hover:bg-white/[0.035]'
                   }`}
                 >
-                  <Layers3 className="h-4 w-4 shrink-0 text-cyan-500" />
+                  <Layers3 className="h-4 w-4 shrink-0 text-[#02A8A4] dark:text-cyan-500" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium">{workspace.name}</p>
-                    <p className="text-[10px] text-zinc-500">Shared with you</p>
+                    <p className="truncate text-xs font-medium text-[#24211D] dark:text-white">{workspace.name}</p>
+                    <p className="text-[10px] text-[#7A7369] dark:text-zinc-500">Shared with you</p>
                   </div>
                   {loadingId === workspace.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : active ? (
-                    <Check className="h-4 w-4 text-cyan-500" />
+                    <Check className="h-4 w-4 text-[#02A8A4] dark:text-cyan-500" />
                   ) : null}
                 </button>
               );

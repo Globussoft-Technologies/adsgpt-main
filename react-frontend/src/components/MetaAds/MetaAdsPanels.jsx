@@ -82,7 +82,7 @@ export const AdCard = ({ ad }) => {
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full shrink-0 overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:border-gray-200 dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/10"
+      className="w-full shrink-0 overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] transition-all hover:border-[#DDD7CD] dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/10"
     >
       {/* ── collapsed row ── */}
       <div className="flex flex-1 gap-3 2xl:gap-4 p-3 2xl:p-4">
@@ -422,7 +422,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
     <motion.div
       // initial={{ opacity: 0, y: 8 }}
       // animate={{ opacity: 1, y: 0 }}
-      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/[0.12] dark:bg-[#161616] dark:hover:border-white/20'}`}
+      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] hover:border-[#DDD7CD] dark:border-white/[0.12] dark:bg-[#161616] dark:hover:border-white/20'}`}
     >
       {isActive && (
         <div className="absolute top-0 left-0 h-full w-0.5 bg-gradient-to-b from-[#15DCFF] to-[#6b72f8]" />
@@ -601,24 +601,24 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
         {kpiCards.map(({ key, icon, label, value, change }) => (
           <div
             key={key}
-            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white backdrop-blur-xl transition-all duration-300 hover:border-gray-300 hover:bg-gray-50 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3 ${
+            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] transition-all duration-300 hover:border-[#DDD7CD] dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3 ${
               compact ? 'p-3' : 'p-4 2xl:p-5'
             }`}
           >
             {/* top row: icon left, label right */}
             <div className="flex items-start justify-between gap-1.5">
               <div
-                className={`flex shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5 ${
+                className={`flex shrink-0 items-center justify-center rounded-xl bg-[#d8dee5] dark:bg-white/5 ${
                   compact ? 'h-7 w-7' : 'h-9 w-9'
                 }`}
               >
                 {React.createElement(icon, {
-                  className: `text-gray-400 dark:text-white/50 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`,
+                  className: `text-gray-700 dark:text-white/50 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`,
                 })}
               </div>
               <p
                 title={label}
-                className={`font-semibold tracking-[0.12em] uppercase text-gray-400 dark:text-white/35 ${
+                className={`font-semibold tracking-[0.12em] uppercase text-gray-600 dark:text-white/35 ${
                   compact ? 'line-clamp-2 text-right text-10 leading-tight' : 'text-xs'
                 }`}
               >
@@ -645,15 +645,15 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
 
       {/* spend / clicks bar chart */}
-      <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+      <div className="flex flex-col rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-5 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
-              <TrendingUp className="h-5 w-5 text-gray-400 dark:text-white/50" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+              <TrendingUp className="h-5 w-5 text-[#24211D] dark:text-white/50" />
             </div>
-            <p className="text-base 2xl:text-lg font-bold text-gray-900 dark:text-white">Performance over time</p>
+            <p className="text-base 2xl:text-lg font-bold text-[#24211D] dark:text-white">Performance over time</p>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/6 dark:bg-[#111]/60">
+          <div className="flex items-center gap-1 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] p-1 dark:border-white/6 dark:bg-[#111]/60">
             {[
               { v: 'spend', l: 'Spend' },
               { v: 'clicks', l: 'Clicks' },
@@ -661,7 +661,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
               <button
                 key={v}
                 onClick={() => setChartMetric(v)}
-                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-gray-200 text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70'}`}
+                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-[#EDE7DF] text-[#24211D] shadow-xs dark:bg-white/10 dark:text-white' : 'text-[#7A7369] hover:text-[#24211D] dark:text-white/40 dark:hover:text-white/70'}`}
               >
                 {l}
               </button>
@@ -708,12 +708,12 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
       <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4">
         {/* action pie */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+        <div className="rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
-              <Target className="h-5 w-5 text-gray-400 dark:text-white/50" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+              <Target className="h-5 w-5 text-[#24211D] dark:text-white/50" />
             </div>
-            <p className="text-base font-bold text-gray-900 dark:text-white">Key Actions</p>
+            <p className="text-base font-bold text-[#24211D] dark:text-white">Key Actions</p>
           </div>
           {actionPieData.length > 0 ? (
             <div className="flex items-center gap-3">
@@ -756,7 +756,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
                       className="h-2 w-2 shrink-0 rounded-full"
                       style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
                     />
-                    <span className="text-xs whitespace-nowrap text-gray-500 dark:text-[#BEBEBE]">{item.name}</span>
+                    <span className="text-xs whitespace-nowrap text-gray-600 dark:text-[#BEBEBE]">{item.name}</span>
                     <span className="text-xs font-semibold text-gray-900 dark:text-white">
                       {item.value.toLocaleString()}
                     </span>
@@ -770,22 +770,22 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
         </div>
 
         {/* all actions table */}
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-none backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
-          <div className="border-b border-gray-200 px-4 py-3 dark:border-white/4">
+        <div className="overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+          <div className="border-b border-[#DDD7CD] px-4 py-3 dark:border-white/4">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5">
-                <Layers className="h-5 w-5 text-gray-400 dark:text-white/50" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+                <Layers className="h-5 w-5 text-[#24211D] dark:text-white/50" />
               </div>
-              <p className="text-base font-bold text-gray-900 dark:text-white">All Actions</p>
+              <p className="text-base font-bold text-[#24211D] dark:text-white">All Actions</p>
             </div>
           </div>
           <div className="scrollbar-thin max-h-65 p-2 pb-3 overflow-y-auto">
             {sortedActions.map((a, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between border-b border-gray-200 px-4 py-2 last:border-b-0 hover:bg-gray-100 dark:border-white/2 dark:hover:bg-white/2"
+                className="flex items-center justify-between border-b border-black/10 px-4 py-2 last:border-b-0 hover:bg-black/5 dark:border-white/2 dark:hover:bg-white/2"
               >
-                <span className="truncate pr-4 text-sm text-gray-500 capitalize dark:text-[#BEBEBE]">{a.type}</span>
+                <span className="truncate pr-4 text-sm text-gray-600 capitalize dark:text-[#BEBEBE]">{a.type}</span>
                 <span className="shrink-0 text-sm font-semibold text-gray-900 dark:text-white">
                   {a.value.toLocaleString()}
                 </span>

@@ -226,18 +226,18 @@ export default function AutopilotLLMAudit({
   // selected instead of duplicating a picker here.
   const accountInfo = selectedAccount && (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
-        <Coins className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-        <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
+      <span className="inline-flex items-center gap-1.5 rounded-xl border-0 bg-[#e2e6ed] px-2.5 py-1.5 shadow-xs 2xl:px-3 2xl:py-2 dark:bg-white/10">
+        <Coins className="h-3.5 w-3.5 text-[#0082FB] dark:text-[#15DCFF]" />
+        <span className="text-10 font-bold uppercase tracking-wider text-gray-700 2xl:text-[11px] dark:text-white/80">
           Currency
         </span>
         <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">
           {selectedAccount.currency}
         </span>
       </span>
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1.5 2xl:px-3 2xl:py-2 dark:border-white/10 dark:bg-white/4">
-        <Clock className="h-3 w-3 text-[#15DCFF] 2xl:h-3.5 2xl:w-3.5" />
-        <span className="text-10 font-medium uppercase tracking-wider text-gray-500 2xl:text-[11px] dark:text-white/55">
+      <span className="inline-flex items-center gap-1.5 rounded-xl border-0 bg-[#e2e6ed] px-2.5 py-1.5 shadow-xs 2xl:px-3 2xl:py-2 dark:bg-white/10">
+        <Clock className="h-3.5 w-3.5 text-[#0082FB] dark:text-[#15DCFF]" />
+        <span className="text-10 font-bold uppercase tracking-wider text-gray-700 2xl:text-[11px] dark:text-white/80">
           Timezone
         </span>
         <span className="text-xs font-bold text-gray-900 2xl:text-13 dark:text-white">

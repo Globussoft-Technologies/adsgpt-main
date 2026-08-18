@@ -467,7 +467,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
           const costs = calculateCreditCost(values);
 
           return (
-            <Form className="flex min-h-0 flex-1 flex-col">
+            <Form className="adfactory-services-form flex min-h-0 flex-1 flex-col">
               {/* FIXED TOP — only the Generation Mode toggle stays pinned;
                   everything else (including the Meta pill) scrolls. */}
               {automationAvailable && (
@@ -536,7 +536,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                                     setFieldValue('servicesSelected.text', val);
                                   }
                                 }}
-                                className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                className="adfactory-services-input h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
                                 placeholder="Enter quantity"
                                 disabled={isSubmitting}
                               />
@@ -588,7 +588,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                                       setFieldValue('servicesSelected.image', val);
                                     }
                                   }}
-                                  className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                  className="adfactory-services-input h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
                                   placeholder="Enter quantity"
                                   disabled={isSubmitting}
                                 />
@@ -675,7 +675,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                                         parseInt(e.target.value) || 0
                                       )
                                     }
-                                    className="h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
+                                    className="adfactory-services-input h-10.5 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF]"
                                     placeholder="Enter quantity"
                                     disabled={isSubmitting}
                                   />
@@ -833,7 +833,7 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                       automationActions.saving
                     }
                     title={automationActions?.validationError || ''}
-                    className="min-w-32 rounded-lg bg-linear-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40 2xl:text-base"
+                    className="min-w-32 rounded-lg bg-linear-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:opacity-95 disabled:cursor-not-allowed disabled:text-gray-700 disabled:opacity-65 2xl:text-base dark:disabled:text-white dark:disabled:opacity-40"
                   >
                     {automationActions?.saving
                       ? automationActions?.isEditMode

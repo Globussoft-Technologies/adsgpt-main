@@ -22,7 +22,7 @@ import 'react-date-range/dist/theme/default.css';
 // ─── containers ────────────────────────────────────────────────────────────
 export const Section = ({ children, className = '' }) => (
   <section
-    className={`rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D] 2xl:p-5 ${className}`}
+    className={`rounded-2xl border-0 bg-[#f2f4f7] p-4 shadow-xs dark:bg-[#14181D] 2xl:p-5 ${className}`}
   >
     {children}
   </section>
@@ -32,7 +32,7 @@ export const SectionHeader = ({ title, subtitle, right }) => (
   <div className="mb-3 flex items-start justify-between gap-3">
     <div className="flex-1">
       <h3 className="text-base font-bold text-gray-900 dark:text-white 2xl:text-lg">{title}</h3>
-      {subtitle && <p className="mt-1 text-13 text-gray-500 dark:text-white/70 2xl:text-sm">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-13 font-medium text-gray-700 dark:text-white/85 2xl:text-sm">{subtitle}</p>}
     </div>
     {right}
   </div>
@@ -68,7 +68,7 @@ export const SecondaryButton = ({
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/20 dark:hover:text-white 2xl:px-3.5 2xl:py-2 2xl:text-13 ${className}`}
+    className={`flex shrink-0 items-center gap-1.5 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-1.5 text-xs font-semibold text-[#24211D] shadow-xs transition-all hover:bg-[#EAE5DC] hover:text-[#24211D] disabled:opacity-50 dark:border-0 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 2xl:px-3.5 2xl:py-2 2xl:text-13 ${className}`}
   >
     {children}
   </button>
@@ -78,17 +78,17 @@ export const SecondaryButton = ({
 export const DarkInput = (props) => (
   <input
     {...props}
-    className={`h-9 w-full rounded-xl border border-gray-300 bg-gray-100 px-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:bg-gray-50 focus:outline-none disabled:opacity-50 dark:border-white/12 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-white/45 dark:focus:bg-white/[0.08] 2xl:h-10 2xl:px-3.5 2xl:text-13 ${props.className || ''}`}
+    className={`h-9 w-full rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 text-xs font-medium text-[#24211D] placeholder:text-[#948C80] shadow-xs focus:outline-none focus:border-[#02C8C4] disabled:opacity-50 dark:border-0 dark:bg-white/10 dark:text-white dark:placeholder:text-white/50 2xl:h-10 2xl:px-3.5 2xl:text-13 ${props.className || ''}`}
   />
 );
 
 export const Field = ({ label, hint, children }) => (
   <div className="flex flex-col gap-1.5">
-    <label className="text-10 font-medium uppercase tracking-wider text-gray-500 dark:text-white/60 2xl:text-[11px]">
+    <label className="text-10 font-bold uppercase tracking-wider text-gray-800 dark:text-white/85 2xl:text-[11px]">
       {label}
     </label>
     {children}
-    {hint && <p className="text-10 leading-relaxed text-gray-500 dark:text-white/60 2xl:text-[11px]">{hint}</p>}
+    {hint && <p className="text-10 leading-relaxed font-medium text-gray-700 dark:text-white/80 2xl:text-[11px]">{hint}</p>}
   </div>
 );
 
@@ -215,7 +215,7 @@ export const CollapsibleCard = ({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div
-      className={`relative rounded-2xl border bg-white transition-colors focus-within:z-50 dark:bg-[#14181D] ${
+      className={`relative overflow-hidden rounded-2xl border bg-white transition-colors focus-within:z-50 dark:bg-[#14181D] ${
         open ? 'z-30' : ''
       } ${
         warn
@@ -228,7 +228,7 @@ export const CollapsibleCard = ({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 dark:hover:bg-white/4 2xl:px-5 2xl:py-3.5"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04] 2xl:px-5 2xl:py-3.5"
       >
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="min-w-0 truncate text-sm font-bold text-gray-900 dark:text-white 2xl:text-15">{title}</span>

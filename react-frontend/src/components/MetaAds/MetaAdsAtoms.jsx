@@ -8,8 +8,8 @@ import { STATUS_MAP } from './metaAdsUtils';
 export function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-gray-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1A1A1A]/95">
-      {label && <p className="mb-1 text-[10px] font-medium text-gray-500 dark:text-[#BEBEBE]">{label}</p>}
+    <div className="rounded-xl border border-[#DDD7CD] bg-[#FCFAF7]/95 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1A1A1A]/95">
+      {label && <p className="mb-1 text-[10px] font-medium text-[#7A7369] dark:text-[#BEBEBE]">{label}</p>}
       {payload.map((p, i) => (
         <p key={i} className="text-xs font-semibold" style={{ color: p.color || '#15DCFF' }}>
           {p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
@@ -39,8 +39,8 @@ export function Spinner() {
   return (
     <div className="flex items-center justify-center py-10">
       <div className="relative h-8 w-8">
-        <div className="absolute inset-0 rounded-full border-2 border-gray-200 dark:border-white/10" />
-        <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#15DCFF]" />
+        <div className="absolute inset-0 rounded-full border-2 border-[#DDD7CD] dark:border-white/10" />
+        <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-[#0082FB]" />
       </div>
     </div>
   );
@@ -50,11 +50,11 @@ export function Spinner() {
 
 export function EmptyState({ message }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 py-12 dark:border-white/5 dark:bg-[#0D0D0D]/50">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-white/5">
-        <Layers className="h-5 w-5 text-gray-500 dark:text-[#BEBEBE]" />
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] py-12 dark:border-white/5 dark:bg-[#0D0D0D]/50">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FCFAF7] text-[#7A7369] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:text-[#BEBEBE] dark:ring-0">
+        <Layers className="h-5 w-5 text-[#7A7369] dark:text-[#BEBEBE]" />
       </div>
-      <p className="text-sm text-gray-500 dark:text-[#BEBEBE]">{message}</p>
+      <p className="text-sm text-[#7A7369] dark:text-[#BEBEBE]">{message}</p>
     </div>
   );
 }
@@ -78,19 +78,19 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-all duration-300 hover:border-gray-300 dark:border-white/[0.06] dark:bg-[#0D0D0D]/60 dark:hover:border-white/10 2xl:p-5"
+      className="group relative overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-xl transition-all duration-300 dark:border-white/10 dark:bg-[#14181D] 2xl:p-5"
     >
       <div
-        className={`pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-15 blur-2xl ${glowColor ?? 'bg-[#15DCFF]'}`}
+        className={`pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-20 blur-2xl ${glowColor ?? 'bg-[#15DCFF]'}`}
       />
       <div className="relative flex flex-col gap-3">
         <div className="flex items-start justify-between">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#15DCFF]/15 to-[#6b72f8]/15">
-            <Icon className="h-4 w-4 text-[#15DCFF]" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FCFAF7] shadow-xs ring-1 ring-[#DDD7CD] dark:bg-gradient-to-br dark:from-[#15DCFF]/20 dark:to-[#6b72f8]/20 dark:ring-0">
+            <Icon className="h-4 w-4 text-[#0082FB] dark:text-[#15DCFF]" />
           </div>
           {trend != null && !loading && (
             <span
-              className={`flex items-center gap-0.5 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : trend < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-[#BEBEBE]'}`}
+              className={`flex items-center gap-0.5 text-[10px] font-bold ${trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : trend < 0 ? 'text-red-600 dark:text-red-400' : 'text-[#7A7369] dark:text-white/80'}`}
             >
               {trend > 0 ? (
                 <ArrowUpRight className="h-3 w-3" />
@@ -104,15 +104,15 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
           )}
         </div>
         <div>
-          <p className="text-[10px] font-medium tracking-widest text-gray-500 uppercase dark:text-[#BEBEBE]">
+          <p className="text-[11px] font-bold tracking-wider text-[#7A7369] uppercase dark:text-white/90">
             {label}
           </p>
           {loading ? (
-            <div className="mt-1.5 h-6 w-24 animate-pulse rounded-lg bg-gray-200 dark:bg-white/5" />
+            <div className="mt-1.5 h-6 w-24 animate-pulse rounded-lg bg-[#E5DFD5] dark:bg-white/5" />
           ) : (
-            <p className="mt-0.5 text-xl font-bold text-gray-900 dark:text-white 2xl:text-2xl">{value}</p>
+            <p className="mt-0.5 text-xl font-bold text-[#24211D] dark:text-white 2xl:text-2xl">{value}</p>
           )}
-          {sub && !loading && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-[#BEBEBE]">{sub}</p>}
+          {sub && !loading && <p className="mt-0.5 text-[11px] font-medium text-[#7A7369] dark:text-white/85">{sub}</p>}
         </div>
       </div>
     </motion.div>
@@ -120,16 +120,6 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
 }
 
 // ─── dropdown ─────────────────────────────────────────────────────────────────
-// `anchor` controls which edge of the menu aligns with the trigger:
-//   - 'right' (default): menu's right edge sticks to trigger's right edge,
-//     menu extends LEFT. Use for triggers near the right of their container.
-//   - 'left': menu's left edge sticks to trigger's left edge, menu extends
-//     RIGHT. Use for triggers near the left of their container — otherwise
-//     the menu gets clipped off the left side of the viewport.
-// `direction` controls which side of the trigger the menu opens:
-//   - 'down' (default): menu sits below the trigger.
-//   - 'up': menu sits above the trigger. Use when the trigger is near the
-//     bottom of the page — otherwise the menu spills past the viewport.
 
 export function Dropdown({
   trigger,
@@ -163,7 +153,7 @@ export function Dropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: yIn, scale: 0.97 }}
             transition={{ duration: 0.14, ease: 'easeOut' }}
-            className={`absolute ${horizontal} ${vertical} z-50 overflow-hidden rounded-2xl border border-gray-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/12 dark:bg-[#14181D]/95`}
+            className={`absolute ${horizontal} ${vertical} z-50 overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-2xl backdrop-blur-xl dark:border-white/12 dark:bg-[#14181D]/95`}
           >
             {children}
           </motion.div>

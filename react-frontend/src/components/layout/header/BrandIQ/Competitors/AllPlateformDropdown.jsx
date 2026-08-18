@@ -1,50 +1,53 @@
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
+import { Check } from 'lucide-react';
 
 const AllPlateformDropdown = ({ options = [], label = '', value = '', onChange }) => {
   return (
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
-        className="group 2xl:text-13 backdrop-blur-100 dark:text-[#AFAFAF] shadow-none relative flex min-w-fit items-center gap-0 rounded-[50px] border border-black/10 bg-gray-50 py-3.5 text-[10px] text-gray-700 hover:bg-gray-100 2xl:py-[18px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:hover:bg-transparent dark:data-[state=open]:text-white"
+        className="group relative flex min-w-fit items-center gap-1.5 rounded-full border border-black/10 dark:border-white/15 bg-white/90 dark:bg-[#18181b]/90 px-4 py-2 text-xs font-medium text-gray-800 dark:text-white shadow-xs hover:bg-gray-50 dark:hover:bg-white/10 transition-all"
       >
-        <div className="flex items-center gap-1.5 pr-1 capitalize group-hover:text-gray-900 dark:group-hover:text-white 2xl:gap-2 2xl:text-sm">
+        <div className="flex items-center gap-1.5 capitalize text-xs font-medium text-gray-800 dark:text-white">
           {(() => {
             const active = options.find((opt) => opt.value === value?.value);
             if (!active) return <span>{label}</span>;
             const IconComp = active.icon;
             return (
               <>
-                {/* {IconComp && <IconComp className="h-3 w-3 2xl:h-4 2xl:w-4" />} */}
-                <span className="dark:group-data-[state=open]:text-white">{active.label}</span>
+                {IconComp && <IconComp className="h-3.5 w-3.5" />}
+                <span>{active.label}</span>
               </>
             );
           })()}
         </div>
       </SelectTrigger>
 
-      <SelectContent className="min-w-40 border border-black/10 bg-white text-gray-900 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
-        <div className="flex flex-col 2xl:gap-1">
-          {options.map(({ value: optionValue, label, icon }) => (
-            <SelectItem
-              key={optionValue}
-              value={optionValue}
-              className={`group cursor-pointer text-[10px] hover:bg-[#DFDFDF] hover:text-gray-900 2xl:text-xs dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
-                value?.value === optionValue
-                  ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white dark:bg-[#0D0D0D]/50'
-                  : 'bg-transparent text-gray-800'
-              } focus:bg-transparent focus:text-inherit`}
-            >
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const IconComp = icon;
-                  return IconComp ? <IconComp className="h-3 w-3 2xl:h-4 2xl:w-4" /> : null;
-                })()}
-                <span className="text-[9px] group-hover:text-gray-900 dark:group-hover:text-white 2xl:text-xs dark:text-inherit">
-                  {label}
-                </span>
-              </div>
-            </SelectItem>
-          ))}
+      <SelectContent className="min-w-48 overflow-hidden rounded-[18px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#18181b] p-1.5 text-gray-900 dark:text-white shadow-2xl backdrop-blur-xl">
+        <div className="flex flex-col gap-1">
+          {options.map(({ value: optionValue, label, icon }) => {
+            const isSelected = value?.value === optionValue;
+            const IconComp = icon;
+            return (
+              <SelectItem
+                key={optionValue}
+                value={optionValue}
+                className={`cursor-pointer rounded-[10px] px-3 py-2 text-xs font-medium transition-all outline-none ${
+                  isSelected
+                    ? 'bg-gradient-to-r! from-[#02C8C4]! to-[#5867EB]! text-white! font-semibold shadow-xs focus:bg-gradient-to-r! focus:from-[#02C8C4]! focus:to-[#5867EB]! focus:text-white!'
+                    : 'text-gray-700! hover:bg-gray-100! hover:text-gray-900! dark:text-white/80! dark:hover:bg-white/10! dark:hover:text-white! focus:bg-gray-100! dark:focus:bg-white/10! focus:text-gray-900! dark:focus:text-white!'
+                }`}
+              >
+                <div className="flex w-full items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {IconComp && <IconComp className="h-3.5 w-3.5 shrink-0" />}
+                    <span className="text-xs font-medium">{label}</span>
+                  </div>
+                  {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-white" />}
+                </div>
+              </SelectItem>
+            );
+          })}
         </div>
       </SelectContent>
     </Select>

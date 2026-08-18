@@ -86,7 +86,7 @@ const PipelineGroupNode = ({ data, dragging }) => {
           handleCardClick(e);
         }
       }}
-      className={`group relative rounded-2xl border bg-[linear-gradient(135deg,rgba(255,255,255,0.85),rgba(247,248,250,0.92))] shadow-sm backdrop-blur-3xl transition-all duration-300 select-none dark:bg-[linear-gradient(135deg,rgba(48,48,48,0.3),rgba(40,40,40,0.5))] dark:shadow-none ${
+      className={`ad_factory_card workspace-card group relative rounded-2xl border bg-[linear-gradient(135deg,rgba(255,255,255,0.85),rgba(247,248,250,0.92))] transition-all duration-300 select-none dark:bg-[linear-gradient(135deg,rgba(48,48,48,0.3),rgba(40,40,40,0.5))] dark:shadow-none ${
         expanded
           ? 'h-full w-full'
           : isClickable

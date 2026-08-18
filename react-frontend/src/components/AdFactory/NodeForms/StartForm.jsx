@@ -30,13 +30,13 @@ export default function StartFormDialog({ open, onOpenChange }) {
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="backdrop-blur-100 w-[96%] max-w-3xl! scale-100! rounded-[30px] border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#303030]/50 dark:text-white p-10 md:w-full">
+        <DialogContent className="light-glass-dialog adfactory-start-dialog backdrop-blur-xl w-[96%] max-w-3xl! scale-100! rounded-[30px] border border-[var(--ws-border)] bg-[var(--ws-surface)] text-[#24211D] shadow-2xl p-10 md:w-full dark:border-white/10 dark:bg-[#303030]/50 dark:text-white">
           {/* Headings */}
           <div className="headings flex flex-col gap-0.5">
             <p className="mb-0 bg-gradient-to-b from-[#5057d6] to-[#0c9fbd] dark:from-[#5E66F5] dark:to-[#15DCFF] bg-clip-text text-center text-[26px] font-semibold text-transparent">
               Start — Create Campaign
             </p>
-            <p className="mb-2 text-center text-[16px] font-medium text-gray-500 dark:text-[#AFAFAF]">
+            <p className="mb-2 text-center text-[16px] font-medium text-[#7A7369] dark:text-[#AFAFAF]">
               Give your campaign a name to get started.
             </p>
           </div>
@@ -95,17 +95,17 @@ export default function StartFormDialog({ open, onOpenChange }) {
               }}
             >
               {({ errors, touched, isValid, dirty, isSubmitting }) => (
-                <Form className="space-y-5">
+                <Form className="adfactory-start-form space-y-5">
                   {/* Campaign Name */}
                   <div>
-                    <label className="text-[18px] font-medium text-gray-900 dark:text-white">Campaign Name*</label>
+                    <label className="text-[18px] font-medium text-[#24211D] dark:text-white">Campaign Name*</label>
                     <div className="mt-2">
                       <Field
                         name="campaignName"
-                        className={`rounded-10 h-[52px] w-full bg-gray-100 dark:bg-[#909294]/20 px-5 py-2.5 text-gray-900 dark:text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] ${
+                        className={`adfactory-start-input rounded-10 h-[52px] w-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-5 py-2.5 text-[#24211D] shadow-xs outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#948C80] focus:border-[#02C8C4] dark:border-transparent dark:bg-[#909294]/20 dark:text-white dark:placeholder:text-[#AFAFAF] ${
                           errors.campaignName && touched.campaignName
-                            ? 'border border-red-500'
-                            : 'border border-transparent'
+                            ? 'border-red-500!'
+                            : ''
                         }`}
                         placeholder="Enter your creative campaign name"
                         disabled={isSubmitting || loading}
@@ -114,18 +114,18 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     <ErrorMessage
                       name="campaignName"
                       component="div"
-                      className="mt-1 text-xs text-red-400"
+                      className="mt-1 text-xs text-red-500"
                     />
                   </div>
                   <div>
-                    <label className="text-[18px] font-medium text-gray-900 dark:text-white">Website URL</label>
+                    <label className="text-[18px] font-medium text-[#24211D] dark:text-white">Website URL</label>
                     <div className="mt-2">
                       <Field
                         name="website_url"
-                        className={`rounded-10 h-[52px] w-full bg-gray-100 dark:bg-[#909294]/20 px-5 py-2.5 text-gray-900 dark:text-white backdrop-blur-md outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] ${
+                        className={`adfactory-start-input rounded-10 h-[52px] w-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-5 py-2.5 text-[#24211D] shadow-xs outline-none placeholder:text-[16px] placeholder:font-medium placeholder:text-[#948C80] focus:border-[#02C8C4] dark:border-transparent dark:bg-[#909294]/20 dark:text-white dark:placeholder:text-[#AFAFAF] ${
                           errors.website_url
-                            ? 'border border-red-500'
-                            : 'border border-transparent'
+                            ? 'border-red-500!'
+                            : ''
                         }`}
                         placeholder="https://example.com (optional)"
                         disabled={isSubmitting || loading}
@@ -134,14 +134,14 @@ export default function StartFormDialog({ open, onOpenChange }) {
                     <ErrorMessage
                       name="website_url"
                       component="div"
-                      className="mt-1 text-xs text-red-400"
+                      className="mt-1 text-xs text-red-500"
                     />
                   </div>
                   {/* Action Buttons */}
                   <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-end">
                     <button
                       type="button"
-                      className="rounded-lg border border-gray-300 dark:border-[#E3E3E3] bg-transparent px-10 py-1.5 text-gray-700 dark:text-[#E3E3E3] hover:bg-black/5 dark:hover:bg-zinc-800 disabled:opacity-50"
+                      className="rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-10 py-2.5 text-sm font-medium text-[#24211D] shadow-xs transition-all hover:bg-[var(--ws-surface-header)] disabled:opacity-50 dark:border-[#E3E3E3] dark:bg-transparent dark:text-[#E3E3E3] dark:hover:bg-zinc-800"
                       disabled={isSubmitting}
                       onClick={handleClose}
                     >

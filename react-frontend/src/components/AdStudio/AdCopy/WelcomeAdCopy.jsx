@@ -78,7 +78,7 @@ const WelcomeAdCopy = () => {
                   onClick={() => handleSuggestionClick(card.text)}
                   key={card?.id || index}
                 >
-                  <div className="group relative flex h-full cursor-pointer flex-col gap-6 rounded-2xl border border-black/[0.04] bg-white p-4 text-sm text-zinc-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] to-[#5771F6]/50 sm:p-6 group-hover:bg-zinc-50 dark:border-transparent dark:from-[#222222] dark:bg-[#222222]/50 dark:text-[#AFAFAF] dark:shadow-none dark:group-hover:bg-gradient-to-br">
+                  <div className="workspace-card group relative flex h-full cursor-pointer flex-col gap-6 rounded-2xl p-4 text-sm text-zinc-700 sm:p-6 dark:border-transparent dark:from-[#222222] dark:bg-[#222222]/50 dark:text-[#AFAFAF] dark:shadow-none dark:group-hover:bg-gradient-to-br">
                     <Icon className="h-5 w-5 text-[#6e7782] opacity-90 dark:text-white dark:opacity-70 dark:group-hover:text-[#5E66F5]" />
                     <p className="max-w-[176px] text-xs 2xl:text-sm">{card.text}</p>
                   </div>

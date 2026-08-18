@@ -356,18 +356,16 @@ const Composer = ({
 
   const radius = variant === 'centered' ? 28 : 24;
 
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
+
   return (
     <>
+    <div className="lm-composer-card w-full">
     <BorderGlow
       edgeSensitivity={30}
       glowColor="40 80 80"
-      // Glassmorphism (matches the Ad Studio → Ad Copy prompt box): translucent
-      // dark fill + heavy backdrop blur so the background gradient frosts through.
-      // `glow-edge-only` disables BorderGlow's two colored mesh-gradient layers
-      // (::before/::after) — they mask their interior with the card bg, so a
-      // TRANSLUCENT glass card lets the mesh bleed inside. Dropping them keeps the
-      // outer edge glow + border only, with a clean glass interior.
-      backgroundColor="rgba(20,20,26,0.35)"
+      // In dark mode: translucent dark glass. In light mode: soft grey neumorphic card.
+      backgroundColor={isDarkMode ? 'rgba(20,20,26,0.35)' : 'rgba(238,241,243,0.85)'}
       className="backdrop-blur-[40px] glow-edge-only"
       borderRadius={radius}
       glowRadius={40}
@@ -378,20 +376,20 @@ const Composer = ({
     >
       <div className="flex w-full flex-col gap-2 px-5 py-4">
         {quote?.text && (
-          <div className="flex items-start gap-2 rounded-xl border-l-2 border-white/30 bg-white/[0.04] px-3 py-2">
-            <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/70" />
+          <div className="flex items-start gap-2 rounded-xl border-l-2 border-black/20 bg-black/[0.04] px-3 py-2 dark:border-white/30 dark:bg-white/[0.04]">
+            <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500 dark:text-white/70" />
             <div className="min-w-0 flex-1">
-              <div className="text-[10.5px] font-medium tracking-wide text-white/70 uppercase">
+              <div className="text-[10.5px] font-medium tracking-wide text-zinc-600 uppercase dark:text-white/70">
                 Replying to {quote.role === 'assistant' ? 'assistant' : quote.role === 'user' ? 'you' : 'message'}
               </div>
-              <div className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-white/65">
+              <div className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-zinc-500 dark:text-white/65">
                 {quote.text}
               </div>
             </div>
             <button
               type="button"
               onClick={() => onClearQuote?.()}
-              className="shrink-0 text-white/45 hover:text-white"
+              className="shrink-0 text-zinc-400 hover:text-zinc-800 dark:text-white/45 dark:hover:text-white"
               aria-label="Cancel reply"
             >
               <X className="h-3.5 w-3.5" />
@@ -407,7 +405,7 @@ const Composer = ({
                   key={a.tempId}
                   onDoubleClick={() => !a.pending && setLightboxSrc(a.url)}
                   title={a.pending ? undefined : 'Double-click to preview'}
-                  className="group relative h-16 w-16 cursor-zoom-in overflow-hidden rounded-lg border border-white/10 bg-black/40"
+                  className="group relative h-16 w-16 cursor-zoom-in overflow-hidden rounded-lg border border-black/10 bg-black/10 dark:border-white/10 dark:bg-black/40"
                 >
                   <img
                     src={a.pending ? a.preview : toMediaUrl(a.url)}
@@ -446,7 +444,7 @@ const Composer = ({
               ) : (
                 <div
                   key={a.tempId}
-                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/85"
+                  className="flex items-center gap-2 rounded-full border border-black/10 bg-black/5 px-3 py-1 text-[11px] text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-white/85"
                 >
                   {a.pending && <Loader2 className="h-3 w-3 animate-spin" />}
                   <span className="max-w-[200px] truncate">{a.filename || a.url}</span>
@@ -472,7 +470,7 @@ const Composer = ({
         {attachments.length > 0 && (
           <span
             className={`text-[11px] font-medium ${
-              attachments.length >= MAX_ATTACHMENTS ? 'text-amber-400/90' : 'text-white/45'
+              attachments.length >= MAX_ATTACHMENTS ? 'text-amber-500/90' : 'text-zinc-400 dark:text-white/45'
             }`}
           >
             {attachments.length} / {MAX_ATTACHMENTS} files
@@ -481,8 +479,8 @@ const Composer = ({
         )}
 
         {showUrlInput && (
-          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
-            <Link2 className="ml-1 h-4 w-4 shrink-0 text-white/45" />
+          <div className="composer-url-field flex items-center gap-2 rounded-xl border border-black/10 bg-black/5 p-2 dark:border-white/10 dark:bg-black/20">
+            <Link2 className="ml-1 h-4 w-4 shrink-0 text-zinc-400 dark:text-white/45" />
             <input
               type="url"
               value={imageUrl}
@@ -497,13 +495,13 @@ const Composer = ({
               }}
               autoFocus
               placeholder="https://example.com/image.png"
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
+              className="composer-url-input min-w-0 flex-1 bg-transparent text-[12px] text-zinc-800 outline-none placeholder:text-zinc-400 dark:text-white dark:placeholder:text-white/35"
             />
             <button
               type="button"
               onClick={handleAddImageUrl}
               disabled={urlAdding || !imageUrl.trim()}
-              className="inline-flex h-7 items-center rounded-full bg-white px-3 text-[11px] font-semibold text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-7 items-center rounded-full bg-zinc-900 px-3 text-[11px] font-semibold text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-white/90"
             >
               {urlAdding ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
             </button>
@@ -513,7 +511,7 @@ const Composer = ({
                 setShowUrlInput(false);
                 setImageUrl('');
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-black/10 hover:text-zinc-800 dark:text-white/45 dark:hover:bg-white/10 dark:hover:text-white"
               aria-label="Close image URL input"
             >
               <X className="h-3.5 w-3.5" />
@@ -540,7 +538,7 @@ const Composer = ({
           // Stay typeable while a response streams — the user can compose their
           // next message; only sending is locked (see canSend / the send button).
           disabled={false}
-          className="w-full resize-none overflow-y-auto border-0 bg-transparent text-[19px] leading-8 text-white outline-none placeholder:text-white/40 disabled:opacity-60"
+          className="w-full resize-none overflow-y-auto border-0 bg-transparent text-[19px] leading-8 text-zinc-800 outline-none placeholder:text-zinc-400 disabled:opacity-60 dark:text-white dark:placeholder:text-white/40"
           style={{ minHeight: `${minTextareaPx}px`, maxHeight: `${maxTextareaPx}px` }}
         />
 
@@ -553,8 +551,8 @@ const Composer = ({
               type="button"
               onClick={() => setShowUrlInput((open) => !open)}
               disabled={disabled}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50 ${
-                showUrlInput ? 'bg-white/10 text-white' : 'text-white/60'
+              className={`lm-icon-btn flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/10 hover:text-zinc-800 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white ${
+                showUrlInput ? 'bg-black/10 text-zinc-800 dark:bg-white/10 dark:text-white' : 'text-zinc-400 dark:text-white/60'
               }`}
               aria-label="Attach image from URL"
               title="Attach image from URL"
@@ -565,7 +563,7 @@ const Composer = ({
               type="button"
               onClick={handleAttachClick}
               disabled={disabled}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+              className="lm-icon-btn flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-black/10 hover:text-zinc-800 disabled:opacity-50 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
               aria-label="Attach file"
               title="Attach file"
             >
@@ -591,8 +589,8 @@ const Composer = ({
               disabled={!canSend}
               className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
                 canSend
-                  ? 'bg-white text-black hover:bg-white/90 shadow-[0_4px_12px_rgba(255,255,255,0.15)]'
-                  : 'bg-white/10 text-white/40'
+                  ? 'lm-send-btn bg-zinc-900 text-white hover:bg-zinc-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:bg-white dark:text-black dark:hover:bg-white/90 dark:shadow-[0_4px_12px_rgba(255,255,255,0.15)]'
+                  : 'bg-black/10 text-zinc-400 dark:bg-white/10 dark:text-white/40'
               }`}
               aria-label="Send message"
             >
@@ -602,6 +600,7 @@ const Composer = ({
         </div>
       </div>
     </BorderGlow>
+    </div>
     <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </>
   );

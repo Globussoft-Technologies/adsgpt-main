@@ -357,7 +357,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
       </div>
 
       {/* Filter bar — relative+z-20 lifts dropdowns above the table below. */}
-      <Section className="relative z-20 p-3!">
+      <Section className="relative z-20 !bg-[var(--ws-surface)] p-3! dark:!bg-[#14181D]">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           {/* Search */}
           <div className="relative w-full xl:max-w-sm">
@@ -367,7 +367,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
               value={filters.search}
               onChange={(e) => setFilter('search', e.target.value)}
               placeholder="Search entity, rule, account…"
-              className="h-9 w-full rounded-xl border border-gray-200 bg-gray-100 pr-3 pl-9 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-white/45 2xl:h-10 2xl:text-13"
+              className="h-9 w-full rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] pr-3 pl-9 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-white/45 2xl:h-10 2xl:text-13"
             />
           </div>
 
@@ -427,7 +427,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
         </div>
 
         {/* Result count + utility buttons */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3 dark:border-white/10">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--ws-border)] pt-3 dark:border-white/10">
           <div className="text-10 text-gray-500 dark:text-white/70 2xl:text-xs">
             Showing{' '}
             <span className="text-gray-900 dark:text-white">
@@ -461,11 +461,11 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
       {error && <Banner variant="error">{error}</Banner>}
 
       {/* Table */}
-      <Section className="overflow-hidden p-0!">
+      <Section className="overflow-hidden !bg-[var(--ws-surface)] p-0! dark:!bg-[#14181D]">
         <div className="scrollbar-thin max-h-[65vh] overflow-auto">
           <table className="w-full min-w-[820px] text-xs 2xl:text-13">
-            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-[#14181D]">
-              <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-white/10 dark:bg-white/2">
+            <thead className="sticky top-0 z-10 bg-[var(--ws-surface-header)] dark:bg-[#14181D]">
+              <tr className="border-b border-[var(--ws-border)] bg-[var(--ws-surface-header)] text-left dark:border-white/10 dark:bg-white/2">
                 <Th>Trigger</Th>
                 <Th>Entity</Th>
                 <Th>Rule</Th>
@@ -533,7 +533,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
 const PageHeader = ({ loading }) => (
   <div className="flex flex-wrap items-start justify-between gap-3">
     <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-[#1A2027] 2xl:h-11 2xl:w-11">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] dark:border-white/10 dark:bg-[#1A2027] 2xl:h-11 2xl:w-11">
         <ClipboardList className="h-5 w-5 text-gray-700 dark:text-white/85 2xl:h-5.5 2xl:w-5.5" />
       </div>
       <div className="min-w-0">
@@ -558,7 +558,7 @@ const PageHeader = ({ loading }) => (
 
 // ─── KPI card ──────────────────────────────────────────────────────────────
 const KpiCard = ({ label, value, sub, valueClassName = '', truncateValue }) => (
-  <div className="rounded-2xl border border-gray-200 bg-white p-4 backdrop-blur-xl transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15 2xl:p-5">
+  <div className="rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface)] p-4 backdrop-blur-xl transition-colors hover:border-[var(--ws-border-strong)] dark:border-white/10 dark:bg-[#14181D] dark:hover:border-white/15 2xl:p-5">
     <div className="text-10 font-bold tracking-wider text-gray-500 uppercase dark:text-white/55 2xl:text-[11px]">
       {label}
     </div>
@@ -589,8 +589,8 @@ const LogRow = ({ row, expanded, onToggle }) => {
     <>
       <tr
         onClick={onToggle}
-        className={`group cursor-pointer border-b border-gray-200 align-top transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/3 ${
-          expanded ? 'bg-gray-100 dark:bg-white/4' : ''
+        className={`group cursor-pointer border-b border-[var(--ws-border)] align-top transition-colors hover:bg-[var(--ws-surface-header)] dark:border-white/10 dark:hover:bg-white/3 ${
+          expanded ? 'bg-[var(--ws-surface-header)] dark:bg-white/4' : ''
         }`}
       >
         {/* Trigger */}
@@ -678,7 +678,7 @@ const LogRow = ({ row, expanded, onToggle }) => {
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.015]">
+        <tr className="border-b border-[var(--ws-border)] bg-[var(--ws-surface-header)] dark:border-white/10 dark:bg-white/[0.015]">
           <td colSpan={5} className="px-4 py-4 sm:px-6 sm:py-5">
             <ExpandedDetail row={row} />
           </td>
@@ -698,7 +698,7 @@ const ExpandedDetail = ({ row }) => {
       <div className="flex flex-col gap-4">
         <DetailBlock label="What happened">
           <div
-            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 p-3 dark:border-white/12 dark:bg-white/[0.04]`}
+            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 dark:border-white/12 dark:bg-white/[0.04]`}
           >
             <span
               className={`absolute top-2 bottom-2 left-0 w-0.5 rounded-full ${actionAccent(row.action).bar}`}
@@ -723,7 +723,7 @@ const ExpandedDetail = ({ row }) => {
         </DetailBlock>
 
         <DetailBlock label="Rule fired">
-          <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 dark:border-white/12 dark:bg-white/[0.04]">
+          <div className="rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 dark:border-white/12 dark:bg-white/[0.04]">
             <div className="text-sm font-medium text-gray-900 dark:text-white">
               {formatRuleLabel(row) || '—'}
             </div>
@@ -866,7 +866,7 @@ const ActionLinkButton = ({ href, children }) => (
     href={href}
     target="_blank"
     rel="noopener noreferrer"
-    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white"
+    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-header)] hover:text-gray-900 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white"
   >
     {children}
   </a>
@@ -877,7 +877,7 @@ const ActionButton = ({ onClick, disabled, children }) => (
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-gray-200 disabled:hover:bg-gray-100 disabled:hover:text-gray-700 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white dark:disabled:hover:border-white/12 dark:disabled:hover:bg-white/[0.04] dark:disabled:hover:text-white/85"
+    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-header)] hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[var(--ws-border)] disabled:hover:bg-[var(--ws-surface-control)] disabled:hover:text-gray-700 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/85 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white dark:disabled:hover:border-white/12 dark:disabled:hover:bg-white/[0.04] dark:disabled:hover:text-white/85"
   >
     {children}
   </button>
@@ -886,7 +886,7 @@ const ActionButton = ({ onClick, disabled, children }) => (
 const MetricsGrid = ({ snapshot, currency }) => {
   if (!snapshot || typeof snapshot !== 'object') {
     return (
-      <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
+      <div className="rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
         No metric snapshot recorded.
       </div>
     );
@@ -956,7 +956,7 @@ const MetricsGrid = ({ snapshot, currency }) => {
 
   if (!metrics.length) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-gray-100 p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
+      <div className="rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 text-11 text-gray-400 dark:border-white/12 dark:bg-white/[0.04] dark:text-white/45">
         No metrics recorded for this trigger.
       </div>
     );
@@ -966,7 +966,7 @@ const MetricsGrid = ({ snapshot, currency }) => {
       {metrics.map((m) => (
         <div
           key={m.key}
-          className="rounded-xl border border-gray-200 bg-gray-100 px-3 py-2.5 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-white/12 dark:bg-white/[0.04] dark:hover:border-white/16 dark:hover:bg-white/[0.06]"
+          className="rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-2.5 transition-colors hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-header)] dark:border-white/12 dark:bg-white/[0.04] dark:hover:border-white/16 dark:hover:bg-white/[0.06]"
         >
           <div className="text-10 font-bold tracking-[0.14em] text-gray-400 uppercase dark:text-white/45">
             {m.label}
@@ -996,7 +996,7 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 dark:border-white/12 dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-2.5 py-1 text-xs font-medium text-gray-900 transition-all hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-header)] dark:border-white/12 dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
         >
           {value}
           <ChevronDown className="h-3 w-3 text-gray-400 dark:text-[#BEBEBE]" />
@@ -1012,9 +1012,9 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
               onChange(s);
               setOpen(false);
             }}
-            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all hover:bg-[var(--ws-surface-header)] dark:hover:bg-white/5 ${
               value === s
-                ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5'
+                ? 'bg-[var(--ws-surface-header)] text-[#15DCFF] dark:bg-white/5'
                 : 'text-gray-900 dark:text-white'
             }`}
           >
@@ -1039,7 +1039,7 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className={`flex ${widthClass} items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-900 transition-all hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:border-white/10`}
+          className={`flex ${widthClass} items-center justify-between gap-2 rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-2 text-xs text-gray-900 transition-all hover:border-[var(--ws-border-strong)] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:border-white/10`}
         >
           <span className="truncate font-medium">{selected.label}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-gray-400 dark:text-[#BEBEBE]" />
@@ -1047,7 +1047,7 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
       }
     >
       <div className="w-56 p-1">
-        <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
+        <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--ws-border-strong)] dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
           {options.map((o) => (
             <button
               key={o.value}
@@ -1055,9 +1055,9 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
                 onChange(o.value);
                 setOpen(false);
               }}
-              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${
+              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-[var(--ws-surface-header)] dark:hover:bg-white/5 ${
                 value === o.value
-                  ? 'bg-gray-100 text-[#15DCFF] dark:bg-white/5'
+                  ? 'bg-[var(--ws-surface-header)] text-[#15DCFF] dark:bg-white/5'
                   : 'text-gray-900 dark:text-white'
               }`}
             >
@@ -1084,7 +1084,7 @@ const Pagination = ({
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface)] p-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#14181D]">
       <div className="flex flex-wrap items-center gap-3 text-10 text-gray-500 dark:text-white/70 2xl:text-xs">
         <span>
           Showing{' '}
@@ -1141,7 +1141,7 @@ const EntityLevelPill = ({ level }) => {
   const label =
     level === 'ad' ? 'AD' : level === 'adset' ? 'AD-SET' : 'CAMPAIGN';
   return (
-    <span className="inline-flex items-center rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-gray-500 uppercase dark:border-white/8 dark:bg-white/5 dark:text-white/55">
+    <span className="inline-flex items-center rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-gray-500 uppercase dark:border-white/8 dark:bg-white/5 dark:text-white/55">
       {label}
     </span>
   );
@@ -1184,7 +1184,7 @@ const OutcomePill = ({ outcome }) => {
     },
     skipped: {
       dot: 'bg-gray-400 dark:bg-white/40',
-      cls: 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/15 dark:bg-white/5 dark:text-white/65',
+      cls: 'border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-gray-500 dark:border-white/15 dark:bg-white/5 dark:text-white/65',
     },
     pending: {
       dot: 'bg-amber-400',
@@ -1227,44 +1227,44 @@ const actionAccent = (action) => {
       return {
         bar: 'bg-rose-500/45',
         iconBg: 'border border-rose-500/35 bg-rose-500/12',
-        iconFg: 'text-rose-300',
+        iconFg: 'text-rose-600 dark:text-rose-300',
       };
     case 'resume':
       return {
         bar: 'bg-emerald-500/45',
         iconBg: 'border border-emerald-500/35 bg-emerald-500/12',
-        iconFg: 'text-emerald-300',
+        iconFg: 'text-emerald-600 dark:text-emerald-300',
       };
     case 'scale_budget':
       return {
         bar: 'bg-emerald-500/45',
         iconBg: 'border border-emerald-500/35 bg-emerald-500/12',
-        iconFg: 'text-emerald-300',
+        iconFg: 'text-emerald-600 dark:text-emerald-300',
       };
     case 'alert_only':
       return {
         bar: 'bg-gray-300 dark:bg-white/20',
         iconBg:
-          'border border-gray-200 bg-gray-100 dark:border-white/15 dark:bg-white/[0.05]',
-        iconFg: 'text-gray-500 dark:text-white/70',
+          'border border-[var(--ws-border)] bg-[var(--ws-surface-control)] dark:border-white/15 dark:bg-white/[0.05]',
+        iconFg: 'text-gray-700 dark:text-white/70',
       };
     case 'rotate_creative':
       return {
         bar: 'bg-cyan-500/45',
         iconBg: 'border border-cyan-500/35 bg-cyan-500/12',
-        iconFg: 'text-cyan-300',
+        iconFg: 'text-cyan-600 dark:text-cyan-300',
       };
     case 'rename':
       return {
         bar: 'bg-indigo-500/45',
         iconBg: 'border border-indigo-500/35 bg-indigo-500/12',
-        iconFg: 'text-indigo-300',
+        iconFg: 'text-indigo-600 dark:text-indigo-300',
       };
     default:
       return {
         bar: 'bg-gray-300 dark:bg-white/20',
         iconBg:
-          'border border-gray-200 bg-gray-100 dark:border-white/15 dark:bg-white/[0.05]',
+          'border border-[var(--ws-border)] bg-[var(--ws-surface-control)] dark:border-white/15 dark:bg-white/[0.05]',
         iconFg: 'text-gray-500 dark:text-white/60',
       };
   }

@@ -332,7 +332,7 @@ function DeleteModal({ item, onConfirm, onCancel, deleting }) {
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ duration: 0.18 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+        className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
       >
         <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -417,7 +417,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-190 border-collapse">
           <thead>
@@ -434,10 +434,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="py-14"><Spinner /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const id        = c.campaignId || c.id;
@@ -646,7 +646,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
         </div>
       </div>
     )}
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           {isPmax ? 'Asset groups' : 'Ad groups'} in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
@@ -866,7 +866,7 @@ function GoogleAdDrawer({ ad, adAccountId, onClose, onStatusChange }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#181818]"
+      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#181818]"
     >
       <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/12">
         <div>
@@ -1250,7 +1250,7 @@ function PmaxAssetGroupDetail({ adGroup, campaign, adAccountId, manageNonce, onL
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
                 <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -1295,7 +1295,7 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
   if (adGroup.isPmax || adGroup.type === 'ASSET_GROUP') {
     const agId = adGroup.adGroupId || adGroup.id;
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
           <div className="flex items-center gap-2">
             <Layers className="h-3.5 w-3.5 text-[#4285F4]" />
@@ -1468,7 +1468,7 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
 
   return (
     <div className="flex min-h-0 flex-1 gap-3">
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ads in <span className="text-gray-900 dark:text-white">{adGroup.name}</span>

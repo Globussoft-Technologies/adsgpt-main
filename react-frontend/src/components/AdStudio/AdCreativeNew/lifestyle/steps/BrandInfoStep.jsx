@@ -304,7 +304,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                     setBrandLogoUrl(text.trim());
                   }
                 }}
-                className="text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
+                className="adcreative-composed-field text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
               >
                 <div className="flex flex-1 items-center justify-between">
                   <input
@@ -316,7 +316,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                     value={brandLogoUrl?.startsWith('blob:') ? '' : brandLogoUrl}
                     onChange={(e) => setBrandLogoUrl(e.target.value)}
                     placeholder="Paste your Brand logo"
-                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
+                    className="adcreative-composed-field-input w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
                   />
                   <LinkIcon className="h-3 w-3 text-gray-500 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
                 </div>
@@ -406,7 +406,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
             <Field label="Brand Images">
               <div
                 onPaste={handleBrandImagePaste}
-                className="text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
+                className="adcreative-composed-field text-10 flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-gray-500 dark:text-[#afafaf]"
               >
                 <div className="flex flex-1 items-center justify-between">
                   <input
@@ -421,7 +421,7 @@ export function BrandInfoStep({ data, title, onBack, onSkip, onClose, onConfirm 
                       }
                     }}
                     placeholder="Paste your Brand image"
-                    className="w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
+                    className="adcreative-composed-field-input w-full rounded-lg bg-transparent px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus:outline-none 2xl:text-base"
                   />
                   <button
                     type="button"

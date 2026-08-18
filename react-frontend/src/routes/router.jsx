@@ -84,6 +84,10 @@ const router = createBrowserRouter([
         element: workspaceFeature('adsManager.meta.manager', <MetaAdsPage />),
       },
       {
+        path: 'autopilot/meta',
+        element: workspaceFeature('adsManager.meta.autopilot', <AutopilotPage />),
+      },
+      {
         path: 'google-ads',
         element: workspaceFeature('adsManager.google.manager', <GoogleAdsPage />),
       },
@@ -132,10 +136,6 @@ const router = createBrowserRouter([
             <AutopilotHomePage />
           </WorkspaceFeatureRoute>
         ),
-      },
-      {
-        path: 'autopilot/meta',
-        element: workspaceFeature('adsManager.meta.autopilot', <AutopilotPage />),
       },
       {
         path: 'my-space',

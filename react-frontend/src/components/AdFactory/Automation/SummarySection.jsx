@@ -78,13 +78,13 @@ export default function SummarySection({
 
   return (
     <section
-      className={`relative flex flex-col gap-2.5 rounded-xl border border-white/10 bg-linear-to-br from-[#15DCFF]/5 via-[#0D0D0D]/40 to-[#6b72f8]/5 px-4 py-3 transition ${
+      className={`relative flex flex-col gap-2.5 rounded-xl border border-black/10 bg-linear-to-br from-[#15DCFF]/5 via-slate-200/70 to-[#6b72f8]/5 px-4 py-3 transition dark:border-white/10 dark:via-[#0D0D0D]/40 ${
         disabled ? 'pointer-events-none select-none' : ''
       }`}
     >
       {disabled && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#0D0D0D]/40 backdrop-blur-sm">
-          <span className="rounded-full border border-white/10 bg-[#0D0D0D]/80 px-3 py-1 text-xs text-[#AFAFAF]">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-200/70 backdrop-blur-sm dark:bg-[#0D0D0D]/40">
+          <span className="rounded-full border border-black/10 bg-slate-300/90 px-3 py-1 text-xs text-gray-600 dark:border-white/10 dark:bg-[#0D0D0D]/80 dark:text-[#AFAFAF]">
             Fill all required fields to see the summary
           </span>
         </div>
@@ -92,12 +92,12 @@ export default function SummarySection({
       <div className={`flex items-center justify-between ${disabled ? 'opacity-60' : ''}`}>
         <div className="flex items-center gap-2">
           <Sigma className="size-4 text-[#15DCFF]" />
-          <h3 className="text-sm font-semibold text-white 2xl:text-base">Summary</h3>
+          <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">Summary</h3>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-[#AFAFAF]">
+        <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-[#AFAFAF]">
           <span>{describeFrequency(frequency)}</span>
           {frequency?.timezone && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-black/[0.04] px-1.5 py-0.5 dark:border-white/10 dark:bg-white/5">
               <Globe className="size-3" />
               {getOffsetLabel(frequency.timezone)}
             </span>
@@ -133,12 +133,12 @@ export default function SummarySection({
         />
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-white/5 bg-[#0D0D0D]/40 px-3 py-2.5">
-        <div className="flex items-center gap-2 text-xs text-[#AFAFAF]">
+      <div className="flex items-center justify-between rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2.5 dark:border-white/5 dark:bg-[#0D0D0D]/40">
+        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-[#AFAFAF]">
           <Coins className="size-3.5 text-[#15DCFF]" />
           Total credits used across runnable cycles
         </div>
-        <span className="text-sm font-semibold text-white">
+        <span className="text-sm font-semibold text-gray-900 dark:text-white">
           {view.totalCost.toLocaleString()} / {view.totalCredits.toLocaleString()}
         </span>
       </div>
@@ -162,9 +162,9 @@ export default function SummarySection({
 
 function Stat({ label, value }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-lg border border-white/5 bg-[#0D0D0D]/40 px-3 py-2">
-      <span className="text-10 tracking-wide text-[#AFAFAF] uppercase">{label}</span>
-      <span className="text-sm font-semibold text-white">{value}</span>
+    <div className="flex flex-col gap-0.5 rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 dark:border-white/5 dark:bg-[#0D0D0D]/40">
+      <span className="text-10 tracking-wide text-gray-500 uppercase dark:text-[#AFAFAF]">{label}</span>
+      <span className="text-sm font-semibold text-gray-900 dark:text-white">{value}</span>
     </div>
   );
 }
@@ -172,8 +172,8 @@ function Stat({ label, value }) {
 function Warning({ children }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
-      <p className="text-xs leading-relaxed text-red-200/90">{children}</p>
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-500 dark:text-red-400" />
+      <p className="text-xs leading-relaxed text-red-700 dark:text-red-200/90">{children}</p>
     </div>
   );
 }

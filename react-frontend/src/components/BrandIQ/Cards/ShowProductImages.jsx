@@ -93,12 +93,12 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
   const handleError = () => setImageError(true);
 
   const containerClasses = `
-    relative cursor-pointer rounded-lg border-2 p-2 transition-all duration-200
-    hover:shadow-sm
+    relative cursor-pointer rounded-[14px] p-2 transition-all duration-200
+    hover:shadow-md
     ${
       isSelected
-        ? 'border-blue-500 bg-blue-500/10'
-        : 'border-[#333] bg-[#1E1E1E] hover:border-[#555]'
+        ? 'ring-2 ring-[#02C8C4] bg-[#02C8C4]/10 dark:bg-[#02C8C4]/15'
+        : 'ring-1 ring-black/8 dark:ring-white/10 bg-gray-50 dark:bg-[#202121] hover:bg-black/5 dark:hover:bg-white/10'
     }
   `;
 
@@ -108,7 +108,7 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
         {!imageError ? (
           <img
             src={image}
-            className="max-h-10 max-w-full object-contain"
+            className="max-h-12 max-w-full object-contain rounded-[8px]"
             alt={`Image ${index + 1}`}
             onError={handleError}
             loading="lazy"
@@ -126,8 +126,8 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
 };
 
 const SelectionIndicator = () => (
-  <div className="absolute -top-1 -right-1">
-    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500">
+  <div className="absolute top-1 right-1">
+    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow-sm">
       <CheckIcon />
     </div>
   </div>

@@ -266,7 +266,7 @@ const Messages = ({
   }, [messages, pending, pendingActiveLabel, pendingDoneLabels]);
 
   return (
-    <div className="flex w-full flex-col gap-6 text-white">
+    <div className="flex w-full flex-col gap-6 text-zinc-900 dark:text-white">
       {messages.map((m) => {
         if (m.role === 'user') {
           return (
@@ -278,7 +278,7 @@ const Messages = ({
                     an empty grey bubble. */}
                 {m.text?.trim() && (
                   <div
-                    className="border border-solid border-[#2A2A2A] bg-[#212121]/60 px-5 py-3.5 text-[17px] leading-relaxed break-words backdrop-blur-[100px] 2xl:text-[18px]"
+                    className="border border-solid border-black/10 bg-white/80 text-zinc-900 shadow-xs backdrop-blur-md dark:border-[#2A2A2A] dark:bg-[#212121]/60 dark:text-white px-5 py-3.5 text-[17px] leading-relaxed break-words 2xl:text-[18px]"
                     style={{ borderRadius: '30px 30px 1px 30px' }}
                   >
                     <QuotableText
@@ -424,7 +424,7 @@ const Messages = ({
               {m.text ? (
                 <QuotableText
                   onQuote={(text) => onQuote?.({ text, role: 'assistant', messageId: m.id })}
-                  className="prose prose-invert prose-lg max-w-none break-words [&_a]:break-words [&_code]:text-[15px] [&_code]:break-words [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_img]:max-w-full [&_li]:text-[17px] [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:break-words [&_pre]:whitespace-pre-wrap [&_table]:block [&_table]:overflow-x-auto"
+                  className="prose dark:prose-invert prose-lg max-w-none text-zinc-900 dark:text-white break-words [&_a]:break-words [&_code]:text-[15px] [&_code]:break-words [&_h1]:text-[24px] [&_h2]:text-[21px] [&_h3]:text-[19px] [&_img]:max-w-full [&_li]:text-[17px] [&_p]:my-2 [&_p]:text-[17px] [&_p]:leading-relaxed [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:break-words [&_pre]:whitespace-pre-wrap [&_table]:block [&_table]:overflow-x-auto"
                 >
                   <ReactMarkdown
                     components={{

@@ -28,8 +28,17 @@ import {
 import ShowProductImages from '../Cards/ShowProductImages';
 import { useNavigate } from 'react-router-dom';
 import { setBrandIQLoading } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+
 import { GA4Events, generateStableId } from '@/utils/ga4';
 import { useEffect, useRef } from 'react';
+
+import {
+  INPUT_BASE,
+  INPUT_ERROR_RING,
+  UPLOAD_FIELD_WRAPPER,
+  UPLOAD_BUTTON,
+} from '@/components/AdStudio/AdCreativeNew/components/AdStudioPrimitives';
+
 
 const OnBoardBrandDialog = () => {
   const [brandDetailsFormNumber, setBrandDetailsFormNumber] = useState(0);
@@ -569,19 +578,19 @@ const OnBoardBrandDialog = () => {
   );
 
   const renderBrandLogoUpload = () => (
-    <div className="flex flex-col gap-2.5">
-      <label className="flex items-center gap-2 text-base font-medium text-gray-200">
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-2 text-[13px] font-medium text-gray-800 dark:text-white/90">
         Brand Logos*
         <ShadcnTooltip
           label={tooltipDescriptions['Brand Logos*']}
           side="right"
           className="max-w-[350px] text-sm"
         >
-          <Info className="h-3 w-3 cursor-pointer text-gray-400 hover:text-white" />
+          <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className="flex items-center gap-2 rounded-md border-0! bg-[#90929430]! px-1.5 py-1">
-        <label className="flex cursor-pointer items-center gap-1 rounded-md bg-white/20 px-2.5 py-2 text-xs text-gray-200 transition-colors hover:bg-[#90929440]">
+      <div className={UPLOAD_FIELD_WRAPPER}>
+        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"
             accept="image/png,image/jpeg"
@@ -590,33 +599,33 @@ const OnBoardBrandDialog = () => {
             onChange={handleBrandLogoChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3 w-3" />
+          <CloudUpload className="h-3.5 w-3.5" />
           Upload
         </label>
-        <span className="text-xs text-gray-400">
+        <span className="text-[12px] font-light text-gray-500 dark:text-white/60">
           {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
         </span>
       </div>
 
       {brandLogos?.length > 0 && (
-        <div className="mb-1">
-          <div className="grid grid-cols-4 gap-1">
+        <div className="mt-1 mb-1">
+          <div className="grid grid-cols-4 gap-2">
             {brandLogos?.map((file, index) => (
               <div
                 key={index}
-                className="relative h-12 overflow-hidden rounded-lg border-2 border-white/20 bg-[#90929430] p-0.5 transition-all duration-200 hover:bg-[#90929440]"
+                className="group relative flex h-16 items-center justify-center overflow-hidden rounded-[16px] bg-gray-50 dark:bg-[#202121] p-1.5 ring-1 ring-black/8 dark:ring-white/10 transition-all hover:scale-[1.02]"
               >
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain rounded-[10px]"
                 />
                 <button
                   type="button"
-                  className="absolute top-0.5 right-0.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600"
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-110"
                   onClick={() => handleRemoveBrandLogo(index)}
                 >
-                  <X className="h-2 w-2" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ))}
@@ -631,19 +640,19 @@ const OnBoardBrandDialog = () => {
   );
 
   const renderProductImageUpload = () => (
-    <div className="flex flex-col gap-2.5">
-      <label className="flex items-center gap-2 text-base font-medium text-gray-200">
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-2 text-[13px] font-medium text-gray-800 dark:text-white/90">
         Product Image
         <ShadcnTooltip
           label={tooltipDescriptions['Product Image*']}
           side="right"
           className="max-w-[350px] text-sm"
         >
-          <Info className="h-3 w-3 cursor-pointer text-gray-400 hover:text-white" />
+          <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className="flex items-center gap-2 rounded-md border-0! bg-[#90929430]! px-1.5 py-1">
-        <label className="flex cursor-pointer items-center gap-1 rounded-lg bg-white/20 px-2.5 py-2 text-xs text-gray-200 transition-colors hover:bg-[#90929440]">
+      <div className={UPLOAD_FIELD_WRAPPER}>
+        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"
             accept="image/*"
@@ -652,10 +661,10 @@ const OnBoardBrandDialog = () => {
             onChange={handleProductImageChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3 w-3" />
+          <CloudUpload className="h-3.5 w-3.5" />
           Upload
         </label>
-        <span className="text-xs text-gray-400">
+        <span className="text-[12px] font-light text-gray-500 dark:text-white/60">
           {productImages?.length === 0
             ? 'No files selected'
             : `${productImages?.length} files selected`}
@@ -663,24 +672,24 @@ const OnBoardBrandDialog = () => {
       </div>
 
       {productImages?.length > 0 && (
-        <div className="mb-1">
-          <div className="grid grid-cols-4 gap-1">
+        <div className="mt-1 mb-1">
+          <div className="grid grid-cols-4 gap-2">
             {productImages.map((file, index) => (
               <div
                 key={index}
-                className="relative h-12 overflow-hidden rounded-lg border-2 border-white/20 bg-[#90929430] p-0.5 transition-all duration-200 hover:border-gray-400"
+                className="group relative flex h-16 items-center justify-center overflow-hidden rounded-[16px] bg-gray-50 dark:bg-[#202121] p-1.5 ring-1 ring-black/8 dark:ring-white/10 transition-all hover:scale-[1.02]"
               >
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain rounded-[10px]"
                 />
                 <button
                   type="button"
-                  className="absolute top-0.5 right-0.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600"
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-110"
                   onClick={() => handleRemoveProductImage(index)}
                 >
-                  <X className="h-2 w-2" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ))}
@@ -703,8 +712,8 @@ const OnBoardBrandDialog = () => {
 
   const renderStep1 = () => (
     <>
-      <div className="flex flex-col gap-2.5">
-        <label className="text-base font-medium text-gray-200">Brand Identity</label>
+      <div className="flex flex-col gap-2">
+        <label className="text-[13px] font-medium text-gray-800 dark:text-white/90">Brand Identity</label>
         <Input
           type="text"
           name="brandName"
@@ -712,7 +721,7 @@ const OnBoardBrandDialog = () => {
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
           autoComplete="off"
-          className="h-10 rounded-md border-0! bg-[#90929430]! p-4 text-sm text-white placeholder:text-[#AFAFAF]"
+          className={`${INPUT_BASE} ${formik.touched.brandName && formik.errors.brandName ? INPUT_ERROR_RING : ''}`}
           placeholder="Brand name"
         />
         {formik.touched.brandName && formik.errors.brandName && (
@@ -720,14 +729,14 @@ const OnBoardBrandDialog = () => {
         )}
       </div>
 
-      <div className="flex flex-col gap-2.5">
-        <label className="text-base font-medium text-gray-200">Brand Description</label>
+      <div className="flex flex-col gap-2">
+        <label className="text-[13px] font-medium text-gray-800 dark:text-white/90">Brand Description</label>
         <Textarea
           name="brandDescription"
           value={formik.values.brandDescription}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
-          className="h-[80px] max-h-[80px] min-h-[80px] rounded-md border-0! bg-[#90929430]! text-white placeholder:text-[#afafaf]!"
+          className={`min-h-[85px] max-h-[110px] w-full rounded-[20px] bg-[#f3f4f6] dark:bg-[#202124] border border-gray-300 dark:border-white/10 p-4 text-[13px] font-normal text-gray-900 dark:text-white outline-none placeholder:text-gray-400 dark:placeholder:text-[#afafaf]/70 focus-visible:ring-2 focus-visible:ring-gray-400 dark:focus-visible:ring-white/20 transition-all ${formik.touched.brandDescription && formik.errors.brandDescription ? INPUT_ERROR_RING : ''}`}
           placeholder="Describe your brand for campaign optimization"
         />
         {formik.touched.brandDescription && formik.errors.brandDescription && (
@@ -738,11 +747,11 @@ const OnBoardBrandDialog = () => {
       {renderBrandLogoUpload()}
       {renderProductImageUpload()}
 
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex items-center justify-between pt-3">
         <button
           type="button"
           onClick={() => setBrandDetailsFormNumber(0)}
-          className="flex items-center gap-1.5 rounded-md border border-white/20 bg-[#20202080] px-4 py-2 text-sm font-medium text-[#E8E8E8] transition-colors hover:bg-[#90929430] hover:text-white"
+          className="flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-white/5 px-5 py-2.5 text-[13px] font-medium text-gray-700 dark:text-white transition-all hover:bg-black/5 dark:hover:bg-white/10"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -752,7 +761,7 @@ const OnBoardBrandDialog = () => {
           type="button"
           onClick={handleNextStep}
           disabled={!isStep1Valid()}
-          className="flex items-center gap-1.5 rounded-md bg-white px-4 py-2 text-sm font-bold text-[#151515] transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-full bg-gray-900 text-white dark:bg-white dark:text-black px-6 py-2.5 text-[13px] font-medium transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Continue
           <ArrowRight className="h-4 w-4" />

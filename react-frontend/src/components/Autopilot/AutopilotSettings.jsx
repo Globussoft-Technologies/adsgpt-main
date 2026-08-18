@@ -487,7 +487,7 @@ const AutopilotSettings = () => {
             <CollapsibleCard
               title={
                 <span className="inline-flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-700 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
                     <Power className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                   </span>
                   <StatusPill on={isOn} dryRun={isDryRun} />
@@ -537,7 +537,7 @@ const AutopilotSettings = () => {
             <CollapsibleCard
               title={
                 <span className="inline-flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-700 dark:border-white/12 dark:bg-white/[0.07] dark:text-white/85 2xl:h-8 2xl:w-8">
                     <Bell className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                   </span>
                   <span>Alerts</span>
@@ -622,30 +622,30 @@ const SaveStatus = ({ saving, dirty, saveMessage }) => {
 const StatusPill = ({ on, dryRun }) => {
   const tone = !on
     ? {
-        fg: 'text-gray-500 dark:text-white/60',
-        bg: 'bg-gray-100 dark:bg-white/8',
-        ring: 'border-gray-200 dark:border-white/10',
-        dot: 'bg-gray-400 dark:bg-white/40',
+        fg: 'text-gray-700 dark:text-white/70',
+        bg: 'bg-gray-200/80 dark:bg-white/8',
+        ring: 'border-gray-300 dark:border-white/10',
+        dot: 'bg-gray-500 dark:bg-white/50',
         label: 'Autopilot · Off',
       }
     : dryRun
       ? {
-          fg: 'text-amber-300',
-          bg: 'bg-amber-500/10',
-          ring: 'border-amber-400/30',
-          dot: 'bg-amber-300',
+          fg: 'text-amber-800 dark:text-amber-300',
+          bg: 'bg-amber-100/90 dark:bg-amber-500/15',
+          ring: 'border-amber-400/60 dark:border-amber-400/30',
+          dot: 'bg-amber-600 dark:bg-amber-400',
           label: 'Autopilot · Dry-run',
         }
       : {
-          fg: 'text-emerald-300',
-          bg: 'bg-emerald-500/10',
-          ring: 'border-emerald-400/30',
-          dot: 'bg-emerald-300',
+          fg: 'text-emerald-800 dark:text-emerald-300',
+          bg: 'bg-emerald-100/90 dark:bg-emerald-500/15',
+          ring: 'border-emerald-400/60 dark:border-emerald-400/30',
+          dot: 'bg-emerald-600 dark:bg-emerald-400',
           label: 'Autopilot · Live',
         };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-10 font-bold uppercase tracking-wide 2xl:px-2.5 2xl:py-1 2xl:text-[11px] ${tone.fg} ${tone.bg} ${tone.ring}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-10 font-bold uppercase tracking-wide 2xl:px-3 2xl:py-1 2xl:text-[11px] ${tone.fg} ${tone.bg} ${tone.ring}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
       {tone.label}

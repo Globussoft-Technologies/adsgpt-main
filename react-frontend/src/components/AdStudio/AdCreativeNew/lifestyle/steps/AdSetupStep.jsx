@@ -45,6 +45,30 @@ import {
   getUserId,
 } from '../../ai-creatives/apiClient';
 import { silentSaveBrandFromAutofill } from '../../ai-creatives/silentBrandSave';
+import {
+  INPUT_BASE,
+  INPUT_ERROR_RING,
+  INPUT_INNER,
+  TEXTAREA_INNER,
+  UPLOAD_FIELD_WRAPPER,
+  UPLOAD_BUTTON,
+  FIELD_LABEL,
+  FIELD_ERROR,
+  LABEL_FIELD_GAP,
+  CARD_SHELL,
+  SECTION_CARD,
+  REFERENCE_CARD,
+  PICKER_PILL,
+  PICKER_DROPDOWN,
+  PICKER_ITEM_BASE,
+  PICKER_ITEM_ACTIVE,
+  PICKER_ITEM_INACTIVE,
+  BRAND_VOICE_ROW,
+  CHIP_SELECTED,
+  CHIP_UNSELECTED,
+  GENERATE_BUTTON,
+  CREDITS_BADGE,
+} from '../../components/AdStudioPrimitives';
 
 const PROMPT_API = import.meta.env.VITE_PROMPT_API;
 
@@ -719,8 +743,6 @@ export function AdSetupStep({
   })();
   const remainingPromptSlots = Math.max(0, MAX_PROMPT_THUMBS - promptThumbs.length);
 
-  // Wrappers around setImages / setModelRefImages that respect the cap and
-  // surface a toast-style error when the user tries to overshoot.
   const addImages = (items) => {
     if (remainingPromptSlots <= 0) {
       setErrors((p) => ({
@@ -745,13 +767,6 @@ export function AdSetupStep({
     setModelRefImages((p) => [...p, ...accepted]);
   };
 
-  // Generate is disabled until every required (*) field is non-empty AND
-  // at least one image is requested via the aspect-ratio picker. Only the
-  // starred fields are mandatory — image uploads are optional per the
-  // form spec (product/reference images, brand logo all unstarred).
-  //   - Lifestyle              : Instructions* + Product description*
-  //   - Product Shot / App-Saas: Instructions* + Product Name*
-  //   - Brand Awareness        : Instructions* + Brand Name*
   const canGenerate =
     total > 0 &&
     instructions.trim().length > 0 &&
@@ -773,14 +788,8 @@ export function AdSetupStep({
     }
     setErrors({});
 
-    // Items are { file?, preview }. The pasted URL field gets folded in as
-    // a final unaffiliated entry so the parent treats it like any other
-    // already-hosted item at submit time.
     const allImages = [...images];
     if (imageUrl.trim()) allImages.push({ file: null, preview: imageUrl.trim() });
-    // Fold chip-picked brand images into the payload too. They live in their
-    // own state so they don't appear as thumbnails in the upload field, but
-    // they must still ship as references at submit time.
     for (const u of brandImagesPicked) {
       if (u && !allImages.some((it) => it.preview === u)) {
         allImages.push({ file: null, preview: u });
@@ -790,8 +799,6 @@ export function AdSetupStep({
     const refImages = [...modelRefImages];
     if (modelRefUrl.trim()) refImages.push({ file: null, preview: modelRefUrl.trim() });
 
-    // Brand logo precedence: uploaded file > typed URL > chip-picked URL
-    // > legacy brandInfo prop. Returns a single { file?, preview } object.
     const finalLogo =
       logoFiles[0] ||
       (logoUrl.trim() ? { file: null, preview: logoUrl.trim() } : null) ||
@@ -818,15 +825,13 @@ export function AdSetupStep({
       variations: total,
       aspectRatio: primaryRatio(ratioCounts),
       ratioCounts,
-      // BrandInfoStep was removed — ship brandInfo inline so the parent
-      // doesn't have to reach back into state for it.
       brandInfo: resolveBrandInfoFromSource(),
     });
   };
 
   return (
     <LifestyleShell title={title} onClose={onClose}>
-      <div className="relative w-full min-w-[420px] max-w-[1100px] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:max-h-[calc(100svh-140px)]">
+      <div className={`relative w-full min-w-[420px] max-w-[1100px] max-h-[calc(100svh-80px)] overflow-y-auto p-6 lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:max-h-[calc(100svh-140px)] ${CARD_SHELL}`}>
         {/* Back arrow always shows. With the single-step flow, there's no
             prior step to return to — so falls back to `onClose`, which
             exits the module (same as AI Creatives Custom). */}
@@ -864,7 +869,6 @@ export function AdSetupStep({
           <div className={`flex min-h-0 min-w-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[16px] text-gray-900 dark:text-white">
-                {/* Instructions<span>*</span> */}
                 Prompt<span>*</span>
               </p>
               <TemplatesTrigger controller={templates} />
@@ -874,10 +878,10 @@ export function AdSetupStep({
                 and the prompt box (only present while the panel is open). */}
             <TemplatesResizer controller={templates} />
             <div
-              className={`relative flex flex-1 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20 transition-[min-height] duration-[250ms] ease-out ${
+              className={`relative flex flex-1 flex-col focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/15 transition-[min-height] duration-[250ms] ease-out ${SECTION_CARD} ${
                 templates.open ? 'min-h-[200px]' : 'min-h-[380px]'
               } ${
-                errors.instructions ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/10'
+                errors.instructions ? INPUT_ERROR_RING : ''
               }`}
             >
               <textarea
@@ -887,7 +891,7 @@ export function AdSetupStep({
                   clearError('instructions');
                 }}
                 placeholder="How would you like your creatives....."
-                className="min-h-0 flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[15px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+                className={`rounded-t-[20px] ${TEXTAREA_INNER}`}
               />
               {/* Prompt-box preview row — selected images (key visuals +
                   model refs for Lifestyle; product/reference images
@@ -985,7 +989,7 @@ export function AdSetupStep({
                   URL autofills the form below. */}
               <div ref={brandIqWrapperRef} className="relative lg:mr-3">
                 <FieldLabel>Attach your Brand Voice</FieldLabel>
-                <div className="mt-3 flex min-w-0 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 p-1 ring-1 ring-black/10 dark:ring-white/5">
+                <div className={`mt-2 ${BRAND_VOICE_ROW}`}>
                   <button
                     type="button"
                     onClick={handleBrandIqOpen}
@@ -1027,7 +1031,7 @@ export function AdSetupStep({
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="min-w-0 flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+                    className="inline-url-input min-w-0 flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
                   />
                   <button
                     type="button"
@@ -1054,7 +1058,7 @@ export function AdSetupStep({
 
                 {/* BrandIQ dropdown */}
                 {showBrandIqPicker && (
-                  <div className="absolute z-30 mt-2 max-h-72 w-full max-w-sm overflow-y-auto rounded-2xl bg-white dark:bg-[#1f1f1f] p-2 shadow-xl ring-1 ring-black/10 dark:ring-white/10">
+                  <div className={`absolute z-30 mt-2 max-h-72 w-full max-w-sm p-2 ${PICKER_DROPDOWN}`}>
                     {brandListState === 'loading' && (
                       <div className="flex items-center justify-center py-6 text-[12px] text-gray-500 dark:text-white/50">
                         <Loader2 size={14} className="mr-2 animate-spin" /> Loading brands…
@@ -1311,7 +1315,7 @@ export function AdSetupStep({
 
         <div className="mt-2 flex items-center justify-end gap-3">
           {total > 0 && (
-            <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
+            <span className={CREDITS_BADGE}>
               –{total * creditsPerImage} credits
             </span>
           )}
@@ -1319,7 +1323,7 @@ export function AdSetupStep({
             type="button"
             onClick={handleGenerate}
             disabled={!canGenerate}
-            className="flex items-center justify-center rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-semibold dark:text-black transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            className={GENERATE_BUTTON}
           >
             Generate
           </button>
@@ -1366,7 +1370,7 @@ function LabeledInput({ label, required, value, onChange, placeholder, error, cl
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-3 h-[50px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-5 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
+        className={`mt-2 ${INPUT_BASE} ${error ? INPUT_ERROR_RING : ''}`}
       />
       <FieldError message={error} />
     </div>
@@ -1382,7 +1386,7 @@ function LabeledTextarea({ label, required, value, onChange, placeholder, error 
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
+        className={`mt-2 min-h-[80px] w-full ${SECTION_CARD} ${TEXTAREA_INNER} ${error ? INPUT_ERROR_RING : ''}`}
       />
       <FieldError message={error} />
     </div>
@@ -1478,7 +1482,7 @@ function FileUploadField({
             onUrlChange('');
           }
         }}
-        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 pl-4 pr-1 ring-1 ring-black/10 dark:ring-white/5"
+        className={`adcreative-composed-field mt-2 ${UPLOAD_FIELD_WRAPPER}`}
       >
         <input
           type="url"
@@ -1507,13 +1511,13 @@ function FileUploadField({
             }
           }}
           placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+          className={`adcreative-composed-field-input ${INPUT_INNER}`}
         />
         <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-gray-500 dark:text-white/40" />
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 text-[12px] font-medium text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 transition-colors hover:bg-black/10 dark:hover:bg-white/25"
+          className={`cursor-pointer ${UPLOAD_BUTTON}`}
         >
           <UploadCloud size={14} strokeWidth={1.8} />
           Upload Image
@@ -1609,8 +1613,8 @@ function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
               }
               className={`relative h-10 w-10 shrink-0 cursor-pointer rounded-md transition ${
                 selected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
+                  ? CHIP_SELECTED
+                  : CHIP_UNSELECTED
               }`}
             >
               <img src={url} alt="" className="h-full w-full rounded-md object-cover" />
@@ -1685,14 +1689,14 @@ function PillDropdown({ label, value, onChange, options }) {
 
   return (
     <div className="relative flex items-center justify-between gap-4">
-      <span className="min-w-16 shrink-0 text-[13px] text-gray-500 dark:text-white/85">{label}</span>
+      <span className="min-w-16 shrink-0 text-[13px] text-gray-700 dark:text-white/85 font-medium">{label}</span>
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#909294]/20"
+        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-[#e2e7ec] dark:bg-[#909294]/10 px-3 py-1.5 border border-black/10 dark:border-white/10 transition-colors hover:bg-[#d8dee5] dark:hover:bg-[#909294]/20"
       >
-        <span className="truncate text-[12px] font-light text-gray-900 dark:text-white/85">{value || 'Select…'}</span>
+        <span className="truncate text-[12px] font-medium text-gray-900 dark:text-white/85">{value || 'Select…'}</span>
         <ChevronDown size={18} strokeWidth={2} className="shrink-0 text-gray-500 dark:text-white/50" />
       </button>
       {open &&
@@ -1706,7 +1710,7 @@ function PillDropdown({ label, value, onChange, options }) {
               width: Math.max(pos.width, 100),
               zIndex: 9999,
             }}
-            className="scale-85 -translate-y-2 -translate-x-2 2xl:translate-0 2xl:scale-100 2xl:max-h-[180px] max-h-[120px] overflow-y-auto rounded-[14px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#0D0D0D]/50 py-1 shadow-2xl backdrop-blur-[100px]"
+            className="scale-85 -translate-y-2 -translate-x-2 2xl:translate-0 2xl:scale-100 2xl:max-h-[180px] max-h-[120px] overflow-y-auto rounded-[14px] border border-black/10 dark:border-white/10 bg-[#eef1f4] dark:bg-[#1a1c20] py-1 shadow-2xl backdrop-blur-[100px]"
           >
             {options.map((opt) => (
               <button
@@ -1717,7 +1721,7 @@ function PillDropdown({ label, value, onChange, options }) {
                   setOpen(false);
                 }}
                 className={`block w-full px-3 py-2 text-left 2xl:text-[12px] text-[10px] transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
-                  opt === value ? 'bg-gray-100 text-gray-900 dark:bg-[#3d3d3d] dark:text-white' : 'text-gray-500 dark:text-white/80'
+                  opt === value ? 'bg-black/10 font-semibold text-gray-900 dark:bg-[#3d3d3d] dark:text-white' : 'text-gray-700 dark:text-white/80'
                 }`}
               >
                 {opt}
@@ -1739,7 +1743,6 @@ function QualityPickerPill({ value, onChange, model }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      // Aspect quantity dropdown is portalled to <body>, outside this ref.
       if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
@@ -1754,13 +1757,13 @@ function QualityPickerPill({ value, onChange, model }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className={PICKER_PILL}
       >
         {activeLabel}
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+        <div className={`absolute bottom-full left-0 z-30 mb-2 min-w-[140px] ${PICKER_DROPDOWN}`}>
           {qualities.map((q) => {
             const selected = q === value;
             return (
@@ -1771,10 +1774,10 @@ function QualityPickerPill({ value, onChange, model }) {
                   onChange(q);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
+                className={`${PICKER_ITEM_BASE} ${
                   selected
-                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                    ? PICKER_ITEM_ACTIVE
+                    : PICKER_ITEM_INACTIVE
                 }`}
               >
                 <span className="flex-1">{qualityLabel(q)}</span>
@@ -1796,7 +1799,6 @@ function ModelPickerPill({ value, onChange }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      // Aspect quantity dropdown is portalled to <body>, outside this ref.
       if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
@@ -1809,7 +1811,7 @@ function ModelPickerPill({ value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className={PICKER_PILL}
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
           <ModelIcon apiId={value} icon={selectedModel?.icon} />
@@ -1818,7 +1820,7 @@ function ModelPickerPill({ value, onChange }) {
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+        <div className={`absolute bottom-full left-0 z-30 mb-2 min-w-[180px] ${PICKER_DROPDOWN}`}>
           {models.map((opt) => {
             const selected = opt.apiId === value;
             return (
@@ -1829,10 +1831,10 @@ function ModelPickerPill({ value, onChange }) {
                   onChange(opt.apiId);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
+                className={`${PICKER_ITEM_BASE} gap-2 ${
                   selected
-                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                    ? PICKER_ITEM_ACTIVE
+                    : PICKER_ITEM_INACTIVE
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
@@ -1849,8 +1851,6 @@ function ModelPickerPill({ value, onChange }) {
 }
 
 function RatioPickerPill({ counts, onChange, model, quality }) {
-  // Shared ad_creative config cache — multiple components calling the hook
-  // still cost one network request per session.
   const { models } = useAdCreativeConfig();
   const selectedModel = models.find((m) => m.apiId === model);
   const creditsPerImage =
@@ -1862,7 +1862,6 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      // Aspect quantity dropdown is portalled to <body>, outside this ref.
       if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
       if (!ref.current?.contains(e.target)) setOpen(false);
     };
@@ -1875,7 +1874,7 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className={`gap-2 px-4 font-light text-[14px] ${PICKER_PILL}`}
       >
         <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
         <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
@@ -1887,7 +1886,7 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
       </button>
       <AnimatedPanel
         open={open}
-        className="absolute right-0 bottom-full z-30 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+        className={`absolute right-0 bottom-full z-30 mb-2 w-[300px] p-4 ${PICKER_DROPDOWN}`}
       >
         <AspectRatioTiles
           counts={counts}

@@ -113,16 +113,16 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        className={`flex h-10 w-full items-center justify-between gap-2 rounded-full bg-[#383838]/50 px-4 text-sm backdrop-blur-md transition outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
-          value ? 'text-white' : 'text-[#AFAFAF]'
+        className={`flex h-10 w-full items-center justify-between gap-2 rounded-full border border-black/10 bg-gray-200 px-4 text-sm backdrop-blur-md transition outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#383838]/50 dark:disabled:opacity-50 ${
+          value ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#AFAFAF]'
         }`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          <Globe className="size-3.5 shrink-0 text-[#AFAFAF]" />
+          <Globe className="size-3.5 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
           {value ? (
             <span className="truncate">
-              <span className="text-[#AFAFAF]">{triggerOffset}</span>
-              <span className="mx-1 text-[#666]">·</span>
+              <span className="text-gray-500 dark:text-[#AFAFAF]">{triggerOffset}</span>
+              <span className="mx-1 text-gray-400 dark:text-[#666]">·</span>
               <span>{triggerName}</span>
             </span>
           ) : (
@@ -130,7 +130,7 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
           )}
         </span>
         <ChevronDown
-          className={`size-4 shrink-0 text-[#AFAFAF] transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`size-4 shrink-0 text-gray-500 transition-transform dark:text-[#AFAFAF] ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -141,23 +141,23 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute top-full right-0 z-50 mt-1 flex w-[min(22rem,90vw)] flex-col overflow-hidden rounded-xl border border-white/15 bg-[#0D0D0D]/95 shadow-2xl backdrop-blur-xl"
+            className="absolute top-full right-0 z-50 mt-1 flex w-[min(22rem,90vw)] flex-col overflow-hidden rounded-xl border border-black/15 bg-[#e8edf2]/98 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-[#0D0D0D]/95 dark:shadow-2xl"
           >
-            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-              <Search className="size-3.5 shrink-0 text-[#AFAFAF]" />
+            <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2 dark:border-white/10">
+              <Search className="size-3.5 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search timezone or offset…"
-                className="h-7 w-full bg-transparent text-sm text-white outline-none placeholder:text-[#666]"
+                className="h-7 w-full bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#666]"
               />
             </div>
 
             <ul className="max-h-72 overflow-y-auto py-1">
               {filtered.length === 0 ? (
-                <li className="px-3 py-4 text-center text-xs text-[#AFAFAF]">
+                <li className="px-3 py-4 text-center text-xs text-gray-500 dark:text-[#AFAFAF]">
                   No matches for "{query}"
                 </li>
               ) : (
@@ -168,12 +168,14 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
                       <button
                         type="button"
                         onClick={() => handleSelect(tz)}
-                        className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm transition hover:bg-white/5 ${
-                          active ? 'bg-white/5 text-white' : 'text-[#E3E3E3] hover:text-white'
+                        className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/5 ${
+                          active
+                            ? 'bg-black/5 text-gray-900 dark:bg-white/5 dark:text-white'
+                            : 'text-gray-700 hover:text-gray-900 dark:text-[#E3E3E3] dark:hover:text-white'
                         }`}
                       >
                         <span className="truncate">
-                          <span className="text-[#AFAFAF]">({getOffsetLabel(tz)})</span>{' '}
+                          <span className="text-gray-500 dark:text-[#AFAFAF]">({getOffsetLabel(tz)})</span>{' '}
                           <span>{tz}</span>
                         </span>
                         {active && <Check className="size-3.5 shrink-0 text-[#15DCFF]" />}

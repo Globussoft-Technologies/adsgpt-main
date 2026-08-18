@@ -167,7 +167,7 @@ const CompetitorVisualsModal = ({ setCurrentStep }) => {
           Select your visuals
         </h3>
 
-        <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-gray-50 px-3 py-1.5 text-gray-700 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+        <div className="competitor-visual-search backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-gray-50 px-3 py-1.5 text-gray-700 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
           <div className="flex flex-shrink-0 items-center">
             <Search
               className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
@@ -177,7 +177,7 @@ const CompetitorVisualsModal = ({ setCurrentStep }) => {
           <input
             type="text"
             placeholder="Search.."
-            className="w-full max-w-25 border-none bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+            className="competitor-visual-search-input w-full max-w-25 border-none bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
             value={exploreCompetitor}
             onChange={(e) => setExploreCompetitor(e.target.value)}
             onKeyDown={(e) => {

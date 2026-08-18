@@ -59,6 +59,30 @@ import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import Masonry from 'react-masonry-css';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
+import {
+  INPUT_BASE,
+  INPUT_ERROR_RING,
+  INPUT_INNER,
+  TEXTAREA_INNER,
+  UPLOAD_FIELD_WRAPPER,
+  UPLOAD_BUTTON,
+  FIELD_LABEL,
+  FIELD_ERROR,
+  LABEL_FIELD_GAP,
+  CARD_SHELL,
+  SECTION_CARD,
+  REFERENCE_CARD,
+  PICKER_PILL,
+  PICKER_DROPDOWN,
+  PICKER_ITEM_BASE,
+  PICKER_ITEM_ACTIVE,
+  PICKER_ITEM_INACTIVE,
+  BRAND_VOICE_ROW,
+  CHIP_SELECTED,
+  CHIP_UNSELECTED,
+  GENERATE_BUTTON,
+  CREDITS_BADGE,
+} from '../components/AdStudioPrimitives';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const PROMPT_API = import.meta.env.VITE_PROMPT_API;
@@ -973,8 +997,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
         />
       ) : (
         <>
-      <form onSubmit={handleSubmit} className="relative w-full min-w-[420px] max-w-[1100px]">
-        <div className="2xl:max-h-[calc(100svh-140px)] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]">
+      <form onSubmit={handleSubmit} className="adcreative-custom-form relative w-full min-w-[420px] max-w-[1100px]">
+        <div className={`adcreative-custom-shell 2xl:max-h-[calc(100svh-140px)] max-h-[calc(100svh-80px)] overflow-y-auto p-6 lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] ${CARD_SHELL}`}>
           <div className="relative mb-6 flex items-center justify-center">
             <button
               type="button"
@@ -1027,14 +1051,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 <TemplatesResizer controller={templates} />
 
                 <div
-                  className="relative flex flex-1 min-h-0 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 ring-black/10 dark:ring-white/10 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20"
+                  className={`adcreative-custom-prompt-card relative flex flex-1 min-h-0 flex-col focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/15 ${SECTION_CARD}`}
                 >
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="write your prompt..."
                   required
-                  className="flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[16px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]"
+                  className={`rounded-t-[20px] ${TEXTAREA_INNER}`}
                 />
 
                 {(() => {
@@ -1142,7 +1166,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                     />
                     {showQualityPicker && (
-                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                      <div className={`absolute bottom-full left-0 z-40 mb-2 min-w-[140px] ${PICKER_DROPDOWN}`}>
                         {(selectedModel?.qualities || []).map((q, i) => {
                           const selected = q === quality;
                           return (
@@ -1153,12 +1177,12 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 setQuality(q);
                                 setShowQualityPicker(false);
                               }}
-                              className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                i === 0 ? 'rounded-tl-[14px] rounded-tr-[14px]' : ''
+                              className={`${PICKER_ITEM_BASE} ${
+                                i === 0 ? 'rounded-tl-[12px] rounded-tr-[12px]' : ''
                               } ${
                                 selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                                  ? PICKER_ITEM_ACTIVE
+                                  : PICKER_ITEM_INACTIVE
                               }`}
                             >
                               <span className="flex-1">{qualityLabel(q)}</span>
@@ -1181,7 +1205,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       }}
                     />
                     {showModelPicker && (
-                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                      <div className={`absolute bottom-full left-0 z-40 mb-2 min-w-[180px] ${PICKER_DROPDOWN}`}>
                         {configModels.map((opt) => {
                           const selected = opt.apiId === model;
                           return (
@@ -1192,10 +1216,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 setModel(opt.apiId);
                                 setShowModelPicker(false);
                               }}
-                              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
+                              className={`${PICKER_ITEM_BASE} gap-2 ${
                                 selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                                  ? PICKER_ITEM_ACTIVE
+                                  : PICKER_ITEM_INACTIVE
                               }`}
                             >
                               <span
@@ -1221,7 +1245,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         setShowQualityPicker(false);
                         setShowBrandIqPicker(false);
                       }}
-                      className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      className={`gap-2 px-4 font-light text-[14px] ${PICKER_PILL}`}
                     >
                       <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
                       <span className="h-3 w-px bg-black/10 dark:bg-white/20" />
@@ -1234,7 +1258,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 
                     <AnimatedPanel
                       open={showAspectPicker}
-                      className="absolute right-0 bottom-full z-40 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+                      className={`absolute right-0 bottom-full z-40 mb-2 w-[300px] p-4 ${PICKER_DROPDOWN}`}
                     >
                       <AspectRatioTiles
                         counts={aspectCounts}
@@ -1253,9 +1277,9 @@ export function AiCreativesCustom({ onClose, onComplete }) {
             <div className="flex flex-col">
               <p className="mb-3 text-[16px] font-medium text-gray-900 dark:text-white">References</p>
 
-              <div className="flex flex-1 flex-col gap-4 rounded-[30px] bg-gray-50 dark:bg-[#202121] p-6">
+              <div className={`adcreative-custom-reference-card flex flex-1 flex-col gap-5 p-6 ${REFERENCE_CARD}`}>
                 <div className="mb-5">
-                  <p className="mb-2.5 text-[14px] font-medium text-gray-900 dark:text-white">
+                  <p className={FIELD_LABEL}>
                     Attach your Brand Voice
                   </p>
                   <div className="flex items-center gap-2">
@@ -1263,20 +1287,20 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       <button
                         type="button"
                         onClick={openBrandIqPicker}
-                        className={`flex min-w-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
+                        className={`flex min-w-0 items-center gap-2 rounded-full px-4 py-2 text-[12px] font-medium border border-black/10 transition-colors ${
                           brandSource.kind === 'list'
-                            ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/20'
-                            : 'bg-gray-100 text-gray-600 ring-black/10 hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]'
+                            ? 'bg-black/10 text-[#0f172a] dark:bg-white/15 dark:text-white dark:border-white/20'
+                            : 'bg-[#e2e7ec] text-[#0f172a] hover:bg-[#d8dee5] dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:border-white/5 dark:hover:bg-[#33333a]'
                         }`}
                       >
                         <img src={brandIqIcon} alt="" className="h-4 w-4" />
                         <span className="min-w-0 max-w-[165px] 2xl:max-w-[200px] truncate">
                           {brandSource.kind === 'list' ? brandSource.item.name : 'Brand IQ'}
                         </span>
-                        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
+                        <ChevronDown size={18} strokeWidth={2} className="text-[#0f172a]/60 dark:text-white/40" />
                       </button>
                       {showBrandIqPicker && (
-                        <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        <div className={`absolute top-full left-0 z-40 mt-2 w-[280px] ${PICKER_DROPDOWN}`}>
                           <div className="max-h-[280px] overflow-y-auto">
                             {brandListState === 'loading' && (
                               <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-500 dark:text-white/60">
@@ -1303,10 +1327,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                     key={b.id}
                                     type="button"
                                     onClick={() => handleBrandIqSelect(b)}
-                                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                                    className={`${PICKER_ITEM_BASE} gap-3 ${
                                       selected
-                                        ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                        : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                                        ? PICKER_ITEM_ACTIVE
+                                        : PICKER_ITEM_INACTIVE
                                     }`}
                                   >
                                     {b.logoUrls?.[0] ? (
@@ -1336,8 +1360,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         </div>
                       )}
                     </div>
-                    <span className="shrink-0 text-[16px] text-gray-500 dark:text-white/60">or</span>
-                    <div className="relative min-w-0 flex-1">
+                    <span className="shrink-0 text-[13px] font-medium text-[#0f172a]/50 dark:text-white/50">or</span>
+                    <div className="inline-url-field relative min-w-0 flex-1">
                       <input
                         // text (not "url") so the browser doesn't reject inputs
                         // without a scheme like "www.google.com" — handleAutofill
@@ -1356,13 +1380,13 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                           }
                         }}
                         placeholder="Enter your website URL..."
-                        className={`${inputCls} pr-20`}
+                        className={`inline-url-input ${INPUT_BASE} pr-20`}
                       />
                       <button
                         type="button"
                         onClick={handleAutofill}
                         disabled={!websiteUrl.trim() || autofillState === 'loading'}
-                        className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-[#d8dee5] dark:bg-[#909294]/20 border border-black/10 dark:border-white/5 px-4 py-1.5 text-[12px] font-semibold text-[#0f172a] dark:text-white transition-all hover:bg-[#ccd3dc] dark:hover:bg-[#33333a] disabled:opacity-50"
                       >
                         {autofillState === 'loading' ? (
                           <Loader2 size={12} className="animate-spin" />
@@ -1382,14 +1406,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 </div>
 
                 <div className="mb-4">
-                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">
+                  <p className={`mb-2 ${FIELD_LABEL}`}>
                     Upload your own reference Images
                   </p>
                   <div
                     onPaste={handleRefPaste}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleRefDrop}
-                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
+                    className={`adcreative-composed-field adcreative-custom-upload-field ${UPLOAD_FIELD_WRAPPER}`}
                   >
                     <div className="flex flex-1 items-center justify-between">
                       <input
@@ -1405,21 +1429,21 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onDragOver={preventDefaultDragOver}
                         onDrop={handleRefDrop}
                         placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
+                        className={`adcreative-composed-field-input ${INPUT_INNER}`}
                       />
                       <button
                         type="button"
                         onClick={handleRefImageUrlAdd}
                         disabled={!referenceImageUrl.trim()}
                         aria-label="Add image URL"
-                        className="shrink-0 px-1 text-gray-500 dark:text-[#909294] transition-colors hover:text-black dark:hover:text-white disabled:opacity-40 disabled:hover:text-gray-500 dark:disabled:hover:text-[#909294]"
+                        className="shrink-0 px-1 text-[#0f172a]/60 dark:text-[#909294] transition-colors hover:text-black dark:hover:text-white disabled:opacity-40 disabled:hover:text-[#0f172a]/60 dark:disabled:hover:text-[#909294]"
                       >
                         <LinkIcon className="h-3 w-3 2xl:h-4 2xl:w-4" />
                       </button>
                     </div>
                     <label
                       htmlFor="ref-image-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
+                      className={`cursor-pointer ${UPLOAD_BUTTON}`}
                     >
                       <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
                       <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
@@ -1517,7 +1541,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 </div>
 
                 <div className="mb-5">
-                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">Brand logo</p>
+                  <p className={`mb-2 ${FIELD_LABEL}`}>Brand logo</p>
                   <div
                     onPaste={(e) => {
                       // Clipboard image → push as upload (strict type check).
@@ -1545,7 +1569,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     }}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleLogoDrop}
-                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
+                    className={`adcreative-composed-field adcreative-custom-upload-field ${UPLOAD_FIELD_WRAPPER}`}
                   >
                     <div className="flex flex-1 items-center justify-between">
                       <input
@@ -1564,13 +1588,13 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onDragOver={preventDefaultDragOver}
                         onDrop={handleLogoDrop}
                         placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
+                        className={`adcreative-composed-field-input ${INPUT_INNER}`}
                       />
-                      <LinkIcon className="h-3 w-3 text-gray-500 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
+                      <LinkIcon className="h-3 w-3 text-[#0f172a]/60 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
                     </div>
                     <label
                       htmlFor="brand-logo-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
+                      className={`cursor-pointer ${UPLOAD_BUTTON}`}
                     >
                       <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
                       <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
@@ -1661,14 +1685,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 </div>
 
                 <div className="mb-6">
-                  <p className="mb-2 text-[16px] font-medium text-gray-900 dark:text-white">
+                  <p className={`mb-2 ${FIELD_LABEL}`}>
                     Attach a Competitor Ad Reference
                   </p>
                   <div className="rounded-full max-w-90 p-px [background:linear-gradient(90deg,#02C8C4_0%,#5867EB_78%)]">
                     <button
                       type="button"
                       onClick={() => setShowCompetitorModal(true)}
-                      className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-white dark:bg-[#2f2f30] py-2.5 text-[14px] 2xl:text-base font-semibold text-gray-900 dark:text-[#ebebeb] transition-colors hover:bg-gray-50 dark:hover:bg-[#363637]"
+                      className="adcreative-custom-competitor flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-[#e2e7ec] dark:bg-[#2f2f30] py-2.5 text-[14px] 2xl:text-base font-semibold text-[#0f172a] dark:text-[#ebebeb] transition-colors hover:bg-[#d8dee5] dark:hover:bg-[#363637]"
                     >
                       <Search size={18} strokeWidth={2} />
                       Search competitors ads
@@ -1683,14 +1707,14 @@ export function AiCreativesCustom({ onClose, onComplete }) {
           </div>
           <div className="mt-4 flex items-center justify-end gap-3">
             {total > 0 && (
-              <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
+              <span className={CREDITS_BADGE}>
                 –{total * creditsPerImage} credits
               </span>
             )}
             <button
               type="submit"
               disabled={!prompt.trim() || total === 0 || isSubmittingLocal}
-              className="flex items-center gap-2 rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-medium dark:text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className={GENERATE_BUTTON}
             >
               {isSubmittingLocal && <Loader2 size={14} className="animate-spin" />}
               {isSubmittingLocal ? 'Generating…' : 'Generate'}
@@ -1752,8 +1776,8 @@ function ChipRow({ label, options, isSelected, onPick, onDoubleClick, rounded })
               }
               className={`relative shrink-0 cursor-pointer ${sizing} ${shape} transition ${
                 selected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
+                  ? CHIP_SELECTED
+                  : CHIP_UNSELECTED
               }`}
             >
               <img
@@ -1829,7 +1853,7 @@ function PillButton({ icon, label, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-3 py-3 text-[12px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+      className={PICKER_PILL}
     >
       {icon && <span aria-hidden>{icon}</span>}
       {label}
@@ -1845,8 +1869,6 @@ function CompetitorModal({
   onTabChange,
   onSelect,
   onClose,
-  // URL of the competitor visual the user previously confirmed (persisted
-  // across modal opens within a session so the chip stays marked).
   initialSelectedUrl,
 }) {
   const dispatch = useDispatch();
@@ -1854,8 +1876,6 @@ function CompetitorModal({
     (state) => state.competitorSearch
   );
 
-  // Seed from the parent's confirmed competitor URL so reopening the modal
-  // shows the previously-selected card as still selected.
   const [selectedImage, setSelectedImage] = useState(
     initialSelectedUrl ? { url: initialSelectedUrl } : null,
   );
@@ -1896,16 +1916,8 @@ function CompetitorModal({
       dispatch(fetchCompetitorAds());
     }, 600);
     return () => clearTimeout(debounce);
-    // `tab` is intentionally NOT in the deps — the tab buttons' onClick
-    // already dispatches the fetch immediately. Including `tab` here would
-    // queue a duplicate debounced fetch on every tab switch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, dispatch]);
 
-  // Only re-fetch when the user actually clears a previously-non-empty
-  // search. Without the prevSearchRef guard this effect double-dispatched
-  // alongside the initial-load effect on mount, racing the first fetch's
-  // result and leaving the modal empty even though ads had returned.
   const prevSearchRef = useRef('');
   useEffect(() => {
     if (!initialLoadRef.current) return;
@@ -1933,8 +1945,7 @@ function CompetitorModal({
     setSelectedImage((prev) => (prev?.url === image.url ? null : image));
   };
 
-  // Modal-local lightbox for double-click preview of a competitor ad.
-  const [modalLightbox, setModalLightbox] = useState(null); // { url } | null
+  const [modalLightbox, setModalLightbox] = useState(null);
   const openModalLightbox = (image) => setModalLightbox({ url: image?.url });
   const closeModalLightbox = () => setModalLightbox(null);
 
@@ -1942,10 +1953,7 @@ function CompetitorModal({
 
   return (
     <div className="w-full max-w-[800px] min-w-[420px] 2xl:max-w-[900px]">
-      {/* min-h on the OUTER panel guarantees the modal never collapses
-          when the ads response is small. The grid below uses min-h too as
-          a secondary safety net. */}
-      <div className="relative -mt-5 flex min-h-[680px] flex-col rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 2xl:min-h-[760px] 2xl:mt-0">
+      <div className={`relative -mt-5 flex min-h-[680px] flex-col p-6 lg:px-8 2xl:min-h-[760px] 2xl:mt-0 ${CARD_SHELL}`}>
         <button
           type="button"
           onClick={onClose}
@@ -1955,11 +1963,10 @@ function CompetitorModal({
           <X size={26} strokeWidth={2} />
         </button>
 
-        {/* Header */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 pr-6">
           <h3 className="text-[18px] font-semibold text-gray-900 dark:text-white">Add a competitor visual</h3>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#0d0d0d]/50 px-4 py-2 ring-1 ring-black/10 dark:ring-white/10">
+            <div className="competitor-visual-search flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#0d0d0d]/50 px-4 py-2 ring-1 ring-black/8 dark:ring-white/[0.06]">
               <Search size={16} strokeWidth={1.8} className="shrink-0 text-gray-500 dark:text-[#969696]" />
               <input
                 type="text"
@@ -1972,7 +1979,7 @@ function CompetitorModal({
                   }
                 }}
                 placeholder="Search..."
-                className="w-24 min-w-0 flex-1 bg-transparent text-[12px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#969696]"
+                className="competitor-visual-search-input w-24 min-w-0 flex-1 bg-transparent text-[12px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#969696]"
               />
               <div className="flex items-center gap-1">
                 {['Competitors', 'Keyword'].map((t) => (
@@ -2002,18 +2009,10 @@ function CompetitorModal({
           </div>
         </div>
 
-        {/* Masonry Grid — fixed minimum height (≈two rows of three cards)
-            so the panel never collapses when the response is small.
-            Dropped `flex-1` because it was negotiating the height down
-            with sibling rows. `min-h` is the load-bearing rule here. */}
         <div
           ref={containerRef}
           className="mt-3 min-h-[65vh] max-h-[65vh] overflow-y-auto rounded-xl pr-2 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:min-h-[560px] 2xl:max-h-[55vh]"
         >
-          {/* In-flight skeleton grid while the API is loading. Once the
-              response arrives we switch to the masonry, where every card
-              has its own per-image Skeleton that lasts until that image
-              finishes loading. */}
           {loading && ads.length === 0 ? (
             <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 9 }).map((_, i) => (
@@ -2068,7 +2067,6 @@ function CompetitorModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="mt-8 flex justify-end">
           <button
             type="button"
@@ -2093,9 +2091,6 @@ function CompetitorModal({
 
 function CompetitorImageCard({ image, isSelected, onSelect, onPreview }) {
   const [imgLoading, setImgLoading] = useState(true);
-  // Click vs. double-click disambiguation: defer the single-click action by
-  // 220 ms so a double-click can cancel it. Single click = toggle selection,
-  // double-click = open the preview lightbox.
   const clickTimerRef = useRef(null);
   const handleClick = (e) => {
     e.stopPropagation();
@@ -2157,8 +2152,4 @@ function CompetitorImageCard({ image, isSelected, onSelect, onPreview }) {
   );
 }
 
-const inputCls = `
-  h-[39px] min-w-full max-w-full flex-1 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4  text-[13px] font-light text-gray-900 dark:text-white
-  outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]
-  focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20
-`;
+

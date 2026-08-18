@@ -121,7 +121,7 @@ const PromotionalInfoTags = ({ disabled }) => {
   return (
     <div className="flex flex-col">
       <div
-        className={`flex min-h-18 w-full flex-wrap items-start gap-2 rounded-[20px] border border-black/10 bg-gray-100 px-4 py-2.5 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:min-h-[80px] ${
+        className={`adfactory-tag-field flex min-h-18 w-full flex-wrap items-start gap-2 rounded-[20px] border border-white/80 bg-[#E2E6EA] px-4 py-2.5 text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:min-h-[80px] ${
           hasError ? 'border-red-500 bg-red-500/10' : ''
         }`}
         onClick={() => inputRef.current?.focus()}
@@ -130,7 +130,7 @@ const PromotionalInfoTags = ({ disabled }) => {
         {tags.map((tag, index) => (
           <div
             key={index}
-            className="flex items-center gap-1 rounded-full border border-blue-400/30 bg-black/10 px-3 py-1 text-sm dark:bg-white/20 2xl:text-base"
+            className="adfactory-tag-chip flex items-center gap-1 rounded-full border border-white/80 bg-[#EEF1F3] px-3 py-1 text-sm shadow-[1px_1px_3px_rgba(160,172,186,0.20),-1px_-1px_3px_rgba(255,255,255,0.85)] dark:border-blue-400/30 dark:bg-white/20 dark:shadow-none 2xl:text-base"
           >
             <span className="break-all">{tag}</span>
             <button
@@ -151,7 +151,7 @@ const PromotionalInfoTags = ({ disabled }) => {
         <input
           ref={inputRef}
           type="text"
-          className="min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
+          className="adfactory-tag-input min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
           placeholder={
             tags.length === 0
               ? 'Enter your promotional details (press Enter or comma to add tags)'
@@ -168,7 +168,7 @@ const PromotionalInfoTags = ({ disabled }) => {
             {promotionalTags?.map((item, idx) => (
               <div
                 key={idx}
-                className={`cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 dark:bg-[#373637] dark:text-white 2xl:text-base ${
+                className={`adfactory-suggestion-chip cursor-pointer rounded-[47px] border border-white/80 bg-[#EEF1F3] px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 shadow-[2px_2px_6px_rgba(160,172,186,0.22),-2px_-2px_6px_rgba(255,255,255,0.85)] hover:bg-[#F4F7F9] dark:border-none dark:bg-[#373637] dark:text-white dark:shadow-none 2xl:text-base ${
                   tags.includes(item) ? 'cursor-not-allowed opacity-50' : ''
                 }`}
                 onClick={() => handleTagClick(item)}
@@ -257,11 +257,10 @@ const CallToActionTags = ({ disabled }) => {
   };
 
   const hasError = errors.callToAction && touched.callToAction;
-
   return (
     <div className="flex flex-col">
       <div
-        className={`mt-1.5 flex min-h-18 w-full flex-wrap items-start gap-2 rounded-[20px] border border-black/10 bg-gray-100 px-4 py-2.5 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:min-h-[60px] ${
+        className={`adfactory-tag-field mt-1.5 flex min-h-18 w-full flex-wrap items-start gap-2 rounded-[20px] border border-white/80 bg-[#E2E6EA] px-4 py-2.5 text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:min-h-[60px] ${
           hasError ? 'border-red-500 bg-red-500/10' : ''
         }`}
         onClick={() => inputRef.current?.focus()}
@@ -270,7 +269,7 @@ const CallToActionTags = ({ disabled }) => {
         {tags.map((tag, index) => (
           <div
             key={index}
-            className="flex items-center gap-1 rounded-4xl border border-blue-400/30 bg-black/10 px-3 py-1 text-sm dark:bg-white/20 2xl:text-base"
+            className="adfactory-tag-chip flex items-center gap-1 rounded-4xl border border-white/80 bg-[#EEF1F3] px-3 py-1 text-sm shadow-[1px_1px_3px_rgba(160,172,186,0.20),-1px_-1px_3px_rgba(255,255,255,0.85)] dark:border-blue-400/30 dark:bg-white/20 dark:shadow-none 2xl:text-base"
           >
             <span className="px-1 break-all">{tag}</span>
             <button
@@ -288,10 +287,10 @@ const CallToActionTags = ({ disabled }) => {
         ))}
 
         {/* Input field */}
-        <textarea
+        <input
           ref={inputRef}
           type="text"
-          className="h-[65px] max-h-[65px] min-h-[65px] min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
+          className="adfactory-tag-input min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
           placeholder={
             tags.length === 0 ? 'Enter call to action (press Enter or comma to add tags)' : ''
           }
@@ -306,7 +305,7 @@ const CallToActionTags = ({ disabled }) => {
             {ctaTags?.map((item, idx) => (
               <div
                 key={idx}
-                className={`cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 dark:bg-[#373637] dark:text-white 2xl:text-base ${
+                className={`adfactory-suggestion-chip cursor-pointer rounded-[47px] border border-white/80 bg-[#EEF1F3] px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 shadow-[2px_2px_6px_rgba(160,172,186,0.22),-2px_-2px_6px_rgba(255,255,255,0.85)] hover:bg-[#F4F7F9] dark:border-none dark:bg-[#373637] dark:text-white dark:shadow-none 2xl:text-base ${
                   tags.includes(item) ? 'cursor-not-allowed opacity-50' : ''
                 }`}
                 onClick={() => handleTagClick(item)}
@@ -397,7 +396,7 @@ const TargetAudienceTags = ({ disabled }) => {
   return (
     <div className="flex flex-col">
       <div
-        className={`flex min-h-11 w-full flex-wrap items-start gap-2 rounded-4xl border border-black/10 bg-gray-100 px-4 py-2 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:min-h-[49px] 2xl:text-base 2xl:placeholder:text-base ${
+        className={`adfactory-tag-field flex min-h-11 w-full flex-wrap items-start gap-2 rounded-4xl border border-white/80 bg-[#E2E6EA] px-4 py-2 text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:min-h-[49px] 2xl:text-base 2xl:placeholder:text-base ${
           hasError ? 'border-red-500 bg-red-500/10' : ''
         }`}
         onClick={() => inputRef.current?.focus()}
@@ -406,7 +405,7 @@ const TargetAudienceTags = ({ disabled }) => {
         {tags.map((tag, index) => (
           <div
             key={index}
-            className="flex items-center gap-1 rounded-4xl border border-blue-400/30 bg-black/10 px-3 py-1 text-sm dark:bg-white/20 2xl:text-base"
+            className="adfactory-tag-chip flex items-center gap-1 rounded-4xl border border-white/80 bg-[#EEF1F3] px-3 py-1 text-sm shadow-[1px_1px_3px_rgba(160,172,186,0.20),-1px_-1px_3px_rgba(255,255,255,0.85)] dark:border-blue-400/30 dark:bg-white/20 dark:shadow-none 2xl:text-base"
           >
             <span className="px-1 break-all">{tag}</span>
             <button
@@ -427,7 +426,7 @@ const TargetAudienceTags = ({ disabled }) => {
         <input
           ref={inputRef}
           type="text"
-          className="min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1.5 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
+          className="adfactory-tag-input min-w-[120px] flex-1 border-none bg-transparent py-1 pl-1.5 text-sm text-gray-900 outline-none placeholder:text-sm placeholder:text-gray-500 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:text-base 2xl:placeholder:text-base"
           placeholder={tags.length === 0 ? 'Enter target audience' : ''}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
@@ -440,7 +439,7 @@ const TargetAudienceTags = ({ disabled }) => {
           {audienceTags?.map((item, idx) => (
             <div
               key={idx}
-              className={`cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 dark:bg-[#373637] dark:text-white 2xl:text-base ${
+              className={`adfactory-suggestion-chip cursor-pointer rounded-[47px] bg-gray-100 px-5 py-1.5 text-sm whitespace-nowrap text-gray-900 hover:bg-gray-400/30 dark:bg-[#373637] dark:text-white 2xl:text-base ${
                 tags.includes(item) ? 'cursor-not-allowed opacity-50' : ''
               }`}
               onClick={() => handleTagClick(item)}
@@ -696,7 +695,7 @@ export default function InputsForm({ onComplete }) {
       initial={{ opacity: 0, y: 25, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25 }}
-      className="relative z-10 text-gray-900 dark:text-white"
+      className="adfactory-objectives-form relative z-10 text-gray-900 dark:text-white"
     >
       <h2 className="mb-4 text-center text-xl font-semibold text-gray-900 dark:text-white 2xl:text-2xl">
         Campaign Objectives
@@ -729,7 +728,7 @@ export default function InputsForm({ onComplete }) {
                   <div className="input-gradient-border 2xl:my-2">
                     <Field
                       name="primaryObjective"
-                      className={`h-11 w-full rounded-full bg-gray-100 px-5 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.primaryObjective && touched.primaryObjective ? 'border-red-500 bg-red-500/10' : ''}`}
+                      className={`adfactory-objectives-input h-11 w-full rounded-full border border-white/80 bg-[#E2E6EA] px-5 py-2.5 pl-6 text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-none dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.primaryObjective && touched.primaryObjective ? 'border-red-500 bg-red-500/10' : ''}`}
                       placeholder="Briefly describe your brand primary object"
                       disabled={isFormSubmitting}
                     />
@@ -771,7 +770,7 @@ export default function InputsForm({ onComplete }) {
                     <Field
                       name="additionalGuidelines"
                       rows={2}
-                      className={`mt-1.5 h-11 w-full rounded-full border border-black/10 bg-gray-100 px-4 py-2.5 pl-6 text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.additionalGuidelines && touched.additionalGuidelines ? 'border-red-500 bg-red-500/10' : ''}`}
+                      className={`adfactory-objectives-input mt-1.5 h-11 w-full rounded-full border border-white/80 bg-[#E2E6EA] px-4 py-2.5 pl-6 text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.additionalGuidelines && touched.additionalGuidelines ? 'border-red-500 bg-red-500/10' : ''}`}
                       placeholder="Enter additional Guidelines"
                       disabled={isFormSubmitting}
                     />
@@ -792,7 +791,7 @@ export default function InputsForm({ onComplete }) {
                       <Field
                         name="coreIdea"
                         rows={2}
-                        className={`flex h-11 w-full flex-1 items-center rounded-full bg-gray-100 px-4! py-2.5 pl-6! text-sm text-gray-900 backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.coreIdea && touched.coreIdea ? 'border-red-500 bg-red-500/10' : ''}`}
+                        className={`adfactory-objectives-input flex h-11 w-full flex-1 items-center rounded-full border border-white/80 bg-[#E2E6EA] px-4! py-2.5 pl-6! text-sm text-gray-900 shadow-[inset_2px_2px_5px_rgba(160,172,186,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)] backdrop-blur-md transition outline-none placeholder:text-sm placeholder:text-gray-500 dark:border-none dark:bg-[#383838]/50 dark:text-white dark:placeholder:text-[#AFAFAF] dark:shadow-none 2xl:h-[49px] 2xl:text-base 2xl:placeholder:text-base ${errors.coreIdea && touched.coreIdea ? 'border-red-500 bg-red-500/10' : ''}`}
                         placeholder="Enter your brand core idea"
                         disabled={isFormSubmitting}
                       />

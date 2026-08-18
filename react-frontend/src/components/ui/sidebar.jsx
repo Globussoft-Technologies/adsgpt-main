@@ -20,12 +20,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH_MOBILE = '6.4rem';
+const SIDEBAR_WIDTH_MOBILE = '5.5rem';
 function getSidebarWidth(innerWidth) {
   return innerWidth >= 1300 ? '16.5rem' : '11rem';
 }
 function getSidebarWidthIcon(innerWidth) {
-  return innerWidth <= 1300 ? '4.3rem' : '6.4rem';
+  if (innerWidth >= 1536) return '6rem';
+  if (innerWidth >= 1200) return '5.5rem';
+  return '5rem';
 }
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
@@ -197,7 +199,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className={`bg-sidebar sidebar_adjust_container text-sidebar-foreground w-full ${openHistory ? 'max-w-[230px]! lg:max-w-[300px]!' : 'max-w-[86px]! sm:max-w-[104px]!'} p-0 [&>button]:hidden`}
+          className={`bg-sidebar sidebar_adjust_container text-sidebar-foreground w-full ${openHistory ? 'max-w-[230px]! lg:max-w-[300px]!' : 'max-w-[84px]! sm:max-w-[94px]!'} p-0 [&>button]:hidden`}
           side={side}
         >
           <SheetHeader className="sr-only">
@@ -241,7 +243,7 @@ function Sidebar({
           // Adjust the padding for floating and inset variants.
           variant === 'floating' || variant === 'inset'
             ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
-            : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l',
+            : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
           className
         )}
         {...props}
@@ -265,9 +267,8 @@ function SidebarTrigger({ className, onClick, children, ...props }) {
     <button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon"
-      className={cn('', className)}
+      type="button"
+      className={cn('bg-transparent border-0 p-0 shadow-none outline-none focus-visible:outline-none', className)}
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();

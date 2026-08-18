@@ -392,12 +392,13 @@ export default function TopHeader() {
   if (currentRoute !== '/adfactory-demo' && hideHeader) {
     // Meta Ads Manager includes the switcher in its own control row so it
     // participates in layout instead of floating over provider controls.
-    if (currentRoute === '/meta-ads') return null;
+    if (currentRoute === '/meta-ads' || currentRoute === '/autopilot/meta') return null;
 
     return (
-      <div className="pointer-events-none fixed top-4 right-5 z-[60]">
-        <div className="pointer-events-auto">
+      <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-2">
           <WorkspaceSwitcher />
+          {SHOW_HIDDEN_HEADER_UI && currentRoute !== '/my-space' && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
         </div>
       </div>
     );
@@ -407,18 +408,18 @@ export default function TopHeader() {
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className={`sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 px-2 py-3 backdrop-blur-xl md:px-5 2xl:h-24 2xl:px-8 2xl:py-6 dark:bg-[#0D0D0D]/50 dark:lg:bg-transparent! dark:lg:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
+          className={`lm-header-surface sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 bg-transparent px-2 py-3 md:px-5 2xl:h-24 2xl:px-8 2xl:py-6 dark:bg-transparent dark:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
         >
           <div className="left_header_container flex items-center">
             <SidebarTrigger>
-              <button className="close_open_ mr-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-slate-800/70 sm:mr-1.5 lg:hidden">
+              <button className="close_open_ mr-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] sm:mr-1.5 lg:hidden">
                 <PanelLeft className="h-5" />
               </button>
             </SidebarTrigger>
             {/* Left Title */}
             {currentRoute !== '/adfactory-demo' && (
               <h1
-                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-zinc-900 md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white`}
+                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white`}
               >
                 {headerName}
               </h1>
@@ -522,7 +523,7 @@ export default function TopHeader() {
             </div> */}
 
                   {/* ! search field */}
-                  <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                  <div className="ad-library-search backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
                     <div className="flex flex-shrink-0 items-center">
                       <Search
                         className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
@@ -535,7 +536,7 @@ export default function TopHeader() {
                     <input
                       type="text"
                       placeholder="Search.."
-                      className="w-full border-none bg-transparent text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+                      className="ad-library-search-input w-full border-none bg-transparent text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
                       value={exploreCompetitor}
                       onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
                     />
@@ -604,7 +605,7 @@ export default function TopHeader() {
                 <Button
                   variant="ghost"
                   onClick={handleNewChatClick}
-                  className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm"
+                  className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A]/70 dark:hover:text-white"
                 >
                   <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   <span>New Chat </span>
@@ -613,7 +614,7 @@ export default function TopHeader() {
                   <Button
                     variant="ghost"
                     onClick={handleNewChatClick}
-                    className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm"
+                    className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A]/70 dark:hover:text-white"
                   >
                     <LuLayoutTemplate className="h-4 w-4 2xl:h-5 2xl:w-5" />
                     <span>Templates </span>
@@ -680,15 +681,19 @@ export default function TopHeader() {
                   id="tour_mobile_tabs_open"
                   ref={mobileTabsOpenRef}
                   onClick={() => setIsShowHeadersTabs(!isShowHeadersTabs)}
-                  className={`show_top_header cursor-pointer rounded-full border border-white/20 ${isShowHeadersTabs ? 'border-white/60 text-white' : ''} bg-[#0D0D0D]/50 p-2 text-xs text-[#AFAFAF] transition-all duration-200 ease-out hover:scale-105 hover:border-white/40 hover:text-white`}
+                  className={`show_top_header cursor-pointer rounded-full border p-2 text-xs transition-all duration-200 ease-out hover:scale-105 ${
+                    isShowHeadersTabs
+                      ? 'border-black/30 text-black dark:border-white/60 dark:text-white'
+                      : 'border-black/10 text-zinc-600 dark:border-white/20 dark:text-[#AFAFAF]'
+                  } bg-white/70 hover:border-black/20 hover:text-black dark:bg-[#0D0D0D]/50 dark:hover:border-white/40 dark:hover:text-white`}
                 >
                   <List className="h-4 w-4" />
                 </button>
               </div>
             )}
 
-            {/* HIDE-MARK — theme toggle hidden globally (inline header). */}
-            {/* {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />} */}
+            {/* Theme toggle — inline header */}
+            {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
           </div>
         </div>
       )}
@@ -699,7 +704,7 @@ export default function TopHeader() {
         <div
           className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
         >
-          {/* HIDE-MARK — theme toggle hidden globally (floating fallback). */}
+          {/* Theme toggle — floating fallback */}
           <WorkspaceSwitcher />
           {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
         </div>

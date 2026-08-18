@@ -28,7 +28,7 @@ import {
 } from '@/store/reducers/aiAssistant/aiAssistantSlice';
 
 const PILL_BTN =
-  'backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 text-xs text-[#AFAFAF] transition-colors hover:text-white has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm';
+  'backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A]/70 dark:hover:text-white';
 
 const formatRelativeTime = (iso) => {
   if (!iso) return '';
@@ -157,19 +157,19 @@ const AIAssistantHeaderActions = () => {
         <PopoverContent
           align="end"
           sideOffset={8}
-          className="w-[340px] max-h-[420px] overflow-hidden border border-white/10 bg-[#0D0D0D]/95 p-0 text-white backdrop-blur-xl"
+          className="w-[340px] max-h-[420px] overflow-hidden border border-black/10 bg-white/95 p-0 text-zinc-900 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#0D0D0D]/95 dark:text-white"
         >
-          <div className="border-b border-white/10 px-4 py-3 text-[13px] font-medium text-white/85">
+          <div className="border-b border-black/10 px-4 py-3 text-[13px] font-medium text-zinc-800 dark:border-white/10 dark:text-white/85">
             Conversation history
           </div>
           <div className="max-h-[360px] overflow-y-auto">
             {conversationsLoading ? (
-              <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-white/60">
+              <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-zinc-500 dark:text-white/60">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading...
               </div>
             ) : (conversations || []).length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-white/50">
+              <div className="px-4 py-8 text-center text-xs text-zinc-500 dark:text-white/50">
                 No past conversations yet.
               </div>
             ) : (
@@ -181,22 +181,22 @@ const AIAssistantHeaderActions = () => {
                       <button
                         type="button"
                         onClick={() => handleSelect(conv)}
-                        className={`group flex w-full items-start gap-2 border-b border-white/5 px-4 py-3 text-left transition-colors hover:bg-white/5 ${
-                          isCurrent ? 'bg-white/5' : ''
+                        className={`group flex w-full items-start gap-2 border-b border-black/5 px-4 py-3 text-left transition-colors hover:bg-black/5 dark:border-white/5 dark:hover:bg-white/5 ${
+                          isCurrent ? 'bg-black/5 dark:bg-white/5' : ''
                         }`}
                       >
-                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/45" />
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-white/45" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-[13px] text-white/90">
+                            <span className="truncate text-[13px] text-zinc-900 dark:text-white/90">
                               {cleanHistoryText(conv.title) || 'Untitled'}
                             </span>
-                            <span className="shrink-0 text-[10px] text-white/40">
+                            <span className="shrink-0 text-[10px] text-zinc-400 dark:text-white/40">
                               {formatRelativeTime(conv.updatedAt)}
                             </span>
                           </div>
                           {cleanHistoryText(conv.lastMessage) && (
-                            <p className="mt-0.5 line-clamp-1 text-[11px] text-white/50">
+                            <p className="mt-0.5 line-clamp-1 text-[11px] text-zinc-500 dark:text-white/50">
                               {cleanHistoryText(conv.lastMessage)}
                             </p>
                           )}
@@ -205,7 +205,7 @@ const AIAssistantHeaderActions = () => {
                           role="button"
                           tabIndex={-1}
                           onClick={(e) => handleDeleteClick(e, conv)}
-                          className="mt-0.5 hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/40 hover:text-red-400 group-hover:flex"
+                          className="mt-0.5 hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:text-red-500 group-hover:flex dark:text-white/40 dark:hover:text-red-400"
                           aria-label="Delete conversation"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -231,10 +231,10 @@ const AIAssistantHeaderActions = () => {
           if (!next && !deleting) setPendingDelete(null);
         }}
       >
-        <DialogContent className="max-w-sm border border-white/10 bg-[#0D0D0D]/95 text-white backdrop-blur-xl">
+        <DialogContent className="max-w-sm border border-black/10 bg-white/95 text-zinc-900 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#0D0D0D]/95 dark:text-white">
           <DialogHeader>
             <DialogTitle>Delete conversation?</DialogTitle>
-            <DialogDescription className="text-white/60">
+            <DialogDescription className="text-zinc-500 dark:text-white/60">
               {pendingDelete?.title
                 ? `"${pendingDelete.title}" will be permanently deleted. This can't be undone.`
                 : "This conversation will be permanently deleted. This can't be undone."}
@@ -245,7 +245,7 @@ const AIAssistantHeaderActions = () => {
               variant="ghost"
               onClick={() => setPendingDelete(null)}
               disabled={deleting}
-              className="border border-white/15 text-white/80 hover:bg-white/5"
+              className="border border-black/15 text-zinc-700 hover:bg-black/5 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/5"
             >
               Cancel
             </Button>

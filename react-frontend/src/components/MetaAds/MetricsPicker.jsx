@@ -293,7 +293,7 @@ export default function MetricsPicker({
       }}
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl workspace-card shadow-2xl dark:border-white/8 dark:bg-[#161616]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* header */}
@@ -336,7 +336,7 @@ export default function MetricsPicker({
               type="button"
               onClick={selectAll}
               disabled={allFilteredSelected || atCap}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-11 font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-[#eef1f4] px-2.5 py-1 text-11 font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-[#e2e7ec] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
             >
               <CheckCheck className="h-3 w-3" />
               Select all{query ? ` (${filteredKeys.length})` : ''}
@@ -345,7 +345,7 @@ export default function MetricsPicker({
               type="button"
               onClick={resetToDefault}
               disabled={isAtDefault}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-11 font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-[#eef1f4] px-2.5 py-1 text-11 font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-[#e2e7ec] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
             >
               <RotateCcw className="h-3 w-3" />
               Reset to default

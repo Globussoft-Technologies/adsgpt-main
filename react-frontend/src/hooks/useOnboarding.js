@@ -42,14 +42,6 @@ const useOnboarding = () => {
 
   const handleCompleteOrSkip = useCallback(() => {
     const targetId = userId || getUserIdFromToken();
-    try {
-      localStorage.setItem('adsgpt_onboarding_completed', 'true');
-      if (targetId) {
-        localStorage.setItem(`onboarding_completed_${targetId}`, 'true');
-      }
-    } catch {
-      // ignore
-    }
     if (targetId) {
       dispatch(markUserOnboardingComplete(targetId));
     }

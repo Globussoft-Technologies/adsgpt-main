@@ -109,7 +109,7 @@ function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPo
   );
 
   return (
-    <div className="group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
+    <div className="my-space-media-card group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-[#1f1f1f]">
       <InfoTooltip />
 
       {/* Selection checkbox — only for completed images */}

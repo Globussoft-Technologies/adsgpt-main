@@ -133,7 +133,7 @@ const AdFactoryStepCard = ({ data, dragging }) => {
   return (
     <div
       id={`tour_${id}`}
-      className={`group relative w-80 rounded-2xl border ${bgClass} shadow-sm backdrop-blur-3xl transition-all duration-200 select-none dark:shadow-none ${
+      className={`ad_factory_card workspace-card group relative w-80 rounded-2xl border ${bgClass} transition-all duration-200 select-none ${
         dragging
           ? 'z-50 border-blue-500 shadow-blue-500/30'
           : !isEnabled

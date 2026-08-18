@@ -92,14 +92,14 @@ export default function CallToActionSection({
 
   return (
     <section
-      className={`flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/2 px-4 py-3 transition ${
-        disabled ? 'pointer-events-none opacity-50' : ''
+      className={`flex flex-col gap-2.5 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition dark:border-white/10 dark:bg-white/2 ${
+        disabled ? 'pointer-events-none opacity-70 dark:opacity-50' : ''
       } ${locked ? 'opacity-60' : ''}`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MousePointerClick className="size-4 text-[#15DCFF]" />
-          <h3 className="text-sm font-semibold text-white 2xl:text-base">
+          <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
             Call-to-Action
             <span className="ml-0.5 text-red-400">*</span>
           </h3>
@@ -122,12 +122,12 @@ export default function CallToActionSection({
           onLockedInteraction={onLockedInteraction}
         />
         <div
-          className={`flex items-center gap-2 rounded-lg border bg-[#0D0D0D]/40 px-3 transition focus-within:border-[#15DCFF]/60 ${
-            urlValid ? 'border-white/10' : 'border-red-500/40'
+          className={`flex items-center gap-2 rounded-lg border bg-gray-200 px-3 transition focus-within:border-[#15DCFF]/60 dark:bg-[#0D0D0D]/40 ${
+            urlValid ? 'border-black/10 dark:border-white/10' : 'border-red-500/40'
           } ${locked ? 'cursor-not-allowed' : ''}`}
           onMouseDownCapture={locked ? handleLockedClick : undefined}
         >
-          <LinkIcon className="size-4 shrink-0 text-[#AFAFAF]" />
+          <LinkIcon className="size-4 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
           <input
             type="url"
             inputMode="url"
@@ -137,7 +137,7 @@ export default function CallToActionSection({
             disabled={disabled}
             readOnly={locked}
             onFocus={locked ? (e) => { e.target.blur(); onLockedInteraction?.(); } : undefined}
-            className={`h-10 w-full bg-transparent text-sm text-white outline-none placeholder:text-[#666] disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`h-10 w-full bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white dark:placeholder:text-[#666] dark:disabled:opacity-50 ${
               locked ? 'cursor-not-allowed' : ''
             }`}
           />
@@ -291,17 +291,21 @@ function ToggleableCtaDropdown({
           }
           setOpen((v) => !v);
         }}
-        className={`flex h-10 w-full items-center justify-between gap-2 rounded-full bg-[#383838]/50 px-4 text-sm backdrop-blur-md transition outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+        className={`flex h-10 w-full items-center justify-between gap-2 rounded-full border border-black/10 bg-gray-200 px-4 text-sm backdrop-blur-md transition outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#383838]/50 dark:disabled:opacity-50 ${
           locked ? 'cursor-not-allowed' : ''
         } ${
-          open ? 'text-white' : selectedLabel ? 'text-white' : 'text-[#AFAFAF]'
+          open
+            ? 'text-gray-900 dark:text-white'
+            : selectedLabel
+              ? 'text-gray-900 dark:text-white'
+              : 'text-gray-500 dark:text-[#AFAFAF]'
         }`}
       >
         <span className="truncate">
           {loading ? 'Loading options…' : selectedLabel || 'Choose a button'}
         </span>
         <ChevronDown
-          className={`size-4 shrink-0 text-[#AFAFAF] transition-transform ${
+          className={`size-4 shrink-0 text-gray-500 transition-transform dark:text-[#AFAFAF] ${
             open ? 'rotate-180' : ''
           }`}
         />
@@ -314,7 +318,7 @@ function ToggleableCtaDropdown({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: flipUp ? 4 : -4 }}
             transition={{ duration: 0.12 }}
-            className={`absolute left-0 z-50 max-h-72 w-full min-w-fit overflow-y-auto rounded-lg border border-white/15 bg-[#0D0D0D]/95 py-1 shadow-2xl backdrop-blur-xl ${
+            className={`absolute left-0 z-50 max-h-72 w-full min-w-fit overflow-y-auto rounded-lg border border-black/15 bg-[#e8edf2]/98 py-1 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-[#0D0D0D]/95 dark:shadow-2xl ${
               flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
             }`}
           >
@@ -325,8 +329,10 @@ function ToggleableCtaDropdown({
                   <button
                     type="button"
                     onClick={() => handleSelect(opt.value)}
-                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-white/5 ${
-                      active ? 'text-white' : 'text-[#AFAFAF] hover:text-white'
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/5 ${
+                      active
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-600 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:text-white'
                     }`}
                   >
                     <span className="min-w-0 wrap-break-word">{opt.label}</span>

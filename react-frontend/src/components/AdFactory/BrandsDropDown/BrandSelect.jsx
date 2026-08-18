@@ -15,7 +15,13 @@ import { setFields, updateBrandName } from '@/store/reducers/adFactoryNew/adFact
 import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 
 
-export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, isBrandInfoStep=false, portal = false }) {
+export default function BrandSearch({
+  isAvatarAdsSearch = false,
+  placeholder,
+  isBrandInfoStep = false,
+  portal = true,
+  surfaceVariant = 'default',
+}) {
 
   const { myBrands: brands } = useSelector((state) => state.brandIQTabs);
   const { selectedBrand, brand_name, brandInfo } = useSelector((state) => state.adFactoryNew);
@@ -23,6 +29,7 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
   const dispatch = useDispatch();
+  const usesNeutralFormSurface = surfaceVariant === 'neutral-form';
 
   useEffect(() => {
     if (portal) return;
@@ -70,22 +77,29 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
   };
 
   return (
-    <div className="brand_select_from_adfactory w-full">
-      <div ref={wrapperRef} className="relative w-full transition-colors focus-within:shadow-lg">
-        <div className={isAvatarAdsSearch ? '' : 'input-gradient-border'}>
+    <div
+      className={`brand_select_from_adfactory w-full ${
+        usesNeutralFormSurface ? 'adfactory-brand-select' : ''
+      }`}
+    >
+      <div ref={wrapperRef} className="relative w-full">
+        <div>
           <Command
-            className={`rounded-full ${isAvatarAdsSearch || isBrandInfoStep ? 'border border-black/10 bg-zinc-50 dark:border-transparent dark:bg-[#9092941A]' : 'border border-black/10 bg-zinc-50 dark:border-white/10 dark:bg-[#383838]/50'} shadow-md focus-within:border-zinc-400 dark:focus-within:border-white/50`}
+            className={`relative !overflow-visible rounded-full border text-zinc-900 transition-all dark:border-white/10 dark:bg-[#383838]/50 dark:text-white dark:shadow-none ${
+              usesNeutralFormSurface
+                ? 'adfactory-brand-select-control border-black/10 bg-[#E2E8EE] shadow-none'
+                : 'border-white/80 bg-[#E2E6EA] shadow-[inset_2px_2px_5px_rgba(160,172,188,0.30),inset_-2px_-2px_5px_rgba(255,255,255,0.85)]'
+            }`}
             shouldFilter={false}
           >
-            <div
-              className={`relative flex w-full items-center ${isAvatarAdsSearch ? 'min-h-[40px] 2xl:min-h-[46px]' : 'min-h-10 2xl:min-h-[49px]'} [&_svg]:hidden`}
-            >
+            <div className="relative flex w-full items-center min-h-11 2xl:min-h-[49px] [&_svg]:hidden">
               <CommandInput
                 value={brand_name || brandInfo?.brandName || ''}
                 placeholder={placeholder || 'Select brand or type a new one'}
                 onValueChange={handleBrandNameChange}
                 onFocus={() => setOpen(true)}
-                className={`h-12 rounded-full bg-transparent ${isAvatarAdsSearch ? 'px-1 text-sm placeholder:text-sm 2xl:placeholder:text-sm' : 'px-3 text-sm placeholder:text-sm 2xl:text-base placeholder:2xl:text-base'} text-zinc-800 placeholder:text-zinc-500 dark:text-white dark:placeholder:text-[#AFAFAF]`}
+                onClick={() => setOpen(true)}
+                className="h-11 w-full border-none bg-transparent px-5 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:text-white dark:placeholder:text-[#AFAFAF] 2xl:h-[49px] 2xl:text-base placeholder:2xl:text-base"
               />
             </div>
             <Button
@@ -93,17 +107,17 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
               variant="ghost"
               size="icon"
               onClick={() => setOpen((prev) => !prev)}
-              className="group absolute top-1/2 right-2 -translate-y-1/2 rounded-full hover:!bg-transparent"
+              className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full hover:bg-transparent"
             >
               <ChevronDown
-                className={` ${isAvatarAdsSearch ? 'size-5 text-zinc-700 dark:text-white' : 'size-4 text-zinc-500 dark:text-[#AFAFAF]'} group-hover:text-zinc-900 dark:group-hover:text-white`}
+                className="size-4 text-zinc-500 dark:text-[#AFAFAF] hover:text-zinc-900 dark:hover:text-white"
               />
             </Button>
 
             {/* Dropdown list */}
             {open && !portal && (
-              <CommandList className="absolute top-full z-10 mt-1 max-h-52 w-full overflow-auto rounded-xl border border-black/10 bg-white p-1 shadow-lg backdrop-blur-[100px] dark:border-white/10 dark:bg-[#1b1c1f]">
-                <CommandEmpty className="py-2 text-center text-sm text-zinc-500 2xl:text-base dark:text-[#AFAFAF]">
+              <CommandList className="absolute top-full left-0 z-[9999] mt-2 max-h-52 w-full overflow-auto rounded-2xl border border-black/10 bg-[#EEF1F3] p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:border-white/10 dark:bg-[#1b1c1f] dark:shadow-2xl">
+                <CommandEmpty className="py-3 text-center text-sm text-zinc-500 2xl:text-base dark:text-[#AFAFAF]">
                   No brand found
                 </CommandEmpty>
                 {filteredBrands.map((b) => (
@@ -111,13 +125,13 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                     key={b?.id}
                     value={b?.name}
                     onSelect={() => handleBrandSelect(b)}
-                    className={`flex w-full cursor-pointer justify-between rounded-lg px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-100 2xl:text-base data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
-                      selectedBrand?.name === b?.name ? 'bg-zinc-100 dark:bg-[#454545]' : ''
+                    className={`flex w-full cursor-pointer justify-between rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 transition-colors hover:bg-black/5 2xl:text-base data-[selected=true]:bg-black/5 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
+                      selectedBrand?.name === b?.name ? 'bg-black/5 font-semibold dark:bg-[#454545]' : ''
                     }`}
                   >
                     {b?.name}
                     <span
-                      className={`flex min-h-4 min-w-4 items-center justify-center rounded-full border ${
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border ${
                         selectedBrand?.name === b?.name
                           ? 'border-zinc-700 bg-zinc-700 dark:border-[#575757] dark:bg-[#575757]'
                           : 'border-zinc-400 dark:border-[#AFAFAF]'
@@ -138,7 +152,9 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                   <div className="absolute bottom-0 left-0 h-0 w-full" />
                 </PopoverAnchor>
                 <PopoverContent
-                  className="z-55 w-[var(--radix-popover-trigger-width)] p-1 rounded-xl border border-black/10 bg-white shadow-lg backdrop-blur-[100px] dark:border-white/10 dark:bg-[#1b1c1f]"
+                  className={`z-[9999] w-[var(--radix-popover-trigger-width)] rounded-2xl border border-black/10 bg-[#EEF1F3] p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:border-white/10 dark:bg-[#1b1c1f] dark:shadow-2xl ${
+                    usesNeutralFormSurface ? 'adfactory-brand-select-popover' : ''
+                  }`}
                   align="start"
                   sideOffset={4}
                 >
@@ -151,8 +167,8 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                         key={b?.id}
                         value={b?.name}
                         onSelect={() => handleBrandSelect(b)}
-                        className={`flex w-full cursor-pointer justify-between rounded-md px-3 2xl:px-4 py-2 2xl:py-3 text-[10px] text-zinc-800 hover:bg-zinc-100 2xl:text-sm data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
-                          selectedBrand?.name === b?.name ? 'bg-zinc-100 dark:bg-[#454545]' : ''
+                        className={`flex w-full cursor-pointer justify-between rounded-xl px-3 2xl:px-4 py-2 2xl:py-3 text-[10px] text-zinc-800 hover:bg-black/5 2xl:text-sm data-[selected=true]:bg-black/5 data-[selected=true]:text-zinc-900 dark:text-white dark:hover:bg-white/10 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-white ${
+                          selectedBrand?.name === b?.name ? 'bg-black/5 font-semibold dark:bg-[#454545]' : ''
                         }`}
                       >
                         {b?.name}
@@ -173,8 +189,6 @@ export default function BrandSearch({ isAvatarAdsSearch = false, placeholder, is
                 </PopoverContent>
               </Popover>
             )}
-
-
           </Command>
         </div>
       </div>

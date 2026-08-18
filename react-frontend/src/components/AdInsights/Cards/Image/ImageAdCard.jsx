@@ -93,7 +93,7 @@ const ImageAdCard = ({
   return (
     <div
       id="tour_image_adcard"
-      className="rounded-10 group relative w-full overflow-hidden border border-white/10 bg-[#0D0D0D] text-white"
+      className="rounded-10 group relative w-full overflow-hidden workspace-card text-gray-900 dark:border-white/10 dark:bg-[#0D0D0D] dark:text-white dark:shadow-none"
       onClick={(e) => startGlobalInteractionTracking(e, ad, 'adCard', userData, currentSessionId)}
       onCopy={(e) => {
         e.preventDefault();

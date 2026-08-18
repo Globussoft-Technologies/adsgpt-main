@@ -97,7 +97,7 @@ const Layout = () => {
           <AppSidebar />
           <main className="relative flex h-svh w-full flex-col overflow-hidden">
             <TopHeader />
-            <div className="flex dark:bg-inherit bg-[#f6f7fb] min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
+            <div className="flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
               <Outlet />
             </div>
             <TourGuide />
@@ -118,22 +118,46 @@ const Layout = () => {
   //   'Anonymous'
   // );
 
+  const usesAdsOperationsAmbient = [
+    '/ads-manager',
+    '/meta-ads',
+    '/google-ads',
+    '/tiktok-ads',
+    '/autopilot',
+    '/autopilot/meta',
+  ].includes(location.pathname);
+
+  const lightAmbientClassName =
+    usesAdsOperationsAmbient
+      ? 'light-ambient-ui-layer ads-manager-ui-layer'
+      : location.pathname === '/brandiq'
+        ? 'light-ambient-ui-layer brandiq-ui-layer'
+        : location.pathname === '/adstudio'
+          ? 'light-ambient-ui-layer adstudio-ui-layer'
+          : location.pathname === '/workspace/members'
+            ? 'light-ambient-ui-layer workspace-ui-layer'
+            : location.pathname === '/my-space'
+              ? 'light-ambient-ui-layer my-space-ui-layer'
+              : location.pathname === '/profile'
+                ? 'light-ambient-ui-layer account-ui-layer'
+                : undefined;
+
   return (
-    <div className="layout_container text-foreground relative flex dark:bg-transparent">
+    <div className="layout_container text-foreground relative flex bg-[#F7F4EE] dark:bg-transparent">
       {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
-        <div className="fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-70 blur-[100px] 2xl:blur-[160px] dark:opacity-100"></div>
+        <div className="pointer-events-none fixed -top-[25%] right-[20vw] z-[-1] h-[15vw] w-[15vw] rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-0 blur-[100px] 2xl:blur-[160px] dark:opacity-100"></div>
       )}
 
       <Toaster position="top-center" reverseOrder={false} />
       {/* <AdBlockerModal /> */}
 
-      <SidebarProvider>
+      <SidebarProvider className={lightAmbientClassName}>
         {!isEditorOpen && (
           <>
             <AppSidebar />
-            <main className="relative flex h-svh w-full flex-col overflow-hidden">
+            <main className="relative flex h-svh w-full flex-col overflow-hidden bg-transparent dark:bg-inherit">
               <TopHeader />
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0! dark:bg-inherit">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0! bg-transparent dark:bg-inherit">
                 <Outlet />
               </div>
               <TourGuide />
@@ -158,7 +182,7 @@ const Layout = () => {
         )}
       </SidebarProvider>
       {location.pathname !== '/adfactory' && location.pathname !== '/assistant' && (
-        <div className="fixed top-[85%] left-1/2 z-[-1] h-[100vw] w-[100vw] -translate-x-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-30 blur-[100px] 2xl:top-[90%] 2xl:h-[130vw] 2xl:w-[130vw] 2xl:blur-[150px] dark:opacity-100"></div>
+        <div className="pointer-events-none fixed top-[85%] left-1/2 z-[-1] h-[100vw] w-[100vw] -translate-x-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-0 blur-[100px] 2xl:top-[90%] 2xl:h-[130vw] 2xl:w-[130vw] 2xl:blur-[150px] dark:opacity-100"></div>
       )}
     </div>
   );

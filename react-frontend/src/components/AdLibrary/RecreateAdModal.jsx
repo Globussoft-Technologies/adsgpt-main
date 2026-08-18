@@ -750,7 +750,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   )}
                 </div>
                 <span className="shrink-0 text-[14px] text-gray-600 dark:text-white/60">or</span>
-                <div className="relative min-w-0 flex-1">
+                <div className="inline-url-field relative min-w-0 flex-1">
                   <input
                     type="text"
                     inputMode="url"
@@ -766,7 +766,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 pr-20 text-[13px] font-light text-gray-900 dark:text-white outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20"
+                    className="inline-url-input h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 pr-20 text-[13px] font-light text-gray-900 dark:text-white outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20"
                   />
                   <button
                     type="button"

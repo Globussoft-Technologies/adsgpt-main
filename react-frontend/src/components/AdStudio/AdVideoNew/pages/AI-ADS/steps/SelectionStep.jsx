@@ -18,7 +18,7 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
   };
 
   return (
-    <div className="relative flex h-full w-screen rounded-3xl max-w-sm min-w-[450px] flex-col overflow-y-auto bg-white dark:bg-[#303030]/40 p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12">
+    <div className="workspace-card relative flex h-full w-screen rounded-3xl max-w-sm min-w-[450px] flex-col overflow-y-auto p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12 dark:bg-[#303030]/40">
       {/* Header */}
       <div className="relative mb-10 flex items-center justify-center pt-6 text-gray-900 dark:text-white 2xl:mb-12">
         <h2 className="text-base font-semibold sm:text-lg lg:text-xl 2xl:text-[26px]">
@@ -40,8 +40,8 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
           onDoubleClick={() => handleDoubleClick('brand')}
           className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border-2 transition-all duration-200 ${
             selected === 'brand'
-              ? 'border-white/40 shadow-[0_0_15px_rgba(255,255,255,0.1)]'
-              : 'border-transparent hover:border-white/20'
+              ? 'border-[#3F51B5] dark:border-white/40 shadow-[0_0_20px_rgba(63,81,181,0.25)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)]'
+              : 'border-transparent hover:border-black/20 dark:hover:border-white/20'
           }`}
         >
           <img
@@ -62,8 +62,8 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
           onDoubleClick={() => handleDoubleClick('product')}
           className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border-2 transition-all duration-200 ${
             selected === 'product'
-              ? 'border-white/40 shadow-[0_0_15px_rgba(255,255,255,0.1)]'
-              : 'border-transparent hover:border-white/20'
+              ? 'border-[#3F51B5] dark:border-white/40 shadow-[0_0_20px_rgba(63,81,181,0.25)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)]'
+              : 'border-transparent hover:border-black/20 dark:hover:border-white/20'
           }`}
         >
           <img

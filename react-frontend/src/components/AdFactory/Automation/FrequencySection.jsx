@@ -195,20 +195,20 @@ export default function FrequencySection({ value, onChange, disabled }) {
 
   return (
     <section
-      className={`flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/2 px-4 py-3 transition ${
-        disabled ? 'pointer-events-none opacity-50' : ''
+      className={`flex flex-col gap-2.5 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition dark:border-white/10 dark:bg-white/2 ${
+        disabled ? 'pointer-events-none opacity-70 dark:opacity-50' : ''
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CalendarDays className="size-4 text-[#15DCFF]" />
-          <h3 className="text-sm font-semibold text-white 2xl:text-base">
+          <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
             Schedule
             <span className="ml-0.5 text-red-400">*</span>
           </h3>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-10 tracking-wide text-[#AFAFAF] uppercase">
+          <span className="text-10 tracking-wide text-gray-500 uppercase dark:text-[#AFAFAF]">
             {describeFrequency(value) || 'Set a frequency'}
           </span>
           {isCustom && !panelOpen && (
@@ -217,7 +217,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
               onClick={handleEditCustom}
               disabled={disabled}
               title="Edit custom recurrence"
-              className="flex size-5 items-center justify-center rounded-md border border-white/10 bg-white/3 text-[#AFAFAF] transition hover:border-[#15DCFF]/40 hover:bg-[#15DCFF]/10 hover:text-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex size-5 items-center justify-center rounded-md border border-black/10 bg-black/[0.03] text-gray-500 transition hover:border-[#15DCFF]/40 hover:bg-[#15DCFF]/10 hover:text-[#15DCFF] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/3 dark:text-[#AFAFAF]"
             >
               <Pencil className="size-2.5" />
             </button>
@@ -266,7 +266,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
         </div>
         <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(8rem,10rem)_minmax(0,1fr)] sm:items-end">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-[#AFAFAF]">Run at</label>
+            <label className="text-xs text-gray-500 dark:text-[#AFAFAF]">Run at</label>
             <InputCommonDropdown
               label="Hour"
               options={hourOptions.length > 0 ? hourOptions : HOUR_OPTIONS}
@@ -275,7 +275,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
               disabled={disabled || (isStartToday && hourOptions.length === 0)}
             />
             {isStartToday && hourOptions.length === 0 && (
-              <span className="text-[11px] text-amber-300/90 italic">
+              <span className="text-[11px] text-amber-700 italic dark:text-amber-300/90">
                 No hours left today — pick tomorrow as the start date.
               </span>
             )}
@@ -311,9 +311,9 @@ export default function FrequencySection({ value, onChange, disabled }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="mt-1 flex flex-col gap-4 rounded-lg border border-white/5 bg-[#0D0D0D]/40 p-4">
+            <div className="mt-1 flex flex-col gap-4 rounded-lg border border-black/10 bg-black/[0.03] p-4 dark:border-white/5 dark:bg-[#0D0D0D]/40">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#AFAFAF]">Repeat every</label>
+                <label className="text-xs text-gray-500 dark:text-[#AFAFAF]">Repeat every</label>
                 <div className="flex items-center gap-2">
                   <NumberField
                     value={customDraft.interval || 1}
@@ -344,7 +344,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
                     className="overflow-hidden"
                   >
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-[#AFAFAF]">Repeat on</label>
+                      <label className="text-xs text-gray-500 dark:text-[#AFAFAF]">Repeat on</label>
                       <div className="flex flex-wrap gap-1.5">
                         {DOW.map(({ value: v, short, full }) => {
                           const active = (customDraft.daysOfWeek || []).map(Number).includes(v);
@@ -359,7 +359,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
                               className={`relative flex size-8 items-center justify-center rounded-full text-xs font-medium transition disabled:cursor-not-allowed ${
                                 active
                                   ? 'bg-linear-to-br from-[#15DCFF] to-[#6b72f8] text-white shadow-md shadow-indigo-500/30'
-                                  : 'border border-white/10 bg-white/4 text-[#AFAFAF] hover:border-white/20 hover:text-white'
+                                  : 'border border-black/10 bg-black/[0.03] text-gray-600 hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:text-white'
                               }`}
                             >
                               {short}
@@ -368,7 +368,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
                         })}
                       </div>
                       {(customDraft.daysOfWeek || []).length === 0 && (
-                        <span className="text-[11px] text-[#AFAFAF]">
+                        <span className="text-[11px] text-gray-500 dark:text-[#AFAFAF]">
                           No days selected — runs on the same weekday as your start date.
                         </span>
                       )}
@@ -382,7 +382,7 @@ export default function FrequencySection({ value, onChange, disabled }) {
                   type="button"
                   onClick={handleCancelCustom}
                   disabled={disabled}
-                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-[#AFAFAF] transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-black/10 px-3 py-1.5 text-xs text-gray-600 transition hover:bg-black/[0.04] hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-[#AFAFAF] dark:hover:bg-white/5 dark:hover:text-white"
                 >
                   Cancel
                 </button>
@@ -461,13 +461,13 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
-        <label className="text-xs text-[#AFAFAF]">{label}</label>
+        <label className="text-xs text-gray-500 dark:text-[#AFAFAF]">{label}</label>
         {allowClear && value && (
           <button
             type="button"
             onClick={() => onChange?.('')}
             disabled={disabled}
-            className="text-10 tracking-wide text-[#AFAFAF] uppercase transition hover:text-white disabled:opacity-50"
+            className="text-10 tracking-wide text-gray-500 uppercase transition hover:text-gray-900 disabled:opacity-50 dark:text-[#AFAFAF] dark:hover:text-white"
           >
             clear
           </button>
@@ -478,19 +478,19 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
           type="button"
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
-          className={`flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#0D0D0D]/40 px-3 text-sm text-white outline-none transition hover:border-white/20 focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-black/10 bg-gray-200 px-3 text-sm text-gray-900 outline-none transition hover:border-black/20 focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0D0D0D]/40 dark:text-white dark:hover:border-white/20 dark:disabled:opacity-50 ${
             open ? 'border-[#15DCFF]/60' : ''
           }`}
         >
-          <span className={`truncate ${dateObj ? 'text-white' : 'text-[#666]'}`}>
+          <span className={`truncate ${dateObj ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
             {display}
           </span>
-          <CalendarDays className="size-4 shrink-0 text-[#AFAFAF]" />
+          <CalendarDays className="size-4 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
         </button>
 
         {open && (
           <div
-            className="adsgpt-cal-pop absolute top-full right-0 z-10000 mt-1 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-2xl"
+            className="adsgpt-cal-pop absolute top-full right-0 z-10000 mt-1 overflow-hidden rounded-lg border border-black/10 bg-[#eef1f3] shadow-xl dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-2xl"
           >
             <style>{`
               .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }
@@ -543,7 +543,7 @@ function NumberField({ value, onChange, min = 1, max = 99, disabled }) {
         onChange?.(Math.min(max, Math.max(min, n)));
       }}
       disabled={disabled}
-      className="h-10 w-20 rounded-lg border border-white/10 bg-[#0D0D0D]/40 px-3 text-center text-sm text-white outline-none transition focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-50"
+      className="adfactory-automation-input h-10 w-20 rounded-lg border border-black/10 bg-gray-200 px-3 text-center text-sm text-gray-900 outline-none transition focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0D0D0D]/40 dark:text-white dark:disabled:opacity-50"
     />
   );
 }

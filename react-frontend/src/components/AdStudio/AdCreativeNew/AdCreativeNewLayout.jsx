@@ -86,11 +86,15 @@ const AdCreativeNewLayout = () => {
   };
 
   if (route === 'home') {
-    return <AdCreativeNewHome onSelectCategory={handleSelectCategory} />;
+    return (
+      <div className="adcreative-field-system h-full">
+        <AdCreativeNewHome onSelectCategory={handleSelectCategory} />
+      </div>
+    );
   }
 
   return (
-    <>
+    <div className="adcreative-field-system h-full">
       {/* Hidden genie target — zero-size, top-right, matches the AdVideo pattern. */}
       <span
         ref={mySpaceIconRef}
@@ -112,7 +116,7 @@ const AdCreativeNewLayout = () => {
           />
         )}
       </div>
-    </>
+    </div>
   );
 };
 

@@ -62,7 +62,7 @@ const InlineDropdown = ({ value, options, onChange, renderLabel }) => {
       </button>
 
       {open && (
-        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-black/10 bg-white py-1 shadow-lg dark:border-[#3a3c44] dark:bg-[#303030]">
+        <div className="scrollbar-thin absolute top-full left-0 z-[60] mt-1 max-h-[220px] w-max min-w-[110px] overflow-y-auto rounded-md border border-[#DDD7CD] bg-[var(--ws-surface-control)] py-1 shadow-lg dark:border-[#3a3c44] dark:bg-[#303030]">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -73,8 +73,8 @@ const InlineDropdown = ({ value, options, onChange, renderLabel }) => {
               }}
               className={`mt-1 block w-full px-3 py-1.5 text-left text-sm ${
                 opt.value === value
-                  ? 'bg-zinc-100 text-zinc-900 dark:bg-[#464951] dark:text-white'
-                  : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white'
+                  ? 'bg-[var(--ws-surface-header)] text-[#24211D] dark:bg-[#464951] dark:text-white'
+                  : 'text-[#7A7369] hover:bg-[var(--ws-surface-header)] hover:text-[#24211D] dark:text-white/80 dark:hover:bg-[#464951] dark:hover:text-white'
               }`}
             >
               {opt.label}
@@ -225,7 +225,7 @@ const GenerationUsageGraph = ({ userId }) => {
       <div className="relative mb-3 flex items-center gap-2" ref={pickerRef}>
         <button
           onClick={() => setIsOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+          className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] px-3.5 py-2 text-xs font-semibold text-[#24211D] shadow-[0_1px_3px_rgba(80,70,58,0.04)] transition-all hover:bg-[var(--ws-surface-header)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-white dark:shadow-none dark:hover:bg-white/10"
         >
           <FiCalendar />
           <span className="text-xs">
@@ -238,7 +238,7 @@ const GenerationUsageGraph = ({ userId }) => {
         <button
           onClick={handleReset}
           title="Reset"
-          className="rounded-md border border-black/10 bg-white p-2 text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+          className="rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-2 text-[#24211D] shadow-[0_1px_3px_rgba(80,70,58,0.04)] transition-all hover:bg-[var(--ws-surface-header)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-white dark:shadow-none dark:hover:bg-white/10"
         >
           <GrPowerReset />
         </button>
@@ -247,19 +247,19 @@ const GenerationUsageGraph = ({ userId }) => {
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="appearance-none rounded-md border border-black/10 bg-white px-4 py-2 pr-10 text-xs text-zinc-800 shadow-sm transition-all hover:border-black/20 focus:border-[#6366F1] focus:ring-1 focus:ring-[#6366F1]/50 focus:outline-none dark:border-white/10 dark:bg-black dark:text-white/90 dark:hover:border-white/20"
+            className="usage-graph-select appearance-none rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] px-4 py-2 pr-10 text-xs font-semibold text-[#24211D] shadow-[0_1px_3px_rgba(80,70,58,0.04)] transition-all hover:bg-[var(--ws-surface-header)] focus:outline-none dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-white/90 dark:shadow-none"
           >
-            <option value="both" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
+            <option value="both" className="bg-[var(--ws-surface-control)] py-2 text-[#24211D] dark:bg-[#1a1a1a] dark:text-white">
               Select Type
             </option>
-            <option value="images" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
+            <option value="images" className="bg-[var(--ws-surface-control)] py-2 text-[#24211D] dark:bg-[#1a1a1a] dark:text-white">
               Images Only
             </option>
-            <option value="videos" className="bg-white py-2 text-zinc-800 dark:bg-[#1a1a1a] dark:text-white">
+            <option value="videos" className="bg-[var(--ws-surface-control)] py-2 text-[#24211D] dark:bg-[#1a1a1a] dark:text-white">
               Videos Only
             </option>
           </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 dark:text-white/50">
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-[#7A7369] dark:text-white/50">
             <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
               <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
             </svg>
@@ -267,7 +267,7 @@ const GenerationUsageGraph = ({ userId }) => {
         </div>
 
         {isOpen && (
-          <div className="absolute top-full left-0 z-50 mt-2 rounded-md border border-black/10 bg-white shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50">
+          <div className="absolute top-full left-0 z-50 mt-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#303030]/50">
             <DateRange
               ranges={tempRange}
               onChange={(r) => setTempRange([r.selection])}
@@ -355,21 +355,21 @@ const GenerationUsageGraph = ({ userId }) => {
       <div className="relative h-[260px] min-h-[260px] w-full">
         <div className="absolute top-[-90px] right-4 z-10 flex gap-3">
           {(selectedType === 'both' || selectedType === 'videos') && (
-            <div className="top-[50px] rounded-lg border bg-white px-4 py-3 shadow-sm dark:bg-[#303030]/50">
-              <p className="text-[11px] tracking-wide text-gray-500 uppercase dark:text-white/70">
+            <div className="rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] px-4 py-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none">
+              <p className="text-[10px] font-bold tracking-wider text-[#7A7369] uppercase dark:text-white/70">
                 Total Videos
               </p>
-              <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              <p className="mt-0.5 text-base font-bold text-[#24211D] dark:text-white">
                 {totalVideos}
               </p>
             </div>
           )}
           {(selectedType === 'both' || selectedType === 'images') && (
-            <div className="rounded-lg border bg-white px-4 py-3 shadow-sm dark:bg-[#303030]/50">
-              <p className="text-[11px] tracking-wide text-gray-500 uppercase dark:text-white/70">
+            <div className="rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] px-4 py-2.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-none">
+              <p className="text-[10px] font-bold tracking-wider text-[#7A7369] uppercase dark:text-white/70">
                 Total Images
               </p>
-              <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              <p className="mt-0.5 text-base font-bold text-[#24211D] dark:text-white">
                 {totalImages}
               </p>
             </div>

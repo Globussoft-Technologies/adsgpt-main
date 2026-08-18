@@ -305,17 +305,19 @@ export default function ValidateForm({ onComplete }) {
                         return (
                           <div
                             key={id}
-                            className={`group rounded-lg bg-gradient-to-r ${
+                            className={`group rounded-lg transition-all ${
                               isSelected
-                                ? 'from-[#02C8C4] to-[#5867EB]'
-                                : 'from-black/20 to-black/5 dark:from-white/30 dark:to-gray-100/10'
-                            } w-fit p-[1px]`}
+                                ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.30)]'
+                                : 'bg-black/10 p-[1px] dark:bg-white/10'
+                            } w-fit`}
                           >
                             <button
                               type="button"
                               onClick={() => handlePlatformToggle(name)}
-                              className={`backdrop-blur-100 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-[#2d2d2d] transition-all 2xl:h-[52px] 2xl:w-[52px] ${
-                                isSelected ? '' : ''
+                              className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg transition-all 2xl:h-[52px] 2xl:w-[52px] ${
+                                isSelected
+                                  ? 'bg-[#02C8C4]/15 text-[#02C8C4] dark:bg-[#02C8C4]/25 dark:text-[#02C8C4]'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-black dark:bg-[#2d2d2d] dark:text-[#AFAFAF] dark:hover:bg-[#383838] dark:hover:text-white'
                               }`}
                               disabled={submitting}
                             >
@@ -409,24 +411,24 @@ export default function ValidateForm({ onComplete }) {
                                     return (
                                       <div
                                         key={value}
-                                        className={`group rounded-full bg-gradient-to-r ${
+                                        className={`group rounded-full transition-all ${
                                           isSelected
-                                            ? 'from-[#02C8C4] to-[#5867EB]'
-                                            : 'from-gray-200 to-gray-200 dark:from-[#2d2d2d] dark:to-[#2d2d2d]'
-                                        } w-fit p-[1px] hover:bg-gradient-to-tr`}
+                                            ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.30)]'
+                                            : 'bg-black/10 p-[1px] dark:bg-white/10'
+                                        } w-fit`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleRatioToggle(pIdx, value)}
-                                          className={`backdrop-blur-100 flex items-center justify-center gap-1.5 rounded-full border bg-gray-100 dark:bg-[#2d2d2d] px-5 py-1.5 text-xs transition-all ${
+                                          className={`flex items-center justify-center gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all ${
                                             isSelected
-                                              ? ''
-                                              : 'border-black/10 bg-gray-100 text-gray-500 hover:border-black/10 hover:text-black dark:border-white/10 dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:hover:border-white/10 dark:hover:text-white'
+                                              ? 'bg-[#02C8C4]/15 text-gray-900 dark:bg-[#02C8C4]/25 dark:text-white'
+                                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-black dark:bg-[#2d2d2d] dark:text-[#AFAFAF] dark:hover:bg-[#383838] dark:hover:text-white'
                                           }`}
                                           disabled={submitting}
                                         >
-                                          <Icon className="h-4 w-4" />
-                                          <span className="text-xs 2xl:text-sm">{label}</span>
+                                          <Icon className={`h-4 w-4 transition-colors ${isSelected ? 'text-[#02C8C4]' : 'text-gray-500 dark:text-[#AFAFAF]'}`} />
+                                          <span className={`text-xs 2xl:text-sm ${isSelected ? 'font-bold' : 'font-medium'}`}>{label}</span>
                                         </button>
                                       </div>
                                     );

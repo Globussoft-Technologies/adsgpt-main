@@ -635,9 +635,9 @@ const ChatInterface = () => {
       {isEmpty ? (
         // subtle-scroll + pb so a tall composer (long prompt) is never clipped by
         // the parent's overflow-hidden at 100% zoom / shorter viewports.
-        <div className="subtle-scroll flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[10vh] pb-10 sm:pt-[14vh]">
+        <div className="subtle-scroll lm-greeting-ambient relative flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[10vh] pb-10 sm:pt-[14vh]">
           <motion.h2
-            className="bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]"
+            className="lm-greeting-text bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] bg-clip-text text-[42px] leading-tight font-medium text-transparent sm:text-[52px]"
             initial={animateIntro ? INTRO_HEADING_FROM : false}
             animate={animateIntro ? INTRO_HEADING_KEYFRAMES : undefined}
             transition={{ duration: 0.7, times: [0, 0.5, 1] }}
@@ -649,10 +649,10 @@ const ChatInterface = () => {
               text="Where do you want to start?"
               delay={120}
               stepDuration={0.3}
-              className="mt-2 justify-center text-sm text-white/60"
+              className="lm-subtitle-text mt-2 justify-center text-sm text-zinc-500 dark:text-white/60"
             />
           ) : (
-            <p className="mt-2 text-sm text-white/60">Where do you want to start?</p>
+            <p className="lm-subtitle-text mt-2 text-sm text-zinc-500 dark:text-white/60">Where do you want to start?</p>
           )}
           <div className="mt-7 w-full max-w-[820px] px-3 sm:px-0">
             <Composer

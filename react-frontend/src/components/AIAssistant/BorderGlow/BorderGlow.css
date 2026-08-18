@@ -24,6 +24,16 @@
     rgba(0, 0, 0, 0.1) 0px 32px 64px;
 }
 
+/* Light-mode card: softer border, lighter shadow, no dark fill */
+html:not(.dark) .border-glow-card {
+  border: 1px solid rgb(0 0 0 / 10%);
+  box-shadow:
+    rgba(0, 0, 0, 0.04) 0px 1px 2px,
+    rgba(0, 0, 0, 0.04) 0px 2px 4px,
+    rgba(0, 0, 0, 0.05) 0px 4px 8px,
+    rgba(0, 0, 0, 0.05) 0px 8px 16px;
+}
+
 .border-glow-card::before,
 .border-glow-card::after,
 .border-glow-card > .edge-light {
@@ -146,5 +156,47 @@
    .edge-light glow + the 1px border still give a clean border glow. */
 .border-glow-card.glow-edge-only::before,
 .border-glow-card.glow-edge-only::after {
+  display: none;
+}
+
+/* ─── LIGHT MODE GLOW ────────────────────────────────────────────────────────
+   Goal: border-only glow matching dark mode's golden theme.
+   Two pitfalls to avoid in light mode:
+   1. ::before gradient bleeds through semi-transparent white card bg
+      → keep ::before hidden for glow-edge-only (same as dark mode)
+   2. inset box-shadows flood the white card interior with colour
+      → outer shadows only — they paint a ring+halo OUTSIDE the card edge */
+
+/* 1. Keep ::before hidden (gradient fill bleeds into white card interior) */
+html:not(.dark) .border-glow-card.glow-edge-only::before {
+  display: none;
+}
+
+/* 2. Light mode edge-light: normal blend, standard opacity */
+html:not(.dark) .border-glow-card > .edge-light {
+  mix-blend-mode: normal;
+  opacity: calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity)));
+}
+
+/* 3. Border-only glow: NO inset shadows (they fill white interior).
+      Only outer shadows — a 1px golden ring at the card edge + soft halo. */
+html:not(.dark) .border-glow-card > .edge-light::before {
+  box-shadow:
+    /* inner glow — smooth golden gradient extending inward from border */
+    inset 0 0 1px 0  rgba(245, 158, 11, 0.80),
+    inset 0 0 4px 0  rgba(245, 158, 11, 0.55),
+    inset 0 0 10px 0 rgba(251, 191, 36, 0.35),
+    inset 0 0 20px 0 rgba(253, 224, 71, 0.18),
+    /* golden border stroke line */
+    0 0 0 1.5px rgba(245, 158, 11, 0.90),
+    /* outer glow — smooth golden gradient extending outward from border */
+    0 0 4px 0    rgba(245, 158, 11, 0.65),
+    0 0 10px 2px rgba(251, 191, 36, 0.45),
+    0 0 20px 4px rgba(252, 211, 77, 0.28),
+    0 0 40px 8px rgba(253, 224, 71, 0.15);
+}
+
+/* 4. Keep ::after hidden — card interior stays clean white */
+html:not(.dark) .border-glow-card.glow-edge-only::after {
   display: none;
 }

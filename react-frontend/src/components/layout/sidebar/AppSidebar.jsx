@@ -217,9 +217,6 @@ const AppSidebar = () => {
   return (
     <Sidebar
       collapsible="icon"
-      // On the assistant, make the sidebar's own surface transparent too (the
-      // ui primitive paints bg-sidebar on the inner slot) so the page's
-      // background gradient shows continuously behind the sidebar.
       className={
         currentRoute === '/assistant' ? '[&_[data-slot=sidebar-inner]]:bg-transparent' : undefined
       }
@@ -232,16 +229,14 @@ const AppSidebar = () => {
         // > */}
         layout
         transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className={`flex h-full w-full flex-col justify-between bg-[#f5f6f8] dark:border-none ${currentRoute === '/assistant' ? 'dark:bg-transparent' : 'dark:bg-[#0F0F0F]'}`}
+        className="lm-sidebar-surface relative flex h-full w-full flex-col justify-between bg-[#F7F4EE] dark:bg-[#0F0F0F]"
       >
         {/* Logo */}
         <div className="logo_and_history flex w-full flex-col gap-0">
-          <div className="logo_app relative flex cursor-pointer items-center justify-between p-4 2xl:p-5.5">
-            <div className="relative flex h-12 w-22 items-center justify-center 2xl:h-14 2xl:w-32">
-              {/* Soft brand glow behind the logo — light mode only. The gold/dark
-                  logo mark sits flat on the white sidebar, so this radial halo
-                  gives it depth. Hidden in dark mode where the bg is already dark. */}
-              <span className="pointer-events-none absolute h-10 w-10 rounded-full bg-[radial-gradient(circle,#15DCFF_0%,#6b72f8_55%,transparent_72%)] opacity-35 blur-xl 2xl:h-12 2xl:w-12 dark:hidden" />
+          <div className="logo_app relative flex cursor-pointer items-center justify-center p-3 2xl:p-4">
+            <div className="relative flex h-13 w-full items-center justify-center">
+              {/* Soft brand glow behind the logo — light mode only. */}
+              <span className="pointer-events-none absolute h-11 w-11 rounded-full bg-[radial-gradient(circle,#15DCFF_0%,#6b72f8_55%,transparent_72%)] opacity-35 blur-xl 2xl:h-13 2xl:w-13 dark:hidden" />
               <AnimatePresence mode="wait">
                 {(isMobile ? openHistory : isSidebarOpen && openHistory) ? (
                   <motion.img
@@ -249,7 +244,7 @@ const AppSidebar = () => {
                       navigate(`${currentRoute}`);
                     }}
                     key="expanded-logo"
-                    src={isDarkMode ? AdsGPTLogo : AdsGPTLightModeLogo}
+                    src={AdsGPTLogo}
                     initial={{ opacity: 0, scale: 0.9, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: -5 }}
@@ -273,7 +268,7 @@ const AppSidebar = () => {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, y: -5 }}
                       transition={{ duration: 0.25, ease: 'backOut' }}
-                      className="absolute h-11 w-11 2xl:h-12 2xl:w-12"
+                      className="absolute h-[46px] w-[46px] object-contain 2xl:h-[54px] 2xl:w-[54px]"
                     />
                   )
                 )}
@@ -281,13 +276,11 @@ const AppSidebar = () => {
             </div>
 
             {isSidebarOpen && (
-              <SidebarTrigger>
-                <ShadcnTooltip label="Close Sidebar">
-                  <button className="right_icon prompt_selection_button absolute top-0.5 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full border border-transparent text-zinc-700 hover:border-black/20 hover:text-black 2xl:h-8 2xl:min-w-8 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:text-white">
-                    <ChevronsLeft className="h-4 w-4 2xl:h-5 2xl:w-5" />
-                  </button>
-                </ShadcnTooltip>
-              </SidebarTrigger>
+              <ShadcnTooltip label="Close Sidebar">
+                <SidebarTrigger className="right_icon prompt_selection_button absolute top-0.5 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full border border-transparent text-zinc-700 hover:border-black/20 hover:text-black 2xl:h-8 2xl:min-w-8 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:text-white">
+                  <ChevronsLeft className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                </SidebarTrigger>
+              </ShadcnTooltip>
             )}
           </div>
 
@@ -305,7 +298,7 @@ const AppSidebar = () => {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="navigation_menu_container mx-auto w-fit space-y-3.5 2xl:space-y-5"
+              className="navigation_menu_container mx-auto flex w-full flex-col items-center space-y-2.5 2xl:space-y-3.5"
             >
               {visibleNavigationItems.map((item, index) => {
                 const isMySpace =
@@ -339,18 +332,15 @@ const AppSidebar = () => {
                         const trulyActive =
                           (navActive || isNavigationItemActive(item)) &&
                           !(item.id === 'adstudio' && isMySpace);
-                        return `group flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-zinc-700 transition-all duration-200 hover:text-black 2xl:gap-0 dark:text-[#AFAFAF] dark:hover:text-white ${trulyActive ? 'active text-zinc-900 dark:text-white' : ''}`;
+                        return `group flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-zinc-700 transition-all duration-200 hover:text-black 2xl:gap-1.5 dark:text-[#AFAFAF] dark:hover:text-white ${trulyActive ? 'active font-semibold text-zinc-900 dark:text-white' : ''}`;
                       }}
                     >
                       <div
-                        className={`active_container relative flex h-7 w-7 items-center justify-center rounded-sm group-[.active]:bg-gradient-to-r group-[.active]:from-[#0fafcb] group-[.active]:to-[#6b72f8] hover:bg-zinc-200 2xl:h-10 2xl:w-10 dark:group-[.active]:from-[#15DCFF] dark:hover:bg-[#2A2A2A]/70`}
+                        className={`active_container relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 2xl:h-11 2xl:w-11 group-[.active]:bg-gradient-to-r group-[.active]:from-[#15DCFF] group-[.active]:to-[#6b72f8] group-[.active]:text-white group-[.active]:shadow-[0_4px_14px_rgba(21,220,255,0.35)] group-[:not(.active)]:bg-[#FCFAF7] group-[:not(.active)]:border group-[:not(.active)]:border-[#DDD7CD] group-[:not(.active)]:shadow-[0_1px_3px_rgba(80,70,58,0.04)] group-[:not(.active)]:hover:bg-[#EAE5DC] group-[:not(.active)]:hover:border-[#DDD7CD] dark:group-[.active]:bg-gradient-to-r dark:group-[.active]:from-[#15DCFF] dark:group-[.active]:to-[#6b72f8] dark:group-[.active]:shadow-[0_4px_14px_rgba(21,220,255,0.35)] dark:group-[:not(.active)]:bg-transparent dark:group-[:not(.active)]:border-none dark:group-[:not(.active)]:shadow-none dark:group-[:not(.active)]:hover:bg-[#2A2A2A]/70`}
                       >
                         {item.badge && (
-                          // BETA uses an amber gradient to distinguish
-                          // from the NEW chip (cyan→violet). Same shape +
-                          // position so the row layout stays identical.
                           <span
-                            className={`absolute -top-1 left-5 h-fit w-8 rounded-[4px] px-1.5 py-[1px] text-[8px] font-semibold text-white uppercase ${
+                            className={`absolute -top-1.5 -right-2.5 z-10 h-fit w-fit rounded-[4px] px-1.5 py-[1px] text-[7.5px] font-bold text-white uppercase shadow-sm ${
                               item.badge === 'BETA'
                                 ? 'bg-gradient-to-r from-[#F5A524] to-[#F31260]'
                                 : 'bg-gradient-to-r from-[#15DCFF] to-[#5E66F5]'
@@ -360,25 +350,23 @@ const AppSidebar = () => {
                           </span>
                         )}
                         {item.lucideIcon ? (
-                          <item.lucideIcon className="w-4 text-zinc-700 opacity-80 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:text-white dark:opacity-60" />
+                          <item.lucideIcon className="w-5 text-zinc-700 opacity-80 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:text-white dark:opacity-60" />
                         ) : (
                           <img
-                            className="block w-4 opacity-80 brightness-0 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:opacity-60 dark:invert"
+                            className="block w-5 opacity-80 brightness-0 group-hover:opacity-100 group-[.active]:hidden 2xl:w-6 dark:opacity-60 dark:invert"
                             src={item.icon}
                           />
                         )}
                         {item.lucideIcon ? (
-                          <item.lucideIcon className="hidden w-4 text-white group-[.active]:block 2xl:w-6" />
+                          <item.lucideIcon className="hidden w-5 text-white group-[.active]:block 2xl:w-6" />
                         ) : (
                           <img
-                            className="hidden w-4 brightness-0 invert group-[.active]:block 2xl:w-6"
+                            className="hidden w-5 brightness-0 invert group-[.active]:block 2xl:w-6"
                             src={item.activeIcon}
                           />
                         )}
                       </div>
-                      <span
-                        className={`text-[9px] leading-none 2xl:text-xs ${isActive ? 'mt-1 2xl:mt-2' : ''} `}
-                      >
+                      <span className="text-center text-[9.5px] font-medium leading-tight whitespace-nowrap 2xl:text-xs">
                         {item.label}
                       </span>
                     </NavLink>
@@ -505,7 +493,7 @@ const AppSidebar = () => {
                     dispatch(setShowTour(true));
                     if (isMobile) toggleSidebar();
                   }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-[#AFAFAF] hover:text-white 2xl:h-12.5 2xl:w-12.5"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white 2xl:h-12.5 2xl:w-12.5"
                 >
                   <HelpCircle className="w-4 2xl:w-5" />
                 </button>
@@ -518,7 +506,7 @@ const AppSidebar = () => {
                     dispatch(setShowTour(true));
                     if (isMobile) toggleSidebar();
                   }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-[#AFAFAF] hover:text-white"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white"
                 >
                   <HelpCircle className="w-4 2xl:w-5" />
                 </button>
@@ -583,20 +571,18 @@ const AppSidebar = () => {
                     setOpenHistory(false);
                     if (isMobile) setOpenMobile(false);
                   }}
-                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white ${
-                    isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'
-                  }`}
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl transition-all duration-200 2xl:gap-1.5 ${
+                    currentRoute === '/workspace/members'
+                      ? 'active font-semibold text-zinc-900 dark:text-white'
+                      : 'text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
+                  } ${isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'}`}
                 >
                   <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
-                      currentRoute === '/workspace/members'
-                        ? 'bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-white'
-                        : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
-                    }`}
+                    className="active_container relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 2xl:h-11 2xl:w-11 group-[.active]:bg-[#24211D] group-[.active]:text-[#FAF8F5] group-[.active]:shadow-[0_2px_8px_rgba(36,33,29,0.18)] group-[:not(.active)]:border group-[:not(.active)]:border-[#DDD7CD] group-[:not(.active)]:bg-[#FCFAF7] group-[:not(.active)]:shadow-[0_1px_3px_rgba(80,70,58,0.04)] group-[:not(.active)]:hover:bg-[#EAE5DC] group-[:not(.active)]:hover:border-[#DDD7CD] dark:group-[.active]:bg-gradient-to-r dark:group-[.active]:from-[#15DCFF] dark:group-[.active]:to-[#6b72f8] dark:group-[.active]:shadow-[0_4px_14px_rgba(21,220,255,0.35)] dark:group-[:not(.active)]:border-none dark:group-[:not(.active)]:bg-transparent dark:group-[:not(.active)]:shadow-none dark:group-[:not(.active)]:hover:bg-[#2A2A2A]/70"
                   >
-                    <Users className="w-4 2xl:w-5" />
+                    <Users className={`w-5 2xl:w-6 ${currentRoute === '/workspace/members' ? 'text-white' : 'text-[#3D3831] dark:text-white dark:opacity-60'}`} />
                   </div>
-                  <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
+                  <span className="text-[9.5px] font-medium leading-tight whitespace-nowrap 2xl:text-xs">
                     Workspace
                   </span>
                 </button>
@@ -617,11 +603,11 @@ const AppSidebar = () => {
                     clearWorkspaceToken();
                     window.location.assign('/workspace-login');
                   }}
-                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl text-zinc-700 hover:text-red-500 dark:text-[#AFAFAF] dark:hover:text-red-400 ${
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl text-zinc-700 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white ${
                     isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'
                   }`}
                 >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-red-500/10 2xl:h-10 2xl:w-10">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-black/5 dark:hover:bg-white/10 2xl:h-10 2xl:w-10">
                     <LogOut className="w-4 2xl:w-5" />
                   </div>
                   <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
@@ -655,20 +641,16 @@ const AppSidebar = () => {
                       setOpenMobile(false);
                     }
                   }}
-                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl transition-all duration-200 ${
+                  className={`group flex cursor-pointer items-center justify-center gap-1 rounded-xl transition-all duration-200 2xl:gap-1.5 ${
                     currentRoute === '/my-space'
-                      ? 'text-zinc-900 dark:text-white'
+                      ? 'active font-semibold text-zinc-900 dark:text-white'
                       : 'text-zinc-700 hover:text-black dark:text-[#AFAFAF] dark:hover:text-white'
                   } ${isSidebarOpen || openHistory ? 'flex-row' : 'flex-col'}`}
                 >
                   <div
-                    className={`relative flex h-7 w-7 items-center justify-center rounded-sm 2xl:h-10 2xl:w-10 ${
-                      currentRoute === '/my-space'
-                        ? 'mb-2 bg-gradient-to-r text-white from-[#15DCFF] to-[#6b72f8]'
-                        : 'hover:bg-zinc-200 dark:hover:bg-[#2A2A2A]/70'
-                    }`}
+                    className="active_container relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 2xl:h-11 2xl:w-11 group-[.active]:bg-gradient-to-r group-[.active]:from-[#15DCFF] group-[.active]:to-[#6b72f8] group-[.active]:text-white group-[.active]:shadow-[0_4px_14px_rgba(21,220,255,0.35)] group-[:not(.active)]:border group-[:not(.active)]:border-[#DDD7CD] group-[:not(.active)]:bg-[#FCFAF7] group-[:not(.active)]:shadow-[0_1px_3px_rgba(80,70,58,0.04)] group-[:not(.active)]:hover:bg-[#EAE5DC] dark:group-[.active]:bg-gradient-to-r dark:group-[.active]:from-[#15DCFF] dark:group-[.active]:to-[#6b72f8] dark:group-[.active]:shadow-[0_4px_14px_rgba(21,220,255,0.35)] dark:group-[:not(.active)]:border-none dark:group-[:not(.active)]:bg-transparent dark:group-[:not(.active)]:shadow-none dark:group-[:not(.active)]:hover:bg-[#2A2A2A]/70"
                   >
-                    <Library className="w-4 2xl:w-5" />
+                    <Library className="w-5 2xl:w-6" />
                     {savedCount > 0 && (
                       <div className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-[8px] font-bold text-black shadow-lg 2xl:h-5 2xl:w-5 2xl:text-[10px]">
                         <div className="absolute inset-0 animate-spin rounded-full border border-white/30 border-t-white"></div>
@@ -676,7 +658,7 @@ const AppSidebar = () => {
                       </div>
                     )}
                   </div>
-                  <span className="text-[9px] leading-none whitespace-nowrap 2xl:text-xs">
+                  <span className="text-[9.5px] font-medium leading-tight whitespace-nowrap 2xl:text-xs">
                     My Space
                   </span>
                 </button>
@@ -699,25 +681,18 @@ const AppSidebar = () => {
               className="flex w-full items-center gap-2"
             >
               <ShadcnTooltip label="User Profile" side="right">
-                {/* <button className="inline min-h-[50px] min-w-[50px] cursor-pointer items-center justify-center rounded-full border-2 border-white/10 text-xs hover:bg-gray-800/50 2xl:text-base">
-                {userData?.user_name
-                  ? `${userData.user_name.split(' ')[0]?.charAt(0) ?? ''}${
-                      userData.user_name.split(' ')[1]?.charAt(0) ?? ''
-                    }`
-                  : ''}
-              </button> */}
                 <>
                   <button
-                    className={`border_white_gradient_2px relative inline-flex h-9 w-9 items-center justify-center rounded-full p-1 hover:bg-gray-300 2xl:h-12.5 2xl:w-12.5 dark:hover:bg-gray-800/50`}
+                    className={`sidebar-profile-button ${currentRoute === '/profile' ? 'sidebar-profile-button-active' : ''} relative inline-flex h-9 w-9 items-center justify-center rounded-full p-0.5 transition-all duration-200 2xl:h-12.5 2xl:w-12.5 bg-[#FCFAF7] border border-[#DDD7CD] shadow-[0_1px_3px_rgba(80,70,58,0.04)] hover:bg-[#EAE5DC] dark:border-white/10 dark:bg-[#1A1A1A] dark:shadow-none dark:hover:bg-[#2A2A2A]`}
                   >
                     {profileImage ? (
                       <img
                         src={profileImage}
                         alt="User Avatar"
-                        className="h-[30px] w-[30px] rounded-full object-cover"
+                        className="sidebar-profile-avatar h-[30px] w-[30px] rounded-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F0F0F] text-[10px] font-bold text-white 2xl:text-sm">
+                      <div className="sidebar-profile-avatar flex h-9 w-9 items-center justify-center rounded-full bg-[#EAE5DC] text-[10px] font-bold text-[#24211D] 2xl:text-sm dark:bg-[#222222] dark:text-white">
                         {(() => {
                           if (memberSession) {
                             return profileDisplayName.slice(0, 2).toUpperCase();
@@ -753,7 +728,7 @@ const AppSidebar = () => {
           </div>
         </div>
 
-        <div className="from-to-black/10 absolute right-0 h-full w-px bg-gradient-to-b from-black/10 via-black/40 opacity-30 dark:from-white/0 dark:via-white dark:to-white/0"></div>
+        <div className="absolute right-0 top-0 h-full w-px bg-gradient-to-b from-transparent via-black/30 to-transparent opacity-100 dark:from-transparent dark:via-white/30 dark:to-transparent"></div>
       </motion.div>
     </Sidebar>
   );

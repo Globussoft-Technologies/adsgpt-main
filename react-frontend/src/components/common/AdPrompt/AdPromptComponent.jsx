@@ -47,6 +47,7 @@ import { deleteImage, submitAdCreativeRequest } from '@/store/actions/adStudio/a
 import CommonDropdown from './CommonDropdown';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { nanoid } from 'nanoid';
+import BorderGlow from '@/components/AIAssistant/BorderGlow/BorderGlow';
 import { submitAdVideoRequest } from '@/store/actions/adStudio/adVideoActions';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import ShowLightBox from '../ShowLightBox';
@@ -61,6 +62,7 @@ import { detect } from 'tinyld';
 
 const AdPromptComponent = () => {
   const dispatch = useDispatch();
+  const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
   const {
     prompt,
     platform,
@@ -600,7 +602,20 @@ const AdPromptComponent = () => {
         className={`layout_for_chat prompt_containerr bottom-0 z-50 w-full max-w-[850px] scale-100 p-2 2xl:bottom-0 2xl:max-w-[1000px] ${getPositionClasses()}`}
       >
         {/* Main Input Container */}
-        <div className="relative flex min-h-28 flex-col justify-between rounded-3xl border border-black/10 bg-white px-3 py-4 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] backdrop-blur-[80px] sm:p-4 2xl:min-h-32 dark:border-transparent dark:bg-[#0d0d0d]/50 dark:shadow-none">
+        <div className="lm-composer-card w-full">
+          <BorderGlow
+            edgeSensitivity={30}
+            glowColor="40 80 80"
+            backgroundColor={isDarkMode ? 'rgba(13,13,13,0.5)' : 'rgba(238,241,243,0.85)'}
+            className="backdrop-blur-[40px] glow-edge-only"
+            borderRadius={28}
+            glowRadius={48}
+            glowIntensity={1.3}
+            coneSpread={25}
+            animated={false}
+            colors={['#c084fc', '#f472b6', '#38bdf8']}
+          >
+            <div className="relative flex min-h-28 flex-col justify-between p-3 sm:p-4 2xl:min-h-32">
           {/* Gemini Suggest Button - Top Right */}
           <div className="absolute top-4 right-4.5 z-[60] flex items-center gap-2">
 
@@ -627,7 +642,9 @@ const AdPromptComponent = () => {
 
           {/* Input Field */}
           <div
-            className={`${uploadedImages.length > 0 && isUploadedImageShowActive && !isEditorOpen ? 'mt-6 2xl:mt-7' : 'mt-10 sm:mt-0'} mb-2 flex flex-1`}
+            className={`relative mb-2 flex flex-1 items-start gap-2 border-0 bg-transparent px-1 py-1 transition-all ${
+              uploadedImages.length > 0 && isUploadedImageShowActive && !isEditorOpen ? 'mt-6 2xl:mt-7' : 'mt-8 sm:mt-0'
+            }`}
           >
             {/* image upload plus button only visible for adcreatives */}
             {activeAdStudioTabId === 'adCreative' && !uploadImageExists && !isEditorOpen && (
@@ -635,7 +652,7 @@ const AdPromptComponent = () => {
                 <PopoverTrigger asChild>
                   <button
                     id="tour_adcreatives_upload"
-                    className={` ${popoverOpen ? 'prompt_selection_button' : ''} relative -top-[0.2rem] -left-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full hover:bg-zinc-200 data-[state=open]:border data-[state=open]:border-black/20 data-[state=open]:bg-zinc-200 2xl:-top-1.5 2xl:h-8 2xl:w-8 dark:hover:bg-[#202020]/50 dark:data-[state=open]:border-white/30 dark:data-[state=open]:bg-[#202020]/50`}
+                    className={` ${popoverOpen ? 'prompt_selection_button' : ''} relative top-0.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full hover:bg-zinc-200 data-[state=open]:border data-[state=open]:border-black/20 data-[state=open]:bg-zinc-200 2xl:h-8 2xl:w-8 dark:hover:bg-[#202020]/50 dark:data-[state=open]:border-white/30 dark:data-[state=open]:bg-[#202020]/50`}
                   >
                     <ShadcnTooltip label={popoverOpen ? 'Close Options' : 'More Options'}>
                       {isImageUploading ? (
@@ -693,7 +710,7 @@ const AdPromptComponent = () => {
                     ? 'Describe how you want to recreate or modify the reference image…'
                     : 'Turn your ideas into visuals — start typing in any language…'
               }
-              className="md:text-13 md:placeholder:text-13 max-h-[110px] min-h-8 w-full resize-none border-none bg-transparent pr-17 text-xs text-zinc-800 outline-none [scrollbar-width:none] placeholder:text-xs placeholder:font-normal placeholder:text-zinc-500 [&::-webkit-scrollbar]:hidden sm:pr-58 2xl:max-h-[180px] 2xl:pr-70 2xl:text-sm 2xl:placeholder:text-sm dark:text-slate-200 dark:placeholder:text-[#CCCCCC]/60"
+              className="md:text-13 md:placeholder:text-13 max-h-[110px] min-h-8 w-full resize-none border-0 bg-transparent pr-10 text-xs text-zinc-900 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 [scrollbar-width:none] placeholder:text-xs placeholder:font-normal placeholder:text-zinc-500 [&::-webkit-scrollbar]:hidden 2xl:max-h-[180px] 2xl:pr-12 2xl:text-sm 2xl:placeholder:text-sm dark:text-slate-200 dark:placeholder:text-[#CCCCCC]/60"
               onKeyDown={handleEnterKeyPress}
               onPaste={handlePaste}
               ref={textAreaRef}
@@ -1031,7 +1048,9 @@ const AdPromptComponent = () => {
             </div>
           )}
 
-          {/* image upload show here */}
+            {/* image upload show here */}
+            </div>
+          </BorderGlow>
         </div>
         {uploadedImages.length > 0 &&
           !isEditorOpen &&

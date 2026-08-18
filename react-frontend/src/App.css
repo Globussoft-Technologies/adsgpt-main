@@ -25,25 +25,25 @@ body {
 html:not(.dark) .prompt_selection_button {
   position: relative;
   z-index: 0;
-  background: #f4f4f5;
-  color: #27272a;
+  background: var(--ws-surface);
+  color: var(--ws-text-primary);
   align-items: center;
   font-weight: 500;
   cursor: pointer;
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--ws-border);
 }
 
 html:not(.dark) .prompt_selection_button_no_gradient {
   position: relative;
   z-index: 0;
-  background: #f4f4f5;
-  color: #27272a;
+  background: var(--ws-surface);
+  color: var(--ws-text-primary);
   align-items: center;
   font-weight: 500;
   cursor: pointer;
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--ws-border);
 }
 
 .dark .prompt_selection_button {
@@ -160,6 +160,29 @@ html:not(.dark) .prompt_selection_button_no_gradient {
   background: linear-gradient(180deg, #555, #777); /* Hover effect */
 }
 
+/* Do not expose the browser's white scrollbar canvas in light mode. The root
+   track blends into the app background and appears only when scrolling is
+   actually required. */
+html:not(.dark) {
+  background-color: var(--ws-bg);
+  scrollbar-color: rgba(140, 128, 112, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+html:not(.dark)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html:not(.dark)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html:not(.dark)::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(71, 85, 105, 0.32);
+}
+
 /* Subtle, self-effacing scrollbar for the AI Assistant surface (chat + Creative
    Studio canvas + textareas). Invisible at rest; a thin, low-opacity thumb
    fades in on hover / focus so the UI isn't peppered with chunky scrollbars.
@@ -170,7 +193,11 @@ html:not(.dark) .prompt_selection_button_no_gradient {
 }
 .subtle-scroll:hover,
 .subtle-scroll:focus-within {
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent; /* Firefox reveal */
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent; /* Firefox reveal — light mode */
+}
+.dark .subtle-scroll:hover,
+.dark .subtle-scroll:focus-within {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent; /* Firefox reveal — dark mode */
 }
 .subtle-scroll::-webkit-scrollbar {
   width: 6px;
@@ -186,10 +213,17 @@ html:not(.dark) .prompt_selection_button_no_gradient {
 }
 .subtle-scroll:hover::-webkit-scrollbar-thumb,
 .subtle-scroll:focus-within::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18); /* light mode */
+}
+.dark .subtle-scroll:hover::-webkit-scrollbar-thumb,
+.dark .subtle-scroll:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18); /* dark mode */
 }
 .subtle-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(0, 0, 0, 0.32); /* light mode stronger */
+}
+.dark .subtle-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32); /* dark mode stronger */
 }
 
 .typing-indicator {
@@ -490,27 +524,6 @@ html:not(.dark) .prompt_selection_button_no_gradient {
 
 .ad_factory_card {
   position: relative;
-  border-radius: 12px;
-  padding: 2px;
-}
-
-.ad_factory_card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, #ffffff40, #ffffff20);
-  pointer-events: none;
-
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  padding: 1px;
 }
 
 /* React-date-range calendar — light-mode */
@@ -535,8 +548,21 @@ html:not(.dark) .rdrDateDisplayItem {
    "Early/Continuous"-style pills above the calendar) with this class.
    Match dark mode's blue accent so the selected one is obvious. */
 html:not(.dark) .rdrDateDisplayItemActive {
-  border-color: #3a91b7 !important;
+  position: relative;
+  border-color: #6b72f8 !important;
   background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .rdrDateDisplayItemActive::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 1px solid #6b72f8;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 html:not(.dark) .rdrDateDisplayItem input::placeholder,
@@ -809,4 +835,2502 @@ html:not(.dark) .rdrYearPicker::after {
   top: 50%;
   margin-top: -6px;
   pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — FULL-SCREEN CONTINUOUS AMBIENT LIGHTING + GLASSMORPHISM
+   ─────────────────────────────────────────────────────────────────────────
+   ALL SELECTORS ARE SCOPED STRICTLY TO html:not(.dark)
+   DARK MODE IS COMPLETELY UNTOUCHED — ZERO DARK RULES MODIFIED
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Design Tokens ────────────────────────────────────────────────────── */
+html:not(.dark) {
+  --lm-bg-base:        var(--ws-bg);
+  --lm-surface-glass:  var(--ws-surface);
+  --lm-surface-card:   var(--ws-surface);
+  --lm-text-primary:   var(--ws-text-primary);
+  --lm-text-secondary: var(--ws-text-secondary);
+  --lm-accent-blue:    #02A8A4;
+  --lm-accent-violet:  #5867EB;
+  /* Warm amber-toned depth, matching Workspace */
+  --lm-shadow-card:    var(--ws-shadow);
+  --lm-shadow-card-hover: var(--ws-shadow-md);
+  --lm-shadow-card-focus:
+    0 8px 24px -2px rgba(80, 70, 58, 0.08),
+    0 0 0 2px rgba(2, 168, 164, 0.15);
+  --lm-shadow-pill: var(--ws-shadow-sm);
+  --lm-shadow-pill-hover: 0 2px 5px rgba(80, 70, 58, 0.08);
+}
+
+/* ── Viewport Base Canvas ────────────────────────────────────────────────── */
+html:not(.dark) body {
+  background-color: var(--ws-bg) !important;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ── Full-Screen Seamless Containers — Zero Section Borders ────────────── */
+html:not(.dark) .layout_container,
+html:not(.dark) main,
+html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Remove cool blue/grey ambient pseudo-element overlays in Light Mode ─ */
+html:not(.dark) body::before,
+html:not(.dark) body::after,
+html:not(.dark) .layout_container::before {
+  display: none !important;
+}
+
+
+
+
+/* ── Sidebar Navigation Items — Soft Neumorphic Hover & Active Depth ──── */
+html:not(.dark) .lm-sidebar-surface .active_container {
+  transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+html:not(.dark) .lm-sidebar-surface .navigation_menu_container .group > span,
+html:not(.dark) .lm-sidebar-surface .bottom_section_container .group > span {
+  color: #171923 !important;
+  font-weight: 600 !important;
+}
+
+html:not(.dark) .lm-sidebar-surface .group:not(.active) .active_container:hover {
+  background: var(--ws-surface-hover) !important;
+  box-shadow:
+    2px 2px 6px rgba(80, 70, 58, 0.08),
+    -1px -1px 4px rgba(255, 255, 255, 0.90),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+  transform: scale(1.04) !important;
+}
+
+html:not(.dark) {
+  --sidebar-active-gradient: linear-gradient(135deg, #16C9DF 0%, #4899E6 48%, #6B72F8 100%);
+  --sidebar-active-shadow: 0 3px 10px rgba(77, 98, 222, 0.24), inset 0 1px 1px rgba(255, 255, 255, 0.32);
+}
+
+.dark {
+  --sidebar-active-gradient: linear-gradient(135deg, #13B9D2 0%, #3F8EDB 48%, #6459D8 100%);
+  --sidebar-active-shadow: 0 3px 10px rgba(77, 98, 222, 0.30), inset 0 1px 1px rgba(255, 255, 255, 0.16);
+}
+
+html:not(.dark) .lm-sidebar-surface .group.active .active_container,
+html:not(.dark) .lm-sidebar-surface .group.active .active_container:hover,
+html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active,
+html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active:hover,
+.dark .lm-sidebar-surface .group.active .active_container,
+.dark .lm-sidebar-surface .group.active .active_container:hover,
+.dark .sidebar-profile-button.sidebar-profile-button-active,
+.dark .sidebar-profile-button.sidebar-profile-button-active:hover {
+  background: var(--sidebar-active-gradient) !important;
+  background-clip: padding-box;
+  box-shadow: var(--sidebar-active-shadow) !important;
+}
+
+/* Sidebar profile: keep a visible outer rim around the avatar and use a
+   restrained surface transition instead of generic hover motion. */
+html:not(.dark) .sidebar-profile-button {
+  background: var(--ws-surface) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease !important;
+}
+
+html:not(.dark) .sidebar-profile-button:hover {
+  background: var(--ws-surface-header) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 4px 10px rgba(80, 70, 58, 0.10) !important;
+}
+
+html:not(.dark) .sidebar-profile-button:active {
+  background: var(--ws-surface-muted) !important;
+}
+
+html:not(.dark) .sidebar-profile-button:focus-visible {
+  outline: 2px solid rgba(88, 103, 235, 0.45);
+  outline-offset: 2px;
+}
+
+html:not(.dark) .sidebar-profile-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  background: var(--ws-surface-muted) !important;
+  color: var(--ws-text-primary) !important;
+  transition: background-color 160ms ease;
+}
+
+html:not(.dark) .sidebar-profile-button:hover .sidebar-profile-avatar {
+  background: #E5DFD5 !important;
+}
+
+/* Keep the profile rim seamless when the shared sidebar active state is on. */
+html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active,
+html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active:hover {
+  border-color: transparent !important;
+}
+
+html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active .sidebar-profile-avatar {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+
+/* Ad Factory campaign state: mirror the Dark Mode status emphasis without
+   changing the card or adjacent action controls. */
+html:not(.dark) .adfactory-campaign-status {
+  border-color: rgba(107, 114, 248, 0.48) !important;
+  background: linear-gradient(135deg, rgba(21, 220, 255, 0.07), rgba(107, 114, 248, 0.10)) !important;
+  box-shadow:
+    0 0 12px rgba(107, 114, 248, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+html:not(.dark) .adfactory-campaign-status:hover {
+  border-color: rgba(107, 114, 248, 0.62) !important;
+  box-shadow:
+    0 0 16px rgba(107, 114, 248, 0.27),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
+}
+
+.dark .sidebar-profile-button.sidebar-profile-button-active,
+.dark .sidebar-profile-button.sidebar-profile-button-active:hover {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .sidebar-profile-button.sidebar-profile-button-active .sidebar-profile-avatar {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+@media (min-width: 1536px) {
+  html:not(.dark) .sidebar-profile-avatar {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
+
+/* ── Top Header Surface — transparent so background gradients flow through ── */
+.lm-header-surface {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Hide scrollbars cleanly (matching dark mode) ─────────────────────── */
+html:not(.dark) .subtle-scroll,
+html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+html:not(.dark) .subtle-scroll::-webkit-scrollbar,
+html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* ── Greeting Text — blue→violet gradient shimmer ─────────────────────── */
+html:not(.dark) .lm-greeting-text {
+  background: linear-gradient(
+    110deg,
+    #3B5BF5 0%,
+    #7C4DED 40%,
+    #4F6EF7 65%,
+    #7C4DED 100%
+  ) !important;
+  background-size: 250% auto !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  animation: lm-shimmer-greeting 5s linear infinite;
+}
+
+@keyframes lm-shimmer-greeting {
+  from { background-position: 0% center; }
+  to   { background-position: 250% center; }
+}
+
+/* ── Subtitle text visibility ───────────────────────────────────────────── */
+html:not(.dark) .lm-subtitle-text {
+  color: var(--lm-text-secondary) !important;
+  opacity: 1 !important;
+}
+
+/* ── Prompt Card — Floating Glass + Neumorphic Shadow ───────────────────── */
+html:not(.dark) .lm-composer-card {
+  position: relative;
+}
+
+/* The AI composer is an elevated writing surface, not an outlined card. Keep
+   the depth in its neutral shadow and remove the bright border/glow layers. */
+html:not(.dark) .lm-composer-card > .border-glow-card {
+  background: var(--ws-surface) !important;
+  backdrop-filter: blur(28px) saturate(1.08) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.08) !important;
+  box-shadow:
+    0 16px 40px rgba(80, 70, 58, 0.08),
+    0 4px 12px rgba(80, 70, 58, 0.04) !important;
+  border: 1px solid var(--ws-border) !important;
+  transition: box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform   280ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+html:not(.dark) .lm-composer-card:hover > .border-glow-card {
+  box-shadow:
+    0 20px 48px rgba(80, 70, 58, 0.12),
+    0 6px 16px rgba(80, 70, 58, 0.05) !important;
+  transform: translateY(-1px);
+}
+
+html:not(.dark) .lm-composer-card:focus-within > .border-glow-card {
+  box-shadow:
+    0 24px 52px rgba(80, 70, 58, 0.14),
+    0 8px 20px rgba(2, 168, 164, 0.10) !important;
+  transform: translateY(-2px);
+}
+
+
+/* ── Action Chips (ToolToggles) — Soft Grey Neumorphic Glass ───────────── */
+html:not(.dark) .lm-chip {
+  background: var(--ws-surface-hover) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.04) !important;
+  color: var(--ws-text-primary) !important;
+  transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+html:not(.dark) .lm-chip:hover {
+  background: var(--ws-border) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 2px 6px rgba(80, 70, 58, 0.06) !important;
+  transform: translateY(-1px) scale(1.02) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .lm-chip[aria-pressed="true"] {
+  background: var(--ws-surface-tertiary) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.08) !important;
+  transform: translateY(0px) !important;
+}
+
+/* ── Icon Buttons (attach, link) — Ghost glass ──────────────────────────── */
+html:not(.dark) .lm-icon-btn {
+  color: var(--ws-text-secondary) !important;
+  transition: all 200ms ease !important;
+}
+
+html:not(.dark) .lm-icon-btn:hover {
+  background: rgba(2, 168, 164, 0.08) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: 0 2px 8px rgba(80, 70, 58, 0.06) !important;
+}
+
+/* ── Send Button — Blue-Violet Gradient with Glow ───────────────────────── */
+html:not(.dark) .lm-send-btn {
+  background: linear-gradient(135deg, #4F6EF7 0%, #7C4DED 100%) !important;
+  box-shadow:
+    0 4px 16px rgba(79, 110, 247, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+html:not(.dark) .lm-send-btn:hover {
+  background: linear-gradient(135deg, #3D5CF5 0%, #6B3DE0 100%) !important;
+  box-shadow:
+    0 8px 28px rgba(79, 110, 247, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-2px) scale(1.05) !important;
+}
+
+html:not(.dark) .lm-send-btn:disabled {
+  background: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
+  color: #B0B4C8 !important;
+  border: none !important;
+  transform: none !important;
+}
+
+/* ── Pill Buttons (header History / New Chat) — Glass ───────────────────── */
+html:not(.dark) .lm-pill-btn {
+  background: var(--ws-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-shadow-pill) !important;
+  color: var(--ws-text-primary) !important;
+  transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+html:not(.dark) .lm-pill-btn:hover {
+  background: var(--ws-surface-hover) !important;
+  box-shadow: var(--lm-shadow-pill-hover) !important;
+  transform: translateY(-1px) scale(1.01) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html.dark .lm-pill-btn {
+  transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+html.dark .lm-pill-btn:hover {
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ── Nav Items — Glass hover lift ───────────────────────────────────────── */
+html:not(.dark) .lm-nav-item {
+  transition: all 200ms ease !important;
+  border-radius: 12px;
+}
+
+html:not(.dark) .lm-nav-item:hover {
+  background: var(--ws-surface-hover) !important;
+  box-shadow:
+    0 2px 12px rgba(80, 70, 58, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ── Textarea placeholder in composer ───────────────────────────────────── */
+html:not(.dark) .lm-composer-card textarea::placeholder {
+  color: #B0B5C8 !important;
+}
+
+html:not(.dark) .lm-composer-card textarea {
+  color: #1A1B30 !important;
+}
+
+/* ── Ambient circle behind greeting ─────────────────────────────────────── */
+html:not(.dark) .lm-greeting-ambient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
+  max-height: 520px;
+  background: radial-gradient(ellipse 70% 55% at 50% 45%,
+    rgba(21, 220, 255, 0.08) 0%,
+    rgba(94, 102, 245, 0.04) 45%,
+    transparent 75%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Freeze element transitions during theme change to prevent frame drop ─ */
+html.theme-changing,
+html.theme-changing *,
+html.theme-changing *::before,
+html.theme-changing *::after {
+  transition: none !important;
+}
+
+/* ── Theme Toggle Full-Page Circular Expanding View Transition ──────────── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 99999;
+  animation: lm-theme-circle-reveal 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  will-change: clip-path;
+  transform: translateZ(0);
+}
+
+@keyframes lm-theme-circle-reveal {
+  from {
+    clip-path: circle(0px at var(--theme-toggle-x, 90%) var(--theme-toggle-y, 2rem));
+  }
+  to {
+    clip-path: circle(150vmax at var(--theme-toggle-x, 90%) var(--theme-toggle-y, 2rem));
+  }
+}
+
+/* ── Visible scrollbar on Profile page in Light Mode ─────────────────────── */
+html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
+html:not(.dark) .profile_container {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent !important;
+  -ms-overflow-style: auto !important;
+}
+
+html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar,
+html:not(.dark) .profile_container::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+}
+
+html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-thumb,
+html:not(.dark) .profile_container::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  border-radius: 9999px !important;
+}
+
+html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-track,
+html:not(.dark) .profile_container::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL LIGHT MODE SURFACE SYSTEM
+   ─────────────────────────────────────────────────────────────────────────
+   Strategy: target Radix UI data-slot attributes and native elements
+   Scope: ALL rules under html:not(.dark) — dark mode is ZERO-TOUCHED
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared surface token ─────────────────────────────────────────────── */
+html:not(.dark) {
+  --lm-surface-backdrop: blur(14px) saturate(1.2);
+  /* Semantic light surfaces: content, headers, and controls remain distinct. */
+  --lm-surface-card-bg:   var(--ws-surface);
+  --lm-surface-panel-bg:  var(--ws-surface);
+  --lm-surface-header-bg: var(--ws-surface-header);
+  --lm-surface-input-bg:  var(--ws-surface-control);
+  --lm-surface-border:    var(--ws-border);
+  --lm-surface-shadow-sm: var(--ws-shadow-sm);
+  --lm-surface-shadow-md: var(--ws-shadow);
+  --lm-surface-shadow-lg: var(--ws-shadow-md);
+}
+
+/* ── Dialog / Modal ───────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="dialog-content"] {
+  background: var(--ws-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-lg) !important;
+}
+
+html:not(.dark) [data-slot="dialog-overlay"] {
+  background: rgba(220, 212, 200, 0.30) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* ── Sheet (side panel) ───────────────────────────────────────────────── */
+html:not(.dark) [data-slot="sheet-content"] {
+  background: var(--ws-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-lg) !important;
+}
+
+/* ── Dropdown Menu ────────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="dropdown-menu-content"],
+html:not(.dark) [data-slot="dropdown-menu-sub-content"] {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-md) !important;
+}
+
+html:not(.dark) [data-slot="dropdown-menu-item"]:focus,
+html:not(.dark) [data-slot="dropdown-menu-item"][data-highlighted] {
+  background: var(--ws-surface-hover) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+/* ── Popover ──────────────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="popover-content"] {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-md) !important;
+}
+
+/* ── Select ───────────────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="select-content"] {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-md) !important;
+}
+
+html:not(.dark) [data-slot="select-trigger"] {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--lm-surface-shadow-sm) !important;
+}
+
+html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+}
+
+html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger:hover {
+  background: var(--ws-surface-header) !important;
+}
+
+/* My Space media toolbar: source, date range, and type filters intentionally
+   share one light control surface even though they use different primitives. */
+html:not(.dark) .adstudio-media-toolbar-control:not(.adstudio-media-toolbar-control-active) {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+}
+
+html:not(.dark) .adstudio-media-toolbar-control:hover {
+  background: var(--ws-surface-header) !important;
+}
+
+html:not(.dark) [data-slot="select-item"][data-highlighted] {
+  background: var(--ws-surface-hover) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+/* ── Command Palette ──────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="command"] {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) [cmdk-item][aria-selected="true"],
+html:not(.dark) [cmdk-item]:hover {
+  background: var(--ws-surface-hover) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+/* ── Tooltip Content ──────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="tooltip-content"] {
+  background: #24211D !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18) !important;
+}
+
+html:not(.dark) [data-slot="tooltip-content"] [fill] {
+  fill: #24211D !important;
+}
+
+/* ── Native Input / Textarea ──────────────────────────────────────────── */
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input),
+html:not(.dark) textarea {
+  background: var(--lm-surface-input-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-inner) !important;
+  transition: border-color 180ms ease, box-shadow 180ms ease !important;
+}
+
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input):focus,
+html:not(.dark) textarea:focus {
+  border-color: var(--ws-border-strong) !important;
+  box-shadow:
+    0 0 0 3px var(--ws-input-focus-ring),
+    var(--ws-shadow-inner) !important;
+  background: var(--ws-surface) !important;
+}
+
+/* Exception: composer textarea managed by lm-composer-card — skip override */
+html:not(.dark) .lm-composer-card textarea {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Generic section/card panels (bg-white pattern) ──────────────────── */
+/* Target motion.section, article, and common card wrapper divs            */
+html:not(.dark) [data-slot="card"] {
+  background: var(--ws-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow) !important;
+}
+
+/* ── Table surfaces ───────────────────────────────────────────────────── */
+html:not(.dark) table thead tr {
+  background: var(--ws-surface-secondary) !important;
+}
+
+html:not(.dark) table tbody tr:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+/* ── Tabs list pill container ─────────────────────────────────────────── */
+html:not(.dark) [data-slot="tabs-list"] {
+  background: var(--ws-surface-secondary) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+}
+
+html:not(.dark) [data-slot="tabs-trigger"][data-state="active"] {
+  background: var(--ws-surface) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+/* ── Separator ────────────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="separator"],
+html:not(.dark) hr {
+  background: var(--ws-border) !important;
+  border-color: var(--ws-border) !important;
+}
+
+/* ── Progress bar ─────────────────────────────────────────────────────── */
+html:not(.dark) [data-slot="progress"] {
+  background: var(--ws-surface-secondary) !important;
+}
+
+/* ── Generic ghost / secondary / outline buttons ─────────────────────── */
+/* Only target buttons that already carry bg-white or bg-gray-* classes.  */
+/* Accent / gradient buttons are NOT overridden here (they manage their own bg). */
+html:not(.dark) button.lm-ghost-btn,
+html:not(.dark) button[variant="ghost"],
+html:not(.dark) button[variant="outline"],
+html:not(.dark) button[variant="secondary"] {
+  background: var(--ws-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  color: var(--ws-text-primary) !important;
+  transition: all 200ms ease !important;
+}
+
+html:not(.dark) button.lm-ghost-btn:hover,
+html:not(.dark) button[variant="ghost"]:hover,
+html:not(.dark) button[variant="outline"]:hover,
+html:not(.dark) button[variant="secondary"]:hover {
+  background: var(--ws-surface-hover) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL LIGHT-MODE NEUMORPHIC / GLASSMORPHIC SURFACE SYSTEM
+   ─────────────────────────────────────────────────────────────────────────
+   Scope: html:not(.dark) ONLY — dark mode is NEVER touched here.
+   Strategy: Use CSS attribute & class selectors to apply the workspace-card
+   design tokens to every section across the app: MetaAds, AdsManager,
+   AdStudio, BrandIQ, Autopilot, Profile, LandingPageAnalyzer, etc.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Core design tokens for the neumorphic card surface ─────────────────── */
+html:not(.dark) {
+  /* Neumorphic card token — now references the warm Workspace palette */
+  --nm-bg:           var(--ws-surface);
+  --nm-border:       var(--ws-border);
+  --nm-shadow-outer: var(--ws-shadow);
+  --nm-shadow-inner: var(--ws-shadow-inner);
+  --nm-radius-lg:    1rem;
+  --nm-radius-md:    0.75rem;
+  --nm-blur:         none;
+}
+
+/* ── Universal card surface — bg-white / bg-gray-50 rounded panels ──────── */
+/* Catches all section cards that have bg-white + a rounded class.
+   Toggle buttons, small inline elements, and dark-mode overrides are safe
+   because the selector requires both a bg class AND a rounded class together,
+   meaning isolated bg-white (e.g. toggle knobs, avatar rings) won't match. */
+
+html:not(.dark) .bg-white.rounded-2xl,
+html:not(.dark) .bg-white.rounded-xl,
+html:not(.dark) .bg-white.rounded-\[20px\],
+html:not(.dark) .bg-gray-50.rounded-2xl,
+html:not(.dark) .bg-gray-50.rounded-xl,
+html:not(.dark) .bg-gray-100.rounded-2xl,
+html:not(.dark) .bg-gray-100.rounded-xl {
+  background: var(--nm-bg) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* Hover lift for interactive card panels */
+html:not(.dark) .bg-white.rounded-2xl:hover,
+html:not(.dark) .bg-white.rounded-xl:hover,
+html:not(.dark) .bg-gray-50.rounded-2xl:hover,
+html:not(.dark) .bg-gray-50.rounded-xl:hover,
+html:not(.dark) .bg-gray-100.rounded-2xl:hover,
+html:not(.dark) .bg-gray-100.rounded-xl:hover {
+  border-color: var(--premium-edge-strong) !important;
+  box-shadow: 0 14px 34px rgba(30, 41, 59, 0.10), 0 3px 9px rgba(30, 41, 59, 0.04) !important;
+}
+
+/* ── Border-gray card panels (common in MetaAds, AdsManager, TikTokAds) ─── */
+/* Targets: border border-gray-200 bg-white / border-gray-200 bg-gray-50 */
+html:not(.dark) .border-gray-200.rounded-2xl,
+html:not(.dark) .border-gray-200.rounded-xl,
+html:not(.dark) .border-gray-300.rounded-2xl,
+html:not(.dark) .border-gray-300.rounded-xl {
+  background: var(--nm-bg) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Smaller inner-card surfaces (list rows, info tiles) ────────────────── */
+html:not(.dark) .bg-gray-100.rounded-lg,
+html:not(.dark) .bg-gray-50.rounded-lg,
+html:not(.dark) .border-gray-200.rounded-lg {
+  background: var(--ws-surface-secondary) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--nm-shadow-inner) !important;
+}
+
+/* ── MetaAdsPanels campaign list item cards ──────────────────────────────── */
+html:not(.dark) .rounded-2xl.border.border-gray-200 {
+  background: var(--nm-bg) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── MetaAds analytics stat/metric tiles ────────────────────────────────── */
+html:not(.dark) .rounded-xl.border.border-gray-200 {
+  background: var(--ws-surface-secondary) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-inner) !important;
+}
+
+/* ── LandingPageAnalyzer section panels ──────────────────────────────────── */
+html:not(.dark) .rounded-\[20px\].workspace-card {
+  /* already handled by workspace-card class — ensure backdrop blur consistency */
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Section sub-panels (inner tiles inside a card) ─────────────────────── */
+html:not(.dark) .rounded-xl.bg-gray-100 {
+  background: var(--ws-surface-secondary) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--nm-shadow-inner) !important;
+}
+
+/* ── MetaAds wizard / campaign creation dropdowns ────────────────────────── */
+html:not(.dark) .rounded-md.border-gray-200,
+html:not(.dark) .rounded-md.border.border-gray-200 {
+  background: var(--nm-bg) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+}
+
+/* ── Small action / filter chips (rounded-lg border bg-gray-100) ─────────── */
+html:not(.dark) .rounded-lg.border-gray-200.bg-gray-100,
+html:not(.dark) .rounded-xl.border-gray-200.bg-gray-100 {
+  background: var(--ws-surface-secondary) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.04) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .rounded-lg.border-gray-200.bg-gray-100:hover,
+html:not(.dark) .rounded-xl.border-gray-200.bg-gray-100:hover {
+  background: var(--ws-surface-hover) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 2px 6px rgba(80, 70, 58, 0.06) !important;
+}
+
+/* ── MetaAds table toolbar bg-gray-50 rounded-xl container ─────────────── */
+html:not(.dark) .rounded-xl.border.border-gray-200.bg-gray-50 {
+  background: var(--ws-surface-secondary) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-inner) !important;
+}
+
+/* ── GoogleAds / TikTokAds dashboard stat card overrides ─────────────────── */
+html:not(.dark) .rounded-2xl.border.border-gray-200.bg-white {
+  background: var(--nm-bg) !important;
+  border-color: var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Autopilot overview cards (already use workspace-card; add backdrop) ─── */
+html:not(.dark) .rounded-2xl.workspace-card {
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── AdStudio / AdCopy layout section panels ─────────────────────────────── */
+html:not(.dark) .rounded-xl.bg-white,
+html:not(.dark) .rounded-2xl.bg-white {
+  background: var(--nm-bg) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Profile section cards (complementary backdrop blur) ─────────────────── */
+html:not(.dark) .rounded-2xl.workspace-card.p-6,
+html:not(.dark) .rounded-2xl.workspace-card.p-4 {
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Wizard field group containers (border-gray + bg) ────────────────────── */
+html:not(.dark) .rounded-2xl.bg-white.p-3,
+html:not(.dark) .rounded-2xl.bg-gray-50.p-3,
+html:not(.dark) .rounded-xl.bg-white.p-3,
+html:not(.dark) .rounded-xl.bg-gray-50.p-3,
+html:not(.dark) .rounded-2xl.bg-white.p-4,
+html:not(.dark) .rounded-2xl.bg-gray-50.p-4,
+html:not(.dark) .rounded-xl.bg-white.p-4,
+html:not(.dark) .rounded-xl.bg-gray-50.p-4 {
+  background: var(--nm-bg) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: var(--nm-blur) !important;
+  -webkit-backdrop-filter: var(--nm-blur) !important;
+}
+
+/* ── Exclusion: toggle knob, small avatar rings, scroll handles  ───────────
+   These have bg-white but are NOT card surfaces. We reset them here.   */
+
+/* Toggle switch knob — keep white */
+html:not(.dark) [role="switch"] span.bg-white,
+html:not(.dark) span.absolute.bg-white.rounded-full,
+html:not(.dark) .translate-x-0.bg-white,
+html:not(.dark) .translate-x-4.bg-white {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.20) !important;
+  backdrop-filter: none !important;
+}
+
+/* Avatar initial badge - keep gradient */
+html:not(.dark) :not(button).rounded-full.bg-gradient-to-r,
+html:not(.dark) :not(button).rounded-full.bg-gradient-to-br,
+html:not(.dark) :not(button).rounded-full.bg-gradient-to-b {
+  background: inherit !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Keep the workspace dialog's primary action on its original, high-contrast
+   cyan-to-indigo treatment. The disabled state still uses the component's
+   opacity utility while a save is in progress. */
+html:not(.dark) button.workspace-primary-action {
+  background-color: #02c8c4 !important;
+  background-image: linear-gradient(to right, #02c8c4, #5867eb) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(88, 103, 235, 0.24) !important;
+}
+
+/* The platform status badge is an intentional gradient affordance, not an
+   avatar surface. Keep its Coming Soon label clearly legible in light mode. */
+html:not(.dark) span.platform-coming-soon.rounded-full.bg-gradient-to-r {
+  background-color: #15dcff !important;
+  background-image: linear-gradient(to right, #15dcff, #6b72f8) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(88, 103, 235, 0.28) !important;
+}
+
+/* Workspace access picker: separate compact controls and permission groups
+   from the modal's light surface without changing their selection behavior. */
+html:not(.dark) .workspace-select-all {
+  color: #087f95 !important;
+}
+
+html:not(.dark) .workspace-selection-count {
+  color: var(--ws-text-primary) !important;
+  background: var(--ws-surface-secondary) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+html:not(.dark) .workspace-feature-picker > section {
+  background: var(--ws-surface-secondary) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.04) !important;
+}
+
+/* Image URL entry in the assistant composer: a compact inset field rather
+   than a flat browser-like strip inside the attachment control. */
+html:not(.dark) .composer-url-field {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: inset 0 1px 2px rgba(80, 70, 58, 0.04) !important;
+}
+
+html:not(.dark) input.composer-url-input[class*="bg-transparent"] {
+  min-height: 28px;
+  padding: 0 4px;
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none !important;
+}
+
+html:not(.dark) input.composer-url-input[class*="bg-transparent"]::placeholder {
+  color: var(--ws-text-secondary) !important;
+}
+
+html:not(.dark) .composer-url-field:focus-within {
+  border-color: var(--lm-field-focus-border) !important;
+  box-shadow: inset 0 1px 2px rgba(80, 70, 58, 0.04) !important;
+}
+
+/* Progress bar track — keep neutral */
+html:not(.dark) .rounded-full.bg-gray-200,
+html:not(.dark) .h-1.rounded-full.bg-gray-200,
+html:not(.dark) .h-2.rounded-full.bg-gray-200 {
+  background: var(--ws-surface-secondary) !important;
+  border: none !important;
+  box-shadow: inset 0 1px 2px rgba(80, 70, 58, 0.06) !important;
+  backdrop-filter: none !important;
+}
+
+/* Separator lines / dividers */
+html:not(.dark) .h-\[1px\].bg-gray-200,
+html:not(.dark) .w-\[1px\].bg-gray-200,
+html:not(.dark) .h-px.bg-gray-200,
+html:not(.dark) .w-px.bg-gray-200 {
+  background: var(--ws-border) !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* ── Page-level background gradient (already set by lm-page-bg) ───────────
+   Ensure the global body bg also complements the neumorphic cards.      */
+html:not(.dark) body {
+  background: var(--ws-bg) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ARBITRARY-RADIUS CARD SURFACE OVERRIDES
+   ─────────────────────────────────────────────────────────────────────────
+   These cover all AdStudio, AdCreative, AdLibrary, AdFactory modal cards
+   that use Tailwind arbitrary radius values like rounded-[30px], [24px],
+   [32px], [18px], [20px], [22px] combined with bg-white.
+   Dark mode is ZERO-TOUCHED (all rules under html:not(.dark)).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── AdStudio / AdCreative main panel cards (rounded-[30px] bg-white) ───── */
+/* Targets: AiCreativesCustom, AdSetupStep, BrandInfoStep, UGCAdsPage,
+   PostAdMySpace, AdsDialogLayout, StartForm main card wrappers */
+html:not(.dark) .rounded-\[30px\].bg-white,
+html:not(.dark) .rounded-\[30px\].bg-white\/70,
+html:not(.dark) .rounded-\[30px\].bg-gray-50 {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Override ring-1 ring-black/10 which adds a plain thin border on these cards */
+html:not(.dark) .rounded-\[30px\].ring-1 {
+  --tw-ring-color: var(--nm-border) !important;
+  --tw-ring-shadow: 0 0 0 1px var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+}
+
+/* ── AdStudio prompt textarea container (rounded-[24px] bg-gray-100) ─────── */
+html:not(.dark) .rounded-\[24px\].bg-gray-100,
+html:not(.dark) .rounded-\[24px\].bg-white {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-inner) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── UGCAdsPage full-page panel (rounded-[32px] bg-white) ────────────────── */
+html:not(.dark) .rounded-\[32px\].bg-white,
+html:not(.dark) .rounded-\[32px\].bg-gray-50 {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Dropdown popover cards (rounded-[18px], [20px] bg-white) ────────────── */
+/* Targets small popover menus for font/color/size pickers within AdStudio */
+html:not(.dark) .rounded-\[18px\].bg-white,
+html:not(.dark) .rounded-\[20px\].bg-white {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: 0 12px 30px rgba(80, 70, 58, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── GoogleAds preview card (rounded-[22px] border-gray-300 bg-white) ────── */
+html:not(.dark) .rounded-\[22px\].bg-white,
+html:not(.dark) .rounded-\[22px\].bg-gray-50 {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── BrandIQ / AdLibrary dialog (rounded-[30px] !bg-white / DialogContent) ─ */
+html:not(.dark) .rounded-\[30px\].\!bg-white {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: 0 16px 40px rgba(80, 70, 58, 0.10) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── WebsiteStep panel (rounded-[24px] bg-white large layout) ────────────── */
+html:not(.dark) .rounded-\[24px\].bg-white {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Exclusion: do NOT override small UI elements with arbitrary rounding ───
+   Small icon badges like rounded-[9px] or rounded-[5px] are excluded    */
+html:not(.dark) .rounded-\[9px\].bg-white,
+html:not(.dark) .rounded-\[5px\].bg-white,
+html:not(.dark) .rounded-\[10px\].bg-white {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.04) !important;
+  backdrop-filter: none !important;
+}
+
+/* ── AdVideoLayout rounded card (rounded-[30px] bg-white/70) ─────────────── */
+html:not(.dark) .rounded-\[30px\].bg-white\/70 {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: var(--nm-shadow-outer) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── profile disconnect buttons (rounded-[50px] bg-white) ────────────────── */
+/* These are small pill buttons — give them a soft neutral chip style */
+html:not(.dark) .rounded-\[50px\].bg-white {
+  background: var(--ws-surface-secondary) !important;
+  border: 1px solid var(--nm-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.04) !important;
+  backdrop-filter: none !important;
+}
+
+html:not(.dark) .rounded-\[50px\].bg-white:hover {
+  box-shadow: 0 3px 8px rgba(80, 70, 58, 0.06) !important;
+  border-color: var(--premium-edge-strong) !important;
+  background: var(--ws-surface-hover) !important;
+}
+
+/* ── AdFactory Campaign Cards — Light Mode Text & Contrast Fix ──────────────
+   The outer card (.ad_factory_card.workspace-card) gets the neumorphic bg.
+   The inner panel (rounded-[15px]) needs a slightly lighter surface so that
+   the dark text (title, description) reads clearly against the card.
+   Dark mode is ZERO-TOUCHED.                                               */
+
+/* Ensure outer card has no dark gradient overlay in light mode */
+html:not(.dark) .ad_factory_card.workspace-card {
+  background: var(--ws-surface) !important;
+  /* Suppress any Tailwind bg-gradient-to-b from-black/* classes */
+  background-image: none !important;
+  padding: 1.5px !important;
+}
+
+/* Inner card panel — clean cream surface for crisp text readability */
+html:not(.dark) .ad_factory_card.workspace-card .rounded-\[15px\] {
+  background: var(--ws-surface) !important;
+  border-radius: 13px !important;
+}
+
+/* Campaign name heading — ensure dark grey, not washed out */
+html:not(.dark) .ad_factory_card h2 {
+  color: var(--ws-text-primary) !important;
+}
+
+/* Date/subtitle text — medium grey, clearly readable */
+html:not(.dark) .ad_factory_card span.text-gray-500 {
+  color: var(--ws-text-secondary) !important;
+}
+
+/* Description text — slightly darker for better contrast */
+html:not(.dark) .ad_factory_card .text-gray-700 {
+  color: var(--ws-text-primary) !important;
+}
+
+/* Hover lift effect on the card */
+html:not(.dark) .ad_factory_card.workspace-card:hover {
+  border-color: var(--premium-edge-strong) !important;
+  box-shadow: var(--ws-shadow-md) !important;
+  transform: translateY(-2px);
+}
+
+/* ── Shared light-mode form controls ──────────────────────────────────────
+   Provides clear dark text, soft gray borders, high-contrast placeholders,
+   and subtle focus states. Preserves bg-transparent for embedded inline inputs
+   (such as URL pills, search bars, and chat textareas) and eliminates any
+   browser/Tailwind purple/blue focus outline rings. */
+html:not(.dark) {
+  --lm-field-background: var(--ws-input-bg);
+  --lm-field-border: var(--ws-border);
+  --lm-field-text: var(--ws-text-primary);
+  --lm-field-placeholder: var(--ws-text-secondary);
+  --lm-field-focus-border: var(--ws-border-strong);
+  --lm-field-focus-ring: var(--ws-input-focus-ring);
+}
+
+/* 1. Standard form fields (inputs, textareas, selects) */
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input),
+html:not(.dark) textarea:not(.bg-transparent):not([class*="bg-transparent"]),
+html:not(.dark) select,
+html:not(.dark) [data-slot="input"],
+html:not(.dark) [data-slot="textarea"] {
+  color: var(--lm-field-text) !important;
+  caret-color: var(--lm-field-text) !important;
+  background: var(--lm-field-background) !important;
+  border: 1px solid var(--lm-field-border) !important;
+  outline: none !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease !important;
+}
+
+/* 2. High-contrast placeholder text */
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder,
+html:not(.dark) select::placeholder,
+html:not(.dark) [data-slot="input"]::placeholder,
+html:not(.dark) [data-slot="textarea"]::placeholder {
+  color: var(--lm-field-placeholder) !important;
+  opacity: 1 !important;
+}
+
+/* 3. Subtle focus state for standard fields & disable purple/blue browser focus rings */
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input):focus,
+html:not(.dark) textarea:not(.bg-transparent):not([class*="bg-transparent"]):focus,
+html:not(.dark) select:focus,
+html:not(.dark) [data-slot="input"]:focus,
+html:not(.dark) [data-slot="textarea"]:focus,
+html:not(.dark) [data-slot="select-trigger"]:focus-visible {
+  border-color: var(--lm-field-focus-border) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--lm-field-focus-ring), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: none !important;
+}
+
+/* 4. Kill browser blue/purple focus ring & outline globally on ALL inputs in light mode */
+html:not(.dark) input:focus,
+html:not(.dark) textarea:focus,
+html:not(.dark) select:focus,
+html:not(.dark) input:focus-visible,
+html:not(.dark) textarea:focus-visible,
+html:not(.dark) select:focus-visible {
+  outline: none !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* 5. Embedded / Transparent inline inputs (URL pills, search bars, chat prompt fields) */
+html:not(.dark) input.bg-transparent,
+html:not(.dark) input[class*="bg-transparent"],
+html:not(.dark) textarea.bg-transparent,
+html:not(.dark) textarea[class*="bg-transparent"],
+html:not(.dark) input.border-none,
+html:not(.dark) input[class*="border-none"],
+html:not(.dark) .bg-transparent input,
+html:not(.dark) .bg-transparent textarea,
+html:not(.dark) .lm-composer-card textarea {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html:not(.dark) input.bg-transparent:focus,
+html:not(.dark) input[class*="bg-transparent"]:focus,
+html:not(.dark) textarea.bg-transparent:focus,
+html:not(.dark) textarea[class*="bg-transparent"]:focus,
+html:not(.dark) input.border-none:focus,
+html:not(.dark) input[class*="border-none"]:focus,
+html:not(.dark) .bg-transparent input:focus,
+html:not(.dark) .bg-transparent textarea:focus,
+html:not(.dark) .lm-composer-card textarea:focus {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: none !important;
+}
+
+/* 6. Invalid field state */
+html:not(.dark) input[aria-invalid="true"],
+html:not(.dark) textarea[aria-invalid="true"],
+html:not(.dark) select[aria-invalid="true"] {
+  border-color: rgba(220, 38, 38, 0.58) !important;
+}
+
+/* AdFactory chip fields are a single control. Keep the typing cursor within
+   the tag surface and use the surface itself for the quiet focus treatment. */
+html:not(.dark) .adfactory-tag-field:not(.border-red-500):focus-within {
+  background: rgba(244, 247, 250, 0.96) !important;
+  border-color: var(--lm-field-focus-border) !important;
+  box-shadow:
+    0 0 0 3px var(--lm-field-focus-ring),
+    inset 1px 1px 3px rgba(160, 172, 186, 0.2),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.82) !important;
+}
+
+/* Must remain the final URL-input rule: this is an inline composer control,
+   so it never receives its own white box, border, or native input chrome. */
+.composer-url-field .composer-url-input,
+.composer-url-field .composer-url-input:focus,
+.composer-url-field .composer-url-input:focus-visible {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Command/search inputs live inside a styled search shell. Keep their text
+   input completely transparent so only that outer shell supplies the border. */
+[data-slot="command-input-wrapper"] [data-slot="command-input"],
+[data-slot="command-input-wrapper"] [data-slot="command-input"]:focus,
+[data-slot="command-input-wrapper"] [data-slot="command-input"]:focus-visible {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* The competitor-visual search field is embedded in a bordered pill. Its
+   input must never create a second white field when focused in light mode. */
+html:not(.dark) .competitor-visual-search .competitor-visual-search-input,
+html:not(.dark) .competitor-visual-search .competitor-visual-search-input:focus,
+html:not(.dark) .competitor-visual-search .competitor-visual-search-input:focus-visible,
+html:not(.dark) .ad-library-search .ad-library-search-input,
+html:not(.dark) .ad-library-search .ad-library-search-input:focus,
+html:not(.dark) .ad-library-search .ad-library-search-input:focus-visible {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html:not(.dark) .ad-library-search {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .ad-library-search:focus-within {
+  border-color: var(--ws-border-strong) !important;
+}
+
+/* URL + Add controls use one pill surface. The real input is deliberately
+   transparent so it cannot create a second white rectangle inside that pill. */
+html:not(.dark) .inline-url-field {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  border-radius: 9999px;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .inline-url-field:focus-within {
+  border-color: var(--lm-field-focus-border) !important;
+}
+
+html:not(.dark) .inline-url-input,
+html:not(.dark) .inline-url-input:focus,
+html:not(.dark) .inline-url-input:focus-visible {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  color: var(--ws-text-primary) !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  --tw-ring-shadow: none !important;
+}
+
+html:not(.dark) .inline-url-input::placeholder {
+  color: var(--ws-text-secondary) !important;
+}
+
+/* Override the earlier global input selector (which intentionally has high
+   specificity). This input belongs to the AI Assistant attachment row, so it
+   must remain transparent; the row itself supplies the one visible border. */
+html:not(.dark) .lm-composer-card .composer-url-field input.composer-url-input[type="url"][class*="bg-transparent"],
+html:not(.dark) .lm-composer-card .composer-url-field input.composer-url-input[type="url"][class*="bg-transparent"]:focus,
+html:not(.dark) .lm-composer-card .composer-url-field input.composer-url-input[type="url"][class*="bg-transparent"]:focus-visible {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-width: 0 !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  --tw-ring-shadow: none !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* Workspace members: one continuous cream surface in Light Mode. The divider
+   separates each header without introducing a darker header band. */
+html:not(.dark) .workspace-members-panel,
+html:not(.dark) body .workspace-members-panel.workspace-members-panel {
+  overflow: hidden;
+  border: 1px solid var(--ws-border) !important;
+  border-radius: 1rem !important;
+  background: var(--lm-surface-input-bg) !important;
+  box-shadow: var(--ws-shadow) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .workspace-members-panel.workspace-members-panel:hover {
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--ws-shadow) !important;
+  transform: none !important;
+}
+
+html:not(.dark) body .workspace-members-panel > div:first-child {
+  background: var(--ws-surface-header) !important;
+  border-bottom: 1px solid var(--ws-border) !important;
+}
+
+html:not(.dark) body .workspace-members-panel > div:first-child > div:first-child,
+html:not(.dark) body .workspace-member-avatar {
+  background: var(--ws-surface-muted) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .workspace-members-panel > div:first-child > div:first-child svg {
+  color: var(--ws-text-primary) !important;
+}
+
+/* Warm Ivory light surface tokens */
+html:not(.dark) {
+  --premium-surface: var(--ws-surface);
+  --premium-surface-muted: var(--ws-surface-muted);
+  --premium-edge: var(--ws-border);
+  --premium-edge-strong: var(--ws-border-strong);
+  --premium-shadow: var(--ws-shadow);
+  --premium-shadow-sm: var(--ws-shadow-sm);
+  --lm-line: var(--premium-edge);
+  --lm-shadow: var(--premium-shadow);
+}
+
+html:not(.dark) body :is(
+  .workspace-card,
+  .ad_factory_card,
+  .lm-card,
+  .workspace-members-panel,
+  [data-slot="card"],
+  .rounded-2xl.border-white\/80,
+  .rounded-xl.border-white\/80,
+  .bg-white.rounded-2xl,
+  .bg-white.rounded-xl
+) {
+  background-color: var(--ws-surface) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--premium-shadow) !important;
+}
+
+html:not(.dark) body :is(
+  button.bg-white,
+  button.bg-white\/50,
+  button.bg-white\/60,
+  button.bg-white\/70,
+  button.bg-white\/80,
+  button.bg-white\/90
+) {
+  background-color: var(--ws-surface) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--premium-shadow-sm) !important;
+}
+
+html:not(.dark) body :is(
+  button.bg-white,
+  button.bg-white\/50,
+  button.bg-white\/60,
+  button.bg-white\/70,
+  button.bg-white\/80,
+  button.bg-white\/90
+):hover {
+  background-color: var(--ws-surface-muted) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: 0 2px 6px rgba(80, 70, 58, 0.06) !important;
+  transform: none !important;
+}
+
+html:not(.dark) .workspace-pill,
+html:not(.dark) .lm-chip,
+html:not(.dark) .lm-pill-btn,
+html:not(.dark) body .workspace-feature-chip {
+  background: var(--ws-surface-hover) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: 0 1px 2px rgba(80, 70, 58, 0.04) !important;
+}
+
+/* Member feature chips sit on the same cream surface as their member row,
+   rather than inheriting the darker generic Workspace chip fill. */
+html:not(.dark) body .workspace-members-panel .workspace-feature-chip {
+  background: var(--ws-surface-control) !important;
+}
+
+html:not(.dark) body .workspace-members-panel .workspace-feature-chip:hover {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  transform: none !important;
+}
+
+html:not(.dark) :is(.workspace-pill, .lm-chip, .lm-pill-btn, body .workspace-feature-chip):hover {
+  background: var(--ws-border) !important;
+  border-color: var(--ws-border-strong) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .account-ui-layer .account-signout-button {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+}
+
+html:not(.dark) .account-ui-layer .account-signout-button:hover {
+  background: var(--ws-surface-header) !important;
+  border-color: var(--ws-border-strong) !important;
+}
+
+html:not(.dark) body :is(.workspace-card-inner, .lm-card-inner) {
+  background: var(--ws-surface-muted) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: inset 0 1px 2px rgba(80, 70, 58, 0.03) !important;
+}
+
+html:not(.dark) body .workspace-empty-icon {
+  background: var(--ws-surface-secondary) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: none !important;
+}
+
+/* Ad Factory's top-level New Campaign action needs one restrained physical
+   edge; its gradient wrapper alone is intentionally too subtle to define it. */
+html:not(.dark) body .adfactory-new-campaign-button {
+  border: 1px solid var(--ws-border) !important;
+}
+
+/* Ad Factory campaign cards & dialogs — balanced soft cream-white surface with subtle white touch */
+html:not(.dark) body .ad-factory-campaign-card.ad-factory-campaign-card {
+  border: 1px solid var(--ws-border) !important;
+  border-radius: 18px !important;
+  background: var(--ws-surface) !important;
+  background-clip: padding-box !important;
+  box-shadow: 0 4px 20px -2px rgba(80, 70, 58, 0.06), 0 2px 6px -1px rgba(80, 70, 58, 0.03) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .ad-factory-campaign-card.ad-factory-campaign-card:hover {
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 8px 24px rgba(80, 70, 58, 0.10) !important;
+  transform: none !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog,
+html:not(.dark) body .adfactory-start-dialog {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow: var(--ws-shadow-xl) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog-input,
+html:not(.dark) body .adfactory-start-input {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog-secondary {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog-secondary:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+/* ── BrandIQ Cards — Shared Light Card Surface ───────────────────────────── */
+html:not(.dark) body .brand-iq-card {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: 0 4px 20px -2px rgba(80, 70, 58, 0.06), 0 2px 6px -1px rgba(80, 70, 58, 0.03) !important;
+}
+
+html:not(.dark) body .brand-iq-card:hover {
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 8px 24px rgba(80, 70, 58, 0.10) !important;
+}
+
+html:not(.dark) body .brand-iq-card-action {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+}
+
+html:not(.dark) body .brand-iq-card-action:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+/* ── Account / Profile Cards — Shared Light Card Surface ─────────────────── */
+html:not(.dark) body .profile-account-card {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: 0 4px 20px -2px rgba(80, 70, 58, 0.06), 0 2px 6px -1px rgba(80, 70, 58, 0.03) !important;
+}
+
+html:not(.dark) body .profile-account-card:hover {
+  border-color: var(--ws-border-strong) !important;
+}
+
+/* Let the Account ambient wave softly show through the two lower data cards
+   while retaining the shared light card surface color. */
+html:not(.dark) body .account-ui-layer .profile-account-card--ambient {
+  background: rgba(252, 250, 247, 0.78) !important;
+  backdrop-filter: blur(14px) saturate(1.02) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.02) !important;
+}
+
+html:not(.dark) body .usage-graph-select,
+html:not(.dark) body .usage-graph-select option {
+  background-color: var(--ws-surface-control) !important;
+  color: var(--ws-text-primary) !important;
+  border-color: var(--ws-border) !important;
+}
+
+.dark body .ad-factory-campaign-card.ad-factory-campaign-card:hover {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Sidebar navigation state changes should behave like dark mode: swap the
+   surface immediately, then animate only restrained depth. This prevents the
+   pale intermediate frame that appeared as a white flash while navigating. */
+html:not(.dark) body .lm-sidebar-surface .active_container {
+  transition-property: border-color, box-shadow, transform !important;
+  transition-duration: 160ms !important;
+  transition-timing-function: ease-out !important;
+}
+
+html:not(.dark) body .lm-sidebar-surface .group.active .active_container,
+html:not(.dark) body .lm-sidebar-surface .group.active .active_container:hover {
+  box-shadow: var(--sidebar-active-shadow) !important;
+}
+
+/* Ad Factory workflow nodes already carry semantic border classes, but the
+   global premium-card layer above intentionally normalizes card borders with
+   !important. Restore those node states here so light mode matches dark mode
+   without leaking workflow colors into cards elsewhere in the application. */
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-green-500/30'],
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-emerald-500/30'] {
+  border-color: rgba(16, 185, 129, 0.42) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-amber-500/30'] {
+  border-color: rgba(245, 158, 11, 0.38) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-red-500/30'] {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-gray-600/30'] {
+  border-color: rgba(75, 85, 99, 0.28) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card.border-blue-500 {
+  border-color: rgb(59, 130, 246) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-emerald-400/60'] {
+  border-color: rgba(52, 211, 153, 0.6) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-emerald-400/40'] {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-[#15DCFF]/60'] {
+  border-color: rgba(21, 220, 255, 0.6) !important;
+}
+
+html:not(.dark) body .react-flow__node .ad_factory_card.workspace-card[class*='border-[#15DCFF]/40'] {
+  border-color: rgba(21, 220, 255, 0.4) !important;
+}
+
+/* Campaign Objectives form: Workspace greige field system. Scoped to
+   this form so global inputs and dark mode retain their existing treatment. */
+html:not(.dark) body .adfactory-objectives-form .adfactory-objectives-input:not(.border-red-500),
+html:not(.dark) body .adfactory-objectives-form .adfactory-tag-field:not(.border-red-500) {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form .adfactory-objectives-input:not(.border-red-500):focus,
+html:not(.dark) body .adfactory-objectives-form .adfactory-tag-field:not(.border-red-500):focus-within {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form :is(
+  .adfactory-objectives-input,
+  .adfactory-tag-field
+).border-red-500 {
+  background: rgba(254, 226, 226, 0.5) !important;
+  border-color: rgba(220, 38, 38, 0.58) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form .adfactory-tag-input,
+html:not(.dark) body .adfactory-objectives-form .adfactory-tag-input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form .adfactory-tag-chip {
+  background: var(--ws-surface-hover) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form .adfactory-suggestion-chip {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: none !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-objectives-form .adfactory-suggestion-chip:hover {
+  background: var(--ws-surface-hover) !important;
+  border-color: var(--ws-border-strong) !important;
+  transform: none !important;
+}
+
+/* Services Selection quantity controls: use the same greige field surface
+   as the other Ad Factory forms without changing shared inputs elsewhere. */
+html:not(.dark) body .adfactory-services-form .input-gradient-border {
+  padding: 0;
+}
+
+html:not(.dark) body .adfactory-services-form .input-gradient-border::after {
+  display: none;
+}
+
+html:not(.dark) body .adfactory-services-form .adfactory-services-input {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-services-form .adfactory-services-input:focus {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+/* Start Campaign dialog: align its two text fields with the restrained
+   greige Ad Factory form system without affecting shared dialogs. */
+html:not(.dark) body .adfactory-start-form .adfactory-start-input:not(.border-red-500) {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-start-form .adfactory-start-input:not(.border-red-500):focus {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+html:not(.dark) body .adfactory-start-form .adfactory-start-input.border-red-500 {
+  background: rgba(254, 226, 226, 0.5) !important;
+  border-color: rgba(220, 38, 38, 0.58) !important;
+  box-shadow: none !important;
+}
+
+/* Run on Schedule: semantic native inputs opt out of the global near-white
+   field layer and retain the automation form's readable neutral treatment. */
+html:not(.dark) body .adfactory-automation-form .adfactory-automation-input {
+  color: var(--ws-text-primary) !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-automation-form .adfactory-automation-input:focus {
+  color: var(--ws-text-primary) !important;
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+/* Shared light popup shell. Opt-in only: use on dialog/modal roots that should
+   match the Workspace invite surface without restyling ordinary cards. */
+html:not(.dark) body .light-glass-dialog {
+  background: rgba(247, 244, 238, 0.86) !important;
+  border-color: rgba(221, 215, 205, 0.9) !important;
+  box-shadow: 0 20px 50px rgba(80, 70, 58, 0.12) !important;
+  backdrop-filter: blur(24px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.04) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog .adfactory-campaign-dialog-input {
+  color: var(--ws-text-primary) !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog .adfactory-campaign-dialog-input:focus {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog .adfactory-campaign-dialog-secondary {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: 0 2px 6px rgba(80, 70, 58, 0.05) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-campaign-dialog .adfactory-campaign-dialog-secondary:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+/* Brand Info form: use the same restrained greige controls as Campaign
+   Objectives. The selector variant also marks its portalled dropdown so the
+   treatment remains local to this form and shared BrandSelect usages retain
+   their existing appearance. */
+html:not(.dark) body .adfactory-brand-form .input-gradient-border {
+  padding: 0;
+}
+
+html:not(.dark) body .adfactory-brand-form .input-gradient-border::after {
+  display: none;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-field:not(.border-red-500),
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-tag-field:not(.border-red-500),
+html:not(.dark) body .adfactory-brand-select .adfactory-brand-select-control {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-field:not(.border-red-500):focus,
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-tag-field:not(.border-red-500):focus-within,
+html:not(.dark) body .adfactory-brand-select .adfactory-brand-select-control:focus-within {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+html:not(.dark) body .adfactory-brand-form :is(
+  .adfactory-brand-field,
+  .adfactory-brand-tag-field
+).border-red-500 {
+  background: rgba(254, 226, 226, 0.5) !important;
+  border: 1px solid rgba(220, 38, 38, 0.58) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-tag-input,
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-tag-input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-tag-chip {
+  background: var(--ws-surface-hover) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-suggestion-chip {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: none !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-suggestion-chip:hover {
+  background: var(--ws-surface-hover) !important;
+  border-color: var(--ws-border-strong) !important;
+  transform: none !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-upload-button {
+  background: var(--ws-surface-control) !important;
+  box-shadow: none !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-brand-form .adfactory-brand-upload-button:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+html:not(.dark) body .adfactory-brand-select-popover {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-md) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:not(.dark) body .adfactory-brand-select-popover [data-slot='command-item'] {
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) body .adfactory-brand-select-popover [data-slot='command-item']:is(:hover, [data-selected='true']) {
+  background: var(--ws-surface-hover) !important;
+}
+
+/* AI Creatives custom form: keep light-mode fields and panel edges neutral.
+   The upload rows are one control, so their embedded URL input stays clear. */
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-shell {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-md) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-reference-card {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card:focus-within {
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+}
+
+html:not(.dark) body .adcreative-custom-form {
+  --adcreative-text-field-bg: var(--ws-surface-control);
+  --adcreative-text-field-border: var(--ws-border);
+  --adcreative-text-field-focus-border: var(--ws-border-strong);
+  --adcreative-text-field-shadow: none;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input {
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+  background: var(--adcreative-text-field-bg) !important;
+  border: 1px solid var(--adcreative-text-field-border) !important;
+  box-shadow: var(--adcreative-text-field-shadow) !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input:focus {
+  background: var(--adcreative-text-field-bg) !important;
+  border-color: var(--adcreative-text-field-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-text-field-shadow) !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-upload-field {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor {
+  background: var(--ws-surface-control) !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor:hover {
+  background: var(--ws-surface-hover) !important;
+}
+
+html:not(.dark) body .templates-search-input,
+html:not(.dark) body input.templates-search-input,
+html:not(.dark) body input[placeholder*="Search all templates"] {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+}
+
+/* Ad Creative field system: every card uses the same neutral text-field
+   tokens. Composed upload/URL rows deliberately expose one outer surface,
+   matching the Model Reference Images control. */
+html:not(.dark) body .adcreative-field-system {
+  --adcreative-field-bg: var(--ws-surface-control);
+  --adcreative-field-border: var(--ws-border);
+  --adcreative-field-focus-border: var(--ws-border-strong);
+  --adcreative-field-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05);
+}
+
+html:not(.dark) body .adcreative-field-system input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']),
+html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not([class*='bg-transparent']),
+html:not(.dark) body .adcreative-field-system select {
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+  background: var(--adcreative-field-bg) !important;
+  border: 1px solid var(--adcreative-field-border) !important;
+  box-shadow: var(--adcreative-field-shadow) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-field-system input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
+html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
+html:not(.dark) body .adcreative-field-system select:focus {
+  background: var(--adcreative-field-bg) !important;
+  border-color: var(--adcreative-field-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-field-shadow) !important;
+}
+
+html:not(.dark) body .adcreative-field-system .adcreative-composed-field {
+  background: var(--adcreative-field-bg) !important;
+  border: 1px solid var(--adcreative-field-border) !important;
+  box-shadow: var(--adcreative-field-shadow) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-field-system .adcreative-composed-field:focus-within {
+  border-color: var(--adcreative-field-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-field-shadow) !important;
+}
+
+html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input,
+html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input:focus {
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input::placeholder {
+  color: var(--ws-text-secondary) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UNIVERSAL ADS MANAGER & PLATFORM SURFACES — WORKSPACE LIGHT MODE ALIGNMENT
+   ─────────────────────────────────────────────────────────────────────────
+   Scope: html:not(.dark) ONLY — dark mode is ZERO-TOUCHED
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Universal overrides for legacy hardcoded cool-grey utility classes in Light Mode */
+html:not(.dark) [class*="bg-[#f0f3f6]"],
+html:not(.dark) [class*="bg-[#eef1f4]"],
+html:not(.dark) [class*="bg-[#f3f4f6]"],
+html:not(.dark) [class*="bg-[#f6f7fb]"] {
+  background-color: var(--ws-surface) !important;
+  border-color: var(--ws-border) !important;
+}
+
+html:not(.dark) [class*="bg-[#e2e7ec]"],
+html:not(.dark) [class*="bg-[#d8dee5]"],
+html:not(.dark) [class*="bg-[#e6e9ee]"],
+html:not(.dark) [class*="bg-[#E4E8EC]"],
+html:not(.dark) [class*="bg-[#EEF1F3]"],
+html:not(.dark) [class*="bg-[#e2e6ed]"],
+html:not(.dark) [class*="bg-[#d8dce4]"],
+html:not(.dark) [class*="bg-[#dce1e8]"],
+html:not(.dark) [class*="bg-[#ccd3dc]"],
+html:not(.dark) [class*="bg-[#dce0e8]"],
+html:not(.dark) [class*="bg-[#cbd3dc]"] {
+  background-color: var(--ws-surface-secondary) !important;
+  border-color: var(--ws-border) !important;
+}
+
+/* Hover overrides for interactive legacy cool-grey items */
+html:not(.dark) [class*="hover:bg-[#d8dee5]"]:hover,
+html:not(.dark) [class*="hover:bg-[#E4E8EC]"]:hover,
+html:not(.dark) [class*="hover:bg-[#d8dce4]"]:hover,
+html:not(.dark) [class*="hover:bg-[#ccd3dc]"]:hover,
+html:not(.dark) [class*="hover:bg-[#dce0e8]"]:hover,
+html:not(.dark) [class*="hover:bg-[#e2e7ec]"]:hover {
+  background-color: var(--ws-surface-hover) !important;
+}
+
+/* Ads Manager Platform Picker */
+html:not(.dark) .platform-picker-card,
+html:not(.dark) div:has(> .platform-coming-soon) {
+  border-color: var(--ws-border) !important;
+}
+
+/* Table containers in Meta Ads, Google Ads, TikTok Ads */
+html:not(.dark) table {
+  background-color: var(--ws-surface) !important;
+}
+
+html:not(.dark) table thead,
+html:not(.dark) table thead tr,
+html:not(.dark) table thead th {
+  background-color: var(--ws-surface-secondary) !important;
+  color: var(--ws-text-secondary) !important;
+  border-color: var(--ws-border) !important;
+}
+
+html:not(.dark) table tbody tr {
+  border-color: var(--ws-border) !important;
+  background-color: var(--ws-surface) !important;
+}
+
+html:not(.dark) table tbody tr:hover {
+  background-color: var(--ws-surface-hover) !important;
+}
+
+/* Google Ads loading and empty rows do not open a campaign, so they should not
+   receive the table's generic ivory hover feedback. */
+html:not(.dark) table tbody tr.google-ads-table-static-row:hover {
+  background-color: var(--ws-surface) !important;
+}
+
+/* Meta Ads uses the same static loading and empty rows. Keep them visually
+   neutral while preserving hover feedback for interactive campaign rows. */
+html:not(.dark) table tbody tr.meta-ads-table-static-row:hover {
+  background-color: var(--ws-surface) !important;
+}
+
+/* The date-range picker owns the visual border around each date value. Keep
+   its nested native input clear so global light-mode field rules cannot draw
+   a competing border or focus shadow inside the purple active state. */
+html:not(.dark) #root .rdrDateDisplayItem .rdrDateInput > input,
+html:not(.dark) #root .rdrDateDisplayItem .rdrDateInput > input:focus,
+html:not(.dark) #root .rdrDateDisplayItem .rdrDateInput > input:focus-visible {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Ensure breadcrumbs and header text have high contrast */
+html:not(.dark) .text-gray-900,
+html:not(.dark) .text-zinc-900,
+html:not(.dark) .text-gray-800,
+html:not(.dark) .text-zinc-800 {
+  color: var(--ws-text-primary);
+}
+
+html:not(.dark) .text-gray-500,
+html:not(.dark) .text-zinc-500,
+html:not(.dark) .text-gray-600,
+html:not(.dark) .text-zinc-600 {
+  color: var(--ws-text-secondary);
+}
+
+/* Route-level light ambients: paint inside the UI stacking context so every
+   transparent page section reveals the design while controls stay above it. */
+html:not(.dark) .light-ambient-ui-layer {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  background: transparent !important;
+}
+
+html:not(.dark) .light-ambient-ui-layer::before,
+html:not(.dark) .light-ambient-ui-layer::after {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9999px;
+}
+
+/* Ads Manager keeps its cyan/indigo upper glow and lavender lower wave. */
+html:not(.dark) .ads-manager-ui-layer::before {
+  top: -18vh;
+  right: 5vw;
+  width: min(58vw, 820px);
+  height: min(46vw, 650px);
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(21, 220, 255, 0.2) 0%,
+    rgba(94, 102, 245, 0.15) 38%,
+    rgba(94, 102, 245, 0.06) 58%,
+    transparent 76%
+  );
+  filter: blur(42px);
+}
+
+/* Lavender/indigo glow rising from the bottom-center. The existing slow wave
+   animation is reused so its timing and movement stay consistent. */
+html:not(.dark) .ads-manager-ui-layer::after {
+  bottom: -34vh;
+  left: 50%;
+  width: 120vw;
+  height: 82vh;
+  background: radial-gradient(
+    ellipse 48% 58% at 50% 68%,
+    rgba(107, 114, 248, 0.3) 0%,
+    rgba(124, 77, 237, 0.18) 40%,
+    rgba(177, 159, 230, 0.08) 60%,
+    transparent 78%
+  );
+  filter: blur(34px);
+}
+
+/* Shared Ads Manager / Autopilot divider: keep header, summary, and tab
+   separators legible over the ambient gradient without opaque panels. */
+html:not(.dark) .ads-manager-ui-layer .ads-operations-divider {
+  border-bottom-color: var(--ws-border-strong) !important;
+}
+
+/* BrandIQ uses an asymmetric teal-violet aura. The small cyan highlight in
+   the lower wave gives the page its own brand-intelligence signature. */
+html:not(.dark) .brandiq-ui-layer::before {
+  top: -12vh;
+  right: 16vw;
+  width: min(45vw, 650px);
+  height: min(31vw, 440px);
+  background:
+    radial-gradient(
+      ellipse at 34% 46%,
+      rgba(2, 200, 196, 0.2) 0%,
+      rgba(21, 220, 255, 0.09) 38%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse at 72% 38%,
+      rgba(124, 77, 237, 0.16) 0%,
+      rgba(94, 102, 245, 0.08) 42%,
+      transparent 72%
+    );
+  filter: blur(32px);
+}
+
+html:not(.dark) .brandiq-ui-layer::after {
+  bottom: -32vh;
+  left: 54%;
+  width: 124vw;
+  height: 84vh;
+  background:
+    radial-gradient(
+      ellipse 22% 32% at 63% 60%,
+      rgba(21, 220, 255, 0.14) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 50% 60% at 50% 70%,
+      rgba(94, 102, 245, 0.29) 0%,
+      rgba(124, 77, 237, 0.17) 40%,
+      rgba(177, 159, 230, 0.07) 60%,
+      transparent 78%
+    );
+  filter: blur(36px);
+}
+
+/* Ad Studio keeps the shared cyan-indigo identity but adds a restrained rose
+   accent for a more creative, spectrum-like signature. The upper treatment
+   stays compact so editor canvases and intentional preview artwork dominate. */
+html:not(.dark) .adstudio-ui-layer::before {
+  top: -10vh;
+  left: 15vw;
+  width: min(44vw, 630px);
+  height: min(30vw, 430px);
+  background:
+    radial-gradient(
+      ellipse at 28% 44%,
+      rgba(21, 220, 255, 0.18) 0%,
+      rgba(2, 200, 196, 0.07) 40%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse at 74% 38%,
+      rgba(94, 102, 245, 0.15) 0%,
+      rgba(210, 111, 219, 0.09) 38%,
+      transparent 72%
+    );
+  filter: blur(32px);
+}
+
+html:not(.dark) .adstudio-ui-layer::after {
+  bottom: -32vh;
+  left: 49%;
+  width: 118vw;
+  height: 82vh;
+  background:
+    radial-gradient(
+      ellipse 18% 28% at 32% 62%,
+      rgba(21, 220, 255, 0.15) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 18% 26% at 69% 64%,
+      rgba(210, 111, 219, 0.14) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 48% 58% at 50% 70%,
+      rgba(94, 102, 245, 0.33) 0%,
+      rgba(124, 77, 237, 0.2) 42%,
+      rgba(177, 159, 230, 0.09) 60%,
+      transparent 78%
+    );
+  filter: blur(31px);
+}
+
+/* Workspace Members uses a calm cyan-indigo upper aura and a centered
+   lavender wave. Its local warm header glow remains visible as a subtle
+   Workspace-specific detail, while cards keep their opaque warm surfaces. */
+html:not(.dark) .workspace-ui-layer .workspace-members-page {
+  background: transparent !important;
+}
+
+/* The header is already outside the scrolling content, so sticky positioning
+   is unnecessary here and can create a one-pixel compositing seam over the
+   transparent Workspace gradient. Keep it stationary without that layer. */
+html:not(.dark) .workspace-ui-layer .lm-header-surface {
+  position: relative !important;
+  top: auto !important;
+}
+
+html:not(.dark) .workspace-ui-layer::before {
+  top: -12vh;
+  right: 12vw;
+  width: min(43vw, 620px);
+  height: min(31vw, 450px);
+  background:
+    radial-gradient(
+      ellipse at 36% 44%,
+      rgba(21, 220, 255, 0.17) 0%,
+      rgba(2, 200, 196, 0.07) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at 72% 38%,
+      rgba(94, 102, 245, 0.13) 0%,
+      rgba(124, 77, 237, 0.06) 42%,
+      transparent 72%
+    );
+  filter: blur(34px);
+}
+
+html:not(.dark) .workspace-ui-layer::after {
+  bottom: -30vh;
+  left: 51%;
+  width: 120vw;
+  height: 82vh;
+  background:
+    radial-gradient(
+      ellipse 20% 28% at 61% 62%,
+      rgba(21, 220, 255, 0.11) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 49% 59% at 50% 70%,
+      rgba(94, 102, 245, 0.29) 0%,
+      rgba(124, 77, 237, 0.17) 42%,
+      rgba(177, 159, 230, 0.08) 60%,
+      transparent 78%
+    );
+  filter: blur(33px);
+}
+
+/* My Space uses an airy sky/periwinkle upper aura and a soft media-library
+   wave with a mint-cyan side highlight. Gallery media remains fully opaque. */
+html:not(.dark) .my-space-ui-layer .my-space-media-card {
+  border: 0 !important;
+  isolation: isolate;
+}
+
+html:not(.dark) .my-space-ui-layer .my-space-media-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: inherit;
+}
+
+html:not(.dark) .my-space-ui-layer::before {
+  top: -9vh;
+  right: 12vw;
+  width: min(41vw, 590px);
+  height: min(29vw, 420px);
+  background:
+    radial-gradient(
+      ellipse at 34% 42%,
+      rgba(84, 190, 255, 0.17) 0%,
+      rgba(21, 220, 255, 0.07) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at 72% 40%,
+      rgba(121, 132, 246, 0.15) 0%,
+      rgba(94, 102, 245, 0.06) 42%,
+      transparent 72%
+    );
+  filter: blur(32px);
+}
+
+html:not(.dark) .my-space-ui-layer::after {
+  bottom: -31vh;
+  left: 50%;
+  width: 116vw;
+  height: 80vh;
+  background:
+    radial-gradient(
+      ellipse 21% 29% at 34% 62%,
+      rgba(83, 215, 195, 0.13) 0%,
+      rgba(21, 220, 255, 0.05) 42%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 48% 58% at 50% 70%,
+      rgba(121, 132, 246, 0.3) 0%,
+      rgba(94, 102, 245, 0.17) 42%,
+      rgba(177, 159, 230, 0.08) 60%,
+      transparent 78%
+    );
+  filter: blur(32px);
+}
+
+/* Account keeps a professional cyan-blue upper aura and a restrained
+   indigo-lavender lower wave. Profile cards and data surfaces stay opaque. */
+html:not(.dark) .account-ui-layer .workspace-profile-page {
+  background: transparent !important;
+}
+
+html:not(.dark) .account-ui-layer::before {
+  top: -10vh;
+  right: 10vw;
+  width: min(42vw, 610px);
+  height: min(30vw, 440px);
+  background:
+    radial-gradient(
+      ellipse at 36% 44%,
+      rgba(21, 220, 255, 0.16) 0%,
+      rgba(58, 145, 183, 0.08) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at 72% 38%,
+      rgba(63, 81, 181, 0.14) 0%,
+      rgba(94, 102, 245, 0.06) 42%,
+      transparent 72%
+    );
+  filter: blur(33px);
+}
+
+html:not(.dark) .account-ui-layer::after {
+  bottom: -26vh;
+  left: 50%;
+  width: 118vw;
+  height: 82vh;
+  background:
+    radial-gradient(
+      ellipse 20% 28% at 62% 62%,
+      rgba(2, 200, 196, 0.16) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 49% 59% at 50% 70%,
+      rgba(94, 102, 245, 0.37) 0%,
+      rgba(124, 77, 237, 0.22) 42%,
+      rgba(177, 159, 230, 0.11) 60%,
+      transparent 78%
+    );
+  filter: blur(33px);
+}
+
+html:not(.dark) .light-ambient-ui-layer::after {
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  animation: aia-bottom-wave 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+html:not(.dark) .light-ambient-ui-layer > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.dark) .light-ambient-ui-layer::after {
+    animation: none;
+    transform: translateX(-50%);
+    will-change: auto;
+  }
 }

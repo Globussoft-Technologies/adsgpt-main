@@ -142,7 +142,7 @@ const BrandCard = ({ brand }) => {
       initial="initial"
       whileInView="whileInView"
       viewport={{ once: true }}
-      className="rounded-10 backdrop-blur-100 relative overflow-hidden border border-black/10 bg-white text-gray-900 shadow-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white dark:shadow-none"
+      className="brand-iq-card rounded-10 relative overflow-hidden border border-[#DDD7CD] bg-[var(--ws-surface)] text-[#24211D] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.06),0_2px_6px_-1px_rgba(80,70,58,0.03)] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white dark:shadow-none"
     >
       {/* Top Banner */}
       <div className="relative h-64 w-full 2xl:h-72">
@@ -321,7 +321,7 @@ const BrandCard = ({ brand }) => {
               href={brand?.websiteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
+              className="brand-iq-card-action icon_container flex h-6 w-6 items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:bg-[#F3EFE9] dark:border-0 dark:bg-[#2A2A2A]"
             >
               <Globe className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
             </a>
@@ -332,7 +332,7 @@ const BrandCard = ({ brand }) => {
                 href={brand?.facebookUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
+                className="brand-iq-card-action icon_container flex h-6 w-6 items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:bg-[#F3EFE9] dark:border-0 dark:bg-[#2A2A2A]"
               >
                 <Facebook className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
@@ -344,7 +344,7 @@ const BrandCard = ({ brand }) => {
                 href={brand?.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
+                className="brand-iq-card-action icon_container flex h-6 w-6 items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:bg-[#F3EFE9] dark:border-0 dark:bg-[#2A2A2A]"
               >
                 <Instagram className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
@@ -356,7 +356,7 @@ const BrandCard = ({ brand }) => {
                 href={brand?.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="icon_container flex h-6 w-6 items-center justify-center rounded-md bg-black/5 p-1 dark:bg-[#2A2A2A]"
+                className="brand-iq-card-action icon_container flex h-6 w-6 items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:bg-[#F3EFE9] dark:border-0 dark:bg-[#2A2A2A]"
               >
                 <Linkedin className="h-[14px] w-[14px] cursor-pointer text-gray-500 hover:text-black dark:text-white/60 dark:hover:text-white" />
               </a>
@@ -370,7 +370,7 @@ const BrandCard = ({ brand }) => {
           <button
             id="tour_edit_brand"
             type="button"
-            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-black/10 bg-black/5 p-1 hover:border-black/20 hover:text-green-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-green-400"
+            className="brand-iq-card-action icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:border-[#C8C1B4] hover:text-green-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-green-400"
             onClick={handleEdit}
           >
             <SquarePen className="h-[14px] w-[14px]" />
@@ -380,7 +380,7 @@ const BrandCard = ({ brand }) => {
           <button
             id="tour_delete_brand"
             type="button"
-            className="icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-black/10 bg-black/5 p-1 hover:border-black/20 hover:text-red-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-red-400"
+            className="brand-iq-card-action icon_container backdrop-blur-80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#DDD7CD] bg-white p-1 hover:border-[#C8C1B4] hover:text-red-600 dark:border-white/20 dark:bg-[#353535]/50 dark:hover:border-white/20 dark:hover:text-red-400"
             onClick={() => {
               setIsDialogOpen(true);
               dispatch(setBrandIQError(null));

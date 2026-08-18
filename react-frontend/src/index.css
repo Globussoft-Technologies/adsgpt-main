@@ -19,7 +19,7 @@
 @custom-variant dark (&:is(.dark *));
 
 html {
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 @theme inline {
@@ -74,37 +74,77 @@ html {
 
 :root {
   --radius: 0.625rem;
-  --background: #f5f6f8;
+  /* Base canvas — Warm Ivory background */
+  --background: #F7F4EE;
   --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
+
+  /* Card / surface — Cream White */
+  --card: #FCFAF7;
   --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
+
+  /* Popover / dropdown / select panel — Cream White */
+  --popover: #FCFAF7;
   --popover-foreground: oklch(0.129 0.042 264.695);
+
   --primary: oklch(0.208 0.042 265.755);
   --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
+
+  /* Secondary / muted — Light Greige tint */
+  --secondary: #EAE5DC;
   --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
+  --muted: #E5DFD5;
   --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
+
+  /* Accent — Warm Ivory hover state */
+  --accent: #F2ECE1;
   --accent-foreground: oklch(0.208 0.042 265.755);
+
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
+
+  /* Border — subtle warm gray */
+  --border: rgba(90, 80, 68, 0.08);
+  --input: rgba(90, 80, 68, 0.08);
   --ring: oklch(0.704 0.04 256.788);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar: #F7F4EE;
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-primary: oklch(0.208 0.042 265.755);
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent: #EAE5DC;
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-border: rgba(90, 80, 68, 0.07);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* ── Workspace Palette — Light Mode Source of Truth ─────────────────────
+     These are the canonical Warm Ivory / Greige / Cream tokens used by the
+     Workspace page. All Light Mode surfaces across the entire app reference
+     these variables. Dark Mode NEVER uses these tokens.
+     ───────────────────────────────────────────────────────────────────── */
+  --ws-bg:                #F7F4EE; /* Warm Ivory — page / main background        */
+  --ws-surface:           #FCFAF7; /* Cream White — card / modal content surface  */
+  --ws-surface-header:    #F8F5EF; /* Soft Ivory — section and card headers       */
+  --ws-surface-control:   #F6F2EC; /* Soft Light Greige — inputs and dropdown panels */
+  --ws-surface-secondary: var(--ws-surface-header);  /* Legacy header alias       */
+  --ws-surface-tertiary:  var(--ws-surface-control); /* Legacy control alias      */
+  --ws-surface-hover:     #E5DFD5; /* Row hover / interactive hover               */
+  --ws-surface-muted:     #EAE5DC; /* Muted surface / secondary action            */
+  --ws-border:            #DDD7CD; /* Default border                              */
+  --ws-border-strong:     #C8C1B4; /* Elevated / focus border                     */
+  --ws-text-primary:      #24211D; /* Primary text                                */
+  --ws-text-secondary:    #7A7369; /* Secondary / muted text                      */
+  --ws-text-muted:        #8C8478; /* Very muted / hint text                      */
+  --ws-shadow:            0 4px 20px -2px rgba(80,70,58,0.05), 0 2px 6px -1px rgba(80,70,58,0.03);
+  --ws-shadow-sm:         0 1px 3px rgba(80,70,58,0.04);
+  --ws-shadow-md:         0 8px 24px -2px rgba(80,70,58,0.08), 0 4px 10px -1px rgba(80,70,58,0.04);
+  --ws-shadow-inner:      inset 0 1px 2px rgba(80,70,58,0.03);
+  --ws-input-bg:          var(--ws-surface-control); /* Input / field background  */
+  --ws-input-border:      rgba(180,168,152,0.45); /* Input border — warm grey     */
+  --ws-input-focus-border:rgba(140,132,120,0.65); /* Input focus border           */
+  --ws-input-focus-ring:  rgba(180,168,152,0.18); /* Input focus ring glow        */
 }
 
 .dark {
@@ -262,6 +302,85 @@ html.theme-changing *::after {
   }
   .scrollbar-auto-hide::-webkit-scrollbar-track {
     background: transparent;
+  }
+
+  /* ───────────────────────────────────────────────────────────────────────
+     Global Warm Ivory & Creamy White Card Design System
+     Light Mode ONLY — Dark Mode is NEVER touched here.
+     ─────────────────────────────────────────────────────────────────────
+  */
+  html:not(.dark) .workspace-card,
+  html:not(.dark) .ad_factory_card,
+  html:not(.dark) .lm-card {
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid #DDD7CD;
+    background-color: #FCFAF7;
+    box-shadow:
+      0 4px 20px -2px rgba(80, 70, 58, 0.05),
+      0 2px 6px -1px rgba(80, 70, 58, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  html:not(.dark) .workspace-card-inner,
+  html:not(.dark) .lm-card-inner {
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid #DDD7CD;
+    background-color: #EAE5DC;
+    box-shadow: inset 0 1px 2px rgba(80, 70, 58, 0.03);
+  }
+
+  html:not(.dark) .workspace-pill {
+    border-radius: 0.5rem;
+    border: 1px solid #DDD7CD;
+    background-color: #FCFAF7;
+    padding: 0.25rem 0.625rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: #3D3831;
+    box-shadow: 0 1px 2px rgba(80, 70, 58, 0.04);
+  }
+
+  /* Premium Warm Ivory Left Sidebar - Light Mode Only */
+  html:not(.dark) .lm-sidebar-surface {
+    position: relative;
+    background: #F7F4EE !important;
+    border-right: none !important;
+    box-shadow: none !important;
+    backdrop-filter: blur(24px) !important;
+  }
+
+  html:not(.dark) .lm-sidebar-surface::before {
+    display: none !important;
+  }
+
+  /* Vertical right-edge border that fades at upper & lower edges and stays visible in the middle */
+  html:not(.dark) .lm-sidebar-surface::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent 18%,
+      rgba(200, 193, 180, 0.15) 28%,
+      rgba(190, 182, 169, 0.8) 36%,
+      #C8C1B4 44%,
+      #C8C1B4 66%,
+      rgba(190, 182, 169, 0.8) 74%,
+      rgba(200, 193, 180, 0.2) 84%,
+      transparent 95%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 20;
+    filter: drop-shadow(0 0 5px rgba(94, 102, 245, 0.24));
   }
 }
 

@@ -610,7 +610,7 @@ export default function VideoCard({
 
   return (
     <div
-      className={`group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f] ${
+      className={`my-space-media-card group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f] ${
         isAiAds && item?.status === 'completed' ? 'flex flex-col' : ''
       }`}
     >

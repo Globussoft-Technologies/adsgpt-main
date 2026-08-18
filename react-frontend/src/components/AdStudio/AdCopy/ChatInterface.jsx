@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, Copy, Loader, Repeat, Send } from 'lucide-react';
 import chatResponseIcon from '@/assets/layouts/adstudio/chat-response-dark.svg';
 import ReactMarkdown from 'react-markdown';
@@ -39,11 +39,44 @@ const UserBubble = ({ message }) => {
 const BotMarkdown = ({ message }) => {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
+  const [collapsedHeight, setCollapsedHeight] = useState(BOT_COLLAPSED_HEIGHT);
   const ref = useRef(null);
 
-  useEffect(() => {
-    if (!ref.current) return;
-    setOverflows(ref.current.scrollHeight > BOT_COLLAPSED_HEIGHT + 8);
+  useLayoutEffect(() => {
+    const container = ref.current;
+    if (!container) return undefined;
+
+    const measureCollapsedContent = () => {
+      const hasOverflow = container.scrollHeight > BOT_COLLAPSED_HEIGHT + 8;
+      setOverflows(hasOverflow);
+
+      if (!hasOverflow) {
+        setCollapsedHeight(BOT_COLLAPSED_HEIGHT);
+        return;
+      }
+
+      const containerTop = container.getBoundingClientRect().top;
+      const range = document.createRange();
+      range.selectNodeContents(container);
+
+      const completeLineBottoms = Array.from(range.getClientRects())
+        .map((rect) => rect.bottom - containerTop)
+        .filter((bottom) => bottom > 0 && bottom <= BOT_COLLAPSED_HEIGHT + 0.5);
+      const lastCompleteLineBottom = Math.max(...completeLineBottoms);
+
+      setCollapsedHeight(
+        Number.isFinite(lastCompleteLineBottom)
+          ? Math.max(1, Math.floor(lastCompleteLineBottom))
+          : BOT_COLLAPSED_HEIGHT,
+      );
+    };
+
+    measureCollapsedContent();
+
+    const resizeObserver = new ResizeObserver(measureCollapsedContent);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
   }, [message]);
 
   return (
@@ -52,12 +85,10 @@ const BotMarkdown = ({ message }) => {
         ref={ref}
         style={
           overflows && !expanded
-            ? { maxHeight: BOT_COLLAPSED_HEIGHT, overflow: 'hidden' }
-            : undefined
-        }
-        className={
-          overflows && !expanded
-            ? 'relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-12 after:bg-gradient-to-t after:from-white after:to-transparent dark:after:from-[#0f0f0f]'
+            ? {
+                maxHeight: collapsedHeight,
+                overflow: 'hidden',
+              }
             : undefined
         }
       >

@@ -62,6 +62,20 @@
   will-change: transform;
 }
 
+.aia-bg-bottom-aura {
+  position: fixed;
+  bottom: -22vh;
+  left: 50%;
+  z-index: 0;
+  width: 116vw;
+  height: 70vh;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  animation: aia-bottom-wave 18s ease-in-out infinite;
+  will-change: transform;
+}
+
 @keyframes aia-bottom-wave {
   0%,
   100% {
@@ -80,10 +94,54 @@
 
 @media (prefers-reduced-motion: reduce) {
   .aia-bg-blob,
-  .aia-bg-bottom {
+  .aia-bg-bottom,
+  .aia-bg-bottom-aura {
     animation: none;
   }
-  .aia-bg-bottom {
+  .aia-bg-bottom,
+  .aia-bg-bottom-aura {
     transform: translateX(-50%);
+  }
+}
+
+/* Light mode optimizations: soft, seamless radial mask so the top and edges
+   never produce a sharp horizontal line against the Warm Ivory canvas. */
+html:not(.dark) .aia-bg-bottom {
+  opacity: 0.52;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 60%, black 32%, transparent 86%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 60%, black 32%, transparent 86%);
+}
+
+html:not(.dark) .aia-bg-bottom-aura {
+  background:
+    radial-gradient(
+      ellipse 48% 62% at 50% 88%,
+      rgba(94, 102, 245, 0.34) 0%,
+      rgba(124, 77, 237, 0.2) 43%,
+      rgba(177, 159, 230, 0.1) 62%,
+      transparent 80%
+    ),
+    radial-gradient(
+      ellipse 23% 30% at 66% 72%,
+      rgba(21, 220, 255, 0.2) 0%,
+      rgba(40, 188, 252, 0.08) 45%,
+      transparent 76%
+    );
+  opacity: 0.72;
+  filter: blur(34px);
+}
+
+.dark .aia-bg-bottom-aura {
+  display: none;
+}
+
+html:not(.dark) .aia-bg-blob {
+  opacity: 0.48;
+  filter: blur(120px);
+}
+
+@media (min-width: 1280px) {
+  html:not(.dark) .aia-bg-bottom {
+    opacity: 0.68;
   }
 }

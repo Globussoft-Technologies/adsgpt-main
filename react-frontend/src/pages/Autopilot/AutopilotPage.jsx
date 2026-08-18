@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FaMeta } from 'react-icons/fa6';
 import {
   Compass,
   TrendingUp,
@@ -22,6 +23,8 @@ import AutopilotSettings from '@/components/Autopilot/AutopilotSettings';
 // import AutopilotRotationQueue from '@/components/Autopilot/AutopilotRotationQueue';
 import AutopilotLLMAudit from '@/components/Autopilot/LLMAudit/AutopilotLLMAudit';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
+import ThemeToggle from '@/components/layout/header/ThemeToggle';
 import FacebookAccountSelector from '@/components/MetaAds/FacebookAccountSelector';
 import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
 import { getAdAccounts, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
@@ -312,31 +315,24 @@ const AutopilotPage = () => {
           of capping mid-screen on wide displays. Horizontal padding scales
           with the viewport; Overview / Action log / Settings follow the
           same scale. */}
-      <div className="relative z-50 shrink-0">
-        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6 2xl:py-5">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 dark:border-white/10 2xl:h-11 2xl:w-11">
-            <Compass className="h-5 w-5 text-[#15DCFF] 2xl:h-5.5 2xl:w-5.5" />
-          </div>
-          <div className="flex flex-col gap-3">
+      <div className="ads-operations-divider relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 pr-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm 2xl:h-12 2xl:w-12 dark:border-white/10">
+              <FaMeta className="h-7 w-7 text-[#0082FB] 2xl:h-7.5 2xl:w-7.5" />
+            </div>
             <AdsManagerModeSwitcher
               activeMode="autopilot"
               platform="Meta"
               autopilotAvailable
-              appearance="tabs"
             />
-            <p className="text-13 leading-relaxed text-gray-500 dark:text-white/70 2xl:text-sm">
-              Set budget. Set objective. Walk away.
-            </p>
           </div>
+          <p className="px-1 text-xs font-semibold text-gray-700 dark:text-white/85">
+            Set budget. Set objective. Walk away.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* AI Audit's ad-account picker — only rendered on that tab,
-              directly left of the Facebook selector (same order as Ads
-              Manager: account, then Facebook identity). An audit run
-              targets exactly one ad account, so this narrows further than
-              the Facebook-level scope Overview / Action log use below. */}
           {activeTab === 'ai-audit' && (
             <Dropdown
               open={aiAuditAccountOpen}
@@ -347,14 +343,14 @@ const AutopilotPage = () => {
                   type="button"
                   onClick={() => setAiAuditAccountOpen((p) => !p)}
                   disabled={aiAuditAdAccounts.length === 0}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:opacity-50 dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+                  className="flex items-center gap-2 rounded-xl border-0 bg-[#e2e6ed] px-3 py-2 text-xs font-semibold text-gray-900 backdrop-blur-xl transition-all hover:bg-[#d8dce4] disabled:opacity-50 dark:bg-[#171717] dark:text-white dark:hover:bg-white/10"
                 >
-                  <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <Radio className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span className="max-w-45 truncate font-medium">
                     {aiAuditAdAccounts.find((account) => account.id === aiAuditAdAccountId)
                       ?.name ?? 'Pick an account'}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
+                  <ChevronDown className="h-3.5 w-3.5 text-gray-700 dark:text-[#BEBEBE]" />
                 </button>
               }
             >
@@ -390,21 +386,11 @@ const AutopilotPage = () => {
               </div>
             </Dropdown>
           )}
-          {/* Scopes Overview + Action log to one Facebook connection's ad
-              accounts; on AI Audit it's what the ad-account picker above is
-              scoped to. Same component/behavior as Ads Manager's picker —
-              persists the pick across the app via localStorage. */}
+          <WorkspaceSwitcher />
           <FacebookAccountSelector
             userId={userId}
             onChange={setSelectedFacebookAccount}
           />
-          {/* Resolved mode badge — reflects the USER's effective state,
-              not the server env flag in isolation. "Live" only when
-              autopilot is enabled AND dryRunGlobal is off AND the
-              server permits live actions; otherwise "Dry-run" or
-              "Autopilot off". Previously this always read the env
-              flag, which surfaced "Live mode" even when the user had
-              toggled autopilot off on their account — confusing. */}
           {autopilotStatus === 'live' ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-10 font-bold tracking-wide uppercase text-emerald-600 dark:border-emerald-500/20 dark:text-emerald-400 2xl:px-3 2xl:py-1.5 2xl:text-[11px]">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
@@ -421,13 +407,15 @@ const AutopilotPage = () => {
               Autopilot off
             </span>
           )}
+          <div className="ml-1 2xl:ml-2">
+            <ThemeToggle />
+          </div>
 
-        </div>
         </div>
       </div>
 
       {/* ── tabs ──────────────────────────────────────────────────────────── */}
-      <div className="relative z-40 shrink-0 border-b border-gray-200 dark:border-white/8">
+      <div className="ads-operations-divider relative z-40 shrink-0 border-b border-gray-200 dark:border-white/8">
         <div className="w-full px-4 sm:px-5 lg:px-6">
           <div
             role="tablist"
@@ -441,10 +429,10 @@ const AutopilotPage = () => {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveTab(id)}
-                className={`relative flex shrink-0 snap-start items-center gap-1.5 px-3 py-3 text-sm font-semibold transition-all duration-200 2xl:gap-2 2xl:px-4 2xl:py-3.5 2xl:text-15 ${
+                className={`relative flex shrink-0 snap-start items-center gap-1.5 px-3 py-3 text-sm font-bold transition-all duration-200 2xl:gap-2 2xl:px-4 2xl:py-3.5 2xl:text-15 ${
                   isActive
                     ? 'text-gray-900 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/65 dark:hover:text-white/85'
+                    : 'text-gray-700 hover:text-gray-900 dark:text-white/80 dark:hover:text-white'
                 }`}
               >
                 <TabIcon className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />

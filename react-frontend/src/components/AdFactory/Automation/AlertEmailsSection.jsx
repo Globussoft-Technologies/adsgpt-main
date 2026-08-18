@@ -134,40 +134,40 @@ export default function AlertEmailsSection({
 
   return (
     <section
-      className={`flex flex-col gap-2 rounded-xl border border-white/10 bg-white/2 px-4 py-3 transition ${
-        disabled ? 'pointer-events-none opacity-50' : ''
+      className={`flex flex-col gap-2 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition dark:border-white/10 dark:bg-white/2 ${
+        disabled ? 'pointer-events-none opacity-70 dark:opacity-50' : ''
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Mail className="size-4 text-[#15DCFF]" />
-          <h3 className="text-sm font-semibold text-white 2xl:text-base">
+          <h3 className="text-sm font-semibold text-gray-900 2xl:text-base dark:text-white">
             Alert emails
-            <span className="ml-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[#AFAFAF]">
+            <span className="ml-1.5 rounded-full border border-black/10 bg-black/[0.04] px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-[#AFAFAF]">
               optional
             </span>
           </h3>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-[#E3E3E3]">
+        <span className="rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-[#E3E3E3]">
           {tokens.length}/{MAX_RECIPIENTS}
         </span>
       </div>
 
-      <p className="text-[12.5px] leading-relaxed text-[#8a8a90]">
+      <p className="text-[12.5px] leading-relaxed text-gray-600 dark:text-[#8a8a90]">
         Cycle summary after each run — press Enter to add, up to {MAX_RECIPIENTS}.
       </p>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <div
           onClick={() => inputRef.current?.focus()}
-          className={`flex min-h-10 w-full flex-1 cursor-text flex-wrap items-center gap-1.5 rounded-2xl bg-[#383838]/50 px-2.5 py-1.5 text-sm transition focus-within:bg-[#383838]/70 ${
+          className={`flex min-h-10 w-full flex-1 cursor-text flex-wrap items-center gap-1.5 rounded-2xl border border-black/10 bg-gray-200 px-2.5 py-1.5 text-sm transition focus-within:border-slate-500/40 focus-within:bg-gray-200 dark:border-white/10 dark:bg-[#383838]/50 dark:focus-within:bg-[#383838]/70 ${
             draftError ? 'ring-1 ring-red-400/60' : ''
           } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           {tokens.map((token, idx) => (
             <span
               key={`${token}-${idx}`}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#15DCFF]/25 bg-[#15DCFF]/10 py-1 pr-1 pl-3 text-xs text-[#c6f7ff]"
+              className="inline-flex max-w-full items-center gap-1 rounded-full border border-cyan-600/25 bg-cyan-500/10 py-1 pr-1 pl-3 text-xs text-cyan-800 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/10 dark:text-[#c6f7ff]"
             >
               <span className="truncate">{token}</span>
               <button
@@ -203,7 +203,7 @@ export default function AlertEmailsSection({
                   ? 'alice@company.com'
                   : 'Add another…'
             }
-            className="h-7 min-w-30 flex-1 bg-transparent px-1.5 text-white outline-none placeholder:text-[#AFAFAF] disabled:cursor-not-allowed"
+            className="h-7 min-w-30 flex-1 bg-transparent px-1.5 text-gray-900 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed dark:text-white dark:placeholder:text-[#AFAFAF]"
           />
         </div>
 
