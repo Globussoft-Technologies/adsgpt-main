@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Minus, Plus, X } from 'lucide-react';
+import { Loader2, Minus, Plus, X } from 'lucide-react';
 import {
   CollapsibleCard,
   DarkInput,
@@ -377,40 +377,200 @@ export function Disclosure({ title, hint, children, defaultOpen = false }) {
 
 // ─── Images ──────────────────────────────────────────────────────────────────
 
-// v1's "Key visuals" node, which was a BLOCKING upload. Here the page's own
-// imagery has already filled it — this is the review-and-prune view.
-export function ImageStrip({ urls, onChange, max = 20, emptyLabel = 'None found' }) {
+// ImageStrip — a real asset editor, not a read-only strip.
+//
+// This was thumbnails plus a remove button and nothing else: no way to add a
+// logo the scrape missed, no upload, no URL, no competitor visuals. v1's "Key
+// visuals" node has all three, and key visuals are one of the strongest inputs
+// to what the generator actually draws — "review and prune what we found" was
+// too thin a job for it.
+//
+// `max` was also only a DISPLAY cap — `slice(0, max)` hid the overflow while
+// still sending it. Hiding assets that remain in the payload is worse than no
+// limit, so the cap is enforced on the way IN and the count is stated on
+// screen, the way v1 states "4 / 5 assets".
+const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif,image/svg+xml';
+
+export function ImageStrip({
+  urls,
+  onChange,
+  max = 5,
+  emptyLabel = 'None found',
+  onAddCompetitors,
+  uploadFile,
+  formatHint = 'JPG, PNG, WebP, GIF, SVG',
+}) {
   const list = Array.isArray(urls) ? urls.filter(Boolean) : [];
-  if (list.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-xs text-gray-400 dark:border-white/12 dark:text-white/45 2xl:text-13">
-        {emptyLabel}
-      </p>
-    );
-  }
+  const [busy, setBusy] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+  const [showUrl, setShowUrl] = useState(false);
+  const [error, setError] = useState('');
+
+  const full = list.length >= max;
+  const room = max - list.length;
+
+  // Adds are capped and de-duplicated here rather than at each call site —
+  // uploading four files with two slots left must add two, not overflow.
+  const addMany = (incoming) => {
+    const merged = [...list];
+    for (const u of incoming) {
+      if (merged.length >= max) break;
+      if (u && !merged.includes(u)) merged.push(u);
+    }
+    onChange?.(merged);
+  };
+
+  const onFiles = async (files) => {
+    const picked = Array.from(files || []).slice(0, room);
+    if (!picked.length || !uploadFile) return;
+    setBusy(true);
+    setError('');
+    try {
+      const uploaded = await Promise.all(picked.map((f) => uploadFile(f)));
+      addMany(uploaded.filter(Boolean));
+    } catch {
+      setError("That upload didn't work. Try again, or add the image by URL.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addUrl = () => {
+    const u = urlDraft.trim();
+    if (!u) return;
+    if (!/^https?:\/\//i.test(u)) {
+      setError('Paste a full image URL starting with http.');
+      return;
+    }
+    addMany([u]);
+    setUrlDraft('');
+    setShowUrl(false);
+    setError('');
+  };
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {list.slice(0, max).map((url, i) => (
-        <span key={`${url}-${i}`} className="group relative">
-          <img
-            src={url}
-            alt=""
-            loading="lazy"
-            className="h-14 w-14 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-white/10 dark:bg-white/6"
-            onError={(e) => {
-              e.currentTarget.style.opacity = '0.25';
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {list.map((url, i) => (
+          <span key={`${url}-${i}`} className="group relative">
+            <img
+              src={url}
+              alt=""
+              loading="lazy"
+              className="h-14 w-14 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-white/10 dark:bg-white/6"
+              onError={(e) => {
+                e.currentTarget.style.opacity = '0.25';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
+              aria-label="Remove image"
+              className="absolute -top-1.5 -right-1.5 hidden h-5 w-5 place-items-center rounded-full bg-gray-900 text-white group-hover:grid dark:bg-white dark:text-black"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+
+        {/* Only while there is room. A tile that stays put and silently does
+            nothing once you hit the cap is how a limit gets read as a bug. */}
+        {!full && uploadFile && (
+          <label
+            title="Upload from device"
+            className="flex h-14 w-14 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-gray-300 text-gray-400 transition-colors hover:border-[#15DCFF]/40 hover:text-[#15DCFF] dark:border-white/15 dark:text-white/45"
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-10">Upload</span>
+              </>
+            )}
+            <input
+              type="file"
+              accept={IMAGE_TYPES}
+              multiple
+              disabled={busy}
+              onChange={(e) => {
+                onFiles(e.target.files);
+                e.target.value = '';
+              }}
+              className="sr-only"
+            />
+          </label>
+        )}
+
+        {list.length === 0 && !uploadFile && (
+          <p className="rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-xs text-gray-400 dark:border-white/12 dark:text-white/45 2xl:text-13">
+            {emptyLabel}
+          </p>
+        )}
+
+        <span className="ml-auto shrink-0 text-10 text-gray-400 tabular-nums dark:text-white/40">
+          {list.length} / {max}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {!full && (
+          <button
+            type="button"
+            onClick={() => setShowUrl((v) => !v)}
+            className="text-xs font-semibold text-[#6b72f8] underline underline-offset-2 dark:text-[#aeb6ff]"
+          >
+            Add from URL
+          </button>
+        )}
+        {!full && onAddCompetitors && (
+          <button
+            type="button"
+            onClick={onAddCompetitors}
+            className="text-xs font-semibold text-[#6b72f8] underline underline-offset-2 dark:text-[#aeb6ff]"
+          >
+            Use a competitor&apos;s ad
+          </button>
+        )}
+        {full && (
+          <span className="text-xs text-gray-400 dark:text-white/45">
+            {max} is the maximum — remove one to add another.
+          </span>
+        )}
+      </div>
+
+      {showUrl && !full && (
+        <div className="flex items-center gap-2">
+          <input
+            type="url"
+            value={urlDraft}
+            placeholder="https://…/image.jpg"
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addUrl();
+              }
             }}
+            className="h-9 min-w-0 flex-1 rounded-xl border border-gray-300 bg-gray-100 px-3 text-13 text-gray-900 outline-none focus:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/6 dark:text-white"
           />
           <button
             type="button"
-            onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
-            aria-label="Remove image"
-            className="absolute -top-1.5 -right-1.5 hidden h-5 w-5 place-items-center rounded-full bg-gray-900 text-white group-hover:grid dark:bg-white dark:text-black"
+            onClick={addUrl}
+            className="h-9 shrink-0 rounded-xl bg-gray-900 px-3 text-13 font-semibold text-white dark:bg-white dark:text-black"
           >
-            <X className="h-3 w-3" />
+            Add
           </button>
-        </span>
-      ))}
+        </div>
+      )}
+
+      {error ? (
+        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      ) : (
+        uploadFile && (
+          <p className="text-xs text-gray-400 dark:text-white/45">Supported: {formatHint}</p>
+        )
+      )}
     </div>
   );
 }

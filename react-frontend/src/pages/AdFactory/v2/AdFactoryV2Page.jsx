@@ -738,9 +738,35 @@ export default function AdFactoryV2Page() {
                 </span>
               </div>
 
-              <PrimaryBtn onClick={handleGenerate} disabled={!canGenerate} busy={saving}>
-                Generate ads
-              </PrimaryBtn>
+              {/* What this click costs, BEFORE it is clicked.
+                  The estimate has been served with the brief all along and was
+                  only rendered once generation had already started — which is
+                  the one moment it is too late to be useful. Priced by the same
+                  projection the freeze uses, so the quote and the charge cannot
+                  disagree; `null` means unpriceable, and we say nothing rather
+                  than imply it is free. */}
+              <div className="flex flex-wrap items-center gap-4">
+                {estimate?.total != null && (
+                  <span className="flex flex-col gap-0.5 text-right">
+                    <span className="text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
+                      Estimated cost
+                    </span>
+                    <span className="text-13 text-gray-500 dark:text-white/55">
+                      <b className="text-gray-900 tabular-nums dark:text-white">
+                        ~{estimate.total}
+                      </b>{' '}
+                      credits
+                      {estimate.counts
+                        ? ` · ${estimate.counts.image} images + ${estimate.counts.text} copies`
+                        : ''}
+                    </span>
+                  </span>
+                )}
+
+                <PrimaryBtn onClick={handleGenerate} disabled={!canGenerate} busy={saving}>
+                  Generate ads
+                </PrimaryBtn>
+              </div>
             </div>
           )}
 

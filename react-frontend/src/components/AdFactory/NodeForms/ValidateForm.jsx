@@ -22,6 +22,7 @@ import {
 } from '@/store/reducers/AdFactory/AdFactorySlice';
 import { useSearchParams } from 'react-router-dom';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { AD_PLATFORMS } from '@/components/AdFactory/adPlatforms';
 
 const schema = Yup.object().shape({
   platforms: Yup.array()
@@ -39,119 +40,37 @@ const schema = Yup.object().shape({
     .max(10, 'Maximum 10 platforms allowed'),
 });
 
-const availablePlatforms = [
-  {
-    id: 'meta',
-    name: 'meta',
-    icon: FaMeta,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: true,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '4:5', label: '4:5', icon: RectangleVertical },
-      { value: '9:16', label: '9:16', icon: RectangleVertical },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-    ],
-  },
-  {
-    id: 'google',
-    name: 'google',
-    icon: FaGoogle,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-    ],
-  },
-  {
-    id: 'tiktok',
-    name: 'tiktok',
-    icon: AiFillTikTok,
-    iconSize: 'size-7',
-    isLaunchable: false,
-    availableRatios: [{ value: '9:16', label: '9:16', icon: RectangleVertical }],
-  },
-  {
-    id: 'snapchat',
-    name: 'snapchat',
-    icon: FaSnapchat,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '9:16', label: '9:16', icon: RectangleVertical },
-      { value: '1:1', label: '1:1', icon: Square },
-    ],
-  },
-  {
-    id: 'linkedin',
-    name: 'linkedin',
-    icon: FaLinkedin,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-    ],
-  },
-  {
-    id: 'twitter',
-    name: 'twitter',
-    icon: RiTwitterXFill,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-    ],
-  },
-  {
-    id: 'pinterest',
-    name: 'pinterest',
-    icon: FaPinterest,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '2:3', label: '2:3', icon: RectangleVertical },
-      { value: '9:16', label: '9:16', icon: RectangleVertical },
-    ],
-  },
-  {
-    id: 'reddit',
-    name: 'reddit',
-    icon: FaReddit,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-      { value: '4:5', label: '4:5', icon: RectangleVertical },
-    ],
-  },
-  {
-    id: 'whatsapp',
-    name: 'whatsapp',
-    icon: FaWhatsapp,
-    iconSize: 'size-5.5 2xl:size-6',
-    isLaunchable: false,
-    availableRatios: [
-      { value: '1:1', label: '1:1', icon: Square },
-      { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-    ],
-  },
-  // {
-  //   id: 'youtube',
-  //   name: 'youtube',
-  //   icon: AiOutlineYoutube,
-  //   iconSize: 'size-7',
-  //   availableRatios: [
-  //     { value: '1:1', label: '1:1', icon: Square },
-  //     { value: '16:9', label: '16:9', icon: RectangleHorizontal },
-  //     { value: '4:5', label: '4:5', icon: RectangleVertical },
-  //   ],
-  // },
-];
+// Icons and sizes are presentation and stay here; the platform list and each
+// platform's valid ratios come from the shared matrix, so v1 and Quick setup
+// cannot drift. Quick setup carried its own shorter copy that offered a ratio
+// no platform accepts (1.91:1) and omitted one Pinterest needs (2:3).
+const RATIO_ICONS = {
+  '1:1': Square,
+  '4:5': RectangleVertical,
+  '2:3': RectangleVertical,
+  '9:16': RectangleVertical,
+  '16:9': RectangleHorizontal,
+};
+
+const PLATFORM_ICONS = {
+  meta: { icon: FaMeta, iconSize: 'size-5.5 2xl:size-6' },
+  google: { icon: FaGoogle, iconSize: 'size-5.5 2xl:size-6' },
+  tiktok: { icon: AiFillTikTok, iconSize: 'size-7' },
+  snapchat: { icon: FaSnapchat, iconSize: 'size-5.5 2xl:size-6' },
+  linkedin: { icon: FaLinkedin, iconSize: 'size-5.5 2xl:size-6' },
+  twitter: { icon: RiTwitterXFill, iconSize: 'size-5.5 2xl:size-6' },
+  pinterest: { icon: FaPinterest, iconSize: 'size-5.5 2xl:size-6' },
+  reddit: { icon: FaReddit, iconSize: 'size-5.5 2xl:size-6' },
+  whatsapp: { icon: FaWhatsapp, iconSize: 'size-5.5 2xl:size-6' },
+};
+
+const availablePlatforms = AD_PLATFORMS.map((p) => ({
+  id: p.id,
+  name: p.id,
+  isLaunchable: p.isLaunchable,
+  ...PLATFORM_ICONS[p.id],
+  availableRatios: p.ratios.map((value) => ({ value, label: value, icon: RATIO_ICONS[value] })),
+}));
 
 export default function ValidateForm({ onComplete }) {
   const [searchParams] = useSearchParams();

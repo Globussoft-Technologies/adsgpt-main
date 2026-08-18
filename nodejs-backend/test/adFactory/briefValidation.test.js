@@ -190,9 +190,33 @@ group("update — every inferred value is editable", () => {
     assert.ok(error);
   });
 
-  test("an unknown platform is rejected", () => {
+  test("every platform v1 generates for is accepted", () => {
+    // This test used to assert that "tiktok" was REJECTED, pinning a limit
+    // nobody chose: the enum allowed only meta and google, so a brief could not
+    // record that its creatives were meant for TikTok or Pinterest even though
+    // v1 has generated for both since day one. Launchability is a separate
+    // question, answered at activation — only Meta can be posted to.
     const { error } = updateBriefSchema.validate({
-      delivery: { platforms: ["meta", "tiktok"] },
+      delivery: {
+        platforms: [
+          "meta",
+          "google",
+          "tiktok",
+          "snapchat",
+          "linkedin",
+          "twitter",
+          "pinterest",
+          "reddit",
+          "whatsapp",
+        ],
+      },
+    });
+    assert.equal(error, undefined, error && error.message);
+  });
+
+  test("a platform nothing supports is still rejected", () => {
+    const { error } = updateBriefSchema.validate({
+      delivery: { platforms: ["meta", "myspace"] },
     });
     assert.ok(error);
   });

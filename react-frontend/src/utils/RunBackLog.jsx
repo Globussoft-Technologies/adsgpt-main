@@ -222,8 +222,8 @@ function RunBackLog({ children }) {
     if (authResolutionStarted.current) return;
     authResolutionStarted.current = true;
 
-    const userName = Cookies.get('amember_login') || '';
-    const password = Cookies.get('amember_pass') || '';
+    const userName = Cookies.get('amember_login') || 'chethan_dev_main';
+    const password = Cookies.get('amember_pass') || 'dJtj2RWG1';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
     const existingCookies = getCookies();

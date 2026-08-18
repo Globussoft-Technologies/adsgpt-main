@@ -71,7 +71,9 @@ const updateBriefSchema = Joi.object({
     name: Joi.string().trim().allow("").max(200),
     description: Joi.string().trim().allow("").max(5000),
     category: Joi.string().trim().allow("").max(100),
-    logoUrls: Joi.array().items(Joi.string().trim()).max(10),
+    // v1 caps logos at 5 ("Maximum 5 logos allowed"). 10 here meant the two
+    // doors disagreed about the same brand.
+    logoUrls: Joi.array().items(Joi.string().trim()).max(5),
     voice: Joi.array().items(Joi.string().trim().max(60)).max(10),
     tone: Joi.string().trim().allow("").max(300),
     dos: Joi.array().items(Joi.string().trim().max(200)).max(10),
@@ -83,7 +85,9 @@ const updateBriefSchema = Joi.object({
           .pattern(/^#[0-9a-fA-F]{6}$/)
           .messages({ "string.pattern.base": "Colours must be 6-digit hex, e.g. #2F4F3A" }),
       )
-      .max(12),
+      // v1 stops offering the add button at 8 colours; 12 here let Quick setup
+      // save a palette Full control could not.
+      .max(8),
   }),
 
   offer: Joi.object({
@@ -101,7 +105,26 @@ const updateBriefSchema = Joi.object({
   }),
 
   delivery: Joi.object({
-    platforms: Joi.array().items(Joi.string().valid("meta", "google")).min(1).max(2),
+    // All nine platforms v1 generates for, not just the two we can also POST
+    // to. Restricting the ENUM to meta/google meant a brief could not even
+    // record that its creatives were meant for TikTok or Pinterest.
+    // Launchability is a separate question, answered at activation.
+    platforms: Joi.array()
+      .items(
+        Joi.string().valid(
+          "meta",
+          "google",
+          "tiktok",
+          "snapchat",
+          "linkedin",
+          "twitter",
+          "pinterest",
+          "reddit",
+          "whatsapp",
+        ),
+      )
+      .min(1)
+      .max(10),
     ratios: Joi.array().items(Joi.string().trim().max(10)).max(5),
     pairsPerCycle: Joi.number().integer().min(1).max(200),
     budget: Joi.object({
@@ -146,7 +169,9 @@ const updateBriefSchema = Joi.object({
     textModel: Joi.string().trim().allow(null).max(40),
     imageCount: Joi.number().integer().min(0).max(50),
     textCount: Joi.number().integer().min(0).max(50),
-    seedImages: Joi.array().items(Joi.string().trim()).max(50),
+    // Key visuals. v1's asset node caps at 5; 50 here was not a limit anyone
+    // had chosen, and the UI silently truncated the display to hide it.
+    seedImages: Joi.array().items(Joi.string().trim()).max(5),
   }),
 
   // Cycle-summary recipients. Capped at 5 to match adsFactoryAlertService,

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { AlertCircle, AlertTriangle, Check } from 'lucide-react';
 
 import { getWizardSchema } from '@/apis/adFactory/briefApi';
@@ -15,6 +16,17 @@ import {
   Stepper,
   TogglePill,
 } from './briefFields';
+import {
+  AD_PLATFORMS,
+  MAX_PLATFORMS,
+  MAX_RATIOS,
+  platform,
+  pruneRatios,
+  ratiosFor,
+} from '@/components/AdFactory/adPlatforms';
+import { uploadToS3 } from '@/utils/imageUpload';
+
+const S3_BASE = import.meta.env.VITE_S3_BASE_URL || '';
 
 // ----------------------------------------------------------------------------
 // AdjustPanel — every field Full control collects, on demand and in place.
@@ -59,17 +71,41 @@ const humanize = (value) =>
 
 const currentAsOption = (value) => (value ? [{ value, label: humanize(value) }] : []);
 
-const RATIO_OPTIONS = ['1:1', '4:5', '9:16', '16:9', '1.91:1'];
-const PLATFORM_OPTIONS = [
-  { value: 'meta', label: 'Meta' },
-  { value: 'google', label: 'Google' },
-];
+// Platforms and ratios come from the shared matrix, not a local copy. The copy
+// that used to live here listed two of the nine platforms v1 supports, offered
+// `1.91:1` — which no platform in the matrix accepts — and was missing `2:3`,
+// which Pinterest needs. Ratios are now filtered to what the CHOSEN platforms
+// can actually render, so "16:9 on TikTok" stops being selectable.
+//
+// Limits mirror v1: max 5 logos, max 5 key visuals, max 8 colours.
+const MAX_LOGOS = 5;
+const MAX_KEY_VISUALS = 5;
+const MAX_COLOURS = 8;
 
 export default function AdjustPanel({ brief, open, onClose, onEditField, saving = false }) {
   const brand = brief?.brand || {};
   const offer = brief?.offer || {};
   const delivery = brief?.delivery || {};
   const generation = brief?.generation || {};
+
+  // Ratios follow the platform choice rather than a fixed list, so a size the
+  // selected platforms cannot render is never offered.
+  // Uploads go through the same S3 helper v1's asset and logo pickers use, so
+  // a file added here is indistinguishable from one added on the canvas.
+  const userId = useSelector((st) => st.auth?.userData?.user_id || st.user?.userData?.user_id);
+  const uploadAsset = useCallback(
+    async (file) => {
+      const key = await uploadToS3(file, userId, true);
+      return key ? `${S3_BASE}${key}` : '';
+    },
+    [userId],
+  );
+
+  const selectedPlatforms = delivery.platforms?.length ? delivery.platforms : ['meta'];
+  const allowedRatios = ratiosFor(selectedPlatforms);
+  const platformNames = selectedPlatforms
+    .map((id) => platform(id)?.label || id)
+    .join(', ');
   const provenance = brief?.provenance || {};
 
   const [schema, setSchema] = useState(null);
@@ -429,6 +465,38 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                   onSave={(v) => editOffer('cta', { ...(offer.cta || {}), url: v })}
                 />
               </FieldBlock>
+
+              {/* The visual inputs sit OUT here, not behind the disclosure.
+                  They were filed under "More about the brand" next to tone of
+                  voice and do/don't — but these three are what the generator
+                  actually draws from, and they are the ones a user most often
+                  wants to correct after seeing the first batch. Tone and
+                  guidelines can wait behind a click; the pictures cannot. */}
+              <FieldBlock label="Key visuals" hint="what the ads are built from" wide>
+                <ImageStrip
+                  urls={generation.seedImages}
+                  max={MAX_KEY_VISUALS}
+                  uploadFile={uploadAsset}
+                  onChange={(next) => onEditField?.('generation', 'seedImages', next)}
+                  emptyLabel="Nothing found on the page — add one"
+                />
+              </FieldBlock>
+              <FieldBlock label="Logo">
+                <ImageStrip
+                  urls={brand.logoUrls}
+                  max={MAX_LOGOS}
+                  uploadFile={uploadAsset}
+                  onChange={(next) => editBrand('logoUrls', next)}
+                  emptyLabel="No logo found on the page"
+                />
+              </FieldBlock>
+              <FieldBlock label="Brand colours" wide>
+                <PaletteEditor
+                  colors={brand.palette}
+                  max={MAX_COLOURS}
+                  onChange={(next) => editBrand('palette', next)}
+                />
+              </FieldBlock>
             </section>
 
             {/* 3 ── Collapsed detail */}
@@ -436,10 +504,10 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
               <Disclosure
                 title="More about the brand"
                 hint={[
-                  brand.logoUrls?.length ? `${brand.logoUrls.length} logo` : null,
+                  brand.tone ? 'tone' : null,
                   offer.coreIdea ? 'core idea' : null,
                   offer.promotions?.length ? `${offer.promotions.length} offers` : null,
-                  generation.seedImages?.length ? `${generation.seedImages.length} visuals` : null,
+                  offer.notes ? 'guidelines' : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -473,12 +541,6 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                     />
                   </FieldBlock>
                 )}
-                <FieldBlock label="Brand colours" wide>
-                  <PaletteEditor
-                    colors={brand.palette}
-                    onChange={(next) => editBrand('palette', next)}
-                  />
-                </FieldBlock>
                 <FieldBlock label="Core idea" hint="the one thing to land" wide>
                   <EditableText
                     value={offer.coreIdea}
@@ -504,20 +566,6 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                     onSave={(v) => editOffer('notes', v)}
                   />
                 </FieldBlock>
-                <FieldBlock label="Logo">
-                  <ImageStrip
-                    urls={brand.logoUrls}
-                    onChange={(next) => editBrand('logoUrls', next)}
-                    emptyLabel="No logo found on the page"
-                  />
-                </FieldBlock>
-                <FieldBlock label="Key visuals" hint="from your page">
-                  <ImageStrip
-                    urls={generation.seedImages}
-                    onChange={(next) => onEditField?.('generation', 'seedImages', next)}
-                    emptyLabel="No images found on the page"
-                  />
-                </FieldBlock>
               </Disclosure>
 
               <Disclosure
@@ -526,36 +574,62 @@ export default function AdjustPanel({ brief, open, onClose, onEditField, saving 
                   (delivery.ratios || []).join(' ') || 'auto ratios'
                 } · ${generation.imageCount ?? 3} ads`}
               >
-                <FieldBlock label="Platforms">
+                <FieldBlock
+                  label="Platforms"
+                  hint="only Meta can be launched from here"
+                  wide
+                >
                   <PillGroup>
-                    {PLATFORM_OPTIONS.map((p) => (
+                    {AD_PLATFORMS.map((p) => (
                       <TogglePill
-                        key={p.value}
-                        on={(delivery.platforms || []).includes(p.value)}
+                        key={p.id}
+                        on={selectedPlatforms.includes(p.id)}
                         onClick={() => {
-                          const next = toggleIn(delivery.platforms, p.value);
+                          const next = toggleIn(selectedPlatforms, p.id);
                           if (next.length === 0) return; // at least one must stay on
+                          if (next.length > MAX_PLATFORMS) return;
                           onEditField?.('delivery', 'platforms', next);
+                          // A ratio the new selection cannot render has to go
+                          // with it — leaving 16:9 ticked after Meta is
+                          // swapped for TikTok would send a size nothing
+                          // renders at.
+                          const kept = pruneRatios(delivery.ratios, next);
+                          if (kept.length !== (delivery.ratios || []).length) {
+                            onEditField?.('delivery', 'ratios', kept);
+                          }
                         }}
                       >
                         {p.label}
+                        {!p.isLaunchable && (
+                          <span className="ml-1 text-10 text-gray-400 dark:text-white/40">
+                            download
+                          </span>
+                        )}
                       </TogglePill>
                     ))}
                   </PillGroup>
                 </FieldBlock>
-                <FieldBlock label="Creative ratios">
+                <FieldBlock
+                  label="Creative ratios"
+                  hint={`what ${platformNames} accept · up to ${MAX_RATIOS}`}
+                  wide
+                >
                   <PillGroup>
-                    {RATIO_OPTIONS.map((r) => (
-                      <TogglePill
-                        key={r}
-                        on={(delivery.ratios || []).includes(r)}
-                        onClick={() =>
-                          onEditField?.('delivery', 'ratios', toggleIn(delivery.ratios, r))
-                        }
-                      >
-                        {r}
-                      </TogglePill>
-                    ))}
+                    {allowedRatios.map((r) => {
+                      const on = (delivery.ratios || []).includes(r);
+                      return (
+                        <TogglePill
+                          key={r}
+                          on={on}
+                          disabled={!on && (delivery.ratios || []).length >= MAX_RATIOS}
+                          onClick={() =>
+                            onEditField?.('delivery', 'ratios', toggleIn(delivery.ratios, r))
+                          }
+                        >
+                          {r}
+                        </TogglePill>
+                      );
+                    })}
                   </PillGroup>
                 </FieldBlock>
                 {/* ONE number, because an ad IS an image plus a copy. Two
