@@ -1,4 +1,5 @@
 
+const logger = require("../utils/logger");
 const adsCreativeChats = require("../Module/adCreative/adCreative");
 const Redis = require("ioredis");
 const axios = require("axios");
@@ -41,7 +42,7 @@ exports.getImageUrl = async (url, userId) => {
       : null;
 
     if (!fileExtension) {
-      console.error(`Unsupported content type: ${contentType}`);
+      logger.error(`Unsupported content type: ${contentType}`);
       return null;
     }
 
@@ -96,7 +97,7 @@ exports.getImageUrl = async (url, userId) => {
     await saveImageUrl(s3Url, userId);
     return s3Url;
   } catch (error) {
-    console.error("Error in getImageUrl:", error);
+    logger.error("Error in getImageUrl:", error);
     return null;
   }
 };
@@ -109,7 +110,7 @@ exports.getImageUrl = async (url, userId) => {
       const image = new IMAGE({ image_url: url, createdAt, user_id, type: 1 });
       await image.save();
     } catch (error) {
-      console.error("Error in saveImageUrl event:", error);
+    logger.error("Error in saveImageUrl event:", error);
     }
   };
 
@@ -119,7 +120,7 @@ exports.getImageUrl = async (url, userId) => {
       const file = req.file;
       const save = req?.body?.save;
       if (!file) {
-        console.error("No Video file received");
+        logger.error("No Video file received");
         return res.status(400).json({ error: "No Video file received" });
       }
       const fileName = getFileName(".mp4");
@@ -135,7 +136,7 @@ exports.getImageUrl = async (url, userId) => {
     return res.status(200).json({ data: s3Url });
   }
    catch (error){
-    console.log(error);
+    logger.error(error);
   }
 }
 exports.redisGetSet = new Redis({
@@ -348,7 +349,7 @@ exports.storeAdCreativeChat = async (user_id, sessionId, chatData) => {
 //     return { success: true, message: "New chat data added to existing session" };
 
 //   } catch (error) {
-//     console.error("Error storing/updating chat data:", error);
+//     logger.error("Error storing/updating chat data:", error);
 //     return { success: false, message: "Failed to store or update chat data" };
 //   }
 // };
@@ -386,7 +387,7 @@ exports.storeAdCreativeChat = async (user_id, sessionId, chatData) => {
 
 //       return res.status(200).json({ message: "Chat updated or created successfully" });
 //   } catch (error) {
-//       console.error("Error creating/updating chat:", error);
+//       logger.error("Error creating/updating chat:", error);
 //       return res.status(500).json({ message: "Failed to create or update chat" });
 //   }
 // };
@@ -516,7 +517,7 @@ exports.updateAdCreativeChatMessage = async (req, res) => {
 
     res.status(200).json({ message: "image_ad updated successfully" });
   } catch (error) {
-    console.error("Error updating image_ad:", error);
+    logger.error("Error updating image_ad:", error);
     res.status(500).json({ message: "Failed to update image_ad" });
   }
 };
@@ -571,7 +572,7 @@ exports.getAdCreativeMessagesBySession = async (req, res) => {
 
     res.status(200).json({ code: 200, message: chat.chat_sessions[0].data , adsData: chat.chat_sessions[0].adsData });
   } catch (error) {
-    console.error("Error fetching session messages:", error);
+    logger.error("Error fetching session messages:", error);
     res.status(500).json({ code: 500, message: "Failed to get messages" });
   }
 };
@@ -611,7 +612,7 @@ exports.deleteAdCreativeChatByUidAndSessionId = async (req, res) => {
            return res.status(200).json({ code: 200, message: `Chat with uid: ${uid} and sessionId: ${sessionId} deleted successfully.` });
        }
    } catch (error) {
-       console.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
+       logger.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
        return res.status(500).json({ code: 500, message: 'Failed to delete' });
    }
  };
@@ -776,7 +777,7 @@ exports.getAdCreativeChatsByResponder = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching chats:", error);
+    logger.error("Error fetching chats:", error);
     res.status(500).json({ 
       code: 500, 
       message: "Failed to get chats",
@@ -802,7 +803,7 @@ exports.saveImage = async (req, res) => {
         data: image,
       });
   } catch (error) {
-    console.error("Error saving image:", error);
+    logger.error("Error saving image:", error);
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
@@ -820,7 +821,7 @@ exports.saveEditedImage = async (req, res) => {
         data: image,
     });
   } catch (error) {
-    console.error("Error saving image:", error);
+    logger.error("Error saving image:", error);
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
@@ -833,7 +834,7 @@ exports.getUserCreatives = async (req, res) => {
     if (!creatives) return res.status(404).json({ message: "No creatives found for the user", success: false });
     return res.status(200).json({ message: "Creatives found successfully", success: true, data: creatives });
   } catch (error) {
-    console.error("Error fetching images:", error);
+    logger.error("Error fetching images:", error);
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 }
@@ -848,7 +849,7 @@ exports.deleteCreative = async (req, res) => {
     if (!image) return res.status(404).json({ message: "Creative not found", success: false });
     return res.status(200).json({ message: "Creative deleted successfully", success: true });
   } catch (error) {
-    console.error("Error deleting images:", error);
+    logger.error("Error deleting images:", error);
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 }
@@ -861,7 +862,7 @@ exports.creativeDetails = async (req, res) => {
     if (!creative) return res.status(404).json({ message: "No creative found", success: false });
     return res.status(200).json({ message: "Creative found successfully", success: true, data: creative });
   } catch (error) {
-    console.error("Error fetching image:", error);
+    logger.error("Error fetching image:", error);
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 }
@@ -946,7 +947,7 @@ exports.creativeDetails = async (req, res) => {
         buffer = Buffer.from(response.data);
         contentType = ct;
       } else {
-        console.error("No file or imageUrl received");
+        logger.error("No file or imageUrl received");
         return res.status(400).json({ error: "No file or imageUrl received" });
       }
 
@@ -972,7 +973,7 @@ exports.creativeDetails = async (req, res) => {
     }
     return res.status(200).json({ data: s3Url });
     } catch (error) {
-      console.error("Error in uploadImageFromFormData:", error);
+      logger.error("Error in uploadImageFromFormData:", error);
       return res.status(500).json({ error: "Image upload failed" });
     }
   };
@@ -984,7 +985,7 @@ exports.creativeDetails = async (req, res) => {
       const file = req.file;
   
       if (!file) {
-        console.error("No file received");
+        logger.error("No file received");
         return res.status(400).json({ error: "No file received" });
       }
   
@@ -1033,7 +1034,7 @@ exports.creativeDetails = async (req, res) => {
   
       return res.status(200).json({ data: s3Url });
     } catch (error) {
-      console.error("Error in uploadImageFromFormData:", error);
+      logger.error("Error in uploadImageFromFormData:", error);
       return res.status(500).json({ error: "Image upload failed" });
     }
   };

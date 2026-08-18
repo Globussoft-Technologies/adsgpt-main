@@ -798,9 +798,9 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
         timeout: '15s',            // Kill slow queries
       });
     } catch (esErr) {
-      console.error(`[searchAdsByKeywords] ES search failed for ${platform} (${index}): ${esErr.message}`);
+      logger.error(`[searchAdsByKeywords] ES search failed for ${platform} (${index}): ${esErr.message}`);
       if (esErr.meta && esErr.meta.body) {
-        console.error(`[searchAdsByKeywords] ES error body: ${JSON.stringify(esErr.meta.body)}`);
+        logger.error(`[searchAdsByKeywords] ES error body: ${JSON.stringify(esErr.meta.body)}`);
       }
       return { ads: [], total: 0, rawCount: 0 };
     }

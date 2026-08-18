@@ -13,6 +13,7 @@
 // Both channels are best-effort and independently guarded — a failure in one
 // never blocks the other and never throws into the caller.
 
+const logger = require("../../utils/logger");
 const DeviceToken = require("../../Module/deviceToken/deviceToken");
 const { getMessaging, isPushEnabled } = require("./firebaseAdmin");
 
@@ -76,11 +77,11 @@ async function sendPushToUser(userId, push) {
         { token: { $in: deadTokens } },
         { $set: { isActive: false } },
       );
-      console.log(`[push] retired ${deadTokens.length} dead token(s) for ${userId}`);
+      logger.info(`[push] retired ${deadTokens.length} dead token(s) for ${userId}`);
     }
   }
 
-  console.log(
+  logger.info(
     `[push] userId=${userId} sent=${resp.successCount}/${tokens.length} failed=${resp.failureCount}`,
   );
 }
@@ -105,7 +106,7 @@ async function notifyUser(userId, { event, socketPayload, push } = {}) {
     try {
       global.io.to(userId).emit(event, socketPayload);
     } catch (e) {
-      console.error(`[notifyUser] socket emit failed for ${userId}: ${e.message}`);
+      logger.error(`[notifyUser] socket emit failed for ${userId}: ${e.message}`);
     }
   }
 
@@ -114,7 +115,7 @@ async function notifyUser(userId, { event, socketPayload, push } = {}) {
     try {
       await sendPushToUser(userId, push);
     } catch (e) {
-      console.error(`[notifyUser] push failed for ${userId}: ${e.message}`);
+      logger.error(`[notifyUser] push failed for ${userId}: ${e.message}`);
     }
   }
 }
@@ -173,8 +174,9 @@ async function notifyUserSessionUpdate(userId) {
       }
     }
   } catch (err) {
-    console.warn(`[notifyUserSessionUpdate] failed for ${userId}: ${err.message}`);
+    logger.warn(`[notifyUserSessionUpdate] failed for ${userId}: ${err.message}`);
   }
 }
 
 module.exports = { notifyUser, sendPushToUser, notifyUserSessionUpdate };
+

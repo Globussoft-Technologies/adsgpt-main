@@ -1,3 +1,4 @@
+const logger = require("../utils/logger");
 const adsVideoChats = require("../Module/adVideo/adVideo");
 const Redis = require("ioredis");
 const axios = require("axios");
@@ -73,7 +74,7 @@ exports.getAdvideoChatsByResponder = async (req, res) => {
         }
       });
     } catch (error) {
-      console.error("Error fetching chats:", error);
+      logger.error("Error fetching chats:", error);
       res.status(500).json({ 
         code: 500, 
         message: "Failed to get chats",
@@ -117,7 +118,7 @@ exports.deleteAdvideoChatByUidAndSessionId = async (req, res) => {
            return res.status(200).json({ code: 200, message: `Chat with uid: ${uid} and sessionId: ${sessionId} deleted successfully.` });
        }
    } catch (error) {
-       console.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
+       logger.error(`Error deleting chat with uid: ${uid} and sessionId: ${sessionId}`, error);
        return res.status(500).json({ code: 500, message: 'Failed to delete' });
    }
  };
@@ -140,7 +141,7 @@ exports.deleteAdvideoChatByUidAndSessionId = async (req, res) => {
   
       res.status(200).json({ code: 200, message: chat.chat_sessions[0].data , adsData: chat.chat_sessions[0].adsData });
     } catch (error) {
-      console.error("Error fetching session messages:", error);
+      logger.error("Error fetching session messages:", error);
       res.status(500).json({ code: 500, message: "Failed to get messages" });
     }
   };
@@ -178,7 +179,7 @@ exports.deleteAdvideoChatByUidAndSessionId = async (req, res) => {
   
         return res.status(200).json({ message: "Chat updated or created successfully" });
     } catch (error) {
-        console.error("Error creating/updating chat:", error);
+        logger.error("Error creating/updating chat:", error);
         return res.status(500).json({ message: "Failed to create or update chat" });
     }
   };
@@ -282,7 +283,7 @@ exports.deleteAdvideoChatByUidAndSessionId = async (req, res) => {
       return { success: true, message: "New chat data added to existing session" };
   
     } catch (error) {
-      console.error("Error storing/updating chat data:", error);
+      logger.error("Error storing/updating chat data:", error);
       return { success: false, message: "Failed to store or update chat data" };
     }
   };

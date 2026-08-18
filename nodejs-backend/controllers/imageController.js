@@ -106,15 +106,15 @@ const emitCreditStatus = async (userId) => {
         if (global.io) {
             try {
                 global.io.to(userId).emit("credits", payload);
-                console.log(`[Socket] Emitted credits update for userId: ${userId}`);
+                logger.info(`[Socket] Emitted credits update for userId: ${userId}`);
             } catch (socketErr) {
-                console.error(`[Socket] Failed to emit credits: ${socketErr.message}`);
+                logger.error(`[Socket] Failed to emit credits: ${socketErr.message}`);
             }
         } else {
-            console.warn("[Socket] global.io not available - credits emit skipped");
+            logger.warn("[Socket] global.io not available - credits emit skipped");
         }
     } catch (error) {
-        console.error("Error emitting credit status:", error);
+        logger.error("Error emitting credit status:", error);
     }
 };
 
@@ -275,12 +275,12 @@ exports.generateImage = async (req, res) => {
             }
         */
 
-        console.log("[generateImage]  Request received:", JSON.stringify({ type: req.body?.type, brandName: req.body?.brandInfo?.brandName, aspectRatios: req.body?.userInputs?.aspectRatioPerImage }, null, 2));
+        logger.info("[generateImage]  Request received:", JSON.stringify({ type: req.body?.type, brandName: req.body?.brandInfo?.brandName, aspectRatios: req.body?.userInputs?.aspectRatioPerImage }, null, 2));
 
         const requestType = req.body?.type;
         const optionalBrandNameTypes = ["recreate_ads", "ai_ads", "lifestyle", "product_shot", "apps_saas"];
         if (!optionalBrandNameTypes.includes(requestType) && (!req.body?.brandInfo?.brandName || req.body.brandInfo.brandName.trim() === "")) {
-            console.error("[generateImage] brandName is empty");
+            logger.error("[generateImage] brandName is empty");
             return res.status(400).json({
                 success: false,
                 error: "brandName is required",
@@ -290,9 +290,9 @@ exports.generateImage = async (req, res) => {
         const { error, value } = generateImageRequestSchema.validate(req.body);
 
         if (error) {
-            console.error("[generateImage]  Validation FAILED:", error.details);
+            logger.error("[generateImage]  Validation FAILED:", error.details);
         } else {
-            console.log("[generateImage]  Validation PASSED");
+            logger.info("[generateImage]  Validation PASSED");
         }
 
         if (error) {
@@ -306,19 +306,19 @@ exports.generateImage = async (req, res) => {
                 );
                 if (specificError) {
                     const fieldErrors = formatValidationError(specificError.details);
-                    console.error(`[generateImage] Validation failed for type ${inputType}:`, fieldErrors);
+                    logger.error(`[generateImage] Validation failed for type ${inputType}:`, fieldErrors);
                     return res.status(400).json({ success: false, error: fieldErrors });
                 }
             }
 
             const fieldErrors = formatValidationError(error.details);
-            console.error("[generateImage] Schema validation failed:", fieldErrors);
+            logger.error("[generateImage] Schema validation failed:", fieldErrors);
             return res.status(400).json({ success: false, error: fieldErrors });
         }
 
         // Validate user authentication
         if (!req.user || !req.user.user_id) {
-            console.error("[generateImage] User not authenticated. req.user:", req.user, "Headers:", req.headers);
+            logger.error("[generateImage] User not authenticated. req.user:", req.user, "Headers:", req.headers);
             return res.status(401).json({
                 success: false,
                 error: "Authentication required. Please provide valid JWT token.",
@@ -329,13 +329,13 @@ exports.generateImage = async (req, res) => {
         let userId = req.user?.user_id || req.user?.id || req.user?.userId;
 
         if (!userId) {
-            console.error("[generateImage] User ID not found. req.user:", req.user);
+            logger.error("[generateImage] User ID not found. req.user:", req.user);
             return res.status(401).json({
                 success: false,
                 error: "Authentication failed: User ID not found in token",
             });
         }
-        console.log(`[generateImage] Authenticated user: ${userId}`);
+        logger.info(`[generateImage] Authenticated user: ${userId}`);
 
         // Quality picker is now enabled on the creative surfaces, so the client
         // sends the chosen quality. The force-HIGH override below is cancelled —
@@ -465,13 +465,13 @@ exports.generateImage = async (req, res) => {
                         success: true,
                     });
                 }
-                console.log(`[generateImage]  Sending to Python API: ${targetApi}`);
-                console.log(`[generateImage]  Payload:`, JSON.stringify({ type: value.type, brandName: value.brandInfo.brandName, sessionId: imageId }, null, 2));
+                logger.info(`[generateImage]  Sending to Python API: ${targetApi}`);
+                logger.info(`[generateImage]  Payload:`, JSON.stringify({ type: value.type, brandName: value.brandInfo.brandName, sessionId: imageId }, null, 2));
 
                 const pythonResponse = await axios.post(targetApi, pythonPayload);
 
                 if (pythonResponse.status === 200) {
-                    console.log(`[generateImage]  Python API responded with 200`);
+                    logger.info(`[generateImage]  Python API responded with 200`);
 
                     await ImageGeneration.updateOne(
                         { _id: imageId },
@@ -479,8 +479,8 @@ exports.generateImage = async (req, res) => {
                     );
                 }
             } catch (err) {
-                console.error(`[Python API] Failed - ${value.type} - sessionId: ${imageId} - Status: ${err.response?.status}`);
-                console.error(`[Python API] Error:`, err.response?.data?.error || err.message);
+                logger.error(`[Python API] Failed - ${value.type} - sessionId: ${imageId} - Status: ${err.response?.status}`);
+                logger.error(`[Python API] Error:`, err.response?.data?.error || err.message);
 
                 // Python rejected → refund freeze + clean up.
                 await UnifiedCreditController.releaseCredits(imageId);
@@ -496,7 +496,7 @@ exports.generateImage = async (req, res) => {
                 });
             }
         } else {
-            console.error(`[Python API] No API configured for type: ${value.type}`);
+            logger.error(`[Python API] No API configured for type: ${value.type}`);
             // No Python API configured → release the freeze rather than leak it.
             await UnifiedCreditController.releaseCredits(imageId);
         }
@@ -507,8 +507,8 @@ exports.generateImage = async (req, res) => {
             data: image,
         });
     } catch (err) {
-        console.error("[generateImage] Error:", err.message);
-        console.error("[generateImage] Stack:", err.stack);
+        logger.error("[generateImage] Error:", err.message);
+        logger.error("[generateImage] Stack:", err.stack);
         res.status(500).json({
             success: false,
             error: err.message || "An error occurred while processing your request",
@@ -570,7 +570,7 @@ exports.saveEditedImage = async (req, res) => {
 
         return res.status(201).json({ success: true, data: record });
     } catch (err) {
-        console.error("[saveEditedImage] Error:", err.message);
+        logger.error("[saveEditedImage] Error:", err.message);
         return res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -585,7 +585,7 @@ exports.getProcessingCount = async (req, res) => {
             count,
         });
     } catch (err) {
-        console.error("[getProcessingCount] Error:", err.message);
+        logger.error("[getProcessingCount] Error:", err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -841,7 +841,7 @@ exports.updateImageResult = async (req, res) => {
                     quality: priorDoc?.inputs?.quality || "high",
                     duration: timing?.totalMs || 0,
                 }).catch((saveError) => {
-                    console.error("Failed to save generated image media:", saveError);
+                    logger.error("Failed to save generated image media:", saveError);
                 });
                 const newCount = new GeneratedCount({
                     userId: userId,
@@ -983,7 +983,7 @@ exports.updateImageResult = async (req, res) => {
             data: image,
         });
     } catch (err) {
-        console.error("Error in updateImageResult:", err);
+        logger.error("Error in updateImageResult:", err);
         logger.error(
             `Error in updateImageResult for sessionId ${req?.params?.sessionId}: ${err.message}`,
             { error: err }
@@ -1089,7 +1089,7 @@ exports.getAllImages = async (req, res) => {
             data: images,
         });
     } catch (err) {
-        console.error("Error in getAllImages:", err);
+        logger.error("Error in getAllImages:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -1135,7 +1135,7 @@ exports.getImageById = async (req, res) => {
         let userId = req.user?.user_id || req.user?.id || req.user?.userId;
 
         if (!userId) {
-            console.error("[generateImage] User ID not found. req.user:", req.user);
+            logger.error("[generateImage] User ID not found. req.user:", req.user);
             return res.status(401).json({
                 success: false,
                 error: "Authentication failed: User ID not found in token",
@@ -1166,7 +1166,7 @@ exports.getImageById = async (req, res) => {
             data: image,
         });
     } catch (err) {
-        console.error("Error in getImageById:", err);
+        logger.error("Error in getImageById:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 };

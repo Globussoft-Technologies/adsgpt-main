@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const { redisGetSet } = require('./adCopy');
 
@@ -34,7 +35,7 @@ const saveQuery = async (req, res) => {
       message: 'Query and token saved successfully',
     });
   } catch (error) {
-    console.error('Error saving query:', error);
+    logger.error('Error saving query:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -60,13 +61,13 @@ const getQuery = async (req, res) => {
       const result = await new Promise((resolve, reject) => {
         redisGetSet.get(key, (err, reply) => {
           if (err) return reject(err);
-          console.log('Raw reply from Redis:', reply);
+          logger.info('Raw reply from Redis:', reply);
           resolve(reply);
         });
       });
   
       if (!result) {
-        console.warn('Key not found or expired in Redis:', key);
+        logger.warn('Key not found or expired in Redis:', key);
         return res.status(404).json({
           success: false,
           message: 'Query not found or expired',
@@ -75,15 +76,15 @@ const getQuery = async (req, res) => {
   
       // delete after successful fetch
       redisGetSet.del(key, (err) => {
-        if (err) console.error('Error deleting key after fetch:', err);
-        else console.log(`Deleted key from Redis: ${key}`);
+        if (err) logger.error('Error deleting key after fetch:', err);
+        else logger.info(`Deleted key from Redis: ${key}`);
       });
   
       let data;
       try {
         data = JSON.parse(result);
       } catch (parseError) {
-        console.error('Failed to parse Redis data:', parseError, 'Raw data:', result);
+        logger.error('Failed to parse Redis data:', parseError, 'Raw data:', result);
         return res.status(500).json({
           success: false,
           message: 'Failed to parse query data',
@@ -96,7 +97,7 @@ const getQuery = async (req, res) => {
       });
   
     } catch (error) {
-      console.error('Error retrieving query:', error);
+      logger.error('Error retrieving query:', error);
       return res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -107,3 +108,4 @@ const getQuery = async (req, res) => {
   
 
 module.exports = { saveQuery, getQuery };
+

@@ -1,3 +1,4 @@
+const logger = require("../../utils/logger");
 const bizSdk = require("facebook-nodejs-business-sdk");
 const FBUsers = require("../../Module/adPosting/facebookUsers");
 const { decrypt } = require("../../utils/crypto");
@@ -56,7 +57,7 @@ class PostController {
           source: "direct",
         }));
       } catch (err) {
-        console.warn("Direct pages fetch failed:", err.message);
+        logger.warn("Direct pages fetch failed:", err.message);
       }
   
       allPages.push(...directPages);
@@ -95,7 +96,7 @@ class PostController {
   
             businessPages.push(...mappedOwned);
           } catch (err) {
-            console.warn(`Owned pages failed for biz ${biz.id}`);
+            logger.warn(`Owned pages failed for biz ${biz.id}`);
           }
   
           // Client pages
@@ -123,11 +124,11 @@ class PostController {
   
             businessPages.push(...mappedClient);
           } catch (err) {
-            console.warn(`Client pages failed for biz ${biz.id}`);
+            logger.warn(`Client pages failed for biz ${biz.id}`);
           }
         }
       } catch (err) {
-        console.warn("Business fetch failed:", err.message);
+        logger.warn("Business fetch failed:", err.message);
       }
   
       allPages.push(...businessPages);
@@ -158,7 +159,7 @@ class PostController {
       });
   
     } catch (error) {
-      console.error("Get pages error:", error.response?.data || error.message);
+      logger.error("Get pages error:", error.response?.data || error.message);
       return res.status(500).json({
         error: "Failed to fetch pages",
         details: error.response?.data?.error?.message || error.message,
@@ -187,10 +188,10 @@ class PostController {
         });
       }
 
-      console.log("Creating post for page:", pageId);
-      console.log("Message:", message);
-      console.log("Has image file:", !!imageFile);
-      console.log("Has image URL:", !!imageUrl);
+      logger.info("Creating post for page:", pageId);
+      logger.info("Message:", message);
+      logger.info("Has image file:", !!imageFile);
+      logger.info("Has image URL:", !!imageUrl);
 
       let postResponse;
 
@@ -219,7 +220,7 @@ class PostController {
         data: postResponse,
       });
     } catch (error) {
-      console.error(
+      logger.error(
         "Create post error:",
         error.response?.data || error.message
       );

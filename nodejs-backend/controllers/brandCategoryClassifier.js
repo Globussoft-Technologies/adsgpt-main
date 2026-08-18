@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const { generateJson, MODELS } = require('../services/ai/geminiClient');
 const brandNameLists = require('../Module/brandNames/brandNamesSchema');
 const { buildBrandCategoryPrompt } = require('../AI/Prompts/brandCategoryPrompt');
@@ -69,7 +70,7 @@ async function classifyBrandCategory(brand) {
     }));
   } catch (err) {
     // Callers record this on the brand's categoryJob as FAILED.
-    console.log(err.message);
+    logger.error(err.message);
     throw err;
   }
 
@@ -193,7 +194,7 @@ async function enrichUserBrands(userId) {
     // Fire-and-forget: never throw into the caller (the get-lists response
     // has already been sent). Swallow after logging.
     // eslint-disable-next-line no-console
-    console.warn(`[brandCategory] enrichUserBrands failed for ${userId}: ${err.message}`);
+    logger.warn(`[brandCategory] enrichUserBrands failed for ${userId}: ${err.message}`);
   }
 }
 
@@ -211,7 +212,7 @@ async function ensureCategoryHandler(req, res) {
     return res.status(200).json({ brandId, category: category ?? null });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn(`[brandCategory] ensure-category failed: ${err.message}`);
+    logger.warn(`[brandCategory] ensure-category failed: ${err.message}`);
     return res.status(500).json({ message: 'Failed to resolve brand category' });
   }
 }

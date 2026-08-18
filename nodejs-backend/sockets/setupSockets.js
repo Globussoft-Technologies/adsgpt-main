@@ -39,7 +39,7 @@ const emitCreditStatus = async (userId, socketId, socket) => {
       });
     }
   } catch (error) {
-    console.error("Error emitting credit status:", error);
+    logger.error("Error emitting credit status:", error);
   }
 };
 
@@ -58,7 +58,7 @@ const handleAdCopyResponse = async (data, socket) => {
       });
     }
   } catch (error) {
-    console.error("Error in responseToNode event:", error);
+    logger.error("Error in responseToNode event:", error);
   }
 };
 
@@ -618,18 +618,18 @@ const handleChatResponse = async (parsedMessage, channel, Socket) => {
 
     // Validate and decode token if applicable
     if (!userToken) {
-      console.error("Token is missing in parsedMessage for channel:", channel);
+      logger.error("Token is missing in parsedMessage for channel:", channel);
       return;
     }
 
     // Validate parsedMessage and channel
     if (!parsedMessage || typeof parsedMessage !== "object") {
-      console.error("Invalid parsedMessage provided:", parsedMessage);
+      logger.error("Invalid parsedMessage provided:", parsedMessage);
       return;
     }
 
     if (!channel || typeof channel !== "string") {
-      console.error("Invalid channel provided:", channel);
+      logger.error("Invalid channel provided:", channel);
       return;
     }
     // Initialize chunk storage if it doesn't exist
@@ -639,18 +639,18 @@ const handleChatResponse = async (parsedMessage, channel, Socket) => {
 
     user = TokenDecode(userToken);
     if (!user) {
-      console.error("Failed to decode user token.");
+      logger.error("Failed to decode user token.");
       return;
     }
     const [subscriptionTypeKey] =
       Object.entries(user?.userSubscriptionType || {})[0] || [];
     if (!subscriptionTypeKey) {
-      console.error("Subscription type key is missing for the user.");
+      logger.error("Subscription type key is missing for the user.");
       return;
     }
     created_from = user?.customPlan ? "PAS" : user.created_from;
     if (!created_from) {
-      console.error("User's 'created_from' field is missing.");
+      logger.error("User's 'created_from' field is missing.");
       return;
     }
 
@@ -795,12 +795,11 @@ const handleChatResponse = async (parsedMessage, channel, Socket) => {
         await updateAdVideoConversation(parsedMessage);
         break;
       default:
-        console.warn("Unknown channel received:", channel);
+        logger.warn("Unknown channel received:", channel);
         break;
     }
   } catch (error) {
-    console.error("Error handling chat response:", error);
-    logger.error(`Error handling chat response:: ${error}`);
+    logger.error("Error handling chat response:", error);
   }
 };
 

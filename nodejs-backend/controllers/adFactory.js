@@ -123,7 +123,7 @@ exports.createCampaign = async (req, res) => {
       campaignId: campaign.metadata.campaignId,
     });
   } catch (error) {
-    console.error("Create Campaign Error:", error);
+    logger.error("Create Campaign Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -171,7 +171,7 @@ exports.getCampaignByUserId = async (req, res) => {
       data: campaigns,
     });
   } catch (error) {
-    console.error("Get Campaign Error:", error);
+    logger.error("Get Campaign Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -255,7 +255,7 @@ exports.getCampaignByUserCampaignId = async (req, res) => {
       data: campaign,
     });
   } catch (error) {
-    console.error("Get Campaign Error:", error);
+    logger.error("Get Campaign Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -320,7 +320,7 @@ exports.getCampaignHistoryByUserCampaignId = async (req, res) => {
       data: history,
     });
   } catch (error) {
-    console.error("Get Campaign Error:", error);
+    logger.error("Get Campaign Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -612,7 +612,7 @@ exports.getAdFactoryGeneratedCountsByUserId = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get AdFactory Counts Error:", error);
+    logger.error("Get AdFactory Counts Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -670,8 +670,7 @@ exports.getAdFactoryImagesByUserId = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    console.error("Get AdFactory Images Error:", error);
-    logger.error(`Get AdFactory Images Error: ${error}`);
+    logger.error("Get AdFactory Images Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -759,7 +758,7 @@ exports.deleteCampaign = async (req, res) => {
       message: "Campaign deleted successfully",
     });
   } catch (error) {
-    console.error("Delete Campaign Error:", error);
+    logger.error("Delete Campaign Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -825,7 +824,6 @@ exports.sendAdFactoryRequest = async (
       };
     } catch (error) {
       logger.error(`Error processing services from adfactory api: ${error}`);
-      console.error("Error processing services from adfactory api", error);
       this.updateErrorResult(campaignId);
       return {
         error: error.message,
@@ -834,7 +832,6 @@ exports.sendAdFactoryRequest = async (
     }
   } catch (error) {
     logger.error("Error processing services update:", error.message);
-    console.error("Error processing services update:", error.message);
     return {
       error: error.message,
       allNodesSuccess: false,
@@ -877,7 +874,6 @@ exports.storeAdFactoryHistory = async (existingCampaign) => {
     };
   } catch (error) {
     logger.error("Error processing services update:", error.message);
-    console.error("Error processing services update:", error.message);
     return {
       error: error.message,
     };
@@ -949,7 +945,6 @@ exports.updateErrorResult = async (campaignId) => {
       data: updatedCampaign.results,
     };
   } catch (error) {
-    console.error("Result Error update:", error);
     logger.error(`Result Error update ${error}`);
     return {
       success: false,
@@ -1011,7 +1006,6 @@ exports.validateCredits = async (user, subscriptionTypeKey, data) => {
     return { code: 200, success: true, totalRequired, userId };
   } catch (error) {
     logger.error("Error in credit checking:", error);
-    console.error("Error in credit checking:", error);
     return { success: false, message: "Internal error in credit checking" };
   }
 };
@@ -1334,7 +1328,6 @@ exports.updateCampaign = async (req, res) => {
       message: `${nodeType} updated successfully`,
     });
   } catch (error) {
-    console.error("Update Campaign Node Error:", error);
     logger.error("Update Campaign Node Error:", error);
     return res.status(500).json({
       success: false,
@@ -1400,7 +1393,7 @@ exports.updateCreativeByCreativeId = async (req, res) => {
       data: updatedCampaign.creatives.find((c) => c.creativeId === creativeId),
     });
   } catch (error) {
-    console.error("Update Creative Error:", error);
+    logger.error("Update Creative Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -1457,7 +1450,7 @@ exports.deleteCreativeByCreativeId = async (req, res) => {
       data: updatedCampaign.creatives,
     });
   } catch (error) {
-    console.error("Delete Creative Error:", error);
+    logger.error("Delete Creative Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -1469,7 +1462,7 @@ exports.deleteCreativeByCreativeId = async (req, res) => {
 exports.emitCampaignResult = async (campaignId, type, result) => {
   try {
     if (!global.io) {
-      console.error("Socket.IO not initialized");
+      logger.error("Socket.IO not initialized");
       return;
     }
 
@@ -1479,9 +1472,9 @@ exports.emitCampaignResult = async (campaignId, type, result) => {
       result,
     });
 
-    console.log(`Sent update to campaign ${campaignId}`);
+    logger.info(`Sent update to campaign ${campaignId}`);
   } catch (error) {
-    console.log("Error in sending data to adfactory", error);
+    logger.error("Error in sending data to adfactory", error);
   }
 };
 
@@ -1572,7 +1565,7 @@ exports.updateGenerationResult = async (req, res) => {
       updatedCampaign.results.status = "success";
       updatedCampaign.status = "success";
       await updatedCampaign.save();
-      console.log(`Campaign ${campaignId} generation completed`);
+      logger.info(`Campaign ${campaignId} generation completed`);
 
       // Settle the upfront freeze: charges exactly for the actually-successful
       // items across all result types (text/image/video), refunds the rest of
@@ -1643,8 +1636,7 @@ exports.updateGenerationResult = async (req, res) => {
       data: updatedCampaign.results[type],
     });
   } catch (error) {
-    console.error("Result update error:", error);
-    logger.error(`Result update error:: ${error}`);
+    logger.error("Result update error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -1690,7 +1682,7 @@ exports.uploadImageFromUrl = async (req, res) => {
       data: finalUrl,
     });
   } catch (error) {
-    console.error("Error in uploadImageFromUrl:", error);
+    logger.error("Error in uploadImageFromUrl:", error);
     return res.status(500).json({ error: "Image upload failed" });
   }
 };
@@ -1737,7 +1729,7 @@ exports.syncCustomCreatives = async (req, res) => {
       copies: cleanCopies.length,
     });
   } catch (error) {
-    console.error("Error in syncCustomCreatives:", error);
+    logger.error("Error in syncCustomCreatives:", error);
     return res.status(500).json({ error: "Failed to save custom creatives" });
   }
 };
@@ -1754,7 +1746,7 @@ exports.downLoadZipImages = async (req, res) => {
     const archive = archiver("zip", { zlib: { level: 9 } });
 
     archive.on("error", (err) => {
-      console.error(err);
+      logger.error(err);
       res.status(500).end();
     });
 
@@ -1775,7 +1767,7 @@ exports.downLoadZipImages = async (req, res) => {
 
         archive.append(response.data, { name: fileName });
       } catch (err) {
-        console.error(`Failed to fetch ${url}`);
+        logger.error(`Failed to fetch ${url}`);
       }
     }
 
@@ -1825,7 +1817,7 @@ exports.saveEditedAdImage = async (req, res) => {
             }
           }
         }
-      ).catch(err => console.error("Failed to push to History:", err));
+      ).catch(err => logger.error("Failed to push to History:", err));
     } else {
       // PUSH TO CURRENT: Prepend so the newest edit appears first
       await Campaign.updateOne(
@@ -1838,7 +1830,7 @@ exports.saveEditedAdImage = async (req, res) => {
             }
           }
         }
-      ).catch(err => console.error("Failed to push to Campaign:", err));
+      ).catch(err => logger.error("Failed to push to Campaign:", err));
     }
 
     // Also save to gallery so it appears in getGalleryImages
@@ -1853,7 +1845,7 @@ exports.saveEditedAdImage = async (req, res) => {
         { new: true, upsert: true }
       );
     } catch (galleryErr) {
-      console.error("Warning: Failed to save image to gallery:", galleryErr);
+      logger.error("Warning: Failed to save image to gallery:", galleryErr);
       // Continue anyway - gallery save is secondary
     }
 
@@ -1864,7 +1856,7 @@ exports.saveEditedAdImage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("saveEditedAdImage Error:", error);
+    logger.error("saveEditedAdImage Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

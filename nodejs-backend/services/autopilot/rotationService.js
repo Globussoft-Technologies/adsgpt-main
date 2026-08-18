@@ -77,11 +77,7 @@ function runAuditForAccount(args) {
 let _logger;
 function getLogger() {
   if (_logger) return _logger;
-  try {
-    _logger = require("../../utils/logger");
-  } catch {
-    _logger = console;
-  }
+  _logger = require("../../utils/logger");
   return _logger;
 }
 

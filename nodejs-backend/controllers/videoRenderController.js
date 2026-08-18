@@ -1,5 +1,6 @@
 
 
+const appLogger = require('../utils/logger');
 const ffmpeg = require('fluent-ffmpeg');
 const axios = require('axios');
 const fs = require('fs');
@@ -573,7 +574,7 @@ async function videoRender(req, res) {
     });
 
     ffmpegCmd.on('error', async err => {
-      console.error(`Debugger - Render error: ${err.message}`);
+      appLogger.error(`Debugger - Render error: ${err.message}`);
       Object.values(localPaths).forEach(p => {
         try { fs.unlinkSync(p); } catch {}
       });
@@ -582,7 +583,7 @@ async function videoRender(req, res) {
 
     ffmpegCmd.run();
   } catch (err) {
-    console.error(`Debugger - Render error: ${err.message}`);
+    appLogger.error(`Debugger - Render error: ${err.message}`);
     Object.values(localPaths).forEach(p => {
       try { fs.unlinkSync(p); } catch {}
     });

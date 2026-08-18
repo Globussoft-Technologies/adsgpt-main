@@ -1,3 +1,4 @@
+const logger = require("../utils/logger");
 const creditConfig = require("../config/creditConfig");
 const UserProfile = require("../Module/user/userProfileModel");
 const CreditReservation = require("../Module/credit/creditReservationModel");
@@ -231,7 +232,7 @@ class UnifiedCreditController {
         remainingCredits: status.remaining_credits,
       };
     } catch (error) {
-      console.error("Error checking unified credits:", error);
+      logger.error("Error checking unified credits:", error);
       return { isAllowed: false, message: "Error checking credits" };
     }
   }
@@ -298,7 +299,7 @@ class UnifiedCreditController {
     if (!userId) return { ok: false, reason: "NO_USER" };
     if (!reservationKey) return { ok: false, reason: "MISSING_KEY" };
     if (!amount || amount <= 0) {
-      console.log(
+      logger.info(
         `[credits] freeze NOOP key=${reservationKey} user=${userId} amount=${amount} (zero or negative)`,
       );
       return {
@@ -313,7 +314,7 @@ class UnifiedCreditController {
       reservation_key: reservationKey,
     });
     if (existing) {
-      console.warn(
+      logger.warn(
         `[credits] freeze IDEMPOTENT key=${reservationKey} user=${userId} ` +
           `existing_amount=${existing.amount} (this freeze call is a duplicate — ` +
           `caller logic should investigate)`,
@@ -341,7 +342,7 @@ class UnifiedCreditController {
         amount,
       );
       if (shortfall > 0) {
-        console.warn(
+        logger.warn(
           `[credits] freeze INSUFFICIENT key=${reservationKey} user=${userId} ` +
             `required=${amount} available=${totalAvailable} short=${shortfall}`,
         );
@@ -375,7 +376,7 @@ class UnifiedCreditController {
       );
 
       if (!cas) {
-        console.log(
+        logger.info(
           `[credits] freeze CAS-miss key=${reservationKey} user=${userId} attempt=${attempt + 1}`,
         );
         continue; // concurrent modification — retry
@@ -390,7 +391,7 @@ class UnifiedCreditController {
           split,
           meta,
         });
-        console.log(
+        logger.info(
           `[credits] freeze OK key=${reservationKey} user=${userId} amount=${amount} ` +
             `split=R${split.fromRollover}/S${split.fromSub}/T${split.fromTopup} ` +
             `meta=${JSON.stringify(meta)}`,
@@ -414,7 +415,7 @@ class UnifiedCreditController {
             };
           }
         }
-        console.error(
+        logger.error(
           "freezeCredits: receipt write failed, refunded hold:",
           err,
         );
@@ -437,11 +438,11 @@ class UnifiedCreditController {
       reservation_key: reservationKey,
     });
     if (deleted) {
-      console.log(
+      logger.info(
         `[credits] settle OK key=${reservationKey} user=${deleted.user_id} amount=${deleted.amount}`,
       );
     } else {
-      console.warn(`[credits] settle NO_RECEIPT key=${reservationKey}`);
+      logger.warn(`[credits] settle NO_RECEIPT key=${reservationKey}`);
     }
     return { ok: !!deleted };
   }
@@ -460,12 +461,12 @@ class UnifiedCreditController {
       reservation_key: reservationKey,
     });
     if (!receipt) {
-      console.warn(`[credits] release NO_RECEIPT key=${reservationKey}`);
+      logger.warn(`[credits] release NO_RECEIPT key=${reservationKey}`);
       return { ok: false, reason: "NO_RECEIPT" };
     }
 
     await this._refundSplitToUser(receipt.user_id, receipt.split);
-    console.log(
+    logger.info(
       `[credits] release OK key=${reservationKey} user=${receipt.user_id} ` +
         `refunded=${receipt.amount} ` +
         `split=R${receipt.split.fromRollover}/S${receipt.split.fromSub}/T${receipt.split.fromTopup}`,
@@ -490,7 +491,7 @@ class UnifiedCreditController {
       reservation_key: reservationKey,
     });
     if (!receipt) {
-      console.warn(
+      logger.warn(
         `[credits] releasePartial NO_RECEIPT key=${reservationKey} actualUsed=${actualUsedAmount} ` +
           `(receipt was already settled/released — likely duplicate callback)`,
       );
@@ -500,7 +501,7 @@ class UnifiedCreditController {
     const used = Math.max(0, Math.min(actualUsedAmount, receipt.amount));
     const refund = receipt.amount - used;
     if (refund <= 0) {
-      console.log(
+      logger.info(
         `[credits] releasePartial OK key=${reservationKey} user=${receipt.user_id} ` +
           `charged=${used} refund=0 (full hold consumed)`,
       );
@@ -520,7 +521,7 @@ class UnifiedCreditController {
       fromSub,
       fromRollover,
     });
-    console.log(
+    logger.info(
       `[credits] releasePartial OK key=${reservationKey} user=${receipt.user_id} ` +
         `charged=${used} refund=${refund} ` +
         `refundSplit=T${fromTopup}/S${fromSub}/R${fromRollover}`,
@@ -597,13 +598,13 @@ class UnifiedCreditController {
         const result = await this.releaseCredits(row.reservation_key);
         if (result.ok) {
           refunded += 1;
-          console.warn(
+          logger.warn(
             `[credit-sweep] released orphan reservation ${row.reservation_key} ` +
               `(user=${row.user_id}, amount=${row.amount})`,
           );
         }
       } catch (err) {
-        console.error(
+        logger.error(
           `[credit-sweep] failed to release ${row.reservation_key}:`,
           err.message,
         );
@@ -639,7 +640,7 @@ class UnifiedCreditController {
     // freeze pattern means deductCredits should NOT be hit on the success path
     // of any migrated endpoint — only as the NO_RECEIPT fallback, and that
     // itself is the smoking gun for duplicate-callback double-charges.
-    console.warn(
+    logger.warn(
       `[credits] LEGACY deductCredits user=${userId} amount=${amount} ` +
         `details=${JSON.stringify(details)} ` +
         `— if a freeze receipt should have settled this, you have a leak`,
@@ -649,7 +650,7 @@ class UnifiedCreditController {
 
       const user = await UserProfile.findOne({ user_id: userId });
       if (!user) {
-        console.error(`User ${userId} not found for credit deduction`);
+        logger.error(`User ${userId} not found for credit deduction`);
         return;
       }
 
@@ -695,7 +696,7 @@ class UnifiedCreditController {
 
       return await this.getCreditStatus(userId);
     } catch (error) {
-      console.error("Error deducting unified credits:", error);
+      logger.error("Error deducting unified credits:", error);
     }
   }
 
@@ -765,7 +766,7 @@ class UnifiedCreditController {
         { new: true }
       );
 
-      console.log(
+      logger.info(
         `Billing cycle refreshed for user ${userId} (plan ${planId}, ${durationDays}d): ` +
           (isYearlyPlan
             ? `yearly plan — no rollover, new allocation: ${newBaseCredits}`
@@ -776,7 +777,7 @@ class UnifiedCreditController {
 
       return updatedUser;
     } catch (error) {
-      console.error("Error refreshing billing cycle:", error);
+      logger.error("Error refreshing billing cycle:", error);
     }
   }
 
@@ -792,7 +793,7 @@ class UnifiedCreditController {
       );
       return updatedUser;
     } catch (error) {
-      console.error("Error adding top-up credits:", error);
+      logger.error("Error adding top-up credits:", error);
     }
   }
 
@@ -831,12 +832,12 @@ class UnifiedCreditController {
         { new: true }
       );
 
-      console.log(
+      logger.info(
         `Credits initialized for user ${userId}: ${baseCredits} monthly credits (plan: ${planName})`
       );
       return updatedUser;
     } catch (error) {
-      console.error("Error initializing credits:", error);
+      logger.error("Error initializing credits:", error);
     }
   }
 }

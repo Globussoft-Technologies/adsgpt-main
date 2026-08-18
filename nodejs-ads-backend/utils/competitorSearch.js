@@ -2,8 +2,8 @@ require('dotenv').config();
 const clients = require('../DB/connectCompetitor');
 const logger = require('../controllers/Loggers/logs');
 
-const scrub = (v) =>
-  typeof v === "string" ? v.replace(/[\r\n\u2028\u2029]/g, " ") : v;
+const scrubStr = (v) => String(v).replace(/[\r\n\u2028\u2029]/g, " ");
+
 
 
 // ── Platform-specific ES configs (senior: use different variables) ──────
@@ -802,9 +802,9 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
         timeout: '15s',            // Kill slow queries
       });
     } catch (esErr) {
-      console.error(scrub(`[searchAdsByKeywords] ES search failed for ${platform} (${index}): ${esErr.message}`));
+      console.error(scrubStr(`[searchAdsByKeywords] ES search failed for ${platform} (${index}): ${esErr.message}`));
       if (esErr.meta && esErr.meta.body) {
-        console.error(scrub(`[searchAdsByKeywords] ES error body: ${JSON.stringify(esErr.meta.body)}`));
+        console.error(scrubStr(`[searchAdsByKeywords] ES error body: ${JSON.stringify(esErr.meta.body)}`));
       }
       return { ads: [], total: 0, rawCount: 0 };
     }

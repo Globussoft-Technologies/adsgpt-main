@@ -112,7 +112,7 @@ const emitCreditStatus = async (userId) => {
       global.io.to(userId).emit("credits", payload);
     }
   } catch (error) {
-    console.error("Error emitting credit status:", error);
+    logger.error("Error emitting credit status:", error);
   }
 };
 
@@ -203,7 +203,7 @@ exports.generateVideo = async (req, res) => {
     const video = await VideoGeneration.create(videoData);
     const videoId = video._id.toString();
 
-    console.log(
+    logger.info(
       `[credits] generateVideo ENTER user=${userId} videoId=${videoId} ` +
         `model=${selectedModel} duration=${inputs.duration} numVideos=${numberOfVideos} ` +
         `totalRequired=${totalRequiredCredits}`,
@@ -279,7 +279,7 @@ exports.generateVideo = async (req, res) => {
             );
           }
         } catch (err) {
-          console.error(
+          logger.error(
             `Error sending ${inputs.type} request to python:`,
             err.message,
           );
@@ -294,7 +294,7 @@ exports.generateVideo = async (req, res) => {
           });
         }
       } else {
-        console.log(`No Python API configured for type: ${inputs.type}`);
+        logger.info(`No Python API configured for type: ${inputs.type}`);
       }
 
       // * Send success response
@@ -305,7 +305,7 @@ exports.generateVideo = async (req, res) => {
       });
     }
   } catch (err) {
-    console.error("Error in generateVideo:", err);
+    logger.error("Error in generateVideo:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 };
@@ -431,13 +431,13 @@ exports.updateVideoResult = async (req, res) => {
     if (preRecord?.inputs?.type === "ai_ads") {
       await persistAiAdsCleanVideoUrl(preRecord, req.body?.cleanVideoUrl);
     }
-    console.log(
+    logger.info(
       `[updateVideoResult] session=${sessionId} type=${preRecord?.inputs?.type} ` +
         `regenState=${preRecord?.regenState} videoStatus=${req.body?.videoStatus}`,
     );
     if (preRecord?.inputs?.type === "ai_ads" && preRecord.regenState === "processing") {
       const b = req.body || {};
-      console.log(
+      logger.info(
         `[AI Ads] voice-regen completion DETECTED session=${sessionId} ` +
           `regenType=${preRecord.pendingRegen?.regenType} videoStatus=${b.videoStatus} — appending version`,
       );
@@ -504,7 +504,7 @@ exports.updateVideoResult = async (req, res) => {
       updateQuery.$set = { status: finalStatus };
     }
 
-    console.log(
+    logger.info(
       `[credits] updateVideoResult ENTER session=${sessionId} videoStatus=${videoStatus} model=${resultData?.model} duration=${resultData?.duration}`,
     );
 
@@ -519,7 +519,7 @@ exports.updateVideoResult = async (req, res) => {
     );
 
     if (!priorDoc) {
-      console.warn(
+      logger.warn(
         `[credits] updateVideoResult 404 session=${sessionId} — no video record`,
       );
       return res.status(404).json({
@@ -549,7 +549,7 @@ exports.updateVideoResult = async (req, res) => {
     };
 
     if (alreadyTerminal) {
-      console.warn(
+      logger.warn(
         `[credits] updateVideoResult DUPLICATE session=${sessionId} ` +
           `prior_status=${priorDoc.status} new_videoStatus=${videoStatus} ` +
           `— skipping credit work to avoid double-charge`,
