@@ -16,7 +16,6 @@ router.patch("/jobs/:id",         authenticateJWT, ctrl.updateJob);
 router.delete("/jobs/:id",        authenticateJWT, ctrl.deleteJob);
 router.post("/jobs/:id/pause",    authenticateJWT, ctrl.pauseJob);
 router.post("/jobs/:id/resume",   authenticateJWT, ctrl.resumeJob);
-router.post("/jobs/:id/run-now",  authenticateJWT, ctrl.runNow);
 router.get("/jobs/:id/history",   authenticateJWT, ctrl.getRunHistory);
 router.get("/jobs/:id/stats",     authenticateJWT, ctrl.getJobStats);     // per-job stats
 router.get("/jobs/:id/activity",  authenticateJWT, ctrl.getJobActivity);  // full generation + posting trace

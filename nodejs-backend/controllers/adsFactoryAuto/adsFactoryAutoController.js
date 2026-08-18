@@ -2,7 +2,7 @@ const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const Campaign      = require("../../Module/adFactory/adFactory");
 const FBUsers       = require('../../Module/adPosting/facebookUsers');
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
-const { scheduleJob, cancelJob, runJobNow, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+const { scheduleJob, cancelJob, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
 const {
   createJobSchema,
   updateJobSchema,
@@ -31,6 +31,45 @@ function isJobRunLocked(job) {
   if (_runningJobs.has(job._id.toString())) return true;
   const expiresAt = job.runLock?.expiresAt ? new Date(job.runLock.expiresAt) : null;
   return !!(expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date());
+}
+
+async function enforceProactiveCompletion(job) {
+  if (job.status === "active" && job.schedule?.endDate) {
+    try {
+      const {
+        resolveInclusiveEndDate,
+        hasPassedEndBoundaryWithGrace,
+      } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+      const effectiveEndBoundary = resolveInclusiveEndDate(
+        job.schedule.endDate,
+        job.schedule.hour,
+        job.schedule.timezone || "UTC"
+      );
+      if (hasPassedEndBoundaryWithGrace({
+        effectiveEndBoundary,
+        now: new Date(),
+        rawGraceMinutes: process.env.ADS_FACTORY_AUTO_END_BOUNDARY_GRACE_MINUTES,
+      })) {
+        logger.info(
+          `[adsFactoryAuto] job ${job._id} endDate ${job.schedule.endDate} has passed — ` +
+          `proactively marking completed`
+        );
+        await AdsFactoryJob.updateOne(
+          { _id: job._id },
+          { $set: { status: "completed", "schedule.nextRunAt": null }, $unset: { lifecycleKey: 1 } }
+        );
+        await cancelJob(job._id.toString()).catch((e) => {
+          logger.warn(`[adsFactoryAuto] could not cancel completed job queue entry: ${e.message}`);
+        });
+        job.status = "completed";
+        if (job.schedule) job.schedule.nextRunAt = null;
+        return true;
+      }
+    } catch (e) {
+      logger.warn(`[adsFactoryAuto] endDate check failed: ${e.message}`);
+    }
+  }
+  return false;
 }
 
 const { trackBackendGA4Event } = require("../../utils/ga4");
@@ -235,6 +274,12 @@ class AdsFactoryAutoController {
         .lean();
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
 
+      // ── Proactive endDate completion check ────────────────────────────────────
+      await enforceProactiveCompletion(job);
+
+      // ── Enrich nextRunAt from live queue (active jobs only) ───────────────────
+      // This block is intentionally AFTER the endDate check — if we just flipped
+      // status to "completed" above, job.status !== "active" so this is skipped.
       if (job.schedule && job.status === "active") {
         try {
           const { getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
@@ -282,6 +327,8 @@ class AdsFactoryAutoController {
       const userId = req.user.user_id;
       const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      await enforceProactiveCompletion(job);
 
       if (job.status === "completed") {
         return res.status(409).json({
@@ -625,6 +672,12 @@ class AdsFactoryAutoController {
       const userId = req.user.user_id;
       const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+      
+      await enforceProactiveCompletion(job);
+      
+      if (job.status === "completed") {
+        return res.status(400).json({ success: false, error: "Cannot pause a completed job" });
+      }
       if (job.status === "paused") {
         const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
         if (nextTime) job.schedule.nextRunAt = nextTime;
@@ -696,6 +749,9 @@ class AdsFactoryAutoController {
       const userId = req.user.user_id;
       const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      await enforceProactiveCompletion(job);
+
       if (job.status === "active") {
         const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
         if (nextTime) job.schedule.nextRunAt = nextTime;
@@ -717,39 +773,6 @@ class AdsFactoryAutoController {
     }
   }
 
-  async runNow(req, res) {
-    /*
-      #swagger.tags = ['Ads Factory Autopilot']
-      #swagger.summary = 'Run job immediately'
-      #swagger.description = 'Queue an autopilot job for immediate execution, independent of its regular schedule.'
-      #swagger.security = [{ "BearerAuth": [] }]
-      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
-    */
-    try {
-      const userId = req.user.user_id;
-      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId }).lean();
-      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
-
-      if (job.status === "paused") {
-        return res.status(400).json({ success: false, error: "Cannot run a paused job. Resume it first." });
-      }
-      if (job.status === "completed") {
-        return res.status(400).json({ success: false, error: "Cannot run a completed job." });
-      }
-      if (isJobRunLocked(job)) {
-        return res.status(409).json({
-          success: false,
-          error: "This job is already running right now. Please wait for the current run to finish before triggering another one.",
-        });
-      }
-
-      await runJobNow(req.params.id);
-      return res.json({ success: true, message: "Job queued for immediate execution" });
-    } catch (err) {
-      logger.error(`[adsFactoryAuto:runNow] ${err.message}`);
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  }
 
   async testAlertEmail(req, res) {
     /*
@@ -1057,6 +1080,9 @@ class AdsFactoryAutoController {
         .select("runHistory totalRuns failedRuns status schedule createdAt targets pairsPerCycle")
         .lean();
       if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      // ── Proactive endDate completion check ────────────────────────────────────
+      await enforceProactiveCompletion(job);
 
       const history = job.runHistory || [];
 

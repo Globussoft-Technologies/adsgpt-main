@@ -55,8 +55,28 @@ function normalizeCampaignsResponse(parsed, adAccountId) {
 
 const normalizeCustomerId = (id) => {
   if (!id) return null;
-  return String(id).replace(/-/g, "").trim();
+  const digits = String(id).replace(/-/g, "").trim();
+  return /^\d{1,15}$/.test(digits) ? digits : null;
 };
+
+const INVALID_AD_ACCOUNT_ID_MESSAGE = "Invalid ad account id";
+
+function respondInvalidAdAccountId(res) {
+  return res.status(400).json({
+    status: false,
+    error: INVALID_AD_ACCOUNT_ID_MESSAGE,
+    message: INVALID_AD_ACCOUNT_ID_MESSAGE,
+  });
+}
+
+function normalizeRequestCustomerId(res, id) {
+  const tid = normalizeCustomerId(id);
+  if (!tid) {
+    respondInvalidAdAccountId(res);
+    return null;
+  }
+  return tid;
+}
 
 function getQueryParam(query, names) {
   for (const name of names) {
@@ -952,7 +972,8 @@ class GoogleAdController {
 
       if (adAccountId) {
         // Mode A: Specific Account — skip listAccessibleCustomers entirely
-        const tid = normalizeCustomerId(adAccountId);
+        const tid = normalizeRequestCustomerId(res, adAccountId);
+        if (!tid) return;
         let resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
         const mccId = normalizeCustomerId(resolvedMcc || tid);
         accountsToFetch.push({ id: tid, loginCustomerId: mccId });
@@ -1464,7 +1485,8 @@ class GoogleAdController {
         return res.status(400).json({ status: false, error: "adAccountId and campaignId are required" });
       }
 
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const cacheKey = `googleAdGroups:v6:${userId}:${tid}:${campaignId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
@@ -1625,7 +1647,8 @@ class GoogleAdController {
         return res.status(400).json({ status: false, error: "adAccountId and campaignId are required" });
       }
 
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const cacheKey = `googleCampaignAds:v3:${userId}:${tid}:${campaignId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
@@ -1771,7 +1794,8 @@ class GoogleAdController {
         return res.status(400).json({ status: false, error: "adAccountId and adGroupId are required" });
       }
 
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const cacheKey = `googleAdGroupAds:v4:${userId}:${tid}:${adGroupId}`;
       if (!wantsCacheRefresh(req)) {
         const cached = await redisClient.get(cacheKey);
@@ -2035,7 +2059,8 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
@@ -2153,7 +2178,8 @@ class GoogleAdController {
       if (cached && !wantsCacheRefresh(req)) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
@@ -2362,7 +2388,8 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const headers = { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": lid, "Content-Type": "application/json" };
@@ -2456,7 +2483,8 @@ class GoogleAdController {
       if (cached) return res.status(200).json(JSON.parse(cached));
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(adAccountId, accessToken, userId);
       const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
 
@@ -2718,7 +2746,8 @@ class GoogleAdController {
       const userId = req.user.user_id;
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(customerId);
+      const tid = normalizeRequestCustomerId(res, customerId);
+      if (!tid) return;
 
       // Fast path: resolve loginCustomerId from Redis only (set by resolveManagerForAccount on first campaign load)
       let loginCustomerId = tid;
@@ -2855,7 +2884,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
       const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const mccId = loginCustomerId;
@@ -2954,7 +2984,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
       const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const customerId = sanitizeId(adAccountId);
@@ -2993,7 +3024,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken);
       const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || tid);
       const mccId = loginCustomerId;
@@ -3043,7 +3075,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customerId = sanitizeId(adAccountId);
@@ -3089,7 +3122,8 @@ class GoogleAdController {
       }
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customerId = sanitizeId(adAccountId);
@@ -3144,7 +3178,8 @@ class GoogleAdController {
       }
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customerId = sanitizeId(adAccountId);
@@ -3227,7 +3262,8 @@ class GoogleAdController {
       const userId = req.user.user_id;
 
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const cleanCustomerId = sanitizeId(adAccountId);
@@ -3333,7 +3369,8 @@ class GoogleAdController {
 
       // ── Init ──────────────────────────────────────────────────────────────
       const { accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customerId = tid;
@@ -3811,7 +3848,8 @@ class GoogleAdController {
 
       // ── Init ──────────────────────────────────────────────────────────────
       const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customer = getCustomerClient(client, adAccountId, mccId, refreshToken);
@@ -4171,7 +4209,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const customerId = normalizeCustomerId(resolvedAccountId);
+      const customerId = normalizeRequestCustomerId(res, resolvedAccountId);
+      if (!customerId) return;
 
       let resolvedLoginCustomerId = null;
       try {
@@ -4680,7 +4719,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const customerId = normalizeCustomerId(adAccountId);
+      const customerId = normalizeRequestCustomerId(res, adAccountId);
+      if (!customerId) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(customerId, accessToken).catch(() => null);
       const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || customerId);
       const cleanAdGroupId = sanitizeId(adGroupId);
@@ -4816,7 +4856,8 @@ class GoogleAdController {
 
       const userId = req.user.user_id;
       const { accessToken } = await initGoogleApiForUser(userId);
-      const customerId = normalizeCustomerId(adAccountId);
+      const customerId = normalizeRequestCustomerId(res, adAccountId);
+      if (!customerId) return;
       const resolvedLoginCustomerId = await resolveManagerForAccount(customerId, accessToken).catch(() => null);
       const loginCustomerId = normalizeCustomerId(resolvedLoginCustomerId || customerId);
       const cleanAdGroupId = sanitizeId(adGroupId);
@@ -4848,6 +4889,11 @@ class GoogleAdController {
 
   async _fetchMappedGoogleAd({ userId, adAccountId, adId }) {
     const tid = normalizeCustomerId(adAccountId);
+    if (!tid) {
+      const error = new Error(INVALID_AD_ACCOUNT_ID_MESSAGE);
+      error.statusCode = 400;
+      throw error;
+    }
     const { accessToken } = await initGoogleApiForUser(userId);
     const resolvedLoginCustomerId = await resolveManagerForAccount(tid, accessToken, userId);
     const lid = normalizeCustomerId(resolvedLoginCustomerId || tid);
@@ -4979,7 +5025,8 @@ class GoogleAdController {
       }
 
       const { client, refreshToken, accessToken } = await initGoogleApiForUser(userId);
-      const tid = normalizeCustomerId(adAccountId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
       const resolvedMcc = await resolveManagerForAccount(tid, accessToken);
       const mccId = normalizeCustomerId(resolvedMcc || tid);
       const customer = getCustomerClient(client, adAccountId, mccId, refreshToken);
