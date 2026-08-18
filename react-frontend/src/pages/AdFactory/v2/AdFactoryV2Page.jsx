@@ -362,6 +362,11 @@ export default function AdFactoryV2Page() {
   const handleStartOver = useCallback(() => {
     dispatch(clearBriefError());
     dispatch(resetBrief());
+    // Refetch explicitly rather than relying on the bootstrap effect. That one
+    // is keyed on `urlBriefId` changing, so coming back from a brief whose id
+    // never reached the URL would not re-run it — and the list the user just
+    // added to would be stale anyway.
+    dispatch(fetchBriefs());
     const next = new URLSearchParams(searchParams);
     next.delete('briefId');
     setSearchParams(next, { replace: true });

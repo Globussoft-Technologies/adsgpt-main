@@ -290,7 +290,21 @@ const adFactoryBriefSlice = createSlice({
   name: 'adFactoryBrief',
   initialState,
   reducers: {
-    resetBrief: (state) => ({ ...initialState, uiMode: state.uiMode }),
+    // Clears the brief being WORKED ON. `briefs` is the history list and is
+    // deliberately carried over: it belongs to the front door, not to any one
+    // brief, and wiping it emptied "Your briefs" on the way back.
+    //
+    // Refetching does not reliably cover for that. Both the reset and the
+    // `fetchBriefs` dispatch are keyed on `urlBriefId` changing — so after a
+    // pasted URL (which never put an id in the URL) Start over reset the list
+    // without re-running the fetch, and the home page came back empty until a
+    // reload.
+    resetBrief: (state) => ({
+      ...initialState,
+      uiMode: state.uiMode,
+      briefs: state.briefs,
+      briefsLoading: state.briefsLoading,
+    }),
     setUiMode: (state, { payload }) => {
       const next = payload?.uiMode === 'quick' ? 'quick' : 'full';
       state.uiMode = next;
@@ -346,8 +360,26 @@ const adFactoryBriefSlice = createSlice({
       state.loading = false;
       const brief = payload?.data;
       if (!brief) return;
-      state.brief = brief;
-      state.briefId = brief._id;
+
+      // THE TWO FRONT DOORS RETURN DIFFERENT SHAPES, and this used to read only
+      // one of them.
+      //
+      //   POST /briefs            202  data: { briefId, status, reused }
+      //   POST /briefs/from-brand 201  data: <the whole brief document>
+      //
+      // The URL path returns 202 with just an id because inference runs
+      // detached — so there IS no document to send yet. Reading `_id` left
+      // `briefId` undefined for every pasted URL, and everything that moves the
+      // user off the wait screen is guarded on it: the 3s poll
+      // (`if (!inferring || !briefId) return`), the socket handler
+      // (`payload.briefId !== state.briefId`), the needsRefetch effect, and the
+      // ?briefId= URL sync. All four went silent, so the wait screen sat there
+      // indefinitely while the brief had actually been ready for minutes.
+      const id = brief._id || brief.briefId;
+      state.briefId = id;
+      // Normalised so nothing downstream has to know which door this came
+      // through — the poll replaces this stub with the real document shortly.
+      state.brief = brief._id ? brief : { ...brief, _id: id };
       state.run = brief.run || initialState.run;
       state.inferStartedAt = brief.status === BRIEF_STATUS.INFERRING ? Date.now() : null;
       // A reused brief may already be finished — pull the full document rather
