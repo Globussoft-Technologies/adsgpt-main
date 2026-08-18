@@ -60,17 +60,25 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
   if (briefs.length === 0) return null;
 
   return (
-    <section className="mx-auto w-full max-w-375 px-4 pb-4 2xl:px-8">
-      <h3 className="mb-3 text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
+    <section className="mx-auto w-full max-w-6xl px-4 pb-4">
+      <h3 className="mb-3 text-center text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
         Your briefs
       </h3>
 
-      {/* list-none + ml-0 are load-bearing: App.css styles every `ul` with
-          `list-style-type: disc; margin-left: 34px`, which put a bullet beside
-          each card and pushed the grid out of line with its own heading. */}
+      {/* `list-none` and `m-0` finally do something. App.css styles every `ul`
+          with `list-style-type: disc; margin-left: 34px` and was UNLAYERED,
+          which beats Tailwind utilities in `@layer utilities` no matter the
+          specificity — so these classes were inert and every card carried a
+          bullet and a 34px indent. App.css now declares that rule inside
+          `@layer base`; see the note there.
+
+          The tracks are fixed-width and centred rather than stretched across
+          the row. With auto-fit + 1fr, one brief became a single card spanning
+          the full width under a centred hero; now a partial row sits under the
+          hero instead of hugging the left edge. */}
       <motion.ul
         {...M.stagger()}
-        className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+        className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(230px,266px))] justify-center gap-3 p-0"
       >
         {briefs.map((b) => {
           const status = STATUS[b.status] || STATUS.draft;

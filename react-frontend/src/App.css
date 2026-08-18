@@ -236,9 +236,24 @@ html:not(.dark) .prompt_selection_button_no_gradient {
   }
 }
 
-ul {
-  list-style-type: disc;
-  margin-left: 34px;
+/* Layered ON PURPOSE.
+ *
+ * App.css is imported separately from index.css and is therefore UNLAYERED,
+ * and unlayered CSS beats layered CSS in the cascade regardless of specificity.
+ * Tailwind ships its utilities in `@layer utilities`, so this bare `ul` rule
+ * silently outranked `list-none` and `m-0` everywhere in the app: every card
+ * grid, timeline and menu built on a <ul> got disc bullets and a 34px left
+ * indent, and the utilities added to suppress them did nothing at all.
+ *
+ * Layer order here is properties, theme, base, components, utilities — so
+ * `base` keeps the default for ordinary prose while letting any list that
+ * opts out actually opt out.
+ */
+@layer base {
+  ul {
+    list-style-type: disc;
+    margin-left: 34px;
+  }
 }
 
 /* Mic loader */
