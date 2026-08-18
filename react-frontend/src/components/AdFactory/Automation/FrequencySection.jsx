@@ -490,7 +490,7 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
 
         {open && (
           <div
-            className="adsgpt-cal-pop absolute top-full left-0 z-10000 mt-1 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-2xl"
+            className="adsgpt-cal-pop absolute top-full right-0 z-10000 mt-1 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-2xl"
           >
             <style>{`
               .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }

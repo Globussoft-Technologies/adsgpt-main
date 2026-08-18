@@ -1057,7 +1057,8 @@ export const fetchAutomationStats = createAsyncThunk(
       });
       // Endpoint shape varies across the autopilot surface — handle both
       // wrapped ({ data: {...} }) and flat responses.
-      const data = res?.data?.data || res?.data || {};
+      const responseData = res?.data?.data || res?.data || {};
+      const data = Array.isArray(responseData) ? responseData[0] || {} : responseData;
       // The /stats endpoint nests creative counts under `generationHealth`
       // and run timestamps under `schedule`. Fall back to top-level keys
       // for older response shapes so the polling stays compatible.
