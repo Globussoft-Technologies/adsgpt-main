@@ -245,8 +245,8 @@ const adVideoNewSlice = createSlice({
         scenes[idx].imageError = null;
         return true;
       };
-      updateScene(state.aiAdsSceneData.scenes) ||
-        updateScene(state.aiAdsSceneData.data?.scenes);
+      updateScene(state.aiAdsSceneData.scenes);
+      updateScene(state.aiAdsSceneData.data?.scenes);
     },
     // Mark one scene's image as failed (partial_error callback)
     markAiAdsSceneImageFailed: (state, action) => {
@@ -260,8 +260,8 @@ const adVideoNewSlice = createSlice({
         scenes[idx].imageError = error || 'Image generation failed';
         return true;
       };
-      updateScene(state.aiAdsSceneData.scenes) ||
-        updateScene(state.aiAdsSceneData.data?.scenes);
+      updateScene(state.aiAdsSceneData.scenes);
+      updateScene(state.aiAdsSceneData.data?.scenes);
     },
     // ── AI Ads voice-regenerate / version switching (My Space card) ──────────
     // Per-item client fields on allVideos: regenState ('idle'|'processing'|

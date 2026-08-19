@@ -556,7 +556,7 @@ export const initSocket = (url) => (dispatch, getState) => {
       // Regen callback (or legacy full-payload) — merge by segmentNumber
       const { adVideoNew } = getState();
       const existingAiAdsData = adVideoNew?.aiAdsSceneData || {};
-      const existingScenes = existingAiAdsData?.scenes || existingAiAdsData?.data?.scenes || [];
+      const existingScenes = existingAiAdsData?.data?.scenes || existingAiAdsData?.scenes || [];
       const incomingScenes = data?.scenes || data?.data?.scenes || [];
 
       const mergedScenes = existingScenes.length > 0
@@ -579,11 +579,19 @@ export const initSocket = (url) => (dispatch, getState) => {
       // Preserve existing _id, status, inputs, etc. — regen socket payload
       // only carries sessionId/event/scenes, so spreading it alone would wipe
       // _id and break URL/Generate flow after Back→Next.
-      dispatch(setAiAdsSceneData({
+      const nextAiAdsData = {
         ...existingAiAdsData,
         ...(data?.data || data),
         scenes: mergedScenes,
-      }));
+      };
+      if (existingAiAdsData?.data) {
+        nextAiAdsData.data = {
+          ...existingAiAdsData.data,
+          ...((data?.data && data.data) || {}),
+          scenes: mergedScenes,
+        };
+      }
+      dispatch(setAiAdsSceneData(nextAiAdsData));
       dispatch(setAiAdsSceneLoading(false));
     });
 
