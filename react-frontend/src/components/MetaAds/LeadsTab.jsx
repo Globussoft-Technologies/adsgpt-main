@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
+import { useSelector } from 'react-redux';
 import {
   RefreshCw,
   Download,
@@ -7,6 +14,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  X,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -28,7 +36,14 @@ import { GA4Events } from '@/utils/ga4';
  * captured leads load into a table; "Download CSV" exports them all
  * (opens in Excel). Backed by GET /meta-ads/get-form-leads and
  * /export-form-leads, both of which need the connected Facebook
- * account to have granted the `leads_retrieval` OAuth scope.
+ * account to have granted the `leads_retrieval` OAuth scope — when it
+ * hasn't, the 403 carries `code: LEADS_SCOPE_MISSING` and this tab offers
+ * a reconnect button rather than a dead-end error.
+ *
+ * Both endpoints are served from a short-lived server-side cache (Meta
+ * rate-limits the leads edge by lead volume). Only the Refresh button
+ * bypasses it; the tab shows how old the data is so a cache hit is never
+ * mistaken for a live read.
  *
  * Only Instant-Form leads are retrievable — leads captured on the
  * advertiser's own website (the Leads/Website cell) never reach Meta,
@@ -44,6 +59,17 @@ import { GA4Events } from '@/utils/ga4';
 // Rows rendered at a time. The server caps a fetch at 5,000 leads; painting
 // that many <tr> at once is what made a busy form feel broken.
 const PAGE_SIZE = 100;
+
+// Re-render cadence for the "Updated N min ago" label. The value only ever
+// changes at minute granularity, so a 30s tick keeps it honest without a
+// per-second render loop.
+const FRESHNESS_TICK_MS = 30_000;
+
+const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
+
+// The server's leads_retrieval 403 carries this discriminator. Matching on
+// it (not on the message prose) is what lets us offer the reconnect CTA.
+const SCOPE_MISSING_CODE = 'LEADS_SCOPE_MISSING';
 
 // "full_name" → "Full name", "phone_number" → "Phone number".
 const prettifyField = (name) =>
@@ -64,6 +90,36 @@ const fmtDate = (iso) => {
         minute: '2-digit',
       });
 };
+
+// "Updated just now" / "Updated 4 min ago" / "Updated 2 hr ago". Reads the
+// server's `fetchedAt`, which is when the rows came off Meta — on a server
+// cache hit that is deliberately older than the request, so this reports the
+// data's real age rather than the time we last asked for it.
+const fmtFreshness = (iso) => {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'Updated just now';
+  if (mins < 60) return `Updated ${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Updated ${hrs} hr ago`;
+  return `Updated ${Math.floor(hrs / 24)} d ago`;
+};
+
+// The server flattens custom_disclaimer_responses to "key: Yes; key2: No"
+// (see utils/metaLeads.js normalizeLead). Split it back into pairs so the
+// table can render a tick/cross per consent box instead of a raw string.
+// Anchored on the trailing Yes/No because a checkbox_key may itself contain
+// a colon.
+const parseConsent = (s) =>
+  String(s || '')
+    .split('; ')
+    .map((part) => {
+      const m = /^(.*):\s(Yes|No)$/.exec(part.trim());
+      return m ? { key: m[1], checked: m[2] === 'Yes' } : null;
+    })
+    .filter(Boolean);
 
 /**
  * Labelled picker built on the shared `Dropdown` atom — the same trigger +
@@ -183,10 +239,20 @@ export default function LeadsTab({ adAccountId, facebookId }) {
   const [leads, setLeads] = useState([]);
   const [fieldNames, setFieldNames] = useState([]);
   const [truncated, setTruncated] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState(null);
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Set when the failure is specifically a missing `leads_retrieval` scope,
+  // which is recoverable by re-running OAuth — see the reconnect CTA below.
+  const [scopeMissing, setScopeMissing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [tablePage, setTablePage] = useState(1);
+
+  // Bumped on a timer purely so the relative "Updated N min ago" label
+  // re-renders as it ages; nothing reads the value itself.
+  const [, setFreshnessTick] = useState(0);
+
+  const { userData } = useSelector((state) => state.socket);
 
   // Monotonic request ids — a slow response from a previously-selected
   // Page/Form must not overwrite state belonging to the current one. Mirrors
@@ -258,36 +324,79 @@ export default function LeadsTab({ adAccountId, facebookId }) {
   }, [pageId, facebookId]);
 
   // ── load leads when a Form is picked ────────────────────────────────
-  const loadLeads = useCallback(() => {
-    if (!formId || !pageId || !facebookId) return;
-    const requestId = ++leadsRequestRef.current;
-    setLeadsLoading(true);
-    setError(null);
-    getFormLeads({ formId, pageId, facebookId })
-      .then((r) => {
-        if (requestId !== leadsRequestRef.current) return;
-        setLeads(r?.leads || []);
-        setFieldNames(r?.fieldNames || []);
-        setTruncated(!!r?.truncated);
-        setTablePage(1);
-      })
-      .catch((e) => {
-        if (requestId !== leadsRequestRef.current) return;
-        const d = e?.response?.data;
-        setError(d?.details || d?.error || e.message);
-        setLeads([]);
-        setFieldNames([]);
-        setTruncated(false);
-      })
-      .finally(() => {
-        if (requestId !== leadsRequestRef.current) return;
-        setLeadsLoading(false);
-      });
-  }, [formId, pageId, facebookId]);
+  // `refresh` is passed only by the Refresh button. Meta rate-limits the
+  // leads edge by lead volume and one uncached read can cost up to 100
+  // paginated calls, so automatic loads (form switch, tab re-entry) ride the
+  // server cache and only an explicit user action forces a fresh crawl.
+  const loadLeads = useCallback(
+    (refresh = false) => {
+      if (!formId || !pageId || !facebookId) return;
+      const requestId = ++leadsRequestRef.current;
+      setLeadsLoading(true);
+      setError(null);
+      setScopeMissing(false);
+      getFormLeads({ formId, pageId, facebookId, refresh })
+        .then((r) => {
+          if (requestId !== leadsRequestRef.current) return;
+          setLeads(r?.leads || []);
+          setFieldNames(r?.fieldNames || []);
+          setTruncated(!!r?.truncated);
+          setFetchedAt(r?.fetchedAt || null);
+          setTablePage(1);
+        })
+        .catch((e) => {
+          if (requestId !== leadsRequestRef.current) return;
+          const d = e?.response?.data;
+          setError(d?.details || d?.error || e.message);
+          setScopeMissing(d?.code === SCOPE_MISSING_CODE);
+          setLeads([]);
+          setFieldNames([]);
+          setTruncated(false);
+          setFetchedAt(null);
+        })
+        .finally(() => {
+          if (requestId !== leadsRequestRef.current) return;
+          setLeadsLoading(false);
+        });
+    },
+    [formId, pageId, facebookId],
+  );
 
   useEffect(() => {
     loadLeads();
   }, [loadLeads]);
+
+  // Age the freshness label while the tab sits open. Only runs when there is
+  // a timestamp to age.
+  useEffect(() => {
+    if (!fetchedAt) return undefined;
+    const t = setInterval(
+      () => setFreshnessTick((n) => n + 1),
+      FRESHNESS_TICK_MS,
+    );
+    return () => clearInterval(t);
+  }, [fetchedAt]);
+
+  // Re-run Facebook OAuth to pick up `leads_retrieval`. The backend's
+  // /api/auth/facebook already sends auth_type=rerequest, which is what
+  // forces Facebook to re-show the permissions dialog for an
+  // already-connected user instead of silently skipping the new scope.
+  const handleReconnect = () => {
+    if (!userData?.user_id) {
+      globalToast.error('Please sign in to reconnect Facebook.');
+      return;
+    }
+    window.location.href = `${BACKEND_HOST}/api/auth/facebook?userId=${userData.user_id}&feUrl=${encodeURIComponent(window.location.href)}`;
+  };
+
+  // Only render a Consent column when the form actually has disclaimer
+  // checkboxes — otherwise every lead-form user pays a permanently empty
+  // column. The data itself has always been fetched and exported to CSV;
+  // it just never reached the table.
+  const showConsent = useMemo(
+    () => leads.some((l) => l.disclaimerResponses),
+    [leads],
+  );
 
   const onDownload = async () => {
     if (!formId || !pageId) return;
@@ -362,10 +471,19 @@ export default function LeadsTab({ adAccountId, facebookId }) {
             {leadsLoading
               ? 'Loading leads…'
               : `${truncated ? 'First ' : ''}${leads.length} lead${leads.length === 1 ? '' : 's'}`}
+            {/* Freshness — the server may have served this from a short-lived
+                cache, so without it a Refresh that changes nothing is
+                indistinguishable from stale data. */}
+            {!leadsLoading && fmtFreshness(fetchedAt) && (
+              <span className="text-gray-400 dark:text-white/35">
+                {' · '}
+                {fmtFreshness(fetchedAt)}
+              </span>
+            )}
           </p>
           <div className="flex items-center gap-2">
             <button
-              onClick={loadLeads}
+              onClick={() => loadLeads(true)}
               disabled={leadsLoading}
               className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 px-3 py-1.5 text-10 2xl:text-xs font-medium text-gray-500 transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/6 dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
             >
@@ -403,13 +521,30 @@ export default function LeadsTab({ adAccountId, facebookId }) {
         </div>
       )}
 
-      {/* Error */}
+      {/* Error. A missing `leads_retrieval` scope is the one failure here the
+          user can actually fix themselves, so it gets its own copy and a
+          reconnect action rather than the generic dead-end banner. */}
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-13 text-red-600 dark:text-red-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500 dark:text-red-300" />
-          <div>
-            <div className="font-semibold text-red-700 dark:text-red-100">Couldn&apos;t load leads</div>
-            {error}
+          <div className="min-w-0">
+            <div className="font-semibold text-red-700 dark:text-red-100">
+              {scopeMissing
+                ? 'Leads access not granted'
+                : "Couldn't load leads"}
+            </div>
+            {scopeMissing
+              ? 'Your Facebook connection is missing the permission needed to read Instant Form submissions. Reconnect and accept the leads access prompt to fix this.'
+              : error}
+            {scopeMissing && (
+              <button
+                type="button"
+                onClick={handleReconnect}
+                className="mt-2 flex items-center gap-1.5 rounded-xl bg-[#1877F2] px-3 py-1.5 text-10 2xl:text-xs font-semibold text-white transition-all hover:bg-[#1665d8]"
+              >
+                Reconnect Facebook
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -445,6 +580,9 @@ export default function LeadsTab({ adAccountId, facebookId }) {
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Ad</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Platform</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Source</th>
+                {showConsent && (
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Consent</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -473,6 +611,32 @@ export default function LeadsTab({ adAccountId, facebookId }) {
                   <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
                     {l.source || '—'}
                   </td>
+                  {showConsent && (
+                    <td className="px-3 py-2">
+                      {l.disclaimerResponses ? (
+                        <div className="flex flex-col gap-0.5">
+                          {parseConsent(l.disclaimerResponses).map((c) => (
+                            <span
+                              key={c.key}
+                              className="flex items-center gap-1 whitespace-nowrap text-10"
+                              title={`${c.key}: ${c.checked ? 'Accepted' : 'Not accepted'}`}
+                            >
+                              {c.checked ? (
+                                <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                              ) : (
+                                <X className="h-3 w-3 shrink-0 text-red-500" />
+                              )}
+                              <span className="max-w-56 truncate text-gray-500 dark:text-white/55">
+                                {prettifyField(c.key)}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 dark:text-white/25">—</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

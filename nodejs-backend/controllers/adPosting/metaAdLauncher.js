@@ -117,6 +117,12 @@ const ALL_CACHE_PREFIXES = [
   // STATUS_CACHE_PREFIXES: pausing an entity doesn't retroactively change
   // its historical metrics, and the 5-min TTL covers the drift.
   "metaTableMetrics",
+  // Captured Instant-Form submissions (the Leads tab). The most sensitive
+  // payload this controller caches — real names, phone numbers, email
+  // addresses — so it must not outlive the connection that was entitled to
+  // read it. Not in STATUS_CACHE_PREFIXES: pausing a campaign doesn't
+  // retroactively change which leads it already captured.
+  "metaLeads",
 ];
 
 async function invalidateMetaCacheByPrefixes(userId, prefixes) {
@@ -510,6 +516,71 @@ async function attachCampaignPlanState(response, userId) {
     logger.warn(`attachCampaignPlanState: ${err.message}`);
   }
   return response;
+}
+
+// Sentinel thrown when a Page Access Token can't be resolved — lets the
+// shared leads loader below signal that specific 403 without either caller
+// duplicating the token-resolution branch.
+class PageTokenError extends Error {}
+
+// Shared read path behind BOTH /get-form-leads and /export-form-leads.
+//
+// Two things this centralises:
+//   1. **The Redis cache.** Meta's lead-retrieval rate limit scales with a
+//      form's lead volume, and one uncached read can cost up to
+//      MAX_LEAD_PAGES (100) paginated calls. Without this, every Refresh
+//      click — and every tab re-entry — paid that in full.
+//   2. **Not crawling twice per export.** exportFormLeads used to re-run
+//      the whole pagination from scratch even though the table had just
+//      loaded the identical rows, so a view-then-download was two full
+//      crawls. It now reads the entry getFormLeads just wrote.
+//
+// `fetchedAt` is deliberately stored INSIDE the cached blob rather than
+// stamped after the read: it describes when these leads came off Meta, so a
+// cache hit must report the original fetch time. Recomputing it per request
+// (the attachPlanUsage pattern) would make the UI's freshness indicator
+// claim data is current when it is up to VOLATILE_TTL old.
+//
+// Only the explicit Refresh button passes `refresh` — automatic loads and
+// exports ride the cache. See cache-strategy.md ("A Refresh button must
+// actually bypass the cache").
+async function loadLeadsForForm(
+  userId,
+  facebookId,
+  { formId, pageId, refresh = false },
+) {
+  const cacheKey = `metaLeads:${metaCacheScope(userId, facebookId)}:${pageId}:${formId}`;
+
+  if (!refresh) {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  }
+
+  await initApiForUser(userId, facebookId);
+
+  const pageToken = await getPageAccessToken(pageId);
+  if (!pageToken) throw new PageTokenError("no page access token");
+
+  const pageApi = new bizSdk.FacebookAdsApi(pageToken);
+  const { leads: rawLeads, truncated } = await fetchAllLeadsForForm(
+    pageApi,
+    formId,
+  );
+  const leads = rawLeads.map(normalizeLead);
+
+  const payload = {
+    leads,
+    fieldNames: leadFieldNames(leads),
+    count: leads.length,
+    truncated,
+    fetchedAt: new Date().toISOString(),
+  };
+
+  // A form that genuinely has zero leads yet IS cached — that empty list is
+  // the stable truth, not a failed read. An upstream failure never reaches
+  // here at all, because fetchAllLeadsForForm throws.
+  await redisClient.set(cacheKey, JSON.stringify(payload), "EX", VOLATILE_TTL);
+  return payload;
 }
 
 class MetaAdLauncher {
@@ -2508,11 +2579,21 @@ class MetaAdLauncher {
           .status(400)
           .json({ status: false, error: "formId and pageId are both required" });
       }
+      const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
-      await initApiForUser(userId, getFacebookIdFromRequest(req));
+      const payload = await loadLeadsForForm(
+        userId,
+        getFacebookIdFromRequest(req),
+        { formId, pageId, refresh },
+      );
 
-      const pageToken = await getPageAccessToken(pageId);
-      if (!pageToken) {
+      // `truncated` is true when Meta had more leads than the fetch cap —
+      // the UI shows a banner so `count` is never mistaken for the form's
+      // real total. `fetchedAt` drives the "Updated N min ago" indicator, so
+      // a cache hit reads as the age it actually is.
+      return res.status(200).json({ status: true, ...payload });
+    } catch (error) {
+      if (error instanceof PageTokenError) {
         return res.status(403).json({
           status: false,
           error: "Couldn't resolve a Page Access Token for this Page",
@@ -2520,24 +2601,6 @@ class MetaAdLauncher {
             "Make sure your Facebook account has admin / advertiser access to this Page.",
         });
       }
-
-      const pageApi = new bizSdk.FacebookAdsApi(pageToken);
-      const { leads: rawLeads, truncated } = await fetchAllLeadsForForm(
-        pageApi,
-        formId,
-      );
-      const leads = rawLeads.map(normalizeLead);
-
-      return res.status(200).json({
-        status: true,
-        leads,
-        fieldNames: leadFieldNames(leads),
-        count: leads.length,
-        // True when Meta had more leads than the fetch cap — the UI shows a
-        // banner so `count` is never mistaken for the form's real total.
-        truncated,
-      });
-    } catch (error) {
       const m = logMetaError("getFormLeads error", error);
       // Meta code 200 on the leads edge == missing leads_retrieval scope.
       const scopeMissing = m.code === 200;
@@ -2549,6 +2612,11 @@ class MetaAdLauncher {
         details: scopeMissing
           ? "This connected Facebook account hasn't granted the leads_retrieval permission. The Leads tab needs `leads_retrieval` enabled on the Meta App, then the user reconnects Facebook."
           : m.message,
+        // Machine-readable discriminator so the UI can offer the one action
+        // that actually fixes this (re-run OAuth, which sends
+        // auth_type=rerequest) instead of a dead-end error banner. Matching
+        // on the prose above would break the moment the copy is reworded.
+        code: scopeMissing ? "LEADS_SCOPE_MISSING" : undefined,
         meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
       });
     }
@@ -2570,22 +2638,14 @@ class MetaAdLauncher {
           .json({ status: false, error: "formId and pageId are both required" });
       }
 
-      await initApiForUser(userId, getFacebookIdFromRequest(req));
-
-      const pageToken = await getPageAccessToken(pageId);
-      if (!pageToken) {
-        return res.status(403).json({
-          status: false,
-          error: "Couldn't resolve a Page Access Token for this Page",
-        });
-      }
-
-      const pageApi = new bizSdk.FacebookAdsApi(pageToken);
-      const { leads: rawLeads, truncated } = await fetchAllLeadsForForm(
-        pageApi,
-        formId,
+      // No `refresh` here on purpose: an export is not a freshness
+      // affordance, and re-crawling every page of a form the table just
+      // loaded doubled this endpoint's Meta cost for identical rows.
+      const { leads, truncated } = await loadLeadsForForm(
+        userId,
+        getFacebookIdFromRequest(req),
+        { formId, pageId },
       );
-      const leads = rawLeads.map(normalizeLead);
       const csv = leadsToCsv(leads);
 
       // Safe filename — strip anything HTTP headers / the OS dislike.
@@ -2610,6 +2670,12 @@ class MetaAdLauncher {
       );
       return res.status(200).send(csv);
     } catch (error) {
+      if (error instanceof PageTokenError) {
+        return res.status(403).json({
+          status: false,
+          error: "Couldn't resolve a Page Access Token for this Page",
+        });
+      }
       const m = logMetaError("exportFormLeads error", error);
       const scopeMissing = m.code === 200;
       return res.status(scopeMissing ? 403 : 500).json({
@@ -2620,6 +2686,7 @@ class MetaAdLauncher {
         details: scopeMissing
           ? "This connected Facebook account hasn't granted the leads_retrieval permission."
           : m.message,
+        code: scopeMissing ? "LEADS_SCOPE_MISSING" : undefined,
       });
     }
   }

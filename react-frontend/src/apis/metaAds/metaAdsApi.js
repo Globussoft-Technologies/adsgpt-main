@@ -508,14 +508,24 @@ export const createLeadForm = async (payload) => {
 };
 
 // Captured leads for an Instant Form — powers the dashboard's Leads tab
-// table. Returns { leads, fieldNames, count, truncated }. `truncated` is
-// true when the form holds more leads than the server-side fetch cap, so
-// `count` must not be presented as the form's real total. Needs the
-// connected account to have granted the `leads_retrieval` scope.
-export const getFormLeads = async ({ formId, pageId, facebookId }) => {
+// table. Returns { leads, fieldNames, count, truncated, fetchedAt }.
+// `truncated` is true when the form holds more leads than the server-side
+// fetch cap, so `count` must not be presented as the form's real total.
+// `fetchedAt` is when these rows actually came off Meta (which, on a server
+// cache hit, is earlier than this request) — it drives the freshness label.
+// Needs the connected account to have granted the `leads_retrieval` scope;
+// without it the call rejects 403 with `code: 'LEADS_SCOPE_MISSING'`.
+//
+// `refresh` bypasses the server-side cache. Reserve it for the explicit
+// Refresh button — the leads edge is rate-limited by lead volume, so
+// automatic loads should ride the cache.
+export const getFormLeads = async ({ formId, pageId, facebookId, refresh }) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/get-form-leads`,
-    { params: { formId, pageId }, headers: getAuthHeaders(facebookId) },
+    {
+      params: { formId, pageId, ...(refresh ? { refresh: true } : {}) },
+      headers: getAuthHeaders(facebookId),
+    },
   );
   return data;
 };
