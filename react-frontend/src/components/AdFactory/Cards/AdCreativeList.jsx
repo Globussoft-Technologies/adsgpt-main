@@ -2,6 +2,7 @@ import CreativeGeneratingLoader from '@/components/AdStudio/AdCreatives/Creative
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { useDownloadWithFormat } from '@/hooks/useDownloadWithFormat';
 import { fetchAdFactoryHistory } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
 import { AnimatePresence } from 'framer-motion';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -68,22 +69,50 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
     }
   };
   const [loadedImages, setLoadedImages] = useState({});
+  const [adFactoryModels, setAdFactoryModels] = useState([]);
   const { userData } = useSelector((state) => state?.socket);
   const { results, history, productionAndServices } = useSelector((state) => state?.adFactoryNew);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchAdFactoryConfig()
+      .then((models) => {
+        if (mounted) setAdFactoryModels(Array.isArray(models) ? models : []);
+      })
+      .catch(() => {
+        if (mounted) setAdFactoryModels([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const modelLabelByCanonical = useMemo(
+    () => new Map(adFactoryModels.map((model) => [model.apiId, model.label])),
+    [adFactoryModels]
+  );
+
+  const resolveModelLabel = useCallback(
+    (model) => {
+      if (!model) return null;
+      const legacyLabels = {
+        google: 'Nano Banana Pro',
+        openai: 'OpenAI 1.5',
+        openai2: 'OpenAI 2.0',
+        auto: 'Auto',
+      };
+      return modelLabelByCanonical.get(model) || legacyLabels[model] || model;
+    },
+    [modelLabelByCanonical]
+  );
 
   const imageModelLabel = useMemo(() => {
     const imageService = productionAndServices?.servicesSelected?.find(
       (s) => s.serviceName === 'image'
     );
     const model = imageService?.serviceParams?.model;
-    const labelMap = {
-      google: 'Nano Banana Pro',
-      openai: 'OpenAI 1.5',
-      openai2: 'OpenAI 2.0',
-      auto: 'Auto',
-    };
-    return model ? (labelMap[model] || model) : null;
-  }, [productionAndServices]);
+    return resolveModelLabel(model);
+  }, [productionAndServices, resolveModelLabel]);
   const queryCampaignId = searchParams.get('campaignId');
   const { handleDownloadWithFormat } = useDownloadWithFormat();
   const [isDownloadingViaAPI, setIsDownloadingViaAPI] = useState(false);
@@ -119,12 +148,13 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
             editImage: img?.data,
             imagePath: img?.data, // Store the path for download
             imageModel: historyImageModel || null,
+            modelLabel: resolveModelLabel(historyImageModel),
           });
         });
       });
 
     return images;
-  }, [historyData]);
+  }, [historyData, resolveModelLabel]);
 
   // Get current images with full URLs
   const currentImagesWithUrls = useMemo(() => {
@@ -157,8 +187,13 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
       version: historyItem?.version,
       imagePath: img?.data,
       editImage: img?.data,
+      modelLabel: resolveModelLabel(
+        historyItem?.previousData?.services?.servicesSelected?.find(
+          (s) => s.serviceName === 'image'
+        )?.serviceParams?.model
+      ),
     }));
-  }, [selectedHistoryVersion, historyData]);
+  }, [selectedHistoryVersion, historyData, resolveModelLabel]);
 
   // Determine which images to display
   const displayHistoryImages =
@@ -433,7 +468,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
             <div className="flex items-center justify-between bg-gray-100 px-4 py-2 dark:bg-[#1a1a1a]">
               <span className="text-xs font-medium text-[#02C8C4]">
                 {item?.prompt === 'Edited image' ? 'Edited Image' : (() => {
-                  const model = isHistory ? item?.imageModel : imageModelLabel;
+                  const model = item?.modelLabel || (isHistory ? item?.imageModel : imageModelLabel);
                   if (!model) return '';
                   const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
                   return (
@@ -454,7 +489,7 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
               <div className="relative flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
                 <div className="absolute top-2 right-3 left-3 flex items-center justify-between">
                   {(() => {
-                    const model = isHistory ? item?.imageModel : imageModelLabel;
+                    const model = item?.modelLabel || (isHistory ? item?.imageModel : imageModelLabel);
                     if (!model) return <span />;
                     const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
                     return (

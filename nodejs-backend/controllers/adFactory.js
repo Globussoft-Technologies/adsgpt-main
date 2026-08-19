@@ -61,6 +61,46 @@ function buildPythonAdFactoryPayload(payload) {
     },
   };
 }
+
+function addImageModelLabels(results, services) {
+  const selected = services?.servicesSelected || [];
+  const imageModel = selected.find((service) => service?.serviceName === "image")
+    ?.serviceParams?.model;
+  if (!imageModel || !Array.isArray(results?.image)) return results;
+
+  const configuredModel = modelConfigurationService.getRuntimeModel(imageModel);
+  const modelLabel = configuredModel?.displayName || configuredModel?.label || imageModel;
+
+  return {
+    ...results,
+    image: results.image.map((entry) => ({ ...entry, modelLabel })),
+  };
+}
+
+function addCampaignImageModelLabel(campaign) {
+  if (!campaign) return campaign;
+  return {
+    ...campaign,
+    results: addImageModelLabels(campaign.results, campaign.services),
+  };
+}
+
+function addHistoryImageModelLabels(history) {
+  if (!history) return history;
+  const plainHistory = typeof history.toObject === "function" ? history.toObject() : history;
+  return {
+    ...plainHistory,
+    previousData: plainHistory.previousData
+      ? {
+          ...plainHistory.previousData,
+          results: addImageModelLabels(
+            plainHistory.previousData.results,
+            plainHistory.previousData.services,
+          ),
+        }
+      : plainHistory.previousData,
+  };
+}
 const { trackBackendGA4Event } = require("../utils/ga4");
 
 // const getFileName = (extension) => `${Date.now()}${extension}`;
@@ -252,7 +292,7 @@ exports.getCampaignByUserCampaignId = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Campaign fetched successfully",
-      data: campaign,
+      data: addCampaignImageModelLabel(campaign),
     });
   } catch (error) {
     logger.error("Get Campaign Error:", error);
@@ -317,7 +357,7 @@ exports.getCampaignHistoryByUserCampaignId = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Campaign history fetched successfully",
-      data: history,
+      data: history.map(addHistoryImageModelLabels),
     });
   } catch (error) {
     logger.error("Get Campaign Error:", error);
