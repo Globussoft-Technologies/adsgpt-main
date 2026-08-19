@@ -111,7 +111,7 @@ const ChatHistorySection = ({ isSidebarOpen }) => {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="history_container scrollbar-thin max-h-[calc(100svh-240px)] space-y-3 overflow-y-auto p-2 xl:max-h-[calc(100svh-235px)] 2xl:max-h-[calc(100svh-310px)] 2xl:space-y-5 2xl:p-3"
+          className="history_container scrollbar-thin max-h-[calc(95svh-240px)] space-y-3 overflow-y-auto p-2 xl:max-h-[calc(92svh-235px)] 2xl:max-h-[calc(96svh-310px)] 2xl:space-y-5 2xl:p-3"
         >
           {noHistory && (
             <div className="today">
