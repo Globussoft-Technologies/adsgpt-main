@@ -108,6 +108,51 @@ group("THE TRAP: arrays accumulate across runs", () => {
   });
 });
 
+group("THE BUG: pending followed the SETTING, not the run", () => {
+  // Reported as "13 are in loading and 1 is generated".
+  //
+  // pending used to be `quantity - delivered - failed`, and `quantity` is the
+  // campaign's CURRENT image count. Editing "ads per generate" re-materialises
+  // the campaign on every keystroke-save, so raising it from 1 to 14 after a
+  // run had produced a single ad reported thirteen pending and drew thirteen
+  // skeletons for a run that never asked for them.
+  const oneSlotRun = () => {
+    const c = campaign({ image: [img(1)], text: [txt(1)] });
+    // The user has since raised the setting to 14.
+    c.services.servicesSelected.find((x) => x.serviceName === "image").serviceParams.quantity = 14;
+    return c;
+  };
+
+  test("raising the quantity after a run invents no skeletons", () => {
+    const v = briefGenerationView(oneSlotRun());
+    assert.equal(v.pending, 0);
+    assert.equal(v.pairs.length, 1);
+  });
+
+  test("requested reports what the RUN asked for, not the new setting", () => {
+    assert.equal(briefGenerationView(oneSlotRun()).requested, 1);
+  });
+
+  test("a live run counts its own empty slots", () => {
+    const c = campaign({ image: [img(1), pendingSlot(), pendingSlot()], text: [txt(1)] });
+    c.results.status = "in-progress";
+    // Setting says 14; the run allocated three slots and filled one.
+    c.services.servicesSelected.find((x) => x.serviceName === "image").serviceParams.quantity = 14;
+    const v = briefGenerationView(c);
+    assert.equal(v.pending, 2);
+    assert.equal(v.requested, 3);
+  });
+
+  test("a failed slot is not also counted as pending", () => {
+    const c = campaign({ image: [img(1), failedSlot(), pendingSlot()], text: [txt(1)] });
+    c.results.status = "in-progress";
+    const v = briefGenerationView(c);
+    assert.equal(v.failed, 1);
+    assert.equal(v.pending, 1);
+    assert.equal(v.requested, 3);
+  });
+});
+
 group("THE TRAP: filter before slicing, never after", () => {
   // A stale placeholder sits at the tail after two real results. Slicing the
   // unfiltered array would take [img(2), placeholder] and report a failure.
@@ -120,9 +165,16 @@ group("THE TRAP: filter before slicing, never after", () => {
     assert.equal(v.pairs[0].imageUrl, "/creatives/1.png");
   });
 
-  test("a pending slot is counted as pending, not as a failure", () => {
+  test("a pending slot is not counted as a failure", () => {
     assert.equal(v.failed, 0);
-    assert.equal(v.pending, 1);
+  });
+
+  test("but an empty slot on a STOPPED run draws no skeleton", () => {
+    // This campaign is not in-progress. Slots and `in-progress` are written in
+    // the same update (resultSlots), so an empty slot outside a live run is a
+    // leftover from a cycle that died — spinning forever on it promises an ad
+    // that is never coming.
+    assert.equal(v.pending, 0);
   });
 
   test("a run in flight reads as running, not idle", () => {

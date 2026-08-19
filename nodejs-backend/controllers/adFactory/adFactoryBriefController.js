@@ -417,7 +417,22 @@ exports.updateBrief = async (req, res) => {
     // the schedule of a live brief saved, displayed, and then did nothing.
     const jobSync = await syncLiveJob(brief, req.user);
 
-    return res.status(200).json({ success: true, data: brief, jobSync });
+    // Re-price on the way out. "Ads per generate" is the number the estimate is
+    // built from, so editing it changed the cost and the client had no way to
+    // learn that: PATCH returned the brief but not a new estimate, and the
+    // estimate only refreshed on a full GET. Pressing + or - moved the count
+    // and left the price sitting at its old value, which is worse than showing
+    // no price at all.
+    //
+    // Priced by the same projection GET uses, and the same one the credit
+    // freeze uses — a second pricing path would eventually disagree with the
+    // charge.
+    const estimate = estimateBriefCredits(
+      brief,
+      UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
+    );
+
+    return res.status(200).json({ success: true, data: brief, jobSync, estimate });
   } catch (err) {
     logger.error(`[adFactory:brief:update] ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });

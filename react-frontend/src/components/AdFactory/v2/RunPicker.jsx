@@ -41,7 +41,13 @@ const when = (value) => {
 
 const plural = (n) => `${n} ${n === 1 ? 'ad' : 'ads'}`;
 
-export default function RunPicker({ history = [], value = CURRENT, onChange, currentCount = 0 }) {
+export default function RunPicker({
+  history = [],
+  value = CURRENT,
+  onChange,
+  currentCount = 0,
+  currentPending = 0,
+}) {
   if (!history.length) return null;
 
   const selected = history.find((h) => String(h.version) === String(value));
@@ -56,8 +62,15 @@ export default function RunPicker({ history = [], value = CURRENT, onChange, cur
         </SelectTrigger>
 
         <SelectContent className="z-9999 border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white">
+          {/* Mid-run this counted only the ads that had ARRIVED, so a run of
+              three reported "1 ad" while three cards were on screen — one
+              finished and two still generating. The count is only a final
+              answer once the run is; until then it says both numbers. */}
           <SelectItem value={CURRENT} className="text-13 dark:focus:bg-white/10">
-            Latest run · {plural(currentCount)}
+            Latest run ·{' '}
+            {currentPending > 0
+              ? `${currentCount} of ${currentCount + currentPending} · generating`
+              : plural(currentCount)}
           </SelectItem>
           {history.map((h) => (
             <SelectItem

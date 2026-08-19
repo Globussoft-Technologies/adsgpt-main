@@ -123,11 +123,14 @@ export default function BriefSummary({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          {/* These are a glance, not controls — the brief itself is one click
+              away in Adjust. Sized down so the summary reads as a caption
+              rather than competing with the ads underneath it. */}
+          <div className="flex flex-wrap items-center gap-1">
             {facts.map((f) => (
               <span
                 key={f.key}
-                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-11 text-gray-600 dark:border-white/10 dark:bg-white/6 dark:text-white/60"
+                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-10 text-gray-600 dark:border-white/10 dark:bg-white/6 dark:text-white/60"
               >
                 <span className={f.strong ? 'font-semibold text-gray-900 dark:text-white/90' : ''}>
                   {f.label}
@@ -139,9 +142,9 @@ export default function BriefSummary({
               <button
                 type="button"
                 onClick={onAdjust}
-                className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-11 font-semibold text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-400"
+                className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-10 font-semibold text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-400"
               >
-                <AlertTriangle className="h-3 w-3" />
+                <AlertTriangle className="h-2.5 w-2.5" />
                 {flaggedCount} worth a look
               </button>
             )}

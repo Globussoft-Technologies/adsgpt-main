@@ -465,6 +465,14 @@ const adFactoryBriefSlice = createSlice({
         // be told. Saying nothing here would rebuild the original bug in the
         // client.
         state.jobSync = payload?.jobSync || null;
+        // The price follows the edit. "Ads per generate" is the number the
+        // estimate is built from, so changing it changes the cost — but the
+        // estimate only ever arrived with a full GET, so pressing + or - moved
+        // the count and left the price frozen at its previous value.
+        //
+        // `undefined` means this response carried no estimate; `null` is a real
+        // answer meaning "cannot be priced", so the two are not collapsed.
+        if (payload?.estimate !== undefined) state.estimate = payload.estimate;
       })
       .addCase(saveBriefEdits.rejected, (state, { payload }) => {
         state.saving = false;

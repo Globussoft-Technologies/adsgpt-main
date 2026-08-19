@@ -22,7 +22,7 @@ import {
 // ----------------------------------------------------------------------------
 // CadencePills — the schedule, as a sentence you can edit.
 //
-//   EVERY [week]  AT [9:00 AM] [IST]  [3] pairs per run
+//   EVERY [week]  AT [9:00 AM] [IST]  [3] ads each run
 //
 // These four values used to be rendered as static pills. They LOOKED like
 // controls, sat inside a card headed "Keep these coming", and none of them did
@@ -61,9 +61,11 @@ const UNITS = [
   { value: 'week', label: 'weeks' },
 ];
 
-// Matches the server's clamp in briefToJobPatch. Offering 200 in a dropdown
-// would be offering someone a way to spend a fortune by misclicking.
-const PAIR_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10];
+// v1's PairsPerCycleSection caps at 50 (MAX_ADS), so this stopped 40 short of
+// what Full control offers for the same setting. The job model's own clamp is
+// 200, which is not a number anyone should reach by misclicking a dropdown —
+// 50 is the product's limit, and the ladder thins out so the list stays usable.
+const PAIR_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 50];
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
@@ -170,7 +172,10 @@ export default function CadencePills({
             disabled={disabled}
             options={PAIR_CHOICES.map((n) => ({ value: String(n), label: String(n) }))}
           />
-          <span className="text-gray-400 dark:text-white/45">pairs per run</span>
+          {/* "ads each run" rather than "pairs per run": Adjust has its own
+              "Ads per generate" and the two were both reading "per run" with
+              different numbers on different screens. */}
+          <span className="text-gray-400 dark:text-white/45">ads each run</span>
         </Pill>
 
         {/* Optional, and it says so. An end date is the difference between a

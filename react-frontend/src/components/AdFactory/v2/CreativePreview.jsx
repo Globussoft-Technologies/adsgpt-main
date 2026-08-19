@@ -49,6 +49,8 @@ export default function CreativePreview({
   onContinue,
   regenerating = false,
   creditsHeld,
+  // What ANOTHER run would cost, as opposed to what the last one held.
+  estimate = null,
   ratio = '4:5',
   readOnly = false,
 }) {
@@ -161,9 +163,19 @@ export default function CreativePreview({
 
           {!running && ready > 0 && (
             <div className="flex flex-wrap items-center gap-2.5">
+              {/* Regenerating costs the same as generating did. The credits
+                  line above reports what the LAST run held; this says what
+                  pressing the button again will cost, before it is pressed. */}
               <GhostBtn onClick={onRegenerate} disabled={regenerating}>
                 <RefreshCw className={`h-3.5 w-3.5 ${regenerating ? 'animate-spin' : ''}`} />
-                <span>Regenerate all</span>
+                <span>
+                  Regenerate all
+                  {estimate != null && (
+                    <span className="ml-1 font-normal text-gray-400 dark:text-white/45">
+                      ~{estimate} credits
+                    </span>
+                  )}
+                </span>
               </GhostBtn>
               <PrimaryBtn icon={Sparkles} onClick={onContinue}>
                 Keep these coming →

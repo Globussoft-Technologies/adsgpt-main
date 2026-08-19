@@ -248,9 +248,13 @@ export default function AdFactoryV2Page() {
   // and the delivery history are the page, and twenty fields above them is
   // noise. Resolved once per brief, not on every render.
   useEffect(() => {
+    // Adjust used to CLOSE ITSELF once ads existed, on the theory that the
+    // creatives should be the page. In practice the brief is what you go back
+    // and change when a batch is wrong, and having it fold away the moment the
+    // ads landed meant re-opening it every single time. It stays open; Done
+    // closes it, and that choice sticks for the session.
     if (!brief || adjustDefaulted.current) return;
     adjustDefaulted.current = true;
-    if (hasCreatives || step === STEP.DELIVERIES) setAdjustOpen(false);
   }, [brief, hasCreatives, step]);
 
   // ── Budget ────────────────────────────────────────────────────────────────
@@ -330,6 +334,32 @@ export default function AdFactoryV2Page() {
       dispatch(applyLocalEdit({ section, field, value }));
       if (briefId) {
         dispatch(saveBriefEdits({ briefId, patch: { [section]: { [field]: value } } }));
+      }
+    },
+    [dispatch, briefId],
+  );
+
+  /**
+   * Several fields of one section, in ONE request.
+   *
+   * Calling `handleEdit` twice in a row fires two PATCHes at once, and the
+   * server's update is a read-modify-write: it loads the brief, merges the
+   * incoming section over it, and saves. The second request reads BEFORE the
+   * first has written, so it merges onto a stale document and saves the old
+   * value back over the new one — a textbook lost update.
+   *
+   * "Ads per generate" writes imageCount and textCount together, and that is
+   * exactly what it hit: the stepper showed 15 while the server ended up with
+   * imageCount 14 and textCount 15, and the estimate that came back priced the
+   * 14. One logical edit has to be one request.
+   */
+  const handleEditMany = useCallback(
+    (section, fields) => {
+      for (const [field, value] of Object.entries(fields)) {
+        dispatch(applyLocalEdit({ section, field, value }));
+      }
+      if (briefId) {
+        dispatch(saveBriefEdits({ briefId, patch: { [section]: fields } }));
       }
     },
     [dispatch, briefId],
@@ -698,7 +728,9 @@ export default function AdFactoryV2Page() {
                   open
                   onClose={() => setAdjustOpen(false)}
                   onEditField={handleEdit}
+                  onEditFields={handleEditMany}
                   saving={saving}
+                  estimate={estimate}
                 />
               </motion.div>
             )}
@@ -775,6 +807,7 @@ export default function AdFactoryV2Page() {
             value={viewRun}
             onChange={setViewRun}
             currentCount={run?.pairs?.length || 0}
+            currentPending={isViewingPast ? 0 : run?.pending || 0}
           />
 
           <CreativePreview
@@ -785,6 +818,7 @@ export default function AdFactoryV2Page() {
             onContinue={handleWantSchedule}
             regenerating={generating}
             creditsHeld={isViewingPast ? null : estimate?.total ?? null}
+            estimate={isViewingPast ? null : estimate?.total ?? null}
             readOnly={isViewingPast}
           />
 
@@ -857,7 +891,9 @@ export default function AdFactoryV2Page() {
                   open
                   onClose={() => setAdjustOpen(false)}
                   onEditField={handleEdit}
+                  onEditFields={handleEditMany}
                   saving={saving}
+                  estimate={estimate}
                 />
               </motion.div>
             )}

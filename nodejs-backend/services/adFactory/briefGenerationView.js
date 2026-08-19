@@ -133,10 +133,42 @@ function briefGenerationView(campaign, opts = {}) {
   const images = deliveredImages.slice(from);
   const texts = deliveredTexts.slice(from);
 
-  // Pending is a count, not a list: a slot with nothing in it has nothing to
-  // render, and the UI only needs to know how many skeletons to draw.
-  const pending = Math.max(0, limit - images.length - rawImages.filter(isFailed).slice(-limit).length);
-  const failed = rawImages.filter(isFailed).slice(-limit).length;
+  // ── This run's own slots ───────────────────────────────────────────────────
+  //
+  // `limit` is the campaign's CURRENT image quantity, and pending used to be
+  // derived from it: `limit - delivered - failed`. That reads the setting, not
+  // the run. Raising "ads per generate" from 3 to 14 rewrites
+  // `services.servicesSelected` — `updateBrief` re-materialises the campaign on
+  // every edit — so a finished run that produced one ad immediately reported
+  // thirteen pending, and drew thirteen skeletons that could never fill.
+  //
+  // The authoritative count is the SLOTS. `resultSlots` pre-allocates one empty
+  // entry per requested item before the request goes out, so the entries from
+  // this run's boundary onward are exactly what this run asked for — fixed at
+  // the moment it started and immune to later edits.
+  //
+  // `from` indexes the DELIVERED-filtered array, so it has to be walked back to
+  // a raw index before the raw entries can be sliced. Mixing the two is what
+  // makes counts like this drift in the first place.
+  let rawFrom = rawImages.length;
+  let seenDelivered = 0;
+  for (let i = 0; i < rawImages.length; i += 1) {
+    if (seenDelivered >= from) {
+      rawFrom = i;
+      break;
+    }
+    if (isDelivered(rawImages[i])) seenDelivered += 1;
+    rawFrom = i + 1;
+  }
+
+  const runSlots = rawImages.slice(rawFrom);
+  const failed = runSlots.filter(isFailed).length;
+  // Neither answered nor refused: an empty slot Python has yet to write to.
+  const awaiting = runSlots.length - runSlots.filter(isDelivered).length - failed;
+
+  // A campaign with no pre-allocated slots predates resultSlots; fall back to
+  // the quantity so those briefs still render something sane.
+  const requested = runSlots.length > 0 ? runSlots.length : limit;
 
   // Index pairing, matching how these are posted.
   const pairs = images.map((image, i) => ({
@@ -148,8 +180,17 @@ function briefGenerationView(campaign, opts = {}) {
   // The campaign owns generation state; the brief deliberately does not
   // duplicate it. `results.status` is what the orchestrator and the webhook
   // both write, so it is the one to read.
+  const running = results.status === "in-progress" || c.status === "in-progress";
+
+  // Skeletons are a promise that something is still coming. A run that has
+  // stopped has nothing coming, whatever its slots look like — an empty slot
+  // left behind by a crashed cycle must not spin forever.
+  const pending = running
+    ? Math.max(0, runSlots.length > 0 ? awaiting : limit - images.length - failed)
+    : 0;
+
   const status =
-    results.status === "in-progress" || c.status === "in-progress"
+    running
       ? "running"
       : failed > 0 && images.length > 0
         ? "partial"
@@ -159,7 +200,7 @@ function briefGenerationView(campaign, opts = {}) {
             ? "success"
             : "idle";
 
-  return { status, images, texts, pairs, pending, failed, requested: limit };
+  return { status, images, texts, pairs, pending, failed, requested };
 }
 
 module.exports = { briefGenerationView, _internals: { isDelivered, isFailed, normalizeCopy } };
