@@ -326,8 +326,15 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           //  svg icons
           if (url.includes('.svg')) return false;
 
-          //  cloudinary transform without asset
-          if (url.includes('res.cloudinary.com') && /\/upload\/w_\d+\/?$/.test(url)) {
+          //  cloudinary transform without asset — match the host rather
+          //  than a substring, which any URL could carry in its path or query
+          let cloudinaryHost = false;
+          try {
+            cloudinaryHost = new URL(url).hostname === 'res.cloudinary.com';
+          } catch {
+            cloudinaryHost = false;
+          }
+          if (cloudinaryHost && /\/upload\/w_\d+\/?$/.test(url)) {
             return false;
           }
 

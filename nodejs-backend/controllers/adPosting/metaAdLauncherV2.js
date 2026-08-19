@@ -1194,9 +1194,23 @@ async function resolveObjectStoreUrlForApp(applicationId, storedUrl, userOs, cal
   try {
     const inferPlatformFromUrl = (url) => {
       if (!url) return null;
-      const u = String(url).toLowerCase();
-      if (u.includes("itunes.apple.com") || u.includes("apps.apple.com")) return "ios";
-      if (u.includes("play.google.com")) return "android";
+      // Match on the host, not a substring. "evil.tld/?q=play.google.com" and
+      // "play.google.com.evil.tld" both satisfy an includes() test and would
+      // otherwise be inferred as a real store URL.
+      const raw = String(url).trim();
+      let host;
+      try {
+        // Stored URLs are not guaranteed to carry a scheme; assume https so a
+        // bare "play.google.com/store/..." still resolves as it did before.
+        host = new URL(raw.includes("://") ? raw : `https://${raw}`)
+          .hostname.toLowerCase();
+      } catch {
+        return null;
+      }
+      const hostIs = (...domains) =>
+        domains.some((d) => host === d || host.endsWith(`.${d}`));
+      if (hostIs("itunes.apple.com", "apps.apple.com")) return "ios";
+      if (hostIs("play.google.com")) return "android";
       return null;
     };
     const os = userOs || [];

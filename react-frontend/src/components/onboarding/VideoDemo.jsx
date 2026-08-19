@@ -54,7 +54,12 @@ function extractYouTubeId(url) {
     }
 
     // youtube.com/watch?v=ID
-    if (parsed.hostname.includes('youtube.com')) {
+    // Exact host or a subdomain of it — includes() would also accept
+    // youtube.com.evil.tld and evil.tld/?q=youtube.com.
+    if (
+      parsed.hostname === 'youtube.com' ||
+      parsed.hostname.endsWith('.youtube.com')
+    ) {
       if (parsed.pathname === '/watch') {
         return parsed.searchParams.get('v') || null;
       }
