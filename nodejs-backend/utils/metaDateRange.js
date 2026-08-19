@@ -103,7 +103,9 @@ function presetWindow(preset, now) {
       now.subtract(1, "year").endOf("year"),
     ],
   };
-  const pair = typeof calendar[preset] === "function" ? calendar[preset]() : calendar[preset];
+  if (!preset || !Object.prototype.hasOwnProperty.call(calendar, preset)) return null;
+  const entry = calendar[preset];
+  const pair = typeof entry === "function" ? entry() : entry;
   if (!pair) return null;
   return { since: pair[0].format(DATE_FMT), until: pair[1].format(DATE_FMT) };
 }

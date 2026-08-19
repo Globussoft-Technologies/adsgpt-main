@@ -111,6 +111,7 @@ export default function ProfileHome() {
       );
 
       const onMessage = async (event) => {
+        if (event.origin !== window.location.origin) return;
         if (event.data === 'canva-connected') {
           window.removeEventListener('message', onMessage);
           if (popup && !popup.closed) popup.close();

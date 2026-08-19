@@ -118,9 +118,8 @@ exports.updateAdCreativeConversation = async (data) => {
     }
 
     if (type === "image") {
-      let ads = [...conversation.ads];
-      let images = data?.images;
-      let num = data?.num_images || 1;
+      let images = Array.isArray(data?.images) ? data.images : [];
+      let num = Math.min(Math.max(1, parseInt(data?.num_images, 10) || 1), 50);
       const failedValue = images?.find(
         (img) => img == 'failed' || img == '400'
       );

@@ -3,16 +3,21 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
-// Function to download image
 const downloadImage = async (imageUrl, outputPath) => {
   try {
+    if (!outputPath || typeof outputPath !== "string") {
+      throw new Error("Invalid output path");
+    }
+    const safePath = path.resolve(outputPath);
     const response = await axios({
       url: imageUrl,
       responseType: "arraybuffer",
+      timeout: 15000,
+      maxContentLength: 20 * 1024 * 1024,
     });
 
-    fs.writeFileSync(outputPath, response.data);
-    return outputPath;
+    fs.writeFileSync(safePath, response.data);
+    return safePath;
   } catch (error) {
     console.error("Error downloading image:", error);
   }

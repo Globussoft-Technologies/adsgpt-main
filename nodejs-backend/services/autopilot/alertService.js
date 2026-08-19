@@ -896,7 +896,9 @@ function buildTelegramHtml(summary, rows = []) {
     String(s == null ? "" : s)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
 
   const dryLabel = summary.dryRun ? " (DRY RUN)" : "";
   const lines = [

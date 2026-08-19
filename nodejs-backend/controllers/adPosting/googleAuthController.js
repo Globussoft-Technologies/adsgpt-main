@@ -8,6 +8,27 @@ const { trackBackendGA4Event } = require("../../utils/ga4");
 
 const ALLOWED_REDIRECT_ORIGIN = process.env.FRONTEND_URL;
 
+function isSafeRedirectUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  const clean = urlStr.trim();
+  if (/^(javascript|data|vbscript):/i.test(clean)) return false;
+  if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) return true;
+  try {
+    const parsed = new URL(clean);
+    const allowed = [
+      ALLOWED_REDIRECT_ORIGIN,
+      process.env.FRONTEND_URL,
+      "http://localhost:3000",
+      "http://localhost:5173",
+    ].filter(Boolean);
+    return allowed.some((a) => {
+      try { return new URL(a).origin === parsed.origin; } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
 class GoogleAuthController {
   constructor() {
     this.initiateAuth = this.initiateAuth.bind(this);
@@ -89,7 +110,7 @@ class GoogleAuthController {
       if (state) {
         const decodedState = JSON.parse(state);
         userId = decodedState.userId;
-        feUrl = decodedState.feUrl || feUrl;
+        feUrl = isSafeRedirectUrl(decodedState.feUrl) ? decodedState.feUrl : feUrl;
       }
     } catch (e) {
       logger.error(`Failed to parse Google auth state: ${e.message}`);

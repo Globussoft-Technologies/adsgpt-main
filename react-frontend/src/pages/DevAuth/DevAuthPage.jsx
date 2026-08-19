@@ -57,7 +57,18 @@ const DevAuthPage = () => {
       // after the redirect. Then hop to the target page.
       window.history.replaceState(null, '', window.location.pathname);
       setStatus('ok');
-      window.location.href = to;
+      const isSafeRedirectUrl = (urlStr) => {
+        if (!urlStr || typeof urlStr !== 'string') return false;
+        const clean = urlStr.trim();
+        if (/^(javascript|data|vbscript):/i.test(clean)) return false;
+        if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) return true;
+        try {
+          return new URL(clean, window.location.origin).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      };
+      window.location.href = isSafeRedirectUrl(to) ? to : '/';
     } catch (err) {
       setStatus('error');
       setMessage(err && err.message ? err.message : String(err));

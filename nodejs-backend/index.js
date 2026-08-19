@@ -165,7 +165,12 @@ async function createServer() {
       secret: process.env.JWT_SECRET_KEY,
       resave: false,
       saveUninitialized: false,
-      cookie: { maxAge: 60 * 60 * 1000 },
+      cookie: {
+        maxAge: 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: process.env.NODE_ENV === 'production',
+      },
     }),
   );
   App.set("view engine", "ejs");

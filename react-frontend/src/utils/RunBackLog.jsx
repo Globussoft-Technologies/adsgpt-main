@@ -167,8 +167,10 @@ function RunBackLog({ children }) {
   // --- NEW API-based query handling ---
   useEffect(() => {
     async function handleQueryRedirect() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const forwardKey = urlParams.get('forword');
+      const rawForwardKey = urlParams.get('forword');
+      const forwardKey = rawForwardKey
+        ? encodeURIComponent(rawForwardKey.trim().replace(/[^a-zA-Z0-9_-]/g, ''))
+        : null;
 
       if (forwardKey) {
         try {

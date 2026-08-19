@@ -20,12 +20,11 @@ const {
 module.exports = (req, res, next) => {
   const origin = req.headers.origin;
   const allowedOrigins = parseAllowedOrigins(
-    process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "",
+    process.env.CORS_ALLOWED_ORIGINS ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
   );
-  const originAllowed =
-    !origin ||
-    isOriginAllowed(origin, allowedOrigins) ||
-    (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production");
+  const originAllowed = !origin || isOriginAllowed(origin, allowedOrigins);
 
   if (origin && originAllowed) {
     res.header("Access-Control-Allow-Origin", origin);

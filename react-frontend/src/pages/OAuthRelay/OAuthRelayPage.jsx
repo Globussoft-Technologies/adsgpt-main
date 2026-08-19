@@ -35,6 +35,26 @@ const cookieDomain = () => {
     : window.location.hostname;
 };
 
+const isSafeRedirectUrl = (urlStr) => {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  const clean = urlStr.trim();
+  if (/^(javascript|data|vbscript):/i.test(clean)) return false;
+  if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) {
+    return true;
+  }
+  try {
+    const parsed = new URL(clean, window.location.origin);
+    if (parsed.origin === window.location.origin) return true;
+    if (HOST) {
+      const hostOrigin = new URL(HOST, window.location.origin).origin;
+      if (parsed.origin === hostOrigin) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
 const OAuthRelayPage = () => {
   const [message, setMessage] = useState('Signing you in…');
   const [isError, setIsError] = useState(false);
@@ -43,19 +63,21 @@ const OAuthRelayPage = () => {
     const params = new URLSearchParams(window.location.search);
     const returnTo = params.get('returnTo');
 
-    if (!returnTo) {
+    if (!returnTo || !isSafeRedirectUrl(returnTo)) {
       setIsError(true);
       setMessage(
-        'Missing returnTo parameter. Restart the sign-in from the application that sent you here.',
+        'Missing or invalid returnTo parameter. Restart the sign-in from the application that sent you here.',
       );
       return;
     }
+
+    const safeReturnTo = isSafeRedirectUrl(returnTo) ? returnTo : '/';
 
     (async () => {
       // Case 1 — already signed in to AdsGPT. Forward immediately.
       const existingToken = Cookies.get('access-token');
       if (existingToken) {
-        window.location.href = returnTo;
+        window.location.href = safeReturnTo;
         return;
       }
 
@@ -103,7 +125,7 @@ const OAuthRelayPage = () => {
           Cookies.remove('amember_login', { domain, path: '/' });
           Cookies.remove('amember_pass', { domain, path: '/' });
 
-          window.location.href = returnTo;
+          window.location.href = safeReturnTo;
           return;
         } catch (err) {
           setIsError(true);

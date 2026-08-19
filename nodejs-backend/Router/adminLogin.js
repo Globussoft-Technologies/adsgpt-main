@@ -12,19 +12,22 @@ const generateToken = (payload, secretKey) => {
 };
 
 router.post("/login", (req, res) => {
-      const { username, password } = req.body;
-      if (
-        username.trim() == process.env.UI_USERNAME &&
-        password == process.env.UI_PASSWORD
-      ) {
-        const token = generateToken({username}, process.env.JWT_SECRET_KEY)
-        req.session.authenticated = true;
-        req.session.username = username;
-        req.session.token = token;
-        res.redirect("/adsgpt/user-intreaction-data/ui-view");
-      } else {
-        res.render("login", { error: "Invalid username or password" });
-      }
+  const { username, password } = req.body;
+  if (
+    username && username.trim() === process.env.UI_USERNAME &&
+    password === process.env.UI_PASSWORD
+  ) {
+    const token = generateToken({ username }, process.env.JWT_SECRET_KEY);
+    req.session.regenerate((err) => {
+      if (err) return res.render("login", { error: "Session error. Please try again." });
+      req.session.authenticated = true;
+      req.session.username = username;
+      req.session.token = token;
+      return res.redirect("/adsgpt/user-intreaction-data/ui-view");
     });
+  } else {
+    res.render("login", { error: "Invalid username or password" });
+  }
+});
 
 module.exports = router;

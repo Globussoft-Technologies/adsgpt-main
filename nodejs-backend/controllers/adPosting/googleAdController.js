@@ -2968,8 +2968,10 @@ class GoogleAdController {
       return res.status(200).json({ status: true, message: "Campaign updated successfully", campaignId });
     } catch (error) {
       const m = formatGoogleError(error);
-      logger.error(`Google update campaign error: ${m.message}`);
-      return res.status(error.response?.status || 500).json({ status: false, error: m.message, reason: m.reason });
+      const safeMsg = String(m.message || "Google update campaign error");
+      const safeReason = m.reason ? String(m.reason) : null;
+      logger.error(`Google update campaign error: ${safeMsg}`);
+      return res.status(error.response?.status || 500).json({ status: false, error: safeMsg, reason: safeReason });
     }
   }
 

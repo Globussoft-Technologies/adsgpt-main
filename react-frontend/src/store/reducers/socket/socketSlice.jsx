@@ -175,9 +175,9 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     const handleAuthenticatedSession = (data) => {
       if (data?.user_id) {
-        Cookies.set('user_id', data.user_id, { expires: 1, path: '/' });
-        Cookies.set('user_name', data.user_name, { expires: 1, path: '/' });
-        Cookies.set('user_email', data.user_email, { expires: 1, path: '/' });
+        Cookies.set('user_id', data.user_id, { expires: 1, path: '/', secure: window.location.protocol === 'https:', sameSite: 'strict' });
+        Cookies.set('user_name', data.user_name, { expires: 1, path: '/', secure: window.location.protocol === 'https:', sameSite: 'strict' });
+        Cookies.set('user_email', data.user_email, { expires: 1, path: '/', secure: window.location.protocol === 'https:', sameSite: 'strict' });
         setGA4User(data.user_id, data.user_name);
         dispatch(setUserData(data));
       }
