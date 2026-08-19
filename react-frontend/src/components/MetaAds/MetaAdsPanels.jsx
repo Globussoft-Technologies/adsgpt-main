@@ -82,7 +82,7 @@ export const AdCard = ({ ad }) => {
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full shrink-0 overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] transition-all hover:border-[#DDD7CD] dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/10"
+      className="w-full shrink-0 overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] transition-all hover:border-[#DDD7CD] dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/10"
     >
       {/* ── collapsed row ── */}
       <div className="flex flex-1 gap-3 2xl:gap-4 p-3 2xl:p-4">
@@ -422,7 +422,7 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
     <motion.div
       // initial={{ opacity: 0, y: 8 }}
       // animate={{ opacity: 1, y: 0 }}
-      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] hover:border-[#DDD7CD] dark:border-white/[0.12] dark:bg-[#161616] dark:hover:border-white/20'}`}
+      className={`group relative overflow-hidden rounded-2xl border ${isActive ? 'border-[#15DCFF]/30 bg-[#15DCFF]/[0.03]' : 'border-[#DDD7CD] bg-[#FCFAF7] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] hover:border-[#DDD7CD] dark:border-white/[0.12] dark:bg-[#161616] dark:hover:border-white/20'}`}
     >
       {isActive && (
         <div className="absolute top-0 left-0 h-full w-0.5 bg-gradient-to-b from-[#15DCFF] to-[#6b72f8]" />
@@ -510,6 +510,19 @@ const ChangeChip = ({ change }) => {
   );
 };
 
+// ─── custom active dot (glowing pulse halo) ──────────────────────────────────
+
+const CustomActiveDot = ({ cx, cy, stroke }) => {
+  if (cx == null || cy == null) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={11} fill={stroke} opacity={0.25} />
+      <circle cx={cx} cy={cy} r={7} fill={stroke} opacity={0.5} />
+      <circle cx={cx} cy={cy} r={4.5} fill="#FFFFFF" stroke={stroke} strokeWidth={2.5} />
+    </g>
+  );
+};
+
 // ─── analytics panel ─────────────────────────────────────────────────────────
 
 // `metricsCatalog`/`visibleMetricKeys` come from MetaAdsDashboard.jsx's
@@ -519,11 +532,25 @@ const ChangeChip = ({ change }) => {
 export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], visibleMetricKeys = [] }) => {
   const [chartMetric, setChartMetric] = useState('spend');
 
+  const chartData = analyticsData?.chartData || [];
+  const displayChartData = React.useMemo(() => {
+    if (!chartData || chartData.length === 0) return [];
+    if (chartData.length === 1) {
+      const pt = chartData[0];
+      return [
+        { name: ' ', spend: 0, clicks: 0 },
+        { name: pt.name, spend: pt.spend, clicks: pt.clicks },
+        { name: '  ', spend: 0, clicks: 0 },
+      ];
+    }
+    return chartData;
+  }, [chartData]);
+
   if (loading) return <Spinner />;
   if (!analyticsData)
     return <EmptyState message="No analytics data for the selected account and period" />;
 
-  const { stats, chartData = [], actions = [] } = analyticsData;
+  const { stats, actions = [] } = analyticsData;
 
   const hasData = stats && Object.values(stats).some((s) => parseFloat(s?.val) > 0);
   if (!hasData) {
@@ -601,14 +628,14 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
         {kpiCards.map(({ key, icon, label, value, change }) => (
           <div
             key={key}
-            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] transition-all duration-300 hover:border-[#DDD7CD] dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3 ${
+            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] transition-all duration-300 hover:border-[#DDD7CD] dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3 ${
               compact ? 'p-3' : 'p-4 2xl:p-5'
             }`}
           >
             {/* top row: icon left, label right */}
             <div className="flex items-start justify-between gap-1.5">
               <div
-                className={`flex shrink-0 items-center justify-center rounded-xl bg-[#d8dee5] dark:bg-white/5 ${
+                className={`flex shrink-0 items-center justify-center rounded-xl bg-[#EAE5DC] dark:bg-white/5 ${
                   compact ? 'h-7 w-7' : 'h-9 w-9'
                 }`}
               >
@@ -618,7 +645,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
               </div>
               <p
                 title={label}
-                className={`font-semibold tracking-[0.12em] uppercase text-gray-600 dark:text-white/35 ${
+                className={`font-semibold tracking-[0.12em] uppercase text-[#7A7369] dark:text-white/35 ${
                   compact ? 'line-clamp-2 text-right text-10 leading-tight' : 'text-xs'
                 }`}
               >
@@ -629,7 +656,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
             {/* bottom row: value left, change chip right */}
             <div className={`flex items-end justify-between gap-1.5 ${compact ? 'mt-2.5' : 'mt-4'}`}>
               <p
-                className={`truncate font-bold leading-none text-gray-900 dark:text-white ${
+                className={`truncate font-bold leading-none text-[#24211D] dark:text-white ${
                   compact ? 'text-base 2xl:text-lg' : 'text-xl 2xl:text-2xl'
                 }`}
               >
@@ -645,15 +672,15 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
 
       {/* spend / clicks bar chart */}
-      <div className="flex flex-col rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-5 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+      <div className="flex flex-col rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-5 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAE5DC] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
               <TrendingUp className="h-5 w-5 text-[#24211D] dark:text-white/50" />
             </div>
             <p className="text-base 2xl:text-lg font-bold text-[#24211D] dark:text-white">Performance over time</p>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] p-1 dark:border-white/6 dark:bg-[#111]/60">
+          <div className="flex items-center gap-1 rounded-xl border border-[#DDD7CD] bg-[#EAE5DC] p-1 dark:border-white/6 dark:bg-[#111]/60">
             {[
               { v: 'spend', l: 'Spend' },
               { v: 'clicks', l: 'Clicks' },
@@ -661,7 +688,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
               <button
                 key={v}
                 onClick={() => setChartMetric(v)}
-                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-[#EDE7DF] text-[#24211D] shadow-xs dark:bg-white/10 dark:text-white' : 'text-[#7A7369] hover:text-[#24211D] dark:text-white/40 dark:hover:text-white/70'}`}
+                className={`rounded-lg px-3 py-1 text-10 font-semibold transition-all ${chartMetric === v ? 'bg-[#FCFAF7] text-[#24211D] shadow-xs dark:bg-white/10 dark:text-white' : 'text-[#7A7369] hover:text-[#24211D] dark:text-white/40 dark:hover:text-white/70'}`}
               >
                 {l}
               </button>
@@ -669,36 +696,79 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
           </div>
         </div>
         <ResponsiveContainer width="100%" height="100%" className="flex-1 min-h-45">
-          <AreaChart data={chartData} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+          <AreaChart data={displayChartData} margin={{ top: 12, right: 8, left: -16, bottom: 0 }}>
             <defs>
-              <linearGradient id="areaGradSpend" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#15DCFF" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="#15DCFF" stopOpacity={0} />
+              {/* Luminous stroke gradient for Spend */}
+              <linearGradient id="strokeGradSpend" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#00F5D4" />
+                <stop offset="50%" stopColor="#00C2FF" />
+                <stop offset="100%" stopColor="#3B82F6" />
               </linearGradient>
+
+              {/* Luminous stroke gradient for Clicks */}
+              <linearGradient id="strokeGradClicks" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#C084FC" />
+                <stop offset="50%" stopColor="#818CF8" />
+                <stop offset="100%" stopColor="#38BDF8" />
+              </linearGradient>
+
+              {/* Multi-stop ambient area gradient for Spend */}
+              <linearGradient id="areaGradSpend" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#00C2FF" stopOpacity={0.35} />
+                <stop offset="40%" stopColor="#00C2FF" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="#00C2FF" stopOpacity={0.0} />
+              </linearGradient>
+
+              {/* Multi-stop ambient area gradient for Clicks */}
               <linearGradient id="areaGradClicks" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#6b72f8" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="#6b72f8" stopOpacity={0} />
+                <stop offset="0%" stopColor="#818CF8" stopOpacity={0.35} />
+                <stop offset="40%" stopColor="#818CF8" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="#818CF8" stopOpacity={0.0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
+
+            <CartesianGrid strokeDasharray="3 4" stroke="currentColor" className="text-black/5 dark:text-white/5" vertical={false} />
             <XAxis
               dataKey="name"
-              tick={{ fill: '#BEBEBE', fontSize: 11 }}
-              axisLine={false}
+              tick={{ fontSize: 11, fontWeight: 500 }}
               tickLine={false}
+              axisLine={false}
+              className="fill-[#7A7369] dark:fill-[#A0A0A0]"
               interval="preserveStartEnd"
             />
-            <YAxis tick={{ fill: '#BEBEBE', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <ReTooltip content={<ChartTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }} />
+            <YAxis
+              tick={{ fontSize: 11, fontWeight: 500 }}
+              tickLine={false}
+              axisLine={false}
+              className="fill-[#7A7369] dark:fill-[#A0A0A0]"
+            />
+            <ReTooltip
+              content={<ChartTooltip />}
+              cursor={{
+                stroke: chartMetric === 'spend' ? 'rgba(0, 194, 255, 0.35)' : 'rgba(129, 140, 248, 0.35)',
+                strokeWidth: 1.5,
+                strokeDasharray: '3 3',
+              }}
+            />
             <Area
               type="monotone"
               dataKey={chartMetric}
               name={chartMetric === 'spend' ? 'Spend (₹)' : 'Clicks'}
-              stroke={chartMetric === 'spend' ? '#15DCFF' : '#6b72f8'}
-              strokeWidth={2}
+              stroke={chartMetric === 'spend' ? 'url(#strokeGradSpend)' : 'url(#strokeGradClicks)'}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               fill={chartMetric === 'spend' ? 'url(#areaGradSpend)' : 'url(#areaGradClicks)'}
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0, fill: chartMetric === 'spend' ? '#15DCFF' : '#6b72f8' }}
+              isAnimationActive={true}
+              animationDuration={1300}
+              animationEasing="ease-in-out"
+              dot={{
+                r: 3.5,
+                strokeWidth: 2,
+                stroke: '#FCFAF7',
+                fill: chartMetric === 'spend' ? '#00C2FF' : '#818CF8',
+              }}
+              activeDot={<CustomActiveDot stroke={chartMetric === 'spend' ? '#00C2FF' : '#818CF8'} />}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -708,9 +778,9 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
       <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4">
         {/* action pie */}
-        <div className="rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+        <div className="rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAE5DC] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
               <Target className="h-5 w-5 text-[#24211D] dark:text-white/50" />
             </div>
             <p className="text-base font-bold text-[#24211D] dark:text-white">Key Actions</p>
@@ -770,10 +840,10 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
         </div>
 
         {/* all actions table */}
-        <div className="overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
+        <div className="overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]">
           <div className="border-b border-[#DDD7CD] px-4 py-3 dark:border-white/4">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FCFAF7] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAE5DC] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:ring-0">
                 <Layers className="h-5 w-5 text-[#24211D] dark:text-white/50" />
               </div>
               <p className="text-base font-bold text-[#24211D] dark:text-white">All Actions</p>
@@ -783,7 +853,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
             {sortedActions.map((a, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between border-b border-black/10 px-4 py-2 last:border-b-0 hover:bg-black/5 dark:border-white/2 dark:hover:bg-white/2"
+                className="flex items-center justify-between border-b border-[#DDD7CD]/60 px-4 py-2 last:border-b-0 hover:bg-[#EAE5DC]/50 dark:border-white/2 dark:hover:bg-white/2"
               >
                 <span className="truncate pr-4 text-sm text-gray-600 capitalize dark:text-[#BEBEBE]">{a.type}</span>
                 <span className="shrink-0 text-sm font-semibold text-gray-900 dark:text-white">

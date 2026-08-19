@@ -11,13 +11,18 @@ const CreativeFilterDropdown = ({
   contentClassName = '',
   triggerClassName = '',
 }) => {
+  const isMediaToolbar = triggerClassName.split(/\s+/).includes('adstudio-media-toolbar-control');
+  const triggerSurfaceClass = isMediaToolbar
+    ? 'adstudio-media-toolbar-select'
+    : 'adstudio-creative-filter-trigger';
+
   // Find the selected option from options array
   const selectedOption = options.find((opt) => opt.value === value?.value);
   const selectedLabel = selectedOption?.label || label || 'Filter';
   return (
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
-        className={`adstudio-creative-filter-trigger !h-auto items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-colors 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white [&>svg]:hidden ${triggerClassName}`}
+        className={`${triggerSurfaceClass} !h-auto items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-colors 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white [&>svg]:hidden ${triggerClassName}`}
       >
         <span className="flex items-center gap-1.5 capitalize 2xl:gap-2">
           {/* Show selected icon (as React element), else ListFilter */}

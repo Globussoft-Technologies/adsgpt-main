@@ -124,12 +124,12 @@ export default function AspectRatioTiles({
   return (
     <>
       <div className="mb-1 flex items-center justify-between">
-        <p className="text-[13px] font-bold text-[#0f172a] dark:text-[#d9d9d9]">Aspect Ratio per Image</p>
-        <span className="text-[12px] text-[#0f172a]/50 dark:text-white/60">
-          Total: <span className="font-semibold text-[#0f172a] dark:text-white">{total}</span>
+        <p className="text-[13px] font-medium text-gray-900 dark:text-[#d9d9d9]">Aspect Ratio per Image</p>
+        <span className="text-[12px] text-gray-500 dark:text-white/60">
+          Total: <span className="font-medium text-gray-900 dark:text-white">{total}</span>
         </span>
       </div>
-      <p className="mb-3 text-[11px] text-[#0f172a]/50 dark:text-white/50">{creditsPerImage} credits per image</p>
+      <p className="mb-3 text-[11px] text-gray-500 dark:text-white/50">{creditsPerImage} credits per image</p>
 
       <div ref={gridRef} className="grid max-h-[264px] grid-cols-3 gap-2 overflow-y-auto pr-1">
         {ratios.map((key) => {
@@ -159,15 +159,15 @@ export default function AspectRatioTiles({
                   style={frameStyle(key)}
                 />
               </div>
-              <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#0f172a] dark:text-white/90">
+              <span className="flex items-center gap-0.5 text-[11px] font-medium text-gray-800 dark:text-white/90">
                 {key}
-                <ChevronDown size={11} className={`text-[#0f172a]/40 transition-transform dark:text-white/50 ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown size={11} className={`text-gray-400 transition-transform dark:text-white/50 ${open ? 'rotate-180' : ''}`} />
               </span>
             </button>
           );
         })}
       </div>
-      <p className="mt-2 text-right text-[10px] text-[#0f172a]/40 dark:text-white/40">Click a ratio to set quantity · max {maxPerRatio} each</p>
+      <p className="mt-2 text-right text-[10px] text-gray-500 dark:text-white/40">Click a ratio to set quantity · max {maxPerRatio} each</p>
 
       {/* Quantity dropdown — portalled + fixed so the scroll container never clips it. */}
       {menu &&
@@ -177,7 +177,7 @@ export default function AspectRatioTiles({
             role="listbox"
             data-aspect-quantity-menu=""
             style={{ position: 'fixed', left: menu.left, top: menu.top, bottom: menu.bottom, width: MENU_W }}
-            className={`pointer-events-auto z-[80] overflow-hidden rounded-xl border border-black/10 bg-[#eef1f4] py-1 shadow-xl ring-1 ring-black/5 transition-all duration-200 ease-out will-change-transform dark:border-white/10 dark:bg-[#232323] dark:ring-white/5 ${
+            className={`pointer-events-auto z-[80] overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-xl ring-1 ring-black/5 transition-all duration-200 ease-out will-change-transform dark:border-white/10 dark:bg-[#232323] dark:ring-white/5 ${
               menu.below ? 'origin-top' : 'origin-bottom'
             } ${
               visible
@@ -199,8 +199,8 @@ export default function AspectRatioTiles({
                   }}
                   className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[12px] transition-colors ${
                     selected
-                      ? 'bg-black/10 font-semibold text-[#0f172a] dark:text-white'
-                      : 'text-[#0f172a]/70 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/5'
+                      ? 'bg-[#3ad0c8]/15 font-semibold text-gray-900 dark:text-white'
+                      : 'text-gray-600 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/5'
                   }`}
                 >
                   <span>{optionLabel(n)}</span>

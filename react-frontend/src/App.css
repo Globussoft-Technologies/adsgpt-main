@@ -59,48 +59,20 @@ html:not(.dark) .prompt_selection_button_no_gradient {
 }
 
 .dark .prompt_selection_button_no_gradient {
-  /* No background set — components add their own dark bg via Tailwind
-     `dark:bg-...` utilities (e.g. dark:bg-[#202020]/50). Setting a value
-     here would override those utility classes and erase the bg. */
+  position: relative;
+  z-index: 0;
   color: white;
   border: none;
 }
 
-.dark .prompt_selection_button::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.4) 100%);
-
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-
-  display: block;
-  z-index: -1;
-  pointer-events: none;
-}
-@media (max-width: 1280px) {
-  .dark .prompt_selection_button::before {
-    padding: 0.5px;
-  }
-}
-
+.dark .prompt_selection_button::before,
 .dark .prompt_selection_button_no_gradient::before {
   content: '';
   position: absolute;
   inset: 0;
   padding: 1px;
   border-radius: inherit;
-  /* background: linear-gradient(to top, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.4) 100%); */
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.38) 100%);
 
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -116,89 +88,47 @@ html:not(.dark) .prompt_selection_button_no_gradient {
   z-index: -1;
   pointer-events: none;
 }
+
 @media (max-width: 1280px) {
+  .dark .prompt_selection_button::before,
   .dark .prompt_selection_button_no_gradient::before {
     padding: 0.5px;
   }
 }
 
-/* Gradietn border for dark */
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 1px; /* border thickness */
-  border-radius: inherit;
-  background: linear-gradient(180deg, #ffffff 100%, rgba(255, 255, 255, 0.5) 50%);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-/* Scrollbar CSS ( Must be in Bottom ) */
+/* Scrollbar CSS */
 .dark {
-  /* For Firefox */
   scrollbar-width: thin;
-  scrollbar-color: #555 #00000010; /* thumb color | track color */
+  scrollbar-color: #555 #00000010;
 }
 
-/* For Chrome, Edge, Safari */
 .dark::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .dark::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #444, #666); /* Professional dark gradient */
+  background: linear-gradient(180deg, #444, #666);
   border-radius: 6px;
 }
 
 .dark::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #555, #777); /* Hover effect */
+  background: linear-gradient(180deg, #555, #777);
 }
 
-/* Do not expose the browser's white scrollbar canvas in light mode. The root
-   track blends into the app background and appears only when scrolling is
-   actually required. */
-html:not(.dark) {
-  background-color: var(--ws-bg);
-  scrollbar-color: rgba(140, 128, 112, 0.35) transparent;
-  scrollbar-width: thin;
-}
-
-html:not(.dark)::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-html:not(.dark)::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-html:not(.dark)::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: rgba(71, 85, 105, 0.32);
-}
-
-/* Subtle, self-effacing scrollbar for the AI Assistant surface (chat + Creative
-   Studio canvas + textareas). Invisible at rest; a thin, low-opacity thumb
-   fades in on hover / focus so the UI isn't peppered with chunky scrollbars.
-   Overrides the global .dark scrollbar for any element carrying this class. */
 .subtle-scroll {
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: transparent transparent; /* thumb | track — hidden at rest */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 .subtle-scroll:hover,
 .subtle-scroll:focus-within {
-  scrollbar-color: rgba(0, 0, 0, 0.18) transparent; /* Firefox reveal — light mode */
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
 }
 .dark .subtle-scroll:hover,
 .dark .subtle-scroll:focus-within {
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent; /* Firefox reveal — dark mode */
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
+
 .subtle-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -524,6 +454,27 @@ html:not(.dark)::-webkit-scrollbar-thumb {
 
 .ad_factory_card {
   position: relative;
+  border-radius: 12px;
+  padding: 2px;
+}
+
+.ad_factory_card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #ffffff40, #ffffff20);
+  pointer-events: none;
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1px;
 }
 
 /* React-date-range calendar — light-mode */
@@ -1377,13 +1328,15 @@ html:not(.dark) [data-slot="select-trigger"] {
   box-shadow: var(--lm-surface-shadow-sm) !important;
 }
 
-html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger {
+html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger,
+html:not(.dark) [data-slot="select-trigger"].adstudio-media-toolbar-select {
   background: var(--ws-surface-control) !important;
   border: 1px solid var(--ws-border) !important;
   box-shadow: var(--ws-shadow-sm) !important;
 }
 
-html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger:hover {
+html:not(.dark) [data-slot="select-trigger"].adstudio-creative-filter-trigger:hover,
+html:not(.dark) [data-slot="select-trigger"].adstudio-media-toolbar-select:hover {
   background: var(--ws-surface-header) !important;
 }
 
@@ -2367,22 +2320,7 @@ html:not(.dark) body .adfactory-new-campaign-button {
   border: 1px solid var(--ws-border) !important;
 }
 
-/* Ad Factory campaign cards & dialogs — balanced soft cream-white surface with subtle white touch */
-html:not(.dark) body .ad-factory-campaign-card.ad-factory-campaign-card {
-  border: 1px solid var(--ws-border) !important;
-  border-radius: 18px !important;
-  background: var(--ws-surface) !important;
-  background-clip: padding-box !important;
-  box-shadow: 0 4px 20px -2px rgba(80, 70, 58, 0.06), 0 2px 6px -1px rgba(80, 70, 58, 0.03) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-html:not(.dark) body .ad-factory-campaign-card.ad-factory-campaign-card:hover {
-  border-color: var(--ws-border-strong) !important;
-  box-shadow: 0 8px 24px rgba(80, 70, 58, 0.10) !important;
-  transform: none !important;
-}
+/* Ad Factory campaign dialogs */
 
 html:not(.dark) body .adfactory-campaign-dialog,
 html:not(.dark) body .adfactory-start-dialog {
@@ -2456,11 +2394,6 @@ html:not(.dark) body .usage-graph-select option {
   border-color: var(--ws-border) !important;
 }
 
-.dark body .ad-factory-campaign-card.ad-factory-campaign-card:hover {
-  border-color: rgba(255, 255, 255, 0.06) !important;
-  box-shadow: none !important;
-  transform: none !important;
-}
 
 /* Sidebar navigation state changes should behave like dark mode: swap the
    surface immediately, then animate only restrained depth. This prevents the
@@ -3334,3 +3267,43 @@ html:not(.dark) .light-ambient-ui-layer > * {
     will-change: auto;
   }
 }
+
+/* Keep the two fields in the Describe Brand popover on the same Light Mode
+   control surface. BrandSelect is shared elsewhere, so this remains local. */
+html:not(.dark) .describe-brand-popover .describe-brand-name-field .brand-select-control,
+html:not(.dark) .describe-brand-popover .describe-brand-cta-input {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: var(--ws-shadow-inner) !important;
+}
+
+html:not(.dark) .describe-brand-popover .describe-brand-name-field .brand-select-control:focus-within,
+html:not(.dark) .describe-brand-popover .describe-brand-cta-input:focus {
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
+}
+
+/* AdVideo uses several page-specific card primitives. Keep their Light Mode
+   surfaces just warmer than the global card token without touching actions,
+   artwork, or Dark Mode. */
+html:not(.dark) .advideo-ui-layer :is(
+  .workspace-card,
+  .rounded-\[30px\].bg-white\/70,
+  [data-slot="card"],
+  .rounded-3xl.border.bg-white,
+  .rounded-2xl.border.bg-white,
+  .rounded-xl.border.bg-white
+) {
+  background-color: var(--ws-surface-header) !important;
+  border-color: var(--ws-border) !important;
+}
+
+html:not(.dark) .advideo-ugc-setup-card {
+  background-color: #FCFAF7 !important;
+  border-color: #DDD7CD !important;
+  box-shadow:
+    0 20px 40px rgba(80, 70, 58, 0.08),
+    0 8px 16px rgba(80, 70, 58, 0.05),
+    0 2px 6px rgba(80, 70, 58, 0.03) !important;
+}
+

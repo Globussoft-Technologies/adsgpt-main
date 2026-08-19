@@ -179,8 +179,8 @@ export default function FacebookAccountSelector({
                 onClick={() => !disabled && select(account.facebookId, accounts)}
                 className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-all cursor-pointer ${
                   active
-                    ? 'bg-[#E5DFD5] dark:bg-[#1C2228] border border-transparent dark:border-white/5'
-                    : 'hover:bg-[#EDE7DF] dark:hover:bg-white/5 opacity-80'
+                    ? 'bg-[#EAE5DC] dark:bg-[#1C2228] border border-transparent dark:border-white/5'
+                    : 'hover:bg-[#EAE5DC] dark:hover:bg-white/5 opacity-80'
                 }`}
               >
                 <div className="min-w-0 flex-1">
@@ -205,7 +205,7 @@ export default function FacebookAccountSelector({
             type="button"
             onClick={connect}
             disabled={disabled}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EDE7DF] dark:text-[#65A4FF] dark:hover:bg-white/5 disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EAE5DC] dark:text-[#65A4FF] dark:hover:bg-white/5 disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Facebook account
@@ -276,8 +276,8 @@ export default function FacebookAccountSelector({
                     select(account.facebookId, accounts);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-[#EDE7DF] dark:hover:bg-white/5 ${
-                    active ? 'bg-[#E5DFD5] dark:bg-white/5' : ''
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-[#EAE5DC] dark:hover:bg-white/5 ${
+                    active ? 'bg-[#EAE5DC] dark:bg-white/5' : ''
                   }`}
                 >
                   <div className="min-w-0">
@@ -301,7 +301,7 @@ export default function FacebookAccountSelector({
             <button
               type="button"
               onClick={connect}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EDE7DF] dark:text-[#65A4FF] dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#1877F2] transition-colors hover:bg-[#EAE5DC] dark:text-[#65A4FF] dark:hover:bg-white/5"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Facebook account
@@ -310,7 +310,7 @@ export default function FacebookAccountSelector({
               <Link
                 to="/profile"
                 onClick={() => setOpen(false)}
-                className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#7A7369] transition-colors hover:bg-[#EDE7DF] hover:text-[#24211D] dark:text-white/70 dark:hover:bg-white/5 dark:hover:text-white"
+                className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-[#7A7369] transition-colors hover:bg-[#EAE5DC] hover:text-[#24211D] dark:text-white/70 dark:hover:bg-white/5 dark:hover:text-white"
               >
                 <Settings2 className="h-3.5 w-3.5" />
                 Manage accounts

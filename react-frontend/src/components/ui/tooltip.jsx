@@ -40,7 +40,7 @@ function TooltipContent({ className, sideOffset = 0, children, ...props }) {
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="z-50 size-2.5 fill-white dark:fill-[#2a2a2a]" />
+        <TooltipPrimitive.Arrow className="z-50 size-2.5 fill-[#FCFAF7] dark:fill-[#1C1C1C]" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

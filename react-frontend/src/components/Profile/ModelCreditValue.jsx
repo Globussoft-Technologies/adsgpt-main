@@ -55,13 +55,13 @@ const splitValue = (valueString) => {
 };
 
 const IconBadge = ({ label }) => (
-  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-10 2xl:w-10 dark:border-white/10 dark:bg-white/5">
+  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 2xl:h-10 2xl:w-10 dark:bg-white/5">
     {getModelIcon(label)}
   </div>
 );
 
 const CHIP_CLASS =
-  'flex w-[172px] shrink-0 items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-3.5 shadow-[0_1px_3px_rgba(80,70,58,0.04)] 2xl:w-[200px] 2xl:gap-3 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-[#BEBEBE] dark:shadow-none';
+  'flex w-[172px] shrink-0 items-center gap-2 rounded-xl border border-black/10 bg-zinc-50 p-4 2xl:w-[200px] 2xl:gap-3 dark:border-white/5 dark:bg-[#333333]/50';
 
 // Flat chip — used for video models and as fallback when no quality tiers exist.
 const FlatChip = ({ label, value }) => {
@@ -118,23 +118,23 @@ const TieredChip = ({ label, tiers }) => {
       <TooltipContent
         side="bottom"
         sideOffset={8}
-        className="!bg-white !text-zinc-900 rounded-xl border border-black/10 p-0 shadow-2xl dark:!bg-[#2a2a2a] dark:!text-white dark:border-white/10"
+        className="rounded-xl border border-black/10 bg-white p-0 text-zinc-900 shadow-2xl dark:border-white/10 dark:bg-[#2a2a2a] dark:text-white"
       >
         <div className="min-w-[210px] px-4 py-3">
-          <p className="mb-2 border-b border-black/10 pb-2 text-xs font-bold tracking-wider text-zinc-800 uppercase dark:border-white/10 dark:text-white/80">
+          <p className="mb-2 border-b border-black/10 pb-2 text-xs font-bold tracking-wider text-zinc-600 uppercase dark:border-white/10 dark:text-white/70">
             {label}
           </p>
           <div className="flex flex-col gap-2">
             {tiers.map((tier) => (
               <div key={tier.quality} className="flex items-center justify-between gap-8">
-                <span className="text-xs font-semibold tracking-wide text-zinc-700 uppercase dark:text-white/80">
+                <span className="text-xs font-semibold tracking-wide text-zinc-600 uppercase dark:text-white/70">
                   {QUALITY_LABELS[tier.quality] || tier.quality}
                 </span>
                 <div className="flex items-baseline gap-1">
                   <span className="text-sm font-black text-[#3F51B5] dark:text-[#7EA7F3]">
                     {tier.creditsPerImage}
                   </span>
-                  <span className="text-[9px] font-bold tracking-tighter text-zinc-500 uppercase dark:text-white/60">
+                  <span className="text-[9px] font-bold tracking-tighter text-zinc-400 uppercase dark:text-white/50">
                     cr
                   </span>
                 </div>

@@ -302,14 +302,14 @@ export function TemplatesTrigger({ controller }) {
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
-      className="flex shrink-0 items-center gap-2 rounded-full bg-[#e2e7ec] px-4 py-2 text-[12px] font-medium text-[#0f172a] border border-black/10 transition-colors hover:bg-[#d8dee5] dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:border-white/5 dark:hover:bg-[#33333a]"
+      className="flex shrink-0 items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-[12px] font-light text-gray-600 ring-1 ring-black/10 transition-colors hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]"
     >
-      <Sparkles size={14} className="text-[#0f172a]/70 dark:text-white/60" />
+      <Sparkles size={14} className="text-gray-500 dark:text-white/60" />
       Templates
       <ChevronDown
         size={16}
         strokeWidth={2}
-        className={`text-[#0f172a]/70 transition-transform dark:text-white/40 ${open ? 'rotate-180' : ''}`}
+        className={`text-gray-500 transition-transform dark:text-white/40 ${open ? 'rotate-180' : ''}`}
       />
     </button>
   );
@@ -439,11 +439,11 @@ export function TemplatesPanel({ controller }) {
               — instead of being a separately-animated marginBottom on the
               Motion.div, which can finish a frame off from the height
               animation and produce a tiny "settle" at the end. */}
-          <div className="rounded-[20px] mb-3 overflow-hidden bg-[#e2e7ec] border border-black/10 dark:bg-[#1a1c20] dark:border-white/10 shadow-lg">
+          <div className="rounded-20 mb-3 overflow-hidden bg-gray-100 ring-1 ring-black/10 dark:bg-[#909294]/10 dark:ring-white/10">
             {state !== 'loaded' && (
               <div className="px-4 py-3">
                 {state === 'loading' && (
-                  <div className="flex items-center gap-2 text-[12px] text-gray-700 dark:text-white/60">
+                  <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-white/60">
                     <Loader2 size={12} className="animate-spin" />
                     Loading templates…
                   </div>
@@ -454,13 +454,13 @@ export function TemplatesPanel({ controller }) {
                   </div>
                 )}
                 {state === 'idle' && (
-                  <div className="text-[12px] text-gray-600 dark:text-white/50">Preparing…</div>
+                  <div className="text-[12px] text-gray-500 dark:text-white/50">Preparing…</div>
                 )}
               </div>
             )}
 
             {state === 'loaded' && templates.length === 0 && (
-              <div className="px-4 py-3 text-[12px] text-gray-600 dark:text-white/50">
+              <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
                 No templates available.
               </div>
             )}
@@ -477,14 +477,14 @@ export function TemplatesPanel({ controller }) {
                   <div className="relative min-w-0 flex-1">
                     <Search
                       size={15}
-                      className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-500 dark:text-white/40"
+                      className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-400 dark:text-white/40"
                     />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search all templates…"
-                      className="templates-search-input h-9 w-full min-w-0 rounded-full bg-[#d8dee5]! pr-3 pl-9 text-[12.5px] font-medium text-[#0f172a]! outline-none border border-black/10 placeholder:text-gray-500 focus:border-black/20 dark:bg-[#1f1f23]! dark:text-white/90! dark:border-white/10 dark:placeholder:text-white/40 dark:focus:border-white/20"
+                      className="h-9 w-full min-w-0 rounded-full bg-white pr-3 pl-9 text-[12.5px] text-gray-700 outline-none ring-1 ring-black/10 placeholder:text-gray-400 focus:ring-1 focus:ring-black/10 dark:bg-[#1f1f23] dark:text-white/90 dark:ring-white/10 dark:placeholder:text-white/40 dark:focus:ring-white/20"
                     />
                   </div>
                 </div>
@@ -505,7 +505,7 @@ export function TemplatesPanel({ controller }) {
                         'flex items-center gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold tracking-wide uppercase';
                       if (searching) {
                         return (
-                          <div className={`${base} text-gray-700 dark:text-white/60`}>
+                          <div className={`${base} text-gray-500 dark:text-white/60`}>
                             <Search size={11} className="shrink-0" />
                             <span className="truncate">
                               {filteredTemplates.length} result
@@ -516,7 +516,7 @@ export function TemplatesPanel({ controller }) {
                       }
                       if (categoryResolving) {
                         return (
-                          <div className={`${base} text-cyan-700 dark:text-cyan-300`}>
+                          <div className={`${base} text-cyan-600 dark:text-cyan-300`}>
                             <Loader2 size={11} className="shrink-0 animate-spin" />
                             <span className="truncate">Finding category…</span>
                           </div>
@@ -524,10 +524,10 @@ export function TemplatesPanel({ controller }) {
                       }
                       return (
                         <div
-                          className={`${base} text-gray-700 dark:text-white/60`}
+                          className={`${base} text-gray-500 dark:text-white/60`}
                           title={selectedCategory}
                         >
-                          <LayoutGrid size={11} className="shrink-0 text-cyan-600 dark:text-cyan-300" />
+                          <LayoutGrid size={11} className="shrink-0 text-cyan-500 dark:text-cyan-300" />
                           <span className="truncate">{selectedCategory || 'General'}</span>
                         </div>
                       );
@@ -539,7 +539,7 @@ export function TemplatesPanel({ controller }) {
                       }`}
                     >
                       {filteredTemplates.length === 0 && (
-                        <div className="px-2 py-3 text-[11px] text-gray-600 dark:text-white/50">
+                        <div className="px-2 py-3 text-[11px] text-gray-500 dark:text-white/50">
                           No matching templates.
                         </div>
                       )}
@@ -554,10 +554,10 @@ export function TemplatesPanel({ controller }) {
                               <button
                                 type="button"
                                 onClick={() => previewTemplate(t)}
-                                className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-medium transition-colors ${
+                                className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] transition-colors ${
                                   isPreviewed
                                     ? 'bg-gray-900 text-white dark:bg-white/20 dark:text-white'
-                                    : 'text-gray-900 hover:bg-black/10 dark:text-white/90 dark:hover:bg-white/10'
+                                    : 'text-gray-800 hover:bg-black/5 dark:text-white/90 dark:hover:bg-white/10'
                                 }`}
                               >
                                 <RowIcon
@@ -573,7 +573,7 @@ export function TemplatesPanel({ controller }) {
                                       className={`block truncate text-[10px] ${
                                         isPreviewed
                                           ? 'text-white/60'
-                                          : 'text-gray-600 dark:text-white/40'
+                                          : 'text-gray-400 dark:text-white/40'
                                       }`}
                                     >
                                       {t._category}
@@ -599,7 +599,7 @@ export function TemplatesPanel({ controller }) {
                   {/* Right detail — fixed-height preview column */}
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
                     {!previewedTemplate ? (
-                      <div className="flex flex-1 items-center justify-center text-center text-[12px] text-gray-600 dark:text-white/50">
+                      <div className="flex flex-1 items-center justify-center text-center text-[12px] text-gray-500 dark:text-white/50">
                         Pick a template on the left to preview it.
                       </div>
                     ) : (
@@ -610,7 +610,7 @@ export function TemplatesPanel({ controller }) {
                               {previewedTemplate.title || 'Template'}
                             </span>
                             {(previewedTemplate._category || previewedTemplate.category) && (
-                              <span className="flex shrink-0 items-center gap-1 text-[10.5px] text-gray-500 dark:text-white/40">
+                              <span className="flex shrink-0 items-center gap-1 text-[10.5px] text-gray-400 dark:text-white/40">
                                 <LayoutGrid size={10} className="shrink-0" />
                                 {previewedTemplate._category || previewedTemplate.category}
                               </span>
@@ -619,7 +619,7 @@ export function TemplatesPanel({ controller }) {
                         </div>
                         <div
                           onScroll={onPreviewScroll}
-                          className={`min-h-0 flex-1 overflow-y-auto px-1 py-2 text-[12.5px] leading-relaxed text-gray-900 scrollbar-auto-hide dark:text-white/80 ${
+                          className={`min-h-0 flex-1 overflow-y-auto px-1 py-2 text-[12.5px] leading-relaxed text-gray-700 scrollbar-auto-hide dark:text-white/80 ${
                             previewScrolling ? 'is-scrolling' : ''
                           }`}
                         >

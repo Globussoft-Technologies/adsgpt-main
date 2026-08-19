@@ -1,62 +1,61 @@
+import React from 'react';
 import { FaChevronDown } from 'react-icons/fa';
-import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import BrandSelect from './BrandSelect';
-import { Box, CloudUpload, Command, Image, Palette, Repeat2, ScanFace, Upload } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setFields } from '@/store/reducers/adStudio/promptSlice';
 
 const DescribeBrandDropdown = () => {
   const dispatch = useDispatch();
   const { cta, brand_name } = useSelector((state) => state.prompt);
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <div className="prompt_selection_button_no_gradient group 2xl:text-13 group backdrop-blur-80 relative flex max-w-[200px] items-center gap-2 rounded-[50px] px-4 py-1.5 text-[9px] text-zinc-800 shadow-none transition-all duration-200 ease-in hover:bg-slate-100 2xl:py-2 dark:border-none dark:bg-[#202020]/50 dark:text-[#AFAFAF]">
-          <span className="truncate font-light text-inherit dark:group-data-[state=open]:text-white">
+        <button
+          type="button"
+          className="describe-brand-trigger group relative flex max-w-[200px] items-center gap-2 rounded-full border border-[#DDD7CD] bg-[#FCFAF7] px-3.5 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-all hover:bg-[#EAE5DC] 2xl:py-2 dark:border-white/10 dark:bg-[#1E1E1E] dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A] dark:hover:text-white"
+        >
+          <span className="truncate font-medium text-inherit">
             {brand_name || 'Describe Brand'}
           </span>
-          <FaChevronDown className="flex-shrink-0 font-light text-current dark:group-data-[state=open]:text-white" />
-        </div>
+          <FaChevronDown className="h-2.5 w-2.5 shrink-0 text-[#7A7369] transition-transform duration-200 group-data-[state=open]:rotate-180 dark:text-[#BEBEBE]" />
+        </button>
       </PopoverTrigger>
 
       <PopoverContent
         side="bottom"
         align="end"
-        className="backdrop-blur-100 mb-2 w-86 rounded-3xl border border-black/10 bg-white px-2 py-4.5 pb-8 dark:border-white/20 dark:bg-[#0D0D0D]/50"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="describe-brand-popover mb-2 w-84 rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-4.5 text-[#24211D] shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#141414] dark:text-white"
       >
         <div className="w-full">
-          <Tabs defaultValue="brand" className="flex w-full">
-            <div className="text-center text-zinc-900 dark:text-white">Describe Brand</div>
+          <h4 className="mb-3.5 text-center text-[13px] font-semibold text-[#24211D] dark:text-white">
+            Describe Brand
+          </h4>
 
-            {/* Brand Content */}
-            <TabsContent value="brand" className="mt-1 px-2">
-              <div>
-                <div className="grid gap-2">
-                  <div className="grid gap-1">
-                    <BrandSelect />
-                  </div>
+          <div className="flex flex-col gap-3">
+            <BrandSelect className="describe-brand-name-field" />
 
-                  <div className="grid gap-1.5">
-                    <label htmlFor="call-to-action" className="text-sm font-normal text-zinc-700 dark:text-[#afafaf]">
-                      Call to Action
-                    </label>
-                    <Input
-                      id="call-to-action"
-                      className="rounded-4xl border border-black/10 bg-zinc-50 text-zinc-800 placeholder:text-zinc-500 focus-within:border-zinc-400 focus:!ring-0 dark:border-white/20 dark:bg-[#0d0d0d]/50 dark:text-white dark:placeholder:text-[#ccc]/60 dark:focus-within:border-white/50"
-                      onChange={(e) => {
-                        dispatch(setFields({ cta: e.target.value }));
-                      }}
-                      placeholder="Enter Call to Action"
-                      value={cta}
-                    />
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="call-to-action"
+                className="text-[12px] font-medium text-[#7A7369] dark:text-white/70"
+              >
+                Call to Action
+              </label>
+              <Input
+                id="call-to-action"
+                className="describe-brand-cta-input h-10 w-full rounded-full border border-[#DDD7CD] bg-white px-3.5 text-xs text-[#24211D] shadow-xs placeholder:text-[#948C80] focus-visible:border-[#02C8C4] focus-visible:ring-1 focus-visible:ring-[#02C8C4]/30 focus-visible:ring-offset-0 dark:border-white/10 dark:bg-[#1C1C1C] dark:text-white dark:placeholder:text-[#afafaf]/50 dark:focus-visible:border-[#15DCFF] dark:focus-visible:ring-[#15DCFF]/30 transition-all"
+                onChange={(e) => {
+                  dispatch(setFields({ cta: e.target.value }));
+                }}
+                placeholder="Enter Call to Action"
+                value={cta || ''}
+              />
+            </div>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

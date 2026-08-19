@@ -8,13 +8,21 @@ import { STATUS_MAP } from './metaAdsUtils';
 export function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-[#DDD7CD] bg-[#FCFAF7]/95 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1A1A1A]/95">
-      {label && <p className="mb-1 text-[10px] font-medium text-[#7A7369] dark:text-[#BEBEBE]">{label}</p>}
-      {payload.map((p, i) => (
-        <p key={i} className="text-xs font-semibold" style={{ color: p.color || '#15DCFF' }}>
-          {p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
-        </p>
-      ))}
+    <div className="rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7]/95 px-3.5 py-2.5 shadow-[0_12px_32px_rgba(80,70,58,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#161616]/95 dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+      {label && <p className="mb-1.5 text-[11px] font-semibold text-[#7A7369] dark:text-[#A0A0A0]">{label}</p>}
+      {payload.map((p, i) => {
+        const isSpend = String(p.name).toLowerCase().includes('spend');
+        const color = isSpend ? '#00C2FF' : '#818CF8';
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
+            <p className="text-xs font-bold text-[#24211D] dark:text-white">
+              <span className="text-[#7A7369] dark:text-white/60 font-medium">{p.name}: </span>
+              {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -50,8 +58,8 @@ export function Spinner() {
 
 export function EmptyState({ message }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] py-12 dark:border-white/5 dark:bg-[#0D0D0D]/50">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FCFAF7] text-[#7A7369] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:text-[#BEBEBE] dark:ring-0">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] py-12 dark:border-white/5 dark:bg-[#0D0D0D]/50">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EAE5DC] text-[#7A7369] ring-1 ring-[#DDD7CD] dark:bg-white/5 dark:text-[#BEBEBE] dark:ring-0">
         <Layers className="h-5 w-5 text-[#7A7369] dark:text-[#BEBEBE]" />
       </div>
       <p className="text-sm text-[#7A7369] dark:text-[#BEBEBE]">{message}</p>
@@ -78,7 +86,7 @@ export function KpiCard({ icon: Icon, label, value, sub, glowColor, trend, loadi
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#EDE7DF] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-xl transition-all duration-300 dark:border-white/10 dark:bg-[#14181D] 2xl:p-5"
+      className="group relative overflow-hidden rounded-2xl border border-[#DDD7CD] bg-[#FCFAF7] p-4 shadow-[0_4px_20px_-2px_rgba(80,70,58,0.05),0_2px_6px_-1px_rgba(80,70,58,0.03)] backdrop-blur-xl transition-all duration-300 dark:border-white/10 dark:bg-[#14181D] 2xl:p-5"
     >
       <div
         className={`pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-20 blur-2xl ${glowColor ?? 'bg-[#15DCFF]'}`}

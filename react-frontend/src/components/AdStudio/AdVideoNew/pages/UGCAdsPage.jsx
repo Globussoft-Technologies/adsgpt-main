@@ -491,14 +491,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   if (step === 1) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-[520px] rounded-[32px] border border-black/10 bg-white dark:border-white/5 dark:bg-[#18181B]/60 p-10 shadow-2xl backdrop-blur-xl">
+        <div className="advideo-ugc-setup-card w-full max-w-[520px] rounded-[32px] border border-[#DDD7CD] bg-[#FCFAF7] p-10 shadow-[0_20px_40px_rgba(80,70,58,0.08),0_8px_16px_rgba(80,70,58,0.05),0_2px_6px_rgba(80,70,58,0.03)] backdrop-blur-xl dark:border-white/5 dark:bg-[#18181B]/60 dark:shadow-2xl">
           {/* Header */}
           <div className="relative mb-10 flex items-center justify-center gap-3 text-gray-900 dark:text-white">
             <Clapperboard className="h-6 w-6 text-gray-900 dark:text-white" />
             <h2 className="text-xl font-semibold tracking-tight">Create your UGC ad</h2>
             <button
               onClick={onClose}
-              className="absolute -top-2 -right-4 rounded-full p-2 text-gray-500 dark:text-white/50 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
+              className="absolute -top-2 -right-4 rounded-full p-2 text-gray-500 transition hover:bg-black/5 hover:text-black dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <X className="h-6 w-6" />
             </button>
@@ -516,10 +516,10 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleNext();
                 }}
-                className={`w-full rounded-full border bg-black/5 dark:bg-white/[0.03] px-6 py-4 text-sm text-gray-900 dark:text-white shadow-inner transition-all placeholder:text-gray-500 dark:placeholder:text-white/20 focus:ring-1 focus:outline-none ${
+                className={`w-full rounded-full border bg-[#F6F2EC] px-6 py-4 text-sm text-gray-900 shadow-inner transition-all placeholder:text-gray-500 focus:ring-1 focus:ring-[#02C8C4]/30 focus:outline-none dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/20 dark:focus:ring-white/20 ${
                   urlError
                     ? 'border-red-500 focus:ring-red-500/30'
-                    : 'border-black/10 dark:border-white/10 focus:ring-white/20'
+                    : 'border-[#DDD7CD] dark:border-white/10'
                 }`}
               />
               <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-white/20" />
@@ -532,7 +532,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
             <button
               onClick={() => setStep(2)}
               disabled={isAnalyzing}
-              className={`rounded-full bg-black/5 dark:bg-white/[0.08] px-8 py-2.5 text-sm font-medium text-gray-500 dark:text-white/60 transition hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white ${
+              className={`rounded-full bg-[#EAE5DC] px-8 py-2.5 text-sm font-medium text-[#7A7369] transition hover:bg-[#DDD7CD] hover:text-[#24211D] dark:bg-white/[0.08] dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white ${
                 isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >
@@ -562,7 +562,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div className="relative h-full w-full max-w-[1100px] rounded-[32px] border border-black/10 bg-white dark:border-white/5 dark:bg-[#18181B]/60 pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8">
+      <div className="advideo-ugc-setup-card relative h-full w-full max-w-[1100px] rounded-[32px] border border-[#DDD7CD] bg-[#FCFAF7] pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8 dark:border-white/5 dark:bg-[#18181B]/60">
         {/* Back Button */}
         {!localRecreateData && (
           <button

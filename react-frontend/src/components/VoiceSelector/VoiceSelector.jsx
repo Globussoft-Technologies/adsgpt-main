@@ -513,28 +513,26 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
         {isOtherLanguage && searchOpen && (
           <div
             ref={searchRef}
-            className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]"
+            className="absolute left-0 top-full z-[99] mt-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1E]/95"
           >
-            {/* Single capped scroll container — same max height as the other
-                chip dropdowns. Search box sticks to the top while results scroll
-                underneath, so the popover never grows taller than a chip dropdown
-                and can't push the form into scrolling. */}
-            <div className="max-h-[120px] overflow-y-auto py-1">
-              <div className="sticky top-0 z-10 bg-white px-3 py-1.5 dark:bg-[#1A1A1A]">
-                <div className="flex items-center gap-2 rounded-md border border-black/10 bg-gray-100 px-2 py-1 dark:border-white/10 dark:bg-white/5">
-                  <Search className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
-                  <input
-                    type="text"
-                    placeholder="Search language…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40"
-                    autoFocus
-                  />
-                </div>
+            {/* Single capped scroll container */}
+            <div className="mb-1 px-1 pt-0.5">
+              <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-gray-100/80 px-2.5 py-1.5 dark:border-white/10 dark:bg-white/5">
+                <Search className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40" />
+                <input
+                  type="text"
+                  placeholder="Search language…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-[12px] text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40"
+                  autoFocus
+                />
               </div>
+            </div>
+
+            <div className="max-h-[190px] overflow-y-auto pr-0.5 [scrollbar-width:thin]">
               {searchLoading && (
-                <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-gray-500 dark:text-white/50">
+                <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-gray-500 dark:text-white/50">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
                 </div>
               )}
@@ -542,7 +540,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
                 <div className="px-3 py-3 text-[12px] text-red-400">{searchError}</div>
               )}
               {!searchLoading && !searchError && searchResults.length === 0 && searchQuery.trim() && (
-                <div className="px-3 py-3 text-[12px] text-gray-500 dark:text-white/40">No voices found</div>
+                <div className="py-3 text-center text-[12px] text-gray-500 dark:text-white/40">No voices found</div>
               )}
               {!searchLoading && !searchError &&
                 searchResults.map((v) => {
@@ -551,7 +549,9 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
                   return (
                     <div
                       key={v.voice_id}
-                      className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-[13px] transition ${selected ? 'bg-black/5 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+                      className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors ${
+                        selected ? 'bg-black/5 dark:bg-white/10 font-medium' : 'hover:bg-black/5 dark:hover:bg-white/5'
+                      }`}
                     >
                       <button
                         type="button"
@@ -559,9 +559,11 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
                         className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       >
                         <span
-                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-emerald-400' : 'border-gray-300 dark:border-white/30'}`}
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                            selected ? 'border-[#02C8C4] dark:border-[#15DCFF]' : 'border-gray-300 dark:border-white/30'
+                          }`}
                         >
-                          {selected && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                          {selected && <span className="h-1.5 w-1.5 rounded-full bg-[#02C8C4] dark:bg-[#15DCFF]" />}
                         </span>
                         <span className="min-w-0 truncate text-gray-700 dark:text-white/90">
                           {v.name}
@@ -574,7 +576,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
                             e.stopPropagation();
                             toggleSearchPreview(v);
                           }}
-                          className="shrink-0 rounded-full bg-black/5 p-1.5 text-gray-500 hover:bg-black/10 hover:text-black dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/20 dark:hover:text-white"
+                          className="shrink-0 rounded-full bg-black/5 p-1 text-gray-500 hover:bg-black/10 hover:text-black dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/20 dark:hover:text-white"
                           title={isPlaying ? 'Pause preview' : 'Play preview'}
                         >
                           {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}

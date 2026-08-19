@@ -390,7 +390,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   };
 
   return (
-    <div className="relative flex h-[95vh] w-full flex-col">
+    <div className="advideo-ui-layer relative flex h-[95vh] w-full flex-col">
       {/* {activePage !== 'myVideos' && <SavedFolderIcon />} */}
 
       {displayedActivePage === 'home' ? (
