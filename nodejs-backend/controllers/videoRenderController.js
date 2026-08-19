@@ -384,10 +384,10 @@ async function videoRender(req, res) {
 
           let angle = 0;
           if (details.details?.transform?.includes('rotate(')) {
-            const rotateMatch = details.details.transform.match(/rotate\(([^)]+)\)/);
+            const rotateMatch = details.details.transform.slice(0, 200).match(/rotate\(([^()]{1,50})\)/);
             if (rotateMatch) angle = parseFloat(rotateMatch[1].replace('deg', ''));
           } else if (details.transform?.includes('rotate(')) {
-            const rotateMatch = details.transform.match(/rotate\(([^)]+)\)/);
+            const rotateMatch = details.transform.slice(0, 200).match(/rotate\(([^()]{1,50})\)/);
             if (rotateMatch) angle = parseFloat(rotateMatch[1].replace('deg', ''));
           } else if (details.transformMatrix?.startsWith('matrix(')) {
             const matrix = details.transformMatrix.slice(7, -1).split(',').map(Number);

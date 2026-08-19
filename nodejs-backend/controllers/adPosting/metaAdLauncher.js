@@ -2589,10 +2589,12 @@ class MetaAdLauncher {
       const csv = leadsToCsv(leads);
 
       // Safe filename — strip anything HTTP headers / the OS dislike.
+      const rawName = String(formName || `form-${formId}`).slice(0, 200);
       const safeName =
-        String(formName || `form-${formId}`)
+        rawName
           .replace(/[^a-z0-9_-]+/gi, "-")
-          .replace(/^-+|-+$/g, "")
+          .replace(/^-+/, "")
+          .replace(/-+$/, "")
           .slice(0, 60) || "leads";
 
       // A partial export has to announce itself in the filename: the banner

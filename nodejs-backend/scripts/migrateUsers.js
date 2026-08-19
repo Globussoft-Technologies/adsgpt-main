@@ -100,7 +100,7 @@ async function fetchActiveMemberSubscriptions() {
       `${AMEMBER_BASE_URL}/users?_key=${AMEMBER_API_KEY}` +
       `&_nested[]=access&_count=${PAGE_SIZE}&_page=${page}`;
 
-    console.log(`  Fetching page ${page} → ${url}`);
+    console.log(`  Fetching page ${page} (count=${PAGE_SIZE})`);
     const res = await fetch(url);
     if (!res.ok)
       throw new Error(`aMember API failed: ${res.status} ${res.statusText}`);

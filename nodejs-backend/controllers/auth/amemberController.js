@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const axios = require('axios');
 const dayjs = require('dayjs');
 const { v4: uuidv4 } = require('uuid'); // make sure to run: npm install uuid
@@ -64,7 +65,7 @@ const optionalUsername = `user_${uniqueId}`;
   
     return {
       login: userName ??optionalUsername ,
-      pass: `Pass@${Math.floor(Math.random() * 100000)}`,
+      pass: `Pass@${crypto.randomInt(10000, 100000)}`,
       email: email ?? optionalEmail,
       name_f: "Auto",
       name_l: "Generated",

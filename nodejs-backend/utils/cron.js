@@ -113,7 +113,7 @@ const registerOAuthSigningKeyRotationCron = () => {
     );
     if (!cron.validate(schedule)) {
         console.error(
-            `[oauth-keyrot] invalid OAUTH_SIGNING_KEY_ROTATION_CRON: ${schedule}. Cron not registered.`,
+            '[oauth-keyrot] invalid key rotation schedule. Cron not registered.',
         );
         return;
     }
@@ -140,7 +140,7 @@ const registerOAuthSigningKeyRotationCron = () => {
         }
     });
     console.log(
-        `[oauth-keyrot] scheduler registered: cron="${schedule}" rotate>${rotationDays}d`,
+        `[oauth-keyrot] scheduler registered: rotate>${rotationDays}d`,
     );
 };
 

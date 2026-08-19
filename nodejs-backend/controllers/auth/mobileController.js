@@ -169,14 +169,14 @@ function generateRandomString(length = 16) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
   let res = "";
   for (let i = 0; i < length; i++) {
-    res += chars.charAt(Math.floor(Math.random() * chars.length));
+    res += chars.charAt(crypto.randomInt(0, chars.length));
   }
   return res;
 }
 
 function emailToLogin(email) {
   const prefix = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "_");
-  return `${prefix}_${Math.floor(1000 + Math.random() * 9000)}`;
+  return `${prefix}_${crypto.randomInt(1000, 10000)}`;
 }
 
 async function verifyFirebaseToken(idToken) {

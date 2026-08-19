@@ -735,7 +735,8 @@ const searchBrandsByName = async (req, res) => {
         data: [],
       });
     }
-    const searchRegex = new RegExp(searchTerm, 'i');
+    const escapeRegExp = (str) => String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchRegex = new RegExp(escapeRegExp(searchTerm), 'i');
 
     const result = await brandNameLists.aggregate([
       { $match: { user_id: userId } },

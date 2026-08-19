@@ -1,5 +1,8 @@
 const { object } = require('joi');
-const FAQ = require('../Module/FAQ/faq')
+const FAQ = require('../Module/FAQ/faq');
+const logger = require('../utils/logger');
+
+const escapeRegExp = (str) => String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Create an FAQ
 const createFAQ = async (req, res) => {
@@ -17,7 +20,8 @@ const createFAQ = async (req, res) => {
       await faq.save();
       res.status(201).send(faq);
     } catch (error) {
-      res.status(400).send(error);
+      logger.error('Error creating FAQ:', error);
+      res.status(400).send({ error: 'Failed to create FAQ' });
     }
   };
   
@@ -106,7 +110,7 @@ const createFAQ = async (req, res) => {
         
         // Add search filter if provided
         if (search) {
-            const searchRegex = new RegExp(search, 'i');
+            const searchRegex = new RegExp(escapeRegExp(search), 'i');
             aggregationPipeline.push({
                 $match: { question: searchRegex }
             });
@@ -146,7 +150,8 @@ const createFAQ = async (req, res) => {
       await faq.save();
       res.status(200).send(faq);
     } catch (error) {
-      res.status(400).send(error);
+      logger.error('Error updating FAQ:', error);
+      res.status(400).send({ error: 'Failed to update FAQ' });
     }
   };
   
@@ -160,7 +165,8 @@ const createFAQ = async (req, res) => {
       }
       res.status(200).send(faq);
     } catch (error) {
-      res.status(500).send(error);
+      logger.error('Error deleting FAQ:', error);
+      res.status(500).send({ error: 'Failed to delete FAQ' });
     }
   }
   

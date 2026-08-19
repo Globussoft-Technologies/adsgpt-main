@@ -73,7 +73,8 @@ const getChatForImage = async (req, res) => {
       });
     }
 
-    const regex = new RegExp(imageUrl, "i");
+    const escapeRegExp = (str) => String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escapeRegExp(imageUrl), "i");
 
     const matchedDocs = allDocs.filter((doc) => deepSearch(doc.toObject(), regex));
 

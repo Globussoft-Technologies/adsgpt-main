@@ -67,10 +67,12 @@ const denySession = (res, error) => {
   return res.status(401).json({ success: false, code, message });
 };
 const requestToken = (req) => {
-  const authHeader = String(req.headers?.authorization || '');
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  const bearer = match?.[1]?.trim();
-  if (bearer && bearer !== 'null' && bearer !== 'undefined') return bearer;
+  const authHeader = String(req.headers?.authorization || '').trim();
+  if (authHeader.length <= 4096) {
+    const match = authHeader.match(/^Bearer\s+(\S+)$/i);
+    const bearer = match?.[1]?.trim();
+    if (bearer && bearer !== 'null' && bearer !== 'undefined') return bearer;
+  }
 
   const cookies = parseCookies(req.headers?.cookie);
   return cookies['adsgpt-session'] || cookies['access-token'] || '';

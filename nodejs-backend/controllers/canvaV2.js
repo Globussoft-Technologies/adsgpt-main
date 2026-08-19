@@ -16,9 +16,10 @@ const toBase64Url = (obj) =>
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/=+$/, "");
+    .replace(/={1,2}$/, "");
 
 const fromBase64Url = (str) => {
+  if (typeof str !== "string") return null;
   const padded = str
     .replace(/-/g, "+")
     .replace(/_/g, "/")
@@ -38,7 +39,7 @@ const buildPKCE = () => {
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/=+$/, "");
+    .replace(/={1,2}$/, "");
   return { codeVerifier, codeChallenge };
 };
 
