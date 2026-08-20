@@ -15,6 +15,8 @@ import {
   Info,
   Inbox,
   SlidersHorizontal,
+  Search,
+  X,
 } from 'lucide-react';
 import {
   getAdAccounts,
@@ -148,6 +150,20 @@ export default function MetaAdsDashboard() {
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
+  // Client-side filter over the already-fetched accounts (same list the
+  // picker renders), not a separate lookup — matches the table search in
+  // MetaAdsTableView.jsx. Matches the account id too: several accounts here
+  // are named as bare numbers, so id is often the only thing to type.
+  const [accountQuery, setAccountQuery] = useState('');
+  const filteredAdAccounts = useMemo(() => {
+    const q = accountQuery.trim().toLowerCase();
+    if (!q) return adAccounts;
+    return adAccounts.filter(
+      (acc) =>
+        (acc.name || '').toLowerCase().includes(q) ||
+        String(acc.id || '').toLowerCase().includes(q),
+    );
+  }, [adAccounts, accountQuery]);
   const [dateOpen, setDateOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
@@ -561,7 +577,10 @@ export default function MetaAdsDashboard() {
           {/* account picker */}
           <Dropdown
             open={accountOpen}
-            onClose={() => setAccountOpen(false)}
+            onClose={() => {
+              setAccountOpen(false);
+              setAccountQuery('');
+            }}
             trigger={
               <button
                 onClick={() => setAccountOpen((p) => !p)}
@@ -594,7 +613,33 @@ export default function MetaAdsDashboard() {
                   </span>
                 </div>
               )}
-              <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+              {/* Hidden while loading: there is nothing to filter yet, and an
+                  input that clears itself once the list arrives is worse than
+                  no input at all. */}
+              {!loadingAccounts && adAccounts.length > 0 && (
+                <div className="relative mb-1 px-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-3.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+                  <input
+                    type="text"
+                    value={accountQuery}
+                    onChange={(e) => setAccountQuery(e.target.value)}
+                    placeholder="Search ad accounts…"
+                    autoFocus
+                    className="w-full rounded-lg border border-gray-300 bg-gray-100 py-1.5 pl-8 pr-8 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+                  />
+                  {accountQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setAccountQuery('')}
+                      className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-0.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-white"
+                      aria-label="Clear ad account search"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="max-h-[360px] overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
                 {loadingAccounts ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="h-4 w-4 animate-spin text-gray-500 dark:text-[#BEBEBE]" />
@@ -603,13 +648,21 @@ export default function MetaAdsDashboard() {
                   <p className="px-3 py-4 text-center text-xs text-gray-500 dark:text-[#BEBEBE]">
                     No ad accounts found
                   </p>
+                ) : filteredAdAccounts.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-xs text-gray-500 dark:text-[#BEBEBE]">
+                    No ad accounts match “{accountQuery}”
+                  </p>
                 ) : (
-                  adAccounts.map((acc) => (
+                  filteredAdAccounts.map((acc) => (
                     <button
                       key={acc.id}
                       onClick={() => {
                         selectAccount(acc);
                         setAccountOpen(false);
+                        // Closing this way bypasses the Dropdown's onClose, so
+                        // the filter has to be reset here too or it persists
+                        // into the next open.
+                        setAccountQuery('');
                         setActiveTab('analytics');
                       }}
                       className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}

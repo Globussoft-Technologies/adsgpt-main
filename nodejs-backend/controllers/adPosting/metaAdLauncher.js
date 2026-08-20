@@ -19,7 +19,16 @@ const {
   getAdSetFields,
   getInsightsFields,
   getCampaignFields,
+  plainMetaList,
 } = require("../../utils/metaHelpers");
+const {
+  RECOMMENDATIONS_TTL,
+  fetchAccountRecommendations,
+  fetchAccountHierarchy,
+  indexRecommendationsByObjectId,
+  collectDescendants,
+  recommendationsForIds,
+} = require("../../utils/metaRecommendations");
 const {
   getMetricsCatalog,
   extractMetricValue,
@@ -83,6 +92,74 @@ async function fetchAllPaged(firstPageCursor, label = "items") {
 // useful while bounding the temporal skew users can observe.
 const VOLATILE_TTL = 300;
 
+// Bumped whenever the shape of a cached entity payload changes. Without it a
+// release that adds a field keeps serving rows that predate it for the full
+// REDIS_TTL, so the new field reads as permanently empty. Old keys are simply
+// orphaned and expire on their own.
+const CACHE_SHAPE = "v2";
+
+// Meta's suggestions come from the ad-account edge, not from the entities
+// themselves, and are attached AFTER the entity cache is read — same reasoning
+// as attachPlanUsage. They turn over on their own schedule, so baking them
+// into the 2-hour entity blob would pin them to the wrong clock.
+async function getRecommendationState(userId, facebookId, adAccountId) {
+  const cacheKey = `metaRecommendations:${metaCacheScope(userId, facebookId)}:${adAccountId}`;
+  const cached = await redisClient.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const recommendations = await fetchAccountRecommendations(adAccountId);
+  // The hierarchy is only needed to roll a child's suggestion up onto its
+  // parents' rows — two extra Meta calls that buy nothing when there are no
+  // suggestions to place.
+  const hierarchy = recommendations.length
+    ? await fetchAccountHierarchy(adAccountId)
+    : { adSetToCampaign: {}, adToCampaign: {}, adToAdSet: {} };
+
+  const state = {
+    index: indexRecommendationsByObjectId(recommendations),
+    descendants: collectDescendants(hierarchy),
+  };
+  await redisClient.set(
+    cacheKey,
+    JSON.stringify(state),
+    "EX",
+    RECOMMENDATIONS_TTL,
+  );
+  return state;
+}
+
+// Fail open: a suggestion is decoration on a table whose actual job is listing
+// entities, so a Meta hiccup here must not take the whole list down with it.
+async function attachRecommendations(items, level, userId, facebookId, adAccountId) {
+  if (!Array.isArray(items) || !items.length) return items;
+  if (!adAccountId) {
+    for (const item of items) item.recommendations = [];
+    return items;
+  }
+
+  try {
+    const { index, descendants } = await getRecommendationState(
+      userId,
+      facebookId,
+      String(adAccountId).replace(/^act_/, ""),
+    );
+    for (const item of items) {
+      const id = String(item.id);
+      const extra =
+        level === "campaign"
+          ? descendants?.byCampaign?.[id] || []
+          : level === "adset"
+            ? descendants?.byAdSet?.[id] || []
+            : [];
+      item.recommendations = recommendationsForIds(index, [id, ...extra]);
+    }
+  } catch (err) {
+    logger.warn(`attachRecommendations(${level}): ${err.message}`);
+    for (const item of items) item.recommendations = [];
+  }
+  return items;
+}
+
 // Cache key prefixes whose payloads embed status fields and therefore
 // must be invalidated when a campaign/adset/ad status changes.
 const STATUS_CACHE_PREFIXES = [
@@ -91,6 +168,9 @@ const STATUS_CACHE_PREFIXES = [
   "metaCampaignAds",
   "metaAdSetAds",
   "metaDashboard",
+  // Meta withdraws a suggestion once the thing it asks for is done, so a
+  // status change can make the cached set wrong.
+  "metaRecommendations",
 ];
 
 // Every cache prefix this controller writes under. Used on disconnect to
@@ -1073,18 +1153,27 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaCampaigns:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
+      const cacheKey = `metaCampaigns:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          // Plan-limit usage + managed-slot state are recomputed fresh even
-          // on a cache HIT — see attachPlanUsage's docblock for why baking
-          // them into this cached blob made a change invisible for REDIS_TTL.
+          // Plan-limit usage, managed-slot state and Meta's suggestions are
+          // recomputed fresh even on a cache HIT — see attachPlanUsage's
+          // docblock for why baking them into this cached blob made a change
+          // invisible for REDIS_TTL.
+          const parsed = JSON.parse(cached);
+          await attachRecommendations(
+            parsed.campaigns,
+            "campaign",
+            userId,
+            getFacebookIdFromRequest(req),
+            adAccountId,
+          );
           return res
             .status(200)
-            .json(await attachCampaignPlanState(JSON.parse(cached), userId));
+            .json(await attachCampaignPlanState(parsed, userId));
         }
       } else {
         await redisClient.del(cacheKey).catch(() => {});
@@ -1125,6 +1214,9 @@ class MetaAdLauncher {
         // For the management "Add Ad Set" flow (see getCampaignFields).
         bid_strategy: campaign.bid_strategy || null,
         special_ad_categories: campaign.special_ad_categories || [],
+        issues_info: plainMetaList(
+          campaign.issues_info || campaign?._data?.issues_info,
+        ),
       }));
 
       const response = {
@@ -1160,6 +1252,15 @@ class MetaAdLauncher {
         logger.warn(`getCapaignsByAdAccount: managed-slot prune failed: ${err.message}`);
       }
 
+      // Attached after the cache write, never into it — see CACHE_SHAPE.
+      await attachRecommendations(
+        response.campaigns,
+        "campaign",
+        userId,
+        getFacebookIdFromRequest(req),
+        adAccountId,
+      );
+
       // Surface the plan's campaign cap + which campaigns hold a slot, so the
       // frontend can lock unmanaged rows and disable "New Campaign" at the
       // limit (the create/mutate handlers are the real enforcement).
@@ -1193,13 +1294,21 @@ class MetaAdLauncher {
       const userId = req.user.user_id;
 
       // ---------- REDIS CACHE ----------
-      const cacheKey = `metaAdsets:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${campaignId || "all"}`;
+      const cacheKey = `metaAdsets:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}:${campaignId || "all"}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          return res.status(200).json(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          await attachRecommendations(
+            parsed.adSets,
+            "adset",
+            userId,
+            getFacebookIdFromRequest(req),
+            adAccountId,
+          );
+          return res.status(200).json(parsed);
         }
       } else {
         await redisClient.del(cacheKey).catch(() => {});
@@ -1245,6 +1354,9 @@ class MetaAdLauncher {
         end_time: adSet.end_time,
         billing_event: adSet.billing_event,
         optimization_goal: adSet.optimization_goal,
+        issues_info: plainMetaList(
+          adSet.issues_info || adSet?._data?.issues_info,
+        ),
       }));
 
       const response = {
@@ -1261,6 +1373,15 @@ class MetaAdLauncher {
         REDIS_TTL,
       );
       // --------------------------------
+
+      // Attached after the cache write, never into it — see CACHE_SHAPE.
+      await attachRecommendations(
+        response.adSets,
+        "adset",
+        userId,
+        getFacebookIdFromRequest(req),
+        adAccountId,
+      );
 
       return res.status(200).json(response);
     } catch (error) {
@@ -1291,12 +1412,20 @@ class MetaAdLauncher {
       }
 
       // ---------- REDIS CACHE ----------
-      const cacheKey = `metaCampaignAds:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${campaignId}`;
+      const cacheKey = `metaCampaignAds:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${campaignId}`;
 
       const cached = await redisClient.get(cacheKey);
 
       if (cached) {
-        return res.status(200).json(JSON.parse(cached));
+        const parsed = JSON.parse(cached);
+        await attachRecommendations(
+          parsed.ads,
+          "ad",
+          userId,
+          getFacebookIdFromRequest(req),
+          parsed.ads?.[0]?.account_id,
+        );
+        return res.status(200).json(parsed);
       }
       // --------------------------------
 
@@ -1314,7 +1443,10 @@ class MetaAdLauncher {
         "ads (by campaign)",
       );
 
-      const formattedAds = ads.map((ad) => ad?._data);
+      const formattedAds = ads.map((ad) => ({
+        ...(ad?._data || {}),
+        issues_info: plainMetaList(ad?.issues_info || ad?._data?.issues_info),
+      }));
 
       const response = {
         status: true,
@@ -1330,6 +1462,15 @@ class MetaAdLauncher {
         REDIS_TTL,
       );
       // --------------------------------
+
+      // Attached after the cache write, never into it — see CACHE_SHAPE.
+      await attachRecommendations(
+        response.ads,
+        "ad",
+        userId,
+        getFacebookIdFromRequest(req),
+        response.ads?.[0]?.account_id,
+      );
 
       return res.status(200).json(response);
     } catch (error) {
@@ -1359,13 +1500,21 @@ class MetaAdLauncher {
       }
 
       // -------- REDIS CACHE --------
-      const cacheKey = `metaAdSetAds:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adSetId}`;
+      const cacheKey = `metaAdSetAds:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adSetId}`;
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
 
       if (!refresh) {
         const cached = await redisClient.get(cacheKey);
         if (cached) {
-          return res.status(200).json(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          await attachRecommendations(
+            parsed.ads,
+            "ad",
+            userId,
+            getFacebookIdFromRequest(req),
+            parsed.ads?.[0]?.account_id,
+          );
+          return res.status(200).json(parsed);
         }
       } else {
         await redisClient.del(cacheKey).catch(() => {});
@@ -1386,7 +1535,10 @@ class MetaAdLauncher {
         "ads (by ad set)",
       );
 
-      const formattedAds = ads.map((ad) => ad?._data);
+      const formattedAds = ads.map((ad) => ({
+        ...(ad?._data || {}),
+        issues_info: plainMetaList(ad?.issues_info || ad?._data?.issues_info),
+      }));
 
       const response = {
         status: true,
@@ -1402,6 +1554,15 @@ class MetaAdLauncher {
         REDIS_TTL,
       );
       // -----------------------------
+
+      // Attached after the cache write, never into it — see CACHE_SHAPE.
+      await attachRecommendations(
+        response.ads,
+        "ad",
+        userId,
+        getFacebookIdFromRequest(req),
+        response.ads?.[0]?.account_id,
+      );
 
       return res.json(response);
     } catch (error) {

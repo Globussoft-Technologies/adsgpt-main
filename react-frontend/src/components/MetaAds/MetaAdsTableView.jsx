@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
@@ -21,6 +22,7 @@ import {
   RefreshCw,
   Lock,
   Check,
+  Lightbulb,
 } from 'lucide-react';
 import {
   getAdSets,
@@ -82,6 +84,240 @@ function AddButton({ label, onClick, busy = false, disabled = false }) {
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
       {label}
     </button>
+  );
+}
+
+// Normalised by the backend (utils/metaRecommendations.js) into a flat array,
+// so this only has to stay defensive about an older cached payload shape.
+function getMetaRecommendations(entity) {
+  const raw = entity?.recommendations;
+  const list = Array.isArray(raw) ? raw : [];
+  return list.filter((item) => item && typeof item === 'object');
+}
+
+// Delivery errors, NOT suggestions. Meta returns these on a different field and
+// they mean the entity is blocked, so they're rendered apart from the
+// optimisation ideas rather than mixed into the same list.
+function getMetaIssues(entity) {
+  const raw = entity?.issues_info;
+  const list = Array.isArray(raw) ? raw : [];
+  return list.filter((item) => item && typeof item === 'object');
+}
+
+function metaText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+function MetaRecommendationBadge({ entity, onOpen }) {
+  const count = getMetaRecommendations(entity).length;
+  const issueCount = getMetaIssues(entity).length;
+
+  if (!count && !issueCount) {
+    return <span className="text-sm text-gray-400 dark:text-white/35">—</span>;
+  }
+
+  const open = (e) => {
+    e.stopPropagation();
+    onOpen(entity);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {count > 0 && (
+        <button
+          type="button"
+          onClick={open}
+          className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 dark:border-[#15DCFF]/20 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:bg-[#15DCFF]/14"
+          aria-label={`View ${count} Meta recommendation${count === 1 ? '' : 's'} for ${entity?.name || 'this item'}`}
+        >
+          <Lightbulb className="h-3 w-3" />
+          {count} recommendation{count === 1 ? '' : 's'}
+        </button>
+      )}
+      {issueCount > 0 && (
+        <button
+          type="button"
+          onClick={open}
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300 dark:hover:bg-red-400/16"
+          aria-label={`View ${issueCount} delivery issue${issueCount === 1 ? '' : 's'} for ${entity?.name || 'this item'}`}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {issueCount} issue{issueCount === 1 ? '' : 's'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MetaRecommendationsModal({ entity, onClose }) {
+  const recommendations = getMetaRecommendations(entity);
+  const issues = getMetaIssues(entity);
+  if (!entity) return null;
+
+  // Rendered into <body> via createPortal for the same reason MetricsPicker
+  // does it: every table here sits inside a <motion.div> that animates `y`,
+  // and framer-motion applies that as a CSS `transform`. A transformed
+  // ancestor becomes the containing block for `position: fixed` AND opens a
+  // new stacking context, so without the portal this overlay sized itself to
+  // the table area — leaving the page header undimmed and painting over the
+  // panel — and its z-index only competed inside that subtree, which is why
+  // raising the number alone did nothing.
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-300 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18 }}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#161616]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meta-recommendations-title"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-white/10">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2">
+              {issues.length > 0 ? (
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-300" />
+              ) : (
+                <Lightbulb className="h-4 w-4 text-sky-600 dark:text-[#15DCFF]" />
+              )}
+              <h2 id="meta-recommendations-title" className="text-sm font-bold text-gray-900 dark:text-white">
+                {issues.length > 0 && recommendations.length === 0
+                  ? 'Delivery issues from Meta'
+                  : 'Recommendations from Meta'}
+              </h2>
+            </div>
+            <p className="truncate text-xs text-gray-500 dark:text-white/50">{entity.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/8 dark:hover:text-white"
+            aria-label="Close Meta recommendations"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="scrollbar-thin overflow-y-auto p-4">
+          {issues.length > 0 && (
+            <div className="mb-4 flex flex-col gap-3">
+              <h3 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Delivery issues
+              </h3>
+              {issues.map((issue, index) => {
+                const summary = metaText(issue.error_summary) || metaText(issue.error_type) || 'Delivery issue';
+                const message = metaText(issue.error_message);
+                const code = metaText(issue.error_code);
+                const level = metaText(issue.level);
+                return (
+                  <div
+                    key={`${code || summary}-${index}`}
+                    className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-400/20 dark:bg-red-400/8"
+                  >
+                    <h4 className="text-sm font-semibold text-red-900 dark:text-red-200">{summary}</h4>
+                    {message && <p className="mt-1.5 text-xs leading-relaxed text-red-800/80 dark:text-red-200/70">{message}</p>}
+                    {(code || level) && (
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-red-200 pt-2 font-mono text-10 text-red-500/70 dark:border-red-400/15 dark:text-red-200/40">
+                        {level && <span>Level: {level}</span>}
+                        {code && <span>Meta code: {code}</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {recommendations.length > 0 && issues.length > 0 && (
+            <h3 className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-[#15DCFF]">
+              <Lightbulb className="h-3.5 w-3.5" />
+              Suggestions
+            </h3>
+          )}
+
+          <div className="flex flex-col gap-3">
+            {recommendations.map((recommendation, index) => {
+              // Meta ships no title with these — `title` is the humanised
+              // `type` enum; the substance is in `body`.
+              const title = metaText(recommendation.title) || 'Recommendation from Meta';
+              const body = metaText(recommendation.body);
+              const lift = metaText(recommendation.liftEstimate);
+              const scoreLift = recommendation.opportunityScoreLift;
+              const stage = metaText(recommendation.stageLabel);
+              const time = metaText(recommendation.time);
+              const url = metaText(recommendation.url);
+              return (
+                <div
+                  key={`${recommendation.type || title}-${index}`}
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/8 dark:bg-white/3"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {lift && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-10 font-bold uppercase tracking-wide text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+                        {lift}
+                      </span>
+                    )}
+                    {Number.isFinite(scoreLift) && (
+                      <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-10 font-semibold uppercase tracking-wide text-gray-500 dark:border-white/10 dark:bg-white/4 dark:text-white/50">
+                        +{scoreLift} opportunity score
+                      </span>
+                    )}
+                    {stage && (
+                      <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-10 font-semibold uppercase tracking-wide text-gray-500 dark:border-white/10 dark:bg-white/4 dark:text-white/50">
+                        {stage}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h4>
+                  {body && <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-white/70">{body}</p>}
+                  {(time || url) && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-gray-200 pt-2 dark:border-white/8">
+                      {time && (
+                        <span className="text-10 text-gray-400 dark:text-white/35">
+                          Suggested {new Date(time).toLocaleDateString()}
+                        </span>
+                      )}
+                      {url && (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 hover:underline dark:text-[#15DCFF]"
+                        >
+                          Open in Ads Manager
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 px-5 py-3 dark:border-white/10">
+          <p className="text-[11px] leading-relaxed text-gray-400 dark:text-white/40">
+            Returned by Meta Ads Manager. AdsGPT has not generated or modified their content.
+          </p>
+        </div>
+      </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -340,6 +576,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [recommendationEntity, setRecommendationEntity] = useState(null);
   const metrics = useTableMetricColumns({
     level: 'campaign',
     adAccountId,
@@ -348,8 +585,8 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     metricKeys,
     onMetricKeysSaved,
   });
-  // 6 structural columns + metric columns + Actions, plus Manage when capped.
-  const colCount = 7 + metrics.entries.length + (slotsCapped ? 1 : 0);
+  // 7 structural columns + metric columns + Actions, plus Manage when capped.
+  const colCount = 8 + metrics.entries.length + (slotsCapped ? 1 : 0);
   // Search by campaign name — client-side over the already-fetched list
   // (same list `useSortedRows` sorts), not a separate API call. Matches
   // the search-input pattern already used in DetailedTargetingPicker.jsx
@@ -517,7 +754,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table
           className="w-full min-w-[700px] border-collapse"
-          style={{ minWidth: 700 + 120 * metrics.entries.length }}
+          style={{ minWidth: 850 + 120 * metrics.entries.length }}
         >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
@@ -527,6 +764,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
               <SortTh label="Daily Budget"     colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
               <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               {slotsCapped && (
                 <th className="w-20 px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Manage</th>
@@ -617,6 +855,9 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                       <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
                       {c.start_time ? new Date(c.start_time).toLocaleDateString() : '—'}
                     </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <MetaRecommendationBadge entity={c} onOpen={setRecommendationEntity} />
                   </td>
                   <MetricBodyCells
                     entries={metrics.entries}
@@ -761,6 +1002,14 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
         defaultKeys={[]}
         maxSelected={20}
       />
+      <AnimatePresence>
+        {recommendationEntity && (
+          <MetaRecommendationsModal
+            entity={recommendationEntity}
+            onClose={() => setRecommendationEntity(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -784,6 +1033,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
   const [toggling, setToggling] = useState({});
   const [resolvingAdd, setResolvingAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [recommendationEntity, setRecommendationEntity] = useState(null);
   // `query` lives in the parent (TableViewCampaigns) — this table unmounts
   // on drill-down/back (conditional render keyed by `level`), so local
   // state would reset the search every time the user comes back.
@@ -1002,7 +1252,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table
           className="w-full min-w-[680px] border-collapse"
-          style={{ minWidth: 680 + 120 * metrics.entries.length }}
+          style={{ minWidth: 830 + 120 * metrics.entries.length }}
         >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
@@ -1012,16 +1262,17 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Optimization Goal" colKey="optimization_goal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
               <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
+              <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
             )}
             {sorted.map((s, idx) => {
               const status = getStatus(s);
@@ -1071,6 +1322,9 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                       {s.start_time ? new Date(s.start_time).toLocaleDateString() : '—'}
                     </span>
                   </td>
+                  <td className="px-4 py-4">
+                    <MetaRecommendationBadge entity={s} onOpen={setRecommendationEntity} />
+                  </td>
                   <MetricBodyCells
                     entries={metrics.entries}
                     values={metrics.metricsById[s.id]}
@@ -1114,6 +1368,14 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
         defaultKeys={[]}
         maxSelected={20}
       />
+      <AnimatePresence>
+        {recommendationEntity && (
+          <MetaRecommendationsModal
+            entity={recommendationEntity}
+            onClose={() => setRecommendationEntity(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1424,6 +1686,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
   const [toggling,  setToggling]  = useState({});
   const [resolving, setResolving] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [recommendationEntity, setRecommendationEntity] = useState(null);
   // `query` lives in the parent (TableViewCampaigns) — this table unmounts
   // on drill-down/back (conditional render keyed by `level`), so local
   // state would reset the search every time the user comes back.
@@ -1618,7 +1881,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
         <div className="scrollbar-thin flex-1 overflow-auto">
           <table
             className="w-full min-w-140 border-collapse"
-            style={{ minWidth: 560 + 120 * metrics.entries.length }}
+            style={{ minWidth: 710 + 120 * metrics.entries.length }}
           >
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
@@ -1628,16 +1891,17 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                 <SortTh label="Bid Type" colKey="bid_type"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="CTA"      colKey="creative.call_to_action_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
                 <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
+                <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
               )}
               {!loading && sorted.length === 0 && (
-                <tr><td colSpan={(canAdd ? 7 : 6) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
+                <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
               )}
               {sorted.map((a, idx) => {
                 const status     = getStatus(a);
@@ -1688,6 +1952,9 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelCTA(a.creative?.call_to_action_type) ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{new Date(a.created_time).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      <MetaRecommendationBadge entity={a} onOpen={setRecommendationEntity} />
+                    </td>
                     <MetricBodyCells
                       entries={metrics.entries}
                       values={metrics.metricsById[a.id]}
@@ -1728,6 +1995,14 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
               setSelectedAd(null);
               onSelectAdChange?.(null);
             }}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {recommendationEntity && (
+          <MetaRecommendationsModal
+            entity={recommendationEntity}
+            onClose={() => setRecommendationEntity(null)}
           />
         )}
       </AnimatePresence>

@@ -24,6 +24,11 @@ function getAdFields() {
     Ad.Fields.bid_info,
     Ad.Fields.bid_type,
     Ad.Fields.conversion_specs,
+    // Delivery errors, kept separate from Meta's optimisation suggestions so
+    // the UI never labels a blocking problem as a suggestion. The suggestions
+    // themselves are NOT readable here — see utils/metaRecommendations.js for
+    // why the per-object `recommendations` field is a silent no-op.
+    Ad.Fields.issues_info,
   ];
 }
 
@@ -39,6 +44,7 @@ function getAdSetFields() {
     AdSet.Fields.end_time,
     AdSet.Fields.billing_event,
     AdSet.Fields.optimization_goal,
+    AdSet.Fields.issues_info,
   ];
 }
 
@@ -59,7 +65,20 @@ function getCampaignFields() {
     // (which constrain ad-set targeting).
     Campaign.Fields.bid_strategy,
     Campaign.Fields.special_ad_categories,
+    Campaign.Fields.issues_info,
   ];
+}
+
+// Nested Marketing API objects are sometimes returned as plain objects and
+// sometimes as SDK AbstractCrudObject instances whose payload lives in `_data`.
+// Keep the HTTP response stable for the frontend in both cases.
+function plainMetaList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(Boolean)
+    .map((item) =>
+      item && typeof item === "object" && item._data ? item._data : item,
+    );
 }
 
 function getInsightsFields() {
@@ -147,4 +166,5 @@ module.exports = {
   getCampaignFields,
   getInsightsFields,
   fetchAllPaged,
+  plainMetaList,
 };
