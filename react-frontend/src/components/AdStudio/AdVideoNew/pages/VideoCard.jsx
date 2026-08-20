@@ -517,6 +517,14 @@ export default function VideoCard({
 
               {isAiAds && (
                 <>
+                  <InfoRow label="Category" value={item?.inputs?.category} className="mt-1" />
+                  <InfoRow label="Ad Style" value={item?.inputs?.adStyle} />
+                  <InfoRow label="Tone" value={item?.inputs?.tone} />
+                  <InfoRow label="CTA" value={item?.inputs?.ctaType} />
+                  <InfoRow label="Prompt" value={item?.inputs?.userPrompt || item?.inputs?.prompt} />
+                  <InfoRow label="Tagline" value={item?.inputs?.tagline} />
+                  <InfoRow label="Product Type" value={item?.inputs?.productType} />
+                  <InfoRow label="Price" value={item?.inputs?.price} />
                   <InfoRow label="Voice Model" value={aiAdsInfo.voiceModel} className="mt-1" />
                   <InfoRow label="Language" value={aiAdsInfo.language} />
                   <InfoRow label="Gender" value={aiAdsInfo.gender} />
@@ -575,7 +583,17 @@ export default function VideoCard({
 
     if (type === 'ai_ads') {
       if (item.scenes?.length > 0) {
-        dispatch(setAiAdsSceneData({ _id: item._id, scenes: item.scenes }));
+        dispatch(setAiAdsSceneData({ _id: item._id, scenes: item.scenes, inputs: item.inputs }));
+      } else if (item.status === 'failed') {
+        dispatch(setAiAdsSceneData({
+          _id: item._id,
+          scenes: [],
+          totalSegments: item.totalSegments || 4,
+          totalDuration: item.totalDuration,
+          status: item.status,
+          sceneError: item.sceneError,
+          inputs: item.inputs,
+        }));
       }
       dispatch(setAIAdsStep('details'));
       dispatch(setActivePage(targetPage));
@@ -769,16 +787,26 @@ export default function VideoCard({
               onClick={(e) => {
                 e.stopPropagation();
 
+                dispatch(setAiAdsPrefillInputs(item.inputs));
                 if (item.scenes?.length > 0) {
                   dispatch(setAiAdsSceneData({
                     _id: item._id,
                     scenes: item.scenes,
                     totalSegments: item.totalSegments || item.scenes.length,
                     totalDuration: item.totalDuration,
+                    inputs: item.inputs,
                   }));
                   dispatch(setAiAdsSceneLoading(false));
                 } else {
-                  dispatch(setAiAdsSceneData({ _id: item._id, scenes: [], totalSegments: 4 }));
+                  dispatch(setAiAdsSceneData({
+                    _id: item._id,
+                    scenes: [],
+                    totalSegments: item.totalSegments || 4,
+                    totalDuration: item.totalDuration,
+                    status: item.status,
+                    sceneError: item.sceneError,
+                    inputs: item.inputs,
+                  }));
                   dispatch(setAiAdsSceneLoading(true));
                 }
                 dispatch(setAIAdsStep('generation'));
@@ -793,6 +821,40 @@ export default function VideoCard({
                 className="transition-transform duration-500 group-hover/resume:rotate-180"
               />
               RESUME
+            </button>
+          </div>
+        </div>
+      ) : item?.inputs?.type === 'ai_ads' &&
+        item?.status === 'failed' ? (
+        <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center overflow-hidden bg-black p-4 text-center">
+          {item?.inputs?.images?.[0] ? (
+            <img
+              src={item.inputs.images[0]}
+              alt="AI Ads failed generation"
+              className="absolute inset-0 h-full w-full object-cover opacity-25"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-[#151515]" />
+          )}
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
+          <div className="relative z-10 flex max-w-[260px] flex-col items-center gap-3">
+            <span className="rounded-full border border-red-400/35 bg-red-500/20 px-3 py-1 text-[10px] font-semibold tracking-wide text-red-200 uppercase backdrop-blur-md">
+              Failed
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Scene Generation Failed</h3>
+              <p className="mt-1 text-[11px] leading-5 text-white/70">{errorMessage}</p>
+            </div>
+            <button
+              onClick={handleRecreate}
+              className="group/recreate mt-1 flex items-center gap-2 rounded-full bg-white px-5 py-2 text-xs font-bold text-black transition-all hover:bg-blue-600 hover:text-white active:scale-95"
+              title="Recreate AI Ad"
+            >
+              <RefreshCw
+                size={14}
+                className="transition-transform duration-500 group-hover/recreate:rotate-180"
+              />
+              Recreate
             </button>
           </div>
         </div>

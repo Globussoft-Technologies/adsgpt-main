@@ -35,7 +35,7 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
 
       if (
         v.inputs?.type === 'ai_ads' &&
-        (v.status === 'pending' || v.status === 'failed') &&
+        v.status === 'pending' &&
         !hasReadyAiAdsScenes
       ) {
         return false;

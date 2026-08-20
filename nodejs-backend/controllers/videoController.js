@@ -831,7 +831,7 @@ exports.getAllVideos = async (req, res) => {
       $nor: [
         {
           "inputs.type": "ai_ads",
-          status: { $in: ["pending", "failed"] },
+          status: "pending",
           $or: [
             { "scenes.0": { $exists: false } },
             {
