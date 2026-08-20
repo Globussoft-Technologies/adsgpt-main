@@ -74,7 +74,8 @@ export default function ShipTheseAds({
 }) {
   const M = useMotionPresets();
 
-  const [mode, setMode] = useState('auto');
+  const [mode, setMode] = useState('existing');
+  void setMode; // kept because the tab switch block stays commented out below
   const [campaignId, setCampaignId] = useState('');
   const [adSetId, setAdSetId] = useState('');
 
@@ -262,79 +263,69 @@ export default function ShipTheseAds({
         <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>
           <Section title="Which campaign">
             <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setMode('auto')}
-                  aria-pressed={mode === 'auto'}
-                  disabled={publishing}
-                  className={mode === 'auto' ? PILL_ON : PILL}
-                >
-                  Built for you
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('existing')}
-                  aria-pressed={mode === 'existing'}
-                  disabled={publishing}
-                  className={mode === 'existing' ? PILL_ON : PILL}
-                >
-                  One I already run
-                </button>
-              </div>
+              {/*
+                Hidden per request: keep the tab options commented out and show
+                only the "One I already run" form below.
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMode('auto')}
+                    aria-pressed={mode === 'auto'}
+                    disabled={publishing}
+                    className={mode === 'auto' ? PILL_ON : PILL}
+                  >
+                    Built for you
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('existing')}
+                    aria-pressed={mode === 'existing'}
+                    disabled={publishing}
+                    className={mode === 'existing' ? PILL_ON : PILL}
+                  >
+                    One I already run
+                  </button>
+                </div>
+              */}
 
               <AnimatePresence initial={false} mode="wait">
-                {mode === 'auto' ? (
-                  <motion.div key="auto" {...M.expand} className="flex flex-col gap-3">
-                    <div className={`flex items-center gap-3 px-3.5 py-3 text-13 ${CONTROL}`}>
-                      <span className="shrink-0 text-[#6B7280] dark:text-[#8B939E]">New campaign</span>
-                      <span className={`min-w-0 flex-1 truncate ${VALUE}`}>Built for you</span>
-                      {campaignHint && <span className={`shrink-0 ${FAINT}`}>{campaignHint}</span>}
-                    </div>
-                    <p className={MUTED}>
-                      We create the campaign and ad set from this brief&apos;s objective and daily
-                      budget, then put the ads in. It stays editable in Ads Manager afterwards.
-                    </p>
-                  </motion.div>
-                ) : (
-                  <motion.div key="existing" {...M.expand} className="flex flex-col gap-4">
-                    <FieldBlock label="Campaign">
-                      <SelectField
-                        value={campaignId}
-                        options={campaignOptions}
-                        onChange={pickCampaign}
-                        disabled={publishing || loadingCampaigns || !adAccountId}
-                        placeholder={
-                          !adAccountId
-                            ? 'Pick an ad account first'
-                            : loadingCampaigns
-                              ? 'Loading campaigns…'
-                              : 'Choose a campaign'
-                        }
-                      />
-                    </FieldBlock>
-                    <FieldBlock label="Ad set">
-                      <SelectField
-                        value={adSetId}
-                        options={adSetOptions}
-                        onChange={setAdSetId}
-                        disabled={publishing || loadingAdSets || !campaignId}
-                        placeholder={
-                          !campaignId
-                            ? 'Pick a campaign first'
-                            : loadingAdSets
-                              ? 'Loading ad sets…'
-                              : 'Choose an ad set'
-                        }
-                      />
-                    </FieldBlock>
-                    <p className={MUTED}>
-                      Budget, targeting and schedule come from the ad set you pick — this brief&apos;s
-                      daily budget is not used.
-                    </p>
-                    {listError && <p className={FAINT}>{listError}</p>}
-                  </motion.div>
-                )}
+                <motion.div key="existing" {...M.expand} className="flex flex-col gap-4">
+                  <FieldBlock label="Campaign">
+                    <SelectField
+                      value={campaignId}
+                      options={campaignOptions}
+                      onChange={pickCampaign}
+                      disabled={publishing || loadingCampaigns || !adAccountId}
+                      placeholder={
+                        !adAccountId
+                          ? 'Pick an ad account first'
+                          : loadingCampaigns
+                            ? 'Loading campaigns…'
+                            : 'Choose a campaign'
+                      }
+                    />
+                  </FieldBlock>
+                  <FieldBlock label="Ad set">
+                    <SelectField
+                      value={adSetId}
+                      options={adSetOptions}
+                      onChange={setAdSetId}
+                      disabled={publishing || loadingAdSets || !campaignId}
+                      placeholder={
+                        !campaignId
+                          ? 'Pick a campaign first'
+                          : loadingAdSets
+                            ? 'Loading ad sets…'
+                            : 'Choose an ad set'
+                      }
+                    />
+                  </FieldBlock>
+                  <p className={MUTED}>
+                    Budget, targeting and schedule come from the ad set you pick — this brief&apos;s
+                    daily budget is not used.
+                  </p>
+                  {listError && <p className={FAINT}>{listError}</p>}
+                </motion.div>
               </AnimatePresence>
             </div>
           </Section>

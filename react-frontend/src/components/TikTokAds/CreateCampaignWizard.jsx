@@ -34,6 +34,7 @@ import {
   MultiSelectField,
   SegGroup,
 } from '@/components/MetaAds/wizardFields';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 
 // TikTok requires in-feed video ads to be at least 5 seconds, up to a
 // 10-minute maximum for standard (non-Spark) ads.
@@ -1794,6 +1795,18 @@ const CreateCampaignWizard = ({
     setErrors((e) => ({ ...e, carousel: undefined }));
     update({ carouselFiles: combined });
   };
+  const handleImagePaste = async (e) => {
+    const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
+    if (!file) return;
+    e.preventDefault();
+    await handleImageFileSelect(file);
+  };
+  const handleCarouselPaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, MAX_CAROUSEL_IMAGES);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleCarouselFilesSelect(files);
+  };
 
   const removeCarouselFile = (index) => {
     update({ carouselFiles: form.carouselFiles.filter((_, i) => i !== index) });
@@ -3288,7 +3301,7 @@ const CreateCampaignWizard = ({
                       placeholder="https://.../image.jpg"
                     />
                     <FieldShell label="Or upload image file">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
                         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
                           Upload image
                           <input
@@ -3333,7 +3346,7 @@ const CreateCampaignWizard = ({
                   </div>
                 )}
                 {form.carouselFiles.length < MAX_CAROUSEL_IMAGES && (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2" onPaste={handleCarouselPaste} tabIndex={0}>
                     <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
                       Add images
                       <input

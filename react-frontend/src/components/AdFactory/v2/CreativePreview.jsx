@@ -144,7 +144,7 @@ export default function CreativePreview({
 
           "Keep these coming" appears only once an ad exists: offering it sooner
           asks the user to commit to something they haven't seen. */}
-      {!readOnly && (running || ready > 0) && (
+      {true && (
         <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 ${CARD} px-5 py-3.5`}>
           <p className={MUTED}>
             {running ? (

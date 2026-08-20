@@ -45,6 +45,7 @@ import {
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { GA4Events } from '@/utils/ga4';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import LibraryPicker from './LibraryPicker';
 
 const MONTHS = [
@@ -1509,6 +1510,12 @@ function AdStep({ form, setForm, currency }) {
     // is valid at a time.
     setForm((f) => ({ ...f, imageFile: file, imageUrl: null }));
   };
+  const handlePaste = (e) => {
+    const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
+    if (!file) return;
+    e.preventDefault();
+    onPick(file);
+  };
 
   const onPickFromLibrary = (url) => {
     if (!url) return;
@@ -1577,6 +1584,7 @@ function AdStep({ form, setForm, currency }) {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
+                onPaste={handlePaste}
                 className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 dark:border-white/15 dark:bg-white/2 px-4 py-3.5 text-left transition-all hover:border-gray-400 hover:bg-gray-100 dark:hover:border-white/25 dark:hover:bg-white/5 2xl:py-4"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/5 2xl:h-11 2xl:w-11">

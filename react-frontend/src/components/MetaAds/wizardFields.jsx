@@ -37,6 +37,7 @@ import { Calendar } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import { globalToast } from '@/utils/globalToast';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 
 // ─── media validation ────────────────────────────────────────────────────────
 // The HTML `accept` attribute is a UX hint — browsers still let the user
@@ -627,10 +628,19 @@ export function ImageField({
       onChangeUrl?.(null);
     }
   };
+  const handlePaste = (e) => {
+    const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
+    if (!file) return;
+    e.preventDefault();
+    if (validateMediaFile(file, 'image')) {
+      onChangeFile?.(file);
+      onChangeUrl?.(null);
+    }
+  };
 
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" onPaste={handlePaste}>
         {previewSrc && (
           <div className="relative w-40 h-40 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-black/30">
             <img src={previewSrc} alt="preview" className="w-full h-full object-cover" />
@@ -680,7 +690,7 @@ export function ImageField({
                 </button>
               )}
             </div>
-            <div className="text-[11px] text-gray-400 dark:text-white/45">or paste an image URL</div>
+            <div className="text-[11px] text-gray-400 dark:text-white/45">or paste an image or URL</div>
             <input
               type="url"
               value={pendingUrl}

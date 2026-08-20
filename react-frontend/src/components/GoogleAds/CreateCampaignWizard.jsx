@@ -47,6 +47,7 @@ import {
   deleteGoogleCampaignTemplate,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import { validateStep, validateAllSteps, deriveAdType, resolveCampaignObjective, effectiveChannel } from './wizardValidation';
 import {
   getDestinationsForObjective,
@@ -780,6 +781,12 @@ function PmaxAdPreview({ form }) {
 }
 
 function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpload, uploadingPmaxVideo, onPmaxVideoUpload }) {
+  const handlePmaxImagePaste = (e) => {
+    const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
+    if (!file) return;
+    e.preventDefault();
+    onPmaxImageUpload(file, 'image');
+  };
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div className="flex flex-col gap-4">
@@ -856,7 +863,7 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
           <div>
             <Label>Image <span className="text-gray-400 dark:text-white/30">(landscape 1200×628)</span></Label>
             <Input value={form.pmaxImageUrl} onChange={(e) => setField('pmaxImageUrl', e.target.value)} placeholder="https://example.com/image.jpg" />
-            <div className="mt-1.5 flex items-center gap-2">
+            <div className="mt-1.5 flex items-center gap-2" onPaste={handlePmaxImagePaste} tabIndex={0}>
               <span className="text-xs text-gray-400 dark:text-white/30">or upload</span>
               <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
                 <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={(e) => { if (e.target.files[0]) { onPmaxImageUpload(e.target.files[0], 'image'); e.target.value = ''; } }} />
@@ -1587,6 +1594,12 @@ function SearchAdFields({ form, setField, errors }) {
 // ─── Step: Ad (DISPLAY) ───────────────────────────────────────────────────────
 
 function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload }) {
+  const handleImagePaste = (e) => {
+    const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
+    if (!file) return;
+    e.preventDefault();
+    onImageUpload(file);
+  };
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -1602,7 +1615,7 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
       <div>
         <Label required>Image</Label>
         <Input value={form.imageUrl} onChange={(e) => setField('imageUrl', e.target.value)} placeholder="https://example.com/banner.jpg" />
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
           <span className="text-xs text-gray-400 dark:text-white/30">or</span>
           <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
             <input type="file" accept="image/jpeg,image/png,image/gif,.jpg,.jpeg,.png,.gif" className="hidden" onChange={(e) => { if (e.target.files[0]) onImageUpload(e.target.files[0]); }} />

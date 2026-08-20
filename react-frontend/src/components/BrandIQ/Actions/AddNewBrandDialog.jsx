@@ -19,6 +19,7 @@ import {
   updateBrandList,
 } from '@/store/actions/brandIQ/myBrandActions';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import {
   checkImageTransparency,
   fileToBase64,
@@ -292,6 +293,24 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
     }
 
     e.target.value = '';
+  };
+  const handleBrandLogoPaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, 5);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleBrandLogoChange({ target: { files, value: '' } });
+  };
+  const handleBrandIconPaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, 1);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleBrandIconChange({ target: { files, value: '' } });
+  };
+  const handleProductImagePaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, 5);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleProductImageChange({ target: { files, value: '' } });
   };
 
   // Separate remove handlers
@@ -602,6 +621,13 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
           ? 'brandIcon'
           : 'productImage';
 
+    const handlePaste =
+      label === 'Brand Logos*'
+        ? handleBrandLogoPaste
+        : label === 'Brand Icon'
+          ? handleBrandIconPaste
+          : handleProductImagePaste;
+
     return (
       <div className="flex flex-col gap-0">
         <label className="mb-0.5 flex items-center gap-1 text-[18px] text-[#AFAFAF] 2xl:mb-1">
@@ -616,7 +642,11 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
             </span>
           </ShadcnTooltip>
         </label>
-        <div className="flex items-center gap-3 rounded-[50px] border border-white/10 bg-[#383838]/50 px-1.5 py-1.5 backdrop-blur-[100px]">
+        <div
+          className="flex items-center gap-3 rounded-[50px] border border-white/10 bg-[#383838]/50 px-1.5 py-1.5 backdrop-blur-[100px]"
+          onPaste={handlePaste}
+          tabIndex={0}
+        >
           <label className="flex shrink-0 cursor-pointer items-center gap-1 rounded-[50px] bg-[#FFFFFF]/20 px-3 py-1.5 text-xs font-extralight text-white">
             <input
               type="file"

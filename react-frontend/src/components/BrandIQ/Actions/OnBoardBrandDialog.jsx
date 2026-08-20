@@ -18,6 +18,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { analazeDomain, createBrandList } from '@/store/actions/brandIQ/myBrandActions';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import {
   checkImageTransparency,
   fileToBase64,
@@ -408,6 +409,18 @@ const OnBoardBrandDialog = () => {
 
     e.target.value = '';
   };
+  const handleBrandLogoPaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, 5);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleBrandLogoChange({ target: { files, value: '' } });
+  };
+  const handleProductImagePaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, 5);
+    if (!files.length) return;
+    e.preventDefault();
+    await handleProductImageChange({ target: { files, value: '' } });
+  };
 
   const handleRemoveBrandLogo = (index) => {
     setBrandLogos((prev) => {
@@ -589,7 +602,7 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={UPLOAD_FIELD_WRAPPER}>
+      <div className={UPLOAD_FIELD_WRAPPER} onPaste={handleBrandLogoPaste} tabIndex={0}>
         <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"
@@ -651,7 +664,7 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={UPLOAD_FIELD_WRAPPER}>
+      <div className={UPLOAD_FIELD_WRAPPER} onPaste={handleProductImagePaste} tabIndex={0}>
         <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"

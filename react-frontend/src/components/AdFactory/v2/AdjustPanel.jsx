@@ -18,6 +18,7 @@ import {
   Stepper,
   TogglePill,
 } from './briefFields';
+import CompetitorVisualsPicker from './CompetitorVisualsPicker';
 import { FAINT, FLAG_BADGE, MUTED, RULE_BORDER } from './_tokens';
 import {
   AD_PLATFORMS,
@@ -147,12 +148,16 @@ export default function AdjustPanel({
   const platformNames = selectedPlatforms.map((id) => platform(id)?.label || id).join(', ');
   // Chosen platforms we can generate for but not post to.
   const downloadOnly = selectedPlatforms
-    .filter((id) => platform(id) && !platform(id).isLaunchable)
+    .filter((id) => {
+      const p = platform(id);
+      return p && !p.isLaunchable && p.label !== 'X';
+    })
     .map((id) => platform(id).label);
   const provenance = brief?.provenance || {};
 
   const [schema, setSchema] = useState(null);
   const [schemaFailed, setSchemaFailed] = useState(false);
+  const [competitorVisualsOpen, setCompetitorVisualsOpen] = useState(false);
 
   const loadSchema = useCallback(() => {
     setSchemaFailed(false);
@@ -392,6 +397,7 @@ export default function AdjustPanel({
               max={MAX_KEY_VISUALS}
               uploadFile={uploadAsset}
               onChange={(next) => onEditField?.('generation', 'seedImages', next)}
+              onAddCompetitors={() => setCompetitorVisualsOpen(true)}
               emptyLabel="Nothing found on the page — add one"
             />
           </FieldBlock>
@@ -546,8 +552,7 @@ export default function AdjustPanel({
                 in a sentence, and only when the selection actually raises it. */}
             {downloadOnly.length > 0 && (
               <p className={FAINT}>
-                We&apos;ll make the {downloadOnly.join(', ')} sizes for you to download — only Meta
-                can be posted from here.
+                We&apos;ll make the {downloadOnly.join(', ')} sizes for you to download.
               </p>
             )}
           </FieldBlock>
@@ -638,6 +643,14 @@ export default function AdjustPanel({
           </FieldGrid>
         </div>
       </Section>
+
+      <CompetitorVisualsPicker
+        open={competitorVisualsOpen}
+        onOpenChange={setCompetitorVisualsOpen}
+        currentImages={generation.seedImages}
+        max={MAX_KEY_VISUALS}
+        onSave={(next) => onEditField?.('generation', 'seedImages', next)}
+      />
     </Panel>
   );
 }

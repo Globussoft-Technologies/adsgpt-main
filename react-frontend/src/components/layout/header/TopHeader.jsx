@@ -30,7 +30,7 @@ import {
 import { LuLayoutTemplate } from 'react-icons/lu';
 import { useDispatch, useSelector } from 'react-redux';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getHeaderName } from '@/utils/getHeaderName';
 import HeaderTabs from './HeaderTabs';
 import {
@@ -218,6 +218,7 @@ const selectPlateformsOptions = [
 
 export default function TopHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentRoute = location.pathname;
 
   const [selectedBrand, setSelectedBrand] = useState(brandOptions[0]);
@@ -431,9 +432,18 @@ export default function TopHeader() {
             {currentRoute === '/adfactory' && IS_AD_FACTORY_V2 && (
               <ModeSwitch
                 mode={adFactoryUiMode}
-                onChange={(next) =>
-                  next !== adFactoryUiMode && dispatch(setUiMode({ uiMode: next }))
-                }
+                onChange={(next) => {
+                  if (next === adFactoryUiMode) return;
+                  dispatch(setUiMode({ uiMode: next }));
+                  const params = new URLSearchParams(location.search);
+                  params.delete('campaignId');
+                  params.delete('briefId');
+                  const search = params.toString();
+                  navigate(
+                    { pathname: '/adfactory', search: search ? `?${search}` : '' },
+                    { replace: true },
+                  );
+                }}
               />
             )}
             {currentRoute === '/adstudio' && (

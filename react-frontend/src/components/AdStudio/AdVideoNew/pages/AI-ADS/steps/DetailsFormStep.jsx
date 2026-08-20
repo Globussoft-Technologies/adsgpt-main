@@ -219,11 +219,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       // Check (a) first so a user's selection survives Back→forward.
       // Language is non-clearable and defaults to English, but the code differs
       // by provider: ElevenLabs uses ISO "en", Sarvam uses BCP-47 "en-IN".
-      provider: data?.voice?.provider || data?.voiceProvider || 'elevenlabs',
+      provider: data?.voice?.provider || data?.voiceProvider || 'sarvam',
       language:
         data?.voice?.language ||
         data?.voiceFilters?.language ||
-        ((data?.voice?.provider || data?.voiceProvider) === 'sarvam' ? 'en-IN' : 'en'),
+        ((data?.voice?.provider || data?.voiceProvider || 'sarvam') === 'sarvam' ? 'en-IN' : 'en'),
       languageLabel: data?.voice?.languageLabel || data?.voiceFilters?.languageLabel || 'English',
       gender: data?.voice?.gender || data?.voiceFilters?.gender || '',
       accent: data?.voice?.accent || data?.voiceFilters?.accent || '',
@@ -285,11 +285,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       voice: {
         // Same dual-shape handling as the useState initializer above.
         // Runtime shape (inputs.voice) wins over saved shape (inputs.voiceFilters).
-        provider: inputs.voice?.provider || inputs.voiceProvider || 'elevenlabs',
+        provider: inputs.voice?.provider || inputs.voiceProvider || 'sarvam',
         language:
           inputs.voice?.language ||
           inputs.voiceFilters?.language ||
-          ((inputs.voice?.provider || inputs.voiceProvider) === 'sarvam' ? 'en-IN' : 'en'),
+          ((inputs.voice?.provider || inputs.voiceProvider || 'sarvam') === 'sarvam' ? 'en-IN' : 'en'),
         languageLabel: inputs.voice?.languageLabel || inputs.voiceFilters?.languageLabel || 'English',
         gender: inputs.voice?.gender || inputs.voiceFilters?.gender || '',
         accent: inputs.voice?.accent || inputs.voiceFilters?.accent || '',
@@ -912,7 +912,6 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
             </div>
 
             <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/*
             <div className={`flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -941,7 +940,6 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 />
               </button>
             </div>
-            */}
 
             <div className="flex min-w-0 flex-col sm:ml-auto">
               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">

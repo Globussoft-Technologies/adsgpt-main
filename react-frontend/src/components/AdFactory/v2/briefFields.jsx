@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Loader2, Minus, Plus, X } from 'lucide-react';
+import { ChevronDown, Loader2, Minus, Plus, Search, X } from 'lucide-react';
 import { InfoTip } from '@/components/Autopilot/_atoms';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import {
   Select,
   SelectContent,
@@ -494,6 +495,12 @@ export function ImageStrip({
       setBusy(false);
     }
   };
+  const handlePaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, room);
+    if (!files.length || !uploadFile) return;
+    e.preventDefault();
+    await onFiles(files);
+  };
 
   const addUrl = () => {
     const u = urlDraft.trim();
@@ -509,7 +516,7 @@ export function ImageStrip({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" onPaste={handlePaste} tabIndex={0}>
       <div className="flex flex-wrap items-center gap-1.5">
         {list.map((url, i) => (
           <span key={`${url}-${i}`} className="group relative">
@@ -559,6 +566,17 @@ export function ImageStrip({
           </label>
         )}
 
+        {!full && onAddCompetitors && (
+          <button
+            type="button"
+            onClick={onAddCompetitors}
+            className="inline-flex h-11 items-center gap-2 rounded-[7px] border border-[#02C8C4]/30 bg-[#02C8C4]/8 px-2 text-13 font-medium text-[#0B7A78] transition-colors hover:border-[#02C8C4]/55 hover:bg-[#02C8C4]/12 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span>Competitor visuals</span>
+          </button>
+        )}
+
         {list.length === 0 && !uploadFile && <p className={FAINT}>{emptyLabel}</p>}
 
         <span className={`ml-1 ${FAINT} ${NUM}`}>
@@ -569,12 +587,7 @@ export function ImageStrip({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {!full && (
           <button type="button" onClick={() => setShowUrl((v) => !v)} className={BTN_LINK}>
-            Add from URL
-          </button>
-        )}
-        {!full && onAddCompetitors && (
-          <button type="button" onClick={onAddCompetitors} className={BTN_LINK}>
-            Use a competitor&apos;s ad
+            Add from URL or paste image
           </button>
         )}
         {full && <span className={FAINT}>{max} is the maximum — remove one to add another.</span>}

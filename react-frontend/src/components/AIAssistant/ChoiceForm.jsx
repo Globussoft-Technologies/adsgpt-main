@@ -44,6 +44,7 @@ import {
 } from './briefCatalog';
 import { uploadToS3 } from '@/utils/imageUpload';
 import toMediaUrl from '@/utils/mediaUrl';
+import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import Tip from './Tip';
 import ImageLightbox from './ImageLightbox';
 
@@ -775,6 +776,12 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
       setUploading(false);
     }
   };
+  const handlePaste = async (e) => {
+    const files = getClipboardImageFiles(e.clipboardData, maxFiles > 1 ? maxFiles : 1);
+    if (!files.length) return;
+    e.preventDefault();
+    await onPick({ target: { files, value: '' } });
+  };
 
   const toggle = (i) => {
     if (disabled) return;
@@ -793,7 +800,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" onPaste={handlePaste} tabIndex={0}>
       <div className="flex flex-wrap gap-2">
         {arr.map((img, i) => {
           const url = img.url;
@@ -878,7 +885,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                   className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
                 >
                   <Link2 className="h-3.5 w-3.5 shrink-0 text-white/50" />
-                  Paste an image URL
+                  Paste image or URL
                 </button>
                 <button
                   type="button"
