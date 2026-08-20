@@ -209,7 +209,10 @@ class GoogleAuthController {
         success: false,
         error_code: 'OAUTH_FAILED',
       });
-      res.redirect(`${feUrl}?error=google_token_exchange_failed`);
+      const safeErrorUrl = isSafeRedirectUrl(feUrl) ? feUrl : (ALLOWED_REDIRECT_ORIGIN || "http://localhost:5173");
+      const errRedirect = new URL(safeErrorUrl);
+      errRedirect.searchParams.set("error", "google_token_exchange_failed");
+      res.redirect(errRedirect.toString());
     }
   }
 

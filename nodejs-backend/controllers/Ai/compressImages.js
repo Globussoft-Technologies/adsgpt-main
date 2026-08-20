@@ -3,23 +3,37 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
+const os = require("os");
+
 const downloadImage = async (imageUrl, outputPath) => {
   try {
-    if (!imageUrl || typeof imageUrl !== "string" || !/^https?:\/\//i.test(imageUrl.trim())) {
-      throw new Error("Invalid or unsafe image URL");
+    if (!imageUrl || typeof imageUrl !== "string") {
+      throw new Error("Invalid or missing image URL");
+    }
+    const cleanUrl = imageUrl.trim();
+    const parsedUrl = new URL(cleanUrl);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Only HTTP and HTTPS protocols are allowed");
     }
     if (!outputPath || typeof outputPath !== "string") {
       throw new Error("Invalid output path");
     }
+
     const safePath = path.resolve(outputPath);
+    const allowedBaseDir = path.resolve(process.cwd());
+    const tmpDir = path.resolve(os.tmpdir());
+    if (!safePath.startsWith(allowedBaseDir) && !safePath.startsWith(tmpDir)) {
+      throw new Error("Destination path is outside allowed directory");
+    }
+
     const response = await axios({
-      url: imageUrl.trim(),
+      url: cleanUrl,
       responseType: "arraybuffer",
       timeout: 15000,
       maxContentLength: 20 * 1024 * 1024,
     });
 
-    fs.writeFileSync(safePath, response.data);
+    fs.writeFileSync(safePath, Buffer.from(response.data));
     return safePath;
   } catch (error) {
     console.error("Error downloading image:", error);

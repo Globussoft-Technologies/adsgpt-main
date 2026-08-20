@@ -118,16 +118,16 @@ exports.updateAdCreativeConversation = async (data) => {
     }
 
     if (type === "image") {
-      let images = Array.isArray(data?.images) ? data.images : [];
+      let images = Array.isArray(data?.images) ? data.images.slice(0, 50) : [];
       let num = Math.min(Math.max(1, parseInt(data?.num_images, 10) || 1), 50);
       const failedValue = images?.find(
         (img) => img == 'failed' || img == '400'
       );
 
       if (failedValue) {
-        images = Array(Math.min(num, 50)).fill(failedValue);
+        images = Array(num).fill(failedValue);
       }
-      images.forEach((image, index) => {
+      images.slice(0, 50).forEach((image, index) => {
         if (ads[index]) {
           ads[index] = {
             ...ads[index],

@@ -174,19 +174,18 @@ async function createServer() {
     }),
   );
 
-  // CSRF protection for cross-site state-changing requests
+  // CSRF protection for state-changing requests
   App.use((req, res, next) => {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-      const secFetchSite = req.headers['sec-fetch-site'];
-      if (secFetchSite === 'cross-site') {
-        const origin = req.headers.origin;
+      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+      if (origin) {
         const allowedOrigins = parseAllowedOrigins(
           process.env.CORS_ALLOWED_ORIGINS ||
             process.env.FRONTEND_URL ||
-            "http://localhost:5173,http://localhost:3000",
+            "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
         );
-        if (origin && !isOriginAllowed(origin, allowedOrigins)) {
-          return res.status(403).json({ error: 'CSRF validation failed' });
+        if (!isOriginAllowed(origin, allowedOrigins)) {
+          return res.status(403).json({ error: 'CSRF validation failed: untrusted origin' });
         }
       }
     }
