@@ -3392,7 +3392,7 @@ function _v2EmitOnboardingStatus(email, userId, isOnboarded) {
  * Build the standard V2 success response envelope.
  * isOnboarded is passed in — computed by the caller via _v2IsOnboarded().
  */
-function _v2BuildSuccessResponse(token, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded) {
+function _v2BuildSuccessResponse(token, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan) {
   return {
     success: true,
     statusCode: 200,
@@ -3454,39 +3454,70 @@ const v2EmailAuth = async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Hit aMember check-access/by-login-pass (same backend call as getUserDetails)
-    const amemberUrl = `${baseUrl}/check-access/by-login-pass`;
-    const qs = new URLSearchParams({ _key: apiKey, login: cleanEmail, pass: password });
-    let userData;
-    try {
-      const resp = await fetch(`${amemberUrl}?${qs}`);
-      userData = await resp.json();
-    } catch (fetchErr) {
-      console.error("[v2Auth/email] aMember fetch error:", fetchErr.response?.data || fetchErr.message);
-      return res.status(500).json({
-        success: false, statusCode: 500,
-        error: "We're having trouble logging you in right now. Please try again in a moment.",
-        code: "AUTH_SERVICE_ERROR",
-      });
-    }
+    // 1. Check if user exists in aMember (using findUserByEmailOrFirebaseUid helper)
+    const { mongoProfile: existingProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
 
-    if (!userData?.ok) {
-      return res.status(401).json({
-        success: false, statusCode: 401,
-        error: "Invalid email or password.", code: "INVALID_CREDENTIALS",
-      });
+    let userData;
+    let isNewUser = false;
+
+    if (amemberUser) {
+      // 2. User exists -> LOGIN Flow
+      const amemberUrl = `${baseUrl}/check-access/by-login-pass`;
+      const qs = new URLSearchParams({ _key: apiKey, login: amemberUser.login, pass: password });
+      try {
+        const resp = await fetch(`${amemberUrl}?${qs}`);
+        userData = await resp.json();
+      } catch (fetchErr) {
+        console.error("[v2Auth/email] aMember fetch error:", fetchErr.response?.data || fetchErr.message);
+        return res.status(500).json({
+          success: false, statusCode: 500,
+          error: "We're having trouble logging you in right now. Please try again in a moment.",
+          code: "AUTH_SERVICE_ERROR",
+        });
+      }
+
+      if (!userData?.ok) {
+        return res.status(401).json({
+          success: false, statusCode: 401,
+          error: "Invalid email or password.", code: "INVALID_CREDENTIALS",
+        });
+      }
+    } else {
+      // 3. User does NOT exist -> SIGNUP Flow
+      isNewUser = true;
+      const cleanLogin = cleanEmail;
+
+      try {
+        const newAmemberUser = await createAmemberUser({
+          login:       cleanLogin,
+          email:       cleanEmail,
+          password:    password,
+          firstName:   "",
+          lastName:    "",
+          phoneNumber: "",
+        });
+
+        // Resolve the newly registered user data
+        userData = await fetchUserDataByName(newAmemberUser.login);
+      } catch (createErr) {
+        console.error("[v2Auth/email] signup error:", createErr.response?.data || createErr.message);
+        return res.status(500).json({
+          success: false, statusCode: 500,
+          error: "Failed to create account. Please try again.",
+          code: "SIGNUP_ERROR",
+        });
+      }
     }
 
     const hasActivePlan = isPlanActive(userData);
 
-    // Sync Mongo profile (creates on first login, updates on subsequent logins)
-    if (hasActivePlan) {
+    // Sync Mongo profile (creates on first login/signup, updates on subsequent logins)
+    if (hasActivePlan || isNewUser) {
       try { await syncUserProfile(userData); }
       catch (syncErr) { console.error("[v2Auth/email] syncUserProfile warning:", syncErr.message); }
     }
 
-    const mongoProfile = await UserProfile.findOne({ user_id: `GPT-${userData.user_id}` });
-    const isNewUser   = !mongoProfile;
+    const mongoProfile = await UserProfile.findOne({ email: cleanEmail });
     const fullName    = `${userData.name_f ?? ""} ${userData.name_l ?? ""}`.trim();
 
     const tokenPayload = {
