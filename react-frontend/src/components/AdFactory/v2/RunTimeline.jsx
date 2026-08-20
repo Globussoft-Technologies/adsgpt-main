@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
 import { useMotionPresets } from './_motion';
+import { CONTROL, FAINT, LABEL, MUTED, NUM } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // RunTimeline — deliveries, which are the home of a live brief.
@@ -52,7 +53,7 @@ export default function RunTimeline({
   if (loading && rows.length === 0) {
     return (
       <section className="flex w-full justify-center py-10">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400 dark:text-white/45" />
+        <Loader2 className="h-5 w-5 animate-spin text-[#9CA3AF] dark:text-[#8B939E]" />
       </section>
     );
   }
@@ -84,13 +85,13 @@ export default function RunTimeline({
         // coming" confusing the first time round.
         right={
           <span
-            className={`rounded-full px-2.5 py-1 text-10 font-extrabold tracking-wider ${
+            className={`rounded-md px-2 py-0.5 text-13 font-medium ${
               live
-                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                : 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/55'
+                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
+                : 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]'
             }`}
           >
-            {live ? 'LIVE' : String(summary?.status || 'paused').toUpperCase()}
+            {live ? 'Live' : sentence(summary?.status || 'paused')}
           </span>
         }
       />
@@ -125,15 +126,9 @@ export default function RunTimeline({
 
 function Metric({ label, value, small = false }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2.5 dark:border-white/10 dark:bg-white/6">
-      <span className="text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
-        {label}
-      </span>
-      <b
-        className={`font-bold tracking-tight text-gray-900 tabular-nums dark:text-white ${
-          small ? 'text-13' : 'text-lg'
-        }`}
-      >
+    <div className={`flex flex-col gap-1.5 px-3.5 py-3 ${CONTROL}`}>
+      <span className={LABEL}>{label}</span>
+      <b className={`font-semibold tracking-[-0.017em] ${NUM} ${small ? 'text-13' : 'text-[17px]'}`}>
         {value}
       </b>
     </div>
@@ -144,14 +139,14 @@ const BULLET = {
   live: 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]',
   part: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)]',
   fail: 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)]',
-  next: 'border-2 border-gray-300 bg-transparent dark:border-white/30',
+  next: 'border-2 border-[#D1D5DB] bg-transparent dark:border-[#3D4650]',
 };
 
 const PILL = {
-  live: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-  part: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  fail: 'bg-red-500/15 text-red-600 dark:text-red-400',
-  next: 'bg-gray-100 text-gray-500 dark:bg-white/8 dark:text-white/50',
+  live: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400',
+  part: 'bg-[#F59E0B]/12 text-[#B45309] dark:text-[#E8A33D]',
+  fail: 'bg-red-500/12 text-red-700 dark:text-red-400',
+  next: 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]',
 };
 
 function Cycle({ row, last, onRetry, motionProps }) {
@@ -162,30 +157,32 @@ function Cycle({ row, last, onRetry, motionProps }) {
 
   const tone = scheduled ? 'next' : failedOnly ? 'fail' : partial ? 'part' : 'live';
 
+  // Sentence case, not caps. Every row carried a shouted label, and when
+  // everything shouts the one row that actually failed no longer stands out.
   const label = scheduled
-    ? 'SCHEDULED'
+    ? 'Scheduled'
     : failedOnly
-      ? 'FAILED'
+      ? 'Failed'
       : partial
-        ? `${row.liveCount} LIVE · ${row.failedCount} FAILED`
-        : `${row.liveCount} ${row.liveCount === 1 ? 'AD' : 'ADS'} LIVE`;
+        ? `${row.liveCount} live · ${row.failedCount} failed`
+        : `${row.liveCount} ${row.liveCount === 1 ? 'ad' : 'ads'} live`;
 
   const link = (row.links || []).find((l) => l?.url);
 
   return (
     <motion.li {...motionProps} className="relative grid grid-cols-[16px_1fr] gap-3 pb-4">
       {!last && (
-        <span className="absolute top-5 bottom-0 left-1.75 w-px bg-gray-200 dark:bg-white/10" />
+        <span className="absolute top-5 bottom-0 left-1.75 w-px bg-[#E5E7EB] dark:bg-[#252B33]" />
       )}
       <span className={`relative z-1 mx-0.75 mt-1.5 size-2.5 rounded-full ${BULLET[tone]}`} />
 
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <b className="text-13 font-bold text-gray-900 dark:text-white">
+          <b className="text-sm font-semibold tracking-[-0.011em] text-[#0A0A0A] dark:text-[#ECEFF3]">
             Cycle {row.cycle ?? '—'}
           </b>
-          <span className="text-xs text-gray-500 dark:text-white/55">{when(row.startedAt)}</span>
-          <span className={`rounded-full px-2 py-0.5 text-10 font-bold ${PILL[tone]}`}>
+          <span className={MUTED}>{when(row.startedAt)}</span>
+          <span className={`rounded-md px-2 py-0.5 text-13 font-medium ${PILL[tone]}`}>
             {label}
           </span>
           {link && (
@@ -193,7 +190,7 @@ function Cycle({ row, last, onRetry, motionProps }) {
               href={link.url}
               target="_blank"
               rel="noreferrer"
-              className="ml-auto inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"
+              className="ml-auto inline-flex items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
             >
               View on {link.platform || 'Meta'}
               <ExternalLink className="h-3 w-3" />
@@ -202,7 +199,7 @@ function Cycle({ row, last, onRetry, motionProps }) {
         </div>
 
         {scheduled && (
-          <p className="mt-1 text-xs text-gray-400 dark:text-white/40">Nothing to do — we&apos;ll run it for you.</p>
+          <p className={`mt-1 ${FAINT}`}>Nothing to do — we&apos;ll run it for you.</p>
         )}
 
         {/* Thumbnails summarise; the expansion is the published-ads view.
@@ -228,12 +225,12 @@ function Cycle({ row, last, onRetry, motionProps }) {
                     className={`h-12 w-10 rounded-md border object-cover ${
                       c.posted === false
                         ? 'border-red-500/40 opacity-50'
-                        : 'border-gray-200 dark:border-white/10'
+                        : 'border-[#E5E7EB] dark:border-[#2E353E]'
                     }`}
                   />
                 ))}
               </span>
-              <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-white/50">
+              <span className={`ml-auto inline-flex shrink-0 items-center gap-1 ${MUTED}`}>
                 {open ? 'Hide ads' : `${row.creatives.length === 1 ? 'the ad' : 'all ads'}`}
                 <ChevronDown
                   className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -261,7 +258,7 @@ function Cycle({ row, last, onRetry, motionProps }) {
         )}
 
         {row.error && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3 py-2.5 text-13 text-[#92400E] dark:text-[#E8A33D]">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 flex-1">{row.error}</span>
             {onRetry && (
@@ -287,7 +284,7 @@ function PublishedAd({ creative }) {
   const link = (creative.adLinks || [])[0];
 
   return (
-    <li className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-white/10 dark:bg-white/4">
+    <li className={`flex items-center gap-2.5 p-2 ${CONTROL}`}>
       {creative.imageUrl ? (
         <img
           src={srcOf(creative.imageUrl)}
@@ -296,26 +293,26 @@ function PublishedAd({ creative }) {
           className="h-11 w-9 shrink-0 rounded-md object-cover"
         />
       ) : (
-        <span className="h-11 w-9 shrink-0 rounded-md bg-gray-200 dark:bg-white/10" />
+        <span className="h-11 w-9 shrink-0 rounded-md bg-[#F3F4F6] dark:bg-[#22272F]" />
       )}
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <b className="truncate text-13 font-semibold text-gray-900 dark:text-white">
+        <b className="truncate text-13 font-medium text-[#111827] dark:text-[#ECEFF3]">
           {creative.headline || 'Untitled ad'}
         </b>
         {creative.message && (
-          <span className="truncate text-xs text-gray-500 dark:text-white/50">
+          <span className={`truncate ${FAINT}`}>
             {creative.message}
           </span>
         )}
       </span>
 
       <span
-        className={`shrink-0 rounded-full px-2 py-0.5 text-10 font-bold ${
+        className={`shrink-0 rounded-md px-2 py-0.5 text-13 font-medium ${
           failed ? PILL.fail : PILL.live
         }`}
       >
-        {failed ? 'NOT POSTED' : 'LIVE'}
+        {failed ? 'Not posted' : 'Live'}
       </span>
 
       {link && (
@@ -323,7 +320,7 @@ function PublishedAd({ creative }) {
           href={link.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"
+          className="inline-flex shrink-0 items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
         >
           View
           <ExternalLink className="h-3 w-3" />
@@ -332,6 +329,8 @@ function PublishedAd({ creative }) {
     </li>
   );
 }
+
+const sentence = (v) => String(v || '').replace(/^./, (c) => c.toUpperCase());
 
 // 9 -> "9:00 AM"; a cadence line reads as a sentence, not a setting.
 function clock(hour) {

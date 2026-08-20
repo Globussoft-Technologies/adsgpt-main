@@ -1,48 +1,47 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import {
-  Banner,
-  InlineSpinner,
-  PrimaryButton,
-  SecondaryButton,
-} from '@/components/Autopilot/_atoms';
+  BTN_GHOST,
+  BTN_PRIMARY,
+  CARD,
+  MUTED,
+  RULE_BORDER,
+  SECTION,
+  SECTION_PAD,
+} from './_tokens';
 
 // ----------------------------------------------------------------------------
-// The Quick-setup panel shell, in Autopilot's vocabulary.
+// The Quick-setup panel shell, in the "Refined" vocabulary (`_tokens.js`).
 //
 // One shape, used by every screen in the flow so the brief, the previews and
 // the automation toggle read as one product rather than three:
 //
-//   Panel        Autopilot's Section surface — a SOLID #14181D card, clearly
-//                lifted off the page rather than a few percent of white
+//   Panel        a 10px card — one hairline, one fill, no second border and no
+//                shadow in dark
 //   PanelHeader  title + subtitle, divided by a rule
 //   PanelBody    the content
-//   PanelFooter  the primary action, on a slightly recessed strip
+//   PanelFooter  the primary action, on the same surface — a recessed strip is
+//                a fourth value step nobody needed
 //
-// The value ordering is the part that matters: page → card (#14181D) →
-// control (white/6). Each step is a visible lift, which is what makes a dark
-// screen legible. Earlier passes had every layer within a couple of percent of
-// the page and read as one black sheet.
+// The value ordering that matters: page (#0f0f0f) → card (#14181D) → control
+// (#1E232A). Autopilot's own ramp, because a pure-neutral one tried here first
+// put all three within a few points of each other and the screen read as one
+// flat black sheet. Each step is a visible lift now, which is the thing that
+// makes a dark UI legible — see the note in `_tokens.js`.
 // ----------------------------------------------------------------------------
 
 export function Panel({ className = '', children }) {
-  return (
-    <div
-      className={`overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#14181D] ${className}`}
-    >
-      {children}
-    </div>
-  );
+  return <div className={`overflow-hidden ${CARD} ${className}`}>{children}</div>;
 }
 
 export function PanelHeader({ title, subtitle, right }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 px-4 py-3.5 dark:border-white/10 2xl:px-5 2xl:py-4">
+    <div
+      className={`flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4 ${RULE_BORDER} 2xl:px-6`}
+    >
       <div className="min-w-0 flex-1">
-        <h3 className="text-base font-bold text-gray-900 dark:text-white 2xl:text-lg">{title}</h3>
-        {subtitle && (
-          <p className="mt-1 text-13 text-gray-500 dark:text-white/70 2xl:text-sm">{subtitle}</p>
-        )}
+        <h3 className={SECTION}>{title}</h3>
+        {subtitle && <p className={`mt-1 ${MUTED}`}>{subtitle}</p>}
       </div>
       {right}
     </div>
@@ -50,58 +49,83 @@ export function PanelHeader({ title, subtitle, right }) {
 }
 
 export function PanelBody({ className = '', children }) {
-  return <div className={`px-4 py-4 2xl:px-5 2xl:py-5 ${className}`}>{children}</div>;
+  return <div className={`${SECTION_PAD} ${className}`}>{children}</div>;
 }
 
 export function PanelFooter({ className = '', children }) {
   return (
-    <div
-      className={`border-t border-gray-200 bg-gray-50 px-4 py-3.5 dark:border-white/10 dark:bg-white/2 2xl:px-5 2xl:py-4 ${className}`}
-    >
-      {children}
-    </div>
+    <div className={`border-t px-5 py-4 ${RULE_BORDER} 2xl:px-6 ${className}`}>{children}</div>
   );
 }
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────
 
-// Autopilot's gradient primary — cyan → indigo, black text. Its `disabled`
-// state is a plain opacity drop, so busy/disabled need no separate styling.
+// The app's own gradient — the cyan-to-indigo the ACTIVE sidebar tile wears.
+// This is the one saturated element the screen gets, so it has to be the thing
+// you click and nothing else. See BTN_PRIMARY in `_tokens.js` for why it is a
+// gradient here when a flat fill would be the general advice.
 export function PrimaryBtn({ onClick, disabled, busy, icon: Icon, className = '', children }) {
   return (
-    <PrimaryButton onClick={onClick} disabled={disabled || busy} className={className}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || busy}
+      className={`${BTN_PRIMARY} ${className}`}
+    >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
         Icon && <Icon className="h-3.5 w-3.5" />
       )}
       <span>{children}</span>
-    </PrimaryButton>
+    </button>
   );
 }
 
 export function GhostBtn({ onClick, disabled, className = '', children }) {
   return (
-    <SecondaryButton onClick={onClick} disabled={disabled} className={className}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${BTN_GHOST} ${className}`}
+    >
       {children}
-    </SecondaryButton>
+    </button>
   );
 }
 
 // ─── Notices ─────────────────────────────────────────────────────────────────
 
-// Autopilot's Banner. Amber for "worth knowing", red only for a real failure —
-// a partial result is information, not an error state for the whole screen.
+// Amber for "worth knowing", red only for a real failure — a partial result is
+// information, not an error state for the whole screen. Both are a tinted
+// hairline box, so a notice never out-shouts the primary action.
+const TONES = {
+  info: {
+    box: 'border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#AFB6C0]',
+    icon: AlertCircle,
+  },
+  warn: {
+    box: 'border-[#F59E0B]/30 bg-[#F59E0B]/8 text-[#92400E] dark:text-[#E8A33D]',
+    icon: AlertTriangle,
+  },
+  error: {
+    box: 'border-[#DC2626]/30 bg-[#DC2626]/8 text-[#991B1B] dark:text-[#F87171]',
+    icon: AlertCircle,
+  },
+};
+
 export function Notice({ tone = 'info', icon: Icon, children }) {
-  const variant = tone === 'warn' ? 'warn' : tone === 'error' ? 'error' : 'info';
+  const t = TONES[tone] || TONES.info;
+  const Ico = Icon || t.icon;
   return (
-    <Banner variant={variant}>
-      <span className="flex items-start gap-2">
-        {Icon && <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-        <span className="min-w-0">{children}</span>
-      </span>
-    </Banner>
+    <div className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-13 ${t.box}`}>
+      {Ico && <Ico className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      <span className="min-w-0 flex-1">{children}</span>
+    </div>
   );
 }
 
-export { InlineSpinner };
+export function InlineSpinner({ className = '' }) {
+  return <Loader2 className={`h-3.5 w-3.5 animate-spin ${className}`} />;
+}

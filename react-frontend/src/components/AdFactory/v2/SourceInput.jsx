@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Globe, Sparkles } from 'lucide-react';
 import { PrimaryBtn } from './Panel';
+import { LABEL } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // SourceInput — screen 1 of Quick setup, and the entire front door.
@@ -80,24 +81,22 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         transition={{ duration: reduce ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="relative flex w-full flex-col items-center"
       >
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#6b72f8]/30 bg-[#6b72f8]/10 px-3.5 py-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-[#7c93ff]" />
-          <span className="text-[11px] font-extrabold tracking-wider text-[#7c93ff] dark:text-[#aeb6ff]">
-            QUICK SETUP
-          </span>
+        {/* An eyebrow, not a badge. A tinted pill with a letterspaced caps
+            label inside it is two treatments doing one job. */}
+        <span className="inline-flex items-center gap-2 text-13 font-medium text-[#0B7A78] dark:text-[#15DCFF]">
+          <Sparkles className="h-3.5 w-3.5" />
+          Quick setup
         </span>
 
         {/* 15ch, not max-w-3xl. The measure IS the design here: it forces the
             three-line stack that makes the gradient line land as its own
             statement. On one wide line the same words read as a caption. */}
-        <h2 className="mt-6 max-w-[15ch] text-4xl leading-[1.08] font-extrabold tracking-tight text-balance text-gray-900 2xl:text-5xl dark:text-white">
+        <h2 className="mt-5 max-w-[15ch] text-4xl leading-[1.06] font-semibold tracking-[-0.028em] text-balance text-[#0A0A0A] 2xl:text-5xl dark:text-[#ECEFF3]">
           Turn any page into a{' '}
-          <span className="bg-linear-to-r from-[#15DCFF] to-[#6b72f8] bg-clip-text text-transparent">
-            running campaign.
-          </span>
+          <span className="text-[#0B7A78] dark:text-[#15DCFF]">running campaign.</span>
         </h2>
 
-        <p className="mt-5 max-w-[44ch] text-sm leading-relaxed text-balance text-gray-500 2xl:text-base dark:text-white/60">
+        <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-balance text-[#6B7280] dark:text-[#AFB6C0]">
           Paste a product or landing page. We read your brand, audience and objective
           from it, then build the ads. About 30 seconds.
         </p>
@@ -105,13 +104,13 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         {/* A filled well, darker than the page — the same treatment every
             control on this surface gets (see briefFields INPUT). */}
         <div
-          className={`mt-8 flex w-full max-w-xl items-center gap-2 rounded-2xl border bg-white p-1.5 pl-4 transition focus-within:border-[#5E66F5] dark:bg-[#111] dark:focus-within:border-white/40 ${
+          className={`mt-8 flex w-full max-w-xl items-center gap-2.5 rounded-xl border bg-white p-1.5 pl-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors focus-within:border-[#02C8C4] dark:bg-[#14181D] dark:shadow-none dark:focus-within:border-[#15DCFF] ${
             invalid
               ? 'border-red-400/60 dark:border-red-500/40'
-              : 'border-gray-200 dark:border-white/10'
+              : 'border-[#E5E7EB] dark:border-[#2E353E]'
           }`}
         >
-          <Globe className="h-5 w-5 shrink-0 text-gray-400 dark:text-white/45" />
+          <Globe className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] dark:text-[#8B939E]" />
           <input
             value={url}
             disabled={busy}
@@ -119,7 +118,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
             onBlur={() => setTouched(true)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
             placeholder="yourbrand.com/product"
-            className="min-w-0 flex-1 bg-transparent py-2 text-base text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
+            className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#111827] outline-none placeholder:text-[#9CA3AF] dark:text-[#ECEFF3] dark:placeholder:text-[#6C7480]"
           />
           <PrimaryBtn
             icon={ArrowRight}
@@ -133,16 +132,14 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         </div>
 
         {invalid && (
-          <p className="mt-2.5 text-sm text-red-600 dark:text-red-400">
+          <p className="mt-2.5 text-13 text-red-600 dark:text-red-400">
             That doesn't look like a web address — try yourbrand.com/product
           </p>
         )}
 
         {savedBrands.length > 0 && (
           <div className="mt-10 flex w-full max-w-xl flex-col items-center gap-3">
-            <span className="text-[11px] font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
-              or start from a saved brand
-            </span>
+            <span className={LABEL}>or start from a saved brand</span>
             <div className="flex flex-wrap justify-center gap-2">
               {savedBrands.map((brand) => (
                 <button
@@ -150,7 +147,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
                   type="button"
                   disabled={busy}
                   onClick={() => onPickBrand?.(brand.id || brand._id)}
-                  className="inline-flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white py-2 pr-4 pl-2 text-13 font-medium text-gray-900 transition hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-[#111] dark:text-white dark:hover:border-white/25"
+                  className="inline-flex items-center gap-2.5 rounded-lg border border-[#E5E7EB] bg-white py-1.5 pr-3.5 pl-1.5 text-13 font-medium text-[#111827] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors hover:border-[#D1D5DB] disabled:opacity-50 dark:border-[#2E353E] dark:bg-[#14181D] dark:text-[#ECEFF3] dark:shadow-none dark:hover:border-[#3D4650]"
                 >
                   <BrandMark brand={brand} />
                   <span className="max-w-45 truncate">{brand.name || brand.brandName}</span>
@@ -173,13 +170,13 @@ function BrandMark({ brand }) {
       <img
         src={logo}
         alt=""
-        className="size-7 rounded-lg bg-gray-100 object-contain dark:bg-white/10"
+        className="size-7 rounded-md border border-[#E5E7EB] bg-white object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
         onError={() => setBroken(true)}
       />
     );
   }
   return (
-    <span className="grid size-7 place-items-center rounded-lg bg-linear-to-br from-[#15DCFF]/20 to-[#6b72f8]/20 text-xs font-extrabold text-[#6b72f8] dark:text-[#aeb6ff]">
+    <span className="grid size-7 place-items-center rounded-md border border-[#E5E7EB] bg-[#F9FAFB] text-13 font-semibold text-[#6B7280] dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#AFB6C0]">
       {String(brand?.name || brand?.brandName || '?').trim().charAt(0).toUpperCase()}
     </span>
   );

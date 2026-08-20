@@ -115,6 +115,25 @@ export const activateBrief = async (briefId, connection) => {
   return data;
 };
 
+// The MANUAL half — v1's "Post Ad". Ships the ads from the run being viewed,
+// once, and creates no job.
+//
+//   mode 'auto'      we build the campaign + ad set from the brief
+//   mode 'existing'  they go into ones the user already runs, and inherit that
+//                    ad set's budget and targeting
+export const publishBrief = async (briefId, { connection, mode = 'auto', campaignId, adSetId }) => {
+  const { data } = await axios.post(
+    `${BRIEFS}/${briefId}/publish`,
+    {
+      connection,
+      mode,
+      ...(mode === 'existing' ? { campaignId, adSetId } : {}),
+    },
+    { headers: authHeaders() },
+  );
+  return data;
+};
+
 // The live Meta wizard schema, so the objective / conversion-location / button
 // pickers can never offer a combination Meta would reject. Served by the Ads
 // Manager surface (`/meta-ads/wizard-schema`) — one schema, both products.

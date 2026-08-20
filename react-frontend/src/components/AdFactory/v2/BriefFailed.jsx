@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import { GhostBtn, Notice, Panel, PanelBody, PanelFooter, PanelHeader, PrimaryBtn } from './Panel';
+import { MUTED } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // BriefFailed — when reading the page didn't work.
@@ -51,7 +52,7 @@ export default function BriefFailed({
 
         <PanelFooter>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-            <p className="text-[11.5px] text-gray-500 dark:text-white/55">
+            <p className={`max-w-100 ${MUTED}`}>
               {isRetryable
                 ? 'Nothing was charged, and nothing was lost — your budget is still saved.'
                 : 'A product or landing page with real copy on it works best. A saved brand works too.'}

@@ -1,21 +1,26 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, ChevronUp, Sliders } from 'lucide-react';
+import { BTN_GHOST, FAINT, MUTED, NUM, TITLE } from './_tokens';
 
 // ----------------------------------------------------------------------------
-// BriefSummary — what we read, in one line.
+// BriefSummary — the page's masthead.
 //
-// This is the screen's correction. The previous attempt put a 539-line,
-// twenty-field, four-column grid between "we read your page" and "here are your
-// ads", which turned "two inputs, not twelve" into "review twenty pre-filled
-// fields" and put configuration back in front of value.
+// Not a card any more, and that is the point. It used to be a bordered box
+// holding an avatar, a 14px name and a row of 10px pill chips, sitting directly
+// above another bordered box holding the same information as editable fields.
+// Two panels of equal weight, neither of them the top of the page, and the
+// biggest type on screen was the same size as a form label — which is exactly
+// what "nothing stands out" describes.
 //
-// Everything that grid held still exists and is still editable — it expands in
-// place beneath this card (AdjustPanel), one click away, flagged fields first.
-// The difference is that reading it is the user's choice rather than a toll
-// gate. Full parity, not full ceremony.
+// Now the brand name is the page title (21px, the largest thing anywhere on the
+// screen) with one grey line under it saying where we read it from and how much
+// of it we guessed. The card below it starts the brief. That is the hierarchy:
+// title → document → action.
 //
-// What earns a place on the line: the five facts that change what the ads look
-// like, plus a count of what we're unsure about. Anything else is detail.
+// The chips stay. They are a glance at the five facts that change what the ads
+// look like, and with the fields expanded underneath they are the fast way to
+// confirm the shape of the brief without reading five sections. They are just
+// no longer competing with the title for it.
 // ----------------------------------------------------------------------------
 
 const LOW_CONFIDENCE = 0.5;
@@ -90,84 +95,82 @@ export default function BriefSummary({
     },
   ].filter(Boolean);
 
-  const initial = String(brand.name || brief?.source?.url || '?')
-    .replace(/^https?:\/\/(www\.)?/, '')
-    .trim()
-    .charAt(0)
-    .toUpperCase();
+  const host = brief?.source?.url ? hostOf(brief.source.url) : '';
+
+  // One grey sentence, assembled from what is actually true — not a fixed
+  // template with empty slots in it.
+  const provenanceLine = [
+    host && `Read from ${host}`,
+    flaggedCount > 0 &&
+      `${flaggedCount} ${flaggedCount === 1 ? 'value was' : 'values were'} guessed`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#14181D]">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-3 px-4 py-3.5">
-        {brand.logoUrls?.[0] ? (
-          <img
-            src={brand.logoUrls[0]}
-            alt=""
-            className="size-8 shrink-0 rounded-lg bg-gray-100 object-contain dark:bg-white/10"
-          />
-        ) : (
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-linear-to-br from-[#15DCFF]/20 to-[#6b72f8]/20 text-13 font-extrabold text-[#6b72f8] dark:text-[#aeb6ff]">
-            {initial}
-          </span>
-        )}
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {brand.logoUrls?.[0] && (
+            <img
+              src={brand.logoUrls[0]}
+              alt=""
+              className="size-7 shrink-0 rounded-md border border-[#E5E7EB] bg-white object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
+            />
+          )}
+          <h1 className={`min-w-0 truncate ${TITLE}`}>{brand.name || 'Your brand'}</h1>
+        </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex items-baseline gap-2">
-            <span className="truncate text-sm font-bold text-gray-900 dark:text-white">
-              {brand.name || 'Your brand'}
-            </span>
-            {brief?.source?.url && (
-              <span className="hidden truncate text-10 text-gray-400 sm:inline dark:text-white/40">
-                read from {hostOf(brief.source.url)}
-              </span>
-            )}
-          </div>
-
-          {/* These are a glance, not controls — the brief itself is one click
-              away in Adjust. Sized down so the summary reads as a caption
-              rather than competing with the ads underneath it. */}
-          <div className="flex flex-wrap items-center gap-1">
-            {facts.map((f) => (
-              <span
-                key={f.key}
-                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-10 text-gray-600 dark:border-white/10 dark:bg-white/6 dark:text-white/60"
-              >
-                <span className={f.strong ? 'font-semibold text-gray-900 dark:text-white/90' : ''}>
-                  {f.label}
-                </span>
-              </span>
-            ))}
-
+        {provenanceLine && (
+          <p className={MUTED}>
+            {host && <span>Read from {host}</span>}
+            {host && flaggedCount > 0 && <span className={FAINT}> · </span>}
             {flaggedCount > 0 && (
               <button
                 type="button"
                 onClick={onAdjust}
-                className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-10 font-semibold text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-400"
+                className="text-[#B45309] underline-offset-2 hover:underline dark:text-[#E8A33D]"
               >
-                <AlertTriangle className="h-2.5 w-2.5" />
-                {flaggedCount} worth a look
+                <AlertTriangle className="mr-1 inline h-3 w-3 align-[-1px]" />
+                <span className={NUM}>{flaggedCount}</span>{' '}
+                {flaggedCount === 1 ? 'value was' : 'values were'} guessed
               </button>
             )}
-          </div>
-        </div>
+          </p>
+        )}
 
-        {/* A toggle, not a launcher — the fields expand directly beneath this
-            card, so the control has to say which way it will go. */}
-        <button
-          type="button"
-          onClick={onAdjust}
-          disabled={busy}
-          aria-expanded={adjusting}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition disabled:opacity-50 ${
-            adjusting
-              ? 'border-gray-300 bg-gray-200 text-gray-900 dark:border-white/25 dark:bg-white/12 dark:text-white'
-              : 'border-gray-200 bg-gray-100 text-gray-900 hover:border-gray-300 dark:border-white/10 dark:bg-white/6 dark:text-white dark:hover:border-white/25'
-          }`}
-        >
+        {/* The five facts that change what the ads look like. Plain text
+            separated by dots — a row of bordered pills is another five boxes on
+            a screen that already has plenty. */}
+        {facts.length > 0 && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {facts.map((f, i) => (
+              <React.Fragment key={f.key}>
+                {i > 0 && <span className={FAINT}>·</span>}
+                <span
+                  className={
+                    f.strong
+                      ? 'text-13 font-medium text-[#111827] dark:text-[#ECEFF3]'
+                      : 'text-13 text-[#6B7280] dark:text-[#AFB6C0]'
+                  }
+                >
+                  {f.label}
+                </span>
+              </React.Fragment>
+            ))}
+          </p>
+        )}
+      </div>
+
+      {/* A toggle, not a launcher — the fields expand directly beneath this,
+          so the control has to say which way it will go. */}
+      <span className="flex shrink-0 items-center gap-3">
+        {busy && <span className={FAINT}>Saving…</span>}
+        <button type="button" onClick={onAdjust} disabled={busy} aria-expanded={adjusting} className={BTN_GHOST}>
           {adjusting ? <ChevronUp className="h-3.5 w-3.5" /> : <Sliders className="h-3.5 w-3.5" />}
           {adjusting ? 'Done' : 'Adjust'}
         </button>
-      </div>
+      </span>
     </div>
   );
 }

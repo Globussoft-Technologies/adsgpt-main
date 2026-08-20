@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { getAdAccounts, getMetaPages } from '@/apis/metaAds/metaAdsApi';
+import { CONTROL, CONTROL_H, LABEL, MENU, MENU_ITEM, MUTED } from '@/components/AdFactory/v2/_tokens';
 import {
   Select,
   SelectContent,
@@ -181,12 +182,6 @@ export default function QuickTemplateSetup({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[11.5px] leading-relaxed text-gray-500 dark:text-zinc-400">
-        We'll build the campaign setup for you — objective, bidding and delivery
-        settings all use Meta's recommended defaults for driving traffic to your
-        site. You can edit it in Ads Manager afterwards.
-      </p>
-
       <SelectField
         label="Ad account"
         value={auto.adAccountId}
@@ -254,8 +249,8 @@ function SelectField({
   const empty = !loading && (!options || options.length === 0);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[11.5px] font-medium text-gray-500 dark:text-zinc-400">{label}</label>
+    <div className="flex flex-col gap-2">
+      <label className={LABEL}>{label}</label>
 
       <Select
         value={value || ''}
@@ -265,11 +260,13 @@ function SelectField({
           if (opt) onSelect(opt);
         }}
       >
-        <SelectTrigger className="h-auto! w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 shadow-none disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/10 dark:bg-[#383838] dark:text-white">
+        <SelectTrigger
+          className={`${CONTROL_H}! w-full ${CONTROL} px-3 text-sm font-medium tracking-[-0.006em] shadow-none disabled:cursor-not-allowed disabled:opacity-55`}
+        >
           {/* Loading is stated in the trigger rather than as a spinner layered
               over the chevron — one control, one message. */}
           {loading ? (
-            <span className="flex items-center gap-2 text-gray-500 dark:text-zinc-400">
+            <span className={`flex items-center gap-2 ${MUTED}`}>
               <Loader2 className="size-3.5 animate-spin" />
               Loading…
             </span>
@@ -278,25 +275,25 @@ function SelectField({
           )}
         </SelectTrigger>
 
-        <SelectContent className="z-9999 max-h-72 border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white">
+        <SelectContent className={`z-9999 max-h-72 ${MENU}`}>
           {(options || []).map((o) => (
-            <SelectItem key={o.id} value={o.id} className="text-xs dark:focus:bg-white/10">
+            <SelectItem key={o.id} value={o.id} className={MENU_ITEM}>
               {o.label}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      {error && <span className="text-[11px] text-amber-300/90">{error}</span>}
+      {error && <span className="text-13 text-[#B45309] dark:text-[#E8A33D]">{error}</span>}
     </div>
   );
 }
 
 function Notice({ children }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
-      <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-      <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">{children}</p>
+    <div className="flex items-start gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3">
+      <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[#B45309] dark:text-[#E8A33D]" />
+      <p className="text-13 leading-relaxed text-[#92400E] dark:text-[#E8A33D]">{children}</p>
     </div>
   );
 }

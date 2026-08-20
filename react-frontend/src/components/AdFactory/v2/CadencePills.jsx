@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { CONTROL, FAINT, LABEL, MENU, MENU_ITEM, NUM, VALUE } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // CadencePills — the schedule, as a sentence you can edit.
@@ -142,7 +143,7 @@ export default function CadencePills({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Pill label="EVERY">
+        <Pill label="Every">
           <PillSelect
             value={frequency}
             onValueChange={(v) =>
@@ -155,7 +156,7 @@ export default function CadencePills({
           />
         </Pill>
 
-        <Pill label="AT">
+        <Pill label="At">
           <PillSelect
             value={String(hour)}
             onValueChange={(v) => set({ hour: Number(v) })}
@@ -175,32 +176,32 @@ export default function CadencePills({
           {/* "ads each run" rather than "pairs per run": Adjust has its own
               "Ads per generate" and the two were both reading "per run" with
               different numbers on different screens. */}
-          <span className="text-gray-400 dark:text-white/45">ads each run</span>
+          <span className={LABEL}>ads each run</span>
         </Pill>
 
         {/* Optional, and it says so. An end date is the difference between a
             campaign and a standing order, and without one there was no way to
             express "run this for a month". */}
-        <Pill label="UNTIL">
+        <Pill label="Until">
           <input
             type="date"
             value={endDate ? String(endDate).slice(0, 10) : ''}
             disabled={disabled}
             onChange={(e) => set({ endDate: e.target.value || null })}
-            className="bg-transparent text-13 font-bold text-gray-900 outline-none disabled:opacity-60 dark:scheme-dark dark:text-white"
+            className={`bg-transparent outline-none disabled:opacity-60 dark:scheme-dark ${VALUE}`}
           />
           {endDate && (
             <button
               type="button"
               disabled={disabled}
               onClick={() => set({ endDate: null })}
-              className="text-xs text-gray-400 hover:text-gray-900 dark:text-white/45 dark:hover:text-white"
+              className="text-[#9CA3AF] transition-colors hover:text-[#111827] dark:text-[#8B939E] dark:hover:text-[#ECEFF3]"
               aria-label="Clear end date"
             >
               <X className="h-3 w-3" />
             </button>
           )}
-          {!endDate && <span className="text-xs text-gray-400 dark:text-white/45">no end</span>}
+          {!endDate && <span className={FAINT}>no end</span>}
         </Pill>
       </div>
 
@@ -217,7 +218,7 @@ export default function CadencePills({
             className="overflow-hidden"
           >
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              <Pill label="REPEAT EVERY">
+              <Pill label="Repeat every">
                 <input
                   type="number"
                   min={1}
@@ -232,7 +233,7 @@ export default function CadencePills({
                       },
                     })
                   }
-                  className="w-10 bg-transparent text-13 font-bold text-gray-900 tabular-nums outline-none disabled:opacity-60 dark:text-white"
+                  className={`w-10 bg-transparent outline-none disabled:opacity-60 ${VALUE} ${NUM}`}
                 />
                 <PillSelect
                   value={c.repeatUnit}
@@ -245,7 +246,7 @@ export default function CadencePills({
               {/* Day selection only means something for a weekly recurrence —
                   "every 3 days on Tuesdays" is not a cadence. */}
               {c.repeatUnit === 'week' && (
-                <Pill label="ON">
+                <Pill label="On">
                   <span className="flex items-center gap-1">
                     {DAYS.map(([day, letter], i) => {
                       const active = c.repeatOnDays.includes(day);
@@ -257,10 +258,10 @@ export default function CadencePills({
                           onClick={() => toggleDay(day)}
                           aria-pressed={active}
                           aria-label={day}
-                          className={`size-6 rounded-lg text-10 font-bold transition disabled:opacity-60 ${
+                          className={`size-6 rounded-md text-10 font-semibold transition-colors disabled:opacity-60 ${
                             active
-                              ? 'bg-[#6b72f8] text-white'
-                              : 'bg-gray-200 text-gray-500 hover:bg-gray-300 dark:bg-white/10 dark:text-white/55 dark:hover:bg-white/20'
+                              ? 'bg-[#02C8C4] text-[#062024] dark:bg-[#15DCFF]'
+                              : 'bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] dark:bg-[#22272F] dark:text-[#AFB6C0] dark:hover:bg-[#2E353E]'
                           }`}
                         >
                           {/* Two Tuesdays' worth of "T" and two "S" — the
@@ -277,7 +278,7 @@ export default function CadencePills({
             </div>
 
             {c.repeatUnit === 'week' && c.repeatOnDays.length === 0 && (
-              <p className="pt-1.5 text-xs text-gray-400 dark:text-white/45">
+              <p className={`pt-1.5 ${FAINT}`}>
                 No days picked — it&apos;ll run on the same weekday it starts.
               </p>
             )}
@@ -290,12 +291,8 @@ export default function CadencePills({
 
 function Pill({ label, children }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-13 text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white">
-      {label && (
-        <span className="text-10 font-extrabold tracking-wider text-gray-400 dark:text-white/45">
-          {label}
-        </span>
-      )}
+    <span className={`inline-flex h-9 items-center gap-2 px-3 ${CONTROL}`}>
+      {label && <span className={LABEL}>{label}</span>}
       {children}
     </span>
   );
@@ -307,12 +304,14 @@ function Pill({ label, children }) {
 function PillSelect({ value, onValueChange, options, disabled }) {
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-      <SelectTrigger className="h-auto! w-auto gap-1.5 border-0 bg-transparent p-0 text-13 font-bold text-gray-900 shadow-none focus:ring-0 disabled:opacity-60 dark:text-white">
+      <SelectTrigger
+        className={`h-auto! w-auto gap-1.5 border-0 bg-transparent p-0 shadow-none focus:ring-0 disabled:opacity-60 ${VALUE}`}
+      >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent className="z-9999 max-h-72 border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white">
+      <SelectContent className={`z-9999 max-h-72 ${MENU}`}>
         {options.map((o) => (
-          <SelectItem key={o.value} value={o.value} className="text-13 dark:focus:bg-white/10">
+          <SelectItem key={o.value} value={o.value} className={MENU_ITEM}>
             {o.label}
           </SelectItem>
         ))}
@@ -348,20 +347,20 @@ function TimezonePicker({ value, onChange, disabled }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         disabled={disabled}
-        className="inline-flex items-center gap-1 text-13 font-bold text-gray-900 outline-none disabled:opacity-60 dark:text-white"
+        className={`inline-flex items-center gap-1 outline-none disabled:opacity-60 ${VALUE}`}
       >
         <span>{shortZone(value)}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/45" />
+        <ChevronDown className="h-3.5 w-3.5 text-[#9CA3AF] dark:text-[#8B939E]" />
       </PopoverTrigger>
 
       <PopoverContent
         align="start"
-        className="z-9999 w-72 border border-black/10 bg-white p-0 text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white"
+        className={`z-9999 w-72 p-0 ${MENU}`}
       >
         <Command className="bg-transparent">
           <CommandInput placeholder="Search city or offset…" className="text-13" />
           <CommandList className="max-h-64">
-            <CommandEmpty className="py-5 text-center text-xs text-gray-400 dark:text-white/45">
+            <CommandEmpty className={`py-5 text-center ${FAINT}`}>
               No timezone matches that.
             </CommandEmpty>
             <CommandGroup>
@@ -375,14 +374,16 @@ function TimezonePicker({ value, onChange, disabled }) {
                     onChange?.(zone);
                     setOpen(false);
                   }}
-                  className="gap-2 text-13 dark:aria-selected:bg-white/10"
+                  className="gap-2 text-13 dark:aria-selected:bg-[#272D35]"
                 >
-                  <Globe className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40" />
+                  <Globe className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF] dark:text-[#8B939E]" />
                   <span className="truncate">{zone}</span>
-                  <span className="ml-auto shrink-0 text-xs text-gray-400 dark:text-white/40">
+                  <span className={`ml-auto shrink-0 ${FAINT}`}>
                     {offsetLabel(zone)}
                   </span>
-                  {zone === value && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />}
+                  {zone === value && (
+                    <Check className="h-3.5 w-3.5 shrink-0 text-[#02C8C4] dark:text-[#15DCFF]" />
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>

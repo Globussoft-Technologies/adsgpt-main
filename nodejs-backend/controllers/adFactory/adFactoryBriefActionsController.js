@@ -33,6 +33,18 @@ const {
 const { BriefProjectionError } = require("../../services/adFactory/briefToCampaignDoc");
 const { buildResultSlotUpdate } = require("../../services/adFactory/resultSlots");
 const { estimateBriefCredits } = require("../../services/adFactory/briefCreditEstimate");
+const {
+  briefPublishPlan,
+  BriefPublishError,
+} = require("../../services/adFactory/briefPublishPlan");
+const { briefGenerationView } = require("../../services/adFactory/briefGenerationView");
+const { sliceRuns } = require("../../services/adFactory/runSlices");
+const CampaignHistory = require("../../Module/adFactory/adFactoryHistory");
+// The three Meta handlers the wizard itself posts through. Reused rather than
+// reimplemented so a Quick setup launch and a Full control launch produce the
+// same objects, with the same validation, on the same code path.
+const metaAdControllerV2 = require("../adPosting/metaAdLauncherV2");
+const adControllerV2 = require("../adPosting/adControllerV2");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const Campaign = require("../../Module/adFactory/adFactory");
 // Runs createJob/deleteJob in-process and captures what they sent, so a
@@ -375,6 +387,176 @@ exports.runBriefNow = async (req, res) => {
     return res.status(statusCode).json(body);
   } catch (err) {
     logger.error(`[adFactory:brief:runNow] ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// ─── brief → live ads, once ──────────────────────────────────────────────────
+
+/**
+ * Read the run the user is looking at, in the same way GET /:id does.
+ *
+ * The rules about which entries of the cumulative `results` array belong to the
+ * current run are subtle — snapshots are boundaries, not batches — so they stay
+ * in `sliceRuns` + `briefGenerationView` and are not re-derived here.
+ */
+async function loadCurrentRun(brief, userId) {
+  if (!brief.campaignId) return null;
+
+  const campaign = await Campaign.findOne({ _id: brief.campaignId, userId }).lean();
+  if (!campaign) return null;
+
+  const snaps = await CampaignHistory.find({
+    userId,
+    campaignId: brief.campaignId.toString(),
+  })
+    .select("version createdAt previousData.results.image")
+    .sort({ version: 1 })
+    .limit(20)
+    .lean();
+
+  const { currentFrom } = sliceRuns(campaign.results, snaps);
+  return briefGenerationView(campaign, { since: currentFrom });
+}
+
+exports.publishBrief = async (req, res) => {
+  /*
+    #swagger.tags = ['Ad Factory 2.0']
+    #swagger.summary = 'Post this brief\'s current ads to Meta, once'
+    #swagger.description = 'The manual half of Ad Factory, matching v1 Post Ad. Ships the creatives from the run being viewed and stops — no job, no schedule, nothing recurring. mode=auto builds the campaign and ad set from the brief; mode=existing posts into ones the user already runs.'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user.user_id;
+    const brief = await findOwnedBrief(req.params.id, userId);
+    if (!brief) {
+      return res.status(404).json({ success: false, error: "Brief not found" });
+    }
+
+    const run = await loadCurrentRun(brief, userId);
+    if (!run || run.pairs.length === 0) {
+      return res.status(409).json({
+        success: false,
+        code: "NOTHING_TO_POST",
+        error: "There are no finished ads to post yet — generate some first.",
+      });
+    }
+
+    const body = req.body || {};
+    const connection = body.connection || {};
+    let plan;
+    try {
+      plan = briefPublishPlan(brief, connection, {
+        mode: body.mode || "auto",
+        pairs: run.pairs,
+        campaignId: body.campaignId,
+        adSetId: body.adSetId,
+        s3Base: process.env.AWS_IMAGE_VIEW_URL,
+      });
+    } catch (err) {
+      if (err instanceof BriefPublishError) {
+        return res.status(400).json({ success: false, error: err.message, field: err.field });
+      }
+      throw err;
+    }
+
+    // The Meta handlers read the identity from the body as readily as the
+    // header (utils/metaConnection.getFacebookIdFromRequest), so an in-process
+    // call needs no header forgery.
+    const facebookId = String(connection.facebookId);
+    const runMeta = (fn, payload) =>
+      callController(fn, { ...req, body: { ...payload, facebookId }, user: req.user });
+
+    let { campaignId, adSetId } = plan;
+
+    // ── auto: build the campaign, then the ad set under it. ─────────────────
+    //
+    // Not wrapped in a transaction, because Meta has none. A failure after the
+    // campaign lands leaves an empty campaign in the user's account rather than
+    // a half-posted batch — recoverable and visible, which is the better of the
+    // two bad outcomes. The error says which step failed so the message can.
+    if (plan.mode === "auto") {
+      const campaignRes = await runMeta(metaAdControllerV2.createCampaignV2, plan.campaignPayload);
+      if (campaignRes.statusCode >= 400) {
+        return res.status(campaignRes.statusCode).json({
+          ...campaignRes.body,
+          success: false,
+          step: "campaign",
+        });
+      }
+      campaignId = campaignRes.body?.campaign?.id || campaignRes.body?.data?.campaign?.id;
+      if (!campaignId) {
+        return res.status(502).json({
+          success: false,
+          step: "campaign",
+          error: "Meta accepted the campaign but returned no id.",
+        });
+      }
+
+      const adSetRes = await runMeta(metaAdControllerV2.createAdSetV2, {
+        ...plan.adSetPayload,
+        campaignId,
+      });
+      if (adSetRes.statusCode >= 400) {
+        return res.status(adSetRes.statusCode).json({
+          ...adSetRes.body,
+          success: false,
+          step: "adset",
+          campaignId,
+        });
+      }
+      adSetId = adSetRes.body?.adSet?.id || adSetRes.body?.data?.adSet?.id;
+      if (!adSetId) {
+        return res.status(502).json({
+          success: false,
+          step: "adset",
+          campaignId,
+          error: "Meta accepted the ad set but returned no id.",
+        });
+      }
+    }
+
+    // ── the ads themselves, through the same batch endpoint v1 Post Ad uses ──
+    const adsRes = await callController(adControllerV2.createAdV2, {
+      ...req,
+      body: {
+        ...plan.adsBody,
+        adFactoryCampaignId: brief.campaignId ? String(brief.campaignId) : undefined,
+        campaignDetails: { campaignId: String(campaignId) },
+        adSetDetails: { adSetId: String(adSetId) },
+      },
+      user: req.user,
+    });
+
+    if (adsRes.statusCode >= 400) {
+      return res.status(adsRes.statusCode).json({
+        ...adsRes.body,
+        success: false,
+        step: "ads",
+        campaignId,
+        adSetId,
+      });
+    }
+
+    // A posted brief is not a LIVE brief. `live` means a running schedule, and
+    // the deliveries screen is built around a jobId this brief does not have —
+    // claiming it here would send the user to a timeline with nothing in it.
+    // `previewing` is where it already is, and where it stays.
+    brief.lastPublishedAt = new Date();
+    await brief.save();
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        mode: plan.mode,
+        campaignId: String(campaignId),
+        adSetId: String(adSetId),
+        requested: plan.ads.length,
+        ...(adsRes.body?.data || adsRes.body || {}),
+      },
+    });
+  } catch (err) {
+    logger.error(`[adFactory:brief:publish] ${err.message}`);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

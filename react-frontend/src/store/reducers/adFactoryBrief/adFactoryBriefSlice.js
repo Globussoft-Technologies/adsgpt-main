@@ -11,6 +11,7 @@ import {
   activateBrief,
   stopBrief,
   runBriefNow,
+  publishBrief,
   getBriefTimeline,
   pauseJob,
   resumeJob,
@@ -228,6 +229,38 @@ export const runNow = createAsyncThunk(
   },
 );
 
+
+// The MANUAL half of Ad Factory, which Quick setup shipped without. v1 has had
+// two paths since day one — post these ads now, or keep making them — and v2
+// only ever offered the second, so the user looking at three finished ads had
+// to subscribe to a schedule to get any of them live.
+//
+// Separate from `activating` on purpose. Both spend, but they commit to
+// completely different things: this posts N ads once and creates nothing,
+// while activate creates a recurring job. Sharing a busy flag would let the
+// UI show "starting deliveries…" over a one-off post.
+export const publishNow = createAsyncThunk(
+  'adFactoryBrief/publish',
+  async ({ briefId, connection, mode, campaignId, adSetId }, { rejectWithValue }) => {
+    try {
+      return await publishBrief(briefId, { connection, mode, campaignId, adSetId });
+    } catch (err) {
+      // The server reports WHICH step failed (`step: 'campaign' | 'adset' |
+      // 'ads'`) because a half-finished launch leaves real objects in the
+      // user's ad account, and "it failed" is not enough to know what to clean
+      // up. Carried through to the UI rather than flattened to a string.
+      const body = err?.response?.data || {};
+      return rejectWithValue({
+        message: message(err, "We couldn't post your ads."),
+        step: body.step || null,
+        field: body.field || null,
+        campaignId: body.campaignId || null,
+        adSetId: body.adSetId || null,
+      });
+    }
+  },
+);
+
 export const fetchTimeline = createAsyncThunk(
   'adFactoryBrief/timeline',
   async (briefId, { rejectWithValue }) => {
@@ -268,6 +301,13 @@ const initialState = {
   // A queued extra cycle. Cleared on the next timeline read, once the run it
   // refers to is actually visible there.
   runNowQueued: false,
+
+  // The one-off post. `publishResult` holds what actually went live so the
+  // screen can say so afterwards — a button that simply stops spinning gives
+  // no evidence anything happened.
+  publishing: false,
+  publishResult: null,
+  publishError: null,
 
   error: null,
   // Set when the failure has a code the UI acts on (NO_BASE_PLAN → upgrade).
@@ -319,6 +359,13 @@ const adFactoryBriefSlice = createSlice({
     },
     clearNeedsRefetch: (state) => {
       state.needsRefetch = false;
+    },
+    // Closing the ship card forgets both the receipt and the failure. Keeping
+    // either would mean reopening the card lands on a stale answer about a
+    // post that already happened.
+    clearPublishState: (state) => {
+      state.publishResult = null;
+      state.publishError = null;
     },
     // Optimistic local edit so a chip doesn't wait a round trip to look
     // changed. The PATCH that follows is the source of truth.
@@ -576,6 +623,20 @@ const adFactoryBriefSlice = createSlice({
         state.error = typeof payload === 'string' ? payload : payload?.message;
       })
 
+      .addCase(publishNow.pending, (state) => {
+        state.publishing = true;
+        state.publishError = null;
+        state.publishResult = null;
+      })
+      .addCase(publishNow.fulfilled, (state, { payload }) => {
+        state.publishing = false;
+        state.publishResult = payload?.data || null;
+      })
+      .addCase(publishNow.rejected, (state, { payload }) => {
+        state.publishing = false;
+        state.publishError = payload || { message: "We couldn't post your ads." };
+      })
+
       .addCase(fetchTimeline.pending, (state) => {
         state.timeline.loading = true;
       })
@@ -597,6 +658,7 @@ export const {
   setPendingBudget,
   clearBriefError,
   clearNeedsRefetch,
+  clearPublishState,
   applyLocalEdit,
   briefReady,
 } = adFactoryBriefSlice.actions;
@@ -612,6 +674,9 @@ export const selectTimeline = (s) => s.adFactoryBrief.timeline;
 export const selectJobSync = (s) => s.adFactoryBrief.jobSync;
 export const selectIsRunningNow = (s) => s.adFactoryBrief.runningNow;
 export const selectRunNowQueued = (s) => s.adFactoryBrief.runNowQueued;
+export const selectPublishing = (s) => s.adFactoryBrief.publishing;
+export const selectPublishResult = (s) => s.adFactoryBrief.publishResult;
+export const selectPublishError = (s) => s.adFactoryBrief.publishError;
 export const selectBriefs = (s) => s.adFactoryBrief.briefs;
 export const selectBriefsLoading = (s) => s.adFactoryBrief.briefsLoading;
 export const selectIsPausing = (s) => s.adFactoryBrief.pausing;

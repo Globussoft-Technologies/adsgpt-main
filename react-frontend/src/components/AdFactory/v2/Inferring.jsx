@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Notice, Panel, PanelBody, PanelHeader } from './Panel';
+import { BTN_LINK, MUTED, NUM, RULE_BORDER } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // Inferring — the ~35-second wait.
@@ -53,7 +54,7 @@ export default function Inferring({ host, startedAt, onStartOver }) {
               : "We're pulling out your brand, audience and objective. Nothing to do — this only takes a moment."
           }
           right={
-            <span className="shrink-0 text-xs text-gray-500 tabular-nums dark:text-white/60">
+            <span className={`shrink-0 ${MUTED} ${NUM}`}>
               {overrunning ? `${Math.round(elapsed / 1000)}s` : `~${remaining}s left`}
             </span>
           }
@@ -61,7 +62,7 @@ export default function Inferring({ host, startedAt, onStartOver }) {
 
         <PanelBody className="flex flex-col gap-5">
           <div
-            className="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"
+            className="h-1 overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2E353E]"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -69,7 +70,7 @@ export default function Inferring({ host, startedAt, onStartOver }) {
             aria-label="Reading your page"
           >
             <div
-              className="h-full rounded-full bg-linear-to-r from-[#15DCFF] to-[#6b72f8] transition-[width] duration-1000 ease-linear"
+              className="h-full rounded-full bg-[#02C8C4] transition-[width] duration-1000 ease-linear dark:bg-[#15DCFF]"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -86,12 +87,12 @@ export default function Inferring({ host, startedAt, onStartOver }) {
               as a trap, and the user who pasted the wrong URL knows it long
               before we do. */}
           {onStartOver && (
-            <div className="border-t border-gray-200 pt-3 text-xs text-gray-500 dark:border-white/10 dark:text-white/60">
+            <div className={`border-t pt-4 ${RULE_BORDER} ${MUTED}`}>
               Wrong page, or taking too long?{' '}
               <button
                 type="button"
                 onClick={onStartOver}
-                className="font-semibold text-[#6b72f8] underline underline-offset-2 hover:text-[#8c93ff] dark:text-[#aeb6ff]"
+                className={BTN_LINK}
               >
                 Start over
               </button>

@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Pause, Play, Square, Zap } from '
 import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
 import CadencePills from './CadencePills';
 import AlertEmails from './AlertEmails';
+import { MUTED, RULE_BORDER } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // SchedulePanel — the cadence of a LIVE brief, and the controls that change it.
@@ -66,7 +67,9 @@ export default function SchedulePanel({
         }
         right={
           <span className="flex items-center gap-2">
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400 dark:text-white/45" />}
+            {saving && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#9CA3AF] dark:text-[#8B939E]" />
+            )}
             {/* An extra cycle without waiting for the schedule. Live only — a
                 paused job refuses server-side, and offering a button that
                 always errors is worse than not offering it. */}
@@ -118,9 +121,9 @@ export default function SchedulePanel({
             orchestrator picks it up, so this says what actually happened
             rather than implying ads exist. */}
         {runNowQueued && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5">
+          <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/8 px-3.5 py-3">
             <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-400">
+            <p className="text-13 leading-relaxed text-emerald-700 dark:text-emerald-400">
               A run is queued. It&apos;ll appear below once it starts — this is an extra cycle, so
               your schedule is unchanged.
             </p>
@@ -128,7 +131,7 @@ export default function SchedulePanel({
         )}
 
         {!over && (
-          <div className="border-t border-gray-200 pt-3.5 dark:border-white/10">
+          <div className={`border-t pt-4 ${RULE_BORDER}`}>
             <AlertEmails
               value={alertEmails}
               onChange={onAlertEmailsChange}
@@ -140,9 +143,9 @@ export default function SchedulePanel({
         {/* The one message that must never be swallowed: the brief now says one
             thing and the running job still does another. */}
         {syncWarning && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B45309] dark:text-[#E8A33D]" />
+            <p className="text-13 leading-relaxed text-[#92400E] dark:text-[#E8A33D]">
               {syncWarning} Your change is saved, but the schedule running right now hasn&apos;t
               changed yet.
             </p>
@@ -150,7 +153,7 @@ export default function SchedulePanel({
         )}
 
         {!over && !syncWarning && (
-          <p className="text-xs text-gray-500 dark:text-white/55">
+          <p className={MUTED}>
             Changes apply from the next run. Pausing keeps everything; stopping ends deliveries for
             good.
           </p>
@@ -161,9 +164,9 @@ export default function SchedulePanel({
           Inline rather than a modal: it belongs to this panel, and a dialog over
           the whole page for one sentence is heavier than the decision. */}
       {confirmingStop && (
-        <div className="border-t border-gray-200 px-4 py-3.5 dark:border-white/10">
+        <div className={`border-t px-5 py-4 ${RULE_BORDER} 2xl:px-6`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-13 text-gray-700 dark:text-white/70">
+            <p className={`max-w-150 ${MUTED}`}>
               Stop deliveries for good? Ads already live stay live, and your run history is kept —
               but restarting means setting the schedule up again.
             </p>
@@ -178,7 +181,7 @@ export default function SchedulePanel({
                   setConfirmingStop(false);
                   onStop?.();
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-red-500/15 px-3.5 py-2 text-13 font-semibold text-red-600 transition hover:bg-red-500/25 disabled:opacity-50 dark:text-red-400"
+                className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
               >
                 {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Stop deliveries

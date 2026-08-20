@@ -1,9 +1,10 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { PrimaryBtn, GhostBtn } from './Panel';
 import { useMotionPresets } from './_motion';
+import { CARD, FAINT, MUTED, NUM, RULE_BORDER, SECTION } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // CreativePreview — the ads, which are the point of the screen.
@@ -47,6 +48,11 @@ export default function CreativePreview({
   onRegenerate,
   onRegenerateOne,
   onContinue,
+  // The manual half. Sits here rather than in a card of its own because the
+  // two things you can do with a finished batch — ship it, or subscribe to
+  // more of it — belong to the batch, and this strip is the batch's own row.
+  onShip,
+  shipping = false,
   regenerating = false,
   creditsHeld,
   // What ANOTHER run would cost, as opposed to what the last one held.
@@ -66,7 +72,7 @@ export default function CreativePreview({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-0.5">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+        <h3 className={`text-[15px] tracking-[-0.013em] ${SECTION}`}>
           {readOnly
             ? `${ready} ${ready === 1 ? 'ad' : 'ads'} from this run`
             : running && ready === 0
@@ -76,7 +82,7 @@ export default function CreativePreview({
                 : 'Generation finished'}
         </h3>
         {running && (
-          <span className="text-xs text-gray-500 dark:text-white/55">
+          <span className={MUTED}>
             This takes a couple of minutes — you can leave and come back.
           </span>
         )}
@@ -123,7 +129,7 @@ export default function CreativePreview({
       </motion.div>
 
       {failed > 0 && (
-        <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+        <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3 text-13 text-[#92400E] dark:text-[#E8A33D]">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="flex-1">
             {failed} didn&apos;t come out this time.
@@ -139,23 +145,23 @@ export default function CreativePreview({
           "Keep these coming" appears only once an ad exists: offering it sooner
           asks the user to commit to something they haven't seen. */}
       {!readOnly && (running || ready > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#14181D]">
-          <p className="text-xs text-gray-500 dark:text-white/55">
+        <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 ${CARD} px-5 py-3.5`}>
+          <p className={MUTED}>
             {running ? (
               <>
-                <b className="text-gray-900 tabular-nums dark:text-white/90">{ready}</b> of{' '}
-                <span className="tabular-nums">{ready + pending}</span> ready
+                <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
+                of <span className={NUM}>{ready + pending}</span> ready
               </>
             ) : (
               <>
-                <b className="text-gray-900 tabular-nums dark:text-white/90">{ready}</b>{' '}
+                <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
                 {ready === 1 ? 'ad' : 'ads'} ready
               </>
             )}
             {creditsHeld != null && (
               <>
                 {' · '}
-                <span className="tabular-nums">{creditsHeld}</span> credits held, settled on
+                <span className={NUM}>{creditsHeld}</span> credits held, settled on
                 what lands
               </>
             )}
@@ -171,12 +177,20 @@ export default function CreativePreview({
                 <span>
                   Regenerate all
                   {estimate != null && (
-                    <span className="ml-1 font-normal text-gray-400 dark:text-white/45">
-                      ~{estimate} credits
-                    </span>
+                    <span className={`ml-1 font-normal ${FAINT}`}>~{estimate} credits</span>
                   )}
                 </span>
               </GhostBtn>
+              {/* Two futures for this batch, and neither is the obvious
+                  default — posting once is the smaller commitment, scheduling
+                  is the bigger one, so posting is the ghost and scheduling
+                  keeps the solid button. */}
+              {onShip && (
+                <GhostBtn onClick={onShip} disabled={shipping}>
+                  <Rocket className="h-3.5 w-3.5" />
+                  <span>Post these ads</span>
+                </GhostBtn>
+              )}
               <PrimaryBtn icon={Sparkles} onClick={onContinue}>
                 Keep these coming →
               </PrimaryBtn>
@@ -191,9 +205,9 @@ export default function CreativePreview({
 function Card({ pair, ratio, callToAction, onRegenerate }) {
   const copy = pair.copy || {};
   return (
-    <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#101316]">
+    <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div
-        className="relative bg-gray-100 dark:bg-white/5"
+        className="relative bg-[#F9FAFB] dark:bg-[#22272F]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         <img
@@ -207,14 +221,14 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
         />
         <RatioBadge ratio={ratio} />
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 border-t border-gray-200 px-3 py-2.5 dark:border-white/10">
+      <div className={`flex flex-1 flex-col gap-1.5 border-t px-3.5 py-3 ${RULE_BORDER}`}>
         {copy.headline && (
-          <b className="text-13 leading-snug font-bold text-gray-900 dark:text-white">
+          <b className="text-13 leading-snug font-medium text-[#111827] dark:text-[#ECEFF3]">
             {copy.headline}
           </b>
         )}
         {copy.primaryText && (
-          <p className="line-clamp-3 text-xs leading-relaxed text-gray-500 dark:text-white/60">
+          <p className="line-clamp-3 text-13 leading-relaxed text-[#6B7280] dark:text-[#AFB6C0]">
             {copy.primaryText}
           </p>
         )}
@@ -222,14 +236,14 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
             common case — far more common than wanting a whole new batch — so
             the fix sits on the card rather than only at the bottom of the page. */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="inline-flex rounded-md bg-gray-900 px-2.5 py-1 text-10 font-bold text-white dark:bg-white/90 dark:text-[#05070A]">
+          <span className="inline-flex rounded-md bg-[#111827] px-2.5 py-1 text-10 font-semibold text-white dark:bg-[#ECEFF3] dark:text-[#0A0A0A]">
             {callToAction}
           </span>
           {onRegenerate && (
             <button
               type="button"
               onClick={onRegenerate}
-              className="text-10 font-semibold text-gray-400 transition hover:text-gray-900 dark:text-white/45 dark:hover:text-white"
+              className="text-13 text-[#9CA3AF] transition-colors hover:text-[#111827] dark:text-[#6C7480] dark:hover:text-[#ECEFF3]"
             >
               Regenerate
             </button>
@@ -242,20 +256,18 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
 
 function SkeletonCard({ ratio }) {
   return (
-    <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#101316]">
+    <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div
-        className="relative animate-pulse bg-gray-100 dark:bg-white/5"
+        className="relative animate-pulse bg-[#F3F4F6] dark:bg-[#191E24]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         <RatioBadge ratio={ratio} />
       </div>
-      <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-3 dark:border-white/10">
-        <span className="h-2.5 w-3/5 animate-pulse rounded bg-gray-100 dark:bg-white/8" />
-        <span className="h-2 w-full animate-pulse rounded bg-gray-100 dark:bg-white/8" />
-        <span className="h-2 w-2/3 animate-pulse rounded bg-gray-100 dark:bg-white/8" />
-        <span className="mt-1 text-10 font-semibold text-gray-400 dark:text-white/40">
-          Generating…
-        </span>
+      <div className={`flex flex-col gap-2 border-t px-3.5 py-3 ${RULE_BORDER}`}>
+        <span className="h-2.5 w-3/5 animate-pulse rounded bg-[#F3F4F6] dark:bg-[#22272F]" />
+        <span className="h-2 w-full animate-pulse rounded bg-[#F3F4F6] dark:bg-[#22272F]" />
+        <span className="h-2 w-2/3 animate-pulse rounded bg-[#F3F4F6] dark:bg-[#22272F]" />
+        <span className={`mt-1 ${FAINT}`}>Generating…</span>
       </div>
     </article>
   );

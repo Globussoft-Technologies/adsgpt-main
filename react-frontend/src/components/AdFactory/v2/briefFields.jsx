@@ -1,11 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2, Minus, Plus, X } from 'lucide-react';
-import {
-  CollapsibleCard,
-  DarkInput,
-  Field,
-  InfoTip,
-} from '@/components/Autopilot/_atoms';
+import { ChevronDown, Loader2, Minus, Plus, X } from 'lucide-react';
+import { InfoTip } from '@/components/Autopilot/_atoms';
 import {
   Select,
   SelectContent,
@@ -13,57 +8,108 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  BTN_LINK,
+  CARD,
+  CHIP,
+  CONTROL,
+  CONTROL_H,
+  FAINT,
+  FLAG_BORDER,
+  INPUT,
+  LABEL,
+  MENU,
+  MENU_ITEM,
+  MUTED,
+  NUM,
+  PILL,
+  PILL_ON,
+  RULE_BORDER,
+  SECTION,
+  SECTION_PAD,
+  TEXTAREA,
+  THUMB,
+  THUMB_ADD,
+  VALUE,
+} from './_tokens';
 
 // ----------------------------------------------------------------------------
 // Editable field primitives for the brief screen.
 //
-// Vocabulary is AUTOPILOT (components/Autopilot/_atoms.jsx), and wherever
-// Autopilot already has the atom we import it rather than restyling a copy —
-// `Field`, `DarkInput`, `CollapsibleCard` and `InfoTip` come straight from
-// there, so the two surfaces cannot drift apart.
+// These used to be built on Autopilot's atoms. They are built on `_tokens.js`
+// now — the "Refined" system — for one reason: Autopilot's field vocabulary is
+// a 10px bold uppercase letterspaced label above every control, and repeated
+// across twenty fields that is what made this screen read as a settings dump
+// rather than a brief. Autopilot is a monitoring surface where every row is
+// equally weighted and that treatment is right; this is a document you read.
 //
-// Why Autopilot rather than the darker AI-Assistant treatment that was here
-// before: Autopilot's surfaces are SOLID and clearly separated in value —
-// page (#0f0f0f) → card (#14181D) → control (white/6). Every step is a visible
-// lift. The previous pass had the card at `white/2` and the control at `#111`,
-// a couple of percent apart against a near-black page: technically structured,
-// visibly not.
+// What is shared with Autopilot is only `InfoTip`, because a portalled tooltip
+// that measures itself against the viewport is behaviour, not styling, and
+// there is no reason for two of them.
 //
-// The atoms below are the ones Autopilot doesn't have — chips, swatches, toggle
-// pills, a stepper and an image strip. Each is built from Autopilot's own
-// sizes, radii and colours.
+// The ramp every atom below sits on:
+//
+//   section   14px / 600   what part of the brief this is
+//   value     14px / 500   what the brief says
+//   label     13px / 400   grey, sentence case — what this field is called
+//   hint      13px / 400   grey, only when the label alone isn't enough
 // ----------------------------------------------------------------------------
-
-// Autopilot's control fill, for the atoms that aren't a plain <input>.
-const CONTROL =
-  'rounded-xl border border-gray-300 bg-gray-100 text-gray-900 dark:border-white/12 dark:bg-white/6 dark:text-white';
 
 // Low confidence gets an amber border. It is the only place amber appears on a
 // field, so "worth a look" stays unambiguous.
-const flaggedBorder = (flagged) =>
-  flagged ? '!border-amber-500/50 dark:!border-amber-500/40' : '';
+const flaggedBorder = (flagged) => (flagged ? FLAG_BORDER : '');
+
+// ─── Section ─────────────────────────────────────────────────────────────────
+
+// One band of a card, divided from its neighbours by a hairline rather than
+// being a card of its own. Nested cards were how the brief ended up looking
+// like six stacked panels; a brief is one document with parts.
+export function Section({ title, badge, children, className = '' }) {
+  return (
+    <section className={`${SECTION_PAD} ${className}`}>
+      {(title || badge) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          {title && <h3 className={SECTION}>{title}</h3>}
+          {badge}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+// The rule between two sections.
+export function SectionRule() {
+  return <div className={`border-t ${RULE_BORDER}`} />;
+}
+
+// The grid a section's fields sit on. Four columns at the widest so a row of
+// short values doesn't stretch to the full page width.
+export function FieldGrid({ cols = 4, children }) {
+  const at = {
+    2: 'sm:grid-cols-2',
+    3: 'sm:grid-cols-2 xl:grid-cols-3',
+    4: 'sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
+  }[cols];
+  return <div className={`grid grid-cols-1 gap-x-5 gap-y-4 ${at}`}>{children}</div>;
+}
 
 // ─── Field shell ─────────────────────────────────────────────────────────────
 
-// Autopilot's `Field` — uppercase micro-label above, optional hint below.
-export function FieldBlock({ label, hint, tooltip, wide, children }) {
+export function FieldBlock({ label, hint, tooltip, wide, full, children }) {
+  const span = full ? 'sm:col-span-2 xl:col-span-3 2xl:col-span-4' : wide ? 'sm:col-span-2' : '';
   return (
-    <div className={wide ? 'min-w-0 sm:col-span-2' : 'min-w-0'}>
-      <Field
-        label={
-          tooltip ? (
-            <span className="inline-flex items-center gap-1">
-              {label}
-              <InfoTip text={tooltip} />
-            </span>
-          ) : (
-            label
-          )
-        }
-        hint={hint}
-      >
-        {children}
-      </Field>
+    <div className={`flex min-w-0 flex-col gap-2 ${span}`}>
+      {/* Label, tip and hint on ONE line. The hint used to sit BELOW the
+          control, which put a third piece of type under every field and pushed
+          the next row down by a line it did not need. Beside the label it reads
+          as part of the field's name, which is what a hint is. */}
+      <label className={`flex flex-wrap items-center gap-x-1.5 gap-y-0.5 ${LABEL}`}>
+        <span>{label}</span>
+        {tooltip && <InfoTip text={tooltip} />}
+        {hint && <span className={FAINT}>{hint}</span>}
+      </label>
+      {children}
     </div>
   );
 }
@@ -100,13 +146,13 @@ export function EditableText({ value, placeholder, flagged, onSave, multiline, r
         placeholder={placeholder}
         onChange={onChange}
         onBlur={commit}
-        className={`w-full resize-y rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-xs leading-relaxed text-gray-900 placeholder:text-gray-400 focus:border-[#15DCFF]/40 focus:bg-gray-50 focus:outline-none dark:border-white/12 dark:bg-white/6 dark:text-white dark:placeholder:text-white/45 dark:focus:bg-white/8 2xl:px-3.5 2xl:text-13 ${flaggedBorder(flagged)}`}
+        className={`${TEXTAREA} ${flaggedBorder(flagged)}`}
       />
     );
   }
 
   return (
-    <DarkInput
+    <input
       type="text"
       value={draft}
       placeholder={placeholder}
@@ -119,7 +165,7 @@ export function EditableText({ value, placeholder, flagged, onSave, multiline, r
           setDraft(value ?? '');
         }
       }}
-      className={flaggedBorder(flagged)}
+      className={`${INPUT} ${flaggedBorder(flagged)}`}
     />
   );
 }
@@ -147,10 +193,8 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
           {list.map((item, i) => (
             <span
               key={`${item}-${i}`}
-              className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border py-1 pr-1.5 pl-2.5 text-xs ${
-                flagged
-                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                  : 'border-gray-200 bg-gray-100 text-gray-700 dark:border-white/10 dark:bg-white/6 dark:text-white/85'
+              className={`inline-flex max-w-full items-center gap-1.5 py-1 pr-1.5 pl-2.5 ${CHIP} ${
+                flagged ? FLAG_BORDER : ''
               }`}
             >
               <span className="min-w-0 truncate">{item}</span>
@@ -158,7 +202,7 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
                 type="button"
                 onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
                 aria-label={`Remove ${item}`}
-                className="shrink-0 text-gray-400 transition-colors hover:text-gray-900 dark:text-white/45 dark:hover:text-white"
+                className="shrink-0 text-[#9CA3AF] transition-colors hover:text-[#111827] dark:text-[#8B939E] dark:hover:text-[#ECEFF3]"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -167,7 +211,7 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
         </div>
       )}
       {list.length < max && (
-        <DarkInput
+        <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -178,6 +222,7 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
           }}
           onBlur={add}
           placeholder={placeholder}
+          className={`${INPUT} ${flaggedBorder(flagged)}`}
         />
       )}
     </div>
@@ -186,7 +231,14 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
 
 // ─── Select ──────────────────────────────────────────────────────────────────
 
-export function SelectField({ value, options, onChange, flagged, placeholder = 'Select…', disabled }) {
+export function SelectField({
+  value,
+  options,
+  onChange,
+  flagged,
+  placeholder = 'Select…',
+  disabled,
+}) {
   // The project's shadcn Select, the same primitive Full control's
   // InputCommonDropdown and the shared CommonDropdown are built on. A native
   // <select> was wrong here for reasons that are not cosmetic: it cannot be
@@ -199,22 +251,16 @@ export function SelectField({ value, options, onChange, flagged, placeholder = '
   return (
     <Select value={value || ''} onValueChange={(v) => onChange?.(v)} disabled={disabled || empty}>
       <SelectTrigger
-        className={`h-9! w-full rounded-xl border bg-gray-100 px-3 text-xs text-gray-900 shadow-none dark:bg-white/6 dark:text-white 2xl:h-10! 2xl:text-13 ${
-          flagged
-            ? 'border-amber-500/60 dark:border-amber-500/50'
-            : 'border-gray-300 dark:border-white/12'
-        } ${disabled || empty ? 'cursor-not-allowed opacity-60' : ''}`}
+        className={`${CONTROL_H}! w-full ${CONTROL} px-3 shadow-none ${VALUE} ${flaggedBorder(
+          flagged,
+        )} ${disabled || empty ? 'cursor-not-allowed opacity-60' : ''}`}
       >
         <SelectValue placeholder={empty ? 'Nothing to choose from' : placeholder} />
       </SelectTrigger>
 
-      <SelectContent className="z-9999 max-h-72 border border-black/10 bg-white text-gray-900 dark:border-white/20 dark:bg-[#14181D] dark:text-white">
+      <SelectContent className={`z-9999 max-h-72 ${MENU}`}>
         {options.map((o) => (
-          <SelectItem
-            key={o.value}
-            value={o.value}
-            className="text-xs 2xl:text-13 dark:focus:bg-white/10"
-          >
+          <SelectItem key={o.value} value={o.value} className={MENU_ITEM}>
             {o.label}
           </SelectItem>
         ))}
@@ -225,8 +271,8 @@ export function SelectField({ value, options, onChange, flagged, placeholder = '
 
 // ─── Toggle pills ────────────────────────────────────────────────────────────
 
-// Selected uses Autopilot's cyan tint (the same treatment DateRangeFilter gives
-// an active filter) — on this surface cyan consistently means "this one is on".
+// Selected is indigo — the same indigo as the primary button, and the only
+// other place it appears. On this surface indigo means "this one is on".
 export function TogglePill({ on, onClick, disabled, children }) {
   return (
     <button
@@ -234,11 +280,7 @@ export function TogglePill({ on, onClick, disabled, children }) {
       onClick={onClick}
       disabled={disabled}
       aria-pressed={on}
-      className={`h-8 rounded-xl border px-3 text-xs font-medium transition-all disabled:opacity-50 2xl:text-13 ${
-        on
-          ? 'border-[#15DCFF]/30 bg-[#15DCFF]/10 text-[#15DCFF]'
-          : 'border-gray-200 bg-gray-100 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white/70 dark:hover:border-white/20 dark:hover:text-white'
-      }`}
+      className={`${on ? PILL_ON : PILL} disabled:cursor-not-allowed disabled:opacity-40`}
     >
       {children}
     </button>
@@ -251,39 +293,38 @@ export function PillGroup({ children }) {
 
 // ─── Stepper ─────────────────────────────────────────────────────────────────
 
+// One segmented control rather than three floating parts — minus, the number,
+// plus, inside a single 36px shell with internal hairlines.
 export function Stepper({ value, onChange, min = 1, max = 20, suffix }) {
   const current = Number.isFinite(Number(value)) ? Number(value) : min;
   const set = (n) => onChange?.(Math.min(max, Math.max(min, n)));
-  const btn = `flex h-9 w-9 items-center justify-center ${CONTROL} transition-colors hover:border-gray-400 disabled:opacity-40 dark:hover:border-white/25 2xl:h-10 2xl:w-10`;
+  const step =
+    'grid w-9 place-items-center self-stretch text-[#6B7280] transition-colors hover:text-[#111827] disabled:cursor-not-allowed disabled:opacity-35 dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]';
 
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => set(current - 1)}
-        disabled={current <= min}
-        aria-label="Decrease"
-        className={btn}
-      >
-        <Minus className="h-3.5 w-3.5" />
-      </button>
-      <span className="min-w-9 text-center text-13 font-bold text-gray-900 tabular-nums dark:text-white">
-        {current}
-      </span>
-      <button
-        type="button"
-        onClick={() => set(current + 1)}
-        disabled={current >= max}
-        aria-label="Increase"
-        className={btn}
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-      {suffix && (
-        <span className="ml-1 text-10 tracking-wider text-gray-500 uppercase dark:text-white/55 2xl:text-[11px]">
-          {suffix}
-        </span>
-      )}
+    <div className="flex items-center gap-2.5">
+      <div className={`inline-flex ${CONTROL_H} items-center overflow-hidden ${CONTROL}`}>
+        <button
+          type="button"
+          onClick={() => set(current - 1)}
+          disabled={current <= min}
+          aria-label="Decrease"
+          className={`${step} border-r ${RULE_BORDER}`}
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </button>
+        <span className={`min-w-11 px-1 text-center text-sm font-semibold ${NUM}`}>{current}</span>
+        <button
+          type="button"
+          onClick={() => set(current + 1)}
+          disabled={current >= max}
+          aria-label="Increase"
+          className={`${step} border-l ${RULE_BORDER}`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {suffix && <span className={MUTED}>{suffix}</span>}
     </div>
   );
 }
@@ -315,7 +356,7 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       {list.map((hex, i) => (
         <span key={`${hex}-${i}`} className="group relative">
           <input
@@ -324,13 +365,13 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
             onChange={(e) => replaceAt(i, e.target.value)}
             title={hex}
             aria-label={`Brand colour ${hex}`}
-            className="h-9 w-9 cursor-pointer rounded-xl border border-gray-300 bg-transparent p-0.5 dark:border-white/12 2xl:h-10 2xl:w-10"
+            className={`h-7 w-7 cursor-pointer bg-transparent p-0 ${THUMB}`}
           />
           <button
             type="button"
             onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
             aria-label={`Remove ${hex}`}
-            className="absolute -top-1.5 -right-1.5 hidden h-4 w-4 place-items-center rounded-full bg-gray-900 text-white group-hover:grid dark:bg-white dark:text-black"
+            className="absolute -top-1.5 -right-1.5 hidden h-4 w-4 place-items-center rounded-full bg-[#111827] text-white group-hover:grid dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
           >
             <X className="h-2.5 w-2.5" />
           </button>
@@ -338,10 +379,7 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
       ))}
 
       {list.length < max && (
-        <label
-          title="Add a colour"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-400 transition-colors hover:border-[#15DCFF]/40 hover:text-[#15DCFF] dark:border-white/15 dark:text-white/45 2xl:h-10 2xl:w-10"
-        >
+        <label title="Add a colour" className={`grid h-7 w-7 cursor-pointer place-items-center ${THUMB_ADD}`}>
           <Plus className="h-3.5 w-3.5" />
           <input
             type="color"
@@ -356,22 +394,44 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
           />
         </label>
       )}
+
+      <span className={`ml-1 ${FAINT} ${NUM}`}>
+        {list.length}/{max}
+      </span>
     </div>
   );
 }
 
 // ─── Disclosure ──────────────────────────────────────────────────────────────
 
-// Autopilot's CollapsibleCard. Progressive disclosure is what keeps this screen
-// from turning back into v1's six-modal form: everything inside is already
-// filled in, one click away, never a blocker.
+// Kept for the surfaces that still want a card that folds. Inside Adjust the
+// sections no longer fold at all — the user asked for everything open — so
+// this is now only used where a genuinely optional block hangs off a screen.
 export function Disclosure({ title, hint, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <CollapsibleCard title={title} preview={hint} defaultOpen={defaultOpen}>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 2xl:grid-cols-3">
-        {children}
-      </div>
-    </CollapsibleCard>
+    <div className={`overflow-hidden ${CARD}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+      >
+        <span className="flex min-w-0 items-baseline gap-2.5">
+          <span className={SECTION}>{title}</span>
+          {!open && hint && <span className={`min-w-0 truncate ${MUTED}`}>{hint}</span>}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-[#9CA3AF] transition-transform dark:text-[#8B939E] ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+      {open && (
+        <div className={`border-t px-5 pt-4 pb-5 ${RULE_BORDER}`}>
+          <FieldGrid cols={3}>{children}</FieldGrid>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -450,14 +510,14 @@ export function ImageStrip({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {list.map((url, i) => (
           <span key={`${url}-${i}`} className="group relative">
             <img
               src={url}
               alt=""
               loading="lazy"
-              className="h-14 w-14 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-white/10 dark:bg-white/6"
+              className={`h-11 w-11 ${THUMB}`}
               onError={(e) => {
                 e.currentTarget.style.opacity = '0.25';
               }}
@@ -466,7 +526,7 @@ export function ImageStrip({
               type="button"
               onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
               aria-label="Remove image"
-              className="absolute -top-1.5 -right-1.5 hidden h-5 w-5 place-items-center rounded-full bg-gray-900 text-white group-hover:grid dark:bg-white dark:text-black"
+              className="absolute -top-1.5 -right-1.5 hidden h-5 w-5 place-items-center rounded-full bg-[#111827] text-white group-hover:grid dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
             >
               <X className="h-3 w-3" />
             </button>
@@ -478,15 +538,12 @@ export function ImageStrip({
         {!full && uploadFile && (
           <label
             title="Upload from device"
-            className="flex h-14 w-14 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-gray-300 text-gray-400 transition-colors hover:border-[#15DCFF]/40 hover:text-[#15DCFF] dark:border-white/15 dark:text-white/45"
+            className={`grid h-11 w-11 cursor-pointer place-items-center ${THUMB_ADD}`}
           >
             {busy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <>
-                <Plus className="h-3.5 w-3.5" />
-                <span className="text-10">Upload</span>
-              </>
+              <Plus className="h-3.5 w-3.5" />
             )}
             <input
               type="file"
@@ -502,41 +559,25 @@ export function ImageStrip({
           </label>
         )}
 
-        {list.length === 0 && !uploadFile && (
-          <p className="rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-xs text-gray-400 dark:border-white/12 dark:text-white/45 2xl:text-13">
-            {emptyLabel}
-          </p>
-        )}
+        {list.length === 0 && !uploadFile && <p className={FAINT}>{emptyLabel}</p>}
 
-        <span className="ml-auto shrink-0 text-10 text-gray-400 tabular-nums dark:text-white/40">
-          {list.length} / {max}
+        <span className={`ml-1 ${FAINT} ${NUM}`}>
+          {list.length}/{max}
         </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {!full && (
-          <button
-            type="button"
-            onClick={() => setShowUrl((v) => !v)}
-            className="text-xs font-semibold text-[#6b72f8] underline underline-offset-2 dark:text-[#aeb6ff]"
-          >
+          <button type="button" onClick={() => setShowUrl((v) => !v)} className={BTN_LINK}>
             Add from URL
           </button>
         )}
         {!full && onAddCompetitors && (
-          <button
-            type="button"
-            onClick={onAddCompetitors}
-            className="text-xs font-semibold text-[#6b72f8] underline underline-offset-2 dark:text-[#aeb6ff]"
-          >
+          <button type="button" onClick={onAddCompetitors} className={BTN_LINK}>
             Use a competitor&apos;s ad
           </button>
         )}
-        {full && (
-          <span className="text-xs text-gray-400 dark:text-white/45">
-            {max} is the maximum — remove one to add another.
-          </span>
-        )}
+        {full && <span className={FAINT}>{max} is the maximum — remove one to add another.</span>}
       </div>
 
       {showUrl && !full && (
@@ -552,12 +593,12 @@ export function ImageStrip({
                 addUrl();
               }
             }}
-            className="h-9 min-w-0 flex-1 rounded-xl border border-gray-300 bg-gray-100 px-3 text-13 text-gray-900 outline-none focus:border-[#15DCFF]/40 dark:border-white/12 dark:bg-white/6 dark:text-white"
+            className={`min-w-0 flex-1 ${INPUT}`}
           />
           <button
             type="button"
             onClick={addUrl}
-            className="h-9 shrink-0 rounded-xl bg-gray-900 px-3 text-13 font-semibold text-white dark:bg-white dark:text-black"
+            className={`shrink-0 ${CONTROL_H} rounded-lg bg-[#02C8C4] px-3.5 text-13 font-semibold text-[#062024] dark:bg-[#15DCFF]`}
           >
             Add
           </button>
@@ -565,11 +606,9 @@ export function ImageStrip({
       )}
 
       {error ? (
-        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-13 text-[#DC2626] dark:text-[#F87171]">{error}</p>
       ) : (
-        uploadFile && (
-          <p className="text-xs text-gray-400 dark:text-white/45">Supported: {formatHint}</p>
-        )
+        uploadFile && <p className={FAINT}>Supported: {formatHint}</p>
       )}
     </div>
   );

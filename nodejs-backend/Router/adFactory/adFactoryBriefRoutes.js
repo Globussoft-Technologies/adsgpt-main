@@ -31,6 +31,10 @@ router.post("/adopt/:campaignId", authenticateJWT, ctrl.adoptCampaign);
 // win, and kept as POSTs because each one creates or changes something.
 router.post("/:id/generate", authenticateJWT, requireBasePlan, actions.generateFromBrief);
 router.post("/:id/activate", authenticateJWT, requireBasePlan, actions.activateBrief);
+// The manual half — v1's "Post Ad", which Quick setup shipped without. Posts
+// the ads the user is looking at, once, and creates no job. Gated like every
+// other path that spends: it puts real ads live against a real budget.
+router.post("/:id/publish", authenticateJWT, requireBasePlan, actions.publishBrief);
 // Ungated, and deliberately so: stopping is how a user STOPS spending. Putting
 // a plan check between someone and the off switch is the one place gating would
 // actively cost them money.

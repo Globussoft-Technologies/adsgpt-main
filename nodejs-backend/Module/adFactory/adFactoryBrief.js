@@ -196,6 +196,13 @@ const AdFactoryBriefSchema = new mongoose.Schema(
     // from `campaign.metadata.jobId` so the deliveries screen is one read.
     jobId: { type: String, default: null },
 
+    // The last time the user posted this brief's ads MANUALLY — the one-off
+    // path, which creates no job. Distinct from `jobId`: a brief can have been
+    // published a dozen times and still not be `live`, because `live` means a
+    // running schedule. Kept so the screen can say "posted 2 hours ago" instead
+    // of offering the button as if nothing had happened.
+    lastPublishedAt: { type: Date, default: null },
+
     source: { type: SourceSchema, default: () => ({}) },
     brand: { type: BrandSchema, default: () => ({}) },
     offer: { type: OfferSchema, default: () => ({}) },

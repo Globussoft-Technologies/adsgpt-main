@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Plus, X } from 'lucide-react';
+import { CHIP, CONTROL, FAINT, FOCUS_WITHIN, LABEL } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // AlertEmails — who hears about each cycle.
@@ -52,17 +53,15 @@ export default function AlertEmails({ value = [], onChange, disabled = false }) 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Mail className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/45" />
-        <span className="text-10 font-extrabold tracking-wider text-gray-400 dark:text-white/45">
-          EMAIL ME AFTER EACH RUN
-        </span>
+        <Mail className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF] dark:text-[#8B939E]" />
+        <span className={LABEL}>Email me after each run</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {emails.map((email) => (
           <span
             key={email}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 py-1.5 pr-2 pl-3 text-13 text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white"
+            className={`inline-flex items-center gap-1.5 py-1.5 pr-2 pl-3 ${CHIP}`}
           >
             <span className="max-w-56 truncate">{email}</span>
             <button
@@ -70,7 +69,7 @@ export default function AlertEmails({ value = [], onChange, disabled = false }) 
               disabled={disabled}
               onClick={() => remove(email)}
               aria-label={`Remove ${email}`}
-              className="text-gray-400 transition hover:text-gray-900 disabled:opacity-50 dark:text-white/45 dark:hover:text-white"
+              className="text-[#9CA3AF] transition-colors hover:text-[#111827] disabled:opacity-50 dark:text-[#8B939E] dark:hover:text-[#ECEFF3]"
             >
               <X className="h-3 w-3" />
             </button>
@@ -78,7 +77,7 @@ export default function AlertEmails({ value = [], onChange, disabled = false }) 
         ))}
 
         {!full && (
-          <span className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-100 px-3 py-1.5 focus-within:border-[#6b72f8] dark:border-white/10 dark:bg-white/6">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${CONTROL} ${FOCUS_WITHIN}`}>
             <input
               type="email"
               value={draft}
@@ -98,14 +97,14 @@ export default function AlertEmails({ value = [], onChange, disabled = false }) 
                 }
               }}
               onBlur={add}
-              className="w-44 bg-transparent text-13 text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-60 dark:text-white dark:placeholder:text-white/35"
+              className="w-44 bg-transparent text-13 outline-none placeholder:text-[#9CA3AF] disabled:opacity-60 dark:placeholder:text-[#6C7480]"
             />
             <button
               type="button"
               disabled={disabled || !draft.trim()}
               onClick={add}
               aria-label="Add recipient"
-              className="text-gray-400 transition hover:text-gray-900 disabled:opacity-30 dark:text-white/45 dark:hover:text-white"
+              className="text-[#9CA3AF] transition-colors hover:text-[#111827] disabled:opacity-30 dark:text-[#8B939E] dark:hover:text-[#ECEFF3]"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -113,10 +112,10 @@ export default function AlertEmails({ value = [], onChange, disabled = false }) 
         )}
       </div>
 
-      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-13 text-red-600 dark:text-red-400">{error}</p>}
 
       {!error && (
-        <p className="text-xs text-gray-400 dark:text-white/45">
+        <p className={FAINT}>
           {emails.length === 0
             ? 'Optional — nobody is emailed unless you add an address.'
             : full

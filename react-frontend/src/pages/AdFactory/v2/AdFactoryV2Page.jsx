@@ -15,11 +15,24 @@ import RunPicker, { CURRENT } from '@/components/AdFactory/v2/RunPicker';
 import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
 import SchedulePanel from '@/components/AdFactory/v2/SchedulePanel';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
-import LaunchConnection, {
+import ShipTheseAds from '@/components/AdFactory/v2/ShipTheseAds';
+import {
   emptyConnection,
   isConnectionComplete,
 } from '@/components/AdFactory/v2/LaunchConnection';
 import { Notice, PrimaryBtn } from '@/components/AdFactory/v2/Panel';
+import {
+  BTN_LINK,
+  CARD,
+  CONTROL_H,
+  FAINT,
+  FOCUS_WITHIN,
+  LABEL,
+  MUTED,
+  NUM,
+  PLACEHOLDER,
+  VALUE,
+} from '@/components/AdFactory/v2/_tokens';
 import AdFactoryBgEffect from '@/components/AdFactory/NodeForms/AdFactoryBgEffect';
 import { useMotionPresets } from '@/components/AdFactory/v2/_motion';
 
@@ -33,6 +46,7 @@ import {
   setAutomationPaused,
   stopAutomation,
   runNow,
+  publishNow,
   fetchBriefs,
   removeBrief,
   fetchTimeline,
@@ -42,6 +56,7 @@ import {
   briefReady,
   clearBriefError,
   clearNeedsRefetch,
+  clearPublishState,
   resetBrief,
   setPendingBudget,
   selectBrief,
@@ -62,6 +77,9 @@ import {
   selectIsPausing,
   selectIsRunningNow,
   selectRunNowQueued,
+  selectPublishing,
+  selectPublishResult,
+  selectPublishError,
   selectBriefs,
   selectBriefsLoading,
 } from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
@@ -109,6 +127,10 @@ export default function AdFactoryV2Page() {
   // not the plumbing or the UI's current state.
   const [connection, setConnection] = useState(emptyConnection);
   const [scheduleOn, setScheduleOn] = useState(false);
+  // The manual path. Mutually exclusive with the schedule card by design —
+  // both answer "what happens to these ads next", and two open cards asking
+  // that at once is the duplication we just spent a pass removing.
+  const [shipOn, setShipOn] = useState(false);
   // NOTE: the cadence is NOT local state. It used to be — `frequency` lived in
   // a useState here — which meant the dropdown changed the UI and nothing else:
   // `activateBrief` builds its payload server-side from the STORED brief, so
@@ -146,6 +168,9 @@ export default function AdFactoryV2Page() {
   const pausing = useSelector(selectIsPausing);
   const runningNow = useSelector(selectIsRunningNow);
   const runNowQueued = useSelector(selectRunNowQueued);
+  const publishing = useSelector(selectPublishing);
+  const publishResult = useSelector(selectPublishResult);
+  const publishError = useSelector(selectPublishError);
   const briefs = useSelector(selectBriefs);
   const briefsLoading = useSelector(selectBriefsLoading);
   const { loading, saving, activating } = useSelector((s) => s.adFactoryBrief);
@@ -480,6 +505,7 @@ export default function AdFactoryV2Page() {
   // moving to it just looks like the button did nothing.
   const scheduleRef = useRef(null);
   const handleWantSchedule = useCallback(() => {
+    setShipOn(false);
     setScheduleOn(true);
     requestAnimationFrame(() => {
       scheduleRef.current?.scrollIntoView({
@@ -488,6 +514,28 @@ export default function AdFactoryV2Page() {
       });
     });
   }, [M.reduce]);
+
+  // Opening one closes the other. Scrolls for the same reason the schedule
+  // card does: summoning something below the fold looks like nothing happened.
+  const shipRef = useRef(null);
+  const handleWantShip = useCallback(() => {
+    setScheduleOn(false);
+    setShipOn(true);
+    requestAnimationFrame(() => {
+      shipRef.current?.scrollIntoView({
+        behavior: M.reduce ? 'auto' : 'smooth',
+        block: 'center',
+      });
+    });
+  }, [M.reduce]);
+
+  const handlePublish = useCallback(
+    ({ mode, campaignId, adSetId }) => {
+      if (!briefId) return;
+      dispatch(publishNow({ briefId, connection, mode, campaignId, adSetId }));
+    },
+    [dispatch, briefId, connection],
+  );
 
   const handlePause = useCallback(
     (paused) => {
@@ -597,12 +645,34 @@ export default function AdFactoryV2Page() {
   // No header here: the page title comes from TopHeader and the mode switch is
   // owned by AdFactoryPage, so both modes share exactly one of each.
   return (
-    <div className="relative flex h-full w-full flex-col gap-5 overflow-y-auto pt-2 pb-10">
+    <div className="relative isolate flex h-full w-full flex-col gap-5 overflow-y-auto pt-2 pb-10">
       {/* The same background Full control uses — one Ad Factory, one backdrop.
           Mounted per-surface, which is the pattern every v1 screen already
           follows (NoCompaignScreen, StartForm, NodeModal all mount their own).
-          It is `fixed`, so it stays put while this column scrolls. */}
-      <AdFactoryBgEffect />
+          It is `fixed`, so it stays put while this column scrolls.
+
+          The wrapper is load-bearing, not tidiness. AdFactoryBgEffect's own
+          elements are `fixed z-0`, and a POSITIONED element at z-0 paints above
+          non-positioned content regardless of document order — so the blue
+          gradient and the bottom-effect SVG were being drawn ON TOP of every
+          card on this page. The cards are solid #14181D; they only looked
+          washed out and semi-transparent because a full-opacity glow was
+          sitting over them.
+
+          A positioned wrapper with a negative z-index makes its own stacking
+          context and pulls the fixed children into it, putting the whole
+          backdrop behind the content. Wrapping here rather than editing
+          AdFactoryBgEffect keeps v1 — which mounts the same component into
+          differently stacked screens — untouched.
+
+          `isolate` on the page root above is the other half. Without it the
+          negative z-index would resolve against the ROOT stacking context and
+          the glow would paint behind `.layout_container`'s light-mode
+          background — visible in dark, gone in light. Isolating scopes it to
+          this page, so both themes keep the backdrop they had. */}
+      <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
+        <AdFactoryBgEffect />
+      </div>
 
       {error && (
         <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
@@ -614,7 +684,7 @@ export default function AdFactoryV2Page() {
                 // dead end.
                 <a
                   href="/pricing"
-                  className="font-semibold text-[#6b72f8] underline underline-offset-2 dark:text-[#aeb6ff]"
+                  className={BTN_LINK}
                 >
                   See plans
                 </a>
@@ -641,7 +711,7 @@ export default function AdFactoryV2Page() {
           <button
             type="button"
             onClick={handleStartOver}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-white/55 dark:hover:text-white"
+            className="inline-flex items-center gap-1.5 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All briefs
@@ -738,21 +808,25 @@ export default function AdFactoryV2Page() {
 
           {/* Before the first run: the budget and one button. This is the only
               thing standing between a read page and ads, and it is input 2 of
-              2 — normally already answered on the wait screen. */}
+              2 — normally already answered on the wait screen.
+
+              One bar, one row, controls aligned on a baseline: what it costs
+              per day, what this press costs once, and the press. It used to be
+              a two-column card with a stacked caption under the input and an
+              uppercase micro-label over every value, which put four
+              differently-sized pieces of type around a single button. */}
           {!generating && !hasCreatives && (
-            <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#14181D]">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
-                  Daily budget
-                </span>
+            <div className={`flex flex-wrap items-end gap-x-8 gap-y-4 ${CARD} px-5 py-4`}>
+              <div className="flex flex-col gap-2">
+                <span className={LABEL}>Daily budget</span>
                 <div
-                  className={`flex h-10 w-44 items-center gap-1.5 rounded-xl border bg-gray-100 px-3 focus-within:border-[#15DCFF]/40 dark:bg-white/6 ${
+                  className={`flex ${CONTROL_H} w-40 items-center gap-1.5 rounded-lg border bg-white px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${
                     canGenerate
-                      ? 'border-gray-300 dark:border-white/12'
-                      : 'border-amber-500/50 dark:border-amber-500/40'
+                      ? 'border-[#E5E7EB] dark:border-[#2E353E]'
+                      : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
                   }`}
                 >
-                  <span className="text-13 text-gray-400 dark:text-white/45">₹</span>
+                  <span className={FAINT}>₹</span>
                   <input
                     type="number"
                     min="1"
@@ -761,13 +835,10 @@ export default function AdFactoryV2Page() {
                     onChange={(e) => dispatch(setPendingBudget(e.target.value))}
                     onBlur={persistBudget}
                     placeholder="800"
-                    className="w-full min-w-0 bg-transparent text-13 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/45"
+                    className={`w-full min-w-0 bg-transparent outline-none ${VALUE} ${PLACEHOLDER} ${NUM}`}
                   />
-                  <span className="shrink-0 text-10 text-gray-400 dark:text-white/45">/day</span>
+                  <span className={`shrink-0 ${FAINT}`}>/day</span>
                 </div>
-                <span className="text-xs text-gray-500 dark:text-white/55">
-                  Nothing spends until you start deliveries.
-                </span>
               </div>
 
               {/* What this click costs, BEFORE it is clicked.
@@ -777,24 +848,29 @@ export default function AdFactoryV2Page() {
                   projection the freeze uses, so the quote and the charge cannot
                   disagree; `null` means unpriceable, and we say nothing rather
                   than imply it is free. */}
-              <div className="flex flex-wrap items-center gap-4">
-                {estimate?.total != null && (
-                  <span className="flex flex-col gap-0.5 text-right">
-                    <span className="text-10 font-extrabold tracking-wider text-gray-400 uppercase dark:text-white/40">
-                      Estimated cost
+              {estimate?.total != null && (
+                <div className="flex flex-col gap-2">
+                  <span className={LABEL}>This run costs</span>
+                  <span className={`flex ${CONTROL_H} items-baseline gap-2`}>
+                    <span
+                      className={`text-[17px] font-semibold tracking-[-0.017em] text-[#111827] dark:text-[#ECEFF3] ${NUM}`}
+                    >
+                      {estimate.total}
                     </span>
-                    <span className="text-13 text-gray-500 dark:text-white/55">
-                      <b className="text-gray-900 tabular-nums dark:text-white">
-                        ~{estimate.total}
-                      </b>{' '}
+                    <span className={MUTED}>
                       credits
                       {estimate.counts
                         ? ` · ${estimate.counts.image} images + ${estimate.counts.text} copies`
                         : ''}
                     </span>
                   </span>
-                )}
+                </div>
+              )}
 
+              <span className="grow" />
+
+              <div className="flex flex-col items-end gap-2">
+                <span className={FAINT}>Nothing spends until you start deliveries.</span>
                 <PrimaryBtn onClick={handleGenerate} disabled={!canGenerate} busy={saving}>
                   Generate ads
                 </PrimaryBtn>
@@ -816,11 +892,40 @@ export default function AdFactoryV2Page() {
             ratio={brief.delivery?.ratios?.[0] || '4:5'}
             onRegenerate={handleGenerate}
             onContinue={handleWantSchedule}
+            onShip={isViewingPast ? undefined : handleWantShip}
+            shipping={publishing}
             regenerating={generating}
             creditsHeld={isViewingPast ? null : estimate?.total ?? null}
             estimate={isViewingPast ? null : estimate?.total ?? null}
             readOnly={isViewingPast}
           />
+
+          {/* The manual half — post the ads on screen, once. Rendered only
+              when asked for, from the preview strip's own button, and never
+              alongside the schedule card. */}
+          {hasCreatives && shipOn && (
+            <div ref={shipRef}>
+              <ShipTheseAds
+                adCount={run?.pairs?.length || 0}
+                connection={connection}
+                onConnectionChange={setConnection}
+                objectiveLabel={objectiveLabel}
+                budget={budget}
+                onPublish={handlePublish}
+                publishing={publishing}
+                result={publishResult}
+                error={publishError}
+                onDismissResult={() => {
+                  setShipOn(false);
+                  dispatch(clearPublishState());
+                }}
+                onClose={() => {
+                  setShipOn(false);
+                  dispatch(clearPublishState());
+                }}
+              />
+            </div>
+          )}
 
           {/* ── 4 ── Only once there is something to schedule. Asking "keep
               these coming" before any ad exists asks the user to commit to
@@ -835,8 +940,15 @@ export default function AdFactoryV2Page() {
               together. On one page only one of them can be the control — the
               button leads here, and the toggle in this card's header is how you
               leave again. */}
+          {/* ONE card. The account pickers used to be a second panel below
+              this one, while this one carried a read-only checklist of the
+              same two values — so the page asked and answered the same
+              question in two different boxes, in the wrong order. The pickers
+              live inside "Where these publish" now, and the derived
+              adAccountLabel/pageLabel object that fed the checklist is gone
+              with it: the connection state goes straight in. */}
           {hasCreatives && scheduleOn && (
-            <div ref={scheduleRef} className="flex flex-col gap-4">
+            <div ref={scheduleRef}>
               <KeepTheseComing
                 enabled={scheduleOn}
                 onToggle={setScheduleOn}
@@ -849,12 +961,8 @@ export default function AdFactoryV2Page() {
                 onActivate={handleActivate}
                 activating={activating}
                 isMetaConnected={isConnectionComplete(connection)}
-                connection={{
-                  adAccountId: connection.adAccountId,
-                  adAccountLabel: connection.adAccountName,
-                  pageId: connection.pageId,
-                  pageLabel: connection.pageName,
-                }}
+                connection={connection}
+                onConnectionChange={setConnection}
                 pairsPerCycle={cadence.pairsPerCycle}
                 budget={budget}
                 hour={cadence.hour}
@@ -862,11 +970,6 @@ export default function AdFactoryV2Page() {
                 objectiveLabel={objectiveLabel}
                 creditsPerCycle={estimate?.total ?? null}
                 firstRunLabel={nextRunLabel}
-              />
-              <LaunchConnection
-                value={connection}
-                onChange={setConnection}
-                disabled={activating}
               />
             </div>
           )}

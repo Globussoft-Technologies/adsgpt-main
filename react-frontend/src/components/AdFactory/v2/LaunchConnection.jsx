@@ -5,9 +5,15 @@ import QuickTemplateSetup, {
   emptyAutoSetup,
   isAutoSetupComplete,
 } from '@/components/AdFactory/Automation/QuickTemplateSetup';
+import { LABEL } from './_tokens';
 
 // ----------------------------------------------------------------------------
 // LaunchConnection — the four ids activation needs, and nothing more.
+//
+// NOT a card. It renders bare fields and is embedded inside KeepTheseComing's
+// "Where these publish" band, which supplies the heading and the surface. It
+// used to be its own panel below that card, which put the account PICKERS in
+// one box and a read-only report of the same two values in another.
 //
 //   facebookId + connectionId  which Meta account we post through
 //   adAccountId + pageId       which account pays, which Page it runs under
@@ -76,20 +82,9 @@ export default function LaunchConnection({ value, onChange, disabled = false }) 
   );
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/2">
-      <div className="flex flex-col gap-0.5">
-        <h3 className="text-13 font-semibold text-gray-900 dark:text-white">
-          Where these publish
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-white/55">
-          We&apos;ll set up the campaign itself — you just pick the account and Page.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-medium text-gray-700 dark:text-white/80">
-          Meta account
-        </span>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <span className={LABEL}>Meta account</span>
         <FacebookAccountSelector
           userId={userData?.user_id}
           preferredFacebookId={conn.facebookId}
