@@ -481,6 +481,12 @@ exports.generateImage = async (req, res) => {
             } catch (err) {
                 logger.error(`[Python API] Failed - ${value.type} - sessionId: ${imageId} - Status: ${err.response?.status}`);
                 logger.error(`[Python API] Error:`, err.response?.data?.error || err.message);
+                const rawPythonMessage = typeof err.response?.data === "string"
+                    ? err.response.data
+                    : err.response?.data
+                        ? JSON.stringify(err.response.data)
+                        : "<empty>";
+                logger.error(`[Python API] Raw response body: ${rawPythonMessage}`);
 
                 // Python rejected → refund freeze + clean up.
                 await UnifiedCreditController.releaseCredits(imageId);
