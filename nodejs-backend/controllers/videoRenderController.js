@@ -383,13 +383,15 @@ async function videoRender(req, res) {
           const boxH = details.computedHeight * heightScale;
 
           let angle = 0;
-          if (details.details?.transform?.includes('rotate(')) {
-            const rotateMatch = details.details.transform.slice(0, 200).match(/rotate\(([^()]{1,50})\)/);
-            if (rotateMatch) angle = parseFloat(rotateMatch[1].replace('deg', ''));
-          } else if (details.transform?.includes('rotate(')) {
-            const rotateMatch = details.transform.slice(0, 200).match(/rotate\(([^()]{1,50})\)/);
-            if (rotateMatch) angle = parseFloat(rotateMatch[1].replace('deg', ''));
-          } else if (details.transformMatrix?.startsWith('matrix(')) {
+          const transformVal = typeof details.details?.transform === 'string'
+            ? details.details.transform
+            : typeof details.transform === 'string'
+            ? details.transform
+            : '';
+          if (transformVal.includes('rotate(')) {
+            const rotateMatch = transformVal.slice(0, 200).match(/rotate\((-?\d+(?:\.\d+)?(?:deg)?)\)/i);
+            if (rotateMatch) angle = parseFloat(rotateMatch[1].replace(/deg/i, ''));
+          } else if (typeof details.transformMatrix === 'string' && details.transformMatrix.startsWith('matrix(')) {
             const matrix = details.transformMatrix.slice(7, -1).split(',').map(Number);
             if (matrix.length === 6) {
               const a = matrix[0], b = matrix[1];

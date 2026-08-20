@@ -35,25 +35,37 @@ const cookieDomain = () => {
     : window.location.hostname;
 };
 
-const isSafeRedirectUrl = (urlStr) => {
-  if (!urlStr || typeof urlStr !== 'string') return false;
-  const clean = urlStr.trim();
-  if (/^(javascript|data|vbscript):/i.test(clean)) return false;
+const getSafeRedirectTarget = (targetUrl, fallback = '/') => {
+  if (!targetUrl || typeof targetUrl !== 'string') return fallback;
+  const clean = targetUrl.trim();
+  if (/^(javascript|data|vbscript):/i.test(clean)) return fallback;
   if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) {
-    return true;
+    return clean;
   }
   try {
-    const parsed = new URL(clean, window.location.origin);
-    if (parsed.origin === window.location.origin) return true;
+    const allowedOrigins = new Set([window.location.origin]);
     if (HOST) {
-      const hostOrigin = new URL(HOST, window.location.origin).origin;
-      if (parsed.origin === hostOrigin) return true;
+      try { allowedOrigins.add(new URL(HOST, window.location.origin).origin); } catch {
+        // Error is completely empty
+      }
+    }
+    if (AMEMBER_URL) {
+      try { allowedOrigins.add(new URL(AMEMBER_URL, window.location.origin).origin); } catch {
+        // Error is completely empty
+      }
+    }
+
+    const parsed = new URL(clean, window.location.origin);
+    if (allowedOrigins.has(parsed.origin)) {
+      return parsed.href;
     }
   } catch {
-    return false;
+    // Error is completely empty
   }
-  return false;
+  return fallback;
 };
+
+const isSafeRedirectUrl = (urlStr) => getSafeRedirectTarget(urlStr, null) !== null;
 
 const OAuthRelayPage = () => {
   const [message, setMessage] = useState('Signing you in…');
@@ -71,13 +83,13 @@ const OAuthRelayPage = () => {
       return;
     }
 
-    const safeReturnTo = isSafeRedirectUrl(returnTo) ? returnTo : '/';
+    const safeReturnTo = getSafeRedirectTarget(returnTo, '/');
 
     (async () => {
       // Case 1 — already signed in to AdsGPT. Forward immediately.
       const existingToken = Cookies.get('access-token');
       if (existingToken) {
-        window.location.href = safeReturnTo;
+        window.location.assign(safeReturnTo);
         return;
       }
 
@@ -125,7 +137,7 @@ const OAuthRelayPage = () => {
           Cookies.remove('amember_login', { domain, path: '/' });
           Cookies.remove('amember_pass', { domain, path: '/' });
 
-          window.location.href = safeReturnTo;
+          window.location.assign(safeReturnTo);
           return;
         } catch (err) {
           setIsError(true);
@@ -145,7 +157,8 @@ const OAuthRelayPage = () => {
         );
         return;
       }
-      window.location.href = `${AMEMBER_URL}/login?amember_redirect_url=${encodeURIComponent(self)}`;
+      const loginUrl = `${AMEMBER_URL}/login?amember_redirect_url=${encodeURIComponent(self)}`;
+      window.location.assign(getSafeRedirectTarget(loginUrl, '/'));
     })();
   }, []);
 

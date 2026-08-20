@@ -2999,8 +2999,8 @@ class GoogleAdController {
         "Content-Type": "application/json",
       };
 
-      // GAQL string literals escape embedded quotes by doubling them.
-      const safeName = String(name).replace(/'/g, "\\'");
+      // GAQL string literals escape backslashes and single quotes cleanly.
+      const safeName = String(name).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const query = `SELECT campaign.id, campaign.name FROM campaign WHERE campaign.name = '${safeName}' AND campaign.status != 'REMOVED' LIMIT 1`;
       const resp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,

@@ -18,6 +18,24 @@ import { Loader2 } from 'lucide-react';
  * / referer logs. Cookie is set on `.poweradspy.com` to match what
  * RunBackLog writes on a real aMember sign-in, so subdomain routing works.
  */
+const getSafeRedirectTarget = (targetUrl, fallback = '/autopilot') => {
+  if (!targetUrl || typeof targetUrl !== 'string') return fallback;
+  const clean = targetUrl.trim();
+  if (/^(javascript|data|vbscript):/i.test(clean)) return fallback;
+  if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) {
+    return clean;
+  }
+  try {
+    const parsed = new URL(clean, window.location.origin);
+    if (parsed.origin === window.location.origin) {
+      return parsed.href;
+    }
+  } catch {
+    // Error is completely empty
+  }
+  return fallback;
+};
+
 const DevAuthPage = () => {
   const [status, setStatus] = useState('setting');
   const [message, setMessage] = useState('');
@@ -57,18 +75,8 @@ const DevAuthPage = () => {
       // after the redirect. Then hop to the target page.
       window.history.replaceState(null, '', window.location.pathname);
       setStatus('ok');
-      const isSafeRedirectUrl = (urlStr) => {
-        if (!urlStr || typeof urlStr !== 'string') return false;
-        const clean = urlStr.trim();
-        if (/^(javascript|data|vbscript):/i.test(clean)) return false;
-        if (clean.startsWith('/') && !clean.startsWith('//') && !clean.startsWith('/\\')) return true;
-        try {
-          return new URL(clean, window.location.origin).origin === window.location.origin;
-        } catch {
-          return false;
-        }
-      };
-      window.location.href = isSafeRedirectUrl(to) ? to : '/';
+      const safeTarget = getSafeRedirectTarget(to, '/autopilot');
+      window.location.assign(safeTarget);
     } catch (err) {
       setStatus('error');
       setMessage(err && err.message ? err.message : String(err));

@@ -125,7 +125,7 @@ exports.updateAdCreativeConversation = async (data) => {
       );
 
       if (failedValue) {
-        images = Array(num).fill(failedValue);
+        images = Array(Math.min(num, 50)).fill(failedValue);
       }
       images.forEach((image, index) => {
         if (ads[index]) {

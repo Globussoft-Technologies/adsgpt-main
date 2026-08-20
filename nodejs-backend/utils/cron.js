@@ -132,16 +132,14 @@ const registerOAuthSigningKeyRotationCron = () => {
                 console.log(
                     `[oauth-keyrot] rotating (age=${Math.round(ageMs / 86400000)}d, threshold=${rotationDays}d)`,
                 );
-                const fresh = await oauthSigningKeyService.rotateSigningKey();
-                console.log(`[oauth-keyrot] new signing key kid=${fresh.kid}`);
+                await oauthSigningKeyService.rotateSigningKey();
+                console.log('[oauth-keyrot] signing key rotated successfully');
             }
         } catch (err) {
             console.error('[oauth-keyrot] cron tick failed:', err.message);
         }
     });
-    console.log(
-        `[oauth-keyrot] scheduler registered: rotate>${rotationDays}d`,
-    );
+    console.log('[oauth-keyrot] scheduler registered');
 };
 
 const runCronJobs = () => {

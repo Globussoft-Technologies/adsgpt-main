@@ -54,7 +54,9 @@ exports.checkAuth = async (req, res) => {
 exports.oauthRedirect = async (req, res) => {
   try {
     const { code, state } = req.query;
-    const { user_id, image_url } = fromBase64Url(state);
+    const payload = fromBase64Url(state);
+    if (!payload || typeof payload !== "object") return res.status(400).send("Invalid state parameter");
+    const { user_id, image_url } = payload;
     const codeVerifier = await redisClient.hget(
       `canva_user:${user_id}`,
       "codeVerifier"

@@ -12,17 +12,21 @@ exports.toBase64Url = (obj) => {
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/={1,2}$/, "");
+    .replace(/=/g, "");
 };
 
 exports.fromBase64Url = (str) => {
   if (typeof str !== "string") return null;
-  const padded = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
-  const json = Buffer.from(padded, "base64").toString("utf8");
-  return JSON.parse(json);
+  try {
+    const padded = str
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 };
 
 
@@ -34,7 +38,7 @@ exports.prepareOAuthResponse = async (user_id, image_url) => {
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/={1,2}$/, "");
+    .replace(/=/g, "");
 
   const statePayload = { user_id, image_url, nonce: crypto.randomBytes(16).toString("hex") };
   const state = exports.toBase64Url(statePayload);

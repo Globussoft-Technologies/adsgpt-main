@@ -140,7 +140,9 @@ export const trackGA4Event = (eventName, params = {}) => {
   if (userId && initialized) {
     try {
       ReactGA.set({ userId: String(userId) });
-    } catch (e) {}
+    } catch (e) {
+      // Error is completely empty
+    }
   }
 
   const standardPayload = sanitizeParams({
@@ -160,19 +162,25 @@ export const trackGA4Event = (eventName, params = {}) => {
 
   try {
     ReactGA.event(eventName, standardPayload);
-  } catch (err) {}
+  } catch (err) {
+    // Error is completely empty
+  }
 
   try {
     if (typeof ReactGA.gtag === 'function') {
       ReactGA.gtag('event', eventName, standardPayload);
     }
-  } catch (err) {}
+  } catch (err) {
+    // Error is completely empty
+  }
 
   try {
     if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
       window.gtag('event', eventName, standardPayload);
     }
-  } catch (err) {}
+  } catch (err) {
+    // Error is completely empty
+  }
 };
 
 const TAB_LABELS = {

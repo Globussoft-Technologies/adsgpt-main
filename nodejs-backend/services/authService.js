@@ -68,9 +68,8 @@ const denySession = (res, error) => {
 };
 const requestToken = (req) => {
   const authHeader = String(req.headers?.authorization || '').trim();
-  if (authHeader.length <= 4096) {
-    const match = authHeader.match(/^Bearer\s+(\S+)$/i);
-    const bearer = match?.[1]?.trim();
+  if (authHeader.length <= 4096 && /^bearer\s+/i.test(authHeader)) {
+    const bearer = authHeader.slice(7).trim();
     if (bearer && bearer !== 'null' && bearer !== 'undefined') return bearer;
   }
 

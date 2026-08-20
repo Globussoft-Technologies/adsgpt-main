@@ -5,12 +5,15 @@ const path = require("path");
 
 const downloadImage = async (imageUrl, outputPath) => {
   try {
+    if (!imageUrl || typeof imageUrl !== "string" || !/^https?:\/\//i.test(imageUrl.trim())) {
+      throw new Error("Invalid or unsafe image URL");
+    }
     if (!outputPath || typeof outputPath !== "string") {
       throw new Error("Invalid output path");
     }
     const safePath = path.resolve(outputPath);
     const response = await axios({
-      url: imageUrl,
+      url: imageUrl.trim(),
       responseType: "arraybuffer",
       timeout: 15000,
       maxContentLength: 20 * 1024 * 1024,

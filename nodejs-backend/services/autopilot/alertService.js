@@ -900,6 +900,13 @@ function buildTelegramHtml(summary, rows = []) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
+  const escapeUrlAttr = (url) => {
+    if (!url || typeof url !== "string") return "#";
+    const clean = url.trim();
+    if (/^(javascript|data|vbscript):/i.test(clean)) return "#";
+    return escape(clean);
+  };
+
   const dryLabel = summary.dryRun ? " (DRY RUN)" : "";
   const lines = [
     `<b>AdsGPT Autopilot${escape(dryLabel)}</b>`,
@@ -937,7 +944,7 @@ function buildTelegramHtml(summary, rows = []) {
       const acctLink = metaAdsManagerUrl({ adAccountId });
       lines.push("");
       lines.push(
-        `<b><a href="${escape(acctLink)}">${escape(acctName)}</a></b>`,
+        `<b><a href="${escapeUrlAttr(acctLink)}">${escape(acctName)}</a></b>`,
       );
 
       for (const [action, list] of byAction.entries()) {
@@ -951,7 +958,7 @@ function buildTelegramHtml(summary, rows = []) {
           });
           const entityName = row.entityName || row.entityId;
           const linked = entityLink
-            ? `<a href="${escape(entityLink)}">${escape(entityName)}</a>`
+            ? `<a href="${escapeUrlAttr(entityLink)}">${escape(entityName)}</a>`
             : `<b>${escape(entityName)}</b>`;
           const sevEmoji = SEVERITY_EMOJI[row.ruleSeverity] || "•";
           const dryTag = row.dryRun ? " <i>(dry-run)</i>" : "";

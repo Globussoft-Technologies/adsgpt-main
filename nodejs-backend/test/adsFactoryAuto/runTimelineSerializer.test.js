@@ -182,7 +182,7 @@ group("deep links — or none at all", () => {
   test("builds a Meta link scoped to the ad", () => {
     const link = r1.links.find((l) => l.platform === "meta");
     assert.ok(link, "expected a meta link");
-    assert.match(link.url, /^https:\/\/adsmanager\.facebook\.com/);
+    assert.match(link.url, /^https:\/\/adsmanager\.facebook\.com\/adsmanager\/manage\/\?act=\d+&selected_ad_ids=\d+$/);
     assert.match(link.url, /selected_ad_ids=1201/);
   });
 

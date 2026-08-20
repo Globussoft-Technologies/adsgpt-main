@@ -18,7 +18,14 @@ const SARVAM_BASE = process.env.VOICE_PYTHON_SARVAM_BASE_URL
 function pickParams(query = {}) {
   const out = {};
   for (const k of ["language", "gender", "accent", "age"]) {
-    if (typeof query[k] === "string" && query[k].length > 0) out[k] = query[k];
+    if (typeof query[k] === "string" && query[k].length > 0) {
+      if (k === "gender") {
+        const val = query[k].trim().toLowerCase();
+        if (["male", "female", "neutral"].includes(val)) out[k] = val;
+      } else {
+        out[k] = query[k].slice(0, 50);
+      }
+    }
   }
   return out;
 }
@@ -86,8 +93,11 @@ async function sarvamProxyGet(path, req, res, params) {
 // /voices takes `lang` (echoed into each voice's language field) + `gender`.
 function pickSarvamVoiceParams(query = {}) {
   const out = {};
-  if (typeof query.lang === "string" && query.lang.length > 0) out.lang = query.lang;
-  if (typeof query.gender === "string" && query.gender.length > 0) out.gender = query.gender;
+  if (typeof query.lang === "string" && query.lang.length > 0) out.lang = query.lang.slice(0, 50);
+  if (typeof query.gender === "string" && query.gender.length > 0) {
+    const val = query.gender.trim().toLowerCase();
+    if (["male", "female", "neutral"].includes(val)) out.gender = val;
+  }
   return out;
 }
 

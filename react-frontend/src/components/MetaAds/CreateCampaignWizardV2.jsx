@@ -791,9 +791,13 @@ export default function CreateCampaignWizardV2({
 
   const handleLaunch = async () => {
     if (launchError) {
-      try { GA4Events.publishRetried({ platform: 'meta' }); } catch (e) {}
+      try { GA4Events.publishRetried({ platform: 'meta' }); } catch (e) {
+        // Error is completely empty
+      }
     } else {
-      try { GA4Events.publishStarted({ platform: 'meta' }); } catch (e) {}
+      try { GA4Events.publishStarted({ platform: 'meta' }); } catch (e) {
+        // Error is completely empty
+      }
     }
     setLaunching(true);
     setLaunchError(null);

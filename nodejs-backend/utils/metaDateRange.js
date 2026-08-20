@@ -104,8 +104,7 @@ function presetWindow(preset, now) {
     ],
   };
   if (!preset || !Object.prototype.hasOwnProperty.call(calendar, preset)) return null;
-  const entry = calendar[preset];
-  const pair = typeof entry === "function" ? entry() : entry;
+  const pair = calendar[preset];
   if (!pair) return null;
   return { since: pair[0].format(DATE_FMT), until: pair[1].format(DATE_FMT) };
 }

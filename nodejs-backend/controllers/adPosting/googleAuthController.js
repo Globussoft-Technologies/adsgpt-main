@@ -196,7 +196,8 @@ class GoogleAuthController {
       // Redirect back to the frontend — exactly like Meta's flow.
       // The user's original JWT is unchanged; the Google OAuth token is
       // stored in MongoDB and looked up automatically on every API call.
-      const redirectUrl = new URL(feUrl);
+      const targetUrl = isSafeRedirectUrl(feUrl) ? feUrl : (ALLOWED_REDIRECT_ORIGIN || "http://localhost:5173");
+      const redirectUrl = new URL(targetUrl);
       redirectUrl.searchParams.set("google_auth", "success");
       redirectUrl.searchParams.set("name", encodeURIComponent(name));
       redirectUrl.searchParams.set("email", encodeURIComponent(email));

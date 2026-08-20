@@ -24,11 +24,12 @@ module.exports = (req, res, next) => {
       process.env.FRONTEND_URL ||
       "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
   );
-  const originAllowed = !origin || isOriginAllowed(origin, allowedOrigins);
+  const originAllowed = Boolean(origin && isOriginAllowed(origin, allowedOrigins));
 
-  if (origin && originAllowed) {
+  if (originAllowed) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Vary", "Origin");
+    res.header("Access-Control-Allow-Credentials", "true");
   }
   res.header(
     "Access-Control-Allow-Methods",
@@ -38,7 +39,6 @@ module.exports = (req, res, next) => {
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Facebook-Id",
   );
-  if (originAllowed) res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Max-Age", "86400");
 
   // Answer the preflight directly — no downstream route handles OPTIONS.

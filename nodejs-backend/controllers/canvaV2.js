@@ -16,15 +16,19 @@ const toBase64Url = (obj) =>
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/={1,2}$/, "");
+    .replace(/=/g, "");
 
 const fromBase64Url = (str) => {
   if (typeof str !== "string") return null;
-  const padded = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
-  return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+  try {
+    const padded = str
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
 };
 
 const isTokenExpired = (created, expiresIn) =>
@@ -39,7 +43,7 @@ const buildPKCE = () => {
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/={1,2}$/, "");
+    .replace(/=/g, "");
   return { codeVerifier, codeChallenge };
 };
 
@@ -153,7 +157,9 @@ exports.checkAuth = async (req, res) => {
 exports.oauthRedirect = async (req, res) => {
   try {
     const { code, state } = req.query;
-    const { user_id, image_url } = fromBase64Url(state);
+    const payload = fromBase64Url(state);
+    if (!payload || typeof payload !== "object") return res.status(400).send("Invalid state parameter");
+    const { user_id, image_url } = payload;
 
     const doc = await CanvaToken.findOne({ user_id });
     if (!doc?.code_verifier) return res.status(400).send("Missing code verifier — please try again");

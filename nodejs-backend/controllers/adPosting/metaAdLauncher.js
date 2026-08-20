@@ -2652,9 +2652,10 @@ class MetaAdLauncher {
       const rawName = String(formName || `form-${formId}`).slice(0, 200);
       const safeName =
         rawName
-          .replace(/[^a-z0-9_-]+/gi, "-")
-          .replace(/^-+/, "")
-          .replace(/-+$/, "")
+          .slice(0, 200)
+          .replace(/[^a-z0-9_-]/gi, "-")
+          .replace(/-{2,}/g, "-")
+          .replace(/^-|-$/g, "")
           .slice(0, 60) || "leads";
 
       // A partial export has to announce itself in the filename: the banner
