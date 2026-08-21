@@ -41,6 +41,7 @@ const savedMetaTemplateSchema = Joi.object({
   conversionLocation: Joi.string().allow("", null).optional(),
   pageId: Joi.string().allow("", null).optional(),
   payload: Joi.object().required(),
+  source: Joi.string().allow("", null).optional(),
 });
 
 // A request to BUILD a template instead of picking one.
@@ -99,6 +100,7 @@ const googleTargetSchema = Joi.object({
     conversionLocation: Joi.string().allow("", null).optional(),
     customerId: Joi.string().allow("", null).optional(),
     payload: Joi.object().required(),
+    source: Joi.string().allow("", null).optional(),
   }).required(),
 });
 
@@ -132,6 +134,7 @@ const updateTargetsSchema = Joi.object({
       conversionLocation: Joi.string().allow("", null).optional(),
       pageId:             Joi.string().allow("", null).optional(),
       payload:            Joi.object().required(),
+      source:             Joi.string().allow("", null).optional(),
     }).required(),
   }).optional(),
   google: Joi.object({
@@ -141,6 +144,7 @@ const updateTargetsSchema = Joi.object({
       conversionLocation: Joi.string().allow("", null).optional(),
       customerId:         Joi.string().allow("", null).optional(),
       payload:            Joi.object().required(),
+      source:             Joi.string().allow("", null).optional(),
     }).required(),
   }).optional(),
 }).min(1);

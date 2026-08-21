@@ -177,17 +177,15 @@ export default function FacebookAccountSelector({
               <div
                 key={account.facebookId}
                 onClick={() => !disabled && select(account.facebookId, accounts)}
-                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-all cursor-pointer ${
-                  active
-                    ? 'bg-[#EAE5DC] dark:bg-[#1C2228] border border-transparent dark:border-white/5'
-                    : 'hover:bg-[#EAE5DC] dark:hover:bg-white/5 opacity-80'
-                }`}
+                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-all cursor-pointer ${active
+                  ? 'bg-[#EAE5DC] dark:bg-[#1C2228] border border-transparent dark:border-white/5'
+                  : 'hover:bg-[#EAE5DC] dark:hover:bg-white/5 opacity-80'
+                  }`}
               >
                 <div className="min-w-0 flex-1">
                   <p
-                    className={`truncate text-xs font-semibold ${
-                      active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
-                    }`}
+                    className={`truncate text-xs font-semibold ${active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
+                      }`}
                   >
                     {account.name}
                   </p>
@@ -276,15 +274,13 @@ export default function FacebookAccountSelector({
                     select(account.facebookId, accounts);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-[#EAE5DC] dark:hover:bg-white/5 ${
-                    active ? 'bg-[#EAE5DC] dark:bg-white/5' : ''
-                  }`}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-[#EAE5DC] dark:hover:bg-white/5 ${active ? 'bg-[#EAE5DC] dark:bg-white/5' : ''
+                    }`}
                 >
                   <div className="min-w-0">
                     <p
-                      className={`truncate text-xs font-medium ${
-                        active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
-                      }`}
+                      className={`truncate text-xs font-medium ${active ? 'text-[#0082FB]' : 'text-[#24211D] dark:text-white'
+                        }`}
                     >
                       {account.name}
                     </p>

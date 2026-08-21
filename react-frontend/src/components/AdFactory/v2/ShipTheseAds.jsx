@@ -350,10 +350,7 @@ export default function ShipTheseAds({
             disabled={!canPost}
           >
             {publishing ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Posting…
-              </span>
+              'Posting…'
             ) : connected ? (
               `Post ${adCount} ${adCount === 1 ? 'ad' : 'ads'}`
             ) : (
@@ -362,6 +359,6 @@ export default function ShipTheseAds({
           </PrimaryBtn>
         </div>
       </PanelFooter>
-    </Panel>
+    </Panel >
   );
 }

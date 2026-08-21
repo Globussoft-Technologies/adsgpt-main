@@ -271,6 +271,23 @@ exports.activateBrief = async (req, res) => {
       throw err;
     }
 
+    // Resolve any synthesize-intent templates into full {name, payload} objects
+    // BEFORE handing them to createJob / Mongoose validation. briefToJobPayload
+    // emits { synthesize: true, objective, conversionLocation, adAccountId, budget }
+    // as a short-hand; the Mongoose schema requires template.name + template.payload.
+    if (payload?.targets?.meta?.template?.synthesize === true) {
+      const { synthesizeTemplate, TemplateSynthesisError } = require('../../services/adsFactoryAuto/templateSynthesizer');
+      try {
+        const synthesized = synthesizeTemplate(payload.targets.meta.template);
+        payload.targets.meta.template = synthesized;
+      } catch (synthErr) {
+        const msg = synthErr instanceof TemplateSynthesisError
+          ? synthErr.message
+          : `Template synthesis failed: ${synthErr.message}`;
+        return res.status(400).json({ success: false, error: msg, field: synthErr.field || 'template' });
+      }
+    }
+
     const { statusCode, body } = await callController(
       adsFactoryAutoController.createJob.bind(adsFactoryAutoController),
       { ...req, body: payload, user: req.user },
@@ -284,13 +301,15 @@ exports.activateBrief = async (req, res) => {
     // Mirror what the user actually committed to, so the brief reads correctly
     // on its own without joining the job.
     if (payload.schedule) {
+      const currentFreq = brief.delivery?.frequency?.toObject?.() || brief.delivery?.frequency || {};
       brief.delivery.frequency = {
-        ...(brief.delivery.frequency || {}),
+        ...currentFreq,
         preset: payload.schedule.frequency,
         hour: payload.schedule.hour,
         timezone: payload.schedule.timezone,
         startDate: payload.schedule.startDate || null,
         endDate: payload.schedule.endDate || null,
+        ...(payload.schedule.customFrequency ? { custom: payload.schedule.customFrequency } : {}),
       };
     }
     await brief.save();

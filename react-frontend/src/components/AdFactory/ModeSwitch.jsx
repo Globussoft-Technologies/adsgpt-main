@@ -46,13 +46,18 @@ export default function ModeSwitch({ mode, onChange, disabled = false, busy = fa
             aria-pressed={active}
             disabled={disabled || busy || active}
             onClick={() => onChange?.(opt.value)}
-            className={`rounded-lg px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed ${
-              active
-                ? 'bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15 text-[#6b72f8] dark:text-[#8f95ff]'
+            className={`rounded-lg px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed ${active
+                ? 'bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15'
                 : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-300 disabled:opacity-45'
-            }`}
+              }`}
           >
-            {opt.label}
+            {active ? (
+              <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text text-transparent dark:from-[#15DCFF] dark:to-[#6b72f8]">
+                {opt.label}
+              </span>
+            ) : (
+              opt.label
+            )}
           </button>
         );
       })}

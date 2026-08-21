@@ -2,6 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import SourceInput from '@/components/AdFactory/v2/SourceInput';
@@ -62,6 +70,7 @@ import {
   selectBrief,
   selectBriefId,
   selectBriefError,
+  selectActivationError,
   selectBriefErrorCode,
   selectInferStartedAt,
   selectIsGenerating,
@@ -145,6 +154,7 @@ export default function AdFactoryV2Page() {
   const [adjustOpen, setAdjustOpen] = useState(true);
   // Which batch the cards are showing. CURRENT = the live run.
   const [viewRun, setViewRun] = useState(CURRENT);
+  const [deletingBrief, setDeletingBrief] = useState(null);
   // Whether the default has been resolved for the brief now loaded. Without
   // this the effect below would re-open the panel every time the brief object
   // changes identity, fighting the user each time they closed it.
@@ -157,6 +167,7 @@ export default function AdFactoryV2Page() {
   const estimate = useSelector(selectEstimate);
   const history = useSelector(selectHistory);
   const error = useSelector(selectBriefError);
+  const activationError = useSelector(selectActivationError);
   const errorCode = useSelector(selectBriefErrorCode);
   const inferring = useSelector(selectIsInferring);
   const inferStartedAt = useSelector(selectInferStartedAt);
@@ -480,10 +491,9 @@ export default function AdFactoryV2Page() {
   // server refuses outright if an automation is still delivering.
   const handleDeleteBrief = useCallback(
     (id, label) => {
-      if (!window.confirm(`Delete “${label}”? This removes the brief and its ads setup.`)) return;
-      dispatch(removeBrief(id));
+      setDeletingBrief({ id, label });
     },
-    [dispatch],
+    [],
   );
 
   // "first run Tue 9:00 AM" — the next occurrence of the chosen hour. Derived
@@ -602,6 +612,7 @@ export default function AdFactoryV2Page() {
       timezone: brief?.delivery?.frequency?.timezone || '',
       pairsPerCycle: brief?.delivery?.pairsPerCycle ?? 3,
       custom: brief?.delivery?.frequency?.custom || null,
+      startDate: brief?.delivery?.frequency?.startDate || null,
       endDate: brief?.delivery?.frequency?.endDate || null,
     }),
     [
@@ -609,6 +620,7 @@ export default function AdFactoryV2Page() {
       brief?.delivery?.frequency?.hour,
       brief?.delivery?.frequency?.timezone,
       brief?.delivery?.frequency?.custom,
+      brief?.delivery?.frequency?.startDate,
       brief?.delivery?.frequency?.endDate,
       brief?.delivery?.pairsPerCycle,
     ],
@@ -674,7 +686,7 @@ export default function AdFactoryV2Page() {
         <AdFactoryBgEffect />
       </div>
 
-      {error && (
+      {error && !(hasCreatives && scheduleOn) && (
         <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
           <Notice tone="warn" icon={AlertCircle}>
             <span className="flex flex-col items-start gap-1">
@@ -719,7 +731,7 @@ export default function AdFactoryV2Page() {
         </div>
       )}
 
-      {loading && !brief && !inferring && (
+      {loading && !brief && !inferring && urlBriefId && (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-gray-400 dark:text-white/45" />
         </div>
@@ -820,11 +832,10 @@ export default function AdFactoryV2Page() {
               <div className="flex flex-col gap-2">
                 <span className={LABEL}>Daily budget</span>
                 <div
-                  className={`flex ${CONTROL_H} w-40 items-center gap-1.5 rounded-lg border bg-white px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${
-                    canGenerate
-                      ? 'border-[#E5E7EB] dark:border-[#2E353E]'
-                      : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
-                  }`}
+                  className={`flex ${CONTROL_H} w-40 items-center gap-1.5 rounded-lg border bg-white px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${canGenerate
+                    ? 'border-[#E5E7EB] dark:border-[#2E353E]'
+                    : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
+                    }`}
                 >
                   <span className={FAINT}>₹</span>
                   <input
@@ -954,6 +965,7 @@ export default function AdFactoryV2Page() {
                 onToggle={setScheduleOn}
                 frequency={cadence.frequency}
                 custom={cadence.custom}
+                startDate={cadence.startDate}
                 endDate={cadence.endDate}
                 alertEmails={brief.alertEmails}
                 onAlertEmailsChange={handleAlertEmailsChange}
@@ -970,6 +982,12 @@ export default function AdFactoryV2Page() {
                 objectiveLabel={objectiveLabel}
                 creditsPerCycle={estimate?.total ?? null}
                 firstRunLabel={nextRunLabel}
+                activationError={activationError}
+                status={brief?.status === 'live' || brief?.jobId ? (timeline?.summary?.status || (brief?.status === 'paused' ? 'paused' : 'active')) : brief?.status}
+                onPause={() => handlePause(true)}
+                onResume={() => handlePause(false)}
+                onStop={handleStop}
+                busy={pausing}
               />
             </div>
           )}
@@ -1012,6 +1030,7 @@ export default function AdFactoryV2Page() {
             timezone={cadence.timezone}
             pairsPerCycle={cadence.pairsPerCycle}
             custom={cadence.custom}
+            startDate={cadence.startDate}
             endDate={cadence.endDate}
             alertEmails={brief.alertEmails}
             onAlertEmailsChange={handleAlertEmailsChange}
@@ -1040,6 +1059,37 @@ export default function AdFactoryV2Page() {
         </div>
       )}
 
+      <Dialog open={!!deletingBrief} onOpenChange={(open) => !open && setDeletingBrief(null)}>
+        <DialogContent className="max-w-sm border border-[#E5E7EB] bg-white text-gray-900 shadow-lg dark:border-[#2E353E] dark:bg-[#14181D] dark:text-white animate-in zoom-in-95 duration-150">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold tracking-tight">Delete brief?</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 dark:text-[#8B939E]">
+              Are you sure you want to delete “{deletingBrief?.label}”? This removes the brief and its ads setup.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 flex justify-end gap-2 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setDeletingBrief(null)}
+              className="rounded-md border border-[#E5E7EB] bg-gray-50 px-4 py-2 hover:bg-gray-100 dark:border-[#2E353E] dark:bg-[#1E232A] dark:hover:bg-[#2E353E]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (deletingBrief) {
+                  dispatch(removeBrief(deletingBrief.id));
+                  setDeletingBrief(null);
+                }
+              }}
+              className="rounded-md bg-red-650 px-4 py-2 text-white hover:bg-red-700 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+            >
+              Delete
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

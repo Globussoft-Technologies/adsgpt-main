@@ -153,10 +153,16 @@ const DeliverySchema = new mongoose.Schema(
       // but not say what it repeated on, which is a 400 at activation. That is
       // why briefToJobPayload used to refuse the word outright.
       custom: {
-        repeatEvery: { type: Number, default: 1, min: 1, max: 52 },
-        repeatUnit: { type: String, enum: ["day", "week"], default: "week" },
-        // Lowercase day names — the queue's DOW_MAP keys.
-        repeatOnDays: { type: [String], default: [] },
+        type: new mongoose.Schema(
+          {
+            repeatEvery: { type: Number, default: 1, min: 1, max: 52 },
+            repeatUnit: { type: String, enum: ["day", "week"], default: "week" },
+            // Lowercase day names — the queue's DOW_MAP keys.
+            repeatOnDays: { type: [String], default: [] },
+          },
+          { _id: false },
+        ),
+        default: null,
       },
     },
   },

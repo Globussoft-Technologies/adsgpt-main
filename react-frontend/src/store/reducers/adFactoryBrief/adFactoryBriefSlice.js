@@ -310,6 +310,7 @@ const initialState = {
   publishError: null,
 
   error: null,
+  activationError: null,
   // Set when the failure has a code the UI acts on (NO_BASE_PLAN → upgrade).
   errorCode: null,
 
@@ -356,6 +357,7 @@ const adFactoryBriefSlice = createSlice({
     clearBriefError: (state) => {
       state.error = null;
       state.errorCode = null;
+      state.activationError = null;
     },
     clearNeedsRefetch: (state) => {
       state.needsRefetch = false;
@@ -555,6 +557,7 @@ const adFactoryBriefSlice = createSlice({
         state.activating = true;
         state.error = null;
         state.errorCode = null;
+        state.activationError = null;
       })
       .addCase(activateAutomation.fulfilled, (state, { payload }) => {
         state.activating = false;
@@ -565,7 +568,7 @@ const adFactoryBriefSlice = createSlice({
       })
       .addCase(activateAutomation.rejected, (state, { payload }) => {
         state.activating = false;
-        state.error = payload?.message || "We couldn't start deliveries.";
+        state.activationError = payload?.message || "We couldn't start deliveries.";
         state.errorCode = payload?.code || null;
       })
 
@@ -681,6 +684,7 @@ export const selectBriefs = (s) => s.adFactoryBrief.briefs;
 export const selectBriefsLoading = (s) => s.adFactoryBrief.briefsLoading;
 export const selectIsPausing = (s) => s.adFactoryBrief.pausing;
 export const selectBriefError = (s) => s.adFactoryBrief.error;
+export const selectActivationError = (s) => s.adFactoryBrief.activationError;
 export const selectBriefErrorCode = (s) => s.adFactoryBrief.errorCode;
 export const selectPendingBudget = (s) => s.adFactoryBrief.pendingBudget;
 export const selectInferStartedAt = (s) => s.adFactoryBrief.inferStartedAt;

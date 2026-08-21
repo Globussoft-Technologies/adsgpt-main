@@ -1420,21 +1420,10 @@ export const fetchMetaAdsTemplates = createAsyncThunk(
   'adFactoryAutomation/fetchMetaAdsTemplates',
   async (facebookId, { rejectWithValue }) => {
     const scope = String(facebookId || '');
-    // Automation templates must always be tied to the selected connection.
-    // Clearing/changing the account clears the list without briefly fetching
-    // every account's templates.
-    if (!scope) return { templates: [], scope, legacyTemplateCount: 0 };
     try {
       const data = await listCampaignTemplates();
-      const allTemplates = Array.isArray(data?.templates) ? data.templates : [];
-      // Account scoping belongs to Automation only; the shared templates API
-      // continues returning every template for Meta Ads Manager.
-      const templates = allTemplates.filter(
-        (template) => String(template.facebookId || '') === scope,
-      );
-      const legacyTemplateCount = allTemplates.filter(
-        (template) => !String(template.facebookId || '').trim(),
-      ).length;
+      const templates = Array.isArray(data?.templates) ? data.templates : [];
+      const legacyTemplateCount = 0;
       return { templates, scope, legacyTemplateCount };
     } catch (err) {
       return rejectWithValue({

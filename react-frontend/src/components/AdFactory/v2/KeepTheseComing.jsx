@@ -1,9 +1,9 @@
-import React from 'react';
-import { Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, Info, Loader2, Pause, Play, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Switch } from '@/components/Autopilot/_atoms';
 
-import { Panel, PanelFooter, PanelHeader, PrimaryBtn } from './Panel';
+import { Panel, PanelFooter, PanelHeader, PrimaryBtn, GhostBtn, Notice } from './Panel';
 import CadencePills from './CadencePills';
 import AlertEmails from './AlertEmails';
 import LaunchConnection from './LaunchConnection';
@@ -14,47 +14,6 @@ import { CONTROL, FAINT, MUTED, NUM, RULE_BORDER } from './_tokens';
 // ----------------------------------------------------------------------------
 // KeepTheseComing — the subscription, and the moment the product's promise
 // actually lands.
-//
-// The thesis of Quick setup is that Ad Factory is not a workflow builder, it is
-// a subscription: you say what to advertise and how often, and ads keep
-// appearing. That makes this the most important screen in the flow, so it says
-// what will happen in plain words and shows what it will run against, rather
-// than presenting a form.
-//
-// ─── One card, not two ───────────────────────────────────────────────────────
-//
-// The account pickers used to sit in a SECOND card underneath this one, while
-// this card carried a read-only checklist reporting "Ad account — Not selected"
-// and "Facebook Page — Not selected". Two boxes, the same two facts: one asking
-// and one reporting, with the reporting one on top. The user had to read down
-// past the summary to find the controls that would change it, and the two cards
-// were different widths besides.
-//
-// So the pickers moved in here, and the checklist rows they duplicated are
-// gone — a picker showing its own selection IS the status, and a tick beside it
-// is a second thing to keep in sync for no gain. What survives from the
-// checklist is the one row no picker covers: the campaign we build for you.
-//
-// The bands, in the order the decision is actually made:
-//
-//   How often     the cadence, as a sentence you can edit
-//   Where         the Meta account, ad account and Page it publishes through
-//   Who hears     alert emails — optional, and last because it is
-//   ─────────
-//   footer        what it costs per cycle, when it first runs, and the button
-//
-// ─── Width ───────────────────────────────────────────────────────────────────
-//
-// This was max-w-2xl and centred, on a page whose every other card runs the
-// full max-w-375 container — so it sat in a narrow gutter-flanked column with
-// roughly 400px of dead space either side, looking like it belonged to a
-// different screen. It takes the page's width now, and the two independent
-// halves of the decision sit side by side rather than stacked: WHEN it runs on
-// the left, WHERE it publishes on the right, divided by one vertical hairline.
-// That roughly halves the height, which matters because the footer holds the
-// button and the whole point is to see the commitment and the button together.
-//
-// They stack again below lg — two 350px columns would be worse than one.
 // ----------------------------------------------------------------------------
 
 export default function KeepTheseComing({
@@ -62,6 +21,7 @@ export default function KeepTheseComing({
   onToggle,
   frequency = 'weekly',
   custom,
+  startDate,
   endDate,
   alertEmails,
   onAlertEmailsChange,
@@ -79,8 +39,19 @@ export default function KeepTheseComing({
   creditsPerCycle,
   firstRunLabel,
   objectiveLabel,
+  activationError = null,
+  status = null,
+  onPause,
+  onResume,
+  onStop,
+  busy = false,
 }) {
   const M = useMotionPresets();
+  const [confirmingStop, setConfirmingStop] = useState(false);
+
+  const isLive = status === 'active' || status === 'live';
+  const isPaused = status === 'paused';
+  const isRunning = isLive || isPaused;
 
   const campaignHint = [
     objectiveLabel,
@@ -91,129 +62,196 @@ export default function KeepTheseComing({
 
   return (
     <Panel>
-        <PanelHeader
-          title="Keep these coming"
-          subtitle="New ads from this brief, on a schedule. Pause or stop any time."
-          right={
+      <PanelHeader
+        title="Keep these coming"
+        subtitle={
+          isPaused
+            ? 'Paused — schedule is stopped'
+            : isLive
+              ? 'Active — new ads delivered on schedule. Pause or stop any time.'
+              : 'New ads from this brief, on a schedule. Pause or stop any time.'
+        }
+        right={
+          <div className="flex items-center gap-2">
+            {isLive && onPause && (
+              <GhostBtn onClick={onPause} disabled={busy || activating}>
+                <Pause className="h-3.5 w-3.5" />
+                <span>Pause</span>
+              </GhostBtn>
+            )}
+            {isPaused && onResume && (
+              <GhostBtn onClick={onResume} disabled={busy || activating}>
+                <Play className="h-3.5 w-3.5" />
+                <span>Resume</span>
+              </GhostBtn>
+            )}
+            {isRunning && onStop && (
+              <GhostBtn onClick={() => setConfirmingStop(true)} disabled={busy || activating}>
+                <Square className="h-3.5 w-3.5" />
+                <span>Stop</span>
+              </GhostBtn>
+            )}
             <Switch
               checked={enabled}
               onChange={(next) => onToggle?.(next)}
               ariaLabel="Keep these coming"
             />
-          }
-        />
+          </div>
+        }
+      />
 
-        {/* Flipping the switch reveals the whole commitment — cadence, what it
-            runs against, and the button that starts spending. It has to unfold
-            from the switch rather than appear beneath it. */}
-        <AnimatePresence initial={false}>
-          {enabled && (
-            <motion.div key="body" {...M.expand}>
-              {/* WHEN on the left, WHERE on the right. The two are independent
-                  — neither answer changes the other — so stacking them only
-                  made the card tall. */}
-              <div className="grid grid-cols-1 lg:grid-cols-2">
-                <div className="flex flex-col">
-                  {/* ── How often ── as a sentence rather than a form, and
-                      editable. Every value here was previously fixed text, so
-                      the hour and timezone silently stayed on the schema
-                      defaults and every schedule ran at 9:00 UTC. */}
-                  <Section title="How often">
-                    <CadencePills
-                      frequency={frequency}
-                      hour={hour}
-                      timezone={timezone}
-                      pairsPerCycle={pairsPerCycle}
-                      custom={custom}
-                      endDate={endDate}
-                      onChange={onCadenceChange}
-                      disabled={activating}
-                    />
-                  </Section>
+      {/* Flipping the switch reveals the whole commitment */}
+      <AnimatePresence initial={false}>
+        {enabled && (
+          <motion.div key="body" {...M.expand}>
+            <div className="grid grid-cols-1 lg:grid-cols-2">
+              <div className="flex flex-col">
+                <Section title="How often">
+                  <CadencePills
+                    frequency={frequency}
+                    hour={hour}
+                    timezone={timezone}
+                    pairsPerCycle={pairsPerCycle}
+                    custom={custom}
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={onCadenceChange}
+                    disabled={activating || busy}
+                  />
+                </Section>
 
-                  <SectionRule />
+                <SectionRule />
 
-                  {/* ── Who hears ── optional, so it sits under the cadence
-                      rather than competing with the account pickers. */}
-                  <Section>
-                    <AlertEmails
-                      value={alertEmails}
-                      onChange={onAlertEmailsChange}
-                      disabled={activating}
-                    />
-                  </Section>
+                <Section>
+                  <AlertEmails
+                    value={alertEmails}
+                    onChange={onAlertEmailsChange}
+                    disabled={activating || busy}
+                  />
+                </Section>
+              </div>
+
+              <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>
+                <Section title="Where these publish">
+                  <LaunchConnection
+                    value={connection}
+                    onChange={onConnectionChange}
+                    disabled={activating || busy}
+                  />
+                </Section>
+              </div>
+            </div>
+
+            <PanelFooter>
+              {activationError && (
+                <div className="mb-4">
+                  <Notice tone="error">
+                    <span className="flex flex-col items-start gap-1 text-left">
+                      <b className="font-semibold text-13">Activation failed</b>
+                      <span className="text-xs leading-normal opacity-90">{activationError}</span>
+                    </span>
+                  </Notice>
                 </div>
+              )}
 
-                {/* ── Where ── the pickers themselves, not a report of them. */}
-                <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>
-                  <Section title="Where these publish">
-                    <div className="flex flex-col gap-4">
-                      <LaunchConnection
-                        value={connection}
-                        onChange={onConnectionChange}
-                        disabled={activating}
-                      />
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+                <p className={MUTED}>
+                  {creditsPerCycle != null && (
+                    <>
+                      ~
+                      <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>
+                        {creditsPerCycle}
+                      </b>{' '}
+                      credits per cycle
+                      {firstRunLabel ? ' · ' : ''}
+                    </>
+                  )}
+                  {firstRunLabel && (
+                    <>
+                      first run{' '}
+                      <b className="font-semibold text-[#111827] dark:text-[#ECEFF3]">
+                        {firstRunLabel}
+                      </b>
+                    </>
+                  )}
+                  {creditsPerCycle == null && !firstRunLabel && 'Nothing spends until you start.'}
+                </p>
 
-                      {/* The one line the pickers don't cover: we synthesise
-                          the campaign, so there is nothing to choose. */}
-                      <div
-                        className={`flex items-center gap-3 border-t pt-3.5 text-13 ${RULE_BORDER}`}
+                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                  {isLive && (
+                    <>
+                      <GhostBtn onClick={onPause} disabled={busy || activating}>
+                        <Pause className="h-3.5 w-3.5" />
+                        <span>Pause schedule</span>
+                      </GhostBtn>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingStop(true)}
+                        disabled={busy || activating}
+                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
                       >
-                        <span className="shrink-0 text-[#6B7280] dark:text-[#8B939E]">
-                          Campaign
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-medium text-[#111827] dark:text-[#ECEFF3]">
-                          Built for you
-                        </span>
-                        {campaignHint && (
-                          <span className={`shrink-0 ${FAINT}`}>{campaignHint}</span>
-                        )}
-                      </div>
+                        <Square className="h-3.5 w-3.5" />
+                        <span>Stop automation</span>
+                      </button>
+                    </>
+                  )}
 
-                      <div className={`flex items-start gap-2.5 px-3.5 py-3 ${CONTROL}`}>
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9CA3AF] dark:text-[#8B939E]" />
-                        <p className={`leading-relaxed ${MUTED}`}>
-                          No saved Meta template needed — we build one from your objective and
-                          budget, and it stays editable in Ads Manager afterwards.
-                        </p>
-                      </div>
-                    </div>
-                  </Section>
+                  {isPaused && (
+                    <>
+                      <PrimaryBtn onClick={onResume} busy={busy}>
+                        Resume deliveries
+                      </PrimaryBtn>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingStop(true)}
+                        disabled={busy || activating}
+                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
+                      >
+                        <Square className="h-3.5 w-3.5" />
+                        <span>Stop automation</span>
+                      </button>
+                    </>
+                  )}
+
+                  {!isRunning && (
+                    <PrimaryBtn onClick={onActivate} busy={activating} disabled={!isMetaConnected}>
+                      {isMetaConnected ? 'Start deliveries' : 'Connect Meta to start'}
+                    </PrimaryBtn>
+                  )}
                 </div>
               </div>
 
-              <PanelFooter>
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
-                  <p className={MUTED}>
-                    {creditsPerCycle != null && (
-                      <>
-                        ~
-                        <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>
-                          {creditsPerCycle}
-                        </b>{' '}
-                        credits per cycle
-                        {firstRunLabel ? ' · ' : ''}
-                      </>
-                    )}
-                    {firstRunLabel && (
-                      <>
-                        first run{' '}
-                        <b className="font-semibold text-[#111827] dark:text-[#ECEFF3]">
-                          {firstRunLabel}
-                        </b>
-                      </>
-                    )}
-                    {creditsPerCycle == null && !firstRunLabel && 'Nothing spends until you start.'}
-                  </p>
-
-                  <PrimaryBtn onClick={onActivate} busy={activating} disabled={!isMetaConnected}>
-                    {isMetaConnected ? 'Start deliveries' : 'Connect Meta to start'}
-                  </PrimaryBtn>
+              {confirmingStop && (
+                <div className={`mt-4 border-t pt-4 ${RULE_BORDER}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className={`max-w-150 ${MUTED}`}>
+                      Stop deliveries for good? Ads already live stay live, and your run history is kept —
+                      but restarting means setting the schedule up again.
+                    </p>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <GhostBtn onClick={() => setConfirmingStop(false)} disabled={busy}>
+                        <span>Keep running</span>
+                      </GhostBtn>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirmingStop(false);
+                          onStop?.();
+                        }}
+                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-white bg-red-600 transition-colors hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Stop deliveries
+                      </button>
+                    </span>
+                  </div>
                 </div>
-              </PanelFooter>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              )}
+            </PanelFooter>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Panel>
   );
 }

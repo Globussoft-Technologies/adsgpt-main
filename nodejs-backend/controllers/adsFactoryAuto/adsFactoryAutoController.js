@@ -134,6 +134,28 @@ class AdsFactoryAutoController {
         });
       }
 
+
+      // ──────────────────────────────────────────────────────────────────────
+      // Synthesize meta template if the client sent a `synthesize: true` intent
+      // (briefToJobPayload path). Joi already validated the synthesize shape
+      // has objective, conversionLocation, adAccountId, and budget. We run it
+      // here so the DB document always holds a complete {name, payload} record —
+      // Mongoose forbids a missing `template.payload` (required field).
+      // ──────────────────────────────────────────────────────────────────────
+      if (value.targets?.meta?.template?.synthesize === true) {
+        const { synthesizeTemplate, TemplateSynthesisError } = require('../../services/adsFactoryAuto/templateSynthesizer');
+        try {
+          const synthesized = synthesizeTemplate(value.targets.meta.template);
+          // Replace the intent object with the resolved template (drops synthesize flag).
+          value.targets.meta.template = synthesized;
+        } catch (synthErr) {
+          const msg = synthErr instanceof TemplateSynthesisError
+            ? synthErr.message
+            : `Template synthesis failed: ${synthErr.message}`;
+          return res.status(400).json({ success: false, error: msg });
+        }
+      }
+
       // Resolve and store cron for preset frequencies
       const resolvedCron = resolvePresetCron(value.schedule.frequency, value.schedule.hour) || null;
 
@@ -153,6 +175,7 @@ class AdsFactoryAutoController {
         status:         "active",
       });
       createdJob = job;
+
 
       await scheduleJob(job._id, resolveScheduleForQueue(job.schedule));
 

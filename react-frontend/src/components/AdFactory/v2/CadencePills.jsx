@@ -115,6 +115,7 @@ export default function CadencePills({
   timezone,
   pairsPerCycle = 3,
   custom,
+  startDate,
   endDate,
   onChange,
   disabled = false,
@@ -177,6 +178,28 @@ export default function CadencePills({
               "Ads per generate" and the two were both reading "per run" with
               different numbers on different screens. */}
           <span className={LABEL}>ads each run</span>
+        </Pill>
+
+        <Pill label="Starting">
+          <input
+            type="date"
+            value={startDate ? String(startDate).slice(0, 10) : ''}
+            disabled={disabled}
+            onChange={(e) => set({ startDate: e.target.value || null })}
+            className={`bg-transparent outline-none disabled:opacity-60 dark:scheme-dark ${VALUE}`}
+          />
+          {startDate && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => set({ startDate: null })}
+              className="text-[#9CA3AF] transition-colors hover:text-[#111827] dark:text-[#8B939E] dark:hover:text-[#ECEFF3]"
+              aria-label="Clear start date"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          {!startDate && <span className={FAINT}>today</span>}
         </Pill>
 
         {/* Optional, and it says so. An end date is the difference between a
@@ -258,11 +281,10 @@ export default function CadencePills({
                           onClick={() => toggleDay(day)}
                           aria-pressed={active}
                           aria-label={day}
-                          className={`size-6 rounded-md text-10 font-semibold transition-colors disabled:opacity-60 ${
-                            active
-                              ? 'bg-[#02C8C4] text-[#062024] dark:bg-[#15DCFF]'
-                              : 'bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] dark:bg-[#22272F] dark:text-[#AFB6C0] dark:hover:bg-[#2E353E]'
-                          }`}
+                          className={`size-6 rounded-md text-10 font-semibold transition-colors disabled:opacity-60 ${active
+                            ? 'bg-[#02C8C4] text-[#062024] dark:bg-[#15DCFF]'
+                            : 'bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] dark:bg-[#22272F] dark:text-[#AFB6C0] dark:hover:bg-[#2E353E]'
+                            }`}
                         >
                           {/* Two Tuesdays' worth of "T" and two "S" — the
                               aria-label carries the real name for screen

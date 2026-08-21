@@ -31,6 +31,7 @@ export default function SchedulePanel({
   timezone,
   pairsPerCycle,
   custom,
+  startDate,
   endDate,
   alertEmails,
   onAlertEmailsChange,
@@ -70,19 +71,6 @@ export default function SchedulePanel({
             {saving && (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#9CA3AF] dark:text-[#8B939E]" />
             )}
-            {/* An extra cycle without waiting for the schedule. Live only — a
-                paused job refuses server-side, and offering a button that
-                always errors is worse than not offering it. */}
-            {live && onRunNow && (
-              <GhostBtn onClick={onRunNow} disabled={busy || runningNow}>
-                {runningNow ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Zap className="h-3.5 w-3.5" />
-                )}
-                <span>Run now</span>
-              </GhostBtn>
-            )}
             {live && (
               <GhostBtn onClick={onPause} disabled={busy}>
                 <Pause className="h-3.5 w-3.5" />
@@ -112,6 +100,7 @@ export default function SchedulePanel({
           timezone={timezone}
           pairsPerCycle={pairsPerCycle}
           custom={custom}
+          startDate={startDate}
           endDate={endDate}
           onChange={onCadenceChange}
           disabled={over || busy}

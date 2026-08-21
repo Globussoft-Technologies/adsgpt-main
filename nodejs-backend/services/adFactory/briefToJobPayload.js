@@ -217,10 +217,18 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
       meta: {
         facebookId: String(connection.facebookId),
         connectionId: String(connection.connectionId),
-        // The Phase 1 synthesize path: send intent, let the backend build the
-        // template from the objective's own cell. No saved template required,
-        // which is the whole point.
-        template: {
+        // If the user picked a saved template (has name + payload), use it
+        // directly — no synthesis needed. Otherwise fall back to the synthesize
+        // path: send an intent and let the controller build the template.
+        template: (connection.template?.name && connection.template?.payload)
+          ? {
+              name: connection.template.name,
+              payload: connection.template.payload,
+              objective: connection.template.objective || objective,
+              conversionLocation: connection.template.conversionLocation || conversionLocation,
+              ...(connection.template.source ? { source: connection.template.source } : {}),
+            }
+          : {
           synthesize: true,
           objective,
           conversionLocation,

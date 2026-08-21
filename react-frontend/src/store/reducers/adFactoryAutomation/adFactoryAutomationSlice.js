@@ -443,17 +443,11 @@ const adFactoryAutomationSlice = createSlice({
       })
 
       // -- Meta Ads templates --
-      .addCase(fetchMetaAdsTemplates.pending, (state, action) => {
+      .addCase(fetchMetaAdsTemplates.pending, (state) => {
         state.metaTemplatesLoading = true;
         state.metaTemplatesError = null;
-        state.metaTemplatesRequestId = action.meta.requestId;
-        state.metaTemplatesScope = String(action.meta.arg || '');
       })
       .addCase(fetchMetaAdsTemplates.fulfilled, (state, action) => {
-        if (
-          state.metaTemplatesRequestId !== action.meta.requestId ||
-          state.metaTemplatesScope !== String(action.payload?.scope || '')
-        ) return;
         state.metaTemplatesLoading = false;
         state.metaTemplatesList = action.payload?.templates || [];
         state.metaTemplatesRequestId = null;
@@ -463,11 +457,11 @@ const adFactoryAutomationSlice = createSlice({
           : null;
       })
       .addCase(fetchMetaAdsTemplates.rejected, (state, action) => {
-        if (state.metaTemplatesRequestId !== action.meta.requestId) return;
         state.metaTemplatesLoading = false;
         state.metaTemplatesRequestId = null;
         state.metaTemplatesError = action.payload?.message || 'Failed to load templates';
       })
+
 
       .addCase(fetchMetaAdsTemplateById.pending, (state, action) => {
         const templateId = action.meta?.arg;
