@@ -222,8 +222,15 @@ function RunBackLog({ children }) {
     if (authResolutionStarted.current) return;
     authResolutionStarted.current = true;
 
-    const userName = Cookies.get('amember_login') || '';
-    const password = Cookies.get('amember_pass') || '';
+    // Local-only convenience: put VITE_DEV_AMEMBER_LOGIN / VITE_DEV_AMEMBER_PASS
+    // in .env.local (gitignored) to skip the SSO bridge during development.
+    // import.meta.env.DEV is statically replaced at build time, so these never
+    // reach a production bundle.
+    const devLogin = import.meta.env.DEV ? import.meta.env.VITE_DEV_AMEMBER_LOGIN : '';
+    const devPass = import.meta.env.DEV ? import.meta.env.VITE_DEV_AMEMBER_PASS : '';
+
+    const userName = Cookies.get('amember_login') || devLogin || '';
+    const password = Cookies.get('amember_pass') || devPass || '';
     const urlParams = new URLSearchParams(window.location.search);
     const forwardKey = urlParams.get('forword');
     const existingCookies = getCookies();
