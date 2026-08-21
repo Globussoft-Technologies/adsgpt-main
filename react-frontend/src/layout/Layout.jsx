@@ -8,9 +8,9 @@ import AppSidebar from '@/components/layout/sidebar/AppSidebar';
 import TopHeader from '@/components/layout/header/TopHeader';
 import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import TourGuide from '@/components/layout/TourGuide';
+// import TourGuide from '@/components/layout/TourGuide';
 import AdBlockerModal from '@/components/layout/AdBlockerModal';
-import OnboardingProvider from '@/onboarding';
+// import OnboardingProvider from '@/onboarding';
 import toast, { Toaster } from 'react-hot-toast';
 import { startGlobalInteractionTracking } from '@/utils/userInteractionTracker';
 import { useEffect, useRef } from 'react';
@@ -100,8 +100,8 @@ const Layout = () => {
             <div className="flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
               <Outlet />
             </div>
-            <TourGuide />
-            <OnboardingProvider />
+            {/* <TourGuide /> */}
+            {/* <OnboardingProvider /> */}
             {/* <AdBlockerModal /> */}
           </main>
         </SidebarProvider>
@@ -160,8 +160,8 @@ const Layout = () => {
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0! bg-transparent dark:bg-inherit">
                 <Outlet />
               </div>
-              <TourGuide />
-              <OnboardingProvider />
+              {/* <TourGuide /> */}
+              {/* <OnboardingProvider /> */}
             </main>
           </>
         )}

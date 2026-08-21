@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,7 +34,13 @@ import {
   Layers,
   Pencil,
   X,
+  Search,
+  SlidersHorizontal,
+  ArrowUpDown,
   AlertTriangle,
+  Check,
+  CheckCheck,
+  RotateCcw,
   Image as ImageIcon,
 } from 'lucide-react';
 import { FaTiktok } from 'react-icons/fa6';
@@ -53,6 +60,8 @@ import {
 } from '@/apis/tikTokAds/tikTokAdsApi';
 import toast from 'react-hot-toast';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
+import ThemeToggle from '@/components/layout/header/ThemeToggle';
 
 // ─── formatting helpers ────────────────────────────────────────────────────
 // NOTE: TikTok's reporting `spend`/cpc/cpm/cpa come back in the account's main
@@ -245,18 +254,17 @@ const KpiCard = ({ icon: Icon, label, value }) => (
 );
 
 const StatusBadge = ({ status }) => {
-  const map = {
-    ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-    PAUSED: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-    DELETED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  };
+  const isAct = status === 'ACTIVE';
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-        map[status] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+        isAct
+          ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:border-emerald-500/20 dark:text-emerald-400'
+          : 'border border-red-500/30 bg-red-500/10 text-red-600 dark:border-red-500/20 dark:text-red-400'
       }`}
     >
-      {status || '—'}
+      <span className={`h-1.5 w-1.5 rounded-full ${isAct ? 'bg-emerald-500' : 'bg-red-500'}`} />
+      {status === 'ACTIVE' ? 'Active' : status === 'PAUSED' ? 'Paused' : status || '—'}
     </span>
   );
 };
@@ -317,7 +325,7 @@ const ToggleSwitch = ({ status, onToggle, disabled = false }) => {
       onClick={onToggle}
       disabled={disabled}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
-        isActive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/15'
+        isActive ? 'bg-emerald-500' : 'bg-red-500'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
       <span
@@ -328,6 +336,285 @@ const ToggleSwitch = ({ status, onToggle, disabled = false }) => {
     </button>
   );
 };
+
+function SortTh({ label, colKey, sortKey, sortDir, onSort, className = '', align = 'left' }) {
+  const active = sortKey === colKey;
+  return (
+    <th
+      onClick={() => onSort && onSort(colKey)}
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 ${
+        align === 'right' ? 'text-right' : 'text-left'
+      } text-xs font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-white/70 dark:hover:text-white ${className}`}
+    >
+      <span className={`flex items-center gap-2 ${align === 'right' ? 'justify-end' : ''}`}>
+        {label}
+        <span
+          className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md transition-all ${
+            active
+              ? 'bg-gray-200 text-gray-900 dark:bg-white/15 dark:text-white'
+              : 'bg-gray-100 text-gray-400 dark:bg-white/6 dark:text-white/25'
+          }`}
+        >
+          <ArrowUpDown
+            className={`h-2.5 w-2.5 transition-transform ${
+              active && sortDir === 'desc' ? 'rotate-180' : ''
+            }`}
+          />
+        </span>
+      </span>
+    </th>
+  );
+}
+
+const TIKTOK_COLUMNS_CATALOG = [
+  {
+    group: 'performance',
+    label: 'Performance',
+    items: [
+      { key: 'spend', label: 'Spend', icon: DollarSign, default: true },
+      { key: 'impressions', label: 'Impressions', icon: Eye, default: true },
+      { key: 'clicks', label: 'Clicks', icon: MousePointerClick, default: true },
+      { key: 'reach', label: 'Reach', icon: Radio, default: false },
+      { key: 'ctr', label: 'CTR', icon: TrendingUp, default: true },
+      { key: 'cpc', label: 'CPC', icon: Activity, default: false },
+      { key: 'cpm', label: 'CPM', icon: Zap, default: false },
+      { key: 'conversions', label: 'Conversions', icon: Target, default: false },
+      { key: 'cpa', label: 'Cost per Conversion', icon: Receipt, default: false },
+      { key: 'conversionRate', label: 'Conversion Rate', icon: TrendingUp, default: false },
+    ],
+  },
+  {
+    group: 'settings',
+    label: 'Campaign Details',
+    items: [
+      { key: 'status', label: 'Status', icon: Activity, default: true },
+      { key: 'objective', label: 'Objective', icon: Target, default: true },
+      { key: 'budget', label: 'Daily Budget', icon: DollarSign, default: true },
+      { key: 'remaining', label: 'Budget Remaining', icon: Receipt, default: true },
+      { key: 'startDate', label: 'Start Date', icon: Calendar, default: true },
+    ],
+  },
+  {
+    group: 'video',
+    label: 'Video',
+    items: [
+      { key: 'videoPlays', label: 'Video Plays', icon: Play, default: false },
+      { key: 'videoViews2s', label: '2-Second Video Views', icon: Eye, default: false },
+      { key: 'videoViews6s', label: '6-Second Video Views', icon: Eye, default: false },
+      { key: 'avgWatchTime', label: 'Average Watch Time', icon: Activity, default: false },
+      { key: 'likes', label: 'Likes', icon: Zap, default: false },
+      { key: 'comments', label: 'Comments', icon: Layers, default: false },
+      { key: 'shares', label: 'Shares', icon: TrendingUp, default: false },
+    ],
+  },
+];
+
+function TikTokCustomizeColumnsModal({
+  open,
+  onClose,
+  visibleKeys,
+  onChange,
+}) {
+  const [selectedKeys, setSelectedKeys] = useState(visibleKeys || []);
+  const [query, setQuery] = useState('');
+  const [openGroups, setOpenGroups] = useState(new Set(['performance', 'settings', 'video']));
+
+  useEffect(() => {
+    if (open) {
+      setSelectedKeys(visibleKeys || []);
+      setQuery('');
+    }
+  }, [open, visibleKeys]);
+
+  const allItems = useMemo(() => {
+    return TIKTOK_COLUMNS_CATALOG.flatMap((g) => g.items);
+  }, []);
+
+  const defaultKeys = useMemo(() => {
+    return allItems.filter((i) => i.default).map((i) => i.key);
+  }, [allItems]);
+
+  const filteredGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return TIKTOK_COLUMNS_CATALOG;
+    return TIKTOK_COLUMNS_CATALOG.map((group) => {
+      const matched = group.items.filter(
+        (i) => i.label.toLowerCase().includes(q) || i.key.toLowerCase().includes(q)
+      );
+      return { ...group, items: matched };
+    }).filter((g) => g.items.length > 0);
+  }, [query]);
+
+  const filteredKeys = useMemo(() => {
+    return filteredGroups.flatMap((g) => g.items).map((i) => i.key);
+  }, [filteredGroups]);
+
+  const toggleGroup = (groupId) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleKey = (key) => {
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const selectAll = () => {
+    setSelectedKeys((prev) => Array.from(new Set([...prev, ...filteredKeys])).slice(0, 20));
+  };
+
+  const resetToDefault = () => {
+    setSelectedKeys(defaultKeys);
+  };
+
+  const handleDone = () => {
+    onChange(selectedKeys);
+    onClose();
+  };
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-300 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={handleDone}
+    >
+      <div
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#161616]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* header */}
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/8">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Customize columns</h3>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-[#BEBEBE]">
+              {selectedKeys.length} / 20 selected · shown for the selected date range
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDone}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white/45 dark:hover:bg-white/8 dark:hover:text-white"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* search & action buttons */}
+        <div className="border-b border-gray-200 px-5 py-3 dark:border-white/8">
+          <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/4">
+            <Search className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/45" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search metrics…"
+              className="w-full bg-transparent text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-white/40"
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
+            >
+              <CheckCheck className="h-3 w-3" />
+              Select all{query ? ` (${filteredKeys.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={resetToDefault}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset to default
+            </button>
+          </div>
+        </div>
+
+        {/* grouped accordion list */}
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-2 py-2">
+          {filteredGroups.length === 0 && (
+            <div className="px-3 py-8 text-center text-xs text-gray-500 dark:text-white/50">
+              No metrics match "{query}".
+            </div>
+          )}
+          {filteredGroups.map(({ group, label, items }) => {
+            const isOpen = openGroups.has(group);
+            const selectedInGroup = items.filter((m) => selectedKeys.includes(m.key)).length;
+            return (
+              <div key={group} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                  className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-white/55">
+                    {label} <span className="font-normal normal-case text-gray-400 dark:text-white/35">({selectedInGroup}/{items.length})</span>
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform dark:text-white/45 ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="flex flex-col gap-0.5 px-1 pb-1">
+                    {items.map((entry) => {
+                      const Icon = entry.icon;
+                      const checked = selectedKeys.includes(entry.key);
+                      return (
+                        <button
+                          type="button"
+                          key={entry.key}
+                          onClick={() => toggleKey(entry.key)}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-gray-100 dark:hover:bg-white/5 ${
+                            checked ? 'bg-gray-50 dark:bg-white/[0.03]' : ''
+                          }`}
+                        >
+                          <span
+                            className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                              checked
+                                ? 'border-transparent bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
+                                : 'border-gray-300 dark:border-white/20'
+                            }`}
+                          >
+                            {checked && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                          </span>
+                          {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/50" />}
+                          <span className="truncate text-xs text-gray-900 dark:text-white">{entry.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* footer */}
+        <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3 dark:border-white/8">
+          <span className="text-xs text-gray-500 dark:text-white/60">
+            {selectedKeys.length} column{selectedKeys.length === 1 ? '' : 's'} enabled
+          </span>
+          <button
+            type="button"
+            onClick={handleDone}
+            className="rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-5 py-1.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const Spinner = ({ label }) => (
   <div className="flex items-center justify-center py-10 text-gray-500">
@@ -341,16 +628,16 @@ const PillDropdown = ({ icon: Icon, iconClass = 'text-emerald-500', label, open,
   <div className="relative">
     <button
       onClick={() => setOpen(!open)}
-      className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 transition hover:bg-gray-50 dark:border-white/10 dark:bg-[#1c1c1c] dark:text-white dark:hover:bg-white/5"
+      className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-2 text-xs font-medium text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
     >
-      {Icon && <Icon className={`h-3.5 w-3.5 ${iconClass}`} />}
+      {Icon && <Icon className={`h-3 w-3 ${iconClass}`} />}
       <span className="max-w-44 truncate">{label}</span>
-      <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+      <ChevronDown className="h-3 w-3 text-[#7A7369] dark:text-[#BEBEBE]" />
     </button>
     {open && (
       <>
         <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-        <div className="absolute right-0 z-50 mt-1 max-h-72 min-w-52 overflow-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#1c1c1c]">
+        <div className="absolute right-0 z-50 mt-1 max-h-72 min-w-52 overflow-auto rounded-xl border border-[#DDD7CD] bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#171717]">
           {children}
         </div>
       </>
@@ -389,6 +676,152 @@ const TikTokAdsDashboard = () => {
   const [loadingRows, setLoadingRows] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [selectedAdGroup, setSelectedAdGroup] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState([
+    'status',
+    'objective',
+    'budget',
+    'remaining',
+    'startDate',
+    'spend',
+    'impressions',
+    'clicks',
+    'ctr',
+    'preview',
+    'actions',
+  ]);
+
+  const toggleColumn = (key) => {
+    setVisibleColumns((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const allColumnsForView = useMemo(() => {
+    if (view === 'campaigns') {
+      return [
+        { key: 'status', label: 'Status' },
+        { key: 'objective', label: 'Objective' },
+        { key: 'budget', label: 'Daily Budget' },
+        { key: 'remaining', label: 'Budget Remaining' },
+        { key: 'startDate', label: 'Start Date' },
+      ];
+    }
+    if (view === 'adgroups') {
+      return [
+        { key: 'status', label: 'Status' },
+        { key: 'budget', label: 'Budget' },
+        { key: 'spend', label: 'Spend' },
+        { key: 'impressions', label: 'Impressions' },
+        { key: 'clicks', label: 'Clicks' },
+      ];
+    }
+    return [
+      { key: 'preview', label: 'Preview' },
+      { key: 'status', label: 'Status' },
+      { key: 'spend', label: 'Spend' },
+      { key: 'impressions', label: 'Impressions' },
+      { key: 'clicks', label: 'Clicks' },
+      { key: 'ctr', label: 'CTR' },
+    ];
+  }, [view]);
+
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedAndFilteredRows = useMemo(() => {
+    let list = rows;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (r) =>
+          (r.name && r.name.toLowerCase().includes(q)) ||
+          (r.id && String(r.id).toLowerCase().includes(q)) ||
+          (r.objective && r.objective.toLowerCase().includes(q)) ||
+          (r.budgetMode && r.budgetMode.toLowerCase().includes(q))
+      );
+    }
+    return [...list].sort((a, b) => {
+      let av = a[sortKey] ?? '';
+      let bv = b[sortKey] ?? '';
+      if (sortKey === 'budget') {
+        av = Number(a.budget) || 0;
+        bv = Number(b.budget) || 0;
+      } else if (sortKey === 'remaining') {
+        av = budgetRemaining(a);
+        bv = budgetRemaining(b);
+        if (typeof av !== 'number') av = 999999999;
+        if (typeof bv !== 'number') bv = 999999999;
+      } else if (sortKey === 'startDate') {
+        av = new Date(a.createTime || 0).getTime();
+        bv = new Date(b.createTime || 0).getTime();
+      } else if (sortKey === 'spend') {
+        av = Number(a.spend) || 0;
+        bv = Number(b.spend) || 0;
+      } else if (sortKey === 'impressions') {
+        av = Number(a.impressions) || 0;
+        bv = Number(b.impressions) || 0;
+      } else if (sortKey === 'clicks') {
+        av = Number(a.clicks) || 0;
+        bv = Number(b.clicks) || 0;
+      } else if (sortKey === 'reach') {
+        av = Number(a.reach || a.impressions) || 0;
+        bv = Number(b.reach || b.impressions) || 0;
+      } else if (sortKey === 'ctr') {
+        av = Number(a.ctr) || 0;
+        bv = Number(b.ctr) || 0;
+      } else if (sortKey === 'cpc') {
+        av = a.spend && a.clicks ? Number(a.spend) / Number(a.clicks) : 0;
+        bv = b.spend && b.clicks ? Number(b.spend) / Number(b.clicks) : 0;
+      } else if (sortKey === 'cpm') {
+        av = a.spend && a.impressions ? (Number(a.spend) / Number(a.impressions)) * 1000 : 0;
+        bv = b.spend && b.impressions ? (Number(b.spend) / Number(b.impressions)) * 1000 : 0;
+      } else if (sortKey === 'conversions') {
+        av = Number(a.conversions) || 0;
+        bv = Number(b.conversions) || 0;
+      } else if (sortKey === 'cpa') {
+        av = a.spend && a.conversions ? Number(a.spend) / Number(a.conversions) : 0;
+        bv = b.spend && b.conversions ? Number(b.spend) / Number(b.conversions) : 0;
+      } else if (sortKey === 'conversionRate') {
+        av = Number(a.conversionRate) || 0;
+        bv = Number(b.conversionRate) || 0;
+      } else if (sortKey === 'videoPlays') {
+        av = Number(a.videoPlayCount || a.videoPlays) || 0;
+        bv = Number(b.videoPlayCount || b.videoPlays) || 0;
+      } else if (sortKey === 'videoViews2s') {
+        av = Number(a.videoWatched2s) || 0;
+        bv = Number(b.videoWatched2s) || 0;
+      } else if (sortKey === 'videoViews6s') {
+        av = Number(a.videoWatched6s) || 0;
+        bv = Number(b.videoWatched6s) || 0;
+      } else if (sortKey === 'avgWatchTime') {
+        av = Number(a.averageVideoPlay) || 0;
+        bv = Number(b.averageVideoPlay) || 0;
+      } else if (sortKey === 'likes') {
+        av = Number(a.likes) || 0;
+        bv = Number(b.likes) || 0;
+      } else if (sortKey === 'comments') {
+        av = Number(a.comments) || 0;
+        bv = Number(b.comments) || 0;
+      } else if (sortKey === 'shares') {
+        av = Number(a.shares) || 0;
+        bv = Number(b.shares) || 0;
+      }
+      const an = parseFloat(av);
+      const bn = parseFloat(bv);
+      const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [rows, searchQuery, sortKey, sortDir]);
 
   const [editWizard, setEditWizard] = useState({ open: false, mode: 'create', context: null });
 
@@ -702,64 +1135,72 @@ const TikTokAdsDashboard = () => {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto p-6 text-gray-900 dark:text-white">
-      {/* Header — title left, account + date pickers top-right (Meta-style) */}
+      {/* Header — title left, account + date pickers and theme toggle top-right (Meta-style) */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/20">
-            <FaTiktok className="h-5 w-5 text-black" />
-          </div>
-          <div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
+              <FaTiktok className="h-6 w-6 text-black 2xl:h-7 2xl:w-7" />
+            </div>
             <AdsManagerModeSwitcher activeMode="manager" platform="TikTok" />
-            <p className="text-sm text-gray-500 dark:text-gray-400">Manage · Analyse · Optimise</p>
+          </div>
+          <p className="px-1 text-xs font-medium text-[#7A7369] dark:text-[#BEBEBE]">
+            Manage · Analyse · Optimise
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <WorkspaceSwitcher />
+          {accounts.length > 0 && (
+            <>
+              <PillDropdown
+                icon={Radio}
+                label={selectedAccount?.name || 'Account'}
+                open={accountOpen}
+                setOpen={setAccountOpen}
+              >
+                {accounts.map((acc) => (
+                  <button
+                    key={acc.id}
+                    onClick={() => {
+                      setSelectedAccount(acc);
+                      setAccountOpen(false);
+                    }}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
+                      selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {acc.name} ({acc.currency})
+                  </button>
+                ))}
+              </PillDropdown>
+              <PillDropdown
+                icon={Calendar}
+                iconClass="text-gray-400"
+                label={DATE_PRESETS.find((p) => p.value === rangeKey)?.label || 'Date range'}
+                open={dateOpen}
+                setOpen={setDateOpen}
+              >
+                {DATE_PRESETS.map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setRangeKey(p.value);
+                      setDateOpen(false);
+                    }}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
+                      rangeKey === p.value ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </PillDropdown>
+            </>
+          )}
+          <div className="ml-1 2xl:ml-2">
+            <ThemeToggle />
           </div>
         </div>
-        {accounts.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <PillDropdown
-              icon={Radio}
-              label={selectedAccount?.name || 'Account'}
-              open={accountOpen}
-              setOpen={setAccountOpen}
-            >
-              {accounts.map((acc) => (
-                <button
-                  key={acc.id}
-                  onClick={() => {
-                    setSelectedAccount(acc);
-                    setAccountOpen(false);
-                  }}
-                  className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
-                    selectedAccount?.id === acc.id ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
-                  }`}
-                >
-                  {acc.name} ({acc.currency})
-                </button>
-              ))}
-            </PillDropdown>
-            <PillDropdown
-              icon={Calendar}
-              iconClass="text-gray-400"
-              label={DATE_PRESETS.find((p) => p.value === rangeKey)?.label || 'Date range'}
-              open={dateOpen}
-              setOpen={setDateOpen}
-            >
-              {DATE_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  onClick={() => {
-                    setRangeKey(p.value);
-                    setDateOpen(false);
-                  }}
-                  className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
-                    rangeKey === p.value ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </PillDropdown>
-          </div>
-        )}
       </div>
 
       {accounts.length === 0 ? (
@@ -941,196 +1382,460 @@ const TikTokAdsDashboard = () => {
 
           {/* ── Campaigns tab ── */}
           {tab === 'campaigns' && (
-          <div className="rounded-xl workspace-card dark:border-white/8 dark:bg-[#161616]">
-            {/* Breadcrumb + Create */}
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 text-sm dark:border-white/8">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => loadCampaigns(selectedAccount)}
-                  className={`font-semibold ${
-                    view === 'campaigns'
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-500 hover:underline'
-                  }`}
-                >
-                  Campaigns
-                </button>
-                {selectedCampaign && (
-                  <>
-                    <ChevronRight size={14} className="text-gray-400" />
-                    <button
-                      onClick={() => loadAdGroups(selectedCampaign)}
-                      className={`font-semibold ${
-                        view === 'adgroups'
-                          ? 'text-gray-900 dark:text-white'
-                          : 'text-gray-500 hover:underline'
-                      }`}
-                    >
-                      {selectedCampaign.name}
-                    </button>
-                  </>
-                )}
-                {selectedAdGroup && (
-                  <>
-                    <ChevronRight size={14} className="text-gray-400" />
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {selectedAdGroup.name}
-                    </span>
-                  </>
-                )}
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              {/* Header Title + Subtitle (matching Meta Ads Manager) */}
+              <div className="shrink-0">
+                <h1 className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Campaigns</h1>
+                <p className="text-xs 2xl:text-sm text-gray-500 dark:text-[#BEBEBE]">
+                  Build and manage TikTok Ads Manager campaigns end-to-end
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (!selectedAccount) return;
-                    if (view === 'campaigns') loadCampaigns(selectedAccount);
-                    else if (view === 'adgroups' && selectedCampaign) loadAdGroups(selectedCampaign);
-                    else if (view === 'ads' && selectedAdGroup) loadAds(selectedAdGroup);
-                  }}
-                  disabled={loadingRows}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 transition hover:bg-gray-100 disabled:opacity-50 dark:border-white/8 dark:bg-[#1c1c1c] dark:text-white dark:hover:bg-white/5"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loadingRows ? 'animate-spin' : ''}`} /> Refresh
-                </button>
-                <button
-                  onClick={() => setShowWizard(true)}
-                  className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 transition hover:bg-gray-100"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Create Campaign
-                </button>
-              </div>
-            </div>
 
-            {loadingRows ? (
-              <Spinner label={`Loading ${view}...`} />
-            ) : rows.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-gray-500">
-                No {view} found.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500 dark:bg-white/[0.03] dark:text-white/50">
-                    <tr>
-                      {view === 'ads' && <th className="w-20 px-4 py-2.5 font-semibold">Preview</th>}
-                      <th className="px-4 py-2.5 font-semibold">{view === 'campaigns' ? 'Campaign' : view === 'adgroups' ? 'Ad Group' : 'Ad'}</th>
-                      <th className="px-4 py-2.5 font-semibold">Status</th>
-                      {view === 'campaigns' && <th className="px-4 py-2.5 font-semibold">Objective</th>}
-                      {(view === 'campaigns' || view === 'adgroups') && <th className="px-4 py-2.5 font-semibold">Budget</th>}
-                      {view === 'campaigns' && <th className="px-4 py-2.5 font-semibold">Remaining</th>}
-                      {view === 'campaigns' && <th className="px-4 py-2.5 font-semibold">Start Date</th>}
-                      {view !== 'campaigns' && <th className="px-4 py-2.5 font-semibold">Spend</th>}
-                      {view !== 'campaigns' && <th className="px-4 py-2.5 font-semibold">Impressions</th>}
-                      {view !== 'campaigns' && <th className="px-4 py-2.5 font-semibold">Clicks</th>}
-                      {view === 'ads' && <th className="px-4 py-2.5 font-semibold">CTR</th>}
-                      <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-white/8">
-                    {rows.map((row) => (
-                      <tr
-                        key={row.id}
-                        onClick={() => onRowClick(row)}
-                        className={`${view !== 'ads' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.03]' : ''}`}
+              {/* Breadcrumb row */}
+              <div className="flex shrink-0 items-center">
+                <div className="flex items-center gap-1.5 text-sm font-semibold">
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      loadCampaigns(selectedAccount);
+                    }}
+                    className={`transition ${
+                      view === 'campaigns'
+                        ? 'text-gray-900 dark:text-white font-bold'
+                        : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Campaigns
+                  </button>
+                  {selectedCampaign && (
+                    <>
+                      <ChevronRight size={14} className="text-gray-400" />
+                      <button
+                        onClick={() => {
+                          setSearchQuery('');
+                          loadAdGroups(selectedCampaign);
+                        }}
+                        className={`transition ${
+                          view === 'adgroups'
+                            ? 'text-gray-900 dark:text-white font-bold'
+                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                        }`}
                       >
-                        {view === 'ads' && (
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              title="Preview ad"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewAd(row);
-                              }}
-                              className="relative block h-11 w-16 cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:ring-2 hover:ring-gray-300 dark:border-white/10 dark:bg-[#1e1e1e] dark:hover:ring-white/30"
-                            >
-                              {row.thumbnailUrl ? (
-                                <img
-                                  src={row.thumbnailUrl}
-                                  alt={row.name}
-                                  loading="lazy"
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center">
-                                  <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
-                                </div>
-                              )}
-                              {row.mediaType === 'video' && (
-                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
-                                  <Play className="h-3 w-3 fill-white text-white" />
-                                </div>
-                              )}
-                            </button>
-                          </td>
-                        )}
-                        <td className="px-4 py-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{row.name}</p>
-                            <p className="truncate text-[11px] text-gray-400">ID: {row.id}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <StatusBadge status={row.status} />
-                            <RejectionWarning reviewInfo={row.reviewInfo} />
-                            <ToggleSwitch status={row.status} onToggle={(e) => toggleStatus(e, row)} disabled={row.status === 'DELETED'} />
-                          </div>
-                        </td>
-                        {view === 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{row.objective || '—'}</td>
-                        )}
-                        {(view === 'campaigns' || view === 'adgroups') && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">
-                            {row.budgetMode === 'BUDGET_MODE_INFINITE'
-                              ? 'Unlimited'
-                              : `${fmtCurrency(row.budget, currency)}`}
-                          </td>
-                        )}
-                        {view === 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">
-                            {typeof budgetRemaining(row) === 'number'
-                              ? fmtCurrency(budgetRemaining(row), currency)
-                              : budgetRemaining(row)}
-                          </td>
-                        )}
-                        {view === 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{fmtDate(row.createTime)}</td>
-                        )}
-                        {view !== 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{fmtCurrency(row.spend, currency)}</td>
-                        )}
-                        {view !== 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{fmtNum(row.impressions)}</td>
-                        )}
-                        {view !== 'campaigns' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{fmtNum(row.clicks)}</td>
-                        )}
-                        {view === 'ads' && (
-                          <td className="px-4 py-3 text-gray-600 dark:text-white/70">{fmtPct(row.ctr)}</td>
-                        )}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={(e) => handleEdit(e, row)}
-                              title="Edit"
-                              className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            {view !== 'ads' && <ChevronRight size={16} className="text-gray-400" />}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        {selectedCampaign.name}
+                      </button>
+                    </>
+                  )}
+                  {selectedAdGroup && (
+                    <>
+                      <ChevronRight size={14} className="text-gray-400" />
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {selectedAdGroup.name}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Campaigns Table Card with fixed internal scroll container */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+                {/* Card Header Toolbar — Count on left, Search, Refresh, Columns, Create on right */}
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+                      {view === 'campaigns'
+                        ? `${sortedAndFilteredRows.length} ${sortedAndFilteredRows.length === 1 ? 'campaign' : 'campaigns'}`
+                        : view === 'adgroups' && selectedCampaign
+                          ? `Ad groups in ${selectedCampaign.name}`
+                          : view === 'ads' && selectedAdGroup
+                            ? `Ads in ${selectedAdGroup.name}`
+                            : `${sortedAndFilteredRows.length} ${view}`}
+                    </p>
+                  </div>
+
+                  {/* Actions Right */}
+                  <div className="flex items-center gap-2">
+                    {/* Search input */}
+                    <div className="relative w-48 sm:w-56">
+                      <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={
+                          view === 'campaigns'
+                            ? 'Search campaigns…'
+                            : view === 'adgroups'
+                              ? 'Search ad groups…'
+                              : 'Search ads…'
+                        }
+                        className="w-full rounded-full border border-gray-300 bg-gray-100 py-1.5 pl-9 pr-8 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute top-1/2 right-2.5 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                          aria-label="Clear search"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Refresh button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!selectedAccount) return;
+                        if (view === 'campaigns') loadCampaigns(selectedAccount);
+                        else if (view === 'adgroups' && selectedCampaign) loadAdGroups(selectedCampaign);
+                        else if (view === 'ads' && selectedAdGroup) loadAds(selectedAdGroup);
+                      }}
+                      disabled={loadingRows}
+                      title="Refresh"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${loadingRows ? 'animate-spin' : ''}`} />
+                    </button>
+
+                    {/* Columns Button */}
+                    <button
+                      type="button"
+                      onClick={() => setColumnsOpen(true)}
+                      className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      Columns
+                      {visibleColumns.length > 0 && (
+                        <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-700 dark:bg-white/15 dark:text-white">
+                          {visibleColumns.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Dynamic Action Button (+ New Campaign / + Add Ad Group / + Add Ad) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (view === 'campaigns') {
+                          setShowWizard(true);
+                        } else if (view === 'adgroups') {
+                          setEditWizard({ open: true, mode: 'add-adgroup', context: selectedCampaign });
+                        } else if (view === 'ads') {
+                          setEditWizard({ open: true, mode: 'add-ad', context: selectedAdGroup });
+                        }
+                      }}
+                      className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-black transition-all hover:bg-gray-100 dark:bg-white dark:text-black shadow-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {view === 'campaigns'
+                        ? 'New Campaign'
+                        : view === 'adgroups'
+                          ? 'Add Ad Group'
+                          : 'Add Ad'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table Scrollable Container with scrollbar inside the card */}
+                <div className="scrollbar-thin flex-1 overflow-auto">
+                  {loadingRows ? (
+                    <Spinner label={`Loading ${view}...`} />
+                  ) : sortedAndFilteredRows.length === 0 ? (
+                    <div className="px-4 py-12 text-center text-sm text-gray-500">
+                      {searchQuery ? `No ${view} matching "${searchQuery}"` : `No ${view} found.`}
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
+                        <tr>
+                          {view === 'ads' && visibleColumns.includes('preview') && (
+                            <th className="w-20 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
+                          )}
+                          <SortTh
+                            label={view === 'campaigns' ? 'Campaign' : view === 'adgroups' ? 'Ad Group' : 'Ad'}
+                            colKey="name"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={toggleSort}
+                            className="w-[36%] pl-5"
+                          />
+                          {visibleColumns.includes('status') && (
+                            <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {view === 'campaigns' && visibleColumns.includes('objective') && (
+                            <SortTh label="Objective" colKey="objective" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {view === 'adgroups' && visibleColumns.includes('objective') && (
+                            <SortTh label="Optimization Goal" colKey="optimizationGoal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {(view === 'campaigns' || view === 'adgroups') && visibleColumns.includes('budget') && (
+                            <SortTh label={view === 'campaigns' ? 'Daily Budget' : 'Daily Budget'} colKey="budget" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {view === 'campaigns' && visibleColumns.includes('remaining') && (
+                            <SortTh label="Budget Remaining" colKey="remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {(view === 'campaigns' || view === 'adgroups') && visibleColumns.includes('startDate') && (
+                            <SortTh label="Start Date" colKey="startDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('spend') && (
+                            <SortTh label="Spend" colKey="spend" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('impressions') && (
+                            <SortTh label="Impressions" colKey="impressions" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('clicks') && (
+                            <SortTh label="Clicks" colKey="clicks" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('reach') && (
+                            <SortTh label="Reach" colKey="reach" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('ctr') && (
+                            <SortTh label="CTR" colKey="ctr" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('cpc') && (
+                            <SortTh label="CPC" colKey="cpc" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('cpm') && (
+                            <SortTh label="CPM" colKey="cpm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('conversions') && (
+                            <SortTh label="Conversions" colKey="conversions" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('cpa') && (
+                            <SortTh label="Cost / Conv" colKey="cpa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('conversionRate') && (
+                            <SortTh label="CVR" colKey="conversionRate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('videoPlays') && (
+                            <SortTh label="Video Plays" colKey="videoPlays" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('videoViews2s') && (
+                            <SortTh label="2s Views" colKey="videoViews2s" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('videoViews6s') && (
+                            <SortTh label="6s Views" colKey="videoViews6s" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('avgWatchTime') && (
+                            <SortTh label="Avg Watch" colKey="avgWatchTime" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('likes') && (
+                            <SortTh label="Likes" colKey="likes" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('comments') && (
+                            <SortTh label="Comments" colKey="comments" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('shares') && (
+                            <SortTh label="Shares" colKey="shares" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                          )}
+                          {visibleColumns.includes('actions') && (
+                            <th className="w-16 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-white/6">
+                        {sortedAndFilteredRows.map((row) => (
+                          <tr
+                            key={row.id}
+                            onClick={() => onRowClick(row)}
+                            className={`group border-b border-gray-200 transition-colors dark:border-white/10 last:border-b-0 ${
+                              view !== 'ads'
+                                ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/3'
+                                : 'cursor-default'
+                            }`}
+                          >
+                            {view === 'ads' && visibleColumns.includes('preview') && (
+                              <td className="px-4 py-4">
+                                <button
+                                  type="button"
+                                  title="Preview ad"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewAd(row);
+                                  }}
+                                  className="relative block h-11 w-16 cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:ring-2 hover:ring-gray-300 dark:border-white/10 dark:bg-[#1e1e1e] dark:hover:ring-white/30"
+                                >
+                                  {row.thumbnailUrl ? (
+                                    <img
+                                      src={row.thumbnailUrl}
+                                      alt={row.name}
+                                      loading="lazy"
+                                      className="h-full w-full object-cover"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center">
+                                      <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/20" />
+                                    </div>
+                                  )}
+                                  {row.mediaType === 'video' && (
+                                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
+                                      <Play className="h-3 w-3 fill-white text-white" />
+                                    </div>
+                                  )}
+                                </button>
+                              </td>
+                            )}
+                            <td className="pl-5 pr-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-white leading-tight">
+                                    {row.name}
+                                  </p>
+                                  <p className="mt-0.5 font-mono text-[11px] text-gray-400 dark:text-white/40">
+                                    ID: {row.id}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            {visibleColumns.includes('status') && (
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2.5">
+                                  <StatusBadge status={row.status} />
+                                  <RejectionWarning reviewInfo={row.reviewInfo} />
+                                  <ToggleSwitch
+                                    status={row.status}
+                                    onToggle={(e) => toggleStatus(e, row)}
+                                    disabled={row.status === 'DELETED'}
+                                  />
+                                </div>
+                              </td>
+                            )}
+                            {view === 'campaigns' && visibleColumns.includes('objective') && (
+                              <td className="px-4 py-4">
+                                <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                                  <Target className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
+                                  {prettyStatus(row.objective) || '—'}
+                                </span>
+                              </td>
+                            )}
+                            {view === 'adgroups' && visibleColumns.includes('objective') && (
+                              <td className="px-4 py-4">
+                                <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                                  <Activity className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
+                                  {prettyStatus(row.optimizationGoal || row.billingEvent || row.objectiveType) || 'Conversions'}
+                                </span>
+                              </td>
+                            )}
+                            {(view === 'campaigns' || view === 'adgroups') && visibleColumns.includes('budget') && (
+                              <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
+                                {row.budgetMode === 'BUDGET_MODE_INFINITE' ? (
+                                  <span className="text-gray-400 dark:text-white/40">Set on campaign (CBO)</span>
+                                ) : row.budget ? (
+                                  fmtCurrency(row.budget, currency)
+                                ) : (
+                                  <span className="text-gray-400 dark:text-white/40">Set on campaign (CBO)</span>
+                                )}
+                              </td>
+                            )}
+                            {view === 'campaigns' && visibleColumns.includes('remaining') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                                {typeof budgetRemaining(row) === 'number'
+                                  ? fmtCurrency(budgetRemaining(row), currency)
+                                  : budgetRemaining(row)}
+                              </td>
+                            )}
+                            {(view === 'campaigns' || view === 'adgroups') && visibleColumns.includes('startDate') && (
+                              <td className="px-4 py-4">
+                                <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-white/80">
+                                  <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
+                                  {fmtDate(row.createTime || row.scheduleStartTime)}
+                                </span>
+                              </td>
+                            )}
+                            {visibleColumns.includes('spend') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtCurrency(row.spend, currency)}</td>
+                            )}
+                            {visibleColumns.includes('impressions') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.impressions)}</td>
+                            )}
+                            {visibleColumns.includes('clicks') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.clicks)}</td>
+                            )}
+                            {visibleColumns.includes('reach') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.reach || row.impressions)}</td>
+                            )}
+                            {visibleColumns.includes('ctr') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtPct(row.ctr)}</td>
+                            )}
+                            {visibleColumns.includes('cpc') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                                {row.spend && row.clicks ? fmtCurrency(Number(row.spend) / Number(row.clicks), currency) : '—'}
+                              </td>
+                            )}
+                            {visibleColumns.includes('cpm') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                                {row.spend && row.impressions ? fmtCurrency((Number(row.spend) / Number(row.impressions)) * 1000, currency) : '—'}
+                              </td>
+                            )}
+                            {visibleColumns.includes('conversions') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.conversions || 0)}</td>
+                            )}
+                            {visibleColumns.includes('cpa') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                                {row.spend && row.conversions ? fmtCurrency(Number(row.spend) / Number(row.conversions), currency) : '—'}
+                              </td>
+                            )}
+                            {visibleColumns.includes('conversionRate') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtPct(row.conversionRate || 0)}</td>
+                            )}
+                            {visibleColumns.includes('videoPlays') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.videoPlayCount || row.videoPlays || 0)}</td>
+                            )}
+                            {visibleColumns.includes('videoViews2s') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.videoWatched2s || 0)}</td>
+                            )}
+                            {visibleColumns.includes('videoViews6s') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.videoWatched6s || 0)}</td>
+                            )}
+                            {visibleColumns.includes('avgWatchTime') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                                {row.averageVideoPlay ? `${Number(row.averageVideoPlay).toFixed(1)}s` : '—'}
+                              </td>
+                            )}
+                            {visibleColumns.includes('likes') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.likes || 0)}</td>
+                            )}
+                            {visibleColumns.includes('comments') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.comments || 0)}</td>
+                            )}
+                            {visibleColumns.includes('shares') && (
+                              <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">{fmtNum(row.shares || 0)}</td>
+                            )}
+                            {visibleColumns.includes('actions') && (
+                              <td className="pr-5 pl-2 py-4">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={(e) => handleEdit(e, row)}
+                                    title="Edit"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  {view !== 'ads' && <ChevronRight size={16} className="text-gray-400" />}
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Customize Columns Modal */}
+              <TikTokCustomizeColumnsModal
+                open={columnsOpen}
+                onClose={() => setColumnsOpen(false)}
+                visibleKeys={visibleColumns}
+                onChange={(nextKeys) => setVisibleColumns(nextKeys)}
+              />
+            </div>
           )}
         </>
       )}
@@ -1139,6 +1844,8 @@ const TikTokAdsDashboard = () => {
       {showWizard && selectedAccount && (
         <CreateCampaignWizard
           advertiserId={selectedAccount.id}
+          accountName={selectedAccount.name || selectedAccount.advertiserName || ''}
+          accounts={accounts}
           currency={currency}
           timezone={selectedAccount.timezone}
           onClose={() => setShowWizard(false)}
@@ -1154,6 +1861,8 @@ const TikTokAdsDashboard = () => {
       {editWizard.open && selectedAccount && (
         <CreateCampaignWizard
           advertiserId={selectedAccount.id}
+          accountName={selectedAccount.name || selectedAccount.advertiserName || ''}
+          accounts={accounts}
           currency={currency}
           timezone={selectedAccount.timezone}
           mode={editWizard.mode}

@@ -1407,6 +1407,45 @@ class TiktokAdController {
         scheduleStart = tiktokScheduleStartNow(tz);
       }
 
+      // Sanitize device_type to TikTok's operating_systems field ("ANDROID", "IOS")
+      if (incoming.device_type && !incoming.operating_systems) {
+        incoming.operating_systems = (
+          Array.isArray(incoming.device_type) ? incoming.device_type : [incoming.device_type]
+        ).map((d) => String(d).replace(/^DEVICE_/, ""));
+        delete incoming.device_type;
+      }
+      if (Array.isArray(incoming.operating_systems)) {
+        incoming.operating_systems = incoming.operating_systems.map((d) =>
+          String(d).replace(/^DEVICE_/, "")
+        );
+      }
+
+      // Sanitize promotion_type for App Promotion
+      if (incoming.promotion_type === "APP_ANDROID" || incoming.promotion_type === "APP_IOS") {
+        incoming.promotion_type = "APP";
+      }
+
+      // Map standard/Meta event names to TikTok Marketing API valid optimization_event enum
+      const eventMap = {
+        COMPLETE_PAYMENT: "ON_WEB_ORDER",
+        PURCHASE: "ON_WEB_ORDER",
+        INITIATE_CHECKOUT: "INITIATE_ORDER",
+        ADD_PAYMENT_INFO: "ADD_BILLING",
+        ADD_TO_CART: "ON_WEB_CART",
+        VIEW_CONTENT: "ON_WEB_DETAIL",
+        ADD_TO_WISHLIST: "ON_WEB_ADD_TO_WISHLIST",
+        SEARCH: "ON_WEB_SEARCH",
+        SUBMIT_FORM: "FORM",
+        LEAD: "FORM",
+        COMPLETE_REGISTRATION: "ON_WEB_REGISTER",
+        SUBSCRIBE: "ON_WEB_SUBSCRIBE",
+        CONTACT: "CONSULT",
+        DOWNLOAD: "DOWNLOAD_FINISH",
+      };
+      if (incoming.optimization_event && eventMap[incoming.optimization_event]) {
+        incoming.optimization_event = eventMap[incoming.optimization_event];
+      }
+
       const payload = {
         advertiser_id: advertiserId,
         campaign_id: campaignId,
@@ -1587,6 +1626,7 @@ class TiktokAdController {
         advertiser_id: String(advertiserId),
         upload_type: "UPLOAD_BY_URL",
         image_url: posterUrl,
+        file_name: `cover_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`,
       },
     });
     return upload?.data?.image_id || upload?.data?.id || "";
@@ -1743,16 +1783,25 @@ class TiktokAdController {
         const blob = new Blob([req.file.buffer], {
           type: req.file.mimetype || "video/mp4",
         });
+        const origName = req.file.originalname || "video.mp4";
+        const dotIdx = origName.lastIndexOf(".");
+        const base = (dotIdx !== -1 ? origName.slice(0, dotIdx) : origName).replace(/[^a-zA-Z0-9_-]/g, "_");
+        const ext = dotIdx !== -1 ? origName.slice(dotIdx) : ".mp4";
+        const uniqueFileName = `${base.slice(0, 50)}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
+
         form.append("upload_type", "UPLOAD_BY_FILE");
         form.append("video_signature", signature);
+        form.append("file_name", uniqueFileName);
         form.append(
           "video_file",
           blob,
-          req.file.originalname || "video.mp4"
+          uniqueFileName
         );
       } else {
+        const uniqueFileName = `video_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp4`;
         form.append("upload_type", "UPLOAD_BY_URL");
         form.append("video_url", videoUrl);
+        form.append("file_name", uniqueFileName);
       }
 
       // Direct axios call (not tiktokApiRequest) so axios sets the multipart
@@ -1949,13 +1998,51 @@ class TiktokAdController {
         return res.status(400).json({ error: "adgroupId is required" });
       }
 
+      const incoming = req.body.payload || {};
+      if (incoming.device_type && !incoming.operating_systems) {
+        incoming.operating_systems = (
+          Array.isArray(incoming.device_type) ? incoming.device_type : [incoming.device_type]
+        ).map((d) => String(d).replace(/^DEVICE_/, ""));
+        delete incoming.device_type;
+      }
+      if (Array.isArray(incoming.operating_systems)) {
+        incoming.operating_systems = incoming.operating_systems.map((d) =>
+          String(d).replace(/^DEVICE_/, "")
+        );
+      }
+
+      // Sanitize promotion_type for App Promotion
+      if (incoming.promotion_type === "APP_ANDROID" || incoming.promotion_type === "APP_IOS") {
+        incoming.promotion_type = "APP";
+      }
+
+      const eventMap = {
+        COMPLETE_PAYMENT: "ON_WEB_ORDER",
+        PURCHASE: "ON_WEB_ORDER",
+        INITIATE_CHECKOUT: "INITIATE_ORDER",
+        ADD_PAYMENT_INFO: "ADD_BILLING",
+        ADD_TO_CART: "ON_WEB_CART",
+        VIEW_CONTENT: "ON_WEB_DETAIL",
+        ADD_TO_WISHLIST: "ON_WEB_ADD_TO_WISHLIST",
+        SEARCH: "ON_WEB_SEARCH",
+        SUBMIT_FORM: "FORM",
+        LEAD: "FORM",
+        COMPLETE_REGISTRATION: "ON_WEB_REGISTER",
+        SUBSCRIBE: "ON_WEB_SUBSCRIBE",
+        CONTACT: "CONSULT",
+        DOWNLOAD: "DOWNLOAD_FINISH",
+      };
+      if (incoming.optimization_event && eventMap[incoming.optimization_event]) {
+        incoming.optimization_event = eventMap[incoming.optimization_event];
+      }
+
       const payload = {
         advertiser_id: advertiserId,
         adgroup_id: adgroupId,
         ...(adgroupName ? { adgroup_name: adgroupName } : {}),
         ...(budget != null ? { budget: Number(budget) } : {}),
         ...(budgetMode ? { budget_mode: budgetMode } : {}),
-        ...(req.body.payload || {}),
+        ...incoming,
       };
 
       const accessToken = await getValidAccessToken(userId);
@@ -2123,12 +2210,21 @@ class TiktokAdController {
         const blob = new Blob([req.file.buffer], {
           type: req.file.mimetype || "image/jpeg",
         });
+        const origName = req.file.originalname || "image.jpg";
+        const dotIdx = origName.lastIndexOf(".");
+        const base = (dotIdx !== -1 ? origName.slice(0, dotIdx) : origName).replace(/[^a-zA-Z0-9_-]/g, "_");
+        const ext = dotIdx !== -1 ? origName.slice(dotIdx) : ".jpg";
+        const uniqueFileName = `${base.slice(0, 50)}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
+
         form.append("upload_type", "UPLOAD_BY_FILE");
         form.append("image_signature", signature);
-        form.append("image_file", blob, req.file.originalname || "image.jpg");
+        form.append("file_name", uniqueFileName);
+        form.append("image_file", blob, uniqueFileName);
       } else {
+        const uniqueFileName = `image_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
         form.append("upload_type", "UPLOAD_BY_URL");
         form.append("image_url", imageUrl);
+        form.append("file_name", uniqueFileName);
       }
 
       const agent2 = getTiktokProxyAgent();

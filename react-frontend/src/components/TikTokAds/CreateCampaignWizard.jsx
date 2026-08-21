@@ -1,6 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Loader2, Check, Rocket, AlertCircle, BookmarkPlus, Bookmark, Trash2 } from 'lucide-react';
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Check,
+  Rocket,
+  AlertCircle,
+  BookmarkPlus,
+  Bookmark,
+  Trash2,
+  Megaphone,
+  Target,
+  Layers,
+  Users,
+  Image as ImageIcon,
+  CheckCircle2,
+  Search,
+  Globe,
+  Tag,
+  Languages as LanguagesIcon,
+  ChevronDown,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getTiktokWizardSchema,
@@ -33,8 +55,26 @@ import {
   SelectField,
   MultiSelectField,
   SegGroup,
+  ToggleField,
+  CurrencyField,
 } from '@/components/MetaAds/wizardFields';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
+
+const currencySymbol = (curr = 'USD') => {
+  switch (curr?.toUpperCase()) {
+    case 'INR':
+      return '₹';
+    case 'EUR':
+      return '€';
+    case 'GBP':
+      return '£';
+    case 'JPY':
+      return '¥';
+    case 'USD':
+    default:
+      return '$';
+  }
+};
 
 // TikTok requires in-feed video ads to be at least 5 seconds, up to a
 // 10-minute maximum for standard (non-Spark) ads.
@@ -217,65 +257,259 @@ function MediaPreview({ file, url, type, onRemove }) {
   );
 }
 
-// TikTok-only multi-select with a scrollable chip list. We keep this local
-// instead of extending the Meta Ads wizard field so the two wizards stay
-// independent.
-function ScrollableMultiSelectField({
+// Searchable multi-select with instant live filtering, selected badges,
+// quick presets, and clear all. Delivers a modern Ads Manager experience.
+function SearchableMultiSelectField({
   label,
   hint,
+  placeholder = 'Search...',
   required,
   error,
-  values,
+  values = [],
   onChange,
-  options,
+  options = [],
   disabled = false,
   className = '',
-  maxHeight = 'max-h-72',
+  icon: Icon = null,
+  emptyHint = 'No selection targets all',
+  presets = null,
 }) {
-  const set = new Set(values || []);
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const set = useMemo(() => new Set(values || []), [values]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return options;
+    const q = query.toLowerCase().trim();
+    return options.filter((opt) => {
+      const lbl = typeof opt === 'string' ? opt : opt.label;
+      return lbl.toLowerCase().includes(q);
+    });
+  }, [options, query]);
+
   const toggle = (v) => {
+    if (disabled) return;
     const next = new Set(set);
     if (next.has(v)) next.delete(v);
     else next.add(v);
     onChange(Array.from(next));
   };
 
+  const removeValue = (v, e) => {
+    e?.stopPropagation();
+    if (disabled) return;
+    const next = new Set(set);
+    next.delete(v);
+    onChange(Array.from(next));
+  };
+
+  const clearAll = (e) => {
+    e?.stopPropagation();
+    if (disabled) return;
+    onChange([]);
+  };
+
+  const selectedOptions = useMemo(() => {
+    return (values || []).map((v) => {
+      const found = options.find((opt) => (typeof opt === 'string' ? opt : opt.value) === v);
+      return {
+        value: v,
+        label: found ? (typeof found === 'string' ? found : found.label) : v,
+      };
+    });
+  }, [values, options]);
+
   return (
-    <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
-      <div
-        className={`${maxHeight} overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/50 p-2 dark:border-white/10 dark:bg-white/5`}
-      >
-        <div className={`flex flex-wrap gap-2 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          {options.map((opt) => {
-            const v = typeof opt === 'string' ? opt : opt.value;
-            const lbl = typeof opt === 'string' ? opt : opt.label;
-            const active = set.has(v);
-            return (
-              <div
-                key={v}
-                className={`rounded-full p-[1px] transition-all ${
-                  active
-                    ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB]'
-                    : 'bg-gray-200 hover:bg-gray-300 dark:bg-white/8 dark:hover:bg-white/15'
-                }`}
+    <FieldShell
+      label={
+        <div className="flex w-full items-center justify-between">
+          <span>{label}</span>
+          {values?.length > 0 && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-[11px] font-semibold text-gray-400 transition hover:text-red-400 dark:text-white/40 dark:hover:text-red-400"
+            >
+              Clear all ({values.length})
+            </button>
+          )}
+        </div>
+      }
+      hint={hint || (values.length === 0 ? emptyHint : undefined)}
+      error={error}
+      required={required}
+      className={className}
+    >
+      <div ref={containerRef} className="relative w-full">
+        {/* Trigger Search Bar & Selected Chips */}
+        <div
+          onClick={() => {
+            if (!disabled) {
+              setIsOpen(true);
+              inputRef.current?.focus();
+            }
+          }}
+          className={`min-h-[46px] w-full rounded-2xl border bg-gray-100 p-2 text-sm transition-all dark:bg-[#909294]/15 ${
+            isOpen
+              ? 'border-gray-400 ring-2 ring-[#02C8C4]/20 dark:border-white/25 dark:ring-[#02C8C4]/20'
+              : 'border-gray-300 hover:border-gray-400 dark:border-white/5 dark:hover:border-white/15'
+          } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            {Icon && (
+              <div className="flex pl-1 pr-0.5 text-gray-400 dark:text-white/40">
+                <Icon className="h-4 w-4" />
+              </div>
+            )}
+
+            {/* Selected Chips */}
+            {selectedOptions.map((opt) => (
+              <span
+                key={opt.value}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#02C8C4]/15 to-[#5867EB]/15 border border-[#15DCFF]/30 px-2.5 py-0.5 text-xs font-semibold text-gray-900 dark:text-white shadow-xs"
               >
+                <span>{opt.label}</span>
                 <button
                   type="button"
-                  onClick={() => toggle(v)}
-                  disabled={disabled}
-                  className={`flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-13 font-medium transition-all dark:bg-[#1d1d1d] 2xl:px-4 2xl:py-1.5 2xl:text-sm ${
-                    active
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/55 dark:hover:text-white/80'
-                  }`}
+                  onClick={(e) => removeValue(opt.value, e)}
+                  className="rounded-full p-0.5 text-gray-400 hover:bg-black/10 hover:text-gray-900 dark:text-white/60 dark:hover:bg-white/20 dark:hover:text-white"
                 >
-                  {active && <Check className="h-3 w-3" />}
-                  {lbl}
+                  <X className="h-3 w-3" />
                 </button>
-              </div>
-            );
-          })}
+              </span>
+            ))}
+
+            {/* Inline search input */}
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (!isOpen) setIsOpen(true);
+              }}
+              onFocus={() => setIsOpen(true)}
+              placeholder={values.length === 0 ? placeholder : 'Add more...'}
+              disabled={disabled}
+              className="min-w-[120px] flex-1 bg-transparent px-1.5 py-1 text-xs text-gray-900 placeholder:text-xs placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-[#AFAFAF]"
+            />
+
+            {/* Dropdown indicator */}
+            <div className="ml-auto flex items-center gap-1 pr-1 text-gray-400 dark:text-white/40">
+              {query && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setQuery('');
+                  }}
+                  className="p-1 hover:text-gray-700 dark:hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#02C8C4]' : ''}`}
+              />
+            </div>
+          </div>
         </div>
+
+        {/* Dropdown Panel */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
+              className="absolute z-50 mt-1.5 w-full rounded-2xl border border-gray-200 bg-white/95 p-3 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#181818]/95 max-h-72 overflow-hidden flex flex-col"
+            >
+              {/* Presets Row if any */}
+              {presets && presets.length > 0 && (
+                <div className="mb-2.5 flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-2.5 dark:border-white/10">
+                  <span className="text-[11px] font-semibold text-gray-400 dark:text-white/40 mr-1">Presets:</span>
+                  {presets.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => {
+                        onChange(p.values);
+                      }}
+                      className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 transition hover:border-[#15DCFF] hover:bg-[#15DCFF]/10 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:border-[#15DCFF] dark:hover:bg-[#15DCFF]/10"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Header inside dropdown */}
+              <div className="mb-2 flex items-center justify-between px-1 text-[11px] text-gray-400 dark:text-white/50">
+                <span>
+                  {filteredOptions.length} {filteredOptions.length === 1 ? 'option' : 'options'}
+                  {query ? ` matching "${query}"` : ''}
+                </span>
+                <span>{values.length} selected</span>
+              </div>
+
+              {/* Options list */}
+              <div className="scrollbar-thin flex-1 overflow-y-auto pr-1">
+                {filteredOptions.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {filteredOptions.map((opt) => {
+                      const v = typeof opt === 'string' ? opt : opt.value;
+                      const lbl = typeof opt === 'string' ? opt : opt.label;
+                      const active = set.has(v);
+
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => toggle(v)}
+                          className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                            active
+                              ? 'bg-gradient-to-r from-[#02C8C4]/15 to-[#5867EB]/15 font-semibold text-gray-900 dark:text-white border border-[#15DCFF]/40'
+                              : 'text-gray-700 hover:bg-gray-100 dark:text-white/70 dark:hover:bg-white/5 border border-transparent'
+                          }`}
+                        >
+                          <span className="truncate pr-2">{lbl}</span>
+                          <div
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-all ${
+                              active
+                                ? 'border-[#02C8C4] bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
+                                : 'border-gray-300 dark:border-white/20 bg-transparent'
+                            }`}
+                          >
+                            {active && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center text-xs text-gray-400 dark:text-white/40">
+                    <p>No results found for &ldquo;{query}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </FieldShell>
   );
@@ -367,13 +601,8 @@ const BUDGET_MODE_CHOICES = BUDGET_MODES.filter((m) => m.value !== 'BUDGET_MODE_
 // toggle plus an optional "Set campaign budget" toggle. The other objectives
 // (Traffic, Lead Gen, App Promotion, Sales) show neither toggle — they always
 // carry a plain campaign budget (confirmed in-product).
-const objectiveHasCboOption = (objectiveKey) =>
-  ['REACH', 'VIDEO_VIEWS', 'ENGAGEMENT'].includes(objectiveKey);
-
-// A campaign carries a budget when: it's a non-CBO-toggle objective (always
-// has a campaign budget), or CBO is on, or the "Set campaign budget" toggle is on.
-const hasCampaignBudget = (form) =>
-  !objectiveHasCboOption(form.objectiveKey) || form.budgetOptimizeOn || form.setCampaignBudget;
+// A campaign carries a budget when CBO (Campaign Budget Optimization) is enabled.
+const hasCampaignBudget = (form) => Boolean(form.budgetOptimizeOn);
 
 // The budget mode that actually governs an ad group's schedule: the campaign's
 // mode when the campaign carries the budget, else the ad group's own mode.
@@ -408,8 +637,8 @@ const PLACEMENTS = [
 ];
 
 const DEVICE_TYPES = [
-  { value: 'DEVICE_ANDROID', label: 'Android' },
-  { value: 'DEVICE_IOS', label: 'iOS' },
+  { value: 'ANDROID', label: 'Android' },
+  { value: 'IOS', label: 'iOS' },
 ];
 
 const BRAND_SAFETY_TYPES = [
@@ -419,15 +648,28 @@ const BRAND_SAFETY_TYPES = [
   { value: 'LIMITED_INVENTORY', label: 'Limited inventory' },
 ];
 
-// TikTok requires the ad group's billing_event to match its optimization goal
-// (e.g. REACH → CPM, video views → CPV, conversions → OCPM). Sending the wrong
-// pairing is rejected with errors like "Only CPM is supported".
-const billingEventForGoal = (goal) => {
+const OPTIMIZATION_GOAL_LABELS = {
+  CLICK: 'Clicks',
+  REACH: 'Reach',
+  ENGAGED_VIEW: '6-second Focused Video Views',
+  VIDEO_VIEW: 'Video Views',
+  FOLLOWERS: 'Followers',
+  PAGE_VISIT: 'Profile visits',
+  LEADS: 'Instant Form Leads',
+  CONVERT: 'Conversions',
+  VALUE: 'Value (ROAS)',
+  INSTALL: 'App Installs',
+  IN_APP_EVENT: 'In-App Events',
+};
+
+const billingEventForGoal = (goal, bidType) => {
   switch (goal) {
     case 'REACH':
+    case 'CPM':
       return 'CPM';
     case 'VIDEO_VIEW':
     case 'ENGAGED_VIEW':
+    case 'CPV':
       return 'CPV';
     case 'CONVERT':
     case 'VALUE':
@@ -437,12 +679,13 @@ const billingEventForGoal = (goal) => {
     case 'FOLLOWERS':
     case 'PROFILE_VIEWS':
       return 'OCPM';
+    case 'PAGE_VISIT':
+      return bidType === 'BID_TYPE_CUSTOM' ? 'CPC' : 'OCPM';
     case 'CLICK':
     case 'TRAFFIC':
     case 'LANDING_PAGE':
-    case 'PAGE_VISIT':
     default:
-      return 'CPC';
+      return bidType === 'BID_TYPE_CUSTOM' ? 'CPC' : 'CPM';
   }
 };
 
@@ -455,7 +698,7 @@ const promotionTypeForObjective = (objectiveKey) => {
     case 'PRODUCT_SALES':
       return 'WEBSITE';
     case 'APP_PROMOTION':
-      return 'APP_ANDROID';
+      return 'APP';
     default:
       return null; // REACH, VIDEO_VIEWS, ENGAGEMENT, LEAD_GENERATION
   }
@@ -492,13 +735,29 @@ const OBJECTIVE_ASSET_NOTE = {
 // Lead Generation has two distinct paths. Only the WEBSITE path needs a pixel;
 // INSTANT_FORM uses a TikTok Instant Form referenced by page_id on the creative.
 const LEAD_SUB_TYPES = [
-  { key: 'INSTANT_FORM', label: 'Instant form (TikTok)' },
-  { key: 'WEBSITE', label: 'Website form' },
+  { key: 'INSTANT_FORM', label: 'Instant form (TikTok)', optimizationGoal: 'LEADS', optimizationGoals: ['LEADS', 'CLICK'] },
+  { key: 'WEBSITE', label: 'Website form', optimizationGoal: 'CONVERT', optimizationGoals: ['CONVERT', 'CLICK'] },
 ];
 
 const isLeadGeneration = (objectiveKey) => objectiveKey === 'LEAD_GENERATION';
 const leadSubTypeNeedsPixel = (subType) => subType === 'WEBSITE';
 const leadSubTypeNeedsForm = (subType) => subType === 'INSTANT_FORM';
+
+const getOptimizationGoalsForObjective = (objectiveKey, leadGenSubType, productSalesSubType, currentObjective) => {
+  if (isLeadGeneration(objectiveKey)) {
+    if (leadGenSubType === 'INSTANT_FORM') return ['LEADS', 'CLICK'];
+    if (leadGenSubType === 'WEBSITE') return ['CONVERT', 'CLICK'];
+    return ['LEADS', 'CONVERT', 'CLICK'];
+  }
+  if (isProductSales(objectiveKey)) {
+    if (productSalesSubType === 'INSTANT_PAGE') return ['CLICK', 'PAGE_VISIT'];
+    if (productSalesSubType === 'WEBSITE') return ['CONVERT', 'VALUE', 'CLICK'];
+    return ['CONVERT', 'VALUE', 'CLICK'];
+  }
+  return currentObjective?.optimizationGoals?.length
+    ? currentObjective.optimizationGoals
+    : ['CLICK', 'CONVERT'];
+};
 
 // Sales has the same Website-vs-Instant-Page split as Lead Generation
 // (confirmed in TikTok Ads Manager: choosing "TikTok Instant Page" as the
@@ -694,17 +953,23 @@ const AD_TEXT_LENGTH_ERROR =
 // authoritative source here.
 const PIXEL_EVENTS_BY_OBJECTIVE = {
   PRODUCT_SALES: [
-    { value: 'COMPLETE_PAYMENT', label: 'Complete payment' },
-    { value: 'PURCHASE', label: 'Purchase' },
-    { value: 'INITIATE_CHECKOUT', label: 'Initiate checkout' },
-    { value: 'ADD_TO_CART', label: 'Add to cart' },
-    { value: 'VIEW_CONTENT', label: 'View content' },
+    { value: 'ON_WEB_ORDER', label: 'Complete payment (Place Order)' },
+    { value: 'PAY_ACTION', label: 'Pay action' },
+    { value: 'INITIATE_ORDER', label: 'Initiate checkout' },
+    { value: 'ADD_BILLING', label: 'Add payment info' },
+    { value: 'ON_WEB_CART', label: 'Add to cart' },
+    { value: 'ON_WEB_DETAIL', label: 'View content / Product details' },
+    { value: 'ON_WEB_ADD_TO_WISHLIST', label: 'Add to wishlist' },
+    { value: 'ON_WEB_SEARCH', label: 'Search' },
+    { value: 'PAGE_VIEW', label: 'Page view' },
   ],
   LEAD_GENERATION: [
-    { value: 'SUBMIT_FORM', label: 'Submit form' },
-    { value: 'COMPLETE_REGISTRATION', label: 'Complete registration' },
-    { value: 'CONTACT', label: 'Contact' },
-    { value: 'DOWNLOAD', label: 'Download' },
+    { value: 'FORM', label: 'Submit form (Lead)' },
+    { value: 'CONVERSION_LEADS', label: 'Conversion leads' },
+    { value: 'ON_WEB_REGISTER', label: 'Complete registration' },
+    { value: 'ON_WEB_SUBSCRIBE', label: 'Subscribe' },
+    { value: 'CONSULT', label: 'Contact / Consult' },
+    { value: 'LANDING_PAGE_VIEW', label: 'Landing page view' },
   ],
 };
 
@@ -1008,33 +1273,48 @@ function TikTokAdPreview({ form, identityName }) {
   );
 }
 
-function StepRail({ currentIndex }) {
+const TIKTOK_STEPS = [
+  { id: 'objective', label: 'Objective', icon: Target },
+  { id: 'campaign', label: 'Campaign', icon: Layers },
+  { id: 'adgroup', label: 'Ad Group', icon: Users },
+  { id: 'ad', label: 'Ad', icon: ImageIcon },
+  { id: 'review', label: 'Review', icon: CheckCircle2 },
+];
+
+function StepRail({ currentIndex, steps: stepOverride, onStepClick }) {
+  const stepsToRender = stepOverride || TIKTOK_STEPS;
   return (
     <div className="flex items-center gap-1 overflow-x-auto 2xl:gap-1.5">
-      {STEPS.map((s, i) => {
+      {stepsToRender.map((s, i) => {
+        const Icon = s.icon;
+        const label = s.label || s;
         const done = i < currentIndex;
         const active = i === currentIndex;
         return (
-          <React.Fragment key={s}>
-            <div
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-all shrink-0 2xl:px-3 2xl:py-1.5 2xl:text-sm ${
+          <React.Fragment key={s.id || label}>
+            <button
+              type="button"
+              onClick={() => onStepClick?.(i)}
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-all shrink-0 2xl:px-3 2xl:py-1.5 2xl:text-sm cursor-pointer ${
                 active
-                  ? 'bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] text-white'
+                  ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white shadow-sm'
                   : done
-                  ? 'border border-emerald-400/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300'
-                  : 'border border-gray-200 bg-gray-50 text-gray-400 dark:border-white/8 dark:bg-white/3 dark:text-white/30'
+                  ? 'border border-emerald-400/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300 hover:border-emerald-400/50'
+                  : 'border border-gray-200 bg-gray-50 text-gray-400 dark:border-white/8 dark:bg-white/3 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'
               }`}
             >
               {done ? (
                 <Check className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" />
+              ) : Icon ? (
+                <Icon className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" />
               ) : (
                 <span className="flex h-3.5 w-3.5 items-center justify-center text-[10px] 2xl:h-4 2xl:w-4 2xl:text-[11px]">
                   {i + 1}
                 </span>
               )}
-              <span className="hidden sm:inline">{s}</span>
-            </div>
-            {i < STEPS.length - 1 && (
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+            {i < stepsToRender.length - 1 && (
               <div
                 className={`h-0.5 w-2 2xl:w-3 shrink-0 ${
                   i < currentIndex ? 'bg-emerald-400/30' : 'bg-gray-200 dark:bg-white/15'
@@ -1106,12 +1386,6 @@ function getStepErrors(step, form, currentObjective, currency = 'USD') {
     if (needsPixel) {
       if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
       if (!form.optimizationEvent) errs.optimizationEvent = 'Select a conversion event';
-    }
-    if (isLeadGeneration(form.objectiveKey) && leadSubTypeNeedsForm(form.leadGenSubType) && !form.pageId) {
-      errs.pageId = 'Select or enter a TikTok Instant Form Page ID';
-    }
-    if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && !form.pageId) {
-      errs.pageId = 'Select or enter a TikTok Instant Page ID';
     }
     if (!form.scheduleStartTime) {
       errs.scheduleStartTime = 'A start time is required';
@@ -1194,68 +1468,107 @@ function getStepIssues(step, form, selectedObjective, currency) {
   return Object.values(getStepErrors(step, form, selectedObjective, currency));
 }
 
-function CampaignSetupSidebar({ currentStep, form, selectedObjective, onStepClick, currency }) {
-  const currentIssues = getStepIssues(currentStep, form, selectedObjective, currency);
+function CampaignSetupSidebar({
+  currentStep,
+  steps = TIKTOK_STEPS,
+  form,
+  selectedObjective,
+  onStepClick,
+  currency,
+  identities = [],
+  stepOffset = 0,
+}) {
+  const actualStep = currentStep + stepOffset;
+  const currentIssues = getStepIssues(actualStep, form, selectedObjective, currency);
+  const isAdStep = actualStep === 3;
 
   return (
-    <div className="hidden lg:flex w-72 shrink-0 flex-col gap-4 border-l border-gray-100 bg-gray-50/50 px-5 py-5 dark:border-white/5 dark:bg-white/[0.02]">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">
-        Campaign Setup
-      </h3>
-
-      <div className="flex flex-col gap-1">
-        {STEPS.map((s, i) => {
-          const isActive = i === currentStep;
-          const stepIssues = getStepIssues(i, form, selectedObjective, currency);
-          const isDone = i < currentStep && stepIssues.length === 0;
-          const hasIssue = stepIssues.length > 0 && !isDone;
-          const isInvalidPast = i < currentStep && stepIssues.length > 0;
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onStepClick?.(i)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
-                isActive
-                  ? 'bg-[#15DCFF]/10 text-[#15DCFF] dark:bg-[#15DCFF]/10'
-                  : isInvalidPast
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                  : 'text-gray-500 hover:bg-gray-100 dark:text-white/50 dark:hover:bg-white/5'
-              }`}
-            >
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                  isDone
-                    ? 'bg-emerald-500 text-white'
-                    : hasIssue
-                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                    : isActive
-                    ? 'bg-[#15DCFF] text-white'
-                    : 'bg-gray-200 text-gray-500 dark:bg-white/10 dark:text-white/50'
-                }`}
-              >
-                {isDone ? <Check className="h-3 w-3" /> : i + 1}
-              </span>
-              <span className="font-medium">{s}</span>
-            </button>
-          );
-        })}
+    <aside className="scrollbar-thin hidden w-64 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 bg-gray-50/50 px-4 py-5 dark:border-white/8 dark:bg-white/2 md:flex">
+      {/* Whole-wizard checklist */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-white/40">
+          Campaign setup
+        </p>
+        <ul className="mt-2.5 flex flex-col gap-0.5">
+          {steps.map((s, i) => {
+            const isCurrent = i === currentStep;
+            const targetStep = i + stepOffset;
+            const stepIssues = getStepIssues(targetStep, form, selectedObjective, currency);
+            const hasErr = stepIssues.length > 0;
+            const done = i < currentStep && !hasErr;
+            const label = s.label || s;
+            return (
+              <li key={s.id || label}>
+                <button
+                  type="button"
+                  onClick={() => onStepClick?.(targetStep)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors cursor-pointer ${
+                    isCurrent
+                      ? 'bg-gray-100 font-semibold text-gray-900 dark:bg-white/8 dark:text-white'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white/55 dark:hover:bg-white/5 dark:hover:text-white/80'
+                  }`}
+                >
+                  <span
+                    className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                      done
+                        ? 'border border-emerald-400/40 bg-emerald-400/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300'
+                        : hasErr && i <= currentStep
+                        ? 'border border-amber-400/40 bg-amber-400/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
+                        : isCurrent
+                        ? 'border border-[#15DCFF]/40 bg-[#15DCFF]/10 text-[#0EA5C2] dark:border-[#15DCFF]/30 dark:bg-[#15DCFF]/15 dark:text-[#15DCFF]'
+                        : 'border border-gray-300 bg-gray-50 text-gray-500 dark:border-white/8 dark:bg-white/3 dark:text-white/40'
+                    }`}
+                  >
+                    {done ? (
+                      <Check className="h-2.5 w-2.5" />
+                    ) : hasErr && i <= currentStep ? (
+                      <AlertCircle className="h-2.5 w-2.5 text-amber-500" />
+                    ) : (
+                      i + 1
+                    )}
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
-      {currentIssues.length > 0 && currentStep < 4 && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
-            <AlertCircle className="h-3.5 w-3.5" />
-            {currentIssues.length} thing{currentIssues.length > 1 ? 's' : ''} left on this step
+      {/* Current-step status — tinted amber card */}
+      {currentIssues.length > 0 && actualStep < 4 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-400/20 dark:bg-amber-400/5">
+          <div className="flex items-start gap-1.5">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600 dark:text-amber-300" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-200">
+                {currentIssues.length} {currentIssues.length === 1 ? 'thing' : 'things'} left on this step
+              </p>
+              <div className="mt-1 flex flex-col gap-0.5">
+                {currentIssues.map((m, idx) => (
+                  <div key={idx} className="flex items-start gap-1 text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                    <span className="select-none">•</span>
+                    <span>{m}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <ul className="flex list-disc flex-col gap-1 pl-4 text-[11px] text-amber-700/80 dark:text-amber-400/80">
-            {currentIssues.map((issue, idx) => (
-              <li key={idx}>{issue}</li>
-            ))}
-          </ul>
         </div>
       )}
-    </div>
+
+      {/* Ad Preview (when on Ad step or previewing) */}
+      {isAdStep && (
+        <div className="mt-1 flex flex-col gap-2 border-t border-gray-200 pt-3 dark:border-white/8">
+          <TikTokAdPreview
+            form={form}
+            identityName={
+              identities?.find((it) => String(it.identityId) === String(form.identityId))?.displayName || ''
+            }
+          />
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -1499,6 +1812,8 @@ function ReviewField({ label, value }) {
 
 const CreateCampaignWizard = ({
   advertiserId,
+  accountName = '',
+  accounts = [],
   currency = 'USD',
   timezone = '',
   mode = 'create',
@@ -1508,7 +1823,9 @@ const CreateCampaignWizard = ({
   onChangeAccount,
 }) => {
   const isCreate = mode === 'create';
-  const isEdit = !isCreate;
+  const isAddAdGroup = mode === 'add-adgroup'; // creating a new ad group under existing campaign
+  const isAddAd = mode === 'add-ad';           // creating a new ad under existing ad group
+  const isEdit = !isCreate && !isAddAdGroup && !isAddAd;
   const isEditCampaign = mode === 'edit-campaign';
   const isEditAdGroup = mode === 'edit-adgroup';
   const isEditAd = mode === 'edit-ad';
@@ -1592,7 +1909,7 @@ const CreateCampaignWizard = ({
     return {};
   };
 
-  const initialStep = isEditCampaign ? 1 : isEditAdGroup ? 2 : isEditAd ? 3 : 0;
+  const initialStep = isEditCampaign ? 1 : isEditAdGroup ? 2 : isEditAd ? 3 : isAddAdGroup ? 2 : isAddAd ? 3 : 0;
 
   const [step, setStep] = useState(initialStep);
   const [schema, setSchema] = useState(null);
@@ -1616,7 +1933,15 @@ const CreateCampaignWizard = ({
   // which otherwise fires each create endpoint twice — visible as duplicate
   // create-campaign/ad-group calls and "Campaign name already exists" errors.
   const inFlightRef = useRef(false);
-  const [created, setCreated] = useState({}); // {campaignId, adgroupId, videoId, imageId, carouselImageIds, adId}
+  // For add-adgroup: pre-seed the existing campaign so handleLaunch skips step 1.
+  // For add-ad: pre-seed both campaign + adgroup so handleLaunch skips steps 1 & 2.
+  const [created, setCreated] = useState(
+    isAddAdGroup && context?.id
+      ? { campaignId: context.id }
+      : isAddAd && context?.id
+        ? { adgroupId: context.id, campaignId: context.campaignId || '' }
+        : {}
+  ); // {campaignId, adgroupId, videoId, imageId, carouselImageIds, adId}
   const [error, setError] = useState(null);
   const [errors, setErrors] = useState({}); // field-level validation errors
   const [videoWarning, setVideoWarning] = useState(''); // non-blocking advisory (e.g. estimated low bitrate)
@@ -1914,6 +2239,52 @@ const CreateCampaignWizard = ({
       .catch(() => setInterestCategories([]));
   }, [advertiserId, form.objectiveType]);
 
+  const locationPresets = useMemo(() => {
+    if (!regions?.length) return [];
+    const findIds = (names) =>
+      regions
+        .filter((r) => names.some((n) => r.name?.toLowerCase().includes(n.toLowerCase())))
+        .map((r) => r.id);
+
+    return [
+      {
+        label: 'Tier 1 (US, UK, CA, AU)',
+        values: findIds(['United States', 'United Kingdom', 'Canada', 'Australia']),
+      },
+      {
+        label: 'North America (US, CA)',
+        values: findIds(['United States', 'Canada']),
+      },
+      {
+        label: 'Europe Top 5',
+        values: findIds(['United Kingdom', 'Germany', 'France', 'Italy', 'Spain']),
+      },
+    ].filter((p) => p.values.length > 0);
+  }, [regions]);
+
+  const languagePresets = [
+    { label: 'English Only', values: ['en'] },
+    { label: 'Top Global (EN, ES, FR, DE, HI, AR)', values: ['en', 'es', 'fr', 'de', 'hi', 'ar'] },
+  ];
+
+  const interestCategoryPresets = useMemo(() => {
+    if (!interestCategories?.length) return [];
+    return [
+      {
+        label: 'E-Commerce & Tech',
+        values: interestCategories
+          .filter((c) => /e-commerce|tech|electronics|app|online/i.test(c.name || ''))
+          .map((c) => String(c.id)),
+      },
+      {
+        label: 'Lifestyle & Media',
+        values: interestCategories
+          .filter((c) => /beauty|fashion|apparel|entertainment|game|travel|food|pets/i.test(c.name || ''))
+          .map((c) => String(c.id)),
+      },
+    ].filter((p) => p.values.length > 0);
+  }, [interestCategories]);
+
   // Fetch pixels when the selected objective/path needs one. Reset pixel state
   // when the objective changes away from a pixel-requiring objective.
   const needsPixel =
@@ -2016,14 +2387,22 @@ const CreateCampaignWizard = ({
     [schema, form.objectiveKey]
   );
 
-  // In edit mode the context only gives us the API `objective_type`. Once the
-  // schema loads, derive the wizard `objectiveKey` so the ad-group step can
+  // In edit mode or add-adgroup/add-ad mode the context only gives us the API `objective_type`.
+  // Once the schema loads, derive the wizard `objectiveKey` so the ad-group step can
   // show the right optimization-goal options and Reach-only fields.
   useEffect(() => {
-    if (!isEdit || !schema || form.objectiveKey) return;
-    const key = findObjectiveKeyByType(form.objectiveType, schema.objectives || []);
-    if (key) update({ objectiveKey: key });
-  }, [isEdit, schema, form.objectiveType, form.objectiveKey]);
+    if (!schema || form.objectiveKey) return;
+    const contextObjectiveType =
+      context?.raw?.objective_type ||
+      context?.raw?.campaign_objective_type ||
+      context?.objectiveType ||
+      context?.objective_type ||
+      form.objectiveType;
+    if (contextObjectiveType) {
+      const key = findObjectiveKeyByType(contextObjectiveType, schema.objectives || []);
+      if (key) update({ objectiveKey: key, objectiveType: contextObjectiveType });
+    }
+  }, [schema, form.objectiveKey, form.objectiveType, context]);
 
   // Objective used to drive ad-group fields. Prefer the explicit key; fall back
   // to a lookup by API objective_type so edits still populate correctly before
@@ -2043,6 +2422,20 @@ const CreateCampaignWizard = ({
     return selectedObjective;
   }, [schema, form.objectiveKey, form.objectiveType, selectedObjective]);
 
+  // Keep form.optimizationGoal aligned with the allowed goals of the current objective
+  useEffect(() => {
+    const validGoals = getOptimizationGoalsForObjective(
+      form.objectiveKey,
+      form.leadGenSubType,
+      form.productSalesSubType,
+      currentObjective
+    );
+    if (!validGoals.length) return;
+    if (!form.optimizationGoal || !validGoals.includes(form.optimizationGoal)) {
+      update({ optimizationGoal: validGoals[0] });
+    }
+  }, [currentObjective, form.objectiveKey, form.leadGenSubType, form.productSalesSubType, form.optimizationGoal]);
+
   // Video-only objectives (Video Views, Community Interaction) don't offer an
   // image option on TikTok — force the media type back to video if a prior
   // objective left it set to image.
@@ -2060,13 +2453,14 @@ const CreateCampaignWizard = ({
     }
   }, [form.objectiveKey, form.mediaType]);
 
-  // Clear a stale music selection when the creative no longer needs music
-  // (e.g. switching Reach from image to video, or away from carousel).
+  // Special Ad Categories (Housing, Employment, Credit) strictly disallow age and
+  // gender targeting under advertising non-discrimination regulations.
   useEffect(() => {
-    if (!mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && (form.musicId || form.musicFile)) {
-      update({ musicId: '', musicFile: null });
+    if (form.specialIndustries?.length > 0) {
+      if (form.ageGroups?.length > 0) update({ ageGroups: [] });
+      if (form.gender && form.gender !== 'GENDER_UNLIMITED') update({ gender: 'GENDER_UNLIMITED' });
     }
-  }, [form.objectiveKey, form.mediaType]);
+  }, [form.specialIndustries]);
 
   const pickObjective = (o) => {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '').replace('-', '').replace('-', '');
@@ -2097,10 +2491,16 @@ const CreateCampaignWizard = ({
   const validateStep = (targetStep = step) =>
     getStepErrors(targetStep, form, currentObjective, currency);
 
+  const activeLaunchSteps = useMemo(() => {
+    if (isAddAd) return [3];
+    if (isAddAdGroup) return [2, 3];
+    return [0, 1, 2, 3];
+  }, [isAddAd, isAddAdGroup]);
+
   const canNext = () => Object.keys(validateStep(step)).length === 0;
 
   const canLaunch = () =>
-    STEPS.slice(0, -1).every((_, i) => Object.keys(validateStep(i)).length === 0);
+    activeLaunchSteps.every((s) => Object.keys(validateStep(s)).length === 0);
 
   const handleNext = () => {
     const errs = validateStep(step);
@@ -2164,7 +2564,9 @@ const CreateCampaignWizard = ({
           adgroup_id: context.id,
           adgroup_name: form.adgroupName,
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
-          ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
+          ...(form.deviceTypes.length
+            ? { operating_systems: form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')) }
+            : {}),
           location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
           age_groups: form.ageGroups,
           gender: form.gender,
@@ -2298,8 +2700,16 @@ const CreateCampaignWizard = ({
       let { campaignId, adgroupId, videoId, videoCoverImageId, imageId, carouselImageIds, adId } = created;
       carouselImageIds = carouselImageIds || [];
 
+      if (isAddAdGroup) {
+        campaignId = campaignId || context?.id || context?.campaignId;
+      }
+      if (isAddAd) {
+        campaignId = campaignId || context?.campaignId || context?.parentCampaignId;
+        adgroupId = adgroupId || context?.id || context?.adgroupId;
+      }
+
       // 1. Campaign
-      if (!campaignId) {
+      if (!campaignId && !isAddAdGroup && !isAddAd) {
         const res = await createTiktokCampaign({
           advertiserId,
           campaignName: form.campaignName,
@@ -2317,17 +2727,19 @@ const CreateCampaignWizard = ({
       }
 
       // 2. Ad Group
-      if (!adgroupId) {
+      if (!adgroupId && !isAddAd) {
         const payload = {
           advertiser_id: advertiserId,
           campaign_id: campaignId,
           adgroup_name: form.adgroupName,
           placement_type: 'PLACEMENT_TYPE_NORMAL',
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
-          ...(form.deviceTypes.length ? { device_type: form.deviceTypes } : {}),
+          ...(form.deviceTypes.length
+            ? { operating_systems: form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')) }
+            : {}),
           location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
-          ...(form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
-          ...(form.gender && form.gender !== 'GENDER_UNLIMITED' ? { gender: form.gender } : {}),
+          ...(form.specialIndustries?.length ? {} : form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
+          ...(form.specialIndustries?.length ? { gender: 'GENDER_UNLIMITED' } : form.gender && form.gender !== 'GENDER_UNLIMITED' ? { gender: form.gender } : {}),
           ...(form.interestCategoryIds.length
             ? { interest_category_ids: form.interestCategoryIds }
             : {}),
@@ -2367,7 +2779,7 @@ const CreateCampaignWizard = ({
           schedule_type: effectiveScheduleType(form),
           ...scheduleEndPayload(),
           optimization_goal: form.optimizationGoal,
-          billing_event: billingEventForGoal(form.optimizationGoal),
+          billing_event: billingEventForGoal(form.optimizationGoal, form.bidType),
           bid_type: form.bidType,
           ...(form.bidType === 'BID_TYPE_CUSTOM' && form.bidPrice
             ? { bid_price: Number(form.bidPrice) }
@@ -2724,72 +3136,57 @@ const CreateCampaignWizard = ({
                 })}
               </div>
             </FieldShell>
-            {/* Reach / Video Views / Community Interaction expose the CBO model
-                (optimization toggle + optional set-campaign-budget). The other
-                objectives always carry a plain campaign budget with no toggles. */}
-            {objectiveHasCboOption(form.objectiveKey) && (
-              <>
-                <FieldShell
-                  label="Campaign budget optimization"
-                  hint="Let TikTok automatically distribute your campaign budget across ad groups for the best results."
-                >
-                  <button
-                    type="button"
-                    onClick={() => update({ budgetOptimizeOn: !form.budgetOptimizeOn })}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                      form.budgetOptimizeOn
-                        ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                        : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
-                    }`}
-                  >
-                    {form.budgetOptimizeOn ? <Check className="h-3 w-3" /> : null}
-                    {form.budgetOptimizeOn ? 'Enabled' : 'Disabled'}
-                  </button>
-                </FieldShell>
+            {!isEdit && (
+              <ToggleField
+                label="Campaign Budget Optimisation (CBO)"
+                description="Set the budget on the campaign and let TikTok distribute across ad groups. Otherwise each ad group has its own budget."
+                value={form.budgetOptimizeOn}
+                onChange={(v) => update({ budgetOptimizeOn: v })}
+              />
+            )}
 
-                {/* When CBO is off, an optional "Set campaign budget" toggle.
-                    Off → no campaign-level budget; budget is set per ad group. */}
-                {!form.budgetOptimizeOn && (
-                  <FieldShell
-                    label="Set campaign budget"
-                    hint="Optional. Off means no campaign-level budget — you'll set budgets at the ad group level instead."
-                  >
-                    <button
-                      type="button"
-                      onClick={() => update({ setCampaignBudget: !form.setCampaignBudget })}
-                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                        form.setCampaignBudget
-                          ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-white'
-                          : 'border border-gray-300 bg-white text-gray-600 hover:border-gray-400 dark:border-white/10 dark:bg-[#1d1d1d] dark:text-white/70'
-                      }`}
-                    >
-                      {form.setCampaignBudget ? <Check className="h-3 w-3" /> : null}
-                      {form.setCampaignBudget ? 'Enabled' : 'Disabled'}
-                    </button>
+            {form.budgetOptimizeOn && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {isEdit ? (
+                  <FieldShell label="Budget type">
+                    <div className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2.5 text-13 text-gray-600 dark:border-white/10 dark:bg-white/3 dark:text-white/70">
+                      {form.budgetMode === 'BUDGET_MODE_DAY' ? 'Daily budget' : 'Lifetime budget'}
+                      <span className="ml-2 text-gray-400 dark:text-white/35">· can’t be changed</span>
+                    </div>
+                  </FieldShell>
+                ) : (
+                  <FieldShell label="Budget type *" required>
+                    <SegGroup
+                      value={form.budgetMode}
+                      onChange={(v) => update({ budgetMode: v })}
+                      options={[
+                        { value: 'BUDGET_MODE_DAY', label: 'Daily budget' },
+                        { value: 'BUDGET_MODE_TOTAL', label: 'Lifetime budget' },
+                      ]}
+                    />
                   </FieldShell>
                 )}
-              </>
-            )}
-
-            {hasCampaignBudget(form) && (
-              <>
-                <SelectField
-                  label="Budget mode"
-                  value={form.budgetMode}
-                  onChange={(v) => update({ budgetMode: v })}
-                  options={BUDGET_MODE_CHOICES}
-                />
-                <NumberField
-                  label={`${form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
+                <CurrencyField
+                  label={form.budgetMode === 'BUDGET_MODE_DAY' ? 'Daily budget *' : 'Lifetime budget *'}
+                  required
+                  symbol={currencySymbol(currency)}
                   value={form.budget}
                   onChange={(v) => update({ budget: v })}
-                  min={campaignMinBudget(currency, form.objectiveKey)}
-                  required
+                  placeholder="100"
                   error={errors.budget}
-                  hint={`TikTok requires at least ${campaignMinBudget(currency, form.objectiveKey)} ${currency} at the campaign level.`}
                 />
-              </>
+              </div>
             )}
+
+            <CurrencyField
+              label="Campaign spending limit (optional)"
+              hint="Once this total spend is reached, TikTok auto-pauses the campaign."
+              symbol={currencySymbol(currency)}
+              value={form.spendCap}
+              onChange={(v) => update({ spendCap: v })}
+              placeholder="e.g. 50000"
+              error={errors.spendCap}
+            />
           </div>
         );
 
@@ -2808,17 +3205,15 @@ const CreateCampaignWizard = ({
               label="Optimization goal"
               value={form.optimizationGoal}
               onChange={(v) => update({ optimizationGoal: v })}
-              options={(currentObjective?.optimizationGoals || [form.optimizationGoal || 'CLICK'])
-                .filter(
-                  (g) =>
-                    !isLeadGeneration(form.objectiveKey) ||
-                    !form.leadGenSubType ||
-                    g === LEAD_SUB_TYPES.find((s) => s.key === form.leadGenSubType)?.optimizationGoal
-                )
-                .map((g) => ({
-                  value: g,
-                  label: g,
-                }))}
+              options={getOptimizationGoalsForObjective(
+                form.objectiveKey,
+                form.leadGenSubType,
+                form.productSalesSubType,
+                currentObjective
+              ).map((g) => ({
+                value: g,
+                label: OPTIMIZATION_GOAL_LABELS[g] || g,
+              }))}
               required
               error={errors.optimizationGoal}
             />
@@ -2903,44 +3298,36 @@ const CreateCampaignWizard = ({
                 budget was also set. So the "inherited" display is CBO-only. */}
             {form.budgetOptimizeOn ? (
               <FieldShell label="Budget">
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
+                <div className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2.5 text-13 text-gray-600 dark:border-white/10 dark:bg-white/3 dark:text-white/70">
                   From campaign settings:{' '}
-                  <span className="font-medium">
-                    {form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} · {form.budget} {currency}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {form.budgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime budget' : 'Daily budget'} · {currencySymbol(currency)} {form.budget}
                   </span>{' '}
-                  (shared across ad groups)
+                  <span className="text-gray-400 dark:text-white/40">· CBO enabled</span>
                 </div>
               </FieldShell>
             ) : (
-              <>
-                <SelectField
-                  label="Budget mode"
-                  value={form.adgroupBudgetMode}
-                  onChange={(v) => update({ adgroupBudgetMode: v })}
-                  options={BUDGET_MODE_CHOICES}
-                />
-                <NumberField
-                  label={`${form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime' : 'Daily'} budget (${currency})`}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <FieldShell label="Budget type *" required>
+                  <SegGroup
+                    value={form.adgroupBudgetMode}
+                    onChange={(v) => update({ adgroupBudgetMode: v })}
+                    options={[
+                      { value: 'BUDGET_MODE_DAY', label: 'Daily budget' },
+                      { value: 'BUDGET_MODE_TOTAL', label: 'Lifetime budget' },
+                    ]}
+                  />
+                </FieldShell>
+                <CurrencyField
+                  label={form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'Lifetime budget *' : 'Daily budget *'}
+                  required
+                  symbol={currencySymbol(currency)}
                   value={form.adgroupBudget}
                   onChange={(v) => update({ adgroupBudget: v })}
-                  min={
-                    form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
-                      ? lifetimeMinBudget(adGroupMinBudget(currency, form.objectiveKey), form.scheduleStartTime, form.scheduleEndTime)
-                      : adGroupMinBudget(currency, form.objectiveKey)
-                  }
-                  required
+                  placeholder="20"
                   error={errors.adgroupBudget}
-                  hint={
-                    form.adgroupBudgetMode === 'BUDGET_MODE_TOTAL'
-                      ? `Lifetime minimum = ${adGroupMinBudget(currency, form.objectiveKey)} ${currency} × scheduled days${
-                          scheduledDays(form.scheduleStartTime, form.scheduleEndTime)
-                            ? ` = ${lifetimeMinBudget(adGroupMinBudget(currency, form.objectiveKey), form.scheduleStartTime, form.scheduleEndTime)} ${currency}`
-                            : ' (set start & end dates below)'
-                        }.`
-                      : `TikTok requires at least ${adGroupMinBudget(currency, form.objectiveKey)} ${currency}/day at the ad-group level.`
-                  }
                 />
-              </>
+              </div>
             )}
             {form.optimizationGoal === 'REACH' && (
               <FieldShell
@@ -3009,44 +3396,74 @@ const CreateCampaignWizard = ({
                 </div>
               </FieldShell>
             )}
-            <ScrollableMultiSelectField
+            <SearchableMultiSelectField
               label="Locations"
-              hint={form.locationIds.length === 0 ? 'No selection = All locations targeted' : undefined}
+              icon={Globe}
+              placeholder="Search countries or regions (e.g. United States, France)..."
+              emptyHint="No selection targets Worldwide (all locations)"
               values={form.locationIds}
               onChange={(v) => update({ locationIds: v })}
               options={regions.map((r) => ({ value: r.id, label: r.name }))}
               error={errors.locationIds}
-              maxHeight="max-h-72"
+              presets={locationPresets}
             />
-            <MultiSelectField
-              label="Age groups"
-              values={form.ageGroups}
-              onChange={(v) => update({ ageGroups: v })}
-              options={AGE_GROUPS}
-            />
-            <SelectField
-              label="Gender"
-              value={form.gender}
-              onChange={(v) => update({ gender: v })}
-              options={GENDERS}
-            />
-            <ScrollableMultiSelectField
+            {form.specialIndustries?.length > 0 ? (
+              <FieldShell
+                label="Age groups"
+                hint="Age targeting is locked to All (18+) for Special Ad Categories to comply with advertising non-discrimination policies."
+              >
+                <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  All ages (18+) · Policy-locked by Special Ad Category
+                </div>
+              </FieldShell>
+            ) : (
+              <MultiSelectField
+                label="Age groups"
+                values={form.ageGroups}
+                onChange={(v) => update({ ageGroups: v })}
+                options={AGE_GROUPS}
+              />
+            )}
+
+            {form.specialIndustries?.length > 0 ? (
+              <FieldShell
+                label="Gender"
+                hint="Gender targeting is locked to All for Special Ad Categories."
+              >
+                <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  All genders · Policy-locked by Special Ad Category
+                </div>
+              </FieldShell>
+            ) : (
+              <SelectField
+                label="Gender"
+                value={form.gender}
+                onChange={(v) => update({ gender: v })}
+                options={GENDERS}
+              />
+            )}
+            <SearchableMultiSelectField
               label="Interest categories"
+              icon={Tag}
+              placeholder="Search interest categories (e.g. Tech, Beauty, Travel)..."
+              emptyHint="No selection targets all audience interests"
               values={form.interestCategoryIds}
               onChange={(v) => update({ interestCategoryIds: v })}
               options={interestCategories.map((c) => ({
                 value: String(c.id),
                 label: c.name || c.raw?.interest_category_name || String(c.id),
               }))}
-              maxHeight="max-h-72"
+              presets={interestCategoryPresets}
             />
-            <ScrollableMultiSelectField
+            <SearchableMultiSelectField
               label="Languages (optional)"
-              hint="Leave empty to target all languages"
+              icon={LanguagesIcon}
+              placeholder="Search languages (e.g. English, Spanish, Hindi)..."
+              emptyHint="Leave empty to target all languages"
               values={form.languages}
               onChange={(v) => update({ languages: v })}
               options={LANGUAGES}
-              maxHeight="max-h-40"
+              presets={languagePresets}
             />
             <FieldShell label="Spending power">
               <div className="flex gap-2">
@@ -3610,13 +4027,13 @@ const CreateCampaignWizard = ({
             ? 'From URL'
             : 'Not selected';
 
-          const issueGroups = STEPS.slice(0, -1)
-            .map((label, i) => ({ label, issues: getStepIssues(i, form, selectedObjective, currency) }))
+          const issueGroups = activeLaunchSteps
+            .map((i) => ({ label: STEPS[i], stepIndex: i, issues: getStepIssues(i, form, selectedObjective, currency) }))
             .filter((g) => g.issues.length > 0);
 
           return (
             <div className="space-y-4">
-              {isCreate && issueGroups.length > 0 && (
+              {issueGroups.length > 0 && (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
                   <div className="mb-2 flex items-center gap-2 font-semibold">
                     <AlertCircle className="h-4 w-4" />
@@ -3625,7 +4042,13 @@ const CreateCampaignWizard = ({
                   <div className="space-y-2">
                     {issueGroups.map((g) => (
                       <div key={g.label}>
-                        <p className="font-semibold">{g.label}</p>
+                        <button
+                          type="button"
+                          onClick={() => setStep(g.stepIndex)}
+                          className="font-semibold text-left underline hover:opacity-80 cursor-pointer"
+                        >
+                          {g.label}
+                        </button>
                         <ul className="list-disc pl-4 text-amber-700/80 dark:text-amber-400/80">
                           {g.issues.map((issue, idx) => (
                             <li key={idx}>{issue}</li>
@@ -3819,13 +4242,33 @@ const CreateCampaignWizard = ({
               </div>
 
               {error && (
-                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500">
-                  {error}
+                <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-600 dark:text-red-400 space-y-1">
+                  <div className="flex items-center gap-2 font-semibold text-red-700 dark:text-red-300">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>
+                      {created.campaignId && !created.adgroupId
+                        ? 'Campaign was created, but Ad Group creation failed'
+                        : created.adgroupId && !created.adId
+                        ? 'Ad Group was created, but Ad creative upload failed'
+                        : 'Launch Failed'}
+                    </span>
+                  </div>
+                  <p className="pl-6 text-red-600/90 dark:text-red-400/90">{error}</p>
+                  {created.campaignId && !created.adgroupId && (
+                    <p className="pl-6 text-[11px] text-gray-500 dark:text-white/60">
+                      Campaign ID: <span className="font-mono">{created.campaignId}</span>. Fix the fields above and click Launch to complete the ad group without creating a duplicate campaign.
+                    </p>
+                  )}
                 </div>
               )}
-              {created.campaignId && (
-                <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-600 dark:text-green-400">
-                  Campaign created (id {created.campaignId}). {created.adgroupId ? 'Ad group created.' : ''}
+              {!error && created.campaignId && (
+                <div className="mt-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>
+                    Campaign created successfully (ID: {created.campaignId})
+                    {created.adgroupId ? ' · Ad group created' : ''}
+                    {created.adId ? ' · Ad live' : ''}.
+                  </span>
                 </div>
               )}
             </div>
@@ -3846,41 +4289,96 @@ const CreateCampaignWizard = ({
         className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 10 }}
+          initial={{ opacity: 0, scale: 0.98, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 10 }}
+          exit={{ opacity: 0, scale: 0.98, y: 8 }}
           transition={{ duration: 0.18 }}
           onClick={(e) => e.stopPropagation()}
-          className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-2xl dark:border-white/8 dark:bg-[#161616] dark:text-white"
+          className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-2xl dark:border-white/8 dark:bg-[#161616] dark:text-white"
         >
-          {/* header */}
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-white/8">
+          {/* Close button — pinned to top-right corner */}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={launching}
+            aria-label="Close"
+            className="absolute right-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 dark:text-white/55 dark:hover:bg-white/8 dark:hover:text-white 2xl:h-8 2xl:w-8 cursor-pointer"
+          >
+            <X className="h-4 w-4 2xl:h-5 2xl:w-5" />
+          </button>
+
+          {/* Header — gradient icon tile + Posting-to pill + StepRail */}
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2.5 pr-12 dark:border-white/12 dark:bg-white/3 sm:gap-3 sm:px-5 sm:py-3 sm:pr-14 2xl:px-6 2xl:py-4 2xl:pr-16">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#15DCFF] to-[#6b72f8] text-white">
-                <Rocket className="h-5 w-5" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-r from-[#02C8C4] to-[#5867EB] ring-1 ring-white/10 2xl:h-12 2xl:w-12">
+                <Megaphone className="h-[18px] w-[18px] text-white 2xl:h-6 2xl:w-6" />
               </div>
               <div>
-                <h2 className="text-base font-bold">
-                  {isEditCampaign ? 'Edit Campaign' : isEditAdGroup ? 'Edit Ad Group' : isEditAd ? 'Edit Ad' : 'New TikTok Campaign'}
-                </h2>
-                <p className="text-xs text-gray-500 dark:text-white/40">Posting to {currency} account</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white 2xl:text-lg">
+                  {isEditCampaign
+                    ? 'Edit Campaign'
+                    : isEditAdGroup
+                    ? 'Edit Ad Group'
+                    : isEditAd
+                    ? 'Edit Ad'
+                    : isAddAdGroup
+                    ? 'New Ad Group'
+                    : isAddAd
+                    ? 'New Ad'
+                    : 'New TikTok Campaign'}
+                  <span className="ml-2 inline-flex items-center rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#15DCFF] 2xl:text-[10px]">
+                    V1
+                  </span>
+                </p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500 dark:text-white/60 2xl:text-xs">
+                    {context?.parentLabel
+                      ? `${isEdit ? 'Editing' : 'Adding to'} ${context.parentLabel} ·`
+                      : 'Posting to'}
+                  </span>
+                  <span className="inline-flex rounded-[6px] bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-px transition-all">
+                    <span className="rounded-[5px] bg-white px-2 py-0.5 text-[11px] font-bold leading-tight text-gray-900 dark:bg-[#141414] dark:text-white 2xl:text-xs">
+                      {accountName || context?.accountName || accounts?.find((a) => String(a.id) === String(advertiserId))?.name || advertiserId || 'TikTok Account'}
+                    </span>
+                  </span>
+                  {currency && (
+                    <span className="font-mono text-[11px] text-gray-400 dark:text-white/45 2xl:text-xs">
+                      · {currency}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
-              <X className="h-5 w-5" />
-            </button>
+
+            {/* Step rail in header */}
+            {(isCreate || isAddAdGroup || isAddAd) && (
+              <StepRail
+                steps={
+                  isAddAdGroup
+                    ? [
+                        { id: 'adgroup', label: 'Ad Group', icon: Users },
+                        { id: 'ad', label: 'Ad', icon: ImageIcon },
+                        { id: 'review', label: 'Review', icon: CheckCircle2 },
+                      ]
+                    : isAddAd
+                    ? [
+                        { id: 'ad', label: 'Ad', icon: ImageIcon },
+                        { id: 'review', label: 'Review', icon: CheckCircle2 },
+                      ]
+                    : TIKTOK_STEPS
+                }
+                currentIndex={isAddAdGroup ? step - 2 : isAddAd ? step - 3 : step}
+                onStepClick={(idx) => {
+                  const targetStep = isAddAdGroup ? idx + 2 : isAddAd ? idx + 3 : idx;
+                  setStep(targetStep);
+                }}
+              />
+            )}
           </div>
 
-          {/* step rail */}
-          {isCreate && (
-            <div className="border-b border-gray-100 px-5 py-3 dark:border-white/8">
-              <StepRail currentIndex={step} />
-            </div>
-          )}
-
           {/* body: form + sidebar */}
-          <div className="flex flex-1 overflow-hidden">
-            <div className="flex-1 overflow-auto px-5 py-4">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 2xl:px-8 2xl:py-8">
               {schema ? renderStep() : (
                 <div className="flex flex-col items-center justify-center gap-3 py-24">
                   <Loader2 className="h-8 w-8 animate-spin text-[#747c7c]" />
@@ -3888,62 +4386,97 @@ const CreateCampaignWizard = ({
                 </div>
               )}
             </div>
-            {isCreate && step === 3 ? (
-              <div className="w-56 shrink-0 overflow-y-auto border-l border-gray-100 bg-gray-50/50 dark:border-white/8 dark:bg-white/2">
-                <TikTokAdPreview
-                  form={form}
-                  identityName={
-                    identities.find((i) => String(i.identityId) === String(form.identityId))?.displayName || ''
-                  }
-                />
-              </div>
-            ) : isCreate ? (
+
+            {/* sidebar */}
+            {isAddAdGroup ? (
               <CampaignSetupSidebar
-                currentStep={step}
+                currentStep={step - 2}
+                stepOffset={2}
+                steps={[
+                  { id: 'adgroup', label: 'Ad Group', icon: Users },
+                  { id: 'ad', label: 'Ad', icon: ImageIcon },
+                  { id: 'review', label: 'Review', icon: CheckCircle2 },
+                ]}
                 form={form}
                 selectedObjective={selectedObjective}
                 onStepClick={setStep}
                 currency={currency}
+                identities={identities}
+              />
+            ) : isAddAd ? (
+              <CampaignSetupSidebar
+                currentStep={step - 3}
+                stepOffset={3}
+                steps={[
+                  { id: 'ad', label: 'Ad', icon: ImageIcon },
+                  { id: 'review', label: 'Review', icon: CheckCircle2 },
+                ]}
+                form={form}
+                selectedObjective={selectedObjective}
+                onStepClick={setStep}
+                currency={currency}
+                identities={identities}
+              />
+            ) : isCreate ? (
+              <CampaignSetupSidebar
+                currentStep={step}
+                stepOffset={0}
+                steps={TIKTOK_STEPS}
+                form={form}
+                selectedObjective={selectedObjective}
+                onStepClick={setStep}
+                currency={currency}
+                identities={identities}
               />
             ) : null}
           </div>
 
           {/* footer */}
           <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 dark:border-white/8">
-            {isCreate ? (
+            {(isCreate || isAddAdGroup || isAddAd) ? (
               <button
-                onClick={() => setStep((s) => Math.max(0, s - 1))}
-                disabled={step === 0 || launching}
-                className="flex items-center gap-1 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-gray-600"
+                onClick={() => setStep((s) => Math.max(initialStep, s - 1))}
+                disabled={step === initialStep || launching}
+                className="flex items-center gap-1 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-gray-600 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" /> Back
               </button>
             ) : (
               <div />
             )}
-            {isCreate ? (
+            {(isCreate || isAddAdGroup || isAddAd) ? (
               step < STEPS.length - 1 ? (
                 <button
                   onClick={handleNext}
-                  className="flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white"
+                  className="flex items-center gap-1 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-5 py-2 text-sm font-semibold text-white cursor-pointer shadow-sm hover:opacity-95"
                 >
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={handleLaunch}
                   disabled={launching || !canLaunch()}
-                  className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-6 py-2 text-xs font-bold text-white shadow-md transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 2xl:px-7 2xl:py-2.5 2xl:text-sm cursor-pointer"
                 >
-                  {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                  {launching ? 'Creating…' : 'Create Campaign'}
+                  {launching ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin 2xl:h-4 2xl:w-4" />
+                      Launching…
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
+                      Launch
+                    </>
+                  )}
                 </button>
               )
             ) : (
               <button
                 onClick={handleSave}
                 disabled={launching || !canNext()}
-                className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 cursor-pointer shadow-sm hover:opacity-95"
               >
                 {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
                 {launching ? 'Saving…' : 'Save Changes'}

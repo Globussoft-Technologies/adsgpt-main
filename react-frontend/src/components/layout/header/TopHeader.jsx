@@ -391,9 +391,14 @@ export default function TopHeader() {
   }, [myBrands, selectedCompetitorBrand, dispatch]);
 
   if (currentRoute !== '/adfactory-demo' && hideHeader) {
-    // Meta Ads Manager includes the switcher in its own control row so it
-    // participates in layout instead of floating over provider controls.
-    if (currentRoute === '/meta-ads' || currentRoute === '/autopilot/meta') return null;
+    // Meta and TikTok Ads Manager include controls in their own row so they
+    // participate in layout instead of floating over provider controls.
+    if (
+      currentRoute === '/meta-ads' ||
+      currentRoute === '/autopilot/meta' ||
+      currentRoute === '/tiktok-ads'
+    )
+      return null;
 
     return (
       <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
