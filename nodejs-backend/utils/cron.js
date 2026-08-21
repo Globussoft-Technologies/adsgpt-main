@@ -9,6 +9,7 @@ const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { runUserRuleCycle } = require('../services/autopilot/userRuleOrchestrator');
 const UnifiedCreditController = require('../controllers/UnifiedCreditController');
 const oauthSigningKeyService = require('../services/oauth/signingKeyService');
+const { reconcileBillingCycles } = require('../services/billingReconciliation');
 require('dotenv').config();
 
 // -----------------------------------------------------------------------------
@@ -142,9 +143,54 @@ const registerOAuthSigningKeyRotationCron = () => {
     console.log('[oauth-keyrot] scheduler registered');
 };
 
+// -----------------------------------------------------------------------------
+// Billing cycle reconciliation
+// Credit refill is otherwise triggered ONLY by login, so a user whose
+// subscription rebills in aMember gets nothing until they next sign in — and
+// anything they generate meanwhile is charged to the previous cycle's
+// remainder. This reconciles local billing cycles against aMember on a
+// schedule, closing that gap.
+//
+// Ships in dry-run so the first runs can be read in the logs before it is
+// allowed to move credits. Set BILLING_RECONCILE_DRY_RUN=false to apply.
+// -----------------------------------------------------------------------------
+const registerBillingReconciliationCron = () => {
+    const enabled =
+        String(process.env.BILLING_RECONCILE_ENABLED || 'true').toLowerCase() === 'true';
+    if (!enabled) {
+        console.log('[billing-reconcile] disabled (BILLING_RECONCILE_ENABLED=false)');
+        return;
+    }
+
+    const schedule = process.env.BILLING_RECONCILE_CRON || '0 2 * * *'; // 02:00 UTC daily
+    const dryRun =
+        String(process.env.BILLING_RECONCILE_DRY_RUN || 'true').toLowerCase() !== 'false';
+
+    if (!cron.validate(schedule)) {
+        console.error(
+            `[billing-reconcile] invalid BILLING_RECONCILE_CRON: ${schedule}. Cron not registered.`,
+        );
+        return;
+    }
+
+    cron.schedule(schedule, async () => {
+        try {
+            await reconcileBillingCycles({ dryRun });
+        } catch (err) {
+            console.error('[billing-reconcile] run failed:', err.message);
+        }
+    });
+    console.log(
+        `[billing-reconcile] scheduler registered: cron="${schedule}" dryRun=${dryRun}`,
+    );
+};
+
 const runCronJobs = () => {
     // Phase 3 — hourly Autopilot orchestrator
     registerAutopilotCron();
+
+    // Grant renewed credits without waiting for a login (daily at 02:00 UTC)
+    registerBillingReconciliationCron();
 
     // Orphan-reservation sweeper (every 10 min by default)
     registerCreditReservationSweepCron();

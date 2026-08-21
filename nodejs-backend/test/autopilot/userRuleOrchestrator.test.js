@@ -67,6 +67,12 @@ const stubs = {
   pauseFailNext: null,
   actionLogWrites: [],
   alertCalls: [],
+  // ── resume-path stubs ──
+  pausedLogRows: [],  // what the resume aggregate returns (prior autopilot pauses)
+  flapHistory: [],    // pause/resume rows the flap counter reads
+  entityMetaById: {}, // entityId → { updated_time, status, effective_status }
+  metaReadFailNext: null,
+  resumeFailNext: null,
 };
 
 function resetStubs() {
@@ -83,9 +89,16 @@ function resetStubs() {
   stubs.pauseFailNext = null;
   stubs.actionLogWrites = [];
   stubs.alertCalls = [];
+  stubs.pausedLogRows = [];
+  stubs.flapHistory = [];
+  stubs.entityMetaById = {};
+  stubs.metaReadFailNext = null;
+  stubs.resumeFailNext = null;
   // Default to live-actions ON so tests don't accidentally hit the
   // dry-run gate. Tests that need it off override per-case.
   process.env.AUTOPILOT_LIVE_ACTIONS_ALLOWED = "true";
+  delete process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES;
+  delete process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS;
 }
 
 const originalLoad = Module._load;
@@ -139,6 +152,17 @@ Module._load = function patched(request, parent, isMain) {
         stubs.actionLogWrites.push(doc);
         return doc;
       },
+      // Resume path: "which entities did these rules really pause?" The
+      // orchestrator's $match/$group is exercised for shape only — the
+      // fixture stands in for the grouped result.
+      aggregate: async (_pipeline) => stubs.pausedLogRows,
+      // Resume path: flap history. Chainable to mirror
+      // `.find(q, proj).sort().lean()`.
+      find: (_q, _proj) => ({
+        sort: () => ({
+          lean: async () => stubs.flapHistory,
+        }),
+      }),
     };
   }
   if (request.endsWith("db/redis")) {
@@ -206,9 +230,13 @@ Module._load = function patched(request, parent, isMain) {
           this._level = level;
         }
         async update(_fields, payload) {
-          if (stubs.pauseFailNext) {
-            const err = stubs.pauseFailNext;
-            stubs.pauseFailNext = null;
+          const failer =
+            payload && payload.status === "ACTIVE"
+              ? "resumeFailNext"
+              : "pauseFailNext";
+          if (stubs[failer]) {
+            const err = stubs[failer];
+            stubs[failer] = null;
             throw err;
           }
           stubs.pauseCalls.push({
@@ -217,17 +245,26 @@ Module._load = function patched(request, parent, isMain) {
             payload,
           });
         }
+        // Used by the resume path's manual-intervention guard
+        // (autoResumeService.getEntityMeta).
+        async read(_fields) {
+          if (stubs.metaReadFailNext) {
+            const err = stubs.metaReadFailNext;
+            stubs.metaReadFailNext = null;
+            throw err;
+          }
+          return { _data: stubs.entityMetaById[this.id] || {} };
+        }
       };
+    const FIELDS = {
+      status: "status",
+      updated_time: "updated_time",
+      effective_status: "effective_status",
+    };
     return {
-      Campaign: Object.assign(SDKLevel("campaign"), {
-        Fields: { status: "status" },
-      }),
-      AdSet: Object.assign(SDKLevel("adset"), {
-        Fields: { status: "status" },
-      }),
-      Ad: Object.assign(SDKLevel("ad"), {
-        Fields: { status: "status" },
-      }),
+      Campaign: Object.assign(SDKLevel("campaign"), { Fields: FIELDS }),
+      AdSet: Object.assign(SDKLevel("adset"), { Fields: FIELDS }),
+      Ad: Object.assign(SDKLevel("ad"), { Fields: FIELDS }),
     };
   }
   if (request.endsWith("services/autopilot/alertService") || request.endsWith("./alertService")) {
@@ -1313,6 +1350,374 @@ const { runUserRuleCycle } = orchestrator;
         assert.equal(stubs.auditCalls[0].lookbackPreset, 'maximum');
         assert.equal(stubs.auditCalls[0].lookbackDays, undefined);
         assert.equal(stubs.auditCalls[0].prevLookbackDays, undefined);
+      },
+    );
+  });
+
+  // ── resume ────────────────────────────────────────────────────────────
+  //
+  // Shared setup: one rule that paused camp_1, and a fixture where camp_1 is
+  // now PAUSED and no longer matches (spend below the rule's threshold), so
+  // the default expectation is "resume fires".
+  const resumeRule = (overrides = {}) => ({
+    _id: "r1",
+    userId: "u1",
+    enabled: true,
+    name: "Runaway spend",
+    severity: "high",
+    evaluateOn: "campaign",
+    conditions: {
+      operator: "AND",
+      rules: [{ field: "spend", op: ">", value: 50000 }],
+    },
+    action: { type: "pause" },
+    attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+    ...overrides,
+  });
+
+  const recoveredFixture = (campaignOverrides = {}) => ({
+    account_name: "Acct 42",
+    entities: {
+      campaigns: [
+        {
+          campaign_id: "camp_1",
+          campaign_name: "Camp One",
+          status: "PAUSED",
+          spend: 1000, // under the rule's 50000 → no longer matches
+          purchases: 3,
+          ...campaignOverrides,
+        },
+      ],
+      adsets: [],
+      ads: [],
+      allCampaignIds: ["camp_1"],
+    },
+  });
+
+  const priorPause = (overrides = {}) => ({
+    _id: { level: "campaign", entityId: "camp_1" },
+    entityName: "Camp One",
+    campaignId: "camp_1",
+    lastPausedAt: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6h ago
+    ruleId: "r1",
+    ...overrides,
+  });
+
+  // Default: Meta says the entity hasn't been touched since we paused it.
+  const untouched = () => ({
+    camp_1: {
+      updated_time: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+      status: "PAUSED",
+      effective_status: "PAUSED",
+    },
+  });
+
+  async function arrangeResume({ rule, fixture, pausedRows, meta } = {}) {
+    resetStubs();
+    stubs.rules = [rule || resumeRule()];
+    stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+    stubs.auditByAccount.set("act_42", fixture || recoveredFixture());
+    stubs.pausedLogRows = pausedRows || [priorPause()];
+    stubs.entityMetaById = meta || untouched();
+  }
+
+  const resumeCalls = () =>
+    stubs.pauseCalls.filter((c) => c.payload && c.payload.status === "ACTIVE");
+  const resumeRows = () =>
+    stubs.actionLogWrites.filter((r) => r.action === "resume");
+
+  await group("runUserRuleCycle — resume", async () => {
+    await testAsync(
+      "rule no longer matches → entity resumed, row written, counter bumped",
+      async () => {
+        await arrangeResume();
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 1, "should resume exactly once");
+        assert.equal(resumeCalls()[0].entityId, "camp_1");
+        assert.equal(resumeCalls()[0].payload.status, "ACTIVE");
+
+        assert.equal(resumeRows().length, 1);
+        const row = resumeRows()[0];
+        assert.equal(row.action, "resume");
+        assert.equal(row.outcome, "success");
+        assert.equal(row.dryRun, false);
+        assert.equal(row.ruleId, "r1", "carries the rule that caused the pause");
+        assert.equal(row.ruleSeverity, "high");
+        assert.equal(row.pausedBy, "autopilot");
+        assert.ok(row.actionPayload.priorPausedAt, "records the original pause");
+
+        assert.equal(result.accounts[0].resume.resumed, 1);
+      },
+    );
+
+    await testAsync(
+      "rule still matches → stays paused, no Meta call, no log row",
+      async () => {
+        // spend back above the threshold: the rule fires again.
+        await arrangeResume({ fixture: recoveredFixture({ spend: 90000 }) });
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0, "unchanged verdict is not logged");
+        assert.equal(result.accounts[0].resume.skipped, 1);
+      },
+    );
+
+    await testAsync(
+      "entity already ACTIVE → silently skipped (human got there first)",
+      async () => {
+        await arrangeResume({ fixture: recoveredFixture({ status: "ACTIVE" }) });
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0);
+        assert.equal(result.accounts[0].resume.skipped, 0, "not even counted");
+      },
+    );
+
+    await testAsync(
+      "manual intervention since the pause → stands down, logs the skip",
+      async () => {
+        await arrangeResume({
+          meta: {
+            camp_1: {
+              // Touched AFTER we paused it — a human has been in here.
+              updated_time: new Date(Date.now() - 60 * 1000).toISOString(),
+              status: "PAUSED",
+              effective_status: "PAUSED",
+            },
+          },
+        });
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0, "must not fight a human");
+        assert.equal(resumeRows().length, 1);
+        assert.equal(resumeRows()[0].outcome, "skipped");
+        assert.equal(resumeRows()[0].skipReason, "manual-intervention");
+        assert.equal(result.accounts[0].resume.skipped, 1);
+      },
+    );
+
+    await testAsync(
+      "flap cooldown: 3 transitions in the window blocks the resume",
+      async () => {
+        await arrangeResume();
+        // pause → resume → pause = 2 transitions … plus one more to hit 3.
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 96 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 72 * 3600e3) },
+          { action: "pause", runAt: new Date(Date.now() - 48 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 24 * 3600e3) },
+        ];
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0, "cooldown must hold it down");
+        assert.equal(resumeRows().length, 0);
+        assert.equal(result.accounts[0].resume.skipped, 1);
+      },
+    );
+
+    await testAsync(
+      "flap cooldown below the strike limit still resumes",
+      async () => {
+        await arrangeResume();
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 48 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 24 * 3600e3) },
+        ]; // 1 transition — under the default 3
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 1);
+      },
+    );
+
+    await testAsync(
+      "AUTOPILOT_FLAP_COOLDOWN_STRIKES tunes the limit",
+      async () => {
+        await arrangeResume();
+        process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES = "1";
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 48 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 24 * 3600e3) },
+        ]; // 1 transition — now at the limit
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 0);
+        delete process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES;
+      },
+    );
+
+    await testAsync(
+      "dry run logs the intent without calling Meta",
+      async () => {
+        await arrangeResume();
+
+        const result = await runUserRuleCycle({ dryRun: true });
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 1);
+        assert.equal(resumeRows()[0].dryRun, true);
+        assert.equal(resumeRows()[0].outcome, "success");
+        assert.equal(result.accounts[0].resume.would_resume, 1);
+        assert.equal(result.accounts[0].resume.resumed, 0);
+      },
+    );
+
+    await testAsync(
+      "AUTOPILOT_LIVE_ACTIONS_ALLOWED=false forces resume to dry-run",
+      async () => {
+        await arrangeResume();
+        process.env.AUTOPILOT_LIVE_ACTIONS_ALLOWED = "false";
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows()[0].dryRun, true);
+        assert.equal(result.accounts[0].resume.would_resume, 1);
+      },
+    );
+
+    await testAsync(
+      "settings.autoResumeEnabled=false suppresses the pass entirely",
+      async () => {
+        await arrangeResume();
+        stubs.settingsByUser.u1 = { autoResumeEnabled: false };
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0);
+        assert.equal(result.accounts[0].resume.resumed, 0);
+      },
+    );
+
+    await testAsync(
+      "missing settings doc still resumes (default is on)",
+      async () => {
+        await arrangeResume();
+        stubs.settingsByUser.u1 = null;
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 1);
+      },
+    );
+
+    await testAsync(
+      "pause from a rule that's since been deleted or disabled → left alone",
+      async () => {
+        // A deleted/disabled rule never reaches the cycle, so its id simply
+        // won't be in the run's rule set — the entity stays paused for a
+        // human rather than being resumed by a rule that no longer exists.
+        await arrangeResume({
+          pausedRows: [priorPause({ ruleId: "r-deleted" })],
+        });
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 0, "unknown rule id must not resume");
+        assert.equal(resumeRows().length, 0);
+      },
+    );
+
+    await testAsync(
+      "entity absent from this window → no resume on a technicality",
+      async () => {
+        await arrangeResume();
+        stubs.pausedLogRows = [
+          priorPause({ _id: { level: "campaign", entityId: "camp_gone" } }),
+        ];
+
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0);
+      },
+    );
+
+    await testAsync(
+      "Meta resume failure is logged as failed, cycle survives",
+      async () => {
+        await arrangeResume();
+        stubs.resumeFailNext = new Error("Meta API down");
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeRows().length, 1);
+        assert.equal(resumeRows()[0].outcome, "failed");
+        assert.match(resumeRows()[0].error, /Meta API down/);
+        assert.equal(result.accounts[0].resume.failed, 1);
+        assert.equal(result.accounts[0].ok, true, "cycle must not abort");
+      },
+    );
+
+    await testAsync(
+      "updated_time read failure does not block the resume",
+      async () => {
+        await arrangeResume();
+        stubs.metaReadFailNext = new Error("read blew up");
+
+        await runUserRuleCycle({ dryRun: false });
+        // No signal means no evidence of intervention — the log is trusted.
+        assert.equal(resumeCalls().length, 1);
+      },
+    );
+
+    await testAsync(
+      "ad-level pause resumes at ad level with parent ids on the row",
+      async () => {
+        await arrangeResume({
+          rule: resumeRule({ evaluateOn: "ad" }),
+          fixture: {
+            account_name: "Acct 42",
+            entities: {
+              campaigns: [
+                { campaign_id: "camp_1", campaign_name: "Camp One", status: "ACTIVE" },
+              ],
+              adsets: [],
+              ads: [
+                {
+                  ad_id: "ad_9",
+                  ad_name: "Ad Nine",
+                  campaign_id: "camp_1",
+                  campaign_name: "Camp One",
+                  adset_id: "as_3",
+                  adset_name: "Set Three",
+                  status: "PAUSED",
+                  spend: 1000,
+                },
+              ],
+              allCampaignIds: ["camp_1"],
+            },
+          },
+          pausedRows: [
+            priorPause({
+              _id: { level: "ad", entityId: "ad_9" },
+              entityName: "Ad Nine",
+            }),
+          ],
+          meta: {
+            ad_9: {
+              updated_time: new Date(Date.now() - 7 * 3600e3).toISOString(),
+              status: "PAUSED",
+              effective_status: "PAUSED",
+            },
+          },
+        });
+
+        await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 1);
+        assert.equal(resumeCalls()[0].level, "ad");
+        assert.equal(resumeCalls()[0].entityId, "ad_9");
+        const row = resumeRows()[0];
+        assert.equal(row.level, "ad");
+        assert.equal(row.entityId, "ad_9");
+        assert.equal(row.campaignId, "camp_1");
+        assert.equal(row.adsetId, "as_3");
       },
     );
   });

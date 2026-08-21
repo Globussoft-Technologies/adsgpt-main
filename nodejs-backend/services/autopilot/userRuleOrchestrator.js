@@ -28,14 +28,22 @@
  *               • action 'alert' → no Meta call; logged with action:
  *                                  'alert_only', folded into the cycle
  *                                  summary so alertService picks it up.
+ *        d. Resume pass (`resumeAtAccount`): re-evaluate each rule against
+ *           the entities IT previously paused and un-pause the ones it no
+ *           longer matches, subject to the flap cooldown and the
+ *           manual-intervention guard. Gated per user by
+ *           `autopilotSettings.autoResumeEnabled` (default on).
  *   4. Build a v3-shaped cycle summary and call notifyAutopilotCycle so
  *      the existing per-user Slack/email fan-out works unchanged.
  *
  * Design intent:
- *   - Action services (autoPauseService etc.) stay in source but become
- *     unwired from autopilot — they're only used by the now-deprecated
- *     manual /run and /run-cycle HTTP endpoints, which keep working but
- *     are no longer the primary surface.
+ *   - Action services (autoPauseService, autoScaleService, rotationService,
+ *     adRenameService) stay in source but are unwired from the cron —
+ *     they're only used by the now-deprecated manual /run and /run-cycle
+ *     HTTP endpoints, which keep working but are no longer the primary
+ *     surface. autoResumeService is the exception: the v4 resume pass
+ *     reuses its guards (`countFlaps`, `detectManualIntervention`) and its
+ *     two SDK wrappers rather than reimplementing them.
  *   - The action log row schema is unchanged; the meaning of `ruleId`
  *     becomes the user's rule._id (was 'AUD-XX'), `ruleSeverity` becomes
  *     low|medium|high (was critical|warning|opportunity), `ruleMessage`
@@ -61,6 +69,14 @@ const { notifyAutopilotCycle } = require("./alertService");
 const {
   _internals: { listUserAdAccounts },
 } = require("./targetDiscovery");
+// Resume reuses the v3 guards rather than reimplementing them: `countFlaps`
+// and `detectManualIntervention` are pure and already unit-covered, and the
+// two SDK wrappers are thin. This is the only v3 service the v4 cron touches.
+const {
+  countFlaps,
+  detectManualIntervention,
+  _internals: { resumeEntity, getEntityMeta },
+} = require("./autoResumeService");
 
 let _bizSdk;
 function bizSdk() {
@@ -459,6 +475,315 @@ async function evaluateRuleAtAccount({
   }
 }
 
+// ─── resume: reverse Autopilot's own pauses ────────────────────────────────
+//
+// Autopilot only ever un-pauses entities IT paused for real (`pausedBy:
+// 'autopilot'`, `outcome: 'success'`, `dryRun: false`). A human-paused entity
+// is never touched, and neither is one a human has edited since — see the
+// manual-intervention guard below.
+//
+// Predicate: re-evaluate the SAME rule that caused the pause against the
+// CURRENT insights window, and resume when it no longer matches.
+//
+// Known consequence of that predicate: a paused entity stops accruing
+// metrics, so a rolling-window rule like `spend > X` eventually stops
+// matching *because the entity is off*, not because it recovered — which can
+// resume, underperform, re-pause. The flap cooldown is the guard that bounds
+// this (default 3 transitions inside 7 days, then the entity is left alone),
+// which is why it is not optional here. Tune with
+// AUTOPILOT_FLAP_COOLDOWN_STRIKES / AUTOPILOT_FLAP_COOLDOWN_DAYS.
+//
+// Runs per lookback group so each rule is re-evaluated against the same
+// window it was paused on.
+async function resumeAtAccount({
+  rules,
+  acctKey,
+  acctName,
+  entities,
+  finalDryRun,
+  runId,
+  userId,
+  resumeCounters,
+  managedCampaignIds = null,
+}) {
+  const logger = getLogger();
+
+  const flapStrikes = Math.max(
+    1,
+    parseInt(process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES || "3", 10) || 3,
+  );
+  const flapDays = Math.max(
+    1,
+    parseInt(process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS || "7", 10) || 7,
+  );
+  const lookbackDays = Math.max(
+    1,
+    parseInt(process.env.AUTOPILOT_AUTO_RESUME_LOOKBACK_DAYS || "30", 10) || 30,
+  );
+
+  const ruleById = new Map(rules.map((r) => [String(r._id), r]));
+  if (!ruleById.size || !entities) return;
+
+  // Distinct entities these rules really paused inside the lookback window.
+  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  let pausedRows = [];
+  try {
+    pausedRows = await AutopilotActionLog.aggregate([
+      {
+        $match: {
+          userId,
+          adAccountId: acctKey,
+          ruleId: { $in: Array.from(ruleById.keys()) },
+          action: "pause",
+          outcome: "success",
+          dryRun: false, // dry-run rows never touched Meta — nothing to undo
+          pausedBy: "autopilot",
+          runAt: { $gte: cutoff },
+        },
+      },
+      { $sort: { runAt: -1 } },
+      {
+        $group: {
+          _id: { level: "$level", entityId: "$entityId" },
+          entityName: { $first: "$entityName" },
+          campaignId: { $first: "$campaignId" },
+          lastPausedAt: { $first: "$runAt" },
+          ruleId: { $first: "$ruleId" },
+        },
+      },
+    ]);
+  } catch (err) {
+    logger.error(
+      `[autopilot v4] resume: paused-entity lookup failed acct=${acctKey}: ${err.message}`,
+    );
+    return;
+  }
+
+  for (const row of pausedRows) {
+    const level = row._id.level;
+    const entityId = row._id.entityId;
+    const rule = ruleById.get(String(row.ruleId));
+
+    // Rule deleted or switched off since the pause. Autopilot stops acting
+    // rather than guessing — the entity stays paused for a human to decide.
+    if (!rule || rule.enabled === false) continue;
+
+    // Plan gate, same as the pause side. A campaign that lost its managed
+    // slot is not automated in either direction; leaving it paused is the
+    // safe half of that.
+    const campaignId = row.campaignId || entityId;
+    if (managedCampaignIds && !managedCampaignIds.has(String(campaignId))) {
+      continue;
+    }
+
+    // Find the entity in the freshly-fetched window.
+    const pool =
+      level === "campaign"
+        ? entities.campaigns
+        : level === "adset"
+          ? entities.adsets
+          : entities.ads;
+    const entity = (pool || []).find(
+      (e) => String(e[`${level}_id`] || e.id) === String(entityId),
+    );
+    // No row this window — deleted, archived, or delivering nothing. Skip
+    // silently; re-evaluating against absent data would resume on a
+    // technicality.
+    if (!entity) continue;
+
+    // Someone already brought it back. Nothing to do, and no row — this
+    // would otherwise repeat every hour (same reasoning as the pause side's
+    // already-PAUSED guard).
+    if ((entity.status || "").toUpperCase() !== "PAUSED") continue;
+
+    // Still matching → stay paused. Counted, not logged: an unchanged
+    // verdict every hour is noise, not information.
+    if (evaluateRule(rule, entity)) {
+      resumeCounters.skipped += 1;
+      continue;
+    }
+
+    // Flap cooldown. Counts pause↔resume transitions this entity has been
+    // through recently; past the strike limit Autopilot stands down and
+    // leaves it to a human.
+    let flaps = 0;
+    try {
+      const history = await AutopilotActionLog.find(
+        {
+          adAccountId: acctKey,
+          entityId,
+          pausedBy: "autopilot",
+          dryRun: false,
+          runAt: {
+            $gte: new Date(Date.now() - flapDays * 24 * 60 * 60 * 1000),
+          },
+        },
+        { action: 1, runAt: 1 },
+      )
+        .sort({ runAt: 1 })
+        .lean();
+      flaps = countFlaps(history);
+    } catch (err) {
+      // Can't prove it's stable — treat as unsafe and leave it paused.
+      logger.warn(
+        `[autopilot v4] resume: flap history read failed ${level}=${entityId}: ${err.message}`,
+      );
+      resumeCounters.skipped += 1;
+      continue;
+    }
+    if (flaps >= flapStrikes) {
+      resumeCounters.skipped += 1;
+      continue;
+    }
+
+    // Manual-intervention guard — if Meta's `updated_time` is newer than our
+    // pause, a human has been in here. Autopilot reverses its own actions,
+    // not theirs.
+    let entityMeta = null;
+    try {
+      entityMeta = await getEntityMeta({ level, entityId });
+    } catch (err) {
+      logger.warn(
+        `[autopilot v4] resume: updated_time read failed ${level}=${entityId}: ${err.message}`,
+      );
+    }
+    const manualCheck = detectManualIntervention(
+      entityMeta && entityMeta.updated_time,
+      row.lastPausedAt,
+    );
+    if (manualCheck.intervened) {
+      resumeCounters.skipped += 1;
+      // Worth one row: "you touched this, we stood down" is a one-time
+      // event a user should be able to find in the log.
+      await writeResumeLogRow({
+        runId,
+        userId,
+        acctKey,
+        acctName,
+        rule,
+        entity,
+        level,
+        entityId,
+        entityName: row.entityName,
+        outcome: "skipped",
+        skipReason: "manual-intervention",
+        actionPayload: {
+          priorPausedAt: row.lastPausedAt,
+          entityUpdatedTime: entityMeta && entityMeta.updated_time,
+          entityEffectiveStatus: entityMeta && entityMeta.effective_status,
+          detail: manualCheck.reason,
+        },
+        dryRun: finalDryRun,
+      });
+      continue;
+    }
+
+    const attemptStart = Date.now();
+    let outcome = "success";
+    let error = null;
+    if (!finalDryRun) {
+      try {
+        await resumeEntity({ level, entityId });
+      } catch (err) {
+        outcome = "failed";
+        error = formatMetaError(err);
+        logger.error(
+          `[autopilot v4] resume failed rule=${rule._id} ${level}=${entityId}: ${error}`,
+        );
+      }
+    }
+
+    if (outcome === "success") {
+      if (finalDryRun) resumeCounters.would_resume += 1;
+      else resumeCounters.resumed += 1;
+    } else {
+      resumeCounters.failed += 1;
+    }
+
+    await writeResumeLogRow({
+      runId,
+      userId,
+      acctKey,
+      acctName,
+      rule,
+      entity,
+      level,
+      entityId,
+      entityName: row.entityName,
+      outcome,
+      error,
+      actionPayload: {
+        priorPausedAt: row.lastPausedAt,
+        flapsInWindow: flaps,
+      },
+      dryRun: finalDryRun,
+      metaLatencyMs: Date.now() - attemptStart,
+    });
+  }
+}
+
+// Resume rows carry `action: 'resume'` and the rule that caused the original
+// pause, so the log reads as a matched pair. Kept separate from
+// writeActionLogRow because that one derives its action from `rule.action.type`
+// — which for a resume is still 'pause'.
+async function writeResumeLogRow({
+  runId,
+  userId,
+  acctKey,
+  acctName,
+  rule,
+  entity,
+  level,
+  entityId,
+  entityName,
+  outcome,
+  skipReason,
+  error,
+  actionPayload,
+  dryRun,
+  metaLatencyMs,
+}) {
+  try {
+    const isAdLevel = level === "ad";
+    const isAdsetLevel = level === "adset";
+    await AutopilotActionLog.create({
+      runId,
+      userId,
+      adAccountId: acctKey,
+      adAccountName: acctName,
+      level,
+      entityId,
+      entityName:
+        entityName || entity[`${level}_name`] || entity.name || undefined,
+      campaignId:
+        isAdLevel || isAdsetLevel ? entity.campaign_id || undefined : undefined,
+      campaignName:
+        isAdLevel || isAdsetLevel
+          ? entity.campaign_name || undefined
+          : undefined,
+      adsetId: isAdLevel ? entity.adset_id || undefined : undefined,
+      adsetName: isAdLevel ? entity.adset_name || undefined : undefined,
+      ruleId: String(rule._id),
+      ruleSeverity: rule.severity,
+      ruleMessage: rule.name,
+      metricsSnapshot: pickMetricsSnapshot(entity),
+      action: "resume",
+      actionPayload,
+      dryRun,
+      outcome,
+      skipReason: skipReason || undefined,
+      error: error || undefined,
+      metaApiLatencyMs: metaLatencyMs,
+      runAt: new Date(),
+      pausedBy: "autopilot",
+    });
+  } catch (logErr) {
+    getLogger().error(
+      `[autopilot v4] resume log write failed runId=${runId}: ${logErr.message}`,
+    );
+  }
+}
+
 // ─── public entry ──────────────────────────────────────────────────────────
 async function runUserRuleCycle({
   dryRun = false,
@@ -519,6 +844,7 @@ async function runUserRuleCycle({
           {
             enabled: 1,
             dryRunGlobal: 1,
+            autoResumeEnabled: 1,
           },
         ).lean();
       } catch (err) {
@@ -790,6 +1116,25 @@ async function runUserRuleCycle({
                 managedCampaignIds,
               });
             }
+
+            // Reverse Autopilot's own pauses whose rule no longer matches.
+            // Runs inside the lookback loop so every rule is re-evaluated
+            // against the same window it was paused on. Honours the user's
+            // `autoResumeEnabled` toggle (default true); a user who wants
+            // pause-only turns it off in Settings.
+            if (!userSettings || userSettings.autoResumeEnabled !== false) {
+              await resumeAtAccount({
+                rules: rulesAtLookback,
+                acctKey,
+                acctName: audit.account_name,
+                entities: audit.entities,
+                finalDryRun,
+                runId,
+                userId,
+                resumeCounters: acctSummary.resume,
+                managedCampaignIds,
+              });
+            }
           }
         } catch (err) {
           logger.error(
@@ -841,7 +1186,9 @@ module.exports = {
     markAttachmentOrphan,
     unmarkAttachmentOrphan,
     writeActionLogRow,
+    writeResumeLogRow,
     evaluateRuleAtAccount,
+    resumeAtAccount,
     resolveEffectiveLookback,
     LOCK_KEY,
     LOCK_TTL_SECONDS,

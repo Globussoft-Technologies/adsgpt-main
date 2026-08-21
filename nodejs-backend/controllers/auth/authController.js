@@ -869,15 +869,69 @@ function resolvePlanSnapshot(subscriptionPlanId, productsMeta, env) {
 }
 
 /**
+ * Choose the base plan a user is actually on when aMember reports more than one.
+ *
+ * check-access returns every ACTIVE subscription, and holding two at once is
+ * normal: during a trial→paid upgrade the trial still has days left, and a
+ * downgrade taking effect at the end of the current term overlaps it too.
+ *
+ * This used to be `allSubIds.find(id => id !== topUpPlanID)`. Object.keys
+ * orders integer-like keys ascending, so that silently returned the LOWEST
+ * product id — for a user who upgraded from the 7-day trial (8) to STARTER (20)
+ * it picked the trial, handing a paying customer 35 credits instead of 300 and
+ * pinning their billing cycle to the trial's dates.
+ *
+ * Ranking is by allocation first, expiry second. Credits lead because during an
+ * overlap the richer plan is the one the user is entitled to right now; ranking
+ * by expiry would prefer a scheduled downgrade over the tier still being paid
+ * for. Product id is a final tie-break purely so the choice is deterministic.
+ */
+function pickBasePlanId(subscriptions, productsMeta, env) {
+  const candidates = Object.keys(subscriptions || {}).filter(
+    (id) => String(id) !== String(topUpPlanID),
+  );
+  if (candidates.length <= 1) return candidates[0] || "";
+
+  const ranked = candidates
+    .map((id) => {
+      const snapshot = resolvePlanSnapshot(id, productsMeta, env);
+      const expiry = new Date(subscriptions[id]).getTime();
+      return {
+        id,
+        credits: Number.isFinite(snapshot?.credits) ? snapshot.credits : -1,
+        expiry: Number.isNaN(expiry) ? -Infinity : expiry,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.credits - a.credits ||
+        b.expiry - a.expiry ||
+        Number(a.id) - Number(b.id),
+    );
+
+  console.log(
+    `[plan-select] ${candidates.length} active base plans (` +
+      ranked.map((r) => `${r.id}:${r.credits}cr`).join(", ") +
+      `) — chose ${ranked[0].id} over ${ranked[1].id}`,
+  );
+
+  return ranked[0].id;
+}
+
+/**
  * Sync user profile in MongoDB and handle credit initialization / billing refresh.
  * Called on every login to keep local state in sync with aMember.
  */
 async function syncUserProfile(userData) {
   const allSubIds = Object.keys(userData.subscriptions || {});
+  const env = UnifiedCreditController.getEnvironment();
 
   // Pick the real base plan (ignore the topUpPlanID entirely finding the base plan)
-  let subscriptionPlanId =
-    allSubIds.find((id) => String(id) !== String(topUpPlanID)) || "";
+  let subscriptionPlanId = pickBasePlanId(
+    userData.subscriptions,
+    userData.productsMeta,
+    env,
+  );
 
   // NO FALLBACK: If they only have a top-up plan, subscriptionPlanId remains ""
   // This successfully prevents topups from providing access without an active subscription.
@@ -907,7 +961,7 @@ async function syncUserProfile(userData) {
     user_id: `GPT-${userData.user_id}`,
   });
 
-  const env = UnifiedCreditController.getEnvironment();
+  // `env` is resolved at the top of the function — plan selection needs it too.
   const planSnapshot = resolvePlanSnapshot(
     subscriptionPlanId,
     userData.productsMeta,
@@ -919,7 +973,10 @@ async function syncUserProfile(userData) {
   // Derive billing cycle start from aMember's expire_date minus the plan's
   // duration. For a 30-day plan expiring on day X, the current cycle started
   // on X-30 — works across renewals because expire_date always reflects the
-  // current cycle's end. Falls back to now if expiry/duration are unresolvable.
+  // current cycle's end.
+  // Returns null when the anchor can't be derived, so callers can tell a real
+  // aMember boundary apart from the "just use now" fallback. Passing that
+  // fallback on as an anchor would look like a renewal on every login.
   const computeCycleStart = () => {
     const durationDays = planSnapshot?.durationDays;
     if (
@@ -927,14 +984,15 @@ async function syncUserProfile(userData) {
       !Number.isFinite(durationDays) ||
       durationDays <= 0
     ) {
-      return new Date();
+      return null;
     }
     return new Date(
       new Date(subscriptionExpiry).getTime() -
         durationDays * 24 * 60 * 60 * 1000,
     );
   };
-  const billingCycleStart = computeCycleStart();
+  const derivedCycleStart = computeCycleStart();
+  const billingCycleStart = derivedCycleStart || new Date();
 
   if (!existingUser) {
     // --- NEW USER: Create profile and initialize credits ---
@@ -1085,7 +1143,9 @@ async function syncUserProfile(userData) {
       );
     } else {
       // Scenario 4: plan unchanged — normal login. Let billing cycle refresh
-      // handle monthly renewal / rollover.
+      // handle monthly renewal / rollover. It gets aMember's derived cycle
+      // start so a rebill paid since the last login grants the new allocation
+      // immediately, rather than whenever our own 30-day clock happens to tick.
       runBillingRefresh = newPlanId !== "";
     }
 
@@ -1102,7 +1162,11 @@ async function syncUserProfile(userData) {
     }
 
     if (runBillingRefresh) {
-      await UnifiedCreditController.refreshBillingCycle(userId, newPlanId);
+      await UnifiedCreditController.refreshBillingCycle(
+        userId,
+        newPlanId,
+        derivedCycleStart,
+      );
     }
   }
 }
@@ -1283,4 +1347,5 @@ module.exports = {
   createAdsGptSessionForAmemberUserId,
   syncUserProfile,
   fetchProductMeta,
+  pickBasePlanId,
 };

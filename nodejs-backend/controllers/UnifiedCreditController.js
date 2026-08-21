@@ -8,6 +8,11 @@ const TOPUP_PLAN_ID = "18";
 
 const FREEZE_MAX_RETRIES = 3;
 
+// Slack when comparing our stored cycle start against aMember's derived
+// anchor. A genuine renewal moves the anchor by a full billing period, so a
+// day of tolerance can't hide one.
+const CYCLE_ANCHOR_TOLERANCE_MS = 24 * 60 * 60 * 1000;
+
 // ADSGPT-TEXT (ad copy) isn't a generation model — keep its env mapping local
 // rather than polluting the registry, which is image/video only.
 const SPECIAL_CASES = {
@@ -705,8 +710,19 @@ class UnifiedCreditController {
    * Reads plan duration and credit allocation from the user's plan_snapshot
    * (populated by syncUserProfile from aMember on each login). Falls back to
    * creditConfig only if snapshot is missing (legacy users).
+   *
+   * `cycleStartAnchor` is the cycle start derived from aMember
+   * (expire_date - durationDays). aMember is authoritative for *when* a cycle
+   * begins: the anchor jumps forward the moment a rebill is paid. Passing it
+   * lets us grant the new allocation on the first login after a renewal
+   * instead of waiting for our own clock to tick over. Omit it only when the
+   * anchor can't be derived — then we fall back to the elapsed-time check.
    */
-  static async refreshBillingCycle(userId, subscriptionPlanId) {
+  static async refreshBillingCycle(
+    userId,
+    subscriptionPlanId,
+    cycleStartAnchor = null,
+  ) {
     try {
       const user = await UserProfile.findOne({ user_id: userId });
       if (!user || !user.billing_cycle_start) return user;
@@ -724,11 +740,25 @@ class UnifiedCreditController {
           ? snapshot.durationDays
           : configEntry?.durationDays || 30;
 
+      // Has aMember already moved us into a new cycle? A renewal extends
+      // expire_date, which pushes the derived anchor forward by one period.
+      // Tolerance absorbs sub-day noise (the anchor is midnight-aligned while
+      // legacy cycle starts are login timestamps) without swallowing a real
+      // renewal, which always advances by a full duration.
+      const anchor =
+        cycleStartAnchor && !Number.isNaN(new Date(cycleStartAnchor).getTime())
+          ? new Date(cycleStartAnchor)
+          : null;
+      const anchorAdvanced =
+        anchor !== null &&
+        anchor.getTime() - cycleStart.getTime() > CYCLE_ANCHOR_TOLERANCE_MS;
+
       // Check if the billing cycle has elapsed
       const elapsedMs = now.getTime() - cycleStart.getTime();
       const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
 
-      if (elapsedDays < durationDays) return user; // Cycle still active
+      // Cycle still active and aMember hasn't renewed — nothing to do.
+      if (!anchorAdvanced && elapsedDays < durationDays) return user;
 
       // Rule: Rollover only applies to same-plan recurring (monthly) renewals — not yearly plans.
       // Only the current cycle's leftover BASE carries forward. Any unused
@@ -751,6 +781,24 @@ class UnifiedCreditController {
         ? snapshot.credits
         : this.getAllowedCreditsByPlan(planId);
 
+      // Stamp the real cycle boundary, never `now`. Stamping the login time is
+      // what let the local cycle drift permanently later than the billing one:
+      // a user who logged in 3 days late started every subsequent cycle 3 days
+      // late, widening the window in which they were paid up but out of
+      // credits. Prefer aMember's anchor; otherwise advance the existing start
+      // by whole periods so the cycle keeps its original phase.
+      const newCycleStart = anchorAdvanced
+        ? anchor
+        : new Date(
+            cycleStart.getTime() +
+              Math.floor(elapsedDays / durationDays) *
+                durationDays *
+                24 *
+                60 *
+                60 *
+                1000,
+          );
+
       const updatedUser = await UserProfile.findOneAndUpdate(
         { user_id: userId },
         {
@@ -759,15 +807,16 @@ class UnifiedCreditController {
             used_subscription_credits: 0,
             rolledover_credits: totalCarryForward,
             used_rolledover_credits: 0,
-            billing_cycle_start: now,
-            last_credit_reset_date: now,
+            billing_cycle_start: newCycleStart,
+            last_credit_reset_date: newCycleStart,
           },
         },
         { new: true }
       );
 
       logger.info(
-        `Billing cycle refreshed for user ${userId} (plan ${planId}, ${durationDays}d): ` +
+        `Billing cycle refreshed for user ${userId} (plan ${planId}, ${durationDays}d, ` +
+          `start ${newCycleStart.toISOString()}, trigger ${anchorAdvanced ? "amember-renewal" : "elapsed"}): ` +
           (isYearlyPlan
             ? `yearly plan — no rollover, new allocation: ${newBaseCredits}`
             : isShortTrial

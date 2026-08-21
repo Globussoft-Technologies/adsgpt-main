@@ -161,6 +161,7 @@ const AutopilotSettings = () => {
     alertOn: 'Notify-me-about chips',
     enabled: 'Autopilot toggle',
     dryRunGlobal: 'Dry-run preview toggle',
+    autoResumeEnabled: 'Turn-things-back-on toggle',
     severityFloor: 'Severity floor',
     selectedAdAccountIds: 'Selected ad accounts',
     perAccountOverrides: 'Per-account overrides',
@@ -446,6 +447,9 @@ const AutopilotSettings = () => {
 
   const isOn = !!settings?.enabled;
   const isDryRun = !!settings?.dryRunGlobal;
+  // Server default is true — an unsaved settings doc should read as ON, so
+  // only an explicit `false` turns the chip off.
+  const isAutoResume = settings?.autoResumeEnabled !== false;
 
   // ───────────────────────────────────────────────────────────────────────────
   // render
@@ -500,6 +504,8 @@ const AutopilotSettings = () => {
                 setOn={setBool('enabled')}
                 dryRun={isDryRun}
                 setDryRun={setBool('dryRunGlobal')}
+                autoResume={isAutoResume}
+                setAutoResume={setBool('autoResumeEnabled')}
               />
             </CollapsibleCard>
 
@@ -810,7 +816,7 @@ const TemplateBadge = ({ kind }) => {
 };
 
 // ─── BasicsPanel ────────────────────────────────────────────────────────────
-const BasicsPanel = ({ on, setOn, dryRun, setDryRun }) => (
+const BasicsPanel = ({ on, setOn, dryRun, setDryRun, autoResume, setAutoResume }) => (
   <div className="flex flex-col gap-3">
     <div className="flex flex-wrap items-center gap-2">
       <ToggleChip
@@ -828,6 +834,14 @@ const BasicsPanel = ({ on, setOn, dryRun, setDryRun }) => (
         accent="amber"
         disabled={!on}
       />
+      <ToggleChip
+        label="Turn things back on"
+        info="When a rule stops matching, Autopilot restarts what it paused. It only ever restarts its own pauses, never yours, and it stands down if you have edited the campaign since. Turn this off to have Autopilot pause only."
+        value={autoResume}
+        onChange={setAutoResume}
+        accent="emerald"
+        disabled={!on}
+      />
       <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/75 2xl:text-13">
         <Clock className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" /> Runs every 1 hour
       </span>
@@ -837,14 +851,14 @@ const BasicsPanel = ({ on, setOn, dryRun, setDryRun }) => (
 
 // ToggleChip — pill-shaped toggle with a label, info icon, and inline switch.
 const ToggleChip = ({ label, info, value, onChange, accent = 'cyan', disabled }) => {
-  const accentRing =
-    accent === 'amber'
-      ? value
-        ? 'border-amber-400/40 bg-amber-500/8'
-        : 'border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/2'
-      : value
-        ? 'border-[#15DCFF]/40 bg-[#15DCFF]/6'
-        : 'border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/2';
+  const OFF_RING =
+    'border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/2';
+  const ON_RING = {
+    amber: 'border-amber-400/40 bg-amber-500/8',
+    emerald: 'border-emerald-400/40 bg-emerald-500/8',
+    cyan: 'border-[#15DCFF]/40 bg-[#15DCFF]/6',
+  };
+  const accentRing = value ? ON_RING[accent] || ON_RING.cyan : OFF_RING;
   return (
     <button
       type="button"
