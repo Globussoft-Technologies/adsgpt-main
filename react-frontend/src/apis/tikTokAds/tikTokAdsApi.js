@@ -350,3 +350,21 @@ export const deleteTiktokCampaignTemplate = async (id) => {
   });
   return data;
 };
+
+export const getMediaLibrary = async ({
+  userId,
+  type,
+  source,
+  page = 1,
+  limit = 24,
+} = {}) => {
+  if (!userId) throw new Error('getMediaLibrary: userId is required');
+  const params = { page, limit };
+  if (type) params.type = type;
+  if (source) params.source = source;
+  const { data } = await axios.get(
+    `${BASE_URL}/adsgpt/generated-media/library/${encodeURIComponent(userId)}`,
+    { params, headers: getAuthHeaders() },
+  );
+  return data;
+};

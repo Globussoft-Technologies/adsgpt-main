@@ -22,6 +22,14 @@ import {
   Tag,
   Languages as LanguagesIcon,
   ChevronDown,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Music,
+  Heart,
+  MessageCircle,
+  Share2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -54,10 +62,12 @@ import {
   NumberField,
   SelectField,
   MultiSelectField,
+  SegButton,
   SegGroup,
   ToggleField,
   CurrencyField,
-} from '@/components/MetaAds/wizardFields';
+} from './wizardFields';
+import LibraryPicker from './LibraryPicker';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
 
 const currencySymbol = (curr = 'USD') => {
@@ -647,6 +657,218 @@ const formatFriendlyError = (raw) => {
   return raw;
 };
 
+const mapApiErrorToField = (rawMsg) => {
+  if (!rawMsg || typeof rawMsg !== 'string') return null;
+  const msgLower = rawMsg.toLowerCase();
+
+  // Pixel / Optimization Event
+  if (
+    msgLower.includes('pixel event') ||
+    msgLower.includes('optimization_event') ||
+    msgLower.includes('pixel event type does not exist') ||
+    msgLower.includes('events manager')
+  ) {
+    return {
+      field: 'optimizationEvent',
+      step: 2,
+      message: 'This pixel event does not exist on your pixel. Set up this event in TikTok Events Manager or choose an active event.',
+    };
+  }
+  if (msgLower.includes('pixel_id') || msgLower.includes('pixel') || msgLower.includes('data connection')) {
+    return {
+      field: 'pixelId',
+      step: 2,
+      message: 'Invalid or missing TikTok Pixel.',
+    };
+  }
+
+  // Bidding & CPC
+  if (
+    msgLower.includes('only cpc is supported') ||
+    msgLower.includes('bid_type') ||
+    msgLower.includes('bid price') ||
+    msgLower.includes('bid_price') ||
+    msgLower.includes('bid')
+  ) {
+    return {
+      field: 'bidPrice',
+      step: 2,
+      message: rawMsg.includes('Only CPC is supported')
+        ? 'TikTok requires a custom CPC bid for this goal. Enter a valid Bid price.'
+        : 'Please provide a valid bid price.',
+    };
+  }
+
+  // Identity / Account
+  if (
+    msgLower.includes('identity') ||
+    msgLower.includes('identity_id') ||
+    msgLower.includes('identity_type') ||
+    msgLower.includes('bc_auth_tt')
+  ) {
+    return {
+      field: 'identityId',
+      step: 3,
+      message: 'Please select a valid TikTok Identity to publish the ad.',
+    };
+  }
+
+  // Ad Media & Creative
+  if (msgLower.includes('video_id') || msgLower.includes('video') || msgLower.includes('transcoding') || msgLower.includes('upload an image')) {
+    return {
+      field: 'video',
+      step: 3,
+      message: 'Invalid or incomplete video asset.',
+    };
+  }
+  if (msgLower.includes('image_ids') || msgLower.includes('single_image')) {
+    return {
+      field: 'image',
+      step: 3,
+      message: 'Invalid or missing image asset.',
+    };
+  }
+  if (msgLower.includes('music')) {
+    return {
+      field: 'musicId',
+      step: 3,
+      message: 'Music is required for this ad format.',
+    };
+  }
+
+  // Ad text & CTA
+  if (msgLower.includes('ad_text') || msgLower.includes('ad text') || msgLower.includes('text')) {
+    return {
+      field: 'adText',
+      step: 3,
+      message: 'Ad text is invalid or exceeds character limit.',
+    };
+  }
+  if (msgLower.includes('call_to_action') || msgLower.includes('call to action') || msgLower.includes('cta')) {
+    return {
+      field: 'cta',
+      step: 3,
+      message: 'Invalid Call to Action for this objective.',
+    };
+  }
+  if (
+    msgLower.includes('landing_page_url') ||
+    msgLower.includes('landing page') ||
+    msgLower.includes('external_url') ||
+    msgLower.includes('url')
+  ) {
+    return {
+      field: 'landingPageUrl',
+      step: 3,
+      message: 'A valid landing page URL is required.',
+    };
+  }
+  if (msgLower.includes('ad_name')) {
+    return {
+      field: 'adName',
+      step: 3,
+      message: 'Invalid Ad Name.',
+    };
+  }
+
+  // Promotion type / target / Subtype
+  if (
+    msgLower.includes('promotion_type') ||
+    msgLower.includes('promotion_target_type') ||
+    msgLower.includes('ecomm_type')
+  ) {
+    return {
+      field: 'optimizationGoal',
+      step: 2,
+      message: rawMsg,
+    };
+  }
+
+  // Operating systems / Devices
+  if (msgLower.includes('operating_systems') || msgLower.includes('device')) {
+    return {
+      field: 'deviceTypes',
+      step: 2,
+      message: 'Select a compatible device type for this objective.',
+    };
+  }
+
+  // Locations / Targeting
+  if (msgLower.includes('location') || msgLower.includes('location_ids')) {
+    return {
+      field: 'locationIds',
+      step: 2,
+      message: 'Invalid location targeting selection.',
+    };
+  }
+  if (msgLower.includes('age_groups') || msgLower.includes('age')) {
+    return {
+      field: 'ageGroups',
+      step: 2,
+      message: 'Invalid age group targeting.',
+    };
+  }
+  if (msgLower.includes('gender')) {
+    return {
+      field: 'gender',
+      step: 2,
+      message: 'Invalid gender targeting.',
+    };
+  }
+  if (msgLower.includes('interest')) {
+    return {
+      field: 'interestCategoryIds',
+      step: 2,
+      message: 'Invalid interest category selection.',
+    };
+  }
+
+  // Ad group / Budget / Schedule
+  if (msgLower.includes('adgroup_name')) {
+    return {
+      field: 'adgroupName',
+      step: 2,
+      message: 'Invalid Ad Group name.',
+    };
+  }
+  if (msgLower.includes('budget') || msgLower.includes('budget_mode')) {
+    return {
+      field: 'adgroupBudget',
+      step: 2,
+      message: 'Invalid budget configuration.',
+    };
+  }
+  if (
+    msgLower.includes('schedule') ||
+    msgLower.includes('schedule_start_time') ||
+    msgLower.includes('schedule_end_time')
+  ) {
+    return {
+      field: 'scheduleStartTime',
+      step: 2,
+      message: 'Invalid schedule start or end time.',
+    };
+  }
+
+  // Campaign fields
+  if (msgLower.includes('campaign_name')) {
+    return {
+      field: 'campaignName',
+      step: 1,
+      message: 'Invalid campaign name.',
+    };
+  }
+  if (msgLower.includes('special_industries')) {
+    return {
+      field: 'specialIndustries',
+      step: 1,
+      message: 'Invalid special industry category.',
+    };
+  }
+
+  return null;
+};
+
 const PLACEMENTS = [
   { value: 'PLACEMENT_TIKTOK', label: 'TikTok' },
   { value: 'PLACEMENT_PANGLE', label: 'Pangle' },
@@ -706,18 +928,20 @@ const billingEventForGoal = (goal, bidType) => {
   }
 };
 
-// TikTok ad groups need a `promotion_type` describing the destination for most
-// objectives. Lead Generation uses `promotion_target_type` (INSTANT_PAGE /
-// EXTERNAL_WEBSITE) instead, so it is excluded here.
-const promotionTypeForObjective = (objectiveKey) => {
+// TikTok ad groups need a `promotion_type` describing the destination for objectives.
+const promotionTypeForObjective = (objectiveKey, deviceTypes = []) => {
   switch (objectiveKey) {
     case 'TRAFFIC':
     case 'PRODUCT_SALES':
       return 'WEBSITE';
     case 'APP_PROMOTION':
-      return 'APP';
+      return (deviceTypes || []).includes('DEVICE_IOS') && !(deviceTypes || []).includes('DEVICE_ANDROID')
+        ? 'APP_IOS'
+        : 'APP_ANDROID';
+    case 'LEAD_GENERATION':
+      return 'LEAD_GENERATION';
     default:
-      return null; // REACH, VIDEO_VIEWS, ENGAGEMENT, LEAD_GENERATION
+      return null; // REACH, VIDEO_VIEWS, ENGAGEMENT
   }
 };
 
@@ -883,10 +1107,15 @@ const lifetimeMinBudget = (dailyMin, startStr, endStr) => {
 // Whether the ad requires a destination website URL. TRAFFIC is the only
 // objective that requires it on the ad itself — every other objective either
 // has no external destination (Reach, Engagement, App promotion, Video
-// views), captures leads via a TikTok page or pixel (Lead generation), or
-// drives to a product/catalog destination configured elsewhere (Product
-// sales), not a standalone landing page URL on the ad.
-const objectiveNeedsLandingUrl = (objectiveKey) => objectiveKey === 'TRAFFIC';
+// Whether the ad requires a destination website URL. TRAFFIC, Website Sales
+// (PRODUCT_SALES), and Website Lead Generation (LEAD_GENERATION) drive traffic
+// to an external landing page and require landing_page_url on the ad.
+const objectiveNeedsLandingUrl = (objectiveKey, subType) => {
+  if (objectiveKey === 'TRAFFIC') return true;
+  if (objectiveKey === 'PRODUCT_SALES' && (!subType || subType === 'WEBSITE')) return true;
+  if (objectiveKey === 'LEAD_GENERATION' && subType === 'WEBSITE') return true;
+  return false;
+};
 
 // Community Interaction has two ad-group optimization goals with very
 // different ad-level destination requirements (confirmed via TikTok's
@@ -921,7 +1150,7 @@ const adHasDestination = (form) => {
   if (isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType)) {
     return !!form.pageId;
   }
-  if (objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType)) {
+  if (objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType)) {
     return !!form.landingPageUrl;
   }
   return false;
@@ -938,7 +1167,7 @@ const objectiveCanHaveDestination = (form) => {
   if (isLeadGeneration(form.objectiveKey) || isProductSales(form.objectiveKey)) {
     return true;
   }
-  return objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType);
+  return objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType);
 };
 
 const TIKTOK_PAGE_CATEGORIES = [
@@ -1031,56 +1260,152 @@ function stripUnsavable(form) {
 }
 
 // ── TikTok phone ad preview ──────────────────────────────────────────────────
-function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaLabel, size = 'sm' }) {
+function PhoneMockup({
+  mediaSrc,
+  mediaSrcs,
+  mediaType,
+  displayName,
+  adText,
+  ctaLabel,
+  musicSrc,
+  musicName,
+  size = 'sm',
+}) {
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+
   const isCarousel = mediaType === 'carousel' && mediaSrcs?.length > 0;
   const activeCarouselSrc = isCarousel ? mediaSrcs[Math.min(carouselIndex, mediaSrcs.length - 1)] : null;
+  const hasMusic = !!musicSrc;
+  const isVideo = mediaType === 'video' && !!mediaSrc;
+
+  // Synchronize video play / pause & mute
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying, mediaSrc]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  // Synchronize background audio for image / carousel with music
+  useEffect(() => {
+    if (!audioRef.current || !hasMusic) return;
+    if (isPlaying && !isMuted) {
+      audioRef.current.play().catch(() => {});
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying, isMuted, musicSrc]);
+
+  const togglePlay = (e) => {
+    e?.stopPropagation?.();
+    setIsPlaying((p) => !p);
+  };
+
+  const toggleMute = (e) => {
+    e?.stopPropagation?.();
+    setIsMuted((m) => {
+      const nextMuted = !m;
+      if (!nextMuted && !isPlaying) {
+        setIsPlaying(true);
+      }
+      return nextMuted;
+    });
+  };
+
   const isSm = size === 'sm';
-  const borderRadius = isSm ? 'rounded-[22px]' : 'rounded-[32px]';
-  const innerRadius = isSm ? 'rounded-[16px]' : 'rounded-[26px]';
-  const borderWidth = isSm ? 'border-[5px]' : 'border-[8px]';
-  const statusFs = isSm ? '8px' : '11px';
-  const fypFs = isSm ? '8px' : '11px';
-  const actionIconFs = isSm ? '14px' : '20px';
-  const actionCountFs = isSm ? '7px' : '10px';
-  const nameFs = isSm ? '8px' : '11px';
-  const textFs = isSm ? '7px' : '10px';
-  const notchH = isSm ? 'h-2 w-8' : 'h-2.5 w-14';
-  const avatarSz = isSm ? 'h-6 w-6' : 'h-9 w-9';
-  const plusSz = isSm ? 'h-3.5 w-3.5' : 'h-5 w-5';
-  const plusFs = isSm ? '7px' : '10px';
-  const navIconSz = isSm ? 'h-3 w-3' : 'h-4 w-4';
-  const placeholderSz = isSm ? 36 : 56;
+  const borderRadius = isSm ? 'rounded-[26px]' : 'rounded-[36px]';
+  const innerRadius = isSm ? 'rounded-[20px]' : 'rounded-[28px]';
+  const borderWidth = isSm ? 'border-[6px]' : 'border-[9px]';
+  const notchH = isSm ? 'h-2.5 w-16' : 'h-3.5 w-24';
+  const avatarSz = isSm ? 'h-7 w-7' : 'h-10 w-10';
+  const iconSz = isSm ? 'h-4 w-4' : 'h-5 w-5';
+  const countFs = isSm ? 'text-[8px]' : 'text-[10px]';
+  const discSz = isSm ? 'h-7 w-7' : 'h-9 w-9';
 
   return (
-    <div className={`relative ${borderRadius} ${borderWidth} border-gray-800 bg-black shadow-2xl`} style={{ aspectRatio: '9/16', width: '100%' }}>
-      {/* notch */}
-      <div className={`absolute left-1/2 top-1 z-20 ${notchH} -translate-x-1/2 rounded-full bg-gray-800`} />
-      {/* status bar */}
-      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 pt-3 pb-1 font-semibold text-white" style={{ fontSize: statusFs }}>
+    <div
+      className={`relative ${borderRadius} ${borderWidth} border-gray-900 bg-black shadow-2xl select-none overflow-hidden`}
+      style={{ aspectRatio: '9/16', width: '100%' }}
+    >
+      {/* Phone Notch */}
+      <div className={`absolute left-1/2 top-1 z-30 ${notchH} -translate-x-1/2 rounded-full bg-gray-900`} />
+
+      {/* Top Status Bar */}
+      <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 pt-2 pb-1 font-semibold text-white pointer-events-none text-[9px] 2xl:text-[11px]">
         <span>9:41</span>
         <div className="flex items-center gap-1">
-          <svg width="10" height="7" viewBox="0 0 10 7" fill="white"><rect x="0" y="2" width="2" height="5" rx="0.5"/><rect x="2.5" y="1" width="2" height="6" rx="0.5"/><rect x="5" y="0" width="2" height="7" rx="0.5"/><rect x="7.5" y="0" width="2" height="7" rx="0.5" opacity="0.3"/></svg>
-          <svg width="9" height="7" viewBox="0 0 9 7" fill="white"><path d="M4.5 1.5C6 1.5 7.3 2.2 8.1 3.3L9 2.4C7.9 1 6.3 0 4.5 0S1.1 1 0 2.4l.9.9C1.7 2.2 3 1.5 4.5 1.5z"/><path d="M4.5 3C5.5 3 6.4 3.4 7 4.1l.9-.9C7 2.4 5.8 1.8 4.5 1.8S2 2.4 1.1 3.2l.9.9C2.6 3.4 3.5 3 4.5 3z"/><circle cx="4.5" cy="5.5" r="1"/></svg>
-          <svg width="14" height="7" viewBox="0 0 14 7" fill="none"><rect x="0.5" y="0.5" width="11" height="6" rx="1.5" stroke="white" strokeOpacity="0.4"/><rect x="1" y="1" width="8" height="5" rx="1" fill="white"/><path d="M12.5 2.5v2c.8-.3.8-1.7 0-2z" fill="white" opacity="0.4"/></svg>
+          <svg width="10" height="7" viewBox="0 0 10 7" fill="white">
+            <rect x="0" y="2" width="2" height="5" rx="0.5" />
+            <rect x="2.5" y="1" width="2" height="6" rx="0.5" />
+            <rect x="5" y="0" width="2" height="7" rx="0.5" />
+            <rect x="7.5" y="0" width="2" height="7" rx="0.5" opacity="0.3" />
+          </svg>
+          <svg width="9" height="7" viewBox="0 0 9 7" fill="white">
+            <path d="M4.5 1.5C6 1.5 7.3 2.2 8.1 3.3L9 2.4C7.9 1 6.3 0 4.5 0S1.1 1 0 2.4l.9.9C1.7 2.2 3 1.5 4.5 1.5z" />
+            <path d="M4.5 3C5.5 3 6.4 3.4 7 4.1l.9-.9C7 2.4 5.8 1.8 4.5 1.8S2 2.4 1.1 3.2l.9.9C2.6 3.4 3.5 3 4.5 3z" />
+            <circle cx="4.5" cy="5.5" r="1" />
+          </svg>
+          <svg width="14" height="7" viewBox="0 0 14 7" fill="none">
+            <rect x="0.5" y="0.5" width="11" height="6" rx="1.5" stroke="white" strokeOpacity="0.4" />
+            <rect x="1" y="1" width="8" height="5" rx="1" fill="white" />
+            <path d="M12.5 2.5v2c.8-.3.8-1.7 0-2z" fill="white" opacity="0.4" />
+          </svg>
         </div>
       </div>
-      {/* FYP tabs */}
-      <div className="absolute left-0 right-0 top-7 z-10 flex justify-center gap-4 font-semibold text-white/70" style={{ fontSize: fypFs }}>
-        <span>Following</span>
-        <span className="border-b border-white pb-px text-white">For You</span>
+
+      {/* Top Header: Following | For You */}
+      <div className="absolute left-0 right-0 top-6 z-30 flex items-center justify-center gap-4 font-semibold text-white/60 pointer-events-none text-[10px] 2xl:text-xs">
+        <span className="cursor-pointer">Following</span>
+        <span className="font-bold text-white border-b-2 border-white pb-0.5">For You</span>
       </div>
-      {/* media area */}
-      <div className={`absolute inset-0 overflow-hidden ${innerRadius} bg-gray-900`}>
+
+      {/* Floating Audio Mute/Unmute toggle button */}
+      <div className="absolute top-9 right-2.5 z-40">
+        {(isVideo || hasMusic) && (
+          <button
+            type="button"
+            onClick={toggleMute}
+            title={isMuted ? 'Click to unmute audio' : 'Click to mute audio'}
+            className={`flex h-6 w-6 2xl:h-7 2xl:w-7 items-center justify-center rounded-full backdrop-blur-md transition-all shadow-md ${
+              !isMuted
+                ? 'bg-[#15DCFF] text-black font-bold ring-2 ring-[#15DCFF]/50 scale-105'
+                : 'bg-black/60 text-white/90 hover:bg-black/80 hover:text-white'
+            }`}
+          >
+            {isMuted ? <VolumeX className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" /> : <Volume2 className="h-3 w-3 2xl:h-3.5 2xl:w-3.5" />}
+          </button>
+        )}
+      </div>
+
+      {/* Main Media Display */}
+      <div
+        className={`absolute inset-0 overflow-hidden ${innerRadius} bg-gray-950 cursor-pointer`}
+        onClick={togglePlay}
+      >
         {isCarousel ? (
           <>
             <img
               src={activeCarouselSrc}
               className="h-full w-full object-cover"
               alt={`Carousel image ${carouselIndex + 1} of ${mediaSrcs.length}`}
-              onClick={() => setCarouselIndex((i) => (i + 1) % mediaSrcs.length)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCarouselIndex((i) => (i + 1) % mediaSrcs.length);
+              }}
             />
-            {/* prev/next affordance — this is one ad, swiped through */}
+            {hasMusic && <audio ref={audioRef} src={musicSrc} loop />}
             {mediaSrcs.length > 1 && (
               <>
                 <button
@@ -1089,8 +1414,7 @@ function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaL
                     e.stopPropagation();
                     setCarouselIndex((i) => (i - 1 + mediaSrcs.length) % mediaSrcs.length);
                   }}
-                  className="absolute left-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white"
-                  style={{ fontSize: '12px' }}
+                  className="absolute left-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/70 text-xs"
                 >
                   ‹
                 </button>
@@ -1100,15 +1424,13 @@ function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaL
                     e.stopPropagation();
                     setCarouselIndex((i) => (i + 1) % mediaSrcs.length);
                   }}
-                  className="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white"
-                  style={{ fontSize: '12px' }}
+                  className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/70 text-xs"
                 >
                   ›
                 </button>
               </>
             )}
-            {/* swipe dots (bottom, above the caption — as TikTok shows them) */}
-            <div className="absolute bottom-20 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1">
+            <div className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 pointer-events-none">
               {mediaSrcs.map((_, i) => (
                 <div
                   key={i}
@@ -1121,75 +1443,166 @@ function PhoneMockup({ mediaSrc, mediaSrcs, mediaType, displayName, adText, ctaL
           </>
         ) : mediaSrc ? (
           mediaType === 'video' ? (
-            <video src={mediaSrc} className="h-full w-full object-cover" muted loop autoPlay playsInline />
+            <video
+              ref={videoRef}
+              src={mediaSrc}
+              className="h-full w-full object-cover"
+              muted={isMuted}
+              loop
+              autoPlay
+              playsInline
+            />
           ) : (
-            <img src={mediaSrc} className="h-full w-full object-cover" alt="ad preview" />
+            <>
+              <img src={mediaSrc} className="h-full w-full object-cover" alt="ad preview" />
+              {hasMusic && <audio ref={audioRef} src={musicSrc} loop />}
+            </>
           )
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <svg width={placeholderSz} height={placeholderSz} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5">
-              <rect x="2" y="2" width="20" height="20" rx="3"/><path d="M9 10l5 3-5 3V10z"/>
+          <div className="flex h-full w-full items-center justify-center bg-gray-900">
+            <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5">
+              <rect x="2" y="2" width="20" height="20" rx="3" />
+              <path d="M9 10l5 3-5 3V10z" />
             </svg>
           </div>
         )}
+
+        {/* Dark Vignette Bottom Scrim for crisp text contrast */}
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none z-10" />
+
+        {/* Center paused overlay indicator */}
+        {!isPlaying && (mediaSrc || activeCarouselSrc) && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25 backdrop-blur-[1px]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white shadow-xl ring-1 ring-white/30">
+              <Play className="ml-0.5 h-5 w-5 fill-white text-white" />
+            </div>
+          </div>
+        )}
       </div>
-      {/* right action bar */}
-      <div className="absolute bottom-16 right-1.5 z-10 flex flex-col items-center gap-3">
+
+      {/* Right Action Bar (Heart, Comment, Bookmark, Share, Vinyl) */}
+      <div className="absolute bottom-11 right-1.5 z-20 flex flex-col items-center gap-2 pointer-events-none">
+        {/* Profile Avatar */}
+        <div className="relative flex flex-col items-center">
+          <div className={`${avatarSz} rounded-full bg-gradient-to-tr from-[#15DCFF] to-[#FE2C55] p-[1.5px] shadow`}>
+            <div className="h-full w-full rounded-full bg-gray-800 flex items-center justify-center text-white text-[9px] font-bold">
+              {(displayName || 'A').slice(0, 1).toUpperCase()}
+            </div>
+          </div>
+          <div className="-mt-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#FE2C55] text-white text-[8px] font-bold shadow">
+            +
+          </div>
+        </div>
+
+        {/* Heart / Like */}
         <div className="flex flex-col items-center">
-          <div className={`${avatarSz} rounded-full bg-linear-to-br from-[#15DCFF] to-[#6b72f8] ring-1 ring-white`} />
-          <div className={`-mt-1 flex ${plusSz} items-center justify-center rounded-full bg-[#FE2C55] text-white font-bold`} style={{ fontSize: plusFs }}>+</div>
+          <Heart className={`${iconSz} fill-white text-white drop-shadow`} />
+          <span className={`text-white font-medium drop-shadow ${countFs}`}>991K</span>
         </div>
-        {[['❤️','991K'],['💬','3456'],['🔖','810'],['↗️','1256']].map(([icon, count]) => (
-          <div key={count} className="flex flex-col items-center">
-            <span style={{ fontSize: actionIconFs }}>{icon}</span>
-            <span className="text-white font-medium" style={{ fontSize: actionCountFs }}>{count}</span>
+
+        {/* Comment */}
+        <div className="flex flex-col items-center">
+          <MessageCircle className={`${iconSz} fill-white text-white drop-shadow`} />
+          <span className={`text-white font-medium drop-shadow ${countFs}`}>3.4K</span>
+        </div>
+
+        {/* Bookmark */}
+        <div className="flex flex-col items-center">
+          <Bookmark className={`${iconSz} fill-white text-white drop-shadow`} />
+          <span className={`text-white font-medium drop-shadow ${countFs}`}>810</span>
+        </div>
+
+        {/* Share */}
+        <div className="flex flex-col items-center">
+          <Share2 className={`${iconSz} fill-white text-white drop-shadow`} />
+          <span className={`text-white font-medium drop-shadow ${countFs}`}>1.2K</span>
+        </div>
+
+        {/* Spinning Vinyl Record Disc */}
+        <div
+          onClick={toggleMute}
+          className={`pointer-events-auto cursor-pointer ${discSz} rounded-full bg-gradient-to-tr from-gray-900 via-gray-800 to-black p-1 ring-1 ring-white/30 shadow-lg mt-0.5 ${
+            isPlaying ? 'animate-spin [animation-duration:3.5s]' : ''
+          }`}
+          title={isMuted ? 'Sound muted - tap to unmute' : 'Playing audio'}
+        >
+          <div className="flex h-full w-full items-center justify-center rounded-full bg-black/90">
+            <Music className={`h-2.5 w-2.5 ${!isMuted ? 'text-[#15DCFF]' : 'text-white/70'}`} />
           </div>
-        ))}
+        </div>
       </div>
-      {/* bottom identity + text + sponsored */}
-      <div className="absolute bottom-8 left-2 right-10 z-10">
+
+      {/* Bottom Left Ad Information Overlay */}
+      <div className="absolute bottom-10 left-2.5 right-12 z-20 pointer-events-none flex flex-col gap-0.5">
         <div className="flex items-center gap-1.5">
-          <p className="font-bold text-white drop-shadow" style={{ fontSize: nameFs }}>{displayName}</p>
-          {isCarousel && (
-            <span
-              className="rounded-sm bg-black/40 px-1 py-px font-medium text-white/90"
-              style={{ fontSize: textFs }}
-            >
-              {mediaSrcs.length} Photos
-            </span>
-          )}
+          <p className="font-bold text-white text-[10px] 2xl:text-xs drop-shadow truncate">
+            @{displayName || 'your_brand'}
+          </p>
+          <span className="rounded-xs bg-white/20 px-1 py-0.5 text-[8px] font-semibold text-white/90 backdrop-blur-xs">
+            Sponsored
+          </span>
         </div>
-        <p className="mt-0.5 leading-tight text-white/80 drop-shadow line-clamp-2" style={{ fontSize: textFs }}>{adText}</p>
-        <p className="mt-1 text-white/50" style={{ fontSize: textFs }}>Sponsored</p>
+
+        <p className="text-[9px] 2xl:text-[11px] leading-tight text-white/90 drop-shadow line-clamp-2 mt-0.5">
+          {adText || 'Your ad copy will be displayed here'}
+        </p>
+
+        {/* Interactive Call to Action Banner */}
+        {ctaLabel && (
+          <div className="mt-1 flex items-center justify-between rounded bg-[#FE2C55] px-2 py-0.5 text-white shadow-sm max-w-[150px]">
+            <span className="text-[9px] 2xl:text-[10px] font-bold tracking-wide">{ctaLabel}</span>
+            <span className="text-[9px] font-bold">›</span>
+          </div>
+        )}
+
+        {/* Music Sound Ticker */}
+        <div className="mt-0.5 flex items-center gap-1 text-white/75 text-[8px] 2xl:text-[10px]">
+          <Music className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">
+            {musicName || (isVideo ? `Original sound - ${displayName || 'ad'}` : 'Commercial sound')}
+          </span>
+        </div>
       </div>
-      {/* CTA button — only shown when the ad carries a destination */}
-      {ctaLabel && (
-        <div className="absolute bottom-3 left-2 z-10">
-          <div className="rounded-sm bg-white/20 px-2 py-0.5 backdrop-blur-sm">
-            <span className="font-semibold text-white" style={{ fontSize: textFs }}>{ctaLabel} ›</span>
+
+      {/* Bottom Navigation Bar */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 z-30 flex h-8 items-center justify-around ${innerRadius.replace(
+          'rounded-[',
+          'rounded-b-[',
+        )} bg-black/85 backdrop-blur-md pointer-events-none px-1 border-t border-white/5`}
+      >
+        <div className="flex flex-col items-center gap-px text-white">
+          <div className="h-2.5 w-2.5 rounded-xs bg-white" />
+          <span className="text-[6px] font-medium">Home</span>
+        </div>
+        <div className="flex flex-col items-center gap-px text-white/60">
+          <div className="h-2.5 w-2.5 rounded-xs bg-white/30" />
+          <span className="text-[6px]">Friends</span>
+        </div>
+        <div className="flex items-center justify-center">
+          <div className="flex h-4 w-7 items-center justify-center rounded-md bg-gradient-to-r from-[#15DCFF] via-white to-[#FE2C55] p-[1.5px] shadow">
+            <div className="flex h-full w-full items-center justify-center rounded-[3px] bg-white text-black font-bold text-[9px] leading-none">
+              +
+            </div>
           </div>
         </div>
-      )}
-      {/* bottom nav */}
-      <div className={`absolute bottom-0 left-0 right-0 z-10 flex items-center justify-around ${innerRadius.replace('rounded-[', 'rounded-b-[')} bg-black/60 py-1.5 backdrop-blur-sm`}>
-        {['Home','Friends','+','Inbox','Me'].map((label) => (
-          <div key={label} className="flex flex-col items-center gap-px">
-            {label === '+' ? (
-              <div className="flex h-4 w-6 items-center justify-center rounded-sm bg-[#FE2C55] text-white text-10 font-bold">+</div>
-            ) : (
-              <div className={`${navIconSz} rounded-sm bg-white/30`} />
-            )}
-            {label !== '+' && <span className="text-white/60" style={{ fontSize: '6px' }}>{label}</span>}
-          </div>
-        ))}
+        <div className="flex flex-col items-center gap-px text-white/60">
+          <div className="h-2.5 w-2.5 rounded-xs bg-white/30" />
+          <span className="text-[6px]">Inbox</span>
+        </div>
+        <div className="flex flex-col items-center gap-px text-white/60">
+          <div className="h-2.5 w-2.5 rounded-xs bg-white/30" />
+          <span className="text-[6px]">Profile</span>
+        </div>
       </div>
     </div>
   );
 }
 
-function TikTokAdPreview({ form, identityName }) {
+function TikTokAdPreview({ form, identityName, musicList = [] }) {
   const [mediaObjectUrl, setMediaObjectUrl] = useState(null);
   const [carouselObjectUrls, setCarouselObjectUrls] = useState([]);
+  const [musicObjectUrl, setMusicObjectUrl] = useState(null);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -1203,27 +1616,46 @@ function TikTokAdPreview({ form, identityName }) {
     } else {
       setMediaObjectUrl(null);
     }
-    return () => { if (url) URL.revokeObjectURL(url); };
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [form.videoFile, form.imageFile, form.mediaType]);
+
+  useEffect(() => {
+    if (form.musicFile) {
+      const url = URL.createObjectURL(form.musicFile);
+      setMusicObjectUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setMusicObjectUrl(null);
+    return undefined;
+  }, [form.musicFile]);
 
   useEffect(() => {
     if (form.mediaType !== 'carousel' || !form.carouselFiles.length) {
       setCarouselObjectUrls([]);
-      return;
+      return () => {};
     }
     const urls = form.carouselFiles.map((f) => URL.createObjectURL(f));
     setCarouselObjectUrls(urls);
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [form.carouselFiles, form.mediaType]);
 
-  const mediaSrc = mediaObjectUrl
-    || (form.mediaType === 'video' ? form.videoUrl : form.imageUrl)
-    || null;
+  const mediaSrc =
+    mediaObjectUrl || (form.mediaType === 'video' ? form.videoUrl : form.imageUrl) || null;
+
+  const selectedMusicObj = useMemo(
+    () => musicList?.find((m) => String(m.musicId) === String(form.musicId)),
+    [musicList, form.musicId]
+  );
+  const musicSrc = musicObjectUrl || selectedMusicObj?.url || '';
+  const musicName =
+    form.musicFile?.name ||
+    selectedMusicObj?.name ||
+    (selectedMusicObj?.author ? `${selectedMusicObj.name} · ${selectedMusicObj.author}` : '');
 
   const displayName = identityName || 'Your identity';
   const adText = form.adText || 'Your text will be shown here';
-  // A real ad only shows a CTA button when it has a destination; mirror that
-  // in the preview so Reach / Video Views etc. don't show a phantom button.
   const ctaLabel = objectiveCanHaveDestination(form)
     ? (form.cta || 'LEARN_MORE').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
     : '';
@@ -1235,51 +1667,50 @@ function TikTokAdPreview({ form, identityName }) {
     displayName,
     adText,
     ctaLabel,
+    musicSrc,
+    musicName,
   };
 
   return (
     <>
-      <div className="flex flex-col items-center gap-2 p-3">
-        <div className="flex w-full items-center justify-between px-1">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-white/40">Ad Preview</p>
+      <div className="flex flex-col items-center gap-2 p-1">
+        <div className="flex w-full items-center justify-between px-1 mb-1">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/50">
+            Ad Preview
+          </p>
           <button
             onClick={() => setExpanded(true)}
             title="Expand preview"
-            className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-white/50 dark:hover:bg-white/10"
+            className="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-white/50 dark:hover:bg-white/10 transition-colors"
           >
-            {/* expand icon: four corners pointing out */}
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8"/>
+              <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
             </svg>
           </button>
         </div>
-        {/* small phone */}
-        <div className="w-45">
+        {/* phone frame */}
+        <div className="w-54 2xl:w-60 max-w-full">
           <PhoneMockup {...mockupProps} size="sm" />
         </div>
-        <p className="text-10 text-gray-400 dark:text-white/30">In feed · TikTok</p>
+        <p className="text-[10px] text-gray-400 dark:text-white/35 mt-1">In feed · TikTok</p>
       </div>
 
-      {/* fullscreen modal */}
+      {/* fullscreen expanded modal */}
       {expanded && (
         <div
-          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/75 backdrop-blur-md p-4"
           onClick={() => setExpanded(false)}
         >
-          <div className="flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
-            {/* top bar */}
-            <div className="flex w-full items-center justify-between rounded-t-xl bg-white px-4 py-2 dark:bg-[#1a1a1a]">
-              <span className="text-sm font-medium text-gray-700 dark:text-white/70">Ad Preview</span>
+          <div className="flex flex-col items-center gap-3 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex w-full items-center justify-between rounded-2xl bg-white/10 backdrop-blur-lg px-4 py-2 text-white border border-white/10">
+              <span className="text-xs font-semibold uppercase tracking-wider">TikTok Live Preview</span>
               <button
                 onClick={() => setExpanded(false)}
-                className="flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-white/10 dark:text-white/50 dark:hover:bg-white/10"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
               >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M4 1v3H1M11 4H8V1M8 11V8h3M1 8h3v3"/>
-                </svg>
+                <X className="h-4 w-4" />
               </button>
             </div>
-            {/* large phone */}
             <div style={{ width: '320px' }}>
               <PhoneMockup {...mockupProps} size="lg" />
             </div>
@@ -1397,8 +1828,9 @@ function getStepErrors(step, form, currentObjective, currency = 'USD') {
         errs.adgroupBudget = `Minimum ${unit} is ${min} ${currency}`;
       }
     }
-    if (form.bidType === 'BID_TYPE_CUSTOM' && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
-      errs.bidPrice = 'Bid price is required';
+    const isCpc = billingEventForGoal(form.optimizationGoal, form.bidType) === 'CPC';
+    if ((isCpc || form.bidType === 'BID_TYPE_CUSTOM') && (!form.bidPrice || Number(form.bidPrice) <= 0)) {
+      errs.bidPrice = 'Bid price is required (must be greater than 0)';
     }
     if (needsPixel) {
       if (!form.pixelId) errs.pixelId = 'Select a TikTok Pixel';
@@ -1456,7 +1888,7 @@ function getStepErrors(step, form, currentObjective, currency = 'USD') {
       }
     }
     if (
-      objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) &&
+      objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType) &&
       !form.landingPageUrl.trim()
     ) {
       errs.landingPageUrl = 'Destination URL is required';
@@ -1493,6 +1925,7 @@ function CampaignSetupSidebar({
   onStepClick,
   currency,
   identities = [],
+  musicList = [],
   stepOffset = 0,
 }) {
   const actualStep = currentStep + stepOffset;
@@ -1582,6 +2015,7 @@ function CampaignSetupSidebar({
             identityName={
               identities?.find((it) => String(it.identityId) === String(form.identityId))?.displayName || ''
             }
+            musicList={musicList}
           />
         </div>
       )}
@@ -1943,6 +2377,7 @@ const CreateCampaignWizard = ({
   const [loadingMusic, setLoadingMusic] = useState(false);
   const [uploadingMusic, setUploadingMusic] = useState(false);
   const [manualPageId, setManualPageId] = useState('');
+  const [libraryMode, setLibraryMode] = useState(true);
   const [launching, setLaunching] = useState(false);
   // Synchronous re-entrancy guard for launch/save. `launching` state can't
   // prevent a second concurrent call (React batches state, and StrictMode +
@@ -2453,6 +2888,13 @@ const CreateCampaignWizard = ({
     }
   }, [currentObjective, form.objectiveKey, form.leadGenSubType, form.productSalesSubType, form.optimizationGoal]);
 
+  // For CLICK optimization (CPC billing event), TikTok strictly requires manual CPC bidding (BID_TYPE_CUSTOM).
+  useEffect(() => {
+    if (billingEventForGoal(form.optimizationGoal, form.bidType) === 'CPC' && form.bidType !== 'BID_TYPE_CUSTOM') {
+      update({ bidType: 'BID_TYPE_CUSTOM' });
+    }
+  }, [form.optimizationGoal, form.bidType]);
+
   // Video-only objectives (Video Views, Community Interaction) don't offer an
   // image option on TikTok — force the media type back to video if a prior
   // objective left it set to image.
@@ -2483,10 +2925,10 @@ const CreateCampaignWizard = ({
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '').replace('-', '').replace('-', '');
     update({
       objectiveKey: o.key,
-      objectiveType: o.objectiveType,
+      objectiveType: o.key === 'PRODUCT_SALES' ? 'WEB_CONVERSIONS' : o.objectiveType,
       optimizationGoal: o.optimizationGoals?.[0] || '',
-      leadGenSubType: '',
-      productSalesSubType: '',
+      leadGenSubType: o.key === 'LEAD_GENERATION' ? 'INSTANT_FORM' : '',
+      productSalesSubType: o.key === 'PRODUCT_SALES' ? 'WEBSITE' : '',
       appPromotionType: 'APP_INSTALL',
       pageId: '',
       pixelId: '',
@@ -2582,7 +3024,12 @@ const CreateCampaignWizard = ({
           adgroup_name: form.adgroupName,
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
           ...(form.deviceTypes.length
-            ? { operating_systems: form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')) }
+            ? {
+                operating_systems:
+                  form.objectiveKey === 'APP_PROMOTION'
+                    ? (form.deviceTypes.includes('DEVICE_IOS') && !form.deviceTypes.includes('DEVICE_ANDROID') ? ['IOS'] : ['ANDROID'])
+                    : form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')),
+              }
             : {}),
           location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
           age_groups: form.ageGroups,
@@ -2605,6 +3052,9 @@ const CreateCampaignWizard = ({
                 budget_mode: form.adgroupBudgetMode || 'BUDGET_MODE_DAY',
               }),
           optimization_goal: form.optimizationGoal,
+          ...(promotionTypeForObjective(form.objectiveKey, form.deviceTypes)
+            ? { promotion_type: promotionTypeForObjective(form.objectiveKey, form.deviceTypes) }
+            : {}),
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? { promotion_target_type: promotionTargetTypeForLeadSubType(form.leadGenSubType) }
             : {}),
@@ -2656,7 +3106,7 @@ const CreateCampaignWizard = ({
                 ? { page_id: Number(form.pageId) }
                 : isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && form.pageId
                 ? { page_id: Number(form.pageId) }
-                : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
+                : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType) && form.landingPageUrl
                 ? { landing_page_url: form.landingPageUrl }
                 : {}),
               ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
@@ -2673,6 +3123,17 @@ const CreateCampaignWizard = ({
       const msg = formatFriendlyError(rawMsg);
       setError(msg);
       toast.error(msg);
+
+      const fieldErr = mapApiErrorToField(rawMsg);
+      if (fieldErr) {
+        setErrors((prev) => ({
+          ...prev,
+          [fieldErr.field]: fieldErr.message,
+        }));
+        if (fieldErr.step) {
+          setStep(fieldErr.step);
+        }
+      }
     } finally {
       setLaunching(false);
       inFlightRef.current = false;
@@ -2728,16 +3189,22 @@ const CreateCampaignWizard = ({
 
       // 1. Campaign
       if (!campaignId && !isAddAdGroup && !isAddAd) {
+        const effectiveObjectiveType =
+          isProductSales(form.objectiveKey) && form.productSalesSubType === 'WEBSITE'
+            ? 'WEB_CONVERSIONS'
+            : form.objectiveType;
+
         const res = await createTiktokCampaign({
           advertiserId,
           campaignName: form.campaignName,
-          objectiveType: form.objectiveType,
+          objectiveType: effectiveObjectiveType,
           // No campaign budget set → infinite (budget lives at ad-group level).
           budgetMode: hasCampaignBudget(form) ? form.budgetMode : 'BUDGET_MODE_INFINITE',
           ...(hasCampaignBudget(form) ? { budget: Number(form.budget) } : {}),
           budgetOptimizeOn: form.budgetOptimizeOn,
           specialIndustries: form.specialIndustries,
           ...(isAppPromotion(form.objectiveKey) ? { appPromotionType: form.appPromotionType } : {}),
+          productSalesSubType: form.productSalesSubType,
         });
         campaignId = res.campaignId;
         setCreated((c) => ({ ...c, campaignId }));
@@ -2753,7 +3220,12 @@ const CreateCampaignWizard = ({
           placement_type: 'PLACEMENT_TYPE_NORMAL',
           placements: form.placements.length ? form.placements : ['PLACEMENT_TIKTOK'],
           ...(form.deviceTypes.length
-            ? { operating_systems: form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')) }
+            ? {
+                operating_systems:
+                  form.objectiveKey === 'APP_PROMOTION'
+                    ? (form.deviceTypes.includes('DEVICE_IOS') && !form.deviceTypes.includes('DEVICE_ANDROID') ? ['IOS'] : ['ANDROID'])
+                    : form.deviceTypes.map((d) => String(d).replace(/^DEVICE_/, '')),
+              }
             : {}),
           location_ids: form.locationIds.length ? form.locationIds : defaultLocationIds(regions),
           ...(form.specialIndustries?.length ? {} : form.ageGroups.length ? { age_groups: form.ageGroups } : {}),
@@ -2768,8 +3240,8 @@ const CreateCampaignWizard = ({
           // ...(form.brandSafetyType && form.brandSafetyType !== 'NO_BRAND_SAFETY'
           //   ? { brand_safety_type: form.brandSafetyType }
           //   : {}),
-          ...(promotionTypeForObjective(form.objectiveKey)
-            ? { promotion_type: promotionTypeForObjective(form.objectiveKey) }
+          ...(promotionTypeForObjective(form.objectiveKey, form.deviceTypes)
+            ? { promotion_type: promotionTypeForObjective(form.objectiveKey, form.deviceTypes) }
             : {}),
           ...(isLeadGeneration(form.objectiveKey) && promotionTargetTypeForLeadSubType(form.leadGenSubType)
             ? {
@@ -2910,7 +3382,7 @@ const CreateCampaignWizard = ({
             ? { page_id: Number(form.pageId) }
             : isProductSales(form.objectiveKey) && productSalesSubTypeNeedsForm(form.productSalesSubType) && form.pageId
             ? { page_id: Number(form.pageId) }
-            : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && form.landingPageUrl
+            : objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType) && form.landingPageUrl
             ? { landing_page_url: form.landingPageUrl }
             : {}),
           ...(form.impressionTrackingUrl ? { impression_tracking_url: form.impressionTrackingUrl } : {}),
@@ -2954,6 +3426,17 @@ const CreateCampaignWizard = ({
       const msg = formatFriendlyError(rawMsg);
       setError(msg);
       toast.error(msg);
+
+      const fieldErr = mapApiErrorToField(rawMsg);
+      if (fieldErr) {
+        setErrors((prev) => ({
+          ...prev,
+          [fieldErr.field]: fieldErr.message,
+        }));
+        if (fieldErr.step) {
+          setStep(fieldErr.step);
+        }
+      }
     } finally {
       setLaunching(false);
       inFlightRef.current = false;
@@ -3055,6 +3538,7 @@ const CreateCampaignWizard = ({
                       onClick={() =>
                         update({
                           productSalesSubType: st.key,
+                          objectiveType: st.key === 'WEBSITE' ? 'WEB_CONVERSIONS' : 'PRODUCT_SALES',
                           optimizationGoal: 'CONVERT',
                           pageId: '',
                           pixelId: '',
@@ -3509,19 +3993,31 @@ const CreateCampaignWizard = ({
               onChange={(v) => update({ brandSafetyType: v })}
               options={BRAND_SAFETY_TYPES}
             /> */}
-            <SelectField
-              label="Bid type"
-              value={form.bidType}
-              onChange={(v) => update({ bidType: v })}
-              options={BID_TYPES}
-            />
-            {form.bidType === 'BID_TYPE_CUSTOM' && (
+            {billingEventForGoal(form.optimizationGoal, form.bidType) === 'CPC' ? (
+              <SelectField
+                label="Bid type"
+                value="BID_TYPE_CUSTOM"
+                disabled
+                hint="TikTok requires a custom CPC (Cost per Click) bid for Click optimization."
+                options={[{ value: 'BID_TYPE_CUSTOM', label: 'Custom bid (CPC)' }]}
+              />
+            ) : (
+              <SelectField
+                label="Bid type"
+                value={form.bidType}
+                onChange={(v) => update({ bidType: v })}
+                options={BID_TYPES}
+              />
+            )}
+            {(form.bidType === 'BID_TYPE_CUSTOM' || billingEventForGoal(form.optimizationGoal, form.bidType) === 'CPC') && (
               <NumberField
                 label={`Bid price (${currency})`}
                 value={form.bidPrice}
                 onChange={(v) => update({ bidPrice: v })}
-                min={0}
+                min={0.01}
                 step={0.01}
+                placeholder="e.g. 0.20"
+                hint="Maximum amount you are willing to pay per click"
                 required
                 error={errors.bidPrice}
               />
@@ -3648,32 +4144,186 @@ const CreateCampaignWizard = ({
               ]}
             />
 
-            {currentObjective?.videoOnly ? (
-              <FieldShell label="Media type" hint="This objective only supports video ads on TikTok.">
-                <div className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-600 dark:bg-[#1d1d1d] dark:text-white/70">
-                  Video
+            <FieldShell
+              label="Media"
+              required
+              error={errors.video || errors.image || errors.carousel}
+              hint={
+                libraryMode
+                  ? 'Pick any image or video from your generated-media library'
+                  : currentObjective?.videoOnly
+                  ? 'MP4 / MOV / WEBM up to 100 MB'
+                  : form.mediaType === 'video'
+                  ? 'MP4 / MOV / WEBM up to 100 MB'
+                  : form.mediaType === 'image'
+                  ? 'JPG or PNG up to 10 MB'
+                  : 'Swipeable carousel of images'
+              }
+            >
+              <div className="flex flex-col gap-3">
+                {/* Source: From library ⇄ Upload / URL */}
+                <div className="flex items-stretch gap-2 max-w-xs">
+                  <SegButton active={libraryMode} onClick={() => setLibraryMode(true)}>
+                    From library
+                  </SegButton>
+                  <SegButton active={!libraryMode} onClick={() => setLibraryMode(false)}>
+                    Upload / URL
+                  </SegButton>
                 </div>
-              </FieldShell>
-            ) : (
-              <FieldShell label="Media type">
-                <SegGroup
-                  value={form.mediaType}
-                  onChange={(v) => update({ mediaType: v })}
-                  options={[
-                    { value: 'video', label: 'Video' },
-                    { value: 'image', label: 'Image' },
-                    // Reach doesn't offer a separate Carousel format — multiple
-                    // images are added under the Image flow instead.
-                    ...(form.objectiveKey === 'REACH' ? [] : [{ value: 'carousel', label: 'Carousel' }]),
-                  ]}
-                />
-              </FieldShell>
-            )}
 
-            {(currentObjective?.videoOnly ? true : form.mediaType === 'video') && (
-              <>
-                {form.videoFile || form.videoUrl ? (
-                  <FieldShell label="Selected video">
+                {libraryMode ? (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4 2xl:p-4">
+                    <LibraryPicker
+                      type={currentObjective?.videoOnly ? 'video' : 'all'}
+                      selectedUrl={form.mediaType === 'video' ? form.videoUrl : form.imageUrl}
+                      onPick={(absoluteUrl, doc) => {
+                        if (doc?.type === 'video') {
+                          update({
+                            mediaType: 'video',
+                            videoUrl: absoluteUrl,
+                            videoFile: null,
+                            imageFile: null,
+                            imageUrl: '',
+                            carouselFiles: [],
+                          });
+                        } else {
+                          update({
+                            mediaType: 'image',
+                            imageUrl: absoluteUrl,
+                            imageFile: null,
+                            videoFile: null,
+                            videoUrl: '',
+                            carouselFiles: [],
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {!currentObjective?.videoOnly && (
+                      <div className="flex items-stretch gap-2 max-w-xs">
+                        <SegButton
+                          active={form.mediaType === 'video'}
+                          onClick={() => update({ mediaType: 'video', imageFile: null, imageUrl: '', carouselFiles: [] })}
+                        >
+                          Video
+                        </SegButton>
+                        <SegButton
+                          active={form.mediaType === 'image'}
+                          onClick={() => update({ mediaType: 'image', videoFile: null, videoUrl: '', carouselFiles: [] })}
+                        >
+                          Image
+                        </SegButton>
+                        {form.objectiveKey !== 'REACH' && (
+                          <SegButton
+                            active={form.mediaType === 'carousel'}
+                            onClick={() => update({ mediaType: 'carousel', videoFile: null, videoUrl: '', imageFile: null, imageUrl: '' })}
+                          >
+                            Carousel
+                          </SegButton>
+                        )}
+                      </div>
+                    )}
+
+                    {(currentObjective?.videoOnly || form.mediaType === 'video') && (
+                      <>
+                        <TextField
+                          label="Video URL (mp4)"
+                          value={form.videoUrl}
+                          onChange={(v) => update({ videoUrl: v })}
+                          placeholder="https://.../video.mp4"
+                        />
+                        <FieldShell label="Or upload video file">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
+                              Upload video
+                              <input
+                                type="file"
+                                accept="video/mp4,video/quicktime,video/webm"
+                                onChange={(e) => handleVideoFileSelect(e.target.files?.[0] || null)}
+                                className="hidden"
+                              />
+                            </label>
+                            <span className="text-[11px] text-gray-400 dark:text-white/45">MP4 / MOV / WEBM</span>
+                          </div>
+                        </FieldShell>
+                      </>
+                    )}
+
+                    {!currentObjective?.videoOnly && form.mediaType === 'image' && (
+                      <>
+                        <TextField
+                          label="Image URL"
+                          value={form.imageUrl}
+                          onChange={(v) => update({ imageUrl: v })}
+                          placeholder="https://.../image.jpg"
+                        />
+                        <FieldShell label="Or upload image file">
+                          <div className="flex flex-wrap items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
+                              Upload image
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                onChange={(e) => handleImageFileSelect(e.target.files?.[0] || null)}
+                                className="hidden"
+                              />
+                            </label>
+                            <span className="text-[11px] text-gray-400 dark:text-white/45">JPG / PNG</span>
+                          </div>
+                        </FieldShell>
+                      </>
+                    )}
+
+                    {!currentObjective?.videoOnly && form.mediaType === 'carousel' && (
+                      <FieldShell
+                        label={`Carousel images (${form.carouselFiles.length}/${MAX_CAROUSEL_IMAGES})`}
+                        hint={`Upload ${MIN_CAROUSEL_IMAGES}-${MAX_CAROUSEL_IMAGES} images. TikTok shows them in this order as a swipeable carousel.`}
+                      >
+                        {form.carouselFiles.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            {form.carouselFiles.map((file, i) => (
+                              <div key={`${file.name}-${i}`} className="relative">
+                                <img
+                                  src={URL.createObjectURL(file)}
+                                  alt={`Carousel image ${i + 1}`}
+                                  className="h-16 w-16 rounded-lg object-cover"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeCarouselFile(i)}
+                                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-white hover:bg-red-600"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {form.carouselFiles.length < MAX_CAROUSEL_IMAGES && (
+                          <div className="flex flex-wrap items-center gap-2" onPaste={handleCarouselPaste} tabIndex={0}>
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
+                              Add images
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                multiple
+                                onChange={(e) => handleCarouselFilesSelect(e.target.files)}
+                                className="hidden"
+                              />
+                            </label>
+                            <span className="text-[11px] text-gray-400 dark:text-white/45">Select multiple JPG / PNG</span>
+                          </div>
+                        )}
+                      </FieldShell>
+                    )}
+                  </>
+                )}
+
+                {/* Show selected media preview if any image/video selected */}
+                {(form.videoFile || form.videoUrl) && (
+                  <FieldShell label="Selected video preview">
                     <MediaPreview
                       file={form.videoFile}
                       url={form.videoUrl}
@@ -3683,122 +4333,22 @@ const CreateCampaignWizard = ({
                         setVideoWarning('');
                       }}
                     />
-                    {errors.video && <p className="mt-1 text-xs text-red-500">{errors.video}</p>}
-                    {!errors.video && videoWarning && (
-                      <p className="mt-1 text-xs text-amber-500">{videoWarning}</p>
-                    )}
+                    {videoWarning && <p className="mt-1 text-xs text-amber-500">{videoWarning}</p>}
                   </FieldShell>
-                ) : (
-                  <>
-                    <TextField
-                      label="Video URL (mp4)"
-                      value={form.videoUrl}
-                      onChange={(v) => update({ videoUrl: v })}
-                      placeholder="https://.../video.mp4"
-                    />
-                    <FieldShell label="Or upload video file">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
-                          Upload video
-                          <input
-                            type="file"
-                            accept="video/mp4,video/quicktime,video/webm"
-                            onChange={(e) => handleVideoFileSelect(e.target.files?.[0] || null)}
-                            className="hidden"
-                          />
-                        </label>
-                        <span className="text-[11px] text-gray-400 dark:text-white/45">MP4 / MOV / WEBM</span>
-                      </div>
-                      {errors.video && <p className="mt-1 text-xs text-red-500">{errors.video}</p>}
-                    </FieldShell>
-                  </>
                 )}
-              </>
-            )}
 
-            {!currentObjective?.videoOnly && form.mediaType === 'image' && (
-              <>
-                {form.imageFile || form.imageUrl ? (
-                  <FieldShell label="Selected image">
+                {(form.imageFile || form.imageUrl) && (
+                  <FieldShell label="Selected image preview">
                     <MediaPreview
                       file={form.imageFile}
                       url={form.imageUrl}
                       type="image"
                       onRemove={() => update({ imageFile: null, imageUrl: '' })}
                     />
-                    {errors.image && <p className="mt-1 text-xs text-red-500">{errors.image}</p>}
                   </FieldShell>
-                ) : (
-                  <>
-                    <TextField
-                      label="Image URL"
-                      value={form.imageUrl}
-                      onChange={(v) => update({ imageUrl: v })}
-                      placeholder="https://.../image.jpg"
-                    />
-                    <FieldShell label="Or upload image file">
-                      <div className="flex flex-wrap items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
-                          Upload image
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png"
-                            onChange={(e) => handleImageFileSelect(e.target.files?.[0] || null)}
-                            className="hidden"
-                          />
-                        </label>
-                        <span className="text-[11px] text-gray-400 dark:text-white/45">JPG / PNG</span>
-                      </div>
-                      {errors.image && <p className="mt-1 text-xs text-red-500">{errors.image}</p>}
-                    </FieldShell>
-                  </>
                 )}
-              </>
-            )}
-
-            {!currentObjective?.videoOnly && form.mediaType === 'carousel' && (
-              <FieldShell
-                label={`Carousel images (${form.carouselFiles.length}/${MAX_CAROUSEL_IMAGES})`}
-                hint={`Upload ${MIN_CAROUSEL_IMAGES}-${MAX_CAROUSEL_IMAGES} images. TikTok shows them in this order as a swipeable carousel.`}
-              >
-                {form.carouselFiles.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {form.carouselFiles.map((file, i) => (
-                      <div key={`${file.name}-${i}`} className="relative">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={`Carousel image ${i + 1}`}
-                          className="h-16 w-16 rounded-lg object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeCarouselFile(i)}
-                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-white hover:bg-red-600"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {form.carouselFiles.length < MAX_CAROUSEL_IMAGES && (
-                  <div className="flex flex-wrap items-center gap-2" onPaste={handleCarouselPaste} tabIndex={0}>
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:opacity-90 dark:bg-white dark:text-black 2xl:text-sm">
-                      Add images
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png"
-                        multiple
-                        onChange={(e) => handleCarouselFilesSelect(e.target.files)}
-                        className="hidden"
-                      />
-                    </label>
-                    <span className="text-[11px] text-gray-400 dark:text-white/45">JPG / PNG</span>
-                  </div>
-                )}
-                {errors.carousel && <p className="mt-1 text-xs text-red-500">{errors.carousel}</p>}
-              </FieldShell>
-            )}
+              </div>
+            </FieldShell>
 
             {mediaTypeNeedsMusic(form.objectiveKey, form.mediaType) && (
               <FieldShell
@@ -3880,7 +4430,7 @@ const CreateCampaignWizard = ({
                   })}
                 />
               )}
-              {objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType) && (
+              {objectiveNeedsLandingUrl(form.objectiveKey, form.leadGenSubType || form.productSalesSubType) && (
                 <TextField
                   label="Landing page URL"
                   value={form.landingPageUrl}
@@ -4421,6 +4971,7 @@ const CreateCampaignWizard = ({
                 onStepClick={setStep}
                 currency={currency}
                 identities={identities}
+                musicList={musicList}
               />
             ) : isAddAd ? (
               <CampaignSetupSidebar
@@ -4435,6 +4986,7 @@ const CreateCampaignWizard = ({
                 onStepClick={setStep}
                 currency={currency}
                 identities={identities}
+                musicList={musicList}
               />
             ) : isCreate ? (
               <CampaignSetupSidebar
@@ -4446,6 +4998,7 @@ const CreateCampaignWizard = ({
                 onStepClick={setStep}
                 currency={currency}
                 identities={identities}
+                musicList={musicList}
               />
             ) : null}
           </div>

@@ -1285,10 +1285,18 @@ class TiktokAdController {
         return res.status(400).json({ error: "objectiveType is required" });
       }
 
+      let finalObjectiveType = objectiveType;
+      if (
+        (objectiveType === "PRODUCT_SALES" || req.body.objectiveKey === "PRODUCT_SALES") &&
+        (req.body.productSalesSubType === "WEBSITE" || req.body.salesDestination === "WEBSITE" || (!req.body.campaignProductSource && !req.body.campaign_product_source))
+      ) {
+        finalObjectiveType = "WEB_CONVERSIONS";
+      }
+
       const payload = {
         advertiser_id: advertiserId,
         campaign_name: campaignName,
-        objective_type: objectiveType,
+        objective_type: finalObjectiveType,
         budget_mode: budgetMode,
         ...(budget != null && budgetMode !== "BUDGET_MODE_INFINITE"
           ? { budget: Number(budget) }
@@ -1299,7 +1307,7 @@ class TiktokAdController {
           : {}),
         // Required by TikTok's Marketing API when objective_type is
         // APP_PROMOTION (App install vs App retargeting).
-        ...(objectiveType === "APP_PROMOTION" && appPromotionType
+        ...(finalObjectiveType === "APP_PROMOTION" && appPromotionType
           ? { app_promotion_type: appPromotionType }
           : {}),
         ...(req.body.payload || {}),
@@ -1420,9 +1428,20 @@ class TiktokAdController {
         );
       }
 
-      // Sanitize promotion_type for App Promotion
-      if (incoming.promotion_type === "APP_ANDROID" || incoming.promotion_type === "APP_IOS") {
-        incoming.promotion_type = "APP";
+      // Sanitize promotion_type for App Promotion: TikTok API requires APP_ANDROID or APP_IOS
+      if (incoming.promotion_type === "APP" || incoming.promotion_type === "APP_PROMOTION") {
+        const isIos = (incoming.operating_systems || []).includes("IOS") && !(incoming.operating_systems || []).includes("ANDROID");
+        incoming.promotion_type = isIos ? "APP_IOS" : "APP_ANDROID";
+      }
+      if (incoming.promotion_type === "APP_ANDROID") {
+        incoming.operating_systems = ["ANDROID"];
+      } else if (incoming.promotion_type === "APP_IOS") {
+        incoming.operating_systems = ["IOS"];
+      }
+
+      // Sanitize promotion_type for Lead Generation
+      if (incoming.promotion_target_type && !incoming.promotion_type) {
+        incoming.promotion_type = "LEAD_GENERATION";
       }
 
       // Map standard/Meta event names to TikTok Marketing API valid optimization_event enum
@@ -2016,9 +2035,20 @@ class TiktokAdController {
         );
       }
 
-      // Sanitize promotion_type for App Promotion
-      if (incoming.promotion_type === "APP_ANDROID" || incoming.promotion_type === "APP_IOS") {
-        incoming.promotion_type = "APP";
+      // Sanitize promotion_type for App Promotion: TikTok API requires APP_ANDROID or APP_IOS
+      if (incoming.promotion_type === "APP" || incoming.promotion_type === "APP_PROMOTION") {
+        const isIos = (incoming.operating_systems || []).includes("IOS") && !(incoming.operating_systems || []).includes("ANDROID");
+        incoming.promotion_type = isIos ? "APP_IOS" : "APP_ANDROID";
+      }
+      if (incoming.promotion_type === "APP_ANDROID") {
+        incoming.operating_systems = ["ANDROID"];
+      } else if (incoming.promotion_type === "APP_IOS") {
+        incoming.operating_systems = ["IOS"];
+      }
+
+      // Sanitize promotion_type for Lead Generation
+      if (incoming.promotion_target_type && !incoming.promotion_type) {
+        incoming.promotion_type = "LEAD_GENERATION";
       }
 
       const eventMap = {
