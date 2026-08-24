@@ -134,7 +134,12 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
   const delivery = plain(b.delivery);
   const generation = plain(b.generation);
   const budget = plain(delivery.budget);
-  const frequency = plain(delivery.frequency);
+  const cadenceOverride = plain(opts.cadenceOverride);
+  const frequency = {
+    ...plain(delivery.frequency),
+    ...(cadenceOverride || {}),
+    ...(cadenceOverride.frequency ? { preset: cadenceOverride.frequency } : {}),
+  };
 
   // `AdsFactoryJob.campaignId` is `required` and `ref: "Campaign"`, and the
   // orchestrator reads that document to run generation. A brief owns its
@@ -193,8 +198,9 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
     ? new Date(frequency.startDate).toISOString().slice(0, 10)
     : todayISO(timezone);
 
-  const pairsPerCycle = Number.isFinite(Number(delivery.pairsPerCycle))
-    ? Math.max(1, Math.min(200, Math.round(Number(delivery.pairsPerCycle))))
+  const rawPairsPerCycle = cadenceOverride.pairsPerCycle ?? delivery.pairsPerCycle;
+  const pairsPerCycle = Number.isFinite(Number(rawPairsPerCycle))
+    ? Math.max(1, Math.min(200, Math.round(Number(rawPairsPerCycle))))
     : DEFAULT_PAIRS;
 
   const resolvedFrequency = resolveFrequency(frequency.preset);

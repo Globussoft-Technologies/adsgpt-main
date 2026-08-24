@@ -259,9 +259,13 @@ exports.activateBrief = async (req, res) => {
     const campaign = await materializeCampaign(brief);
 
     const connection = req.body?.connection || req.body || {};
+    const cadence = req.body?.cadence || null;
     let payload;
     try {
-      payload = briefToJobPayload(brief, connection, { campaignId: campaign._id });
+      payload = briefToJobPayload(brief, connection, {
+        campaignId: campaign._id,
+        cadenceOverride: cadence,
+      });
     } catch (err) {
       if (err instanceof BriefJobPayloadError) {
         // These are all "you haven't told us X yet" — a 400 the UI can point at
@@ -310,6 +314,12 @@ exports.activateBrief = async (req, res) => {
         startDate: payload.schedule.startDate || null,
         endDate: payload.schedule.endDate || null,
         ...(payload.schedule.customFrequency ? { custom: payload.schedule.customFrequency } : {}),
+      };
+    }
+    if (payload.pairsPerCycle != null) {
+      brief.delivery = {
+        ...(brief.delivery?.toObject?.() || brief.delivery || {}),
+        pairsPerCycle: payload.pairsPerCycle,
       };
     }
     await brief.save();

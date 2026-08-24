@@ -458,26 +458,6 @@ export default function AdFactoryV2Page() {
     setSearchParams(next, { replace: true });
   }, [dispatch, searchParams, setSearchParams]);
 
-  const handleActivate = useCallback(async () => {
-    if (!briefId || !isConnectionComplete(connection)) return;
-    const result = await dispatch(
-      activateAutomation({
-        briefId,
-        connection: {
-          facebookId: connection.facebookId,
-          connectionId: connection.connectionId,
-          adAccountId: connection.adAccountId,
-          adAccountName: connection.adAccountName,
-          pageId: connection.pageId,
-          pageName: connection.pageName,
-        },
-      }),
-    );
-    if (activateAutomation.fulfilled.match(result)) {
-      setScheduleOn(false);
-    }
-  }, [dispatch, briefId, connection]);
-
   // Meta's enums are SHOUTY_SNAKE; render them as a human would read them.
   const ctaLabel = useMemo(() => {
     const button = brief?.offer?.cta?.button;
@@ -614,6 +594,9 @@ export default function AdFactoryV2Page() {
           ...rest,
           ...(preset ? { preset } : {}),
         };
+        if ((preset || next.preset) !== 'custom') {
+          delete next.custom;
+        }
         patch.frequency = next;
         dispatch(applyLocalEdit({ section: 'delivery', field: 'frequency', value: next }));
       }
@@ -642,6 +625,9 @@ export default function AdFactoryV2Page() {
           ...rest,
           ...(preset ? { preset } : {}),
         };
+        if ((preset || next.preset) !== 'custom') {
+          delete next.custom;
+        }
         patch.delivery = { ...(patch.delivery || {}), frequency: next };
         dispatch(applyLocalEdit({ section: 'delivery', field: 'frequency', value: next }));
       }
@@ -683,6 +669,35 @@ export default function AdFactoryV2Page() {
       brief?.delivery?.pairsPerCycle,
     ],
   );
+
+  const handleActivate = useCallback(async () => {
+    if (!briefId || !isConnectionComplete(connection)) return;
+    const result = await dispatch(
+      activateAutomation({
+        briefId,
+        connection: {
+          facebookId: connection.facebookId,
+          connectionId: connection.connectionId,
+          adAccountId: connection.adAccountId,
+          adAccountName: connection.adAccountName,
+          pageId: connection.pageId,
+          pageName: connection.pageName,
+        },
+        cadence: {
+          frequency: cadence.frequency,
+          hour: cadence.hour,
+          timezone: cadence.timezone,
+          pairsPerCycle: cadence.pairsPerCycle,
+          ...(cadence.frequency === 'custom' ? { custom: cadence.custom } : {}),
+          startDate: cadence.startDate,
+          endDate: cadence.endDate,
+        },
+      }),
+    );
+    if (activateAutomation.fulfilled.match(result)) {
+      setScheduleOn(false);
+    }
+  }, [dispatch, briefId, connection, cadence]);
 
   // A list, so it replaces rather than merges — removing a recipient is the
   // main thing anyone does to one.

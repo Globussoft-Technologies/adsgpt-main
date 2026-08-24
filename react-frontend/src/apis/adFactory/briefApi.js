@@ -106,10 +106,13 @@ export const generateFromBrief = async (briefId) => {
 
 // Creates the AdsFactoryJob. No saved Meta template needed — one is synthesised
 // from the objective and budget.
-export const activateBrief = async (briefId, connection) => {
+export const activateBrief = async (briefId, connection, cadence = null) => {
   const { data } = await axios.post(
     `${BRIEFS}/${briefId}/activate`,
-    { connection },
+    {
+      connection,
+      ...(cadence ? { cadence } : {}),
+    },
     { headers: authHeaders() },
   );
   return data;
