@@ -48,51 +48,30 @@ function normalizeImageRecord(raw) {
 }
 
 function triggerImageRequested(type) {
-  if (type === 'recreate_ads') {
-    GA4Events.adLibraryRecreateRequested({ source: 'ad_library_recreate_form', success: true });
-  } else if (type === 'lifestyle') {
-    GA4Events.adCreativeLifestyleAdRequested({ source: 'lifestyle_ad_form', success: true });
-  } else if (type === 'product_shot') {
-    GA4Events.adCreativeProductShotRequested({ source: 'product_shot_form', success: true });
-  } else if (type === 'brand_awareness') {
-    GA4Events.adCreativeBrandAwarenessRequested({ source: 'brand_awareness_form', success: true });
-  } else if (type === 'apps_saas') {
-    GA4Events.adCreativeAppsSaasRequested({ source: 'apps_saas_form', success: true });
-  } else {
-    GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
-  }
+  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
+  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdRequested({ source: 'lifestyle_ad_form', success: true });
+  else if (type === 'product_shot') GA4Events.adCreativeProductShotRequested({ source: 'product_shot_form', success: true });
+  else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessRequested({ source: 'brand_awareness_form', success: true });
+  else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasRequested({ source: 'apps_saas_form', success: true });
+  else if (type === 'recreate_ads') GA4Events.adLibraryRecreateRequested({ source: 'ad_library_recreate_form', success: true });
 }
 
 function triggerImageGenerated(type) {
-  if (type === 'recreate_ads') {
-    GA4Events.adLibraryRecreateGenerated({ source: 'ad_library_recreate_studio', success: true });
-  } else if (type === 'lifestyle') {
-    GA4Events.adCreativeLifestyleAdGenerated({ source: 'lifestyle_ad_studio', success: true });
-  } else if (type === 'product_shot') {
-    GA4Events.adCreativeProductShotGenerated({ source: 'product_shot_studio', success: true });
-  } else if (type === 'brand_awareness') {
-    GA4Events.adCreativeBrandAwarenessGenerated({ source: 'brand_awareness_studio', success: true });
-  } else if (type === 'apps_saas') {
-    GA4Events.adCreativeAppsSaasGenerated({ source: 'apps_saas_studio', success: true });
-  } else {
-    GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
-  }
+  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
+  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdGenerated({ source: 'lifestyle_ad_studio', success: true });
+  else if (type === 'product_shot') GA4Events.adCreativeProductShotGenerated({ source: 'product_shot_studio', success: true });
+  else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessGenerated({ source: 'brand_awareness_studio', success: true });
+  else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasGenerated({ source: 'apps_saas_studio', success: true });
+  else if (type === 'recreate_ads') GA4Events.adLibraryRecreateGenerated({ source: 'ad_library_recreate_studio', success: true });
 }
 
 function triggerImageFailed(type) {
-  if (type === 'recreate_ads') {
-    GA4Events.adLibraryRecreateFailed({ source: 'ad_library_recreate_studio', success: false });
-  } else if (type === 'lifestyle') {
-    GA4Events.adCreativeLifestyleAdFailed({ source: 'lifestyle_ad_studio', success: false });
-  } else if (type === 'product_shot') {
-    GA4Events.adCreativeProductShotFailed({ source: 'product_shot_studio', success: false });
-  } else if (type === 'brand_awareness') {
-    GA4Events.adCreativeBrandAwarenessFailed({ source: 'brand_awareness_studio', success: false });
-  } else if (type === 'apps_saas') {
-    GA4Events.adCreativeAppsSaasFailed({ source: 'apps_saas_studio', success: false });
-  } else {
-    GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
-  }
+  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
+  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdFailed({ source: 'lifestyle_ad_studio', success: false });
+  else if (type === 'product_shot') GA4Events.adCreativeProductShotFailed({ source: 'product_shot_studio', success: false });
+  else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessFailed({ source: 'brand_awareness_studio', success: false });
+  else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasFailed({ source: 'apps_saas_studio', success: false });
+  else if (type === 'recreate_ads') GA4Events.adLibraryRecreateFailed({ source: 'ad_library_recreate_studio', success: false });
 }
 
 // ── submit + auto-poll ──────────────────────────────────────────────────

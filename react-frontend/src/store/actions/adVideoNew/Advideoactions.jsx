@@ -32,15 +32,10 @@ export const generateVideoAction =
     try {
       dispatch(setLoading(true));
       dispatch(setError(null));
-      const vType = payload?.inputs?.type || 'broll';
-      if (vType === 'ai_ads') {
-        GA4Events.adVideoAIAdsRequested({ source: 'ai_ads_form', success: true });
-      } else {
-        GA4Events.adVideoProductBrollsRequested({ source: 'product_brolls_form', success: true });
-      }
 
       const { socket } = getState();
       const userId = socket?.userData?.user_id;
+      GA4Events.adVideoProductBrollsRequested({ source: 'product_brolls_form', success: true });
 
       let imageUrl = '';
 
@@ -161,10 +156,10 @@ export const generateVideoUGCAction =
     try {
       dispatch(setLoading(true));
       dispatch(setError(null));
-      GA4Events.adVideoAIUGCAdsRequested({ source: 'ai_ugc_ads_form', success: true });
 
       const { socket } = getState();
       const userId = socket?.userData?.user_id;
+      GA4Events.adVideoAIUGCAdsRequested({ source: 'ai_ugc_ads_form', success: true });
 
       let imageUrl = '';
 
@@ -526,7 +521,6 @@ export const generateAvatarVideo =
     try {
       dispatch(setLoading(true));
       dispatch(setError(null));
-      GA4Events.adVideoAIAvatarsRequested({ source: 'ai_avatars_form', success: true });
       const response = await axios.post(
         `${BACKEND_HOST}/adsgpt/video/generate-avatar-video/${id}`,
         payload,
@@ -539,6 +533,7 @@ export const generateAvatarVideo =
       );
       console.log(' Video generated successfully: ', response);
       globalToast.success('Video generation started successfully!');
+      GA4Events.adVideoAIAvatarsRequested({ source: 'ai_avatars_form', success: true });
       return response.data;
     } catch (error) {
       console.error('Error in generating video', error);
@@ -587,10 +582,10 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
   try {
     dispatch(setAiAdsSceneLoading(true));
     dispatch(setError(null));
-    GA4Events.adVideoAIAdsRequested({ source: 'ai_ads_form', success: true });
 
     const { socket } = getState();
     const userId = socket?.userData?.user_id;
+    GA4Events.adVideoAIAdsRequested({ source: 'ai_ads_form', success: true });
 
     // Upload all images (url-based then file-based) to S3
     const imageUrls = [];
@@ -873,13 +868,13 @@ export const generateCloneVideo = (id, payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
-    GA4Events.adVideoCloneYourselfRequested({ source: 'clone_yourself_form', success: true });
     const res = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-clone-video/${id}`,
       payload || {},
       { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
     );
     globalToast.success('Clone video generation started!');
+    GA4Events.adVideoCloneYourselfRequested({ source: 'clone_yourself_form', success: true });
     return res.data;
   } catch (error) {
     const msg = error.response?.data?.error || error.message || 'Failed to generate clone video';

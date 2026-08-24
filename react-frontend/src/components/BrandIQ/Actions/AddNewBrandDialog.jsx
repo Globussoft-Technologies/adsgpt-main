@@ -30,6 +30,7 @@ import {
 import { setBrandIQError } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { useDynamicBackground } from '@/hooks/useDynamicBackground';
 import { GA4Events } from '@/utils/ga4';
+import { globalToast } from '@/utils/globalToast';
 
 const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
   const [brandDetailsFormNumber, setBrandDetailsFormNumber] = useState(1);
@@ -502,6 +503,7 @@ const AddNewBrandDialog = ({ fromComponent, brandData, setEditingBrand }) => {
         } else {
           await dispatch(createBrandList(newBrand)).unwrap();
           GA4Events.brandCreated({ feature: 'brand_iq' });
+          globalToast.success('Brand created successfully!');
         }
         setBrandDetailsFormNumber(1);
         setBrandLogos([]);

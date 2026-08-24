@@ -59,8 +59,6 @@ const HeaderTabs = ({
                   if (tab.id === 'adVideo' && isPlan) {
                     window.location.href = import.meta.env.VITE_GUEST_USER_SIGNUP_URL;
                   } else {
-                    trackGA4PageView(`/adstudio/${tab.id}`);
-                    GA4Events.featureVisited({ tab: tab.id });
                     onTabChange(tab.id);
                   }
                 }}

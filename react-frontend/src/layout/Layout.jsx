@@ -45,6 +45,7 @@ const Layout = () => {
   // Track time spent on each page
   const pageEnterTime = useRef(Date.now());
   const prevPage = useRef(location.pathname);
+  const lastTrackedGa4Path = useRef(null);
 
   useEffect(() => {
     let sessionId;
@@ -70,8 +71,10 @@ const Layout = () => {
       ? `/adstudio/${targetTab}`
       : location.pathname;
 
-    trackGA4PageView(targetPath);
-    GA4Events.featureVisitedByRoute(location.pathname);
+    if (lastTrackedGa4Path.current !== targetPath) {
+      trackGA4PageView(targetPath);
+      lastTrackedGa4Path.current = targetPath;
+    }
 
     // Save time spent on previous page then record new page entry
     const now = Date.now();

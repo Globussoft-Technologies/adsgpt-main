@@ -41,7 +41,13 @@ export const generateStableId = (prefix = 'flow') => {
 
 export const initGA4 = () => {
   if (!MEASUREMENT_ID || initialized) return;
-  ReactGA.initialize(MEASUREMENT_ID);
+  ReactGA.initialize(MEASUREMENT_ID, {
+    gaOptions: { send_page_view: false },
+    gtagOptions: { send_page_view: false },
+  });
+  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+    window.gtag('config', MEASUREMENT_ID, { send_page_view: false });
+  }
   initialized = true;
 };
 
@@ -74,6 +80,7 @@ const PAGE_TITLES = {
   '/adstudio/adCreativeNew': 'AdsGPT - Ad Creative',
   '/adstudio/adVideo': 'AdsGPT - Ad Video',
   '/adstudio/adVideoNew': 'AdsGPT - Ad Video',
+  '/adstudio/adLibrary': 'AdsGPT - Ad Library',
   '/adinsights': 'AdsGPT - Ad Insights',
   '/ad-library': 'AdsGPT - Ad Library',
   '/brandiq': 'AdsGPT - Brand IQ',
@@ -94,44 +101,39 @@ const PAGE_TITLES = {
   '/onboarding': 'AdsGPT - Onboarding',
 };
 
+let lastTrackedPath = null;
+
 export const trackGA4PageView = (path, customTitle) => {
   if (!initialized) return;
   const userId = Cookies.get('user_id') || null;
-  const normalizedPath = (path || '')
+  const basePath = (path || '').split('?')[0];
+  const normalizedPath = basePath
     .replace('/adstudio/adCreativeNew', '/adstudio/adCreative')
     .replace('/adstudio/adVideoNew', '/adstudio/adVideo')
     .replace(/^\/landing-page-analyzer\/[^/]+/, '/landing-page-analyzer')
     .replace(/^\/workspace-invite\/[^/]+/, '/workspace-invite')
     .replace(/^\/ad-library\/[^/]+/, '/ad-library')
     .replace(/^\/adfactory\/[^/]+/, '/adfactory');
-  const resolvedTitle = customTitle || PAGE_TITLES[normalizedPath] || PAGE_TITLES[path] || document.title || 'AdsGPT';
+
+  // Prevent duplicate pageview dispatches for the same path
+  if (lastTrackedPath === normalizedPath) return;
+  lastTrackedPath = normalizedPath;
+
+  const resolvedTitle = customTitle || PAGE_TITLES[normalizedPath] || PAGE_TITLES[path] || document.title || 'AdsGPT • Generative AI For Ads';
   try {
     document.title = resolvedTitle;
   } catch (e) {
     /* ignore DOM errors */
   }
 
-  ReactGA.send({
-    hitType: 'pageview',
-    page: normalizedPath || path,
-    title: resolvedTitle,
-    page_title: resolvedTitle,
-    screen_name: resolvedTitle,
-    page_location: window.location.href,
-    user_id: userId ? String(userId) : undefined,
-    anonymous_id: getAnonymousId(),
-    session_id: getSessionId(),
-  });
-
-  try {
-    ReactGA.event('page_view', {
+  // Authoritative SPA pageview dispatch via gtag event
+  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+    window.gtag('event', 'page_view', {
+      page_path: normalizedPath,
       page_title: resolvedTitle,
-      screen_name: resolvedTitle,
       page_location: window.location.href,
-      page_path: normalizedPath || path,
+      ...(userId ? { user_id: String(userId) } : {}),
     });
-  } catch (e) {
-    /* ignore */
   }
 };
 
@@ -161,22 +163,10 @@ export const trackGA4Event = (eventName, params = {}) => {
   });
 
   try {
-    ReactGA.event(eventName, standardPayload);
-  } catch (err) {
-    // Error is completely empty
-  }
-
-  try {
-    if (typeof ReactGA.gtag === 'function') {
-      ReactGA.gtag('event', eventName, standardPayload);
-    }
-  } catch (err) {
-    // Error is completely empty
-  }
-
-  try {
     if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
       window.gtag('event', eventName, standardPayload);
+    } else {
+      ReactGA.event(eventName, standardPayload);
     }
   } catch (err) {
     // Error is completely empty
@@ -213,6 +203,8 @@ const ROUTE_LABELS = {
   '/onboarding': 'onboarding',
 };
 
+let lastTrackedFeaturePath = null;
+
 export const GA4Events = {
   // Session
   sessionStarted: () => {
@@ -236,6 +228,8 @@ export const GA4Events = {
   },
 
   featureVisitedByRoute: (pathname) => {
+    if (lastTrackedFeaturePath === pathname) return;
+    lastTrackedFeaturePath = pathname;
     const label = ROUTE_LABELS[pathname];
     if (label) trackGA4Event('feature_viewed', { feature: label });
   },
