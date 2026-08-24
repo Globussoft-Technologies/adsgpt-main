@@ -120,6 +120,35 @@ export const ACTION_TYPES = [
     label: "Alert me",
     hint: "Just notify (Slack / email). No Meta change.",
   },
+  {
+    value: "scale",
+    label: "Change the budget",
+    hint: "Raise or lower the daily budget each time this rule fires. Budgets live on campaigns and ad sets, so an ad-level rule changes the ad's parent ad set.",
+  },
+];
+
+// Bounds on a SINGLE step. Must match MIN_RULE_STEP_PCT / MAX_RULE_STEP_PCT in
+// nodejs-backend/services/autopilot/scalePolicy.js — the form and Joi are a
+// unit, and a mismatch shows up as a server rejection the form said was fine.
+//
+// Everything above this bound is engine policy and deliberately not exposed:
+// a 7-day cumulative ceiling (at most double / at most halve), a per-account
+// per-cycle cap, and a per-cycle action count. A rule may ask for a step; it
+// may not raise the ceiling.
+export const MIN_SCALE_PCT = 1;
+export const MAX_SCALE_PCT = 50;
+
+export const SCALE_DIRECTIONS = [
+  {
+    value: "up",
+    label: "Increase",
+    hint: "Raise the daily budget. Applies every time the rule fires, so growth compounds — Autopilot will not let an entity more than double in 7 days.",
+  },
+  {
+    value: "down",
+    label: "Decrease",
+    hint: "Lower the daily budget. Autopilot will not let an entity fall below half its level from 7 days ago.",
+  },
 ];
 
 export const EVALUATE_ON = [

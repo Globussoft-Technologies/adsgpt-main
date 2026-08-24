@@ -4,12 +4,15 @@ import { useSelector } from 'react-redux';
 import { X, Plus, Trash2, Loader2, ChevronDown, Search, Check } from 'lucide-react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
-import { PrimaryButton, SecondaryButton, Banner } from '../_atoms';
+import { PrimaryButton, SecondaryButton, Banner, Switch } from '../_atoms';
 import {
   NUMERIC_FIELDS,
   STRING_FIELDS,
   SEVERITIES,
   ACTION_TYPES,
+  SCALE_DIRECTIONS,
+  MIN_SCALE_PCT,
+  MAX_SCALE_PCT,
   EVALUATE_ON,
   opsForField,
   fieldMeta,
@@ -64,6 +67,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
           rules: [{ field: '', op: '', value: '' }],
         },
         action: rule.action || { type: 'pause' },
+        autoResume: rule.autoResume === true,
         attachments: rule.attachments || [],
         enabled: rule.enabled !== false,
       };
@@ -81,6 +85,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
           rules: [{ field: '', op: '', value: '' }],
         },
         action: prefill.action || { type: 'pause' },
+        autoResume: prefill.autoResume === true,
         attachments: prefill.attachments || [],
         enabled: true,
       };
@@ -94,6 +99,8 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
       lookbackPreset: null,
       conditions: { operator: 'AND', rules: [{ field: '', op: '', value: '' }] },
       action: { type: 'pause' },
+      // Opt-in: reversing a pause is a separate decision from making it.
+      autoResume: false,
       attachments: [],
       enabled: true,
     };
@@ -228,6 +235,24 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         fieldErrors.conditions[i] = rowErr;
       }
     });
+
+    // Mirrors the Joi rule in Validations/autopilotUserRule.validator.js.
+    // Keep the two in step: a mismatch surfaces as a server rejection the
+    // form already said was fine.
+    if (form.action?.type === 'scale') {
+      const pct = Number(form.action.pct);
+      if (form.action.pct === '' || form.action.pct === null || form.action.pct === undefined) {
+        fieldErrors.actionPct = 'Enter a percentage.';
+      } else if (!Number.isInteger(pct)) {
+        fieldErrors.actionPct = 'Enter a whole number.';
+      } else if (pct === 0) {
+        fieldErrors.actionPct = 'A 0% change would do nothing.';
+      } else if (Math.abs(pct) < MIN_SCALE_PCT) {
+        fieldErrors.actionPct = `Use at least ${MIN_SCALE_PCT}%.`;
+      } else if (Math.abs(pct) > MAX_SCALE_PCT) {
+        fieldErrors.actionPct = `A single step can be at most ${MAX_SCALE_PCT}%.`;
+      }
+    }
 
     if (!form.attachments || form.attachments.length === 0) {
       fieldErrors.attachments = 'Attach the rule to at least one campaign.';
@@ -609,11 +634,37 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                     selected={form.action.type === opt.value}
                     label={opt.label}
                     hint={opt.hint}
-                    onClick={() => set({ action: { type: opt.value } })}
+                    onClick={() =>
+                      set({
+                        // `pct` is meaningful only for scale — the backend
+                        // REJECTS a stray pct on pause/alert rather than
+                        // ignoring it, so it must not survive the switch.
+                        action:
+                          opt.value === 'scale'
+                            ? { type: 'scale', pct: form.action.pct ?? 20 }
+                            : { type: opt.value },
+                      })
+                    }
                   />
                 ))}
               </div>
               {showError('action') && <FieldError>{errorFor('action')}</FieldError>}
+
+              {form.action.type === 'pause' && (
+                <AutoResumeToggle
+                  value={form.autoResume}
+                  onChange={(v) => set({ autoResume: v })}
+                />
+              )}
+
+              {form.action.type === 'scale' && (
+                <ScaleStepEditor
+                  pct={form.action.pct}
+                  onChange={(pct) => set({ action: { type: 'scale', pct } })}
+                  invalid={showError('actionPct')}
+                  error={showError('actionPct') ? errorFor('actionPct') : null}
+                />
+              )}
             </div>
 
             {/* Attached campaigns */}
@@ -756,6 +807,129 @@ function FieldError({ children }) {
 // Big tappable choice card used for evaluation level + action type. Same
 // "rounded-2xl + gradient border on selected" pattern as the wizard's
 // objective tiles, scaled down to fit the rule form's tighter rhythm.
+// ScaleStepEditor — direction + magnitude for a `scale` action.
+//
+// Storage is a single SIGNED `pct` (negative lowers the budget), because one
+// field keeps one code path on the backend and the action log's `pct_change`
+// carries direction for free. People don't think in signed numbers though, so
+// the form splits it: pick a direction, type a positive size.
+function ScaleStepEditor({ pct, onChange, invalid, error }) {
+  const raw = pct === '' || pct === null || pct === undefined ? '' : Number(pct);
+  const direction = raw !== '' && raw < 0 ? 'down' : 'up';
+  const magnitude = raw === '' ? '' : Math.abs(raw);
+
+  const setDirection = (dir) => {
+    const size = magnitude === '' ? 20 : Math.abs(Number(magnitude) || 0);
+    onChange(dir === 'down' ? -size : size);
+  };
+
+  const setMagnitude = (next) => {
+    if (next === '') {
+      onChange('');
+      return;
+    }
+    const n = Number(next);
+    if (!Number.isFinite(n)) return;
+    const size = Math.abs(n);
+    onChange(direction === 'down' ? -size : size);
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {SCALE_DIRECTIONS.map((opt) => (
+          <ChoiceCard
+            key={opt.value}
+            selected={direction === opt.value}
+            label={opt.label}
+            hint={opt.hint}
+            onClick={() => setDirection(opt.value)}
+          />
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2.5">
+        <label
+          htmlFor="scale-step-pct"
+          className="text-13 font-medium text-gray-700 dark:text-white/85"
+        >
+          {direction === 'down' ? 'Lower by' : 'Raise by'}
+        </label>
+        <div className="relative">
+          <input
+            id="scale-step-pct"
+            type="number"
+            inputMode="numeric"
+            step="1"
+            min={MIN_SCALE_PCT}
+            max={MAX_SCALE_PCT}
+            value={magnitude}
+            onChange={(e) => setMagnitude(e.target.value)}
+            aria-invalid={invalid || undefined}
+            className={`text-13 h-9 w-24 rounded-full border bg-gray-100 pl-4 pr-7 text-gray-900 transition-colors focus:outline-none dark:bg-[#909294]/15 dark:text-white ${
+              invalid
+                ? 'border-red-400/60 focus:border-red-400'
+                : 'border-gray-300 hover:border-gray-400 focus:border-gray-400 dark:border-white/5 dark:hover:border-white/15 dark:focus:border-white/20'
+            }`}
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-13 text-gray-500 dark:text-white/55">
+            %
+          </span>
+        </div>
+        <span className="text-[11px] leading-snug text-gray-500 dark:text-white/55">
+          each time the rule fires
+        </span>
+      </div>
+
+      {error && <FieldError>{error}</FieldError>}
+
+      <p className="mt-2.5 text-[11px] leading-snug text-gray-500 dark:text-white/55">
+        Autopilot runs hourly, so changes compound. It will not let an entity
+        more than double or fall below half its budget from 7 days ago, and it
+        caps how much of an account&apos;s total daily budget can move in any
+        one run.
+      </p>
+    </div>
+  );
+}
+
+// AutoResumeToggle — may Autopilot undo THIS rule's pauses?
+//
+// Per-rule rather than a single global switch because rules differ in whether
+// their cause can resolve on its own. "Spent a lot, zero installs" is worth
+// another go once the evidence ages out of the window. "Ad was disapproved"
+// is a policy state — waiting changes nothing, and retrying just earns
+// another disapproval. Off by default: pausing is a decision this rule made,
+// reversing it is a different one.
+function AutoResumeToggle({ value, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      aria-pressed={value}
+      className={`mt-3 flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-colors ${
+        value
+          ? 'border-emerald-400/40 bg-emerald-500/8'
+          : 'border-gray-200 bg-gray-50 hover:bg-white dark:border-white/8 dark:bg-white/3 dark:hover:bg-white/6'
+      }`}
+    >
+      <span className="mt-0.5">
+        <Switch checked={value} onChange={onChange} size="sm" />
+      </span>
+      <span className="flex flex-col gap-1">
+        <span className="text-13 font-semibold text-gray-900 dark:text-white">
+          Turn it back on if it recovers
+        </span>
+        <span className="text-[11px] leading-snug text-gray-500 dark:text-white/55">
+          {value
+            ? "Autopilot will retry what this rule paused once the rule stops matching, and stop retrying after a few attempts. It only ever undoes its own pauses, and stands down if you've edited the entity."
+            : "Anything this rule pauses stays paused until you turn it back on yourself. Leave this off for rules that pause for reasons waiting won't fix — a disapproved ad, for example."}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function ChoiceCard({ selected, label, hint, onClick }) {
   return (
     <div

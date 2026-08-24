@@ -28,6 +28,14 @@
  *               • action 'alert' → no Meta call; logged with action:
  *                                  'alert_only', folded into the cycle
  *                                  summary so alertService picks it up.
+ *               • action 'scale' → move the entity's daily budget by the
+ *                                  rule's signed `pct` (`applyScale`).
+ *                                  Budgets live on campaigns/ad sets, so an
+ *                                  ad-level rule scales the parent ad set.
+ *                                  Bounded by scalePolicy.js (7-day
+ *                                  cumulative RATIO ceilings up and down,
+ *                                  per-account per-cycle delta caps) and by
+ *                                  the shared actionBudget.js count.
  *        d. Resume pass (`resumeAtAccount`): re-evaluate each rule against
  *           the entities IT previously paused and un-pause the ones it no
  *           longer matches, subject to the flap cooldown and the
@@ -35,6 +43,11 @@
  *           `autopilotSettings.autoResumeEnabled` (default on).
  *   4. Build a v3-shaped cycle summary and call notifyAutopilotCycle so
  *      the existing per-user Slack/email fan-out works unchanged.
+ *
+ * Per-account, per-cycle ACTION BUDGET (actionBudget.js) is shared by scale
+ * and resume. It is what bounds a first tick against an account with weeks of
+ * accumulated pauses, and what stops fifty simultaneous winners from all
+ * being raised in one hour.
  *
  * Design intent:
  *   - Action services (autoPauseService, autoScaleService, rotationService,
@@ -77,6 +90,28 @@ const {
   detectManualIntervention,
   _internals: { resumeEntity, getEntityMeta },
 } = require("./autoResumeService");
+// Scaling ceilings + the pure math behind them. Engine-owned, not editable
+// from a rule — see the module header for why.
+const {
+  resolveScalePolicy,
+  cumulativeRatio,
+  computeStep,
+  accountCapAbsolute,
+  withinAccountCap,
+  scaledBudget,
+} = require("./scalePolicy");
+// How many actions Autopilot may take on one account in one tick. Shared by
+// scale and resume; resume needs it to survive its cold start.
+const { createActionBudget } = require("./actionBudget");
+// Every autopilotActionLog read the cron makes. Extracted so a verification
+// script can exercise the REAL queries against a REAL database — the unit
+// stubs ignore the query object, so a broken $match would pass every test.
+const {
+  autopilotPausesFor,
+  flapHistoryFor,
+  retirementRecorded,
+  scaleHistoryFor,
+} = require("./actionLogQueries");
 
 let _bizSdk;
 function bizSdk() {
@@ -362,6 +397,11 @@ async function evaluateRuleAtAccount({
   runId,
   userId,
   acctSummary,
+  // Account-scoped scaling state: ceilings, the per-cycle budget deltas, the
+  // shared action budget, and the memoised 7d-history lookup. Shared across
+  // every rule at this account so the account cap caps the ACCOUNT rather
+  // than each rule independently. Null when no rule here scales.
+  scaleContext = null,
   // Set of campaign ids the user's plan lets them automate, or null when the
   // plan is uncapped (then nothing is filtered). Resolved once per user run.
   managedCampaignIds = null,
@@ -414,6 +454,24 @@ async function evaluateRuleAtAccount({
     const targets = collectTargetsForRule(rule, entities, att.campaignId);
     for (const target of targets) {
       if (!evaluateRule(rule, target)) continue;
+
+      // Scale owns its whole branch: budgets don't live where ads do, the
+      // ceilings are different, and the account-level state is shared across
+      // rules. Threading that through the pause path would tangle both.
+      if (rule.action.type === "scale") {
+        await applyScale({
+          rule,
+          target,
+          entities,
+          acctKey,
+          acctName,
+          finalDryRun,
+          runId,
+          userId,
+          scaleContext,
+        });
+        continue;
+      }
 
       const isPause = rule.action.type === "pause";
 
@@ -480,6 +538,411 @@ async function evaluateRuleAtAccount({
   }
 }
 
+// ─── scale: move a winner's (or loser's) budget ────────────────────────────
+//
+// Budgets live on campaigns and ad sets, never on ads — so an ad-level rule
+// scales the ad's PARENT AD SET and records which ad triggered it.
+//
+// The user's rule owns the trigger and the step; every ceiling above that is
+// engine policy (scalePolicy.js) and the per-cycle action count is a shared
+// budget (actionBudget.js). See those files for why none of it is editable
+// from the rule form.
+
+/**
+ * Where does the budget for this match actually live?
+ * Returns null when an ad has no resolvable parent ad set.
+ */
+function resolveScaleTarget(rule, target, entities) {
+  if (rule.evaluateOn === "campaign") {
+    return {
+      level: "campaign",
+      entityId: target.campaign_id || target.id,
+      entityName: target.campaign_name || target.name,
+      entity: target,
+      triggeringAd: null,
+    };
+  }
+  if (rule.evaluateOn === "adset") {
+    return {
+      level: "adset",
+      entityId: target.adset_id || target.id,
+      entityName: target.adset_name || target.name,
+      entity: target,
+      triggeringAd: null,
+    };
+  }
+  // Ad level — walk up. The ad row carries adset_id/adset_name; the ad set's
+  // own row (for its status) may or may not be in this window's fetch.
+  const adsetId = target.adset_id;
+  if (!adsetId) return null;
+  const adsetRow = (entities.adsets || []).find(
+    (s) => String(s.adset_id) === String(adsetId),
+  );
+  return {
+    level: "adset",
+    entityId: adsetId,
+    entityName: target.adset_name || (adsetRow && adsetRow.adset_name),
+    entity: adsetRow || null,
+    triggeringAd: {
+      ad_id: target.ad_id,
+      ad_name: target.ad_name,
+    },
+  };
+}
+
+// Budget read that does NOT throw on "no daily budget". v3's readEntityBudget
+// threw, which as an hourly cron action means a `failed` row every hour
+// forever for an entity that will never be scalable. Here the absence is
+// information: it tells us whether this is a lifetime-budget entity or a CBO
+// child, and both become skips with a specific reason.
+async function readBudget({ level, entityId }) {
+  const sdk = bizSdk();
+  const Klass = level === "campaign" ? sdk.Campaign : sdk.AdSet;
+  const res = await new Klass(entityId).read([
+    Klass.Fields.daily_budget,
+    Klass.Fields.lifetime_budget,
+  ]);
+  const data = (res && res._data) || res || {};
+  const toInt = (v) => {
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? 0 : n;
+  };
+  return {
+    dailyBudget: toInt(data.daily_budget),
+    lifetimeBudget: toInt(data.lifetime_budget),
+  };
+}
+
+async function writeBudget({ level, entityId, newBudget }) {
+  const sdk = bizSdk();
+  const Klass = level === "campaign" ? sdk.Campaign : sdk.AdSet;
+  await new Klass(entityId).update([Klass.Fields.daily_budget], {
+    [Klass.Fields.daily_budget]: newBudget,
+  });
+}
+
+/**
+ * Budget movement already applied to this entity inside the cumulative
+ * window, as the oldest `prev_budget` we can compare today's budget against.
+ * Memoised per entity for the cycle — two rules targeting the same ad set
+ * must not each get a fresh (and by then stale) reading.
+ */
+async function oldestBudgetInWindow({ acctKey, entityId, windowDays, memo }) {
+  const key = String(entityId);
+  if (memo.has(key)) return memo.get(key);
+  let oldest = null;
+  try {
+    const rows = await scaleHistoryFor({
+      adAccountId: acctKey,
+      entityId: key,
+      sinceDays: windowDays,
+    });
+    if (rows && rows.length) {
+      const p = rows[0].actionPayload || {};
+      oldest = Number.isFinite(Number(p.prev_budget))
+        ? Number(p.prev_budget)
+        : null;
+    }
+  } catch (err) {
+    // Unknown history — treating it as "no movement yet" would grant full
+    // headroom, so signal the caller to skip instead.
+    getLogger().warn(
+      `[autopilot v4] scale: 7d history read failed ${entityId}: ${err.message}`,
+    );
+    memo.set(key, undefined); // undefined = unknown, distinct from null
+    return undefined;
+  }
+  memo.set(key, oldest);
+  return oldest;
+}
+
+async function applyScale({
+  rule,
+  target,
+  entities,
+  acctKey,
+  acctName,
+  finalDryRun,
+  runId,
+  userId,
+  scaleContext,
+}) {
+  if (!scaleContext) return;
+  const logger = getLogger();
+  const c = scaleContext.counters;
+  const { policy, budget, deltaUp, deltaDown } = scaleContext;
+
+  c.findings_count += 1;
+
+  const resolved = resolveScaleTarget(rule, target, entities);
+  if (!resolved || !resolved.entityId) {
+    c.skipped += 1;
+    return;
+  }
+  const { level, entityId, entityName, entity, triggeringAd } = resolved;
+
+  // Scaling a paused entity spends nothing and helps nobody.
+  if (entity && (entity.status || "").toUpperCase() === "PAUSED") {
+    c.skipped += 1;
+    return;
+  }
+
+  // Per-cycle action budget. Logged once per account so the user learns the
+  // cycle hit its ceiling, without a row per remaining candidate.
+  if (!budget.canSpend("scale")) {
+    c.skipped += 1;
+    if (!scaleContext.budgetExhaustedLogged) {
+      scaleContext.budgetExhaustedLogged = true;
+      await writeScaleLogRow({
+        runId,
+        userId,
+        acctKey,
+        acctName,
+        rule,
+        entity: entity || target,
+        level,
+        entityId,
+        entityName,
+        outcome: "skipped",
+        skipReason: "action-budget-exhausted",
+        actionPayload: {
+          limit: budget.limits.scale,
+          detail: `Autopilot already made ${budget.limits.scale} budget changes on this account this cycle and stopped for the hour.`,
+        },
+        dryRun: finalDryRun,
+      });
+    }
+    return;
+  }
+
+  let budgets;
+  try {
+    budgets = await readBudget({ level, entityId });
+  } catch (err) {
+    c.failed += 1;
+    logger.error(
+      `[autopilot v4] scale: budget read failed ${level}=${entityId}: ${formatMetaError(err)}`,
+    );
+    return;
+  }
+
+  if (!budgets.dailyBudget) {
+    c.skipped += 1;
+    const isLifetime = budgets.lifetimeBudget > 0;
+    await writeScaleLogRow({
+      runId,
+      userId,
+      acctKey,
+      acctName,
+      rule,
+      entity: entity || target,
+      level,
+      entityId,
+      entityName,
+      outcome: "skipped",
+      skipReason: isLifetime ? "lifetime-budget" : "no-budget-on-entity",
+      actionPayload: {
+        lifetime_budget: budgets.lifetimeBudget || undefined,
+        detail: isLifetime
+          ? "This uses a lifetime budget. Autopilot only adjusts daily budgets."
+          : "No budget on this entity — its campaign most likely uses campaign budget optimisation. Point the rule at the campaign instead.",
+      },
+      dryRun: finalDryRun,
+    });
+    return;
+  }
+
+  const oldestPrev = await oldestBudgetInWindow({
+    acctKey,
+    entityId,
+    windowDays: policy.cumulativeWindowDays,
+    memo: scaleContext.priorByEntity,
+  });
+  if (oldestPrev === undefined) {
+    // History unreadable — refuse rather than assume full headroom.
+    c.skipped += 1;
+    return;
+  }
+
+  const ratioSoFar = cumulativeRatio(budgets.dailyBudget, oldestPrev);
+  const step = computeStep({
+    pctStep: rule.action.pct,
+    ratioSoFar,
+    maxRatio7d: policy.maxRatio7d,
+    minRatio7d: policy.minRatio7d,
+  });
+  if (!step.allowed) {
+    c.skipped += 1;
+    await writeScaleLogRow({
+      runId,
+      userId,
+      acctKey,
+      acctName,
+      rule,
+      entity: entity || target,
+      level,
+      entityId,
+      entityName,
+      outcome: "skipped",
+      skipReason: step.reason,
+      actionPayload: {
+        prev_budget: budgets.dailyBudget,
+        cumulative_ratio_7d: ratioSoFar,
+        max_ratio_7d: policy.maxRatio7d,
+        min_ratio_7d: policy.minRatio7d,
+        detail:
+          step.reason === "cap-reached-up"
+            ? `Budget is already ${ratioSoFar.toFixed(2)}x its level ${policy.cumulativeWindowDays} days ago — at the ceiling.`
+            : `Budget is already down to ${ratioSoFar.toFixed(2)}x its level ${policy.cumulativeWindowDays} days ago — at the floor.`,
+      },
+      dryRun: finalDryRun,
+    });
+    return;
+  }
+
+  const newBudget = scaledBudget(budgets.dailyBudget, step.pctStep);
+  const pendingDelta = newBudget - budgets.dailyBudget;
+  const goingUp = pendingDelta > 0;
+
+  const acct = withinAccountCap({
+    accumulatedDelta: goingUp ? deltaUp.value : deltaDown.value,
+    pendingDelta,
+    accountCapAbsolute: scaleContext.accountCap,
+  });
+  if (!acct.allowed) {
+    c.skipped += 1;
+    await writeScaleLogRow({
+      runId,
+      userId,
+      acctKey,
+      acctName,
+      rule,
+      entity: entity || target,
+      level,
+      entityId,
+      entityName,
+      outcome: "skipped",
+      skipReason: goingUp ? "account-cap-up" : "account-cap-down",
+      actionPayload: {
+        prev_budget: budgets.dailyBudget,
+        would_be_budget: newBudget,
+        pending_delta: pendingDelta,
+        account_cap: scaleContext.accountCap,
+        detail: `This cycle has already moved the account's daily budget as far ${goingUp ? "up" : "down"} as it may.`,
+      },
+      dryRun: finalDryRun,
+    });
+    return;
+  }
+
+  budget.spend("scale");
+
+  const attemptStart = Date.now();
+  let outcome = "success";
+  let error = null;
+  if (!finalDryRun) {
+    try {
+      await writeBudget({ level, entityId, newBudget });
+    } catch (err) {
+      outcome = "failed";
+      error = formatMetaError(err);
+      logger.error(
+        `[autopilot v4] scale failed rule=${rule._id} ${level}=${entityId}: ${error}`,
+      );
+    }
+  }
+
+  if (outcome === "success") {
+    // Only a committed change moves the cycle's running totals; a failed
+    // write moved nothing, so it must not consume account headroom.
+    if (goingUp) deltaUp.value += Math.abs(pendingDelta);
+    else deltaDown.value += Math.abs(pendingDelta);
+    if (finalDryRun) c.would_scale += 1;
+    else c.scaled += 1;
+  } else {
+    c.failed += 1;
+  }
+
+  await writeScaleLogRow({
+    runId,
+    userId,
+    acctKey,
+    acctName,
+    rule,
+    entity: entity || target,
+    level,
+    entityId,
+    entityName,
+    outcome,
+    error,
+    actionPayload: {
+      prev_budget: budgets.dailyBudget,
+      new_budget: newBudget,
+      pct_change: step.pctStep,
+      requested_pct: rule.action.pct,
+      cumulative_ratio_7d: ratioSoFar,
+      ...(triggeringAd && triggeringAd.ad_id ? { triggering_ad: triggeringAd } : {}),
+    },
+    dryRun: finalDryRun,
+    metaLatencyMs: Date.now() - attemptStart,
+  });
+}
+
+// Scale rows carry `action: 'scale_budget'` — already in the action-log enum
+// and already rendered by the Action Log UI as "Budget +". Kept separate from
+// writeActionLogRow because that one derives its action from
+// `rule.action.type`, which for a scale rule is 'scale', not 'scale_budget'.
+async function writeScaleLogRow({
+  runId,
+  userId,
+  acctKey,
+  acctName,
+  rule,
+  entity,
+  level,
+  entityId,
+  entityName,
+  outcome,
+  skipReason,
+  error,
+  actionPayload,
+  dryRun,
+  metaLatencyMs,
+}) {
+  try {
+    const e = entity || {};
+    const isAdset = level === "adset";
+    await AutopilotActionLog.create({
+      runId,
+      userId,
+      adAccountId: acctKey,
+      adAccountName: acctName,
+      level,
+      entityId: String(entityId),
+      entityName: entityName || e[`${level}_name`] || e.name || undefined,
+      campaignId: isAdset ? e.campaign_id || undefined : undefined,
+      campaignName: isAdset ? e.campaign_name || undefined : undefined,
+      ruleId: String(rule._id),
+      ruleSeverity: rule.severity,
+      ruleMessage: rule.name,
+      metricsSnapshot: pickMetricsSnapshot(e),
+      action: "scale_budget",
+      actionPayload,
+      dryRun,
+      outcome,
+      skipReason: skipReason || undefined,
+      error: error || undefined,
+      metaApiLatencyMs: metaLatencyMs,
+      runAt: new Date(),
+      pausedBy: "autopilot",
+    });
+  } catch (logErr) {
+    getLogger().error(
+      `[autopilot v4] scale log write failed runId=${runId}: ${logErr.message}`,
+    );
+  }
+}
+
 // ─── resume: reverse Autopilot's own pauses ────────────────────────────────
 //
 // Autopilot only ever un-pauses entities IT paused for real (`pausedBy:
@@ -515,6 +978,7 @@ async function evaluateRuleAtAccount({
 async function resumeAtAccount({
   rules,
   effectiveLookback,
+  actionBudget,
   acctKey,
   acctName,
   entities,
@@ -547,37 +1011,30 @@ async function resumeAtAccount({
     parseInt(process.env.AUTOPILOT_AUTO_RESUME_LOOKBACK_DAYS || "30", 10) || 30,
   );
 
-  const ruleById = new Map(rules.map((r) => [String(r._id), r]));
+  // Only rules that OPTED IN. Reversal is per-rule because rules differ in
+  // whether their cause can resolve on its own: "spent a lot, zero installs"
+  // deserves another trial once the evidence ages out; "ad was disapproved"
+  // is a policy state that waiting does not fix, and retrying just earns
+  // another disapproval. Filtering here (rather than per candidate) also
+  // means an account whose rules all opted out costs zero database work.
+  const ruleById = new Map(
+    rules.filter((r) => r.autoResume === true).map((r) => [String(r._id), r]),
+  );
   if (!ruleById.size || !entities) return;
+
+  // Log the budget ceiling once per account per cycle, not per candidate.
+  const resumeBudgetLogged = { value: false };
 
   // Distinct entities these rules really paused inside the lookback window.
   const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   let pausedRows = [];
   try {
-    pausedRows = await AutopilotActionLog.aggregate([
-      {
-        $match: {
-          userId,
-          adAccountId: acctKey,
-          ruleId: { $in: Array.from(ruleById.keys()) },
-          action: "pause",
-          outcome: "success",
-          dryRun: false, // dry-run rows never touched Meta — nothing to undo
-          pausedBy: "autopilot",
-          runAt: { $gte: cutoff },
-        },
-      },
-      { $sort: { runAt: -1 } },
-      {
-        $group: {
-          _id: { level: "$level", entityId: "$entityId" },
-          entityName: { $first: "$entityName" },
-          campaignId: { $first: "$campaignId" },
-          lastPausedAt: { $first: "$runAt" },
-          ruleId: { $first: "$ruleId" },
-        },
-      },
-    ]);
+    pausedRows = await autopilotPausesFor({
+      userId,
+      adAccountId: acctKey,
+      ruleIds: Array.from(ruleById.keys()),
+      sinceDays: lookbackDays,
+    });
   } catch (err) {
     logger.error(
       `[autopilot v4] resume: paused-entity lookup failed acct=${acctKey}: ${err.message}`,
@@ -634,20 +1091,11 @@ async function resumeAtAccount({
     // leaves it to a human.
     let flaps = 0;
     try {
-      const history = await AutopilotActionLog.find(
-        {
-          adAccountId: acctKey,
-          entityId,
-          pausedBy: "autopilot",
-          dryRun: false,
-          runAt: {
-            $gte: new Date(Date.now() - flapDays * 24 * 60 * 60 * 1000),
-          },
-        },
-        { action: 1, runAt: 1 },
-      )
-        .sort({ runAt: 1 })
-        .lean();
+      const history = await flapHistoryFor({
+        adAccountId: acctKey,
+        entityId,
+        sinceDays: flapDays,
+      });
       flaps = countFlaps(history);
     } catch (err) {
       // Can't prove it's stable — treat as unsafe and leave it paused.
@@ -666,14 +1114,13 @@ async function resumeAtAccount({
       // the other silent skips exist to avoid.
       let alreadyRecorded = false;
       try {
-        alreadyRecorded = !!(await AutopilotActionLog.exists({
+        alreadyRecorded = await retirementRecorded({
           adAccountId: acctKey,
           entityId,
           ruleId: String(rule._id),
-          action: "resume",
           skipReason: RETIRED_SKIP_REASON,
-          runAt: { $gte: row.lastPausedAt },
-        }));
+          since: row.lastPausedAt,
+        });
       } catch (err) {
         // Can't prove we haven't already written it — stay silent rather
         // than risk an hourly duplicate.
@@ -706,6 +1153,21 @@ async function resumeAtAccount({
           },
           dryRun: finalDryRun,
         });
+      }
+      continue;
+    }
+
+    // Per-cycle action budget. Checked here — after every cheap skip, before
+    // the first Meta read — so a run of skips can't exhaust it and an
+    // exhausted budget costs no API calls. This is what stops the very first
+    // tick after deploy from resuming a 30-day backlog all at once.
+    if (actionBudget && !actionBudget.canSpend("resume")) {
+      resumeCounters.skipped += 1;
+      if (!resumeBudgetLogged.value) {
+        resumeBudgetLogged.value = true;
+        getLogger().info(
+          `[autopilot v4] resume: per-cycle budget of ${actionBudget.limits.resume} reached for ${acctKey} — remaining candidates roll to the next tick`,
+        );
       }
       continue;
     }
@@ -751,6 +1213,8 @@ async function resumeAtAccount({
       });
       continue;
     }
+
+    if (actionBudget) actionBudget.spend("resume");
 
     const attemptStart = Date.now();
     let outcome = "success";
@@ -1050,11 +1514,21 @@ async function runUserRuleCycle({
             would_pause: 0,
             failed: 0,
           },
-          // v3 wrapped resume/scale/rotate too — v4 only emits pause+alert,
-          // but we leave the keys empty so alertService's count rollup
-          // doesn't crash on missing fields.
+          // v3 wrapped resume/scale/rotate too. resume always exists so
+          // alertService's count rollup doesn't trip on a missing field;
+          // `scale` is attached lazily below, only when a rule at this
+          // account actually scales — alertService renders that block
+          // conditionally, and an unconditional `scaled=0` would be noise
+          // for the majority of users who never write a scale rule.
           resume: { resumed: 0, would_resume: 0, skipped: 0, failed: 0 },
         };
+
+        // One action budget per account per cycle, shared by scale and
+        // resume. See actionBudget.js — resume in particular needs this to
+        // survive its first tick against an account with weeks of pauses.
+        const actionBudget = createActionBudget();
+        // Attached on first sight of a scale rule at this account.
+        let scaleContext = null;
         // Quick aliases the per-rule loop writes into.
         const counters = acctSummary.pause;
         const proxyCounters = {
@@ -1177,6 +1651,39 @@ async function runUserRuleCycle({
             // window's response is fine.
             if (!acctSummary.name) acctSummary.name = audit.account_name;
 
+            // Build the scale context lazily, and only once per account even
+            // across lookback groups — the per-cycle deltas and the action
+            // budget must span the whole account's cycle, not reset per
+            // window. `accountDailyBudget` is pre-aggregated by the audit
+            // (minor units), so the account cap costs no extra fetch.
+            if (
+              !scaleContext &&
+              rulesAtLookback.some((r) => r.action && r.action.type === "scale")
+            ) {
+              const policy = resolveScalePolicy();
+              acctSummary.scale = {
+                findings_count: 0,
+                scaled: 0,
+                would_scale: 0,
+                skipped: 0,
+                failed: 0,
+              };
+              scaleContext = {
+                policy,
+                counters: acctSummary.scale,
+                budget: actionBudget,
+                accountCap: accountCapAbsolute(
+                  audit.accountDailyBudget,
+                  policy.capAccountPct,
+                ),
+                // Boxed so applyScale can mutate them by reference.
+                deltaUp: { value: 0 },
+                deltaDown: { value: 0 },
+                priorByEntity: new Map(),
+                budgetExhaustedLogged: false,
+              };
+            }
+
             for (const rule of rulesAtLookback) {
               await evaluateRuleAtAccount({
                 rule,
@@ -1187,6 +1694,7 @@ async function runUserRuleCycle({
                 runId,
                 userId,
                 acctSummary: proxyCounters,
+                scaleContext,
                 managedCampaignIds,
               });
             }
@@ -1200,6 +1708,7 @@ async function runUserRuleCycle({
               await resumeAtAccount({
                 rules: rulesAtLookback,
                 effectiveLookback,
+                actionBudget,
                 acctKey,
                 acctName: audit.account_name,
                 entities: audit.entities,
@@ -1264,6 +1773,9 @@ module.exports = {
     writeResumeLogRow,
     evaluateRuleAtAccount,
     resumeAtAccount,
+    applyScale,
+    resolveScaleTarget,
+    writeScaleLogRow,
     resolveEffectiveLookback,
     LOCK_KEY,
     LOCK_TTL_SECONDS,

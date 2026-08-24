@@ -56,9 +56,16 @@ const actionSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["pause", "alert"],
+      enum: ["pause", "alert", "scale"],
       required: true,
     },
+    // Signed percent to move the budget by, per firing. Positive raises,
+    // negative lowers. Only meaningful for `type: 'scale'`; Joi is the strict
+    // gate (required for scale, forbidden otherwise) and the schema stays
+    // permissive per the note above. The ceilings that bound what this can
+    // actually do are NOT here — they are engine policy in
+    // services/autopilot/scalePolicy.js.
+    pct: { type: Number },
   },
   { _id: false },
 );
@@ -125,6 +132,26 @@ const autopilotUserRuleSchema = new mongoose.Schema(
 
     conditions: { type: conditionsSchema, required: true },
     action: { type: actionSchema, required: true },
+
+    // Opt-in: may Autopilot un-pause what THIS rule paused, once the rule
+    // stops matching? Default false, and deliberately so — a pause is a
+    // decision the rule made; reversing it is a different decision the author
+    // has not made yet.
+    //
+    // Per-rule rather than global because rules differ in whether their cause
+    // can even resolve on its own. "Spent a lot, zero installs" is worth
+    // another trial once the evidence ages out. "Ad was disapproved" is a
+    // POLICY state — waiting changes nothing, and retrying just earns another
+    // disapproval. One global switch would force both to the same answer.
+    //
+    // The global `autopilotSettings.autoResumeEnabled` remains as a master
+    // kill switch above this, mirroring how `autopilotSettings.enabled` sits
+    // above each rule's own `enabled`.
+    //
+    // Only the pause path reads it. It is allowed (and simply inert) on
+    // alert/scale rules so that flipping a rule's action back and forth
+    // doesn't silently discard the author's preference.
+    autoResume: { type: Boolean, default: false },
 
     // Schema-level minimum guard. The Joi validator also enforces this
     // and provides better error messages; the schema-level check is

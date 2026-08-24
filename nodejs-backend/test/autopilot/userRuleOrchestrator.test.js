@@ -74,6 +74,12 @@ const stubs = {
   metaReadFailNext: null,
   resumeFailNext: null,
   retiredRowExists: false, // stands in for the retirement-row idempotency check
+  // ── scale-path stubs ──
+  budgetById: {},        // entityId → { daily_budget, lifetime_budget }
+  budgetReadFailNext: null,
+  budgetWriteFailNext: null,
+  budgetWrites: [],      // { level, entityId, payload }
+  scaleHistory: [],      // prior scale_budget rows for the 7d ratio lookup
 };
 
 function resetStubs() {
@@ -96,6 +102,13 @@ function resetStubs() {
   stubs.metaReadFailNext = null;
   stubs.resumeFailNext = null;
   stubs.retiredRowExists = false;
+  stubs.budgetById = {};
+  stubs.budgetReadFailNext = null;
+  stubs.budgetWriteFailNext = null;
+  stubs.budgetWrites = [];
+  stubs.scaleHistory = [];
+  delete process.env.AUTOPILOT_MAX_SCALE_ACTIONS_PER_RUN;
+  delete process.env.AUTOPILOT_MAX_RESUME_ACTIONS_PER_RUN;
   // Default to live-actions ON so tests don't accidentally hit the
   // dry-run gate. Tests that need it off override per-case.
   process.env.AUTOPILOT_LIVE_ACTIONS_ALLOWED = "true";
@@ -116,9 +129,10 @@ const AutopilotActionLogStub = {
   aggregate: async (_pipeline) => stubs.pausedLogRows,
   // Resume path: flap history. Chainable to mirror
   // `.find(q, proj).sort().lean()`.
-  find: (_q, _proj) => ({
+  find: (q, _proj) => ({
     sort: () => ({
-      lean: async () => stubs.flapHistory,
+      lean: async () =>
+        q && q.action === "scale_budget" ? stubs.scaleHistory : stubs.flapHistory,
     }),
   }),
   // Resume path: "have we already written the retirement row for this
@@ -239,6 +253,19 @@ Module._load = function patched(request, parent, isMain) {
           this._level = level;
         }
         async update(_fields, payload) {
+          if (payload && payload.daily_budget !== undefined) {
+            if (stubs.budgetWriteFailNext) {
+              const err = stubs.budgetWriteFailNext;
+              stubs.budgetWriteFailNext = null;
+              throw err;
+            }
+            stubs.budgetWrites.push({
+              level: this._level,
+              entityId: this.id,
+              payload,
+            });
+            return;
+          }
           const failer =
             payload && payload.status === "ACTIVE"
               ? "resumeFailNext"
@@ -256,7 +283,17 @@ Module._load = function patched(request, parent, isMain) {
         }
         // Used by the resume path's manual-intervention guard
         // (autoResumeService.getEntityMeta).
-        async read(_fields) {
+        async read(fields) {
+          const wantsBudget =
+            Array.isArray(fields) && fields.includes("daily_budget");
+          if (wantsBudget) {
+            if (stubs.budgetReadFailNext) {
+              const err = stubs.budgetReadFailNext;
+              stubs.budgetReadFailNext = null;
+              throw err;
+            }
+            return { _data: stubs.budgetById[this.id] || {} };
+          }
           if (stubs.metaReadFailNext) {
             const err = stubs.metaReadFailNext;
             stubs.metaReadFailNext = null;
@@ -269,6 +306,8 @@ Module._load = function patched(request, parent, isMain) {
       status: "status",
       updated_time: "updated_time",
       effective_status: "effective_status",
+      daily_budget: "daily_budget",
+      lifetime_budget: "lifetime_budget",
     };
     return {
       Campaign: Object.assign(SDKLevel("campaign"), { Fields: FIELDS }),
@@ -1372,6 +1411,9 @@ const { runUserRuleCycle } = orchestrator;
     _id: "r1",
     userId: "u1",
     enabled: true,
+    // Reversal is opt-in per rule; the whole resume group presumes a rule
+    // that asked for it. The default-off behaviour is asserted separately.
+    autoResume: true,
     name: "Runaway spend",
     severity: "high",
     evaluateOn: "campaign",
@@ -1436,6 +1478,58 @@ const { runUserRuleCycle } = orchestrator;
     stubs.actionLogWrites.filter((r) => r.action === "resume");
 
   await group("runUserRuleCycle — resume", async () => {
+    await testAsync(
+      "a rule that didn't opt in is never resumed",
+      async () => {
+        await arrangeResume({ rule: resumeRule({ autoResume: false }) });
+        const result = await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0);
+        assert.equal(result.accounts[0].resume.resumed, 0);
+      },
+    );
+
+    await testAsync(
+      "autoResume absent (legacy rule) is treated as opted out",
+      async () => {
+        const r = resumeRule();
+        delete r.autoResume;
+        await arrangeResume({ rule: r });
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(
+          resumeCalls().length,
+          0,
+          "existing rules must not start resuming on deploy",
+        );
+      },
+    );
+
+    await testAsync(
+      "opted-out rules cost no database work",
+      async () => {
+        await arrangeResume({ rule: resumeRule({ autoResume: false }) });
+        let aggregateCalls = 0;
+        const realAgg = AutopilotActionLogStub.aggregate;
+        AutopilotActionLogStub.aggregate = async (p) => {
+          aggregateCalls += 1;
+          return realAgg(p);
+        };
+        await runUserRuleCycle({ dryRun: false });
+        AutopilotActionLogStub.aggregate = realAgg;
+        assert.equal(aggregateCalls, 0, "candidate lookup should be skipped");
+      },
+    );
+
+    await testAsync(
+      "global autoResumeEnabled=false overrides an opted-in rule",
+      async () => {
+        await arrangeResume();
+        stubs.settingsByUser.u1 = { autoResumeEnabled: false };
+        await runUserRuleCycle({ dryRun: false });
+        assert.equal(resumeCalls().length, 0, "master switch must win");
+      },
+    );
+
     await testAsync(
       "rule no longer matches → entity resumed, row written, counter bumped",
       async () => {
@@ -1848,6 +1942,278 @@ const { runUserRuleCycle } = orchestrator;
         assert.equal(row.adsetId, "as_3");
       },
     );
+  });
+
+  // ── scale ─────────────────────────────────────────────────────────────
+  const scaleRule = (overrides = {}) => ({
+    _id: "s1",
+    userId: "u1",
+    enabled: true,
+    name: "Scale winners",
+    description: "d",
+    severity: "high",
+    evaluateOn: "adset",
+    lookbackDays: 14,
+    conditions: { operator: "AND", rules: [{ field: "roas", op: ">", value: 2 }] },
+    action: { type: "scale", pct: 20 },
+    attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+    ...overrides,
+  });
+
+  // One winning ad set (ROAS 3) under camp_1, plus its ad for ad-level tests.
+  const scaleFixture = () => ({
+    account_name: "Acct 42",
+    accountDailyBudget: 1000000, // 10% cap => 100000 paise
+    entities: {
+      campaigns: [
+        { campaign_id: "camp_1", campaign_name: "Camp One", status: "ACTIVE", roas: 3 },
+      ],
+      adsets: [
+        {
+          adset_id: "as_1",
+          adset_name: "Set One",
+          campaign_id: "camp_1",
+          campaign_name: "Camp One",
+          status: "ACTIVE",
+          roas: 3,
+          spend: 9000,
+        },
+      ],
+      ads: [
+        {
+          ad_id: "ad_1",
+          ad_name: "Ad One",
+          adset_id: "as_1",
+          adset_name: "Set One",
+          campaign_id: "camp_1",
+          campaign_name: "Camp One",
+          status: "ACTIVE",
+          roas: 3,
+        },
+      ],
+      allCampaignIds: ["camp_1"],
+    },
+  });
+
+  async function arrangeScale({ rule, fixture, budgets } = {}) {
+    resetStubs();
+    stubs.rules = [rule || scaleRule()];
+    stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+    stubs.auditByAccount.set("act_42", fixture || scaleFixture());
+    stubs.budgetById = budgets || { as_1: { daily_budget: "50000" } };
+  }
+
+  const scaleRows = () =>
+    stubs.actionLogWrites.filter((r) => r.action === "scale_budget");
+
+  await group("runUserRuleCycle — scale", async () => {
+    await testAsync("raises the ad set budget by the rule's pct", async () => {
+      await arrangeScale();
+      const result = await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(stubs.budgetWrites.length, 1);
+      assert.equal(stubs.budgetWrites[0].level, "adset");
+      assert.equal(stubs.budgetWrites[0].entityId, "as_1");
+      assert.equal(stubs.budgetWrites[0].payload.daily_budget, 60000);
+
+      assert.equal(scaleRows().length, 1);
+      const row = scaleRows()[0];
+      assert.equal(row.action, "scale_budget");
+      assert.equal(row.outcome, "success");
+      assert.equal(row.actionPayload.prev_budget, 50000);
+      assert.equal(row.actionPayload.new_budget, 60000);
+      assert.equal(row.actionPayload.pct_change, 20);
+      assert.equal(result.accounts[0].scale.scaled, 1);
+    });
+
+    await testAsync("negative pct lowers the budget", async () => {
+      await arrangeScale({
+        rule: scaleRule({ action: { type: "scale", pct: -20 } }),
+      });
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites[0].payload.daily_budget, 40000);
+      assert.equal(scaleRows()[0].actionPayload.pct_change, -20);
+    });
+
+    await testAsync("ad-level rule scales the parent ad set", async () => {
+      await arrangeScale({ rule: scaleRule({ evaluateOn: "ad" }) });
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 1);
+      assert.equal(stubs.budgetWrites[0].entityId, "as_1");
+      const row = scaleRows()[0];
+      assert.equal(row.level, "adset");
+      assert.equal(row.actionPayload.triggering_ad.ad_id, "ad_1");
+    });
+
+    await testAsync("lifetime-budget entity is skipped, not failed", async () => {
+      await arrangeScale({ budgets: { as_1: { lifetime_budget: "900000" } } });
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows()[0].outcome, "skipped");
+      assert.equal(scaleRows()[0].skipReason, "lifetime-budget");
+      assert.equal(result.accounts[0].scale.failed, 0, "must not be a failure");
+    });
+
+    await testAsync("CBO child with no budget is skipped with guidance", async () => {
+      await arrangeScale({ budgets: { as_1: {} } });
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(scaleRows()[0].skipReason, "no-budget-on-entity");
+      assert.match(
+        scaleRows()[0].actionPayload.detail,
+        /campaign budget optimisation/i,
+      );
+    });
+
+    await testAsync("paused entity is not scaled", async () => {
+      const f = scaleFixture();
+      f.entities.adsets[0].status = "PAUSED";
+      await arrangeScale({ fixture: f });
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows().length, 0);
+    });
+
+    await testAsync("7d ratio ceiling blocks a further raise", async () => {
+      await arrangeScale();
+      // Started the window at 25000, now 50000 => already at 2.0x.
+      stubs.scaleHistory = [
+        {
+          actionPayload: { prev_budget: 25000 },
+          runAt: new Date(Date.now() - 3 * 86400e3),
+        },
+      ];
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows()[0].skipReason, "cap-reached-up");
+      assert.equal(result.accounts[0].scale.skipped, 1);
+    });
+
+    await testAsync("7d ratio clamps a partial raise rather than refusing", async () => {
+      await arrangeScale();
+      // 27000 -> 50000 is ~1.85x; ceiling 2.0 leaves only ~8% headroom, so a
+      // +20% request should be clamped down, not rejected outright.
+      stubs.scaleHistory = [
+        {
+          actionPayload: { prev_budget: 27000 },
+          runAt: new Date(Date.now() - 2 * 86400e3),
+        },
+      ];
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 1, "should still act, just smaller");
+      const written = stubs.budgetWrites[0].payload.daily_budget;
+      assert.ok(written > 50000 && written <= 54000, `clamped to ${written}`);
+      assert.ok(scaleRows()[0].actionPayload.pct_change < 20);
+    });
+
+    await testAsync("down ceiling does not block an up move", async () => {
+      await arrangeScale();
+      // Window opened at 100000, now 50000 => 0.5x: no DOWN headroom left.
+      stubs.scaleHistory = [
+        {
+          actionPayload: { prev_budget: 100000 },
+          runAt: new Date(Date.now() - 86400e3),
+        },
+      ];
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 1, "up must still be allowed at 0.5x");
+    });
+
+    await testAsync("account per-cycle cap blocks an oversized move", async () => {
+      // Cap = 10% of 1,000,000 = 100,000. +20% of 900,000 is +180,000.
+      await arrangeScale({ budgets: { as_1: { daily_budget: "900000" } } });
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows()[0].skipReason, "account-cap-up");
+      assert.equal(result.accounts[0].scale.skipped, 1);
+    });
+
+    await testAsync("action budget caps scales per account per cycle", async () => {
+      const f = scaleFixture();
+      f.entities.adsets.push({
+        adset_id: "as_2",
+        adset_name: "Set Two",
+        campaign_id: "camp_1",
+        campaign_name: "Camp One",
+        status: "ACTIVE",
+        roas: 3,
+      });
+      await arrangeScale({ fixture: f });
+      process.env.AUTOPILOT_MAX_SCALE_ACTIONS_PER_RUN = "1";
+      stubs.budgetById = {
+        as_1: { daily_budget: "50000" },
+        as_2: { daily_budget: "50000" },
+      };
+
+      await runUserRuleCycle({ dryRun: false });
+      delete process.env.AUTOPILOT_MAX_SCALE_ACTIONS_PER_RUN;
+
+      assert.equal(stubs.budgetWrites.length, 1, "only one scale may land");
+      const exhausted = scaleRows().filter(
+        (r) => r.skipReason === "action-budget-exhausted",
+      );
+      assert.equal(exhausted.length, 1, "recorded once, not per candidate");
+    });
+
+    await testAsync("dry run computes but never writes", async () => {
+      await arrangeScale();
+      const result = await runUserRuleCycle({ dryRun: true });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows().length, 1);
+      assert.equal(scaleRows()[0].dryRun, true);
+      assert.equal(scaleRows()[0].actionPayload.new_budget, 60000);
+      assert.equal(result.accounts[0].scale.would_scale, 1);
+      assert.equal(result.accounts[0].scale.scaled, 0);
+    });
+
+    await testAsync("AUTOPILOT_LIVE_ACTIONS_ALLOWED=false forces dry-run", async () => {
+      await arrangeScale();
+      process.env.AUTOPILOT_LIVE_ACTIONS_ALLOWED = "false";
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(scaleRows()[0].dryRun, true);
+    });
+
+    await testAsync("Meta write failure logs failed and spends no headroom", async () => {
+      await arrangeScale();
+      stubs.budgetWriteFailNext = new Error("Meta rejected budget");
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(scaleRows()[0].outcome, "failed");
+      assert.match(scaleRows()[0].error, /Meta rejected budget/);
+      assert.equal(result.accounts[0].scale.failed, 1);
+      assert.equal(result.accounts[0].ok, true, "cycle survives");
+    });
+
+    await testAsync("budget read failure counts as failed, not a silent skip", async () => {
+      await arrangeScale();
+      stubs.budgetReadFailNext = new Error("read exploded");
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.budgetWrites.length, 0);
+      assert.equal(result.accounts[0].scale.failed, 1);
+    });
+
+    await testAsync("no scale rules leaves no scale block in the summary", async () => {
+      resetStubs();
+      stubs.rules = [
+        {
+          _id: "p1",
+          userId: "u1",
+          enabled: true,
+          name: "Pause",
+          severity: "high",
+          evaluateOn: "adset",
+          conditions: {
+            operator: "AND",
+            rules: [{ field: "roas", op: "<", value: 1 }],
+          },
+          action: { type: "pause" },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+        },
+      ];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok" }];
+      stubs.auditByAccount.set("act_42", scaleFixture());
+      const result = await runUserRuleCycle({ dryRun: false });
+      assert.equal(result.accounts[0].scale, undefined, "no noise for non-scalers");
+    });
   });
 
   // restore + report

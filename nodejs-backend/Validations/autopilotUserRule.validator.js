@@ -1,4 +1,11 @@
 const Joi = require("joi");
+// Step bounds live with the rest of the scaling ceilings so the validator,
+// the cron and the rule form share one number. See scalePolicy.js for why
+// the ceilings above this are engine-owned and not user-editable.
+const {
+  MIN_RULE_STEP_PCT,
+  MAX_RULE_STEP_PCT,
+} = require("../services/autopilot/scalePolicy");
 
 /**
  * Validators for the user-defined Autopilot rules feature (v4).
@@ -66,7 +73,7 @@ const NUMERIC_OPS = [">", "<", ">=", "<=", "==", "!="];
 const STRING_OPS = ["==", "!="];
 
 const SEVERITIES = ["low", "medium", "high"];
-const ACTION_TYPES = ["pause", "alert"];
+const ACTION_TYPES = ["pause", "alert", "scale"];
 const EVALUATE_ON = ["campaign", "adset", "ad"];
 
 // Hard caps — keep cron cost bounded.
@@ -147,6 +154,46 @@ const actionSchema = Joi.object({
   type: Joi.string()
     .valid(...ACTION_TYPES)
     .required(),
+  // `scale` is the only action carrying a parameter: the SIGNED percent to
+  // move the budget by each time the rule fires. Positive scales up,
+  // negative scales down; zero is rejected because it is never what anyone
+  // meant. One field rather than two action types keeps a single code path,
+  // and `pct_change` in the action log carries the direction naturally.
+  //
+  // Required for scale, REJECTED for the others — a stray `pct` on a pause
+  // rule means the author misunderstood the form and should hear about it
+  // rather than have it silently ignored.
+  //
+  // The bound here is on a SINGLE STEP. Everything above it — the 7-day
+  // cumulative ratio ceiling, the per-account per-cycle cap, the actions-
+  // per-run budget — is engine policy in services/autopilot/scalePolicy.js
+  // and services/autopilot/actionBudget.js, and is not user-editable.
+  pct: Joi.when("type", {
+    is: "scale",
+    then: Joi.number()
+      .integer()
+      .min(-MAX_RULE_STEP_PCT)
+      .max(MAX_RULE_STEP_PCT)
+      .invalid(0)
+      .custom((value, helpers) => {
+        if (Math.abs(value) < MIN_RULE_STEP_PCT) {
+          return helpers.error("number.tooSmall");
+        }
+        return value;
+      })
+      .required()
+      .messages({
+        "number.max": `A single scale step can be at most ${MAX_RULE_STEP_PCT}%. Autopilot applies it every time the rule fires, so growth compounds — the 7-day ceiling bounds the total.`,
+        "number.min": `A single scale step can be at most -${MAX_RULE_STEP_PCT}%.`,
+        "number.tooSmall": `A scale step must be at least ${MIN_RULE_STEP_PCT}% in either direction.`,
+        "any.invalid": "A scale step of 0% would do nothing. Use a positive percentage to raise the budget, or a negative one to lower it.",
+        "any.required": "A scale rule needs a budget change percentage.",
+      }),
+    otherwise: Joi.forbidden().messages({
+      "any.unknown":
+        "Only a 'scale' action takes a percentage. Remove it, or change the action to Scale budget.",
+    }),
+  }),
 });
 
 const attachmentSchema = Joi.object({
@@ -188,6 +235,11 @@ const createRuleSchema = Joi.object({
   lookbackPreset: Joi.string().valid("this_month", "maximum").allow(null),
   conditions: conditionsSchema.required(),
   action: actionSchema.required(),
+  // Opt-in reversal of this rule's own pauses. Unlike `action.pct` this is
+  // NOT forbidden on non-pause rules: it is inert rather than wrong there,
+  // and keeping it lets an author flip a rule between actions without losing
+  // the setting. See the model for why this is per-rule at all.
+  autoResume: Joi.boolean().default(false),
   attachments: Joi.array()
     .items(attachmentSchema)
     .min(1)
@@ -215,6 +267,7 @@ const updateRuleSchema = Joi.object({
   lookbackPreset: Joi.string().valid("this_month", "maximum").allow(null),
   conditions: conditionsSchema,
   action: actionSchema,
+  autoResume: Joi.boolean(),
   attachments: Joi.array()
     .items(attachmentSchema)
     .min(1)
