@@ -66,7 +66,15 @@ test.describe('frontend shell (authenticated)', () => {
 
 test.describe('frontend auth gate', () => {
   test('unauthenticated visit does not render the authenticated shell', async ({ browser }) => {
-    const ctx = await browser.newContext()
+    // `storageState` MUST be passed explicitly. The test runner copies every
+    // context option from the project's `use` block into contexts created by
+    // hand (playwright/lib/index.js → runBeforeCreateBrowserContext), skipping
+    // only keys already present on the options object. A bare newContext()
+    // therefore inherits the logged-in state from `setup-frontend` and this
+    // test silently asserts nothing.
+    const ctx = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    })
     const page = await ctx.newPage()
     await page.goto('/adstudio', { waitUntil: 'load' })
     await expect(
